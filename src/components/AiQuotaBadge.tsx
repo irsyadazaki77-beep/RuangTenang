@@ -209,7 +209,7 @@ export const AiQuotaBadge: React.FC<AiQuotaBadgeProps> = ({
                   </div>
                 </div>
                 <button
-                  onClick={fetchUsageStats}
+                  onClick={() => { fetchUsageStats(true); }}
                   className="p-1 hover:bg-slate-100 rounded-md text-slate-400 hover:text-slate-600 transition-colors"
                   title="Segarkan Kuota"
                 >
@@ -331,7 +331,7 @@ export const AiQuotaBadge: React.FC<AiQuotaBadgeProps> = ({
           </div>
         </div>
         <button
-          onClick={fetchUsageStats}
+          onClick={() => { fetchUsageStats(true); }}
           className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-slate-800 transition-colors text-xs flex items-center gap-1 font-medium"
           title="Segarkan data kuota"
         >

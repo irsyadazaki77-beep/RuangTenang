@@ -9,28 +9,25 @@ import { requireAuth, optionalAuth, requireRole, getTokenFromReq, getJwtSecret }
 import { AuthController } from '../controllers/authController.js';
 import jwt from 'jsonwebtoken';
 
+import {
+  loginLimiter,
+  registerLimiter,
+  mfaLimiter,
+  passwordResetLimiter,
+  emailVerificationLimiter
+} from '../middleware/rateLimiters.js';
+
 const router = Router();
 
-// Rate Limiter for Authentication Endpoints
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 mins
-  max: 100,
-  message: {
-    error: 'Terlalu banyak percobaan autentikasi. Silakan coba lagi setelah 15 menit.'
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
-// Register & Login using Controller
-router.post('/register', authLimiter, AuthController.register);
-router.post('/login', authLimiter, AuthController.login);
+// Register & Login using Controller and granular limiters
+router.post('/register', registerLimiter, AuthController.register);
+router.post('/login', loginLimiter, AuthController.login);
 router.get('/me', optionalAuth, AuthController.me);
 router.post('/logout', optionalAuth, AuthController.logout);
 
 
 // MFA Verify
-router.post('/mfa/verify', authLimiter, async (req: Request, res: Response) => {
+router.post('/mfa/verify', mfaLimiter, async (req: Request, res: Response) => {
   try {
     const { mfaToken, code } = req.body;
     if (!mfaToken || !code) {
@@ -44,7 +41,7 @@ router.post('/mfa/verify', authLimiter, async (req: Request, res: Response) => {
 
     const clientIp = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1';
     const userAgent = req.headers['user-agent'] || 'Browser';
-    const sessionId = 'sess-' + Date.now() + '-' + crypto.randomBytes(4).toString('hex');
+    const sessionId = crypto.randomUUID();
 
     const token = authService.generateSessionToken({
       userId: user.id,
@@ -83,7 +80,7 @@ router.post('/mfa/verify', authLimiter, async (req: Request, res: Response) => {
 });
 
 // Verify Email
-router.post('/verify-email', async (req: Request, res: Response) => {
+router.post('/verify-email', emailVerificationLimiter, async (req: Request, res: Response) => {
   try {
     const { userId, code } = req.body;
     if (!userId || !code) {
@@ -103,7 +100,7 @@ router.post('/verify-email', async (req: Request, res: Response) => {
 });
 
 // Forgot Password (STRICT SECURITY: Never leak reset token in API response)
-router.post('/forgot-password', authLimiter, async (req: Request, res: Response) => {
+router.post('/forgot-password', passwordResetLimiter, async (req: Request, res: Response) => {
   try {
     const { email } = req.body;
     if (!email) {
@@ -128,7 +125,7 @@ router.post('/forgot-password', authLimiter, async (req: Request, res: Response)
 });
 
 // Reset Password
-router.post('/reset-password', authLimiter, async (req: Request, res: Response) => {
+router.post('/reset-password', passwordResetLimiter, async (req: Request, res: Response) => {
   try {
     const { token, newPassword } = req.body;
     if (!token || !newPassword) {

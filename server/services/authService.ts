@@ -22,7 +22,12 @@ export const authService = {
    * Generates JWT token for active user session.
    */
   generateSessionToken(payload: TokenPayload): string {
-    return jwt.sign(payload, getJwtSecret(), { expiresIn: '7d' });
+    return jwt.sign(payload, getJwtSecret(), {
+      expiresIn: '7d',
+      issuer: 'ruangtenang',
+      audience: 'ruangtenang-web',
+      algorithm: 'HS256'
+    });
   },
 
   /**

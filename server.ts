@@ -6,7 +6,6 @@ import { createServer as createViteServer } from 'vite';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import cors from 'cors';
-import { rateLimit } from 'express-rate-limit';
 
 import { serverDb, seedInitialDataIfNeeded } from './server/database.js';
 import {
@@ -22,6 +21,7 @@ import { getAiClient } from './server/config/aiConfig.js';
 
 import { validateEnvironment } from './server/config/envValidation.js';
 import { csrfProtection } from './server/middleware/csrf.js';
+import { generalApiLimiter } from './server/middleware/rateLimiters.js';
 
 // Modular Route Handlers
 import authRouter from './server/routes/auth.js';
@@ -36,15 +36,6 @@ import chatRouter from './server/routes/chat.js';
 import userDataRouter from './server/routes/userData.js';
 import counselorsRouter from './server/routes/counselors.js';
 
-// Global API rate limiters
-const apiLimiter = rateLimit({
-  windowMs: 1 * 60 * 1000,
-  max: 1000,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Terlalu banyak permintaan. Silakan coba lagi nanti.' }
-});
-
 async function startServer() {
   // 1. Startup Environment Validation
   validateEnvironment();
@@ -58,19 +49,20 @@ async function startServer() {
     throw new Error(`FATAL: Invalid port configured: ${rawPort}`);
   }
 
-  // Trust the first proxy to correctly resolve X-Forwarded-For
-  app.set('trust proxy', 1);
+  // Trust proxy setup for Cloud Run / reverse proxies
+  const trustProxySetting = process.env.TRUST_PROXY || '1';
+  app.set('trust proxy', trustProxySetting === 'true' ? true : isNaN(Number(trustProxySetting)) ? trustProxySetting : Number(trustProxySetting));
 
-  // Advanced security hardening (CSP, HSTS, X-Frame-Options)
   const isProd = process.env.NODE_ENV === 'production';
   
+  // CORS Allowlist Setup
   const allowedOrigins = new Set<string>();
   if (process.env.APP_ORIGIN) {
-    allowedOrigins.add(process.env.APP_ORIGIN.trim());
+    allowedOrigins.add(process.env.APP_ORIGIN.trim().toLowerCase());
   }
   if (process.env.CORS_ALLOWED_ORIGINS) {
     process.env.CORS_ALLOWED_ORIGINS.split(',').forEach(o => {
-      if (o.trim()) allowedOrigins.add(o.trim());
+      if (o.trim()) allowedOrigins.add(o.trim().toLowerCase());
     });
   }
 
@@ -85,20 +77,39 @@ async function startServer() {
     origin: (origin, callback) => {
       if (!origin) {
         if (isProd) {
-          return callback(new Error('CORS Blocked: Missing origin not allowed in production.'));
+          return callback(new Error('CORS Blocked: Missing Origin header in production.'));
         }
         return callback(null, true);
       }
       
-      const isAIStudioPreview = origin.endsWith('.run.app') || origin.endsWith('.studio') || origin === 'https://ai.studio' || origin.endsWith('.google.com') || origin.endsWith('.google.dev');
-      
-      if (allowedOrigins.has(origin) || isAIStudioPreview) {
-        return callback(null, true);
+      const lowerOrigin = origin.toLowerCase();
+
+      if (isProd) {
+        // Strict production CORS matching: NO wildcards
+        if (allowedOrigins.has(lowerOrigin)) {
+          return callback(null, true);
+        }
+        return callback(new Error(`CORS Blocked: Origin ${origin} is not allowed in production.`));
+      } else {
+        // Dev / Staging: allow preview domains & localhost
+        const isAIStudioPreview = lowerOrigin.endsWith('.run.app') ||
+                                  lowerOrigin.endsWith('.studio') ||
+                                  lowerOrigin === 'https://ai.studio' ||
+                                  lowerOrigin.endsWith('.google.com') ||
+                                  lowerOrigin.endsWith('.google.dev');
+        if (allowedOrigins.has(lowerOrigin) || isAIStudioPreview) {
+          return callback(null, true);
+        }
+        return callback(new Error(`CORS Blocked: Origin ${origin} is not allowed.`));
       }
-      return callback(new Error(`CORS Blocked: Origin ${origin} is not allowed.`));
     },
     credentials: true,
   }));
+
+  // Clickjacking & Security Headers (Helmet)
+  const frameAncestorsList = isProd 
+    ? ["'self'", ...(process.env.APP_ORIGIN ? [process.env.APP_ORIGIN.trim()] : [])]
+    : ["'self'", "https://*.google.com", "https://*.google.dev", "https://*.run.app", "https://*.studio", "https://ai.studio"];
 
   app.use(helmet({
     contentSecurityPolicy: {
@@ -115,91 +126,87 @@ async function startServer() {
         connectSrc: isProd
           ? ["'self'", "https://generativelanguage.googleapis.com"]
           : ["'self'", "https://*", "wss://*", "ws://*"],
-        frameAncestors: ["'self'", "https://*.google.com", "https://*.google.dev", "https://*.run.app", "https://*.studio", "https://ai.studio"],
+        frameAncestors: frameAncestorsList,
       }
     },
-    frameguard: false,
+    frameguard: isProd ? { action: 'sameorigin' } : false,
     hsts: isProd ? { maxAge: 31536000, includeSubDomains: true, preload: true } : false,
   }));
 
-  // Apply generic API limiter and no-cache
+  // Apply general API limiter and privacy cache headers
   app.use('/api/', (req, res, next) => {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');
     res.setHeader('Surrogate-Control', 'no-store');
     next();
-  }, apiLimiter);
-
-  // Do NOT run demo seed automatically on server startup.
-  // Production admin provisioning & demo seeding must be run explicitly.
+  }, generalApiLimiter);
 
   // 2. Core Middleware Stack
   app.use(compression());
-  app.use(express.json({ limit: '5mb' }));
+  // Request Body Size Limit: reduced to 256kb for security hardening
+  app.use(express.json({ limit: '256kb' }));
   app.use(cookieParser());
   app.use(requestIdAndLoggerMiddleware);
   app.use(timeoutMiddleware(15000));
   app.use(csrfProtection);
 
-  // 3. OpenAPI & Swagger Documentation Routes
+  // 3. OpenAPI & Swagger Documentation Protection
   app.get(['/api/v1/openapi.json', '/api/openapi.json'], (_req, res) => {
+    if (isProd && process.env.ENABLE_PUBLIC_DOCS !== 'true') {
+      return res.status(404).json({ success: false, code: 'NOT_FOUND', error: 'Endpoint tidak ditemukan' });
+    }
     res.json(openApiSpec);
   });
 
   app.get(['/api/v1/docs', '/api/docs', '/docs'], (_req, res) => {
+    if (isProd && process.env.ENABLE_PUBLIC_DOCS !== 'true') {
+      return res.status(404).send('Not Found');
+    }
     res.setHeader('Content-Type', 'text/html');
     res.send(renderSwaggerHtml());
   });
 
-  // 4. Liveness & Readiness Endpoints
-  // Liveness (Health) indicates the server process is alive
-  app.get(['/api/v1/health', '/api/health', '/healthz'], (req, res) => {
-    res.status(200).json({ status: 'healthy', uptimeSeconds: Math.floor(process.uptime()), timestamp: new Date().toISOString() });
+  // 4. Liveness & Readiness Endpoints (Sanitized in Production)
+  app.get(['/api/v1/health', '/api/health', '/healthz'], (_req, res) => {
+    res.status(200).json({ status: 'healthy' });
   });
 
-  // Readiness indicates the application dependencies are ready
   app.get(['/api/v1/readiness', '/api/readiness', '/readyz'], async (req, res) => {
-    let dbStatus = 'UP';
-    let aiStatus = 'DEGRADED';
-    let isHealthy = false;
+    let isHealthy = true;
 
     try {
       await serverDb.ping();
-      dbStatus = 'UP';
-      isHealthy = true;
     } catch (e: any) {
       console.error('[READINESS] Database connection failed:', e.message);
-      dbStatus = 'DOWN';
+      isHealthy = false;
     }
 
-    const ai = getAiClient();
-    if (ai) {
-      aiStatus = 'UP';
-    }
-    
-    // Critical configuration checks
-    const hasSecret = !!process.env.JWT_SECRET;
-    if (!hasSecret) {
+    if (!process.env.JWT_SECRET) {
        console.error('[READINESS] Critical config JWT_SECRET is missing');
        isHealthy = false;
     }
 
+    // In production without admin token, do not expose detailed service breakdowns or environment names
+    if (isProd) {
+      return res.status(isHealthy ? 200 : 503).json({
+        status: isHealthy ? 'ready' : 'unready'
+      });
+    }
+
+    // Non-production detailed response
     res.status(isHealthy ? 200 : 503).json({
       status: isHealthy ? 'ready' : 'unready',
       timestamp: new Date().toISOString(),
       services: {
-        database: dbStatus,
-        ai: aiStatus
-      },
-      config: {
-        jwt: hasSecret ? 'valid' : 'invalid'
+        database: isHealthy ? 'UP' : 'DOWN',
+        ai: getAiClient() ? 'UP' : 'DEGRADED'
       },
       environment: process.env.NODE_ENV || 'development'
     });
   });
 
-  // 5. Mount Modular API Routers (supporting both /api/v1 and /api)
+  // 5. Mount Modular API Routers
   app.use('/api/v1/auth', authRouter);
 
   app.use('/api/v1/appointments', appointmentsRouter);

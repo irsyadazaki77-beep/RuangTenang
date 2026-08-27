@@ -71,13 +71,13 @@ export function getValidatedJwtSecret(): string {
     }
     return 'local-dev-jwt-secret-ruangtenang-32-chars-long-test-key';
   }
-  if (isProd && (secret.length < 32 || KNKNOWN_INSECURE_DEMO_SECRETS_check(secret))) {
+  if (isProd && (secret.length < 32 || isKnownInsecureDemoSecret(secret))) {
     throw new Error('FATAL SECURITY ERROR: Insecure JWT_SECRET in production.');
   }
   return secret;
 }
 
-function KNKNOWN_INSECURE_DEMO_SECRETS_check(secret: string): boolean {
+function isKnownInsecureDemoSecret(secret: string): boolean {
   return KNOWN_INSECURE_DEMO_SECRETS.some(s => secret.toLowerCase() === s.toLowerCase() || secret.toLowerCase().includes(s.toLowerCase()));
 }
 
@@ -98,7 +98,7 @@ export function getValidatedEncryptionKey(version: string = 'v1'): Buffer {
     rawKey = `local-dev-aes-encryption-key-ruangtenang-32-chars-long-${version}`;
   }
 
-  if (isProd && (rawKey.length < 32 || KNKNOWN_INSECURE_DEMO_SECRETS_check(rawKey))) {
+  if (isProd && (rawKey.length < 32 || isKnownInsecureDemoSecret(rawKey))) {
     throw new Error(`FATAL SECURITY ERROR: Insecure ENCRYPTION_KEY for version ${version} in production.`);
   }
 

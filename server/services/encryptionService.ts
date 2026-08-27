@@ -14,6 +14,21 @@ export const encryptionService = {
   },
 
   /**
+   * Encrypts plaintext using AES-256-GCM with fail-closed semantics.
+   * Throws an error if plaintext is missing/empty or if encryption fails.
+   */
+  encryptRequiredSensitive(plaintext: string, targetVersion?: string): string {
+    if (!plaintext || typeof plaintext !== 'string' || plaintext.trim() === '') {
+      throw new Error('ENCRYPTION_FAILED: Required sensitive field is empty or missing.');
+    }
+    const encrypted = this.encryptSensitive(plaintext, targetVersion);
+    if (!encrypted || !this.isEncrypted(encrypted)) {
+      throw new Error('ENCRYPTION_FAILED: Encryption produced invalid or empty output.');
+    }
+    return encrypted;
+  },
+
+  /**
    * Encrypts plaintext using AES-256-GCM with the active key version.
    * Output Format: [VERSION]:[IV(base64)]:[AUTHTAG(base64)]:[CIPHERTEXT(base64)]
    */

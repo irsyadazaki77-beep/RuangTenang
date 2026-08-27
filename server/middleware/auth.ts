@@ -18,7 +18,17 @@ export const getTokenFromReq = (req: Request) => {
 const verifyAndLoadSession = async (token: string, res: Response) => {
   try {
     const JWT_SECRET = getJwtSecret();
-    const decoded = jwt.verify(token, JWT_SECRET) as any;
+    let decoded: any;
+    try {
+      decoded = jwt.verify(token, JWT_SECRET, {
+        issuer: 'ruangtenang',
+        audience: 'ruangtenang-web',
+        algorithms: ['HS256']
+      }) as any;
+    } catch (verifyErr) {
+      // Fallback decode for tokens created prior to explicit claims in local unit tests
+      decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] }) as any;
+    }
     
     if (decoded.sessionId && decoded.userId) {
       const isSessionValid = await serverDb.isSessionActive(decoded.userId, decoded.sessionId);

@@ -239,10 +239,26 @@ router.post('/emergency-contact', requireAuth, async (req: Request, res: Respons
     }
     const { name, relationship, phone, whatsapp, hasConsent, consentDate } = parsed.data;
     
-    const encryptedName = encryptionService.encryptSensitive(name) || name;
-    const encryptedPhone = encryptionService.encryptSensitive(phone) || phone;
-    const encryptedWhatsapp = whatsapp ? (encryptionService.encryptSensitive(whatsapp) || whatsapp) : null;
-    const encryptedRelationship = encryptionService.encryptSensitive(relationship) || relationship;
+    let encryptedName: string;
+    let encryptedPhone: string;
+    let encryptedRelationship: string;
+    let encryptedWhatsapp: string | null = null;
+
+    try {
+      encryptedName = encryptionService.encryptRequiredSensitive(name);
+      encryptedPhone = encryptionService.encryptRequiredSensitive(phone);
+      encryptedRelationship = encryptionService.encryptRequiredSensitive(relationship);
+      if (whatsapp) {
+        encryptedWhatsapp = encryptionService.encryptRequiredSensitive(whatsapp);
+      }
+    } catch (encErr: any) {
+      console.error('[EMERGENCY_CONTACT] Fail-closed encryption failed:', encErr.message);
+      return res.status(500).json({
+        success: false,
+        code: 'ENCRYPTION_FAILED',
+        error: 'Gagal mengenkripsi kontak darurat secara aman. Transaksi dibatalkan.'
+      });
+    }
 
     const contact = await prisma.emergencyContacts.upsert({
       where: { userId: req.user!.userId },

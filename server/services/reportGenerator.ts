@@ -12,7 +12,7 @@ export interface ReportMetrics {
 }
 
 export async function generateRectorateReport(metrics: ReportMetrics): Promise<string> {
-  return new Promise(async (resolve, reject) => {
+  return new Promise((resolve, reject) => {
     try {
       const doc = new PDFDocument({ margin: 50, size: 'A4' });
       const reportsDir = path.join(process.cwd(), 'reports');
@@ -97,63 +97,65 @@ export async function generateRectorateReport(metrics: ReportMetrics): Promise<s
 }
 
 export async function generateStudentProgressPdf(userId: string, studentName: string): Promise<Buffer> {
-  return new Promise(async (resolve, reject) => {
-    try {
-      const doc = new PDFDocument({ margin: 50, size: 'A4' });
-      const chunks: Buffer[] = [];
+  return new Promise((resolve, reject) => {
+    (async () => {
+      try {
+        const doc = new PDFDocument({ margin: 50, size: 'A4' });
+        const chunks: Buffer[] = [];
 
-      doc.on('data', (chunk) => chunks.push(chunk));
-      doc.on('end', () => resolve(Buffer.concat(chunks)));
-      doc.on('error', (err) => reject(err));
+        doc.on('data', (chunk) => chunks.push(chunk));
+        doc.on('end', () => resolve(Buffer.concat(chunks)));
+        doc.on('error', (err) => reject(err));
 
-      // Fetch data
-      const screenings = await (prisma as any).screenings.findMany({
-        where: { userId },
-        orderBy: { timestamp: 'asc' }
-      });
-      
-      const latestScreening = screenings.length > 0 ? screenings[screenings.length - 1] : null;
+        // Fetch data
+        const screenings = await (prisma as any).screenings.findMany({
+          where: { userId },
+          orderBy: { timestamp: 'asc' }
+        });
+        
+        const latestScreening = screenings.length > 0 ? screenings[screenings.length - 1] : null;
 
-      // Header
-      doc.fontSize(22).fillColor('#0f172a').font('Helvetica-Bold').text('Ringkasan Perkembangan Emosional', { align: 'center' });
-      doc.moveDown(0.5);
-      doc.fontSize(12).fillColor('#64748b').font('Helvetica').text('Aplikasi RuangTenang Kampus', { align: 'center' });
-      doc.moveDown(2);
+        // Header
+        doc.fontSize(22).fillColor('#0f172a').font('Helvetica-Bold').text('Ringkasan Perkembangan Emosional', { align: 'center' });
+        doc.moveDown(0.5);
+        doc.fontSize(12).fillColor('#64748b').font('Helvetica').text('Aplikasi RuangTenang Kampus', { align: 'center' });
+        doc.moveDown(2);
 
-      // Identitas (Optional / Masked for safety, but this is their own export so name is fine, just safe practices)
-      doc.fontSize(12).fillColor('#334155').font('Helvetica-Bold').text(`Nama Mahasiswa: ${studentName || 'Anonim'}`);
-      doc.font('Helvetica').text(`Tanggal Unduh: ${new Date().toLocaleDateString('id-ID')}`);
-      doc.moveDown(1.5);
+        // Identitas (Optional / Masked for safety, but this is their own export so name is fine, just safe practices)
+        doc.fontSize(12).fillColor('#334155').font('Helvetica-Bold').text(`Nama Mahasiswa: ${studentName || 'Anonim'}`);
+        doc.font('Helvetica').text(`Tanggal Unduh: ${new Date().toLocaleDateString('id-ID')}`);
+        doc.moveDown(1.5);
 
-      // Metrik Saat Ini
-      doc.fontSize(16).fillColor('#0f172a').font('Helvetica-Bold').text('Kondisi Terkini Berdasarkan Skrining Terakhir');
-      doc.moveDown(0.5);
-      
-      if (latestScreening) {
-        doc.fontSize(12).fillColor('#334155').font('Helvetica')
-           .text(`Tanggal Skrining: ${new Date(latestScreening.timestamp).toLocaleDateString('id-ID')}`)
-           .text(`Skor PHQ-9 (Depresi): ${latestScreening.phq9Score} / 27`)
-           .text(`Skor GAD-7 (Kecemasan): ${latestScreening.gad7Score} / 21`);
-      } else {
-        doc.fontSize(12).fillColor('#334155').font('Helvetica').text('Belum ada data skrining yang tercatat.');
+        // Metrik Saat Ini
+        doc.fontSize(16).fillColor('#0f172a').font('Helvetica-Bold').text('Kondisi Terkini Berdasarkan Skrining Terakhir');
+        doc.moveDown(0.5);
+        
+        if (latestScreening) {
+          doc.fontSize(12).fillColor('#334155').font('Helvetica')
+             .text(`Tanggal Skrining: ${new Date(latestScreening.timestamp).toLocaleDateString('id-ID')}`)
+             .text(`Skor PHQ-9 (Depresi): ${latestScreening.phq9Score} / 27`)
+             .text(`Skor GAD-7 (Kecemasan): ${latestScreening.gad7Score} / 21`);
+        } else {
+          doc.fontSize(12).fillColor('#334155').font('Helvetica').text('Belum ada data skrining yang tercatat.');
+        }
+        
+        doc.moveDown(1.5);
+
+        // Catatan Konseling (Placeholder untuk dibawa ke sesi)
+        doc.fontSize(16).fillColor('#0f172a').font('Helvetica-Bold').text('Ruang Catatan Konselor / Psikolog');
+        doc.moveDown(0.5);
+        
+        // Draw lines for notes
+        const startY = doc.y;
+        for (let i = 0; i < 10; i++) {
+          doc.moveTo(50, startY + (i * 25)).lineTo(545, startY + (i * 25)).lineWidth(1).strokeColor('#e2e8f0').stroke();
+        }
+
+        doc.end();
+      } catch (err) {
+        reject(err);
       }
-      
-      doc.moveDown(1.5);
-
-      // Catatan Konseling (Placeholder untuk dibawa ke sesi)
-      doc.fontSize(16).fillColor('#0f172a').font('Helvetica-Bold').text('Ruang Catatan Konselor / Psikolog');
-      doc.moveDown(0.5);
-      
-      // Draw lines for notes
-      const startY = doc.y;
-      for (let i = 0; i < 10; i++) {
-        doc.moveTo(50, startY + (i * 25)).lineTo(545, startY + (i * 25)).lineWidth(1).strokeColor('#e2e8f0').stroke();
-      }
-
-      doc.end();
-    } catch (err) {
-      reject(err);
-    }
+    })();
   });
 }
 

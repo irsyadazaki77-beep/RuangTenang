@@ -6,6 +6,9 @@ import { consentService } from '../services/consentService.js';
 import { retentionService } from '../services/retentionService.js';
 import { serverDb } from '../database.js';
 
+import { exportLimiter } from '../middleware/rateLimiters.js';
+import bcrypt from 'bcryptjs';
+
 const router = Router();
 
 export const saveConsentSchema = z.object({
@@ -78,12 +81,14 @@ router.post('/consent/revoke', requireAuth, async (req: Request, res: Response) 
 });
 
 // Download Complete User Data Export (JSON)
-router.get(['/download-data', '/export'], requireAuth, async (req: Request, res: Response) => {
+router.get(['/download-data', '/export'], requireAuth, exportLimiter, async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
     const bundle = await retentionService.exportUserData(userId);
 
     res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.setHeader('Pragma', 'no-cache');
     res.setHeader('Content-Disposition', `attachment; filename="ruangtenang_data_export_${userId}.json"`);
     return res.json(bundle);
   } catch (err: any) {
@@ -208,6 +213,33 @@ router.post(['/erasure-request', '/db/data-erasure'], requireAuth, async (req: R
     let targetUserId = req.user!.userId;
     if (req.user!.role === 'admin' && req.body.userId) {
       targetUserId = req.body.userId;
+    }
+
+    // Confirmation check for self-erasure
+    if (targetUserId === req.user!.userId) {
+      const { confirmText, confirmPassword } = req.body;
+      const isConfirmedText = confirmText === 'HAPUS AKUN SAYA' || req.body.confirmDelete === true;
+      if (!isConfirmedText && !confirmPassword) {
+        return res.status(400).json({
+          success: false,
+          code: 'CONFIRMATION_REQUIRED',
+          error: 'Penghapusan akun memerlukan konfirmasi. Sertakan confirmText: "HAPUS AKUN SAYA" atau kata sandi Anda.'
+        });
+      }
+
+      if (confirmPassword) {
+        const user = await serverDb.getUserById(req.user!.userId);
+        if (user) {
+          const isValid = await bcrypt.compare(confirmPassword, user.passwordHash);
+          if (!isValid) {
+            return res.status(401).json({
+              success: false,
+              code: 'INVALID_PASSWORD',
+              error: 'Kata sandi konfirmasi tidak sesuai.'
+            });
+          }
+        }
+      }
     }
 
     const result = await retentionService.eraseUserData(targetUserId, req.user!.name);
