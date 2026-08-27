@@ -248,6 +248,16 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
             <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">Progress & Aktivitas</h1>
             <p className="text-sm text-slate-500 mt-1">Pantau perkembangan kesejahteraan mental Anda dari waktu ke waktu.</p>
           </div>
+          <button
+            onClick={() => {
+              showToast('Menyiapkan dokumen PDF Anda...');
+              window.open('/api/v1/user/export-progress-pdf', '_blank');
+            }}
+            className="flex items-center gap-2 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 px-4 py-2.5 rounded-xl font-medium text-sm transition-all shadow-sm"
+          >
+            <Activity className="w-4 h-4 text-teal-600" />
+            <span>Unduh Ringkasan Perkembangan Saya (.PDF)</span>
+          </button>
         </motion.div>
 
         {/* Summary Cards */}
@@ -292,6 +302,7 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
             <div className="overflow-hidden">
                <ScreeningTrend 
                  screenHistory={screenHistory as any}
+                 moodLogs={moodLogs}
                  currentPhq9={currentPhq9}
                  currentGad7={currentGad7}
                  currentTriage={currentTriage}

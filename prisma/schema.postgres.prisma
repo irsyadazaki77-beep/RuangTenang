@@ -3,8 +3,8 @@
 // Configuration: Uses DATABASE_URL environment variable
 
 datasource db {
-  provider = "sqlite"
-  url      = "file:./ruangtenang_sqlite.db"
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 generator client {
@@ -241,6 +241,7 @@ model Chats {
 
   @@index([userId])
   @@index([userId, isPinned, updatedAt])
+  @@index([userId, isArchived, updatedAt])
 }
 
 model ChatMessages {

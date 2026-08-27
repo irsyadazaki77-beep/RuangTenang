@@ -103,32 +103,31 @@ export const CounselorDirectory: React.FC<CounselorDirectoryProps> = ({
         </p>
       </div>
 
-      {/* Filter Controls (Requirement 11) */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-4">
+      {/* Filter Controls */}
+      <div className="bg-white border border-slate-200/70 rounded-2xl p-4 shadow-sm space-y-4">
         <div className="flex flex-col md:flex-row gap-3">
           {/* Search Box */}
           <div className="flex-1 relative">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
+            <Search className="w-5 h-5 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               placeholder="Cari nama konselor, kampus, atau topik..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-slate-50 rounded-xl pl-10 pr-4 py-2.5 text-base sm:text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-teal-600 min-h-[44px]"
+              className="w-full bg-slate-50/50 rounded-xl pl-12 pr-4 py-3 text-sm text-slate-800 placeholder-slate-400 border border-slate-200/80 focus:outline-none focus:border-teal-500/50 focus:ring-4 focus:ring-teal-500/10 transition-all min-h-[48px]"
             />
           </div>
 
           {/* Gender Filter */}
-          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl text-xs font-semibold border border-slate-200">
-            <span className="text-slate-500 text-xs px-2">Gender:</span>
+          <div className="flex items-center bg-slate-50/50 p-1 rounded-xl text-sm font-medium border border-slate-200/80">
             {(["Semua", "Perempuan", "Laki-laki"] as const).map((g) => (
               <button
                 key={g}
                 onClick={() => setGenderFilter(g)}
-                className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer min-h-[44px] ${
+                className={`px-4 py-2 rounded-lg transition-all cursor-pointer min-h-[40px] ${
                   genderFilter === g
-                    ? "bg-teal-700 text-white shadow-xs"
-                    : "text-slate-600 hover:text-slate-900"
+                    ? "bg-white text-teal-700 shadow-sm border border-slate-200/60"
+                    : "text-slate-500 hover:text-slate-800"
                 }`}
               >
                 {g}
@@ -136,71 +135,43 @@ export const CounselorDirectory: React.FC<CounselorDirectoryProps> = ({
             ))}
           </div>
         </div>
-
         
         {/* Advanced Filters */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 pt-3 border-t border-slate-100">
-          <select value={campusFilter} onChange={(e) => setCampusFilter(e.target.value)} className="bg-slate-50 border border-slate-200 text-slate-700 text-base sm:text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-teal-500">
+        <div className="flex flex-wrap gap-3 pt-3 border-t border-slate-100">
+          <select value={campusFilter} onChange={(e) => setCampusFilter(e.target.value)} className="bg-white border border-slate-200/80 text-slate-600 text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:border-teal-500 min-h-[44px]">
             <option value="Semua">Semua Kampus</option>
             <option value="UI">UI</option>
             <option value="ITB">ITB</option>
             <option value="UGM">UGM</option>
             <option value="UNAIR">UNAIR</option>
           </select>
-          <select value={costFilter} onChange={(e) => setCostFilter(e.target.value)} className="bg-slate-50 border border-slate-200 text-slate-700 text-base sm:text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-teal-500">
+          <select value={costFilter} onChange={(e) => setCostFilter(e.target.value)} className="bg-white border border-slate-200/80 text-slate-600 text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:border-teal-500 min-h-[44px]">
             <option value="Semua">Semua Biaya</option>
             <option value="Gratis">Gratis (Mahasiswa)</option>
             <option value="Berbayar">Berbayar</option>
           </select>
-          <select value={methodFilter} onChange={(e) => setMethodFilter(e.target.value)} className="bg-slate-50 border border-slate-200 text-slate-700 text-base sm:text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-teal-500">
+          <select value={methodFilter} onChange={(e) => setMethodFilter(e.target.value)} className="bg-white border border-slate-200/80 text-slate-600 text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:border-teal-500 min-h-[44px]">
             <option value="Semua">Semua Metode</option>
             <option value="video_call">Video Call</option>
-            <option value="Chat">Chat</option>
             <option value="in_person">Tatap Muka</option>
           </select>
-          <select value={languageFilter} onChange={(e) => setLanguageFilter(e.target.value)} className="bg-slate-50 border border-slate-200 text-slate-700 text-base sm:text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-teal-500">
-            <option value="Semua">Semua Bahasa</option>
-            <option value="Indonesia">Indonesia</option>
-            <option value="Inggris">Inggris</option>
-            <option value="Jawa">Jawa</option>
-          </select>
-          <select value={availabilityFilter} onChange={(e) => setAvailabilityFilter(e.target.value)} className="bg-slate-50 border border-slate-200 text-slate-700 text-base sm:text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-teal-500">
-            <option value="Semua">Semua Ketersediaan</option>
-            <option value="Hari Ini">Tersedia Hari Ini</option>
-          </select>
-        </div>
-
-        {/* Concern Categories Filter */}
-        <div className="flex items-center gap-2 overflow-x-auto pt-1 no-scrollbar text-xs border-t border-slate-100">
-          <span className="text-slate-500 font-bold shrink-0 mr-1 flex items-center gap-1">
-            <Filter className="w-3.5 h-3.5 text-teal-600" /> Kebutuhan:
-          </span>
-          {CONCERN_CATEGORIES.map((cat) => (
-            <button
-              key={cat}
-              onClick={() => setSelectedConcern(cat)}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all whitespace-nowrap cursor-pointer min-h-[44px] ${
-                selectedConcern === cat
-                  ? "bg-teal-700 text-white font-bold"
-                  : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-              }`}
-            >
-              {cat}
-            </button>
-          ))}
         </div>
       </div>
 
-      {/* Directory Grid (Requirement 10: Clean Essentials) */}
+      {/* Directory Grid */}
       {filteredCounselors.length === 0 ? (
-        <div className="bg-white border border-slate-200 rounded-2xl p-8 text-center space-y-3 shadow-xs">
-          <Users className="w-8 h-8 text-slate-400 mx-auto" />
-          <h3 className="font-bold text-slate-900 text-sm">
-            Tidak Ada Konselor Ditemukan
-          </h3>
-          <p className="text-slate-500 text-xs max-w-sm mx-auto">
-            Coba ubah kata kunci pencarian atau sesuaikan filter kriteria.
-          </p>
+        <div className="bg-white border border-slate-200/70 rounded-2xl p-12 text-center space-y-4 shadow-sm">
+          <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto">
+             <Users className="w-8 h-8 text-slate-400" />
+          </div>
+          <div>
+            <h3 className="font-semibold text-slate-800 text-lg">
+              Tidak Ada Konselor Ditemukan
+            </h3>
+            <p className="text-slate-500 text-sm mt-1 max-w-sm mx-auto">
+              Coba ubah kata kunci pencarian atau sesuaikan filter kriteria.
+            </p>
+          </div>
           <button
             onClick={() => {
               setSearchQuery("");
@@ -212,114 +183,71 @@ export const CounselorDirectory: React.FC<CounselorDirectoryProps> = ({
               setLanguageFilter("Semua");
               setAvailabilityFilter("Semua");
             }}
-            className="px-4 py-2.5 bg-teal-700 hover:bg-teal-800 text-white font-semibold text-xs rounded-xl transition-all cursor-pointer min-h-[44px]"
+            className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium text-sm rounded-xl transition-all cursor-pointer min-h-[44px]"
           >
-            Reset Semua Filter
+            Reset Filter
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {filteredCounselors.map((counselor) => (
             <div
               key={counselor.id}
-              className="bg-white border border-slate-200 hover:border-teal-500 rounded-2xl p-5 transition-all shadow-xs space-y-4 flex flex-col justify-between"
+              className="bg-white border border-slate-200/70 hover:border-teal-200 rounded-2xl p-5 transition-all shadow-sm hover:shadow-md space-y-5 flex flex-col justify-between group"
             >
-              <div className="space-y-3">
-                
-                {/* Credentials & Verification Notice */}
-                {counselor.isDemoData ? (
-                  <div className="bg-yellow-50/50 border border-yellow-100 rounded-xl p-3 mb-2 space-y-1">
-                     <p className="text-[11px] text-yellow-800 flex items-center gap-1 font-medium"><ShieldCheck className="w-3.5 h-3.5" /> Demo Data (Fiktif)</p>
-                     <p className="text-[10px] text-yellow-600">Tidak untuk digunakan nyata</p>
-                  </div>
-                ) : counselor.licenseNumber ? (
-                  <div className="bg-teal-50/50 border border-teal-100 rounded-xl p-3 mb-2 space-y-1">
-                     <p className="text-[11px] text-teal-800 flex items-center gap-1 font-medium"><ShieldCheck className="w-3.5 h-3.5" /> Terverifikasi HIMPSI & SIPP Aktif</p>
-                     <p className="text-[10px] text-teal-600">No: {counselor.licenseNumber}</p>
-                  </div>
-                ) : (
-                  <div className="bg-slate-50/50 border border-slate-200 rounded-xl p-3 mb-2 space-y-1">
-                     <p className="text-[11px] text-slate-700 flex items-center gap-1 font-medium"><Users className="w-3.5 h-3.5" /> Konselor Belum Terverifikasi</p>
-                     <p className="text-[10px] text-slate-500">Menunggu proses verifikasi SIPP</p>
-                  </div>
-                )}
+              <div className="space-y-4">
                 {/* Essentials: Photo, Name, Title, University */}
-                <div className="flex items-start gap-3.5">
+                <div className="flex items-center gap-4">
                   <img
                     src={counselor.avatar}
                     alt={counselor.name}
-                    width={56}
-                    height={56}
+                    width={64}
+                    height={64}
                     loading="lazy"
-                    className="w-14 h-14 rounded-xl object-cover border border-slate-200 shrink-0 cursor-pointer"
+                    className="w-16 h-16 rounded-full object-cover border border-slate-100 shadow-sm shrink-0 cursor-pointer group-hover:scale-105 transition-transform"
                     onClick={() => setSelectedCounselorModal(counselor)}
                   />
-                  <div className="space-y-1 flex-1 min-w-0">
+                  <div className="space-y-0.5 flex-1 min-w-0">
                     <h3
                       onClick={() => setSelectedCounselorModal(counselor)}
-                      className="font-bold text-slate-900 text-base leading-tight cursor-pointer hover:text-teal-700 transition-colors truncate"
+                      className="font-semibold text-slate-900 text-base leading-tight cursor-pointer hover:text-teal-700 transition-colors truncate"
                     >
                       {counselor.name}
                     </h3>
-                    <p className="text-xs text-slate-600 font-medium">
+                    <p className="text-sm text-slate-500 font-medium truncate">
                       {counselor.title}
                     </p>
-                    <p className="text-xs text-slate-500 flex items-center gap-1">
-                      <GraduationCap className="w-3.5 h-3.5 text-slate-400" />
+                    <p className="text-xs text-slate-400 flex items-center gap-1.5 mt-1">
+                      <GraduationCap className="w-3.5 h-3.5" />
                       <span className="truncate">{counselor.university}</span>
                     </p>
                   </div>
                 </div>
-
-                {/* Specialties & Badge */}
-                <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                  <span className="px-2.5 py-1 bg-teal-50 text-teal-700 rounded-lg text-xs font-bold border border-teal-200 flex items-center gap-1">
-                    <Lock className="w-3 h-3" /> 100% Virtual Session
-                  </span>
-                  
-                  {counselor.availableToday && (
-                    <span className="px-2.5 py-1 bg-green-50 text-green-700 rounded-lg text-xs font-bold border border-green-200 flex items-center gap-1">
-                      Hari Ini
-                    </span>
-                  )}
-                  <span className="px-2.5 py-1 bg-slate-100 text-slate-700 rounded-lg text-xs font-medium">
-                      {counselor.isFreeForStudents ? 'Gratis' : `Rp${counselor.price?.toLocaleString('id-ID')}`}
-                  </span>
-                  {counselor.specialties.slice(0, 1).map((s, idx) => (
-                    <span
-                      key={idx}
-                      className="px-2.5 py-1 bg-slate-100 text-slate-700 rounded-lg text-xs font-medium"
-                    >
-                      {s}
-                    </span>
-                  ))}
-                </div>
               </div>
 
               {/* Essential Details: Available schedule, method, and 1 primary CTA */}
-              <div className="pt-3 space-y-3">
-                <div className="flex items-center justify-between text-xs text-slate-600">
-                  <span>Jadwal Tersedia Terdekat:</span>
-                  <span className="font-bold text-slate-900 flex items-center gap-1">
-                    <Calendar className="w-3.5 h-3.5 text-teal-600" />{" "}
+              <div className="pt-4 border-t border-slate-100/80 space-y-4">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-slate-500">Sesi Terdekat</span>
+                  <span className="font-medium text-slate-800 flex items-center gap-1.5 bg-slate-50 px-2 py-1 rounded-md">
+                    <Calendar className="w-4 h-4 text-teal-600" />
                     {counselor.nextAvailableSlot}
                   </span>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 pt-1">
                   <button
                     onClick={() => setSelectedCounselorModal(counselor)}
-                    className="px-3 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold rounded-xl transition-all cursor-pointer min-h-[44px]"
+                    className="px-4 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-sm font-medium rounded-xl transition-all cursor-pointer min-h-[44px]"
                   >
                     Profil
                   </button>
 
                   <button
                     onClick={() => onSelectCounselorForBooking(counselor)}
-                    className="flex-1 py-2.5 bg-teal-700 hover:bg-teal-800 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer min-h-[44px]"
+                    className="flex-1 py-2.5 bg-teal-600 hover:bg-teal-700 text-white font-medium text-sm rounded-xl shadow-sm hover:shadow transition-all flex items-center justify-center gap-2 cursor-pointer min-h-[44px]"
                   >
-                    <span>Pilih & Jadwalkan</span>
-                    <ArrowRight className="w-4 h-4" />
+                    <span>Jadwalkan</span>
                   </button>
                 </div>
               </div>

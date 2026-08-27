@@ -14,8 +14,17 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+export const DEFAULT_GUEST_USER: UserSession = {
+  id: 'guest',
+  name: 'Mahasiswa / Tamu (Anonim)',
+  email: 'anonim@kampus.ac.id',
+  role: 'guest',
+  tier: 'Free',
+  usageStats: { chatMessagesSent: 0, appointmentsBooked: 0 }
+};
+
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<UserSession | null>(null);
+  const [user, setUser] = useState<UserSession | null>(DEFAULT_GUEST_USER);
   const [loading, setLoading] = useState(true);
   const [isOffline, setIsOffline] = useState(false);
 
@@ -40,11 +49,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (res.success && res.data?.user) {
         setUser(res.data.user);
       } else {
-        setUser(null);
+        setUser(DEFAULT_GUEST_USER);
       }
     } catch (e) {
-      console.error('Session check failed:', e);
-      setUser(null);
+      console.warn('Session check fallback to guest:', e);
+      setUser(DEFAULT_GUEST_USER);
     } finally {
       setLoading(false);
     }
@@ -60,7 +69,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } catch (err) {
       console.error('Logout failed:', err);
     } finally {
-      setUser(null);
+      setUser(DEFAULT_GUEST_USER);
     }
   };
 

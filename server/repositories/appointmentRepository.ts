@@ -2,6 +2,7 @@ import { prisma } from "../database";
 import { AppointmentRecord } from "../database";
 import { auditRepository } from "./auditRepository";
 import { encryptionService } from "../services/encryptionService";
+import { redisService } from "../services/redisService";
 
 const HARD_MAX_PAGE_SIZE = 100;
 
@@ -59,6 +60,12 @@ export const appointmentRepository = {
   },
 
   async getAppointmentAvailability(counselorId: string, date: string) {
+    const cacheKey = `availability:${counselorId}:${date}`;
+    const cached = await redisService.get<any>(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
     const standardSlots = ["09:00", "10:30", "14:00", "16:00"];
     
     // Find slots currently reserved in the database
@@ -74,7 +81,7 @@ export const appointmentRepository = {
       (slot) => !bookedSlots.includes(slot),
     );
 
-    return {
+    const result = {
       counselorId,
       date,
       allSlots: standardSlots,
@@ -82,6 +89,11 @@ export const appointmentRepository = {
       availableSlots,
       fullyBooked: availableSlots.length === 0,
     };
+
+    // Cache availability for 60 seconds
+    await redisService.set(cacheKey, result, 60);
+
+    return result;
   },
 
   async addAppointment(
@@ -159,6 +171,9 @@ export const appointmentRepository = {
       } catch (logErr) {
         console.warn('Non-fatal audit log failure in transaction:', logErr);
       }
+
+      // Invalidate slot availability cache
+      await redisService.del(`availability:${appt.counselorId}:${appt.date}`);
 
       return mapDbAppointmentToRecord(created);
     });
@@ -261,6 +276,12 @@ export const appointmentRepository = {
         console.warn('Non-fatal audit log failure in transaction:', logErr);
       }
 
+      // Invalidate slot availability cache
+      await redisService.del(`availability:${current.counselorId}:${current.date}`);
+      if (targetCounselorId !== current.counselorId || targetDate !== current.date) {
+        await redisService.del(`availability:${targetCounselorId}:${targetDate}`);
+      }
+
       return mapDbAppointmentToRecord(updated);
     });
   },
@@ -268,6 +289,8 @@ export const appointmentRepository = {
   async deleteAppointment(id: string): Promise<boolean> {
     try {
       await prisma.$transaction(async (tx) => {
+        const appt = await tx.appointments.findUnique({ where: { id } });
+
         await tx.appointmentSlot.deleteMany({
           where: { appointmentId: id },
         });
@@ -285,6 +308,10 @@ export const appointmentRepository = {
             userRole: "admin",
           }
         });
+
+        if (appt) {
+          await redisService.del(`availability:${appt.counselorId}:${appt.date}`);
+        }
       });
 
       return true;

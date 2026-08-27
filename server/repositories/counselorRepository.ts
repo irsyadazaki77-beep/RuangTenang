@@ -1,5 +1,6 @@
 import { prisma } from "../database";
 import { CounselorRecord } from "../database";
+import { redisService } from "../services/redisService";
 
 export const counselorRepository = {
   async getCounselors(limit = 100, offset = 0): Promise<CounselorRecord[]> {
@@ -96,6 +97,9 @@ export const counselorRepository = {
         createdAt: timestamp,
       },
     });
+
+    // Invalidate cached counselor lists
+    await redisService.delPattern('counselors:list:*');
 
     return {
       ...created,

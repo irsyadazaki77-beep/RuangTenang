@@ -27,6 +27,7 @@ import { BookingForm } from './BookingForm';
 import { RescheduleModal } from './RescheduleModal';
 import { CounselorChatSimulation } from './CounselorChatSimulation';
 import { AppointmentDetailsModal } from './AppointmentDetailsModal';
+import { VideoConsultationRoom } from './VideoConsultationRoom';
 import { CalendarReminderModal } from '../../components/CalendarReminderModal';
 import {
   downloadIcsCalendarFile,
@@ -60,9 +61,62 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
   // Modal and focus tracking states (for progressive disclosure)
   const [rescheduleApt, setRescheduleApt] = useState<Appointment | null>(null);
   const [activeChatApt, setActiveChatApt] = useState<Appointment | null>(null);
+  const [activeVideoApt, setActiveVideoApt] = useState<Appointment | null>(null);
   const [activeSummaryApt, setActiveSummaryApt] = useState<Appointment | null>(null);
   const [selectedCalendarApt, setSelectedCalendarApt] = useState<Appointment | null>(null);
   const [cancelModalAptId, setCancelModalAptId] = useState<string | null>(null);
+
+  // Real-time Appointment Status Updates (SSE)
+  useEffect(() => {
+    if (!userSession || userSession.role === 'guest') {
+      return;
+    }
+
+    let eventSource: EventSource | null = null;
+    try {
+      eventSource = new EventSource('/api/v1/appointments/stream', { withCredentials: true });
+      
+      eventSource.onmessage = (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          if (data && data.id) {
+            setAppointments(prev => prev.map(a => {
+              if (a.id === data.id) {
+                return {
+                  ...a,
+                  status: data.status === 'PENDING' ? 'Menunggu Konfirmasi' : data.status === 'CONFIRMED' ? 'Konfirmasi' : data.status === 'CANCELLED' ? 'Dibatalkan' : data.status === 'REJECTED' ? 'Ditolak' : 'Selesai',
+                  approvalStatus: data.approvalStatus,
+                  attendanceStatus: data.attendanceStatus,
+                  notes: data.notes || a.notes,
+                  mode: data.mode || a.mode,
+                  date: data.date || a.date,
+                  timeSlot: (data.time && data.timezone) ? `${data.time} ${data.timezone}` : a.timeSlot
+                };
+              }
+              return a;
+            }));
+            showToast(`Pembaruan: Status janji temu Anda telah diubah menjadi ${data.status}.`, 'info');
+          }
+        } catch (err) {
+          console.warn('Failed to parse SSE data', err);
+        }
+      };
+
+      eventSource.onerror = () => {
+        if (eventSource) {
+          eventSource.close();
+        }
+      };
+    } catch (e) {
+      console.warn('SSE connection initialization error', e);
+    }
+
+    return () => {
+      if (eventSource) {
+        eventSource.close();
+      }
+    };
+  }, [userSession?.role, showToast]);
 
   // Active Reminder Scheduler Interval
   useEffect(() => {
@@ -544,7 +598,7 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
 
                 {/* Chat Simulation Actions */}
                 {apt.status !== 'Dibatalkan' && (
-                  <div className="pt-2.5 border-t border-slate-100 w-full">
+                  <div className="pt-2.5 border-t border-slate-100 w-full flex flex-col gap-2">
                     {apt.status === 'Selesai' ? (
                       <button
                         onClick={() => setActiveSummaryApt(apt)}
@@ -554,13 +608,25 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
                         <span>Lihat Ringkasan Hasil Konseling</span>
                       </button>
                     ) : (
-                      <button
-                        onClick={() => setActiveChatApt(apt)}
-                        className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-all shadow-sm cursor-pointer"
-                      >
-                        <MessageSquare className="w-4 h-4" />
-                        <span>Mulai Sesi Chat</span>
-                      </button>
+                      <>
+                        <button
+                          onClick={() => setActiveChatApt(apt)}
+                          className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-all shadow-sm cursor-pointer"
+                        >
+                          <MessageSquare className="w-4 h-4" />
+                          <span>Mulai Sesi Chat Teks (Simulasi)</span>
+                        </button>
+                        
+                        {apt.mode === 'video_call' && (
+                          <button
+                            onClick={() => setActiveVideoApt(apt)}
+                            className="w-full py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-all shadow-sm cursor-pointer"
+                          >
+                            <Video className="w-4 h-4" />
+                            <span>Mulai Tele-Konseling Video</span>
+                          </button>
+                        )}
+                      </>
                     )}
                   </div>
                 )}
@@ -596,6 +662,14 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
         onClose={() => setActiveChatApt(null)}
         onCompleteSession={handleCompleteSession}
         showToast={showToast}
+      />
+
+      {/* VIDEO CONSULTATION ROOM MODAL */}
+      <VideoConsultationRoom
+        appointment={activeVideoApt}
+        onClose={() => setActiveVideoApt(null)}
+        onEndCall={handleCompleteSession}
+        userRole={userSession.role as any}
       />
 
       {/* SUMMARY / DETAIL APPOINTMENT MODAL (PROGRESSIVE DISCLOSURE) */}

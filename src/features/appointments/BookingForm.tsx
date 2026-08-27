@@ -300,21 +300,21 @@ export const BookingForm: React.FC<BookingFormProps> = ({
 
         {/* Header & Stepper */}
         <div>
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+          <div className="flex items-center justify-between pb-4">
             <div>
-              <span className="text-xs font-bold text-teal-700 bg-teal-50 px-2.5 py-1 rounded-full border border-teal-200">
+              <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
                 Langkah {currentStep} dari 4
-              </span>
-              <h2 className="text-lg font-bold text-slate-900 mt-1">
+              </p>
+              <h2 className="text-xl font-medium text-slate-800 dark:text-slate-100">
                 {currentStep === 1 && "Pilih Konselor"}
-                {currentStep === 2 && "Pilih Jadwal"}
-                {currentStep === 3 && "Data Diri"}
+                {currentStep === 2 && "Pilih Jadwal Sesi"}
+                {currentStep === 3 && "Informasi Pribadi"}
                 {currentStep === 4 && "Konfirmasi"}
               </h2>
             </div>
             <button
               onClick={onClose}
-              className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg transition-colors cursor-pointer min-h-[36px]"
+              className="p-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors cursor-pointer"
               aria-label="Tutup Form"
             >
               <XCircle className="w-5 h-5" />
@@ -322,29 +322,29 @@ export const BookingForm: React.FC<BookingFormProps> = ({
           </div>
 
           {/* Stepper Progress Bar */}
-          <div className="w-full bg-slate-100 rounded-full h-1.5 mb-5 overflow-hidden">
+          <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-1 mb-8 overflow-hidden">
             <div
-              className="bg-teal-600 h-1.5 transition-all duration-300"
+              className="bg-teal-500 h-1 transition-all duration-500 ease-out"
               style={{ width: `${(currentStep / 4) * 100}%` }}
             />
           </div>
 
           {formError && (
-            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs font-medium flex items-center gap-2 mb-4">
-              <XCircle className="w-4 h-4 text-rose-600 shrink-0" />
+            <div className="p-3.5 bg-rose-50/80 border border-rose-100 rounded-2xl text-rose-600 text-sm font-medium flex items-center gap-3 mb-6">
+              <XCircle className="w-4 h-4 shrink-0" />
               <span>{formError}</span>
             </div>
           )}
 
-          {/* STEP 2: PILIH KONSELOR */}
+          {/* STEP 1: PILIH KONSELOR */}
           {currentStep === 1 && (
-            <div className="space-y-3">
-              <p className="text-xs text-slate-600">
-                Pilih psikolog / konselor kampus berpengalaman yang sesuai:
+            <div className="space-y-4 animate-in fade-in slide-in-from-right-2 duration-300">
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                Pilih psikolog atau konselor kampus yang ingin Anda temui:
               </p>
-              <div className="space-y-2 max-h-[320px] overflow-y-auto pr-1 custom-scrollbar">
+              <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
                 {loading ? (
-                  <div className="text-center text-slate-500 py-4 text-sm">Memuat konselor...</div>
+                  <div className="text-center text-slate-400 py-8 text-sm">Memuat daftar konselor...</div>
                 ) : (
                   counselors.map((c) => {
                     const isSelected = selectedCounselorId === c.id;
@@ -353,45 +353,35 @@ export const BookingForm: React.FC<BookingFormProps> = ({
                       key={c.id}
                       type="button"
                       onClick={() => setSelectedCounselorId(c.id)}
-                      className={`w-full text-left p-3.5 rounded-xl border transition-all cursor-pointer flex items-center gap-3.5 min-h-[72px] ${
+                      className={`w-full text-left p-4 rounded-2xl border transition-all cursor-pointer flex items-center gap-4 ${
                         isSelected
-                          ? "bg-teal-50 border-teal-600 ring-1 ring-teal-600"
-                          : "bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50"
+                          ? "bg-stone-50 dark:bg-slate-800/80 border-teal-500/30 ring-1 ring-teal-500/30"
+                          : "bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 hover:border-slate-200 dark:hover:border-slate-700"
                       }`}
                     >
                       <img
                         src={c.avatar}
                         alt={c.name}
-                        className="w-12 h-12 rounded-xl object-cover border border-slate-200 shrink-0"
+                        className="w-12 h-12 rounded-full object-cover border border-slate-100 dark:border-slate-700 shrink-0"
                       />
                       <div className="flex-1 min-w-0">
                         <p
-                          className={`text-base sm:text-sm font-bold truncate ${isSelected ? "text-teal-900" : "text-slate-900"}`}
+                          className={`text-base font-medium truncate ${isSelected ? "text-teal-700 dark:text-teal-400" : "text-slate-800 dark:text-slate-200"}`}
                         >
                           {c.name}
                         </p>
-                        <p className="text-xs text-slate-600 truncate">
+                        <p className="text-sm text-slate-500 truncate">
                           {c.title} &bull; {c.university}
                         </p>
-                        <div className="flex flex-wrap gap-1 mt-1">
-                          {c.specialties.slice(0, 2).map((s, idx) => (
-                            <span
-                              key={idx}
-                              className="text-[10px] bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md"
-                            >
-                              {s}
-                            </span>
-                          ))}
-                        </div>
                       </div>
                       <div
-                        className={`w-5 h-5 rounded-full border flex items-center justify-center shrink-0 ${
+                        className={`w-5 h-5 rounded-full border flex items-center justify-center shrink-0 transition-colors ${
                           isSelected
-                            ? "bg-teal-600 border-teal-600 text-white"
-                            : "border-slate-300"
+                            ? "bg-teal-500 border-teal-500 text-white"
+                            : "border-slate-200 dark:border-slate-700"
                         }`}
                       >
-                        {isSelected && <CheckCircle2 className="w-3.5 h-3.5" />}
+                        {isSelected && <CheckCircle2 className="w-3 h-3" />}
                       </div>
                     </button>
                   );
@@ -401,32 +391,32 @@ export const BookingForm: React.FC<BookingFormProps> = ({
             </div>
           )}
 
-          {/* STEP 3: PILIH JADWAL & METODE */}
+          {/* STEP 2: PILIH JADWAL & METODE */}
           {currentStep === 2 && (
-            <div className="space-y-4">
-              <div className="p-3 bg-slate-50 rounded-xl flex items-center gap-3">
+            <div className="space-y-6 animate-in fade-in slide-in-from-right-2 duration-300">
+              <div className="p-4 bg-stone-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800/80 rounded-2xl flex items-center gap-4">
                 <img
                   src={currentCounselor.avatar}
                   alt={currentCounselor.name}
-                  className="w-10 h-10 rounded-lg object-cover"
+                  className="w-12 h-12 rounded-full object-cover shrink-0"
                 />
                 <div>
-                  <p className="text-xs font-bold text-slate-900">
-                    {currentCounselor.name}
+                  <p className="text-sm font-medium text-slate-800 dark:text-slate-200">
+                    Sesi dengan {currentCounselor.name}
                   </p>
-                  <p className="text-[11px] text-slate-500">
+                  <p className="text-xs text-slate-500 mt-0.5">
                     {selectedConcern}
                   </p>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
                   <label
                     htmlFor="session-date-input"
-                    className="block text-xs font-semibold text-slate-700 mb-1"
+                    className="block text-sm text-slate-600 dark:text-slate-400"
                   >
-                    Tanggal Sesi:
+                    Tanggal
                   </label>
                   <input
                     id="session-date-input"
@@ -434,23 +424,23 @@ export const BookingForm: React.FC<BookingFormProps> = ({
                     required
                     value={date}
                     onChange={(e) => setDate(e.target.value)}
-                    className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 text-base sm:text-xs text-slate-800 focus:outline-none focus:border-teal-600 min-h-[44px]"
+                    className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:border-teal-500/50 focus:ring-4 focus:ring-teal-500/10 transition-all"
                   />
                 </div>
 
-                <div>
+                <div className="space-y-1.5">
                   <label
                     htmlFor="session-time-input"
-                    className="block text-xs font-semibold text-slate-700 mb-1"
+                    className="block text-sm text-slate-600 dark:text-slate-400"
                   >
-                    Jam Slot:
+                    Waktu
                   </label>
                   <select
                     id="session-time-input"
                     value={timeSlot}
                     onChange={(e) => setTimeSlot(e.target.value)}
                     disabled={isFullyBooked || availableSlots.length === 0}
-                    className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 text-base sm:text-xs text-slate-800 focus:outline-none focus:border-teal-600 disabled:bg-slate-100 min-h-[44px]"
+                    className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:border-teal-500/50 focus:ring-4 focus:ring-teal-500/10 transition-all disabled:opacity-50"
                   >
                     {availableSlots.length > 0 ? (
                       availableSlots.map((slot) => (
@@ -459,24 +449,24 @@ export const BookingForm: React.FC<BookingFormProps> = ({
                         </option>
                       ))
                     ) : (
-                      <option value="">(Penuh - Pilih Tanggal Lain)</option>
+                      <option value="">Penuh / Tidak Tersedia</option>
                     )}
                   </select>
                 </div>
               </div>
 
-              <div>
+              <div className="space-y-1.5">
                 <label
                   htmlFor="session-timezone"
-                  className="block text-xs font-semibold text-slate-700 mb-1"
+                  className="block text-sm text-slate-600 dark:text-slate-400"
                 >
-                  Zona Waktu:
+                  Zona Waktu
                 </label>
                 <select
                   id="session-timezone"
                   value={timezone}
                   onChange={(e) => setTimezone(e.target.value as any)}
-                  className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 text-base sm:text-xs text-slate-800 focus:outline-none focus:border-teal-600 min-h-[44px]"
+                  className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:border-teal-500/50 focus:ring-4 focus:ring-teal-500/10 transition-all"
                 >
                   <option value="WIB">WIB (Jakarta / Jawa / Sumatra)</option>
                   <option value="WITA">WITA (Bali / Sulawesi / Kaltim)</option>
@@ -484,21 +474,17 @@ export const BookingForm: React.FC<BookingFormProps> = ({
                 </select>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-2">
-                  Metode Konsultasi:
-                </label>
-                <div className="p-3 bg-teal-50 border border-teal-200 rounded-xl space-y-2">
-                  <div className="flex items-center gap-2 text-teal-800 font-bold text-xs">
-                    <span className="flex w-5 h-5 bg-teal-600 text-white rounded-full items-center justify-center">
-                      📹
-                    </span>
-                    Sesi Virtual Video Call (Jitsi / WebRTC)
+              <div className="pt-2">
+                <div className="p-4 bg-teal-50/50 dark:bg-teal-900/10 border border-teal-100 dark:border-teal-900/30 rounded-2xl flex items-start gap-3">
+                  <div className="mt-0.5 text-teal-600">
+                    <Lock className="w-4 h-4" />
                   </div>
-                  <p className="text-xs text-teal-700">
-                    Tautan ruang temu virtual akan langsung aktif begitu sesi
-                    dikonfirmasi oleh konselor.
-                  </p>
+                  <div>
+                    <p className="text-sm font-medium text-teal-800 dark:text-teal-300">Sesi Virtual Video Call</p>
+                    <p className="text-xs text-teal-600/80 dark:text-teal-400/80 mt-1">
+                      Tautan aman (Jitsi/WebRTC) akan diberikan setelah konfirmasi.
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
@@ -507,26 +493,23 @@ export const BookingForm: React.FC<BookingFormProps> = ({
           
           {/* STEP 3: DATA DIRI */}
           {currentStep === 3 && (
-            <div className="space-y-5 animate-in fade-in slide-in-from-right-4 duration-300">
-              <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4 shadow-sm">
-                <h3 className="font-bold text-slate-800 text-sm border-b border-slate-100 pb-2">Informasi Pribadi & Kontak</h3>
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">Nama Lengkap</label>
-                    <input type="text" value={studentName} onChange={(e) => setStudentName(e.target.value)} placeholder="Contoh: Budi Santoso" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-base sm:text-sm text-slate-800 focus:outline-none focus:border-teal-500 transition-all" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">NIM / Nomor Induk Mahasiswa</label>
-                    <input type="text" value={studentNIM} onChange={(e) => setStudentNIM(e.target.value)} placeholder="Contoh: 1201928391" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-base sm:text-sm text-slate-800 focus:outline-none focus:border-teal-500 transition-all" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">Email Kampus / Pribadi</label>
-                    <input type="email" value={studentEmail} onChange={(e) => setStudentEmail(e.target.value)} placeholder="Contoh: budi@univ.edu" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-base sm:text-sm text-slate-800 focus:outline-none focus:border-teal-500 transition-all" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">Nomor WhatsApp Aktif</label>
-                    <input type="tel" value={studentPhone} onChange={(e) => setStudentPhone(e.target.value)} placeholder="Contoh: 081234567890" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-base sm:text-sm text-slate-800 focus:outline-none focus:border-teal-500 transition-all" />
-                  </div>
+            <div className="space-y-5 animate-in fade-in slide-in-from-right-2 duration-300">
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="block text-sm text-slate-600 dark:text-slate-400">Nama Lengkap</label>
+                  <input type="text" value={studentName} onChange={(e) => setStudentName(e.target.value)} placeholder="Sesuai kartu identitas" className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:border-teal-500/50 focus:ring-4 focus:ring-teal-500/10 transition-all" />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="block text-sm text-slate-600 dark:text-slate-400">NIM / Nomor Induk</label>
+                  <input type="text" value={studentNIM} onChange={(e) => setStudentNIM(e.target.value)} placeholder="Cth: 12345678" className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:border-teal-500/50 focus:ring-4 focus:ring-teal-500/10 transition-all" />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="block text-sm text-slate-600 dark:text-slate-400">Email Utama</label>
+                  <input type="email" value={studentEmail} onChange={(e) => setStudentEmail(e.target.value)} placeholder="email@contoh.com" className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:border-teal-500/50 focus:ring-4 focus:ring-teal-500/10 transition-all" />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="block text-sm text-slate-600 dark:text-slate-400">Nomor WhatsApp Aktif</label>
+                  <input type="tel" value={studentPhone} onChange={(e) => setStudentPhone(e.target.value)} placeholder="0812..." className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:border-teal-500/50 focus:ring-4 focus:ring-teal-500/10 transition-all" />
                 </div>
               </div>
             </div>
@@ -534,62 +517,50 @@ export const BookingForm: React.FC<BookingFormProps> = ({
 
           {/* STEP 4: KONFIRMASI RINGKASAN */}
           {currentStep === 4 && (
-            <div className="space-y-5 animate-in fade-in slide-in-from-right-4 duration-300">
-              <div className="bg-teal-50/50 border border-teal-200 rounded-2xl p-5 shadow-sm space-y-4 relative overflow-hidden sticky top-0">
-                <div className="absolute top-0 right-0 w-32 h-32 bg-teal-500/10 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none" />
-                <h3 className="font-bold text-teal-900 text-sm flex items-center gap-2 border-b border-teal-100/50 pb-2 relative z-10">
-                  <CheckCircle2 className="w-4 h-4 text-teal-600" /> Ringkasan Reservasi
-                </h3>
-                
-                <div className="space-y-3 text-sm relative z-10">
-                  <div className="flex justify-between items-start">
-                    <span className="text-teal-700/70 font-medium">Konselor:</span>
-                    <span className="font-bold text-teal-950 text-right">{counselors.find(c => c.id === selectedCounselorId)?.name}</span>
-                  </div>
-                  <div className="flex justify-between items-start">
-                    <span className="text-teal-700/70 font-medium">Jadwal Sesi:</span>
-                    <span className="font-bold text-teal-950 text-right">
-                      {new Date(date).toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long", year: "numeric" })} <br/>
-                      {timeSlot} {timezone}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-start">
-                    <span className="text-teal-700/70 font-medium">Metode:</span>
-                    <span className="font-bold text-teal-950 text-right">{mode}</span>
-                  </div>
-                  <div className="flex justify-between items-start">
-                    <span className="text-teal-700/70 font-medium">Data Pasien:</span>
-                    <span className="font-bold text-teal-950 text-right">{studentName} <br/><span className="text-teal-700/60 font-normal text-xs">{studentEmail} | {studentPhone}</span></span>
-                  </div>
+            <div className="space-y-6 animate-in fade-in slide-in-from-right-2 duration-300">
+              <div className="bg-stone-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-2xl p-6 space-y-5">
+                <div className="space-y-1">
+                  <p className="text-xs text-slate-500">Konselor</p>
+                  <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{counselors.find(c => c.id === selectedCounselorId)?.name}</p>
                 </div>
-
-                <div className="bg-rose-50 border border-rose-100 rounded-xl p-3 mt-4 space-y-1 relative z-10">
-                  <p className="text-xs font-bold text-rose-800 flex items-center gap-1.5"><XCircle className="w-3.5 h-3.5"/> Kebijakan Pembatalan</p>
-                  <p className="text-[11px] text-rose-700/80 leading-relaxed">
-                    Pembatalan atau perubahan jadwal (reschedule) wajib dilakukan maksimal <strong>H-1 (24 jam)</strong> sebelum sesi dimulai. Pembatalan sepihak yang mendadak tanpa pemberitahuan akan mempengaruhi prioritas reservasi Anda di masa mendatang.
+                <div className="space-y-1">
+                  <p className="text-xs text-slate-500">Jadwal Sesi</p>
+                  <p className="text-sm font-medium text-slate-800 dark:text-slate-200">
+                    {new Date(date).toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long", year: "numeric" })} — {timeSlot} {timezone}
                   </p>
                 </div>
+                <div className="space-y-1">
+                  <p className="text-xs text-slate-500">Data Pemesan</p>
+                  <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{studentName}</p>
+                  <p className="text-xs text-slate-500 mt-0.5">{studentEmail}</p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3 p-4 bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl">
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  Dengan mengonfirmasi jadwal ini, Anda menyetujui bahwa pembatalan atau perubahan jadwal wajib dilakukan maksimal 24 jam sebelum sesi dimulai.
+                </p>
               </div>
             </div>
           )}
         </div>
         
 {/* Footer Navigation Buttons */}
-        <div className="pt-4 border-t border-slate-100 flex items-center justify-between gap-3 mt-6">
+        <div className="pt-6 mt-8 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3">
           {currentStep > 1 ? (
             <button
               type="button"
               onClick={handlePrevStep}
-              className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 active:scale-95 text-xs font-semibold rounded-xl transition-all flex items-center gap-1 cursor-pointer min-h-[44px]"
+              className="px-5 py-3 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 text-sm font-medium rounded-xl transition-colors flex items-center gap-2 cursor-pointer"
             >
               <ChevronLeft className="w-4 h-4" />
-              <span>Sebelumnya</span>
+              <span>Kembali</span>
             </button>
           ) : (
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2.5 text-slate-500 hover:text-slate-800 text-xs font-semibold rounded-xl transition-all cursor-pointer min-h-[44px]"
+              className="px-5 py-3 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 text-sm font-medium rounded-xl transition-colors cursor-pointer"
             >
               Batal
             </button>
@@ -599,9 +570,9 @@ export const BookingForm: React.FC<BookingFormProps> = ({
             <button
               type="button"
               onClick={handleNextStep}
-              className="px-5 py-2.5 bg-teal-700 hover:bg-teal-800 text-white active:scale-95 text-xs font-bold rounded-xl shadow-xs transition-all flex items-center gap-1 cursor-pointer min-h-[44px]"
+              className="px-6 py-3 bg-slate-900 dark:bg-white hover:bg-slate-800 dark:hover:bg-slate-100 text-white dark:text-slate-900 text-sm font-medium rounded-xl shadow-sm transition-all flex items-center gap-2 cursor-pointer ml-auto"
             >
-              <span>Lanjutkan</span>
+              <span>Lanjut</span>
               <ChevronRight className="w-4 h-4" />
             </button>
           ) : (
@@ -609,9 +580,9 @@ export const BookingForm: React.FC<BookingFormProps> = ({
               type="button"
               onClick={handleCreateAppointment}
               disabled={isSubmitting}
-              className="px-6 py-2.5 bg-teal-700 hover:bg-teal-800 text-white active:scale-95 text-xs font-bold rounded-xl shadow-xs transition-all disabled:opacity-50 cursor-pointer min-h-[44px]"
+              className="px-6 py-3 bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium rounded-xl shadow-sm transition-all disabled:opacity-50 cursor-pointer ml-auto"
             >
-              {isSubmitting ? "Memproses..." : "Konfirmasi & Simpan Jadwal"}
+              {isSubmitting ? "Memproses..." : "Konfirmasi Sesi"}
             </button>
           )}
         </div>

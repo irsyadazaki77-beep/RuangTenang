@@ -54,12 +54,26 @@ export function csrfProtection(req: Request, res: Response, next: NextFunction) 
   try {
     const parsedSource = new URL(sourceUrl);
     const sourceHost = parsedSource.host;
+    const sourceOrigin = parsedSource.origin;
 
-    // Check if source matches current server host or localhost
+    // Resolve configured allowed origins
+    const allowedOrigins = new Set<string>();
+    if (process.env.APP_ORIGIN) {
+      allowedOrigins.add(process.env.APP_ORIGIN.trim());
+    }
+    if (process.env.CORS_ALLOWED_ORIGINS) {
+      process.env.CORS_ALLOWED_ORIGINS.split(',').forEach(o => {
+        if (o.trim()) allowedOrigins.add(o.trim());
+      });
+    }
+
+    // Check if source matches current server host, localhost, or explicit allowlist
     const isSameHost = host && (sourceHost === host || sourceHost.split(':')[0] === host.split(':')[0]);
     const isLocalhost = sourceHost.startsWith('localhost') || sourceHost.startsWith('127.0.0.1') || sourceHost.startsWith('0.0.0.0');
+    const isAIStudioPreview = sourceOrigin.endsWith('.run.app') || sourceOrigin.endsWith('.studio') || sourceOrigin === 'https://ai.studio' || sourceOrigin.endsWith('.google.com') || sourceOrigin.endsWith('.google.dev');
+    const isExplicitlyAllowed = allowedOrigins.has(sourceOrigin) || isAIStudioPreview;
 
-    if (isSameHost || isLocalhost) {
+    if (isSameHost || isLocalhost || isExplicitlyAllowed) {
       return next();
     }
 

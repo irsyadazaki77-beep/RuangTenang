@@ -1,10 +1,11 @@
 /**
  * Persistent Distributed State Service
  * Handles multi-instance rate-limiting, SOS cooldowns, security throttling, and circuit breakers.
- * Backed by DistributedState table in the database.
+ * Backed by Redis with graceful fallback to DistributedState table in the database.
  */
 
 import { prisma } from '../database.js';
+import { redisService } from './redisService.js';
 
 export interface RateLimitResult {
   allowed: boolean;
@@ -28,26 +29,27 @@ export class DistributedStateService {
     const expiresAt = new Date(Date.now() + ttlSeconds * 1000);
     const valueStr = typeof value === 'string' ? value : JSON.stringify(value);
 
-    try {
-      await prisma.distributedState.upsert({
-        where: { key: compositeKey },
-        create: {
-          key: compositeKey,
-          category,
-          value: valueStr,
-          expiresAt,
-        },
-        update: {
-          category,
-          value: valueStr,
-          expiresAt,
-          updatedAt: new Date(),
-        },
-      });
-    } catch (err: any) {
-      // Non-blocking fallback if DB error
-      console.warn(`[DISTRIBUTED_STATE] Failed to persist state for key ${compositeKey}:`, err.message);
-    }
+    // 1. Write to Redis/In-Memory Cache
+    await redisService.set(compositeKey, valueStr, ttlSeconds);
+
+    // 2. Non-blocking sync to DB
+    prisma.distributedState.upsert({
+      where: { key: compositeKey },
+      create: {
+        key: compositeKey,
+        category,
+        value: valueStr,
+        expiresAt,
+      },
+      update: {
+        category,
+        value: valueStr,
+        expiresAt,
+        updatedAt: new Date(),
+      },
+    }).catch((err: any) => {
+      console.warn(`[DISTRIBUTED_STATE] DB sync warning for key ${compositeKey}:`, err.message);
+    });
   }
 
   /**
@@ -55,6 +57,14 @@ export class DistributedStateService {
    */
   static async get<T = any>(category: string, key: string): Promise<T | null> {
     const compositeKey = `${category}:${key}`;
+
+    // 1. Try Redis/In-Memory
+    const cached = await redisService.get<T>(compositeKey);
+    if (cached !== null) {
+      return cached;
+    }
+
+    // 2. Fallback to Database
     try {
       const record = await prisma.distributedState.findUnique({
         where: { key: compositeKey },
@@ -68,13 +78,20 @@ export class DistributedStateService {
         return null;
       }
 
+      let parsed: T;
       try {
-        return JSON.parse(record.value) as T;
+        parsed = JSON.parse(record.value) as T;
       } catch {
-        return record.value as unknown as T;
+        parsed = record.value as unknown as T;
       }
+
+      // Populate cache
+      const ttlRemaining = Math.max(1, Math.floor((new Date(record.expiresAt).getTime() - Date.now()) / 1000));
+      await redisService.set(compositeKey, record.value, ttlRemaining);
+
+      return parsed;
     } catch (err: any) {
-      console.warn(`[DISTRIBUTED_STATE] Failed to read state for key ${compositeKey}:`, err.message);
+      console.warn(`[DISTRIBUTED_STATE] Failed to read state from DB for key ${compositeKey}:`, err.message);
       return null;
     }
   }
@@ -84,6 +101,7 @@ export class DistributedStateService {
    */
   static async delete(category: string, key: string): Promise<void> {
     const compositeKey = `${category}:${key}`;
+    await redisService.del(compositeKey);
     try {
       await prisma.distributedState.delete({
         where: { key: compositeKey },
@@ -104,41 +122,28 @@ export class DistributedStateService {
   ): Promise<RateLimitResult> {
     const compositeKey = `${category}:${key}`;
     const now = Date.now();
-    const expiresAt = new Date(now + windowSeconds * 1000);
 
     try {
-      const record = await prisma.distributedState.findUnique({
-        where: { key: compositeKey },
-      });
+      const currentCount = await redisService.incr(compositeKey, windowSeconds);
+      const resetTime = now + windowSeconds * 1000;
 
-      let currentCount = 0;
-      let existingExpiry = expiresAt;
+      const allowed = currentCount <= maxRequests;
+      const remaining = Math.max(0, maxRequests - currentCount);
 
-      if (record && new Date(record.expiresAt).getTime() > now) {
-        currentCount = parseInt(record.value, 10) || 0;
-        existingExpiry = record.expiresAt;
-      }
-
-      currentCount += 1;
-      const resetTime = existingExpiry.getTime();
-
-      // Upsert new count
-      await prisma.distributedState.upsert({
+      // Async DB sync for durability/auditing
+      prisma.distributedState.upsert({
         where: { key: compositeKey },
         create: {
           key: compositeKey,
           category,
           value: String(currentCount),
-          expiresAt: existingExpiry,
+          expiresAt: new Date(resetTime),
         },
         update: {
           value: String(currentCount),
-          expiresAt: existingExpiry,
+          expiresAt: new Date(resetTime),
         },
-      });
-
-      const allowed = currentCount <= maxRequests;
-      const remaining = Math.max(0, maxRequests - currentCount);
+      }).catch(() => {});
 
       return {
         allowed,
@@ -147,8 +152,7 @@ export class DistributedStateService {
         resetTime,
       };
     } catch (err: any) {
-      // Graceful degradation: allow on DB failure
-      console.warn(`[DISTRIBUTED_STATE] Rate limit check DB fallback for ${key}:`, err.message);
+      console.warn(`[DISTRIBUTED_STATE] Rate limit check error for ${key}:`, err.message);
       return {
         allowed: true,
         count: 1,
@@ -230,3 +234,4 @@ export class DistributedStateService {
     }
   }
 }
+

@@ -4,18 +4,18 @@
 
 ### 1. Before/After Architecture
 **Before:**
-- Large monolithic routes (`server/routes/chat.ts`).
-- Pagination performed in memory (array `.slice`).
-- Mixed error handling and frequent `any` types.
-- Modal dialogs missing standard ARIA roles and keyboard focus trap capabilities.
-- Lack of standard connection resilience handling (e.g. distributed cron collision).
+- SQLite explicitly referenced in standard `schema.prisma` causing deployment conflicts with PostgreSQL.
+- Heavy React re-renders during chat streaming caused by full array mapping on every chunk.
+- Inconsistent API error formatting and HTTP statuses.
+- E2E tests skipping features implicitly if elements weren't found.
 
 **After:**
-- Data queries offloaded to DB-side `cursor` and `limit/offset` pagination.
-- Added strict rate limiting and distributed lock mechanisms via `DistributedStateService` (using lease-backed lock in Postgres).
-- Connection pooler managed efficiently for multi-instance deployments (max ~500 concurrent users per 10 cloud run nodes).
-- Added `/api/liveness` and `/api/readiness` endpoints.
-- Implemented robust `backupTool.ts` for automated state backups.
+- **Database Strategy:** Dual-schema architecture implemented (`db:generate:sqlite`, `db:generate:postgres`) explicitly separating local development from Cloud SQL production. Added required compound indexes (`[userId, isArchived, updatedAt]`).
+- **Frontend Performance:** Optimized chat streaming by introducing a separate `streamingMessage` state, bypassing massive re-renders of the `MessageBubble` array. Heavy plugins are lazily loaded.
+- **Backend Refactoring:** Extracted heavy memory processing from `chat.ts` into a dedicated `MemoryController`. 
+- **Observability:** Centralized AI telemetry logging (`logAiTelemetry`) stripping all PII and sensitive data. Added strict health check endpoints (`/api/v1/health`) for readiness/liveness probes.
+- **API Consistency:** Standardized error contracts across all endpoints to `{ success: false, error: { code, message } }` with backward compatibility.
+- **E2E Testing:** Refactored `app.spec.ts` to follow concrete User Journeys (Guest, Screening, Counselor Directory) ensuring strict UI assertions without silent skipping.
 
 ### 2. UX & Accessibility Changes
 - Improved Touch Targets: Ensured core components (buttons, links) are at least 44x44 px for mobile users.
@@ -25,19 +25,20 @@
 
 ### 3. Test Numbers
 - **Typecheck**: PASS (0 Errors)
-- **Lint**: PASS (0 Errors, fixed automatically)
-- **E2E (Playwright) / Integration**: PASS (Verified via testing workflows)
-- **Security Check**: PASS (Encrypted PI, Idempotency keys used, no IDOR found)
+- **Lint**: PASS (0 Errors)
+- **E2E (Playwright) / Integration**: PASS (Strict User Journeys)
+- **Security Check**: PASS (Encrypted PII, Idempotency keys used, no health data leaked to observability)
 
 ### 4. Performance Metrics
-- Pagination reduces load overhead significantly on endpoints (e.g., chat history, counselor list, appointment list).
-- API request latencies monitored via `/api/admin/system` are within target SLAs (e.g., <150ms average overhead before LLM transit).
-- Server memory foot print stabilized due to removed array manipulations and `DistributedStateService`.
-- React optimization completed with chunked lazy loading via Vite.
+- **Streaming UI Latency**: Substantially reduced CPU overhead during LLM streaming.
+- **API Latencies**: Chat and memory injection requests overhead reduced.
+- **Database**: Reduced query times with `[userId, isArchived, updatedAt]` compound index.
+- React optimization completed with chunked lazy loading via Vite and `Suspense`.
 
 ### 5. Unresolved Issues
 - None (0 P0 / P1 issues).
 
 ### 6. Deployment Notes
-- `npx prisma migrate deploy` strictly mandated before app start.
-- `server.cjs` entrypoint using Esbuild ensures minimal runtime module resolution latency.
+- Production deployments MUST use `npm run db:generate:postgres`.
+- Ensure all environment variables (especially `JWT_SECRET`) are set before starting to pass the readiness probe.
+- Run `node dist/server.cjs` after a full `npm run build`.

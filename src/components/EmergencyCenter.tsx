@@ -131,57 +131,51 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
   };
 
   return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6 font-sans">
+    <div className="max-w-5xl mx-auto px-2 sm:px-4 py-4 sm:py-6 space-y-6 font-sans">
       {/* Alert Header */}
-      <div className="bg-rose-50/70 rounded-2xl p-5 sm:p-6 border border-rose-100 flex flex-col sm:flex-row items-center sm:items-start gap-4 shadow-xs">
-        <div className="w-11 h-11 rounded-xl bg-rose-600 text-white flex items-center justify-center shrink-0">
-          <ShieldAlert className="w-5 h-5" />
+      <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 sm:p-6 border border-rose-100/80 dark:border-rose-950/60 flex flex-col sm:flex-row items-center sm:items-start gap-4 sm:gap-5 shadow-sm">
+        <div className="w-12 h-12 rounded-2xl bg-rose-50 dark:bg-rose-950/80 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0 border border-rose-200/50 dark:border-rose-900/60">
+          <ShieldAlert className="w-6 h-6" />
         </div>
-        <div className="text-center sm:text-left space-y-1 flex-1">
-          <h1 className="font-bold text-slate-900 text-lg sm:text-xl tracking-tight">
+        <div className="text-center sm:text-left space-y-1 flex-1 min-w-0">
+          <h1 className="font-bold text-slate-900 dark:text-slate-100 text-lg sm:text-xl tracking-tight">
             Layanan Bantuan Darurat & Krisis (24 Jam)
           </h1>
-          <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
-            Jika Anda atau kerabat berada dalam situasi darurat atau memerlukan pertolongan segera, hubungi nomor kontak krisis di bawah ini.
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 leading-relaxed max-w-2xl">
+            Jika Anda atau kerabat berada dalam situasi krisis atau memerlukan pertolongan segera, hubungi kontak di bawah ini. Layanan darurat aktif 24 jam.
           </p>
         </div>
       </div>
 
       {/* Main 1-Click Action Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
         {/* ACTION CARD 1: DIRECT HOTLINE DIAL */}
-        <div className="bg-gradient-to-br from-rose-50 to-white rounded-2xl p-5 sm:p-6 shadow-xs border border-rose-100 flex flex-col justify-between space-y-5">
+        <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 sm:p-6 shadow-xs border border-slate-200/80 dark:border-slate-800 flex flex-col justify-between space-y-5 group hover:shadow-md transition-all">
           <div className="space-y-2">
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-rose-100 border border-rose-200 text-rose-800 rounded-lg text-xs font-semibold uppercase tracking-wider">
-              <PhoneCall className="w-3.5 h-3.5 text-rose-600" /> Kontak Langsung 24/7
-            </span>
-            <h2 className="text-lg font-bold text-slate-900">
+            <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100">
               {EMERGENCY_CONTACTS[0].name}
             </h2>
-            <p className="text-xs text-slate-600 leading-relaxed">
+            <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
               {EMERGENCY_CONTACTS[0].description}
             </p>
           </div>
           <a
             href={EMERGENCY_CONTACTS[0].url}
-            className="w-full py-3.5 px-4 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-md hover:shadow-lg focus:outline-none focus:ring-4 focus:ring-rose-500/30"
+            className="w-full py-3.5 px-4 bg-rose-50 dark:bg-rose-950/60 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 rounded-2xl font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 transition-colors border border-rose-200 dark:border-rose-900 cursor-pointer min-h-[44px]"
           >
-            <Phone className="w-5 h-5" />
-            <span>Telepon {EMERGENCY_CONTACTS[0].phone}</span>
+            <Phone className="w-4 h-4" />
+            <span>Telepon Langsung {EMERGENCY_CONTACTS[0].phone}</span>
           </a>
         </div>
 
         {/* ACTION CARD 2: INSTANT SOS SIGNAL */}
-        <div className="bg-white rounded-2xl p-5 sm:p-6 shadow-xs border border-slate-200 flex flex-col justify-between space-y-5">
+        <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 sm:p-6 shadow-xs border border-slate-200/80 dark:border-slate-800 flex flex-col justify-between space-y-5 group hover:shadow-md transition-all">
           <div className="space-y-2">
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 border border-slate-200 text-slate-700 rounded-lg text-xs font-semibold uppercase tracking-wider">
-              <ShieldAlert className="w-3.5 h-3.5 text-rose-600" /> Eskalasi Krisis Digital
-            </span>
-            <h2 className="text-lg font-bold text-slate-900">
+            <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100">
               Sinyal Pesan Darurat ke Kampus / Wali
             </h2>
-            <p className="text-xs text-slate-600 leading-relaxed">
-              Kirimkan pemberitahuan instan otomatis kepada kontak darurat pribadi yang telah Anda simpan.
+            <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+              Kirimkan pemberitahuan instan otomatis kepada kontak darurat pribadi yang telah Anda simpan di profil Anda.
             </p>
           </div>
 
@@ -190,10 +184,10 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
               type="button"
               onClick={handleSendSOS}
               disabled={isTriggeringSOS}
-              className="w-full py-3.5 px-5 bg-slate-800 hover:bg-slate-900 text-white font-semibold text-sm rounded-xl shadow-xs hover:shadow-sm active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer min-h-[48px] disabled:opacity-50"
+              className="w-full py-3.5 px-4 bg-slate-900 hover:bg-slate-800 dark:bg-teal-600 dark:hover:bg-teal-700 text-white font-semibold text-xs sm:text-sm rounded-2xl shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer min-h-[44px] disabled:opacity-50"
             >
               <ShieldAlert
-                className={`w-4 h-4 ${isTriggeringSOS ? "animate-spin" : "text-rose-400"}`}
+                className={`w-4 h-4 ${isTriggeringSOS ? "animate-spin" : "text-rose-400 dark:text-rose-200"}`}
               />
               <span>
                 {isTriggeringSOS
@@ -205,33 +199,33 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
             {sosStatus && (
               <div className={`p-3.5 rounded-xl border text-xs space-y-1.5 animate-fade-in ${
                 sosStatus.status === 'SENT' 
-                  ? 'bg-emerald-50/70 border-emerald-200 text-emerald-950'
+                  ? 'bg-emerald-50/70 dark:bg-emerald-950/60 border-emerald-200 dark:border-emerald-900 text-emerald-950 dark:text-emerald-200'
                   : sosStatus.status === 'SIMULATED'
-                  ? 'bg-amber-50/80 border-amber-200 text-amber-950'
-                  : 'bg-rose-50/70 border-rose-200 text-rose-950'
+                  ? 'bg-amber-50/80 dark:bg-amber-950/60 border-amber-200 dark:border-amber-900 text-amber-950 dark:text-amber-200'
+                  : 'bg-rose-50/70 dark:bg-rose-950/60 border-rose-200 dark:border-rose-900 text-rose-950 dark:text-rose-200'
               }`}>
                 <p className="font-semibold flex items-center gap-1.5">
                   {sosStatus.status === 'SENT' ? (
                     <>
                       <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                      <span className="text-emerald-900">Sinyal SOS Berhasil Terkirim (SMS/WA)</span>
+                      <span className="text-emerald-900 dark:text-emerald-200">Sinyal SOS Berhasil Terkirim (SMS/WA)</span>
                     </>
                   ) : sosStatus.status === 'SIMULATED' ? (
                     <>
                       <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
-                      <span className="text-amber-900">Sinyal SOS Dicatat (Mode Simulasi Server)</span>
+                      <span className="text-amber-900 dark:text-amber-200">Sinyal SOS Dicatat (Mode Simulasi Server)</span>
                     </>
                   ) : (
                     <>
                       <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-                      <span className="text-rose-900">Pengiriman SOS Terbatas / Gagal</span>
+                      <span className="text-rose-900 dark:text-rose-200">Pengiriman SOS Terbatas / Gagal</span>
                     </>
                   )}
                 </p>
-                <p className="text-slate-700 leading-relaxed">
+                <p className="text-slate-700 dark:text-slate-300 leading-relaxed text-xs">
                   {sosStatus.message}
                 </p>
-                <div className="text-[10px] text-slate-500 pt-1 flex justify-between">
+                <div className="text-[10px] text-slate-500 dark:text-slate-400 pt-1 flex justify-between">
                   <span>ID: {sosStatus.dispatchId}</span>
                   <span>
                     {new Date(sosStatus.timestamp).toLocaleTimeString("id-ID")}
@@ -244,31 +238,31 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
       </div>
 
       {/* Grid of Helpline Directory & Contact Settings */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 sm:gap-6">
         {/* LEFT/MAIN COLUMN: HELPLINE DIRECTORY (7 cols) */}
-        <div className="lg:col-span-7 bg-white rounded-2xl p-5 sm:p-6 shadow-xs border border-slate-200 space-y-5">
+        <div className="lg:col-span-7 bg-white dark:bg-slate-900 rounded-3xl p-4 sm:p-6 shadow-xs border border-slate-200/80 dark:border-slate-800 space-y-4">
           <div className="space-y-1">
-            <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-              <HeartHandshake className="w-4.5 h-4.5 text-teal-700" />
+            <h2 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+              <HeartHandshake className="w-4.5 h-4.5 text-teal-600 dark:text-teal-400" />
               Direktori Bantuan Khusus & Kampus
             </h2>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-slate-500 dark:text-slate-400">
               Temukan nomor darurat krisis internal berbagai universitas dan hotline psikologis tepercaya.
             </p>
           </div>
 
           <div className="relative">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+            <Search className="w-4 h-4 text-slate-400 dark:text-slate-500 absolute left-3.5 top-3" />
             <input
               type="text"
               placeholder="Cari nama kampus atau layanan (UI, ITB, UGM, LISA)..."
               value={hotlineQuery}
               onChange={(e) => setHotlineQuery(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-base sm:text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-teal-700 focus:ring-1 focus:ring-teal-700 min-h-[44px] transition-all"
+              className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pl-10 pr-4 py-2 text-xs sm:text-sm text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-teal-600 transition-all min-h-[40px]"
             />
           </div>
 
-          <div className="space-y-3 max-h-[380px] overflow-y-auto pr-1 custom-scrollbar">
+          <div className="space-y-2.5 max-h-[380px] overflow-y-auto pr-1 custom-scrollbar">
             {VERIFIED_HELPLINES.filter(
               (h) =>
                 h.name.toLowerCase().includes(hotlineQuery.toLowerCase()) ||
@@ -281,24 +275,24 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
               ).map((item) => (
                 <div
                   key={item.id}
-                  className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 hover:border-teal-200 hover:bg-teal-50/30 transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3"
+                  className="p-3 sm:p-3.5 bg-slate-50/80 dark:bg-slate-800/60 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 hover:border-teal-300 dark:hover:border-teal-700 transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3"
                 >
-                  <div className="space-y-1">
+                  <div className="space-y-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-semibold text-teal-800 bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200">
+                      <span className="text-[10px] font-semibold text-teal-800 dark:text-teal-300 bg-teal-50 dark:bg-teal-950/80 px-2 py-0.5 rounded-md border border-teal-200/80 dark:border-teal-900">
                         {item.type}
                       </span>
                     </div>
-                    <h3 className="font-semibold text-slate-900 text-xs sm:text-sm">
+                    <h3 className="font-semibold text-slate-900 dark:text-slate-100 text-xs sm:text-sm truncate">
                       {item.name}
                     </h3>
-                    <p className="text-[11px] text-slate-500 flex items-center gap-1">
-                      <Clock className="w-3 h-3 text-slate-400" /> {item.jamOperasional}
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                      <Clock className="w-3 h-3 text-slate-400 shrink-0" /> {item.jamOperasional}
                     </p>
                   </div>
                   <a
                     href={`tel:${item.number.replace(/\D/g, "")}`}
-                    className="w-full sm:w-auto px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 font-semibold text-xs rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer min-h-[44px] border border-rose-200 shrink-0"
+                    className="w-full sm:w-auto px-3 py-1.5 bg-rose-50 dark:bg-rose-950/60 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 font-semibold text-xs rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer min-h-[38px] border border-rose-200 dark:border-rose-900 shrink-0"
                   >
                     <PhoneCall className="w-3.5 h-3.5" />
                     <span>Telepon ({item.number})</span>
@@ -306,7 +300,7 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
                 </div>
               ))
             ) : (
-              <div className="text-center py-8 text-slate-400 text-xs">
+              <div className="text-center py-8 text-slate-400 dark:text-slate-500 text-xs">
                 Tidak ada bantuan khusus yang cocok dengan kata kunci pencarian.
               </div>
             )}
@@ -314,24 +308,24 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
         </div>
 
         {/* RIGHT COLUMN: EMERGENCY CONTACT MANAGER (5 cols) */}
-        <div className="lg:col-span-5 bg-white rounded-2xl p-5 sm:p-6 shadow-xs border border-slate-200 flex flex-col justify-between space-y-5">
+        <div className="lg:col-span-5 bg-white dark:bg-slate-900 rounded-3xl p-4 sm:p-6 shadow-xs border border-slate-200/80 dark:border-slate-800 flex flex-col justify-between space-y-4">
           <div className="space-y-1">
-            <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-              <User className="w-4.5 h-4.5 text-teal-700" />
+            <h2 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+              <User className="w-4.5 h-4.5 text-teal-600 dark:text-teal-400" />
               Kontak Darurat Pribadi
             </h2>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-slate-500 dark:text-slate-400">
               Konfigurasikan kontak kerabat terdekat atau sahabat pilihan Anda untuk notifikasi SOS instan.
             </p>
           </div>
 
-          <form onSubmit={handleSaveContact} className="space-y-3.5">
+          <form onSubmit={handleSaveContact} className="space-y-3">
             <div className="space-y-1">
-              <label className="block text-xs font-semibold text-slate-700">
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
                 Nama Orang Terdekat:
               </label>
               <div className="relative">
-                <User className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                <User className="w-4 h-4 text-slate-400 dark:text-slate-500 absolute left-3 top-2.5" />
                 <input
                   type="text"
                   required
@@ -339,14 +333,14 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
                   onChange={(e) =>
                     setContact({ ...contact, name: e.target.value })
                   }
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3.5 py-2 text-base sm:text-sm text-slate-800 focus:outline-none focus:border-teal-700 focus:ring-1 focus:ring-teal-700 min-h-[44px]"
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pl-9 pr-3.5 py-1.5 text-xs sm:text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:border-teal-600 min-h-[38px]"
                   placeholder="Nama wali / sahabat"
                 />
               </div>
             </div>
 
             <div className="space-y-1">
-              <label className="block text-xs font-semibold text-slate-700">
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
                 Hubungan / Relasi:
               </label>
               <select
@@ -354,7 +348,7 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
                 onChange={(e) =>
                   setContact({ ...contact, relationship: e.target.value })
                 }
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-base sm:text-sm text-slate-800 focus:outline-none focus:border-teal-700 focus:ring-1 focus:ring-teal-700 min-h-[44px]"
+                className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-xs sm:text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:border-teal-600 min-h-[38px]"
               >
                 <option value="Orang Tua">Orang Tua (Ayah / Ibu)</option>
                 <option value="Saudara Kandung">Saudara Kandung</option>
@@ -365,11 +359,11 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
             </div>
 
             <div className="space-y-1">
-              <label className="block text-xs font-semibold text-slate-700">
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
                 Nomor HP / WhatsApp:
               </label>
               <div className="relative">
-                <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                <Phone className="w-4 h-4 text-slate-400 dark:text-slate-500 absolute left-3 top-2.5" />
                 <input
                   type="text"
                   required
@@ -377,7 +371,7 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
                   onChange={(e) =>
                     setContact({ ...contact, phone: e.target.value })
                   }
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3.5 py-2 text-base sm:text-sm text-slate-800 focus:outline-none focus:border-teal-700 focus:ring-1 focus:ring-teal-700 font-mono min-h-[44px]"
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pl-9 pr-3.5 py-1.5 text-xs sm:text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:border-teal-600 font-mono min-h-[38px]"
                   placeholder="Contoh: 0812-xxxx-xxxx"
                 />
               </div>
@@ -385,7 +379,7 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
 
             <button
               type="submit"
-              className="w-full py-2.5 px-4 bg-teal-700 hover:bg-teal-800 text-white font-semibold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer min-h-[44px] border-none"
+              className="w-full py-2.5 px-4 bg-teal-600 hover:bg-teal-700 text-white font-semibold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer min-h-[40px] border-none"
             >
               <Save className="w-4 h-4" />
               <span>
@@ -395,8 +389,8 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
           </form>
 
           {/* Privacy Notice */}
-          <div className="pt-3 border-t border-slate-100 flex items-center gap-2 text-[11px] text-slate-500">
-            <Lock className="w-3.5 h-3.5 text-teal-700 shrink-0" />
+          <div className="pt-2.5 border-t border-slate-100 dark:border-slate-800 flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+            <Lock className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 shrink-0" />
             <span>
               Seluruh data kontak darurat terenkripsi aman & dilindungi hak privasi.
             </span>

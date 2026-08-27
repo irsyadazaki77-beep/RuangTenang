@@ -1,50 +1,91 @@
 import React from 'react';
-import { CounselorBadge } from '../../../components/AiCounselorDisclaimerBadge';
+import { NotebookPen, HeartPulse, Sparkles, Wind } from 'lucide-react';
 
 interface EmptyChatStateProps {
   userName?: string;
   onSelectPrompt: (prompt: string) => void;
 }
 
+const QUICK_ACTIONS = [
+  {
+    title: 'Menceritakan hari saya',
+    desc: 'Bagi pengalaman atau hal yang membebani pikiran Anda',
+    icon: NotebookPen,
+    iconColor: 'text-teal-600 dark:text-teal-400',
+    iconBg: 'bg-teal-50 dark:bg-teal-950/60 border-teal-200/60 dark:border-teal-900/60',
+    query: 'Saya ingin menceritakan apa yang saya alami dan rasakan hari ini...'
+  },
+  {
+    title: 'Saya sedang merasa cemas',
+    desc: 'Temukan rasa tenang dan kurangi rasa gelisah',
+    icon: HeartPulse,
+    iconColor: 'text-rose-600 dark:text-rose-400',
+    iconBg: 'bg-rose-50 dark:bg-rose-950/60 border-rose-200/60 dark:border-rose-900/60',
+    query: 'Saya sedang merasa cemas dan tegang, tolong bantu saya merasa lebih tenang...'
+  },
+  {
+    title: 'Refleksi pikiran',
+    desc: 'Urai benang kusut dalam pikiran secara jernih',
+    icon: Sparkles,
+    iconColor: 'text-indigo-600 dark:text-indigo-400',
+    iconBg: 'bg-indigo-50 dark:bg-indigo-950/60 border-indigo-200/60 dark:border-indigo-900/60',
+    query: 'Bantu saya merefleksikan dan menyusun ulang sudut pandang pikiran saya...'
+  },
+  {
+    title: 'Latihan pernapasan',
+    desc: 'Panduan teknik relaksasi napas 4-7-8',
+    icon: Wind,
+    iconColor: 'text-sky-600 dark:text-sky-400',
+    iconBg: 'bg-sky-50 dark:bg-sky-950/60 border-sky-200/60 dark:border-sky-900/60',
+    query: 'Tolong pandu saya latihan pernapasan santai untuk meredakan ketegangan...'
+  }
+];
+
 export function EmptyChatState({ userName, onSelectPrompt }: EmptyChatStateProps) {
   return (
-    <div className="max-w-2xl mx-auto w-full flex flex-col items-center text-center px-4 pt-4 pb-4 md:pt-8 md:pb-6">
-      <div className="w-12 h-12 bg-teal-50/80 rounded-2xl flex items-center justify-center border border-teal-200/80 shadow-3xs p-1 mb-4 ring-4 ring-teal-500/10">
-        <img src="/favicon.svg" alt="RuangTenang Logo" className="w-8 h-8 object-contain" />
+    <div className="w-full max-w-[660px] mx-auto flex flex-col items-center text-center px-4 pt-4 sm:pt-8 pb-4 my-auto">
+      {/* Compact Logo */}
+      <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 shadow-2xs flex items-center justify-center p-2 mb-3 shrink-0">
+        <img src="/favicon.svg" alt="RuangTenang" className="w-full h-full object-contain" />
       </div>
-      <h2 className="text-2xl md:text-[28px] leading-tight font-bold text-slate-800 mb-2 tracking-tight">
-        Halo, {userName || "Kawan"}! 🤗 Mau cerita apa hari ini?
+      
+      {/* Greeting */}
+      <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight mb-1">
+        Halo, {userName || "Tamu"}.
       </h2>
-      <p className="text-[14px] leading-[1.6] text-slate-600 mb-4 max-w-md">
-        Selamat datang di ruang amanmu 🤍. Jangan ragu atau takut bercerita yaa... Privasimu rahasia & terjaga 🔐. RuangTenang di sini siap merangkul dan mendengarkanmu tanpa menghakimi 🌿✨
+      
+      {/* Short Subtitle */}
+      <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 mb-5 sm:mb-6 max-w-sm sm:max-w-md leading-relaxed">
+        Ruang aman dan rahasia. Ceritakan apa saja yang sedang Anda rasakan atau pilih panduan di bawah.
       </p>
       
-      {/* Reassurance Banner */}
-      <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-teal-50/80 border border-teal-200/80 text-teal-800 text-xs font-medium mb-5 shadow-3xs">
-        <span>🛡️ Ruang Rahasia & Privat</span>
-        <span>•</span>
-        <span>Bebas Dari Penghakiman 🤍</span>
-      </div>
-
-      <CounselorBadge type="ai_simulation" showDetails={true} className="mb-6" />
-      <div className="flex flex-col gap-2.5 w-full max-w-sm text-left mt-1">
-        {[
-          { title: 'Mau menceritakan hariku...', icon: '☕', query: 'Aku mau menceritakan hariku hari ini...' },
-          { title: 'Lagi merasa cemas & butuh ketenangan', icon: '🌿', query: 'Aku sedang merasa sangat cemas & butuh saran penenang...' },
-          { title: 'Bantu merapikan pikiran & perasaan', icon: '✨', query: 'Bantu aku merefleksikan dan merapikan perasaanku minggu ini...' },
-          { title: 'Cuma butuh teman cerita yang mau dengar', icon: '🫂', query: 'Bolehkah kamu temani aku mengobrol sejenak tanpa menghakimi?' },
-          { title: 'Mulai latihan relaksasi & pernapasan', icon: '🤍', query: 'Tolong pandu aku latihan pernapasan untuk meredakan ketegangan...' }
-        ].map(prompt => (
-          <button
-            key={prompt.title}
-            onClick={() => onSelectPrompt(prompt.query)}
-            className="min-h-[52px] px-[14px] py-[12px] rounded-[14px] border border-stone-200/80 hover:border-teal-400 hover:bg-teal-50/40 active:scale-[0.98] transition-all text-[14px] sm:text-[15px] font-medium text-slate-700 bg-white shadow-3xs flex items-center gap-[12px] w-full text-left cursor-pointer group"
-          >
-            <span className="w-6 h-6 flex items-center justify-center text-lg shrink-0 group-hover:scale-110 transition-transform">{prompt.icon}</span>
-            <span className="flex-1 leading-snug">{prompt.title}</span>
-          </button>
-        ))}
+      {/* Quick Action Cards Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 w-full text-left">
+        {QUICK_ACTIONS.map(action => {
+          const Icon = action.icon;
+          return (
+            <button
+              key={action.title}
+              onClick={() => onSelectPrompt(action.query)}
+              aria-label={`${action.title}: ${action.desc}`}
+              className="group relative flex items-center gap-3 p-3 sm:py-3.5 sm:px-4 rounded-xl sm:rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 hover:bg-slate-50 dark:hover:bg-slate-800/80 hover:border-teal-500/40 dark:hover:border-teal-500/40 hover:shadow-xs active:scale-[0.99] transition-all cursor-pointer min-h-[56px] sm:min-h-[64px]"
+            >
+              <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl border flex items-center justify-center shrink-0 transition-transform group-hover:scale-105 ${action.iconBg}`}>
+                <Icon className={`w-4 h-4 sm:w-5 sm:h-5 ${action.iconColor}`} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-200 group-hover:text-teal-700 dark:group-hover:text-teal-400 truncate transition-colors">
+                  {action.title}
+                </div>
+                <div className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 line-clamp-2 mt-0.5 leading-snug">
+                  {action.desc}
+                </div>
+              </div>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
 }
+

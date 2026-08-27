@@ -26,14 +26,26 @@ export function validateEnvironment(): void {
   const encryptionKey = process.env.DATA_ENCRYPTION_KEY || process.env.ENCRYPTION_KEY;
 
   if (isProd) {
-    if (!jwtSecret || jwtSecret.length < 32) {
-      console.warn('⚠️ [STARTUP WARNING]: JWT_SECRET environment variable is missing or too short. Using secure production runtime fallback key.');
-      process.env.JWT_SECRET = process.env.JWT_SECRET || 'ruangtenang-prod-jwt-secret-key-32chars-minimum-fallback-key-2026-secure';
+    if (!jwtSecret) {
+      throw new Error('FATAL SECURITY ERROR: JWT_SECRET environment variable is missing in production.');
     }
-    if (!encryptionKey || encryptionKey.length < 32) {
-      console.warn('⚠️ [STARTUP WARNING]: ENCRYPTION_KEY environment variable is missing or too short. Using secure production runtime fallback key.');
-      process.env.ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || 'ruangtenang-prod-encryption-key-32chars-minimum-fallback-key-2026-secure';
+    if (jwtSecret.length < 32) {
+      throw new Error('FATAL SECURITY ERROR: JWT_SECRET must be at least 32 characters long in production.');
     }
+    if (KNOWN_INSECURE_DEMO_SECRETS.some(s => jwtSecret.toLowerCase() === s.toLowerCase() || jwtSecret.toLowerCase().includes(s.toLowerCase()))) {
+      throw new Error('FATAL SECURITY ERROR: Insecure or compromise-prone JWT_SECRET detected in production.');
+    }
+
+    if (!encryptionKey) {
+      throw new Error('FATAL SECURITY ERROR: ENCRYPTION_KEY environment variable is missing in production.');
+    }
+    if (encryptionKey.length < 32) {
+      throw new Error('FATAL SECURITY ERROR: ENCRYPTION_KEY must be at least 32 characters long in production.');
+    }
+    if (KNOWN_INSECURE_DEMO_SECRETS.some(s => encryptionKey.toLowerCase() === s.toLowerCase() || encryptionKey.toLowerCase().includes(s.toLowerCase()))) {
+      throw new Error('FATAL SECURITY ERROR: Insecure or compromise-prone ENCRYPTION_KEY detected in production.');
+    }
+
     // Validate PostgreSQL Database Configuration
     resolveDatabaseConfiguration();
   } else {
@@ -52,10 +64,21 @@ export function validateEnvironment(): void {
 
 export function getValidatedJwtSecret(): string {
   const secret = process.env.JWT_SECRET;
+  const isProd = process.env.NODE_ENV === 'production';
   if (!secret) {
-    return 'ruangtenang-prod-jwt-secret-key-32chars-minimum-fallback-key-2026-secure';
+    if (isProd) {
+      throw new Error('FATAL SECURITY ERROR: JWT_SECRET is missing in production execution.');
+    }
+    return 'local-dev-jwt-secret-ruangtenang-32-chars-long-test-key';
+  }
+  if (isProd && (secret.length < 32 || KNKNOWN_INSECURE_DEMO_SECRETS_check(secret))) {
+    throw new Error('FATAL SECURITY ERROR: Insecure JWT_SECRET in production.');
   }
   return secret;
+}
+
+function KNKNOWN_INSECURE_DEMO_SECRETS_check(secret: string): boolean {
+  return KNOWN_INSECURE_DEMO_SECRETS.some(s => secret.toLowerCase() === s.toLowerCase() || secret.toLowerCase().includes(s.toLowerCase()));
 }
 
 export function getValidatedEncryptionKey(version: string = 'v1'): Buffer {
@@ -66,8 +89,17 @@ export function getValidatedEncryptionKey(version: string = 'v1'): Buffer {
     rawKey = process.env[`ENCRYPTION_KEY_${version.toUpperCase()}`] || process.env[`DATA_ENCRYPTION_KEY_${version.toUpperCase()}`];
   }
 
+  const isProd = process.env.NODE_ENV === 'production';
+
   if (!rawKey) {
-    rawKey = `ruangtenang-prod-encryption-key-32chars-minimum-fallback-key-2026-secure-${version}`;
+    if (isProd) {
+      throw new Error(`FATAL SECURITY ERROR: ENCRYPTION_KEY for version ${version} is missing in production.`);
+    }
+    rawKey = `local-dev-aes-encryption-key-ruangtenang-32-chars-long-${version}`;
+  }
+
+  if (isProd && (rawKey.length < 32 || KNKNOWN_INSECURE_DEMO_SECRETS_check(rawKey))) {
+    throw new Error(`FATAL SECURITY ERROR: Insecure ENCRYPTION_KEY for version ${version} in production.`);
   }
 
   try {

@@ -4,8 +4,40 @@ import { serverDb, prisma } from '../database';
 import { requireAuth } from '../middleware/auth';
 import { sanitizeInput } from '../security';
 import { validatePagination, idempotencyMiddleware } from '../apiV1Helpers';
+import { EventEmitter } from 'events';
 
 const router = Router();
+
+// EventEmitter for real-time appointment updates
+export const appointmentEvents = new EventEmitter();
+
+// --- SSE Endpoint for Real-time Status Transitions ---
+router.get('/stream', requireAuth, (req: Request, res: Response) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders(); // flush the headers to establish SSE
+
+  // Function to send event
+  const sendEvent = (data: any) => {
+    // Only send if the update belongs to the user or if user is admin, etc.
+    // Basic filter: Check if user is involved (as counselor or student)
+    const isStudentMatch = req.user?.role === 'mahasiswa' && data.userId === req.user.userId;
+    const isCounselorMatch = req.user?.role === 'konselor' && data.counselorUserId === req.user.userId; 
+    const isAdmin = req.user?.role === 'admin';
+
+    if (isStudentMatch || isCounselorMatch || isAdmin) {
+      res.write(`data: ${JSON.stringify(data)}\n\n`);
+    }
+  };
+
+  appointmentEvents.on('update', sendEvent);
+
+  req.on('close', () => {
+    appointmentEvents.off('update', sendEvent);
+  });
+});
+
 
 export const createAppointmentSchema = z.object({
   counselorId: z.string().max(100).optional(),
@@ -361,6 +393,16 @@ router.put(['/:id', '/db/appointments/:id'], requireAuth, async (req: Request, r
     if (!record) {
       return res.status(404).json({ error: 'Jadwal gagal diperbarui.' });
     }
+    
+    // Emit event for SSE
+    // Need to get counselor user ID to filter SSE properly
+    let counselorUserId = '';
+    const counselorProfile = await prisma.counselors.findUnique({ where: { id: record.counselorId } });
+    if (counselorProfile && counselorProfile.userId) {
+      counselorUserId = counselorProfile.userId;
+    }
+    appointmentEvents.emit('update', { ...mapAppointmentToResponse(record), counselorUserId });
+
     res.json({ success: true, record: mapAppointmentToResponse(record) });
   } catch (err: any) {
     if (err.message === 'SLOT_ALREADY_BOOKED') {

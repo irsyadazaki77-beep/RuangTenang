@@ -198,11 +198,96 @@ export const userRepository = {
       skip: offset,
     });
     
-    const records: UserRecord[] = [];
-    for (const u of list) {
-      records.push(await mapUserToRecord(u));
+    if (list.length === 0) return [];
+
+    const userIds = list.map(u => u.id);
+
+    const [allSessions, allLoginEvents, allNotifications] = await Promise.all([
+      prisma.userSession.findMany({
+        where: { userId: { in: userIds } },
+        orderBy: { lastActive: "desc" },
+      }),
+      prisma.loginEvent.findMany({
+        where: { userId: { in: userIds } },
+        orderBy: { timestamp: "desc" },
+      }),
+      prisma.securityNotification.findMany({
+        where: { userId: { in: userIds } },
+        orderBy: { timestamp: "desc" },
+      }),
+    ]);
+
+    const sessionsByUserId = new Map<string, typeof allSessions>();
+    for (const s of allSessions) {
+      const arr = sessionsByUserId.get(s.userId) || [];
+      arr.push(s);
+      sessionsByUserId.set(s.userId, arr);
     }
-    return records;
+
+    const loginEventsByUserId = new Map<string, typeof allLoginEvents>();
+    for (const e of allLoginEvents) {
+      const arr = loginEventsByUserId.get(e.userId) || [];
+      if (arr.length < 50) arr.push(e);
+      loginEventsByUserId.set(e.userId, arr);
+    }
+
+    const notifsByUserId = new Map<string, typeof allNotifications>();
+    for (const n of allNotifications) {
+      const arr = notifsByUserId.get(n.userId) || [];
+      if (arr.length < 20) arr.push(n);
+      notifsByUserId.set(n.userId, arr);
+    }
+
+    return list.map(u => {
+      const sessions = sessionsByUserId.get(u.id) || [];
+      const loginEvents = loginEventsByUserId.get(u.id) || [];
+      const notifications = notifsByUserId.get(u.id) || [];
+
+      return {
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        passwordHash: u.passwordHash,
+        role: u.role as any,
+        tier: u.tier as any,
+        university: u.university,
+        createdAt: u.createdAt.toISOString(),
+        emailVerified: u.emailVerified,
+        emailVerificationCode: u.emailVerificationCode || undefined,
+        emailVerificationExpires: u.emailVerificationExpires?.toISOString() || undefined,
+        passwordResetToken: u.passwordResetToken || undefined,
+        passwordResetExpires: u.passwordResetExpires?.toISOString() || undefined,
+        failedLoginAttempts: u.failedLoginAttempts,
+        lockUntil: u.lockUntil?.toISOString() || undefined,
+        mfaEnabled: u.mfaEnabled,
+        mfaCode: u.mfaCode || undefined,
+        mfaExpires: u.mfaExpires?.toISOString() || undefined,
+        mfaToken: u.mfaToken || undefined,
+        activeSessions: sessions.map(s => ({
+          sessionId: s.id,
+          device: s.device,
+          ip: s.ip,
+          userAgent: s.userAgent,
+          createdAt: s.createdAt.toISOString(),
+          lastActive: s.lastActive.toISOString(),
+        })),
+        loginHistory: loginEvents.map(e => ({
+          id: e.id,
+          timestamp: e.timestamp.toISOString(),
+          ip: e.ip,
+          userAgent: e.userAgent,
+          status: e.status as any,
+          location: e.location || undefined,
+        })),
+        securityNotifications: notifications.map(n => ({
+          id: n.id,
+          title: n.title,
+          message: n.message,
+          timestamp: n.timestamp.toISOString(),
+          read: n.read,
+        })),
+      };
+    });
   },
 
   async getUserByEmail(email: string): Promise<UserRecord | null> {

@@ -1,9 +1,20 @@
 import React, { useState } from 'react';
-import { Activity, Compass, BookOpen, ArrowRight, FileSpreadsheet, RotateCcw } from 'lucide-react';
+import { Activity, Compass, BookOpen, ArrowRight, FileSpreadsheet, RotateCcw, Moon, Heart } from 'lucide-react';
 import { HistoricalScore, TriageCategory } from '../../types';
+
+interface MoodLog {
+  id: string;
+  date: string;
+  mood: number;
+  emotions: string[];
+  notes: string;
+  sleepHours: number;
+  sleepQuality: 'Nyenyak' | 'Kurang Nyenyak' | 'Insomnia';
+}
 
 interface ScreeningTrendProps {
   screenHistory: HistoricalScore[];
+  moodLogs?: MoodLog[];
   currentPhq9: number;
   currentGad7: number;
   currentTriage: TriageCategory;
@@ -16,6 +27,7 @@ interface ScreeningTrendProps {
 
 export const ScreeningTrend: React.FC<ScreeningTrendProps> = ({
   screenHistory,
+  moodLogs = [],
   currentPhq9,
   currentGad7,
   currentTriage,
@@ -291,6 +303,90 @@ export const ScreeningTrend: React.FC<ScreeningTrendProps> = ({
             </div>
           </div>
         )}
+      </div>
+
+      {/* Correlation Chart (Sleep vs Mood) */}
+      <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-2xs space-y-4">
+        <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
+          <Moon className="w-5 h-5 text-indigo-500" />
+          <h3 className="font-semibold text-slate-800 text-sm">Korelasi Kualitas Tidur & Fluktuasi Mood</h3>
+        </div>
+        
+        {moodLogs.length < 3 ? (
+          <div className="py-8 text-center text-sm text-slate-500">
+            Kumpulkan minimal 3 catatan harian (mood dan tidur) untuk melihat analisis korelasi ini.
+          </div>
+        ) : (
+          <div className="relative h-40 sm:h-48 w-full flex items-end justify-between px-2 sm:px-6 pt-4 pb-6">
+            {/* Simple correlation visual: overlaying bars for sleep, and line for mood */}
+            <div className="absolute inset-0 flex flex-col justify-between text-[10px] text-slate-400 pointer-events-none pb-6 pt-4">
+              <div className="border-b border-slate-100 pb-1 flex justify-between"><span>Tidur Optimal (8+ Jam) / Sangat Baik</span></div>
+              <div className="border-b border-slate-100 pb-1 flex justify-between"><span>Kurang Tidur (&lt;5 Jam) / Sangat Buruk</span></div>
+            </div>
+            
+            <div className="relative h-full w-full flex items-end justify-between z-10">
+              {moodLogs.slice(0, 14).reverse().map((log, i) => {
+                const sleepHeight = Math.min(100, (log.sleepHours / 12) * 100);
+                const moodY = 100 - ((log.mood - 1) / 4) * 100; // 0 (top) to 100 (bottom) based on 1-5 scale
+                
+                return (
+                  <div key={log.id} className="relative flex flex-col items-center flex-1 h-full group">
+                    <div className="absolute bottom-0 w-4 sm:w-6 bg-indigo-100 rounded-t-sm" style={{ height: `${sleepHeight}%` }}></div>
+                    <div 
+                      className="absolute w-2 h-2 rounded-full bg-teal-500 z-20 shadow border border-white transition-all group-hover:scale-150" 
+                      style={{ top: `${moodY}%` }}
+                    ></div>
+                    
+                    <div className="absolute -bottom-5 text-[8px] sm:text-[10px] text-slate-400 font-mono">
+                      {log.date.split('-')[2]}/{log.date.split('-')[1]}
+                    </div>
+                    
+                    {/* Tooltip */}
+                    <div className="opacity-0 group-hover:opacity-100 absolute -top-8 bg-slate-800 text-white text-[10px] p-1.5 rounded whitespace-nowrap z-30 transition-opacity">
+                      Tidur: {log.sleepHours} Jam | Mood: {log.mood}/5
+                    </div>
+                  </div>
+                );
+              })}
+              
+              {/* Connecting line for mood */}
+              <svg className="absolute inset-0 w-full h-full pointer-events-none z-10" preserveAspectRatio="none">
+                 {(() => {
+                   const logs = moodLogs.slice(0, 14).reverse();
+                   if (logs.length < 2) return null;
+                   
+                   let path = '';
+                   logs.forEach((log, i) => {
+                     const x = (i + 0.5) * (100 / logs.length); // percentage
+                     const y = 100 - ((log.mood - 1) / 4) * 100;
+                     if (i === 0) path += `M ${x}% ${y}%`;
+                     else path += ` L ${x}% ${y}%`;
+                   });
+                   
+                   return <path d={path} fill="none" stroke="#14b8a6" strokeWidth="2" opacity="0.6" strokeDasharray="4 2" />;
+                 })()}
+              </svg>
+            </div>
+          </div>
+        )}
+      </div>
+      
+      {/* Recovery Milestones */}
+      <div className="bg-gradient-to-br from-emerald-50 to-teal-50 border border-teal-100 p-5 rounded-xl flex flex-col sm:flex-row items-center gap-4 shadow-sm">
+        <div className="p-3 bg-white rounded-full shadow-sm text-emerald-500 shrink-0">
+           <Heart className="w-6 h-6" />
+        </div>
+        <div>
+           <h4 className="text-sm font-semibold text-teal-900 mb-1">Milestone Pemulihan Emosional</h4>
+           <p className="text-xs text-teal-800/80 leading-relaxed">
+             {screenHistory.length > 1 && screenHistory[screenHistory.length - 1].phq9 < screenHistory[0].phq9
+               ? `Luar Biasa! Terdapat penurunan skor depresi sebesar ${screenHistory[0].phq9 - screenHistory[screenHistory.length - 1].phq9} poin dibandingkan tes awal Anda. Tetap pertahankan rutinitas self-care dan konseling.`
+               : moodLogs.length > 5 
+               ? 'Konsistensi Anda dalam melacak mood sangat baik. Pemahaman diri adalah langkah pertama menuju ketahanan emosional.'
+               : 'Perjalanan pemulihan Anda baru dimulai. Rutin melakukan check-in harian akan membantu mengidentifikasi pola pemicu stres.'
+             }
+           </p>
+        </div>
       </div>
 
       {/* Action Recommendations Based on Triage */}

@@ -1,13 +1,13 @@
 /**
  * Distributed Lock Service
  * Provides multi-instance safe locks for scheduled background jobs (e.g. data retention, migrations, batch tasks).
- * Supports both PostgreSQL Advisory Locks and Database-backed lease locks with automatic TTL expiration.
+ * Utilizes Redis atomic lock (SET key val NX EX) with DB lease lock fallback.
  */
 
 import crypto from 'crypto';
 import os from 'os';
 import { prisma } from '../database.js';
-import { dbConfig } from '../config/databaseConfig.js';
+import { redisService } from './redisService.js';
 
 export class DistributedLockService {
   private static instanceId = `${os.hostname()}-${process.pid}-${crypto.randomBytes(4).toString('hex')}`;
@@ -20,9 +20,39 @@ export class DistributedLockService {
     const holder = customHolder || this.instanceId;
     const now = new Date();
     const expiresAt = new Date(now.getTime() + ttlSeconds * 1000);
+    const redisLockKey = `lock:${lockId}`;
 
+    // 1. Try Redis Atomic Lock (SET key val NX EX)
+    const redisAcquired = await redisService.setnx(redisLockKey, holder, ttlSeconds);
+    if (redisAcquired) {
+      // Async sync to DB for monitoring/fallback
+      prisma.distributedLock.upsert({
+        where: { id: lockId },
+        create: {
+          id: lockId,
+          holder,
+          acquiredAt: now,
+          expiresAt,
+        },
+        update: {
+          holder,
+          acquiredAt: now,
+          expiresAt,
+        },
+      }).catch(() => {});
+
+      return true;
+    }
+
+    // Check if Redis lock exists and belongs to holder (renew lock)
+    const existingHolder = await redisService.get<string>(redisLockKey);
+    if (existingHolder === holder) {
+      await redisService.set(redisLockKey, holder, ttlSeconds);
+      return true;
+    }
+
+    // 2. Fallback to Database Lock if Redis did not acquire
     try {
-      // 1. If running on PostgreSQL, we can use advisory locks or database table locks
       const existing = await prisma.distributedLock.findUnique({
         where: { id: lockId },
       });
@@ -44,7 +74,7 @@ export class DistributedLockService {
         return false;
       }
 
-      // Create new lock
+      // Create new DB lock if not existing in DB
       await prisma.distributedLock.create({
         data: {
           id: lockId,
@@ -65,23 +95,34 @@ export class DistributedLockService {
    */
   static async releaseLock(lockId: string, customHolder?: string): Promise<boolean> {
     const holder = customHolder || this.instanceId;
+    const redisLockKey = `lock:${lockId}`;
+
+    let released = false;
+
+    // 1. Release from Redis
+    const currentRedisHolder = await redisService.get<string>(redisLockKey);
+    if (currentRedisHolder === holder || !currentRedisHolder) {
+      await redisService.del(redisLockKey);
+      released = true;
+    }
+
+    // 2. Release from DB
     try {
       const existing = await prisma.distributedLock.findUnique({
         where: { id: lockId },
       });
 
-      if (!existing || existing.holder !== holder) {
-        return false;
+      if (existing && existing.holder === holder) {
+        await prisma.distributedLock.delete({
+          where: { id: lockId },
+        });
+        released = true;
       }
-
-      await prisma.distributedLock.delete({
-        where: { id: lockId },
-      });
-      return true;
     } catch (err: any) {
-      console.warn(`[DISTRIBUTED_LOCK] Failed to release lock for ${lockId}:`, err.message);
-      return false;
+      console.warn(`[DISTRIBUTED_LOCK] Failed to release DB lock for ${lockId}:`, err.message);
     }
+
+    return released;
   }
 
   /**
@@ -93,7 +134,8 @@ export class DistributedLockService {
     ttlSeconds: number,
     action: () => Promise<T>
   ): Promise<{ executed: boolean; result?: T; reason?: string }> {
-    const acquired = await this.acquireLock(lockId, ttlSeconds);
+    const uniqueHolder = `${this.instanceId}-req-${crypto.randomBytes(4).toString('hex')}`;
+    const acquired = await this.acquireLock(lockId, ttlSeconds, uniqueHolder);
     if (!acquired) {
       return {
         executed: false,
@@ -105,7 +147,8 @@ export class DistributedLockService {
       const result = await action();
       return { executed: true, result };
     } finally {
-      await this.releaseLock(lockId);
+      await this.releaseLock(lockId, uniqueHolder);
     }
   }
 }
+

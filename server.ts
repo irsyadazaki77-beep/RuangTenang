@@ -39,7 +39,7 @@ import counselorsRouter from './server/routes/counselors.js';
 // Global API rate limiters
 const apiLimiter = rateLimit({
   windowMs: 1 * 60 * 1000,
-  max: 300,
+  max: 1000,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Terlalu banyak permintaan. Silakan coba lagi nanti.' }
@@ -51,7 +51,12 @@ async function startServer() {
   validateStartupEnvironment();
 
   const app = express();
-  const PORT = 3000;
+  
+  const rawPort = process.env.PORT || '3000';
+  const PORT = parseInt(rawPort, 10);
+  if (isNaN(PORT) || PORT < 1 || PORT > 65535) {
+    throw new Error(`FATAL: Invalid port configured: ${rawPort}`);
+  }
 
   // Trust the first proxy to correctly resolve X-Forwarded-For
   app.set('trust proxy', 1);
@@ -59,28 +64,63 @@ async function startServer() {
   // Advanced security hardening (CSP, HSTS, X-Frame-Options)
   const isProd = process.env.NODE_ENV === 'production';
   
+  const allowedOrigins = new Set<string>();
+  if (process.env.APP_ORIGIN) {
+    allowedOrigins.add(process.env.APP_ORIGIN.trim());
+  }
+  if (process.env.CORS_ALLOWED_ORIGINS) {
+    process.env.CORS_ALLOWED_ORIGINS.split(',').forEach(o => {
+      if (o.trim()) allowedOrigins.add(o.trim());
+    });
+  }
+
+  if (!isProd) {
+    allowedOrigins.add('http://localhost:3000');
+    allowedOrigins.add('http://127.0.0.1:3000');
+    allowedOrigins.add('http://localhost:5173');
+    allowedOrigins.add('http://127.0.0.1:5173');
+  }
+
   app.use(cors({
-    origin: (origin, callback) => callback(null, true),
+    origin: (origin, callback) => {
+      if (!origin) {
+        if (isProd) {
+          return callback(new Error('CORS Blocked: Missing origin not allowed in production.'));
+        }
+        return callback(null, true);
+      }
+      
+      const isAIStudioPreview = origin.endsWith('.run.app') || origin.endsWith('.studio') || origin === 'https://ai.studio' || origin.endsWith('.google.com') || origin.endsWith('.google.dev');
+      
+      if (allowedOrigins.has(origin) || isAIStudioPreview) {
+        return callback(null, true);
+      }
+      return callback(new Error(`CORS Blocked: Origin ${origin} is not allowed.`));
+    },
     credentials: true,
   }));
 
-  if (isProd) {
-    app.use(helmet({
-      contentSecurityPolicy: {
-        directives: {
-          defaultSrc: ["'self'"],
-          scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
-          styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
-          fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
-          imgSrc: ["'self'", "data:", "blob:", "https://*"],
-          connectSrc: ["'self'", "https://*", "wss://*", "ws://*"],
-          frameAncestors: ["*"],
-        }
-      },
-      frameguard: false,
-      hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
-    }));
-  }
+  app.use(helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        objectSrc: ["'none'"],
+        baseUri: ["'self'"],
+        scriptSrc: isProd 
+          ? ["'self'"]
+          : ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+        styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+        fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
+        imgSrc: ["'self'", "data:", "blob:", "https://images.unsplash.com", "https://api.dicebear.com", "https://*.google.com", "https://*.googleapis.com"],
+        connectSrc: isProd
+          ? ["'self'", "https://generativelanguage.googleapis.com"]
+          : ["'self'", "https://*", "wss://*", "ws://*"],
+        frameAncestors: ["'self'", "https://*.google.com", "https://*.google.dev", "https://*.run.app", "https://*.studio", "https://ai.studio"],
+      }
+    },
+    frameguard: false,
+    hsts: isProd ? { maxAge: 31536000, includeSubDomains: true, preload: true } : false,
+  }));
 
   // Apply generic API limiter and no-cache
   app.use('/api/', (req, res, next) => {
@@ -113,31 +153,23 @@ async function startServer() {
   });
 
   // 4. Liveness & Readiness Endpoints
-  // Liveness simply indicates the server is running and can accept requests
-  app.get(['/api/liveness', '/liveness', '/healthz'], (req, res) => {
-    res.status(200).json({ status: 'UP', uptime: Math.floor(process.uptime()) });
+  // Liveness (Health) indicates the server process is alive
+  app.get(['/api/v1/health', '/api/health', '/healthz'], (req, res) => {
+    res.status(200).json({ status: 'healthy', uptimeSeconds: Math.floor(process.uptime()), timestamp: new Date().toISOString() });
   });
 
-  // Readiness indicates the application is ready to serve traffic (DB is connected)
-  app.get(['/api/readiness', '/readiness', '/readyz'], async (req, res) => {
-    try {
-      await serverDb.ping();
-      res.status(200).json({ status: 'READY', timestamp: new Date().toISOString() });
-    } catch (e: any) {
-      console.error('[READINESS] Database connection failed:', e.message);
-      res.status(503).json({ status: 'UNAVAILABLE', reason: 'Database connection failed' });
-    }
-  });
-
-  const healthCheckHandler = async (req: express.Request, res: express.Response) => {
+  // Readiness indicates the application dependencies are ready
+  app.get(['/api/v1/readiness', '/api/readiness', '/readyz'], async (req, res) => {
     let dbStatus = 'UP';
     let aiStatus = 'DEGRADED';
+    let isHealthy = false;
 
     try {
       await serverDb.ping();
       dbStatus = 'UP';
+      isHealthy = true;
     } catch (e: any) {
-      console.error('[HEALTHCHECK] Database connection failed:', e.message);
+      console.error('[READINESS] Database connection failed:', e.message);
       dbStatus = 'DOWN';
     }
 
@@ -145,23 +177,27 @@ async function startServer() {
     if (ai) {
       aiStatus = 'UP';
     }
-
-    const isHealthy = dbStatus === 'UP';
+    
+    // Critical configuration checks
+    const hasSecret = !!process.env.JWT_SECRET;
+    if (!hasSecret) {
+       console.error('[READINESS] Critical config JWT_SECRET is missing');
+       isHealthy = false;
+    }
 
     res.status(isHealthy ? 200 : 503).json({
-      status: isHealthy ? 'healthy' : 'unhealthy',
+      status: isHealthy ? 'ready' : 'unready',
       timestamp: new Date().toISOString(),
       services: {
         database: dbStatus,
         ai: aiStatus
       },
-      uptimeSeconds: Math.floor(process.uptime()),
-      environment: process.env.NODE_ENV || 'development',
-      requestId: req.requestId
+      config: {
+        jwt: hasSecret ? 'valid' : 'invalid'
+      },
+      environment: process.env.NODE_ENV || 'development'
     });
-  };
-
-  app.get(['/api/v1/health', '/api/health'], healthCheckHandler);
+  });
 
   // 5. Mount Modular API Routers (supporting both /api/v1 and /api)
   app.use('/api/v1/auth', authRouter);
@@ -231,6 +267,10 @@ async function startServer() {
   try {
     const { initRetentionCronJobs } = await import('./server/jobs/cronRetention.js');
     initRetentionCronJobs();
+    
+    // Appointment Reminder Job
+    const { startAppointmentReminderJob } = await import('./server/jobs/appointmentReminderJob.js');
+    startAppointmentReminderJob();
   } catch(err) {
     console.error('Failed to initialize cron jobs:', err);
   }

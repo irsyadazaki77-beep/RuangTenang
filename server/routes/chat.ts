@@ -22,7 +22,12 @@ const router = Router();
 
 // Error wrapper helper
 const sendError = (res: Response, code: string, message: string, status = 500) => {
-  res.status(status).json({ success: false, code, message });
+  res.status(status).json({ 
+    success: false, 
+    code, 
+    message,
+    error: { code, message }
+  });
 };
 
 // Middleware to check ownership for a specific chat ID
@@ -693,90 +698,15 @@ router.post('/chat/mood-insights', optionalAuth, async (req: Request, res: Respo
   }
 });
 
+import { MemoryController } from '../controllers/memoryController.js';
+
+// ... (other code)
+
 // Memories
-router.get('/memories', requireAuth, async (req: Request, res: Response) => {
-  try {
-    const userId = req.user!.userId;
-    const memories = await prisma.userMemories.findMany({ where: { userId } });
-    const decryptedMemories = memories.map(m => ({
-      ...m,
-      content: encryptionService.decryptSensitive(m.content) || m.content
-    }));
-    res.json(decryptedMemories);
-  } catch (e) {
-    sendError(res, 'FETCH_MEMORIES_FAILED', 'Gagal mengambil memori');
-  }
-});
-
-router.post('/memories', requireAuth, async (req: Request, res: Response) => {
-  try {
-    const userId = req.user!.userId;
-    const isConsentGiven = await consentService.canUseMemoriesForAI(userId);
-    if (!isConsentGiven) {
-      return sendError(res, 'CONSENT_REQUIRED', 'Penyimpanan memori AI dinonaktifkan dalam izin privasi Anda.', 403);
-    }
-
-    const { content } = req.body;
-    if (!content || typeof content !== 'string') return sendError(res, 'INVALID_INPUT', 'Konten tidak valid', 400);
-    const safeContent = content.substring(0, 500);
-    const memory = await prisma.userMemories.create({
-      data: { id: `mem_${Date.now()}`, userId, content: encryptionService.encryptSensitive(safeContent) || safeContent }
-    });
-    res.json({ ...memory, content: safeContent });
-  } catch (e) {
-    sendError(res, 'CREATE_MEMORY_FAILED', 'Gagal menyimpan memori');
-  }
-});
-
-router.put('/memories/:id', requireAuth, async (req: Request, res: Response) => {
-  try {
-    const userId = req.user!.userId;
-    const { content, isActive } = req.body;
-    const memory = await prisma.userMemories.findFirst({ where: { id: req.params.id, userId } });
-    if (!memory) return sendError(res, 'NOT_FOUND', 'Memori tidak ditemukan', 404);
-
-    let updatedContent = memory.content;
-    let safeContent = typeof content === 'string' ? content.substring(0, 500) : null;
-    
-    if (safeContent) {
-      updatedContent = encryptionService.encryptSensitive(safeContent) || safeContent;
-    } else {
-      // Just keep old content for response purposes
-      safeContent = encryptionService.decryptSensitive(memory.content) || memory.content;
-    }
-
-    const updated = await prisma.userMemories.update({
-      where: { id: req.params.id },
-      data: {
-        ...(typeof content === 'string' ? { content: updatedContent } : {}),
-        ...(typeof isActive === 'boolean' ? { isActive } : {})
-      }
-    });
-    res.json({ ...updated, content: safeContent });
-  } catch (e) {
-    sendError(res, 'UPDATE_MEMORY_FAILED', 'Gagal memperbarui memori');
-  }
-});
-
-router.delete('/memories/:id', requireAuth, async (req: Request, res: Response) => {
-  try {
-    const userId = req.user!.userId;
-    const result = await prisma.userMemories.deleteMany({ where: { id: req.params.id, userId } });
-    if (result.count === 0) return sendError(res, 'NOT_FOUND', 'Memori tidak ditemukan', 404);
-    res.json({ success: true });
-  } catch (e) {
-    sendError(res, 'DELETE_MEMORY_FAILED', 'Gagal menghapus memori');
-  }
-});
-
-router.delete('/memories', requireAuth, async (req: Request, res: Response) => {
-  try {
-    const userId = req.user!.userId;
-    await prisma.userMemories.deleteMany({ where: { userId } });
-    res.json({ success: true });
-  } catch (e) {
-    sendError(res, 'DELETE_MEMORIES_FAILED', 'Gagal menghapus semua memori');
-  }
-});
+router.get('/memories', requireAuth, MemoryController.getMemories);
+router.post('/memories', requireAuth, MemoryController.createMemory);
+router.put('/memories/:id', requireAuth, MemoryController.updateMemory);
+router.delete('/memories/:id', requireAuth, MemoryController.deleteMemory);
+router.delete('/memories', requireAuth, MemoryController.deleteAllMemories);
 
 export default router;

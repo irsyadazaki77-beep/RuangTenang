@@ -20,6 +20,50 @@ interface AiQuotaBadgeProps {
   className?: string;
 }
 
+// In-flight request deduplication and memory cache
+let cachedUsageStats: UsageStatsData | null = null;
+let lastUsageFetchTime = 0;
+let inflightUsagePromise: Promise<UsageStatsData | null> | null = null;
+
+async function getCachedUsageStats(force = false): Promise<UsageStatsData | null> {
+  const now = Date.now();
+  if (!force && cachedUsageStats && now - lastUsageFetchTime < 10000) {
+    return cachedUsageStats;
+  }
+  if (inflightUsagePromise) {
+    return inflightUsagePromise;
+  }
+
+  inflightUsagePromise = apiClient.get<UsageStatsData>('/api/v1/user/usage-stats')
+    .then(res => {
+      if (res.success && res.data) {
+        const data = res.data;
+        const normalized: UsageStatsData = {
+          dailyLimit: data.dailyLimit,
+          dailyUsage: data.dailyUsage || 0,
+          weeklyLimit: data.weeklyLimit,
+          weeklyUsage: data.weeklyUsage || 0,
+          userTier: data.userTier || 'Free',
+          isPro: data.isPro || false,
+          isDeveloper: data.isDeveloper || false
+        };
+        cachedUsageStats = normalized;
+        lastUsageFetchTime = Date.now();
+        return normalized;
+      }
+      return cachedUsageStats;
+    })
+    .catch(err => {
+      console.warn('Failed to fetch AI quota stats:', err);
+      return cachedUsageStats;
+    })
+    .finally(() => {
+      inflightUsagePromise = null;
+    });
+
+  return inflightUsagePromise;
+}
+
 export const AiQuotaBadge: React.FC<AiQuotaBadgeProps> = ({
   userId = 'guest',
   userTier = 'Free',
@@ -27,37 +71,28 @@ export const AiQuotaBadge: React.FC<AiQuotaBadgeProps> = ({
   onOpenSettings,
   className = ''
 }) => {
-  const [stats, setStats] = useState<UsageStatsData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState<UsageStatsData | null>(() => cachedUsageStats);
+  const [loading, setLoading] = useState(!cachedUsageStats);
   const [showPopover, setShowPopover] = useState(false);
 
-  const fetchUsageStats = useCallback(async () => {
+  const fetchUsageStats = useCallback(async (force = false) => {
     try {
-      const res = await apiClient.get<UsageStatsData>('/api/v1/user/usage-stats');
-      if (res.success && res.data) {
-        const data = res.data;
-        setStats({
-          dailyLimit: data.dailyLimit,
-          dailyUsage: data.dailyUsage,
-          weeklyLimit: data.weeklyLimit,
-          weeklyUsage: data.weeklyUsage,
-          userTier: data.userTier || 'Free',
-          isPro: data.isPro || false,
-          isDeveloper: data.isDeveloper || false
-        });
+      const data = await getCachedUsageStats(force);
+      if (data) {
+        setStats(data);
       }
     } catch (err) {
-      console.error('Failed to fetch AI quota stats:', err);
+      console.warn('Failed to update stats:', err);
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchUsageStats();
+    fetchUsageStats(false);
 
     const handleQuotaUpdate = () => {
-      fetchUsageStats();
+      fetchUsageStats(true);
     };
 
     window.addEventListener('aiQuotaUpdated', handleQuotaUpdate);

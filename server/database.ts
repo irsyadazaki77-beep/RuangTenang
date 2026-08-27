@@ -12,11 +12,55 @@ const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
+// Sanitized Query Logging Helper
+function sanitizeQueryLog(query: string, params: string): { sanitizedQuery: string; sanitizedParams: string } {
+  const sensitiveRegex = /(password|token|secret|notes|studentNIM|studentEmail|mfaCode)/i;
+  let sanitizedQuery = query;
+  let sanitizedParams = params;
+
+  if (sensitiveRegex.test(params)) {
+    sanitizedParams = '[REDACTED_SENSITIVE_PARAMS]';
+  }
+  if (sensitiveRegex.test(query)) {
+    sanitizedQuery = query.replace(/(passwordHash\s*=\s*)'[^']+'/gi, '$1[REDACTED]');
+  }
+
+  return { sanitizedQuery, sanitizedParams };
+}
+
+// PostgreSQL connection pool tuning for Cloud Run / Docker containers
+let databaseUrl = process.env.DATABASE_URL;
+if (databaseUrl && databaseUrl.startsWith('postgres') && !databaseUrl.includes('connection_limit')) {
+  const poolLimit = process.env.DB_POOL_SIZE || '15';
+  const poolTimeout = process.env.DB_CONNECTION_TIMEOUT_SEC || '10';
+  const joiner = databaseUrl.includes('?') ? '&' : '?';
+  databaseUrl = `${databaseUrl}${joiner}connection_limit=${poolLimit}&pool_timeout=${poolTimeout}`;
+}
+
 export const prisma = globalForPrisma.prisma ?? new PrismaClient({
-  log: process.env.NODE_ENV === 'development' ? ['warn', 'error'] : ['error'],
+  ...(databaseUrl && databaseUrl.startsWith('postgres') ? { datasources: { db: { url: databaseUrl } } } : {}),
+  log: [
+    { emit: 'event', level: 'query' },
+    { emit: 'stdout', level: 'warn' },
+    { emit: 'stdout', level: 'error' },
+  ],
 });
 
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
+
+try {
+  (prisma as any).$on?.('query', (e: any) => {
+    const duration = e.duration;
+    const { sanitizedQuery, sanitizedParams } = sanitizeQueryLog(e.query || '', e.params || '');
+    if (duration > 200) {
+      console.warn(`[SLOW_QUERY_WARN] (${duration}ms): ${sanitizedQuery} | params: ${sanitizedParams}`);
+    } else if (process.env.NODE_ENV === 'development') {
+      console.log(`[PRISMA_QUERY] (${duration}ms): ${sanitizedQuery}`);
+    }
+  });
+} catch {
+  // Ignore query event listener setup error
+}
 
 // Graceful shutdown
 process.on('beforeExit', async () => {

@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import Sidebar from '../components/layout/Sidebar';
+import { ThemeProvider } from '../contexts/ThemeContext';
 
 describe('Mobile Navigation Drawer Unit Tests', () => {
   it('renders sidebar drawer when isOpen is true', () => {
@@ -14,21 +15,23 @@ describe('Mobile Navigation Drawer Unit Tests', () => {
     const onToggleArchive = vi.fn();
 
     render(
-      <MemoryRouter>
-        <Sidebar
-          isOpen={true}
-          setIsOpen={setIsOpen}
-          chats={[]}
-          onNewChat={onNewChat}
-          onSelectChat={onSelectChat}
-          onDeleteChat={onDeleteChat}
-          onUpdateTitle={onUpdateTitle}
-          onTogglePin={onTogglePin}
-          onToggleArchive={onToggleArchive}
-        />
-      </MemoryRouter>
+      <ThemeProvider>
+        <MemoryRouter>
+          <Sidebar
+            isOpen={true}
+            setIsOpen={setIsOpen}
+            chats={[]}
+            onNewChat={onNewChat}
+            onSelectChat={onSelectChat}
+            onDeleteChat={onDeleteChat}
+            onUpdateTitle={onUpdateTitle}
+            onTogglePin={onTogglePin}
+            onToggleArchive={onToggleArchive}
+          />
+        </MemoryRouter>
+      </ThemeProvider>
     );
 
-    expect(screen.getByText(/RuangTenang V2/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Mulai Chat Baru/i })).toBeInTheDocument();
   });
 });

@@ -1,4 +1,4 @@
-export type DatabaseProvider = 'sqlite';
+export type DatabaseProvider = 'sqlite' | 'postgresql';
 export interface DatabaseConfiguration {
   provider: DatabaseProvider;
   url: string;

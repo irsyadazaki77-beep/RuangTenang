@@ -14,7 +14,7 @@ const router = Router();
 // Rate Limiter for Authentication Endpoints
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 mins
-  max: 30,
+  max: 100,
   message: {
     error: 'Terlalu banyak percobaan autentikasi. Silakan coba lagi setelah 15 menit.'
   },

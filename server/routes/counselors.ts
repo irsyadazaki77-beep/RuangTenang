@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 import { prisma } from '../database.js';
 import { consentService } from '../services/consentService.js';
+import { redisService } from '../services/redisService.js';
 
 const router = Router();
 
@@ -184,7 +185,23 @@ router.get(['/', '/counselors', '/api/counselors', '/api/v1/counselors'], async 
   try {
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 50));
+    const format = (req.query.format as string) || 'array';
     const offset = (page - 1) * limit;
+
+    const cacheKey = `counselors:list:p${page}:l${limit}:f${format}`;
+    const cached = await redisService.get<{ data: any; headers: Record<string, any> }>(cacheKey);
+
+    if (cached) {
+      res.setHeader('X-Cache', 'HIT');
+      if (cached.headers) {
+        for (const [k, v] of Object.entries(cached.headers)) {
+          res.setHeader(k, String(v));
+        }
+      }
+      return res.json(cached.data);
+    }
+
+    res.setHeader('X-Cache', 'MISS');
 
     const [total, dbCounselors] = await Promise.all([
       prisma.counselors.count(),
@@ -244,21 +261,31 @@ router.get(['/', '/counselors', '/api/counselors', '/api/v1/counselors'], async 
       };
     });
 
+    const totalPages = Math.ceil(total / limit) || 1;
+    const headers = {
+      'X-Total-Count': total,
+      'X-Page': page,
+      'X-Limit': limit,
+      'X-Total-Pages': totalPages,
+    };
+
     res.setHeader('X-Total-Count', total);
     res.setHeader('X-Page', page);
     res.setHeader('X-Limit', limit);
-    res.setHeader('X-Total-Pages', Math.ceil(total / limit) || 1);
+    res.setHeader('X-Total-Pages', totalPages);
 
-    if (req.query.format === 'object') {
-      return res.json({
-        data: formattedCounselors,
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit) || 1
-      });
-    }
-    res.json(formattedCounselors);
+    const responsePayload = format === 'object' ? {
+      data: formattedCounselors,
+      total,
+      page,
+      limit,
+      totalPages
+    } : formattedCounselors;
+
+    // Cache payload for 300 seconds
+    await redisService.set(cacheKey, { data: responsePayload, headers }, 300);
+
+    res.json(responsePayload);
   } catch (error) {
     console.error('Failed to fetch counselors:', error);
     res.status(500).json({ error: 'Gagal memuat daftar konselor' });

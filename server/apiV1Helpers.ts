@@ -662,7 +662,8 @@ export function centralizedErrorHandler(err: any, req: Request, res: Response, _
 
   res.status(statusCode).json({
     success: false,
-    error: statusCode >= 500 ? 'INTERNAL_SERVER_ERROR' : 'API_ERROR',
+    error: { code: statusCode >= 500 ? 'INTERNAL_SERVER_ERROR' : 'API_ERROR', message: isProd && statusCode >= 500 ? 'Terjadi kesalahan internal pada server.' : userMessage },
+    code: statusCode >= 500 ? 'INTERNAL_SERVER_ERROR' : 'API_ERROR',
     message: isProd && statusCode >= 500 ? 'Terjadi kesalahan internal pada server.' : userMessage,
     requestId
   });

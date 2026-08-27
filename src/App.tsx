@@ -3,7 +3,7 @@ import { apiClient } from "./lib/apiClient";
 import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import Sidebar from './components/layout/Sidebar';
-import { Menu, WifiOff } from 'lucide-react';
+import { WifiOff } from 'lucide-react';
 import { Chat } from './features/chat/types';
 import MainChat from './features/chat/components/MainChat';
 import { WorkspaceLayout } from './components/layout/WorkspaceLayout';
@@ -66,10 +66,10 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (user) {
+    if (user?.id) {
       fetchChats();
     }
-  }, [user]);
+  }, [user?.id]);
 
   useEffect(() => {
     const handleKeydown = (e: KeyboardEvent) => {
@@ -166,12 +166,12 @@ export default function App() {
   };
 
   if (loading) {
-    return <div className="flex h-[100dvh] items-center justify-center bg-white"><div className="w-8 h-8 border-4 border-teal-500 border-t-transparent rounded-full animate-spin"></div></div>;
+    return <div className="flex h-[100dvh] items-center justify-center bg-white dark:bg-slate-950"><div className="w-8 h-8 border-4 border-teal-500 border-t-transparent rounded-full animate-spin"></div></div>;
   }
 
   if (!user) {
     return (
-      <Suspense fallback={<div className="flex h-[100dvh] items-center justify-center bg-white"><div className="w-8 h-8 border-4 border-teal-500 border-t-transparent rounded-full animate-spin"></div></div>}>
+      <Suspense fallback={<div className="flex h-[100dvh] items-center justify-center bg-white dark:bg-slate-950"><div className="w-8 h-8 border-4 border-teal-500 border-t-transparent rounded-full animate-spin"></div></div>}>
         <AuthModal isOpen={true} onClose={() => {}} currentSession={null as any} onLogin={(u) => setUser(u)} onLogout={() => {}} />
       </Suspense>
     );
@@ -179,21 +179,21 @@ export default function App() {
 
   if (user.role === 'konselor') {
     return (
-      <div className="flex min-h-[100dvh] w-full bg-white text-slate-900 font-sans">
+      <div className="flex min-h-[100dvh] w-full bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans">
         {isSettingsOpen && (
-          <div className="fixed inset-0 bg-slate-50 z-50 flex flex-col overflow-hidden">
-            <div className="p-4 border-b flex items-center bg-white shadow-sm">
-              <button onClick={() => setIsSettingsOpen(false)} className="mr-4 text-slate-500 hover:text-slate-800" aria-label="Kembali">&larr; Kembali</button>
-              <h2 className="font-bold">Pengaturan & Profil</h2>
+          <div className="fixed inset-0 bg-slate-50 dark:bg-slate-900 z-50 flex flex-col overflow-hidden">
+            <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center bg-white dark:bg-slate-900 shadow-sm">
+              <button onClick={() => setIsSettingsOpen(false)} className="mr-4 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200" aria-label="Kembali">&larr; Kembali</button>
+              <h2 className="font-bold text-slate-900 dark:text-slate-100">Pengaturan & Profil</h2>
             </div>
             <div className="flex-1 overflow-y-auto">
-               <Suspense fallback={<div className="p-4 text-center text-slate-500">Memuat pengaturan...</div>}>
+               <Suspense fallback={<div className="p-4 text-center text-slate-500 dark:text-slate-400">Memuat pengaturan...</div>}>
                  <SettingsPage userSession={user} setUserSession={(u) => setUser(u)} onOpenAuth={() => setIsAuthModalOpen(true)} onOpenScreening={() => {}} onOpenLegal={() => {}} />
                </Suspense>
             </div>
           </div>
         )}
-        <Suspense fallback={<div className="flex h-[100dvh] items-center justify-center bg-white"><div className="w-8 h-8 border-4 border-teal-500 border-t-transparent rounded-full animate-spin"></div></div>}>
+        <Suspense fallback={<div className="flex h-[100dvh] items-center justify-center bg-white dark:bg-slate-950"><div className="w-8 h-8 border-4 border-teal-500 border-t-transparent rounded-full animate-spin"></div></div>}>
           <CounselorDashboard />
         </Suspense>
       </div>
@@ -201,7 +201,7 @@ export default function App() {
   }
 
   return (
-    <div className="flex w-full h-[100dvh] bg-white text-slate-900 font-sans relative overflow-hidden">
+    <div className="flex w-full h-[100dvh] bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans relative overflow-hidden">
       {isOffline && (
         <div className="absolute top-0 left-0 right-0 z-50 bg-amber-500 text-white px-4 py-2 text-sm font-medium flex items-center justify-center gap-2 shadow-md animate-in slide-in-from-top">
           <WifiOff size={16} />
@@ -226,19 +226,19 @@ export default function App() {
       
       <div className="flex-1 flex flex-col relative min-w-0">
         {isSettingsOpen ? (
-          <div className="absolute inset-0 bg-slate-50 z-20 flex flex-col overflow-hidden">
-            <div className="p-4 border-b flex items-center bg-white shadow-sm shrink-0">
-              <button onClick={() => setIsSettingsOpen(false)} className="mr-4 text-slate-500 hover:text-slate-800" aria-label="Kembali">&larr; Kembali</button>
-              <h2 className="font-bold">Pengaturan & Profil</h2>
+          <div className="absolute inset-0 bg-slate-50 dark:bg-slate-900 z-20 flex flex-col overflow-hidden">
+            <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center bg-white dark:bg-slate-900 shadow-sm shrink-0">
+              <button onClick={() => setIsSettingsOpen(false)} className="mr-4 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200" aria-label="Kembali">&larr; Kembali</button>
+              <h2 className="font-bold text-slate-900 dark:text-slate-100">Pengaturan & Profil</h2>
             </div>
             <div className="flex-1 overflow-y-auto min-w-0">
-               <Suspense fallback={<div className="p-4 text-center text-slate-500">Memuat pengaturan...</div>}>
+               <Suspense fallback={<div className="p-4 text-center text-slate-500 dark:text-slate-400">Memuat pengaturan...</div>}>
                  <SettingsPage userSession={user} setUserSession={(u) => setUser(u)} onOpenAuth={() => setIsAuthModalOpen(true)} onOpenScreening={() => {}} onOpenLegal={() => {}} />
                </Suspense>
             </div>
           </div>
         ) : (
-          <Suspense fallback={<div className="flex h-full items-center justify-center bg-white"><div className="w-8 h-8 border-4 border-teal-500 border-t-transparent rounded-full animate-spin"></div></div>}>
+          <Suspense fallback={<div className="flex h-full items-center justify-center bg-white dark:bg-slate-950"><div className="w-8 h-8 border-4 border-teal-500 border-t-transparent rounded-full animate-spin"></div></div>}>
             <Routes>
               <Route path="/" element={<MainChat user={user} setChats={setChats} onOpenSidebar={() => setIsSidebarOpen(true)} onOpenSettings={() => setIsSettingsOpen(true)} />} />
               <Route path="/c/:chatId" element={<MainChat user={user} setChats={setChats} onOpenSidebar={() => setIsSidebarOpen(true)} onOpenSettings={() => setIsSettingsOpen(true)} />} />

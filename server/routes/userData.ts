@@ -3,6 +3,8 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { requireAuth } from '../middleware/auth.js';
 import { encryptionService } from '../services/encryptionService.js';
+import { generateStudentProgressPdf } from '../services/reportGenerator.js';
+import crypto from 'crypto';
 
 const router = Router();
 
@@ -18,17 +20,33 @@ router.get('/mood', requireAuth, async (req: Request, res: Response) => {
       orderBy: { timestamp: 'desc' }
     });
     const decryptedLogs = logs.map(log => {
+      let decryptedNotes = '';
+      if (log.notes) {
+        decryptedNotes = encryptionService.decryptSensitive(log.notes) || '';
+      }
+
       let factors: string[] = [];
       if (log.factors) {
-        try {
-          factors = JSON.parse(log.factors);
-        } catch {
-          factors = [log.factors];
+        if (encryptionService.isEncrypted(log.factors)) {
+          const decryptedFactorsStr = encryptionService.decryptSensitive(log.factors);
+          if (decryptedFactorsStr) {
+            try {
+              factors = JSON.parse(decryptedFactorsStr);
+            } catch {
+              factors = [decryptedFactorsStr];
+            }
+          }
+        } else {
+          try {
+            factors = JSON.parse(log.factors);
+          } catch {
+            factors = [log.factors];
+          }
         }
       }
       return {
         ...log,
-        notes: encryptionService.decryptSensitive(log.notes) || log.notes || '',
+        notes: decryptedNotes,
         factors
       };
     });
@@ -53,17 +71,37 @@ router.post('/mood', requireAuth, async (req: Request, res: Response) => {
     }
     const { mood, notes, intensity, factors } = parsed.data;
     const moodStr = String(mood);
+
+    let encryptedNotes: string | null = null;
+    if (notes) {
+      const enc = encryptionService.encryptSensitive(notes);
+      if (!enc) {
+        return res.status(500).json({ success: false, code: 'ENCRYPTION_FAILED', message: 'Gagal mengenkripsi catatan mood sensitif. Transaksi dibatalkan.' });
+      }
+      encryptedNotes = enc;
+    }
+
+    let encryptedFactors: string | null = null;
+    if (factors && factors.length > 0) {
+      const factorsJson = JSON.stringify(factors);
+      const enc = encryptionService.encryptSensitive(factorsJson);
+      if (!enc) {
+        return res.status(500).json({ success: false, code: 'ENCRYPTION_FAILED', message: 'Gagal mengenkripsi faktor mood sensitif. Transaksi dibatalkan.' });
+      }
+      encryptedFactors = enc;
+    }
+
     const log = await prisma.moodLogs.create({
       data: {
-        id: `mood_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+        id: `mood_${crypto.randomUUID()}`,
         userId: req.user!.userId,
         mood: moodStr,
-        notes: encryptionService.encryptSensitive(notes || '') || notes || '',
+        notes: encryptedNotes,
         intensity: intensity ?? 8,
-        factors: factors ? JSON.stringify(factors) : null
+        factors: encryptedFactors
       }
     });
-    res.json({ success: true, log: { ...log, notes, factors: factors || [] } });
+    res.json({ success: true, log: { ...log, notes: notes || '', factors: factors || [] } });
   } catch (e: any) {
     console.error('[MOOD] Error:', e.message);
     sendError(res, 'CREATE_MOOD_FAILED', 'Gagal menyimpan data mood');
@@ -90,10 +128,28 @@ router.put('/mood/:id', requireAuth, async (req: Request, res: Response) => {
     const updates: any = {};
     if (parsed.data.mood !== undefined) updates.mood = String(parsed.data.mood);
     if (parsed.data.notes !== undefined) {
-      updates.notes = encryptionService.encryptSensitive(parsed.data.notes) || parsed.data.notes;
+      if (parsed.data.notes) {
+        const enc = encryptionService.encryptSensitive(parsed.data.notes);
+        if (!enc) {
+          return res.status(500).json({ success: false, code: 'ENCRYPTION_FAILED', message: 'Gagal mengenkripsi catatan mood sensitif. Pembaruan dibatalkan.' });
+        }
+        updates.notes = enc;
+      } else {
+        updates.notes = null;
+      }
     }
     if (parsed.data.intensity !== undefined) updates.intensity = parsed.data.intensity;
-    if (parsed.data.factors !== undefined) updates.factors = JSON.stringify(parsed.data.factors);
+    if (parsed.data.factors !== undefined) {
+      if (parsed.data.factors && parsed.data.factors.length > 0) {
+        const enc = encryptionService.encryptSensitive(JSON.stringify(parsed.data.factors));
+        if (!enc) {
+          return res.status(500).json({ success: false, code: 'ENCRYPTION_FAILED', message: 'Gagal mengenkripsi faktor mood sensitif. Pembaruan dibatalkan.' });
+        }
+        updates.factors = enc;
+      } else {
+        updates.factors = null;
+      }
+    }
 
     const updated = await prisma.moodLogs.update({
       where: { id },
@@ -104,7 +160,7 @@ router.put('/mood/:id', requireAuth, async (req: Request, res: Response) => {
       success: true,
       log: {
         ...updated,
-        notes: parsed.data.notes !== undefined ? parsed.data.notes : (encryptionService.decryptSensitive(updated.notes) || updated.notes)
+        notes: parsed.data.notes !== undefined ? parsed.data.notes : (encryptionService.decryptSensitive(updated.notes) || updated.notes || '')
       }
     });
   } catch (e: any) {
@@ -225,6 +281,24 @@ router.post('/profile', requireAuth, async (req: Request, res: Response) => {
     res.json({ success: true });
   } catch(e) {
     sendError(res, 'UPDATE_PROFILE_FAILED', 'Gagal memperbarui profil');
+  }
+});
+
+// --- EXPORT PDF ---
+router.get('/export-progress-pdf', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const user = await prisma.users.findUnique({ where: { id: req.user!.userId } });
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User tidak ditemukan' });
+    }
+    const pdfBuffer = await generateStudentProgressPdf(user.id, user.name);
+    
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=Progress_RuangTenang_${Date.now()}.pdf`);
+    res.send(pdfBuffer);
+  } catch (e: any) {
+    console.error('[EXPORT PDF] Error:', e);
+    sendError(res, 'EXPORT_FAILED', 'Gagal menghasilkan PDF perkembangan');
   }
 });
 

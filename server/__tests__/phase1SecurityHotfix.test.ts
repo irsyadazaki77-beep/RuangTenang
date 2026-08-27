@@ -4,6 +4,7 @@ import express from 'express';
 import cookieParser from 'cookie-parser';
 import jwt from 'jsonwebtoken';
 import { prisma, seedInitialDataIfNeeded } from '../database.js';
+import { redisService } from '../services/redisService.js';
 import { getJwtSecret } from '../middleware/auth.js';
 import counselorsRouter from '../routes/counselors.js';
 import emergencyRouter, { clearSosHistoryForTesting } from '../routes/emergency.js';
@@ -99,9 +100,11 @@ describe('FASE 1 SECURITY HOTFIX REGRESSION TEST SUITE', () => {
     });
   });
 
-  beforeEach(() => {
+  beforeEach(async () => {
     clearIdempotencyStoreForTesting();
     clearSosHistoryForTesting();
+    await redisService.flush();
+    await prisma.distributedState.deleteMany({});
   });
 
   afterAll(async () => {

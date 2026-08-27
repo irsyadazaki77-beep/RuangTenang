@@ -65,7 +65,7 @@ export const screeningRepository = {
 
     // Application-level encryption of clinical textual indicators
     let encryptedIndicators: string | null = null;
-    if (screening.riskIndicators && Array.isArray(screening.riskIndicators)) {
+    if (screening.riskIndicators) {
       const jsonStr = JSON.stringify(screening.riskIndicators);
       encryptedIndicators = encryptionService.encryptSensitive(jsonStr);
     }
