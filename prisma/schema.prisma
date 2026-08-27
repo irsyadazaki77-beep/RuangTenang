@@ -1,0 +1,422 @@
+// Prisma Schema for RuangTenang Platform
+// Production Target: PostgreSQL 15+
+// Configuration: Uses DATABASE_URL environment variable
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./ruangtenang_sqlite.db"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Users {
+  id                        String    @id
+  name                      String
+  email                     String    @unique
+  passwordHash              String
+  role                      String    @default("mahasiswa")
+  tier                      String    @default("Free")
+  university                String    @default("Universitas Indonesia")
+  createdAt                 DateTime  @default(now())
+  emailVerified             Boolean   @default(false)
+  emailVerificationCode     String?
+  emailVerificationExpires  DateTime?
+  passwordResetToken        String?
+  passwordResetExpires      DateTime?
+  failedLoginAttempts       Int       @default(0)
+  lockUntil                 DateTime?
+  mfaEnabled                Boolean   @default(false)
+  mfaCode                   String?
+  mfaExpires                DateTime?
+  mfaToken                  String?
+  activeSessions            String?   // Legacy JSON String
+  loginHistory              String?   // Legacy JSON String
+  securityNotifications     String?   // Legacy JSON String
+
+  // Relations
+  chats                     Chats[]
+  moodLogs                  MoodLogs[]
+  screenings                Screenings[]
+  appointments              Appointments[]
+  consent                   UserConsents?
+  emergencyContact          EmergencyContacts?
+  memories                  UserMemories[]
+  sessions                  UserSession[]
+  loginEvents               LoginEvent[]
+  notifications             SecurityNotification[]
+}
+
+model Appointments {
+  id               String   @id
+  counselorId      String
+  counselorName    String
+  date             String
+  time             String
+  timezone         String   @default("WIB")
+  notes            String?
+  status           String
+  approvalStatus   String
+  attendanceStatus String
+  meetingLink      String?
+  mode             String   @default("Virtual Video Call")
+  createdAt        DateTime @default(now())
+  userId           String?
+  studentName      String?
+  studentNIM       String?
+  studentEmail     String?
+
+  // Relations
+  user             Users?       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  counselor        Counselors   @relation(fields: [counselorId], references: [id], onDelete: Cascade)
+  slot             AppointmentSlot?
+
+  @@index([userId])
+  @@index([counselorId])
+  @@index([userId, status])
+  @@index([counselorId, date, time])
+  @@index([date, status])
+  @@index([createdAt])
+}
+
+model Screenings {
+  id              String   @id
+  phq9Score       Int
+  gad7Score       Int
+  phq9Severity    String
+  gad7Severity    String
+  item9Score      Int?
+  hasSelfHarmRisk Boolean?
+  riskLevel       String?
+  riskIndicators  String?  // AES-256-GCM Encrypted JSON
+  status          String   @default("Menunggu Penanganan")
+  timestamp       DateTime @default(now())
+  userId          String?
+
+  // Relations
+  user            Users?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, timestamp])
+  @@index([timestamp])
+  @@index([hasSelfHarmRisk, status])
+  @@index([phq9Score])
+}
+
+model AuditLogs {
+  id        String   @id
+  action    String
+  details   String
+  timestamp DateTime @default(now())
+  ipHash    String?
+  userRole  String?
+
+  @@index([timestamp])
+  @@index([action, timestamp])
+  @@index([ipHash])
+}
+
+model UserConsents {
+  userId                     String    @id
+  consentForAI               Boolean   @default(false)
+  consentForAIMood           Boolean   @default(false)
+  consentForAIScreening      Boolean   @default(false)
+  consentForAIMemory         Boolean   @default(false)
+  consentForAIJournal        Boolean   @default(false)
+  consentForEmergencySOS     Boolean   @default(false)
+  consentForCounselorSummary Boolean   @default(false)
+  consentForCounselorSharing Boolean   @default(false)
+  consentForTelemetry        Boolean   @default(false)
+  consentForAnalytics        Boolean   @default(false)
+  consentVersion             String    @default("v1.3-2026")
+  policyVersion              String    @default("v2.0-PDP-2026")
+  consentTimestamp           DateTime?
+  grantedAt                  DateTime?
+  withdrawnAt                DateTime?
+  retentionDays              Int       @default(90)
+  updatedAt                  DateTime  @default(now())
+
+  // Relations
+  user                       Users     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model TelemetryLogs {
+  id           String   @id
+  timestamp    DateTime @default(now())
+  service      String
+  status       String
+  latencyMs    Int
+  details      String
+  retryAttempt Int?
+
+  @@index([timestamp])
+  @@index([service, status])
+}
+
+model UsabilityFeedbacks {
+  id              String   @id
+  role            String
+  scenarioName    String
+  susScores       String   // Comma-separated or JSON string
+  overallSusScore Float
+  comments        String?
+  submittedAt     DateTime @default(now())
+
+  @@index([submittedAt])
+}
+
+model ProgramProgresses {
+  userId           String
+  programId        String
+  completedStepIds String   // JSON array
+  lastUpdated      DateTime @default(now())
+
+  @@id([userId, programId])
+  @@index([userId])
+}
+
+model GovernanceTests {
+  id               String   @id
+  category         String
+  prompt           String
+  expectedBehavior String
+  actualAIResponse String
+  status           String
+  evaluatedAt      DateTime @default(now())
+
+  @@index([evaluatedAt])
+  @@index([category, status])
+}
+
+model DailyUsages {
+  identifier String
+  date       String
+  count      Int
+
+  @@id([identifier, date])
+}
+
+model StaffAccessLogs {
+  id           String   @id
+  timestamp    DateTime @default(now())
+  staffUserId  String
+  staffName    String
+  staffRole    String
+  targetUserId String
+  accessType   String
+  purpose      String
+
+  @@index([timestamp])
+  @@index([targetUserId, timestamp])
+  @@index([staffUserId, timestamp])
+}
+
+model DataErasureRequests {
+  id                 String    @id
+  userId             String
+  userEmail          String
+  requestedAt        DateTime  @default(now())
+  status             String
+  erasedRecordsCount Int
+  completedAt        DateTime?
+  details            String
+
+  @@index([requestedAt])
+  @@index([userId])
+}
+
+model Chats {
+  id        String   @id
+  userId    String
+  title     String
+  isArchived Boolean @default(false)
+  isPinned  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  messages  ChatMessages[]
+
+  // Relations
+  user      Users    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, isPinned, updatedAt])
+}
+
+model ChatMessages {
+  id        String   @id
+  chatId    String
+  role      String
+  content   String
+  plugin    String?
+  createdAt DateTime @default(now())
+  chat      Chats    @relation(fields: [chatId], references: [id], onDelete: Cascade)
+
+  @@index([chatId])
+  @@index([chatId, createdAt])
+}
+
+model UserMemories {
+  id        String   @id
+  userId    String
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  isActive  Boolean  @default(true)
+
+  // Relations
+  user      Users    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Counselors {
+  id                String   @id
+  name              String
+  role              String
+  specialties       String   // JSON
+  imageUrl          String
+  availability      String   // JSON
+  rating            Float?   @default(5.0)
+  sessionCount      Int?     @default(0)
+  university        String?
+  licenseNumber     String?
+  isVerified        Boolean  @default(false)
+  experienceYears   Int?     @default(5)
+  isFreeForStudents Boolean  @default(true)
+  price             Int?     @default(0)
+  consultationType  String?  // JSON
+  contactPhone      String?
+  contactWhatsapp   String?
+  languages         String?  // JSON
+  bio               String?
+  location          String?
+  isDemoData        Boolean  @default(false)
+  userId            String?
+  createdAt         DateTime @default(now())
+
+  // Relations
+  appointments      Appointments[]
+
+  @@index([isVerified])
+}
+
+model MoodLogs {
+  id        String   @id
+  userId    String
+  mood      String
+  notes     String?
+  intensity Int?
+  factors   String? // JSON array
+  timestamp DateTime @default(now())
+
+  // Relations
+  user      Users    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, timestamp])
+  @@index([timestamp])
+}
+
+model EmergencyContacts {
+  userId       String   @id
+  name         String
+  relationship String
+  phone        String
+  whatsapp     String?
+  hasConsent   Boolean  @default(false)
+  consentDate  String?
+  updatedAt    DateTime @default(now()) @updatedAt
+
+  // Relations
+  user         Users    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model UserSession {
+  id         String   @id
+  userId     String
+  device     String
+  ip         String
+  userAgent  String
+  createdAt  DateTime @default(now())
+  lastActive DateTime @default(now())
+  user       Users    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, lastActive])
+}
+
+model LoginEvent {
+  id         String   @id
+  userId     String
+  timestamp  DateTime @default(now())
+  ip         String
+  userAgent  String
+  status     String
+  location   String?
+  user       Users    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, timestamp])
+  @@index([ip, timestamp])
+}
+
+model SecurityNotification {
+  id        String   @id
+  userId    String
+  title     String
+  message   String
+  timestamp DateTime @default(now())
+  read      Boolean  @default(false)
+  user      Users    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, timestamp])
+  @@index([userId, read])
+}
+
+model AppointmentSlot {
+  id            String   @id
+  counselorId   String
+  date          String
+  time          String
+  appointmentId String   @unique
+  appointment   Appointments @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  @@unique([counselorId, date, time])
+}
+
+model IdempotencyRecord {
+  key            String   @id
+  userId         String?
+  route          String
+  method         String
+  requestHash    String
+  responseStatus Int
+  responseBody   String
+  expiresAt      DateTime
+
+  @@index([expiresAt])
+  @@index([key, route])
+}
+
+model DistributedState {
+  key        String   @id
+  category   String   // 'RATE_LIMIT' | 'SOS_COOLDOWN' | 'THROTTLE' | 'CIRCUIT_BREAKER'
+  value      String   // JSON payload / count / timestamp
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([category, key])
+  @@index([expiresAt])
+}
+
+model DistributedLock {
+  id         String   @id
+  holder     String   // Host / worker pod identifier
+  acquiredAt DateTime @default(now())
+  expiresAt  DateTime
+
+  @@index([expiresAt])
+}

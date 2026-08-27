@@ -1,0 +1,50 @@
+name: CI/CD Pipeline & Production Quality Gate
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  quality_gate:
+    name: Build, Test & Security Release Gate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js Environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: 1. Install Dependencies
+        run: npm ci
+
+      - name: 2. Type Checking
+        run: npm run typecheck
+
+      - name: 3. ESLint & Accessibility Audit
+        run: npm run lint
+
+      - name: 4. Frontend Unit Tests
+        run: npm run test:unit
+
+      - name: 5. Backend Integration Tests
+        run: npm run test:integration
+
+      - name: 6. Production Application Build
+        run: npm run build
+
+      - name: 7. Security & E2E Smoke Tests
+        run: |
+          npm run test:security
+          npx playwright test
+        env:
+          NODE_ENV: test
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          JWT_SECRET: "ci-pipeline-secure-test-jwt-secret-key-32chars"
+          ENCRYPTION_KEY: "0123456789abcdef0123456789abcdef"

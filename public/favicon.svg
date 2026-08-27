@@ -1,0 +1,28 @@
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Hand/Leaf shape at the bottom (green gradient) -->
+  <defs>
+    <linearGradient id="handGrad" x1="40" y1="160" x2="200" y2="160" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#4ade80" />
+      <stop offset="1" stop-color="#10b981" />
+    </linearGradient>
+    <linearGradient id="heartLeft" x1="128" y1="50" x2="60" y2="150" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#14b8a6" />
+      <stop offset="1" stop-color="#0d9488" />
+    </linearGradient>
+    <linearGradient id="heartRight" x1="128" y1="50" x2="190" y2="150" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#67e8f9" />
+      <stop offset="1" stop-color="#06b6d4" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Left Heart Half -->
+  <path d="M128 160 C 128 160, 50 130, 50 85 C 50 55, 80 40, 105 55 C 115 62, 128 80, 128 80 Z" fill="url(#heartLeft)" />
+  
+  <!-- Right Heart Half -->
+  <path d="M128 160 C 128 160, 206 130, 206 85 C 206 55, 176 40, 151 55 C 141 62, 128 80, 128 80 Z" fill="url(#heartRight)" />
+  
+  <!-- Hand -->
+  <path d="M25 145 C 50 135, 80 155, 110 165 C 140 175, 180 155, 210 140 C 220 135, 230 145, 220 155 C 200 175, 160 200, 128 205 C 80 210, 40 180, 25 145 Z" fill="url(#handGrad)" />
+  <!-- Hand inner lines -->
+  <path d="M128 175 C 150 185, 180 165, 195 155" stroke="white" stroke-width="4" stroke-linecap="round" fill="none" />
+</svg>

@@ -1,0 +1,6 @@
+{
+  "name": "RuangTenang - Konseling Mental Mahasiswa",
+  "description": "Platform chatbot psikologi mahasiswa responsif dengan enkripsi data, deteksi krisis darurat real-time, direktori bantuan, analitik konselor, dan pemesanan sesi konseling.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
