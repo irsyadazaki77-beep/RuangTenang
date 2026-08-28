@@ -1,29 +1,22 @@
 import { useAuth } from "./contexts/AuthContext";
 import { apiClient } from "./lib/apiClient";
-import React, { useState, useEffect, Suspense, lazy } from 'react';
-import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
+import React, { useState, useEffect, Suspense } from 'react';
+import { Routes, Route, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import Sidebar from './components/layout/Sidebar';
 import { WifiOff } from 'lucide-react';
 import { Chat } from './features/chat/types';
 import MainChat from './features/chat/components/MainChat';
 import { WorkspaceLayout } from './components/layout/WorkspaceLayout';
+import { useToast } from './components/Toast';
+import { lazyWithRetry } from './lib/lazyWithRetry';
 
 const UserProgressTracker = lazyWithRetry(() => import('./features/mood/UserProgressTracker').then(module => ({ default: module.UserProgressTracker })));
 const ScreeningModal = lazyWithRetry(() => import('./features/screening/ScreeningModal').then(module => ({ default: module.ScreeningModal })));
 const CounselorDirectory = lazyWithRetry(() => import('./features/counselors/CounselorDirectory').then(module => ({ default: module.CounselorDirectory })));
 const AppointmentScheduler = lazyWithRetry(() => import('./features/appointments/AppointmentScheduler').then(module => ({ default: module.AppointmentScheduler })));
 const EmergencyCenter = lazyWithRetry(() => import('./components/EmergencyCenter').then(module => ({ default: module.EmergencyCenter })));
+const LegalDocsModal = lazyWithRetry(() => import('./features/privacy/LegalDocsModal').then(module => ({ default: module.LegalDocsModal })));
 import { Counselor } from './types';
-
-// Helper for resilient lazy loading with retry
-function lazyWithRetry<T extends React.ComponentType<any>>(factory: () => Promise<{ default: T } | any>) {
-  return lazy(() =>
-    factory().catch((err) => {
-      console.warn('Dynamic import failed, retrying...', err);
-      return new Promise((resolve) => setTimeout(resolve, 300)).then(() => factory());
-    })
-  );
-}
 
 const AuthModal = lazyWithRetry(() => import('./features/authentication/AuthModal').then(module => ({ default: module.AuthModal })));
 const SettingsPage = lazyWithRetry(() => import('./features/settings/SettingsPage').then(module => ({ default: module.SettingsPage })));
@@ -31,14 +24,22 @@ const CounselorDashboard = lazyWithRetry(() => import('./features/counselors/Cou
 
 export default function App() {
   const { user, setUser, loading, isOffline, logout } = useAuth();
+  const { showToast } = useToast();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [isLegalDocsOpen, setIsLegalDocsOpen] = useState(false);
   const [chats, setChats] = useState<Chat[]>([]);
   const [isLoadingChats, setIsLoadingChats] = useState(true);
   const [selectedCounselor, setSelectedCounselor] = useState<Counselor | null>(null);
   const navigate = useNavigate();
   const location = useLocation();
+
+  useEffect(() => {
+    if (location.state && (location.state as any).selectedCounselor) {
+      setSelectedCounselor((location.state as any).selectedCounselor);
+    }
+  }, [location.state]);
 
   const fetchChats = async () => {
     if (!user || user.role === 'guest') {
@@ -91,8 +92,9 @@ export default function App() {
       if (!res.success) {
         throw new Error(res.error || 'Failed to delete chat');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to delete chat:', err);
+      showToast(err?.message || 'Gagal menghapus percakapan', 'error');
       setChats(originalChats);
       fetchChats();
     }
@@ -106,8 +108,9 @@ export default function App() {
       if (!res.success) {
         throw new Error(res.error || 'Failed to update title');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to update title:', err);
+      showToast(err?.message || 'Gagal mengubah judul percakapan', 'error');
       setChats(originalChats);
       fetchChats();
     }
@@ -121,8 +124,9 @@ export default function App() {
       if (!res.success) {
         throw new Error(res.error || 'Failed to toggle pin');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to toggle pin:', err);
+      showToast(err?.message || 'Gagal menyematkan percakapan', 'error');
       setChats(originalChats);
       fetchChats();
     }
@@ -139,8 +143,9 @@ export default function App() {
         if (!res.success) {
           throw new Error(res.error || 'Failed to toggle archive');
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error('Failed to toggle archive:', err);
+        showToast(err?.message || 'Gagal mengarsip percakapan', 'error');
         setChats(originalChats);
         fetchChats();
       }
@@ -149,19 +154,13 @@ export default function App() {
 
   const handleLogout = async () => {
     try {
-      await apiClient.post('/api/v1/auth/logout');
+      await logout();
     } catch (err) {
       console.error('Logout error:', err);
     } finally {
-      setUser({
-    id: 'guest',
-    name: 'Mahasiswa / Tamu (Anonim)',
-    email: 'anonim@kampus.ac.id',
-    role: 'guest',
-    tier: 'Free',
-    usageStats: { chatMessagesSent: 0, appointmentsBooked: 0 }
-  } as any);
       setChats([]);
+      navigate('/');
+      showToast('Anda telah keluar dari akun.', 'info');
     }
   };
 
@@ -188,7 +187,19 @@ export default function App() {
             </div>
             <div className="flex-1 overflow-y-auto">
                <Suspense fallback={<div className="p-4 text-center text-slate-500 dark:text-slate-400">Memuat pengaturan...</div>}>
-                 <SettingsPage userSession={user} setUserSession={(u) => setUser(u)} onOpenAuth={() => setIsAuthModalOpen(true)} onOpenScreening={() => {}} onOpenLegal={() => {}} />
+                 <SettingsPage 
+                   userSession={user} 
+                   setUserSession={(u) => setUser(u)} 
+                   onOpenAuth={() => setIsAuthModalOpen(true)} 
+                   onOpenScreening={() => {
+                     setIsSettingsOpen(false);
+                     navigate('/screening');
+                   }} 
+                   onOpenLegal={() => {
+                     setIsSettingsOpen(false);
+                     setIsLegalDocsOpen(true);
+                   }} 
+                 />
                </Suspense>
             </div>
           </div>
@@ -233,7 +244,19 @@ export default function App() {
             </div>
             <div className="flex-1 overflow-y-auto min-w-0">
                <Suspense fallback={<div className="p-4 text-center text-slate-500 dark:text-slate-400">Memuat pengaturan...</div>}>
-                 <SettingsPage userSession={user} setUserSession={(u) => setUser(u)} onOpenAuth={() => setIsAuthModalOpen(true)} onOpenScreening={() => {}} onOpenLegal={() => {}} />
+                 <SettingsPage 
+                   userSession={user} 
+                   setUserSession={(u) => setUser(u)} 
+                   onOpenAuth={() => setIsAuthModalOpen(true)} 
+                   onOpenScreening={() => {
+                     setIsSettingsOpen(false);
+                     navigate('/screening');
+                   }} 
+                   onOpenLegal={() => {
+                     setIsSettingsOpen(false);
+                     setIsLegalDocsOpen(true);
+                   }} 
+                 />
                </Suspense>
             </div>
           </div>
@@ -271,7 +294,10 @@ export default function App() {
                       isOpen={true}
                       isPageMode={true}
                       onClose={() => navigate('/')}
-                      onComplete={() => {}}
+                      onComplete={() => {
+                        showToast('Skrining berhasil disimpan ke profil Anda.', 'success');
+                        navigate('/mood');
+                      }}
                     />
                   </WorkspaceLayout>
                 }
@@ -310,13 +336,13 @@ export default function App() {
                     onOpenSidebar={() => setIsSidebarOpen(true)}
                   >
                     <div className="max-w-4xl mx-auto p-3 sm:p-6 w-full">
-                      <EmergencyCenter onTriggerSOS={() => {}} />
+                      <EmergencyCenter onTriggerSOS={() => showToast('Sinyal SOS darurat diaktifkan.', 'info')} />
                     </div>
                   </WorkspaceLayout>
                 }
               />
               {/* Fallback route */}
-              <Route path="*" element={<MainChat user={user} setChats={setChats} onOpenSidebar={() => setIsSidebarOpen(true)} onOpenSettings={() => setIsSettingsOpen(true)} />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </Suspense>
         )}
@@ -333,10 +359,16 @@ export default function App() {
               setIsAuthModalOpen(false);
             }} 
             onLogout={() => {
-              setUser(null);
+              handleLogout();
               setIsAuthModalOpen(false);
             }} 
           />
+        </Suspense>
+      )}
+
+      {isLegalDocsOpen && (
+        <Suspense fallback={null}>
+          <LegalDocsModal isOpen={isLegalDocsOpen} onClose={() => setIsLegalDocsOpen(false)} />
         </Suspense>
       )}
     </div>

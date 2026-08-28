@@ -18,7 +18,7 @@ import { useToast } from "./Toast";
 import { apiClient } from "../lib/apiClient";
 
 interface EmergencyCenterProps {
-  onTriggerSOS: () => void;
+  onTriggerSOS?: () => void;
 }
 
 const EMERGENCY_CONTACT_KEY = "ruangtenang_emergency_contact";
@@ -63,7 +63,9 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
   const handleSendSOS = async () => {
     setIsTriggeringSOS(true);
     setSosStatus(null);
-    onTriggerSOS();
+    if (onTriggerSOS) {
+      onTriggerSOS();
+    }
 
     if (!navigator.onLine) {
       setSosStatus({

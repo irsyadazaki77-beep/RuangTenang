@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { HeartHandshake, User, AlertCircle, CheckCircle, UserPlus, LogIn, KeyRound, ShieldCheck, MailCheck, Lock, X, ShieldAlert } from 'lucide-react';
 import { UserRole, UserSession } from '../../types';
 import { apiClient } from '../../lib/apiClient';
+import { useAuth } from '../../contexts/AuthContext';
 import { LoginForm } from './components/LoginForm';
 
 interface AuthModalProps {
@@ -320,10 +321,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
   };
 
+  let authLogout: (() => Promise<void>) | null = null;
+  try {
+    const auth = useAuth();
+    authLogout = auth.logout;
+  } catch {
+    authLogout = null;
+  }
+
   const handleLogoutClick = async () => {
     setLoading(true);
     try {
-      await apiClient.post<any>('/api/v1/auth/logout', {});
+      if (authLogout) {
+        await authLogout();
+      } else {
+        await apiClient.post<any>('/api/v1/auth/logout', {});
+      }
       onLogout();
       onClose();
     } catch (err) {

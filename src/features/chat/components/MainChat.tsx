@@ -4,11 +4,12 @@ import { MessageBubble } from './MessageBubble';
 import { ChatComposer } from './ChatComposer';
 import { Message, ChatMode, ResponseStyle, Chat } from '../types';
 import { UserSession } from '../../../types';
-const ScreeningModal = React.lazy(() => import('../../../features/screening/ScreeningModal').then(m => ({ default: m.ScreeningModal })));
-const CounselorDirectory = React.lazy(() => import('../../../features/counselors/CounselorDirectory').then(m => ({ default: m.CounselorDirectory })));
-const UserProgressTracker = React.lazy(() => import('../../../features/mood/UserProgressTracker').then(m => ({ default: m.UserProgressTracker })));
-const EmergencyCenter = React.lazy(() => import('../../../components/EmergencyCenter').then(m => ({ default: m.EmergencyCenter })));
-const MentalHealthArticles = React.lazy(() => import('../../../components/MentalHealthArticles').then(m => ({ default: m.MentalHealthArticles })));
+import { lazyWithRetry } from '../../../lib/lazyWithRetry';
+const ScreeningModal = lazyWithRetry(() => import('../../../features/screening/ScreeningModal').then(m => ({ default: m.ScreeningModal })));
+const CounselorDirectory = lazyWithRetry(() => import('../../../features/counselors/CounselorDirectory').then(m => ({ default: m.CounselorDirectory })));
+const UserProgressTracker = lazyWithRetry(() => import('../../../features/mood/UserProgressTracker').then(m => ({ default: m.UserProgressTracker })));
+const EmergencyCenter = lazyWithRetry(() => import('../../../components/EmergencyCenter').then(m => ({ default: m.EmergencyCenter })));
+const MentalHealthArticles = lazyWithRetry(() => import('../../../components/MentalHealthArticles').then(m => ({ default: m.MentalHealthArticles })));
 import { RefreshCw, ChevronDown, AlertTriangle } from 'lucide-react';
 import { useToast } from '../../../components/Toast';
 import { DEFAULT_AI_MODEL_ID } from '../../../lib/aiModels';
@@ -103,10 +104,14 @@ export default function MainChat({ user, setChats, onOpenSidebar, onOpenSettings
   const scrollToBottom = (force = false) => {
     if (force || !showScrollBottom) {
       if (scrollContainerRef.current) {
-        scrollContainerRef.current.scrollTo({
-          top: scrollContainerRef.current.scrollHeight,
-          behavior: 'smooth'
-        });
+        if (typeof scrollContainerRef.current.scrollTo === 'function') {
+          scrollContainerRef.current.scrollTo({
+            top: scrollContainerRef.current.scrollHeight,
+            behavior: 'smooth'
+          });
+        } else {
+          scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+        }
       }
     }
   };
@@ -193,28 +198,25 @@ export default function MainChat({ user, setChats, onOpenSidebar, onOpenSettings
   
   const handleEditMessage = async (msgId: string, newContent: string) => {
     if (!newContent.trim()) return;
-    
-    // Optimistic update
-    setMessages(prev => {
-      const idx = prev.findIndex(m => m.id === msgId);
-      if (idx === -1) return prev;
-      
-      const updated = [...prev];
-      updated[idx] = { ...updated[idx], content: newContent, isEdited: true };
-      
-      // Remove all messages after this one if it's the last user message before assistant
-      // In a real app, this would fork the conversation, but here we just truncate.
-      return updated.slice(0, idx + 1);
-    });
+
+    const previousMessages = [...messages];
+    const idx = messages.findIndex(m => m.id === msgId);
+    if (idx !== -1) {
+      setMessages(messages.slice(0, idx));
+    }
 
     try {
       if (chatId) {
-        await apiClient.post(`/api/v1/chat/truncate-history`, { chatId, messageId: msgId });
+        const res = await apiClient.post(`/api/v1/chat/${chatId}/truncate`, { messageId: msgId });
+        if (!res.success) {
+          throw new Error(res.error || res.message || 'Gagal memotong riwayat pesan');
+        }
       }
-      handleSend(newContent);
-    } catch (err) {
-      showToast('Gagal mengedit pesan', 'error');
-      fetchMessages(); // Revert
+      await handleSend(newContent);
+    } catch (err: any) {
+      showToast(err?.message || 'Gagal mengedit pesan', 'error');
+      setMessages(previousMessages);
+      fetchMessages();
     }
   };
 
@@ -241,8 +243,11 @@ export default function MainChat({ user, setChats, onOpenSidebar, onOpenSettings
   const handleCommand = async (command: string) => {
     const cleanCmd = command.toLowerCase().trim();
     if (cleanCmd === '/new') {
-      navigate('/c');
+      abortStream();
       setMessages([]);
+      setFollowUps([]);
+      setStreamingMessage(null);
+      navigate('/');
       showToast('Percakapan baru dimulai', 'info');
       return;
     }
@@ -353,14 +358,18 @@ export default function MainChat({ user, setChats, onOpenSidebar, onOpenSettings
           onClose={handleClosePlugin} 
           onComplete={(score) => { 
             handleClosePlugin(); 
-            handleSend('', `Saya telah menyelesaikan screening dengan skor PHQ-9: ${score.phq9.score}, GAD-7: ${score.gad7.score}`); 
+            showToast('Skrining berhasil diselesaikan.', 'success');
+            handleSend('', `Saya telah menyelesaikan skrining mandiri PHQ-9 (skor: ${score.phq9.score}, kategori: ${score.phq9.severity}) dan GAD-7 (skor: ${score.gad7.score}, kategori: ${score.gad7.severity}). Catatan: Skrining ini adalah alat evaluasi mandiri awal dan BUKAN diagnosis medis.`); 
           }} 
         />,
         'Instrumen PHQ-9 & GAD-7 untuk deteksi dini'
       )}
       {activePlugin === 'counselors' && renderPluginWrapper(
         'Direktori Konselor & Psikolog Kampus',
-        <CounselorDirectory onSelectCounselorForBooking={() => {}} />,
+        <CounselorDirectory onSelectCounselorForBooking={(counselor) => {
+          handleClosePlugin();
+          navigate('/counselors', { state: { selectedCounselor: counselor } });
+        }} />,
         'Jadwalkan sesi pendampingan psikologis terpercaya'
       )}
       {activePlugin === 'mood' && renderPluginWrapper(
@@ -375,7 +384,7 @@ export default function MainChat({ user, setChats, onOpenSidebar, onOpenSettings
       )}
       {activePlugin === 'emergency' && renderPluginWrapper(
         'Pusat Bantuan Darurat SOS',
-        <EmergencyCenter onTriggerSOS={() => {}} />,
+        <EmergencyCenter onTriggerSOS={() => showToast('Sinyal SOS darurat diaktifkan.', 'info')} />,
         'Layanan krisis 24 jam & nomor darurat langsung'
       )}
 

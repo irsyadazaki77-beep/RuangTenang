@@ -25,7 +25,6 @@ describe('CORS Production Hardening Tests', () => {
     app.use(cors({
       origin: (origin, callback) => {
         if (!origin) {
-          if (isProd) return callback(new Error('CORS Blocked: Missing origin in production.'));
           return callback(null, true);
         }
         const lowerOrigin = origin.toLowerCase();
@@ -66,6 +65,13 @@ describe('CORS Production Hardening Tests', () => {
       .set('Origin', 'https://app.ruangtenang.id');
     expect(res.status).toBe(200);
     expect(res.headers['access-control-allow-origin']).toBe('https://app.ruangtenang.id');
+  });
+
+  it('should ALLOW requests without Origin header in production mode (health check, server-to-server)', async () => {
+    const res = await supertest(app)
+      .get('/api/test-cors');
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
   });
 
   it('should REJECT preview domains like *.run.app in production mode', async () => {

@@ -11,6 +11,37 @@ export interface ApiResponse<T = any> {
   message?: string;
 }
 
+function extractErrorMessage(body: any, fallbackMessage: string): string {
+  if (!body) return fallbackMessage;
+
+  if (typeof body.error === 'string' && body.error.trim().length > 0) {
+    return body.error;
+  }
+
+  if (body.error && typeof body.error === 'object') {
+    if (typeof body.error.message === 'string' && body.error.message.trim().length > 0) {
+      return body.error.message;
+    }
+  }
+
+  if (typeof body.message === 'string' && body.message.trim().length > 0) {
+    return body.message;
+  }
+
+  return fallbackMessage;
+}
+
+function extractErrorCode(body: any, fallbackCode: string): string {
+  if (!body) return fallbackCode;
+  if (typeof body.code === 'string' && body.code.trim().length > 0) {
+    return body.code;
+  }
+  if (body.error && typeof body.error === 'object' && typeof body.error.code === 'string' && body.error.code.trim().length > 0) {
+    return body.error.code;
+  }
+  return fallbackCode;
+}
+
 export async function fetchWithTimeoutAndRetry<T = any>(
   url: string,
   options: RequestInit = {},
@@ -96,13 +127,14 @@ export async function fetchWithTimeoutAndRetry<T = any>(
     clearTimeout(id);
 
     if (!res.ok) {
-      let errorMsg = `Server error (${res.status})`;
+      const fallbackMsg = `Server error (${res.status})`;
+      let errorMsg = fallbackMsg;
       let code = 'HTTP_ERROR';
       let errorDetails = undefined;
       try {
         const body = await res.json();
-        errorMsg = body.error || body.message || errorMsg;
-        code = body.code || code;
+        errorMsg = extractErrorMessage(body, fallbackMsg);
+        code = extractErrorCode(body, code);
         errorDetails = body.details;
       } catch (e) {
         // ignore json parse error on non-ok
@@ -111,6 +143,19 @@ export async function fetchWithTimeoutAndRetry<T = any>(
     }
 
     const data = await res.json();
+    if (data && typeof data === 'object' && data.success === false) {
+      const fallbackMsg = `Server error (${res.status})`;
+      const errorMsg = extractErrorMessage(data, fallbackMsg);
+      const code = extractErrorCode(data, 'ERROR');
+      return {
+        success: false,
+        error: errorMsg,
+        message: errorMsg,
+        code,
+        status: res.status,
+        data: data.details || data.data
+      };
+    }
     return { success: true, data, status: res.status };
   } catch (err: any) {
     clearTimeout(id);

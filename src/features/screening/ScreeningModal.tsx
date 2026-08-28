@@ -297,6 +297,9 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
                 Tekanan skripsi, beban UKT, dan adaptasi kuliah sering kali memicu stres yang tidak terlihat.
                 Hasil tes akan <strong className="text-teal-800 font-medium">disimpan secara aman di sistem</strong> untuk memantau perkembangan Anda. Konselor hanya dapat melihat hasil tes ini jika Anda telah memberikan izin akses.
               </p>
+              <p className="text-xs text-amber-800 bg-amber-50/80 p-2.5 rounded-lg border border-amber-200/80 mt-2">
+                <strong>Catatan Penting:</strong> Instrumen ini adalah alat evaluasi mandiri awal dan bukan diagnosis medis pengganti konsultasi profesional.
+              </p>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">

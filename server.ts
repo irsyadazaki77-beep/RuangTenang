@@ -76,10 +76,8 @@ async function startServer() {
 
   app.use(cors({
     origin: (origin, callback) => {
+      // Allow requests without Origin header (e.g. health checks, server-to-server, reverse proxy)
       if (!origin) {
-        if (isProd) {
-          return callback(new Error('CORS Blocked: Missing Origin header in production.'));
-        }
         return callback(null, true);
       }
       

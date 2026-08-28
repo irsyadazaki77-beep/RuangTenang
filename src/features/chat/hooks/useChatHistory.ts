@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { Message } from '../types';
 import { apiClient } from '../../../lib/apiClient';
 
@@ -9,12 +9,25 @@ export function useChatHistory(chatId: string | undefined) {
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const loadedChatIdRef = useRef<string | null>(null);
+  const activeFetchChatIdRef = useRef<string | undefined>(chatId);
+
+  useEffect(() => {
+    activeFetchChatIdRef.current = chatId;
+    if (chatId !== loadedChatIdRef.current) {
+      setMessages([]);
+      setFetchMessagesError(null);
+    }
+  }, [chatId]);
 
   const fetchMessages = useCallback(async (cursor?: string) => {
     if (!chatId) {
       setMessages([]);
+      loadedChatIdRef.current = null;
       return;
     }
+
+    const targetChatId = chatId;
+
     if (!cursor) {
       setIsLoadingMessages(true);
       setFetchMessagesError(null);
@@ -27,6 +40,10 @@ export function useChatHistory(chatId: string | undefined) {
       if (cursor) url += `&cursor=${cursor}`;
 
       const res = await apiClient.get<any>(url);
+
+      if (activeFetchChatIdRef.current !== targetChatId) {
+        return;
+      }
 
       if (!res.success) {
         throw new Error(res.error || 'Failed to fetch messages');
@@ -48,18 +65,22 @@ export function useChatHistory(chatId: string | undefined) {
           setMessages(data.data);
         }
         setNextCursor(data.nextCursor || null);
-        loadedChatIdRef.current = chatId;
+        loadedChatIdRef.current = targetChatId;
       } else {
         setMessages(Array.isArray(data) ? data : []);
+        loadedChatIdRef.current = targetChatId;
       }
     } catch (err: any) {
+      if (activeFetchChatIdRef.current !== targetChatId) return;
       console.error('Fetch messages error:', err);
       if (!cursor) {
         setFetchMessagesError(err.message || 'Gagal memuat pesan. Silakan coba lagi.');
       }
     } finally {
-      if (cursor) setIsLoadingMore(false);
-      else setIsLoadingMessages(false);
+      if (activeFetchChatIdRef.current === targetChatId) {
+        if (cursor) setIsLoadingMore(false);
+        else setIsLoadingMessages(false);
+      }
     }
   }, [chatId]);
 
