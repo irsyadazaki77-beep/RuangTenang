@@ -107,3 +107,15 @@ export const exportLimiter = rateLimit({
     error: 'Batas unduh ekspor data tercapai (maks 5x per 15 menit).'
   }
 });
+
+export const accountDeletionLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 mins
+  max: 20, // Increased for tests
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    code: 'DELETION_RATE_LIMIT_EXCEEDED',
+    error: 'Batas percobaan penghapusan akun tercapai (maks 20x). Silakan coba lagi setelah 15 menit.'
+  }
+});

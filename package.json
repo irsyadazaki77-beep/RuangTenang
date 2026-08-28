@@ -17,7 +17,7 @@
     "test:integration": "npm run db:push:sqlite && vitest run server/__tests__ --fileParallelism=false",
     "test:security": "vitest run server/__tests__/security.test.ts server/__tests__/authSecurity.test.ts server/__tests__/corsSecurity.test.ts server/__tests__/csrfSecurity.test.ts server/__tests__/rateLimitSecurity.test.ts server/__tests__/sessionSecurity.test.ts --fileParallelism=false",
     "test:e2e": "playwright test",
-    "db:backup": "mkdir -p backups && cp data/ruangtenang_sqlite.db backups/backup_$(date +%s).db",
+    "db:backup": "tsx server/scripts/backupTool.ts",
     "db:generate:sqlite": "npx prisma generate --schema prisma/schema.sqlite.prisma",
     "db:generate:postgres": "npx prisma generate --schema prisma/schema.postgres.prisma",
     "db:push:sqlite": "npx prisma db push --schema prisma/schema.sqlite.prisma",

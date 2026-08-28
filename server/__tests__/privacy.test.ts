@@ -16,7 +16,12 @@ app.use(cookieParser());
 app.use('/api/privacy', privacyRouter);
 
 const generateToken = (user: any) => {
-  return jwt.sign(user, getJwtSecret(), { expiresIn: '1h' });
+  return jwt.sign({ ...user, sessionId: user.sessionId || 'test-session' }, getJwtSecret(), { 
+    expiresIn: '1h',
+    issuer: 'ruangtenang',
+    audience: 'ruangtenang-web',
+    algorithm: 'HS256'
+  });
 };
 
 describe('Privacy, Consent, & Data Governance Tests', () => {

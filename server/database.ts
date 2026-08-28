@@ -317,6 +317,28 @@ export interface CounselorRecord {
   createdAt: string;
 }
 
+// Ensure database is ready and initialized on fresh clone
+export async function ensureDatabaseReady(): Promise<void> {
+  const isProd = process.env.NODE_ENV === 'production';
+  const rawProvider = (process.env.DB_PROVIDER || (isProd ? 'postgresql' : 'sqlite')).toLowerCase().trim();
+  const isPostgres = rawProvider === 'postgresql' || rawProvider === 'postgres';
+
+  if (!isPostgres && !isProd) {
+    try {
+      await prisma.users.count();
+    } catch {
+      console.log('[DATABASE INIT] Initializing SQLite database schema...');
+      try {
+        const { execSync } = await import('child_process');
+        execSync('npx prisma db push --schema prisma/schema.sqlite.prisma --skip-generate', { stdio: 'inherit' });
+        console.log('[DATABASE INIT] SQLite database schema initialized successfully.');
+      } catch (err: any) {
+        console.error('[DATABASE INIT] Could not auto-push schema:', err?.message || err);
+      }
+    }
+  }
+}
+
 // Placeholder for demo seed
 export async function seedInitialDataIfNeeded(): Promise<void> {
   if (process.env.NODE_ENV === 'production' || process.env.SEED_DEMO_DATA !== 'true') {

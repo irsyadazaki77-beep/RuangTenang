@@ -13,7 +13,7 @@ app.use(express.json());
 app.use(cookieParser());
 app.use('/api', chatRouter);
 
-const generateToken = (user: any) => jwt.sign(user, JWT_SECRET);
+const generateToken = (user: any) => jwt.sign({ ...user, sessionId: "test-session" }, JWT_SECRET, { issuer: 'ruangtenang', audience: 'ruangtenang-web', algorithm: 'HS256' });
 
 describe('DELETE /api/chat/:id/messages (Clear Chat Messages) Integration Tests', () => {
   const student1 = { userId: 'usr-student-chat-1', name: 'Budi Santoso', email: 'budi.chat1@univ.ac.id', role: 'mahasiswa' };

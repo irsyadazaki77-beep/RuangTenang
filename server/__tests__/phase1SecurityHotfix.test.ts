@@ -30,7 +30,12 @@ const generateUserToken = (user: { userId: string; role: string; name: string; e
       sessionId: `sess-${user.userId}`
     },
     getJwtSecret(),
-    { expiresIn: '1h' }
+    { 
+      expiresIn: '1h',
+      issuer: 'ruangtenang',
+      audience: 'ruangtenang-web',
+      algorithm: 'HS256'
+    }
   );
 };
 

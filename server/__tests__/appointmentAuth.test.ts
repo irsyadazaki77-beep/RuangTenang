@@ -13,7 +13,7 @@ app.use(express.json());
 app.use(cookieParser());
 app.use('/api/v1/appointments', appointmentsRouter);
 
-const generateToken = (user: any) => jwt.sign(user, JWT_SECRET);
+const generateToken = (user: any) => jwt.sign({ ...user, sessionId: "test-session" }, JWT_SECRET, { issuer: 'ruangtenang', audience: 'ruangtenang-web', algorithm: 'HS256' });
 
 describe('Appointment Security & IDOR Prevention Tests', () => {
   const student1Token = generateToken({ userId: 'std-idor-1', name: 'Student One', role: 'mahasiswa', email: 's1@test.com' });

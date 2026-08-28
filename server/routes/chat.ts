@@ -2,6 +2,7 @@ import { prisma } from '../database.js';
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { requireAuth, optionalAuth } from '../middleware/auth.js';
+import { aiAbuseLimiter } from '../middleware/aiAbuseLimiter.js';
 import { sanitizeInput, detectPromptInjection } from '../security.js';
 import { scanAndSanitizePII } from '../services/piiService.js';
 import { checkUserAiUsageLimit, recordUserAiUsage } from '../services/aiUsageLimiter.js';
@@ -89,7 +90,7 @@ router.post('/chat/:id/truncate', requireAuth, checkChatOwnership, async (req: R
   }
 });
 
-router.post('/chat/summary', requireAuth, checkChatOwnership, async (req: Request, res: Response) => {
+router.post('/chat/summary', requireAuth, checkChatOwnership, aiAbuseLimiter, async (req: Request, res: Response) => {
   try {
     const { chatId, aiModel = DEFAULT_AI_MODEL } = req.body;
     let history = await prisma.chatMessages.findMany({
@@ -126,7 +127,7 @@ router.post('/chat/summary', requireAuth, checkChatOwnership, async (req: Reques
   }
 });
 
-router.post('/chat/followup', requireAuth, checkChatOwnership, async (req: Request, res: Response) => {
+router.post('/chat/followup', requireAuth, checkChatOwnership, aiAbuseLimiter, async (req: Request, res: Response) => {
   try {
     const { chatId, aiModel = DEFAULT_AI_MODEL } = req.body;
     let history = await prisma.chatMessages.findMany({
@@ -174,7 +175,7 @@ router.post('/chat/followup', requireAuth, checkChatOwnership, async (req: Reque
 });
 
 // Main Streaming Chat Route
-router.post('/chat/stream', optionalAuth, async (req: Request, res: Response) => {
+router.post('/chat/stream', optionalAuth, aiAbuseLimiter, async (req: Request, res: Response) => {
   try {
     const { 
       message, 
@@ -186,7 +187,9 @@ router.post('/chat/stream', optionalAuth, async (req: Request, res: Response) =>
       aiModel = DEFAULT_AI_MODEL
     } = req.body;
     
-    let cleanMessage = sanitizeInput(message || '', 1000);
+    const isAnonymous = !req.user || req.user.userId === 'guest';
+    const maxLength = isAnonymous ? 500 : 2000;
+    let cleanMessage = sanitizeInput(message || '', maxLength);
     cleanMessage = scanAndSanitizePII(cleanMessage).sanitizedText;
     
     if (detectPromptInjection(cleanMessage)) {
@@ -648,7 +651,7 @@ router.post('/chat/truncate-history', requireAuth, checkChatOwnership, async (re
 });
 
 // Daily AI Reflection Prompts
-router.post('/chat/reflection-prompts', optionalAuth, async (req: Request, res: Response) => {
+router.post('/chat/reflection-prompts', optionalAuth, aiAbuseLimiter, async (req: Request, res: Response) => {
   try {
     const { mood, feeling, context } = req.body;
     const userId = req.user?.userId;
@@ -672,7 +675,7 @@ router.post('/chat/reflection-prompts', optionalAuth, async (req: Request, res: 
 });
 
 // AI Weekly Mood Insights
-router.post('/chat/mood-insights', optionalAuth, async (req: Request, res: Response) => {
+router.post('/chat/mood-insights', optionalAuth, aiAbuseLimiter, async (req: Request, res: Response) => {
   try {
     const { logs, averageMood, streak } = req.body;
     const userId = req.user?.userId;

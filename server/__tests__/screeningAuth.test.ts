@@ -14,7 +14,7 @@ app.use(express.json());
 app.use(cookieParser());
 app.use('/api/screenings', screeningRouter);
 
-const generateToken = (user: any) => jwt.sign(user, JWT_SECRET);
+const generateToken = (user: any) => jwt.sign({ ...user, sessionId: "test-session" }, JWT_SECRET, { issuer: 'ruangtenang', audience: 'ruangtenang-web', algorithm: 'HS256' });
 
 describe('Screening Authorization Security Tests', () => {
   const m1Token = generateToken({ userId: 'student-1', name: 'Mahasiswa 1', role: 'mahasiswa', email: 'm1@test.com' });

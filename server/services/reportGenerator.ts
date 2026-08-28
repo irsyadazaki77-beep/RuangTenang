@@ -160,68 +160,64 @@ export async function generateStudentProgressPdf(userId: string, studentName: st
 }
 
 export async function generateRectorateExcel(metrics: ReportMetrics): Promise<string> {
-  try {
-    const workbook = new ExcelJS.Workbook();
-    workbook.creator = 'RuangTenang Kampus';
-    workbook.lastModifiedBy = 'Sistem Otomatis';
-    workbook.created = new Date();
-    workbook.modified = new Date();
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = 'RuangTenang Kampus';
+  workbook.lastModifiedBy = 'Sistem Otomatis';
+  workbook.created = new Date();
+  workbook.modified = new Date();
 
-    const sheet = workbook.addWorksheet('Laporan Agregat', {
-      pageSetup: { paperSize: 9, orientation: 'landscape' }
-    });
+  const sheet = workbook.addWorksheet('Laporan Agregat', {
+    pageSetup: { paperSize: 9, orientation: 'landscape' }
+  });
 
-    // Column Setup
-    sheet.columns = [
-      { header: 'Kategori', key: 'kategori', width: 30 },
-      { header: 'Nilai / Metrik', key: 'nilai', width: 40 },
-      { header: 'Keterangan Tambahan', key: 'ket', width: 40 },
-    ];
+  // Column Setup
+  sheet.columns = [
+    { header: 'Kategori', key: 'kategori', width: 30 },
+    { header: 'Nilai / Metrik', key: 'nilai', width: 40 },
+    { header: 'Keterangan Tambahan', key: 'ket', width: 40 },
+  ];
 
-    // Header styling
-    sheet.getRow(1).font = { name: 'Arial', family: 4, size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
-    sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F172A' } };
+  // Header styling
+  sheet.getRow(1).font = { name: 'Arial', family: 4, size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
+  sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F172A' } };
 
-    // Basic Metrics
-    sheet.addRow({ kategori: 'Periode Laporan', nilai: metrics.dateRange, ket: 'Agregat bulanan' });
-    sheet.addRow({ kategori: 'Total Sesi Konseling', nilai: `${metrics.totalSessions} Sesi`, ket: 'Sesi terselesaikan' });
-    sheet.addRow({ kategori: 'Rasio Krisis Darurat', nilai: metrics.crisisRatio, ket: 'Menurun 12% dari bulan lalu' });
-    sheet.addRow({ kategori: 'Keluhan Dominan', nilai: metrics.mostCommonConcern, ket: 'Paling sering disebut mahasiswa' });
-    
-    sheet.addRow({}); // Empty row
+  // Basic Metrics
+  sheet.addRow({ kategori: 'Periode Laporan', nilai: metrics.dateRange, ket: 'Agregat bulanan' });
+  sheet.addRow({ kategori: 'Total Sesi Konseling', nilai: `${metrics.totalSessions} Sesi`, ket: 'Sesi terselesaikan' });
+  sheet.addRow({ kategori: 'Rasio Krisis Darurat', nilai: metrics.crisisRatio, ket: 'Menurun 12% dari bulan lalu' });
+  sheet.addRow({ kategori: 'Keluhan Dominan', nilai: metrics.mostCommonConcern, ket: 'Paling sering disebut mahasiswa' });
+  
+  sheet.addRow({}); // Empty row
 
-    // Breakdown Section
-    sheet.addRow({ kategori: 'Distribusi Stresor Akademik' }).font = { bold: true };
-    sheet.addRow({ kategori: 'Tugas & Skripsi', nilai: '45%', ket: 'Faktor pemicu utama' });
-    sheet.addRow({ kategori: 'Finansial / UKT', nilai: '25%', ket: 'Faktor pendukung stres' });
-    sheet.addRow({ kategori: 'Hubungan / Teman', nilai: '20%', ket: 'Konflik sosial' });
-    sheet.addRow({ kategori: 'Karir & Magang', nilai: '10%', ket: 'Kecemasan masa depan' });
+  // Breakdown Section
+  sheet.addRow({ kategori: 'Distribusi Stresor Akademik' }).font = { bold: true };
+  sheet.addRow({ kategori: 'Tugas & Skripsi', nilai: '45%', ket: 'Faktor pemicu utama' });
+  sheet.addRow({ kategori: 'Finansial / UKT', nilai: '25%', ket: 'Faktor pendukung stres' });
+  sheet.addRow({ kategori: 'Hubungan / Teman', nilai: '20%', ket: 'Konflik sosial' });
+  sheet.addRow({ kategori: 'Karir & Magang', nilai: '10%', ket: 'Kecemasan masa depan' });
 
-    sheet.addRow({});
+  sheet.addRow({});
 
-    // Effectiveness Section
-    sheet.addRow({ kategori: 'Efektivitas Intervensi' }).font = { bold: true };
-    sheet.addRow({ kategori: 'Penurunan GAD-7', nilai: '-4.5 Poin', ket: 'Rata-rata setelah 3 sesi' });
-    sheet.addRow({ kategori: 'Penurunan PHQ-9', nilai: '-5.2 Poin', ket: 'Rata-rata setelah 3 sesi' });
-    sheet.addRow({ kategori: 'Rujukan Luar (Psikiatri)', nilai: '3.2%', ket: 'Dari total kasus yang ditangani' });
+  // Effectiveness Section
+  sheet.addRow({ kategori: 'Efektivitas Intervensi' }).font = { bold: true };
+  sheet.addRow({ kategori: 'Penurunan GAD-7', nilai: '-4.5 Poin', ket: 'Rata-rata setelah 3 sesi' });
+  sheet.addRow({ kategori: 'Penurunan PHQ-9', nilai: '-5.2 Poin', ket: 'Rata-rata setelah 3 sesi' });
+  sheet.addRow({ kategori: 'Rujukan Luar (Psikiatri)', nilai: '3.2%', ket: 'Dari total kasus yang ditangani' });
 
-    sheet.addRow({});
+  sheet.addRow({});
 
-    // Compliance Disclaimer
-    sheet.addRow({ kategori: 'Kepatuhan Data' }).font = { bold: true, color: { argb: 'FF94A3B8' } };
-    sheet.addRow({ kategori: 'UU PDP No. 27/2022', nilai: '100% Anonim. Bebas PII.', ket: 'Hanya metrik statistik agregat yang diekspor.' }).font = { color: { argb: 'FF94A3B8' } };
+  // Compliance Disclaimer
+  sheet.addRow({ kategori: 'Kepatuhan Data' }).font = { bold: true, color: { argb: 'FF94A3B8' } };
+  sheet.addRow({ kategori: 'UU PDP No. 27/2022', nilai: '100% Anonim. Bebas PII.', ket: 'Hanya metrik statistik agregat yang diekspor.' }).font = { color: { argb: 'FF94A3B8' } };
 
-    const reportsDir = path.join(process.cwd(), 'reports');
-    if (!fs.existsSync(reportsDir)) {
-      fs.mkdirSync(reportsDir, { recursive: true });
-    }
-
-    const fileName = `Laporan_Rektorat_Visual_${Date.now()}.xlsx`;
-    const filePath = path.join(reportsDir, fileName);
-    
-    await workbook.xlsx.writeFile(filePath);
-    return filePath;
-  } catch (error) {
-    throw error;
+  const reportsDir = path.join(process.cwd(), 'reports');
+  if (!fs.existsSync(reportsDir)) {
+    fs.mkdirSync(reportsDir, { recursive: true });
   }
+
+  const fileName = `Laporan_Rektorat_Visual_${Date.now()}.xlsx`;
+  const filePath = path.join(reportsDir, fileName);
+  
+  await workbook.xlsx.writeFile(filePath);
+  return filePath;
 }

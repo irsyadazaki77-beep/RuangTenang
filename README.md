@@ -41,16 +41,25 @@ RuangTenang Kampus adalah platform digital kesehatan emosional dan pendampingan 
 
 ---
 
-## ⚡ Cara Menjalankan & Pipeline CI/CD
+## ⚡ Cara Menjalankan & Setup Database Lokal
 
 1. **Install Dependensi:**
    ```bash
-   npm ci
+   npm install
    ```
 
-2. **Inisialisasi Database:**
+2. **Setup Database Lokal (SQLite):**
+   *Aplikasi secara otomatis membuat file database SQLite dan mensinkronisasikan tabel skema saat pertama kali dijalankan via `npm run dev`.*
+   
+   Jika ingin melakukan inisialisasi / push skema secara manual:
    ```bash
-   npm run db:push
+   npm run db:push:sqlite
+   ```
+
+   *(Opsional)* Mengisi data demo konselor dan pengguna uji coba:
+   ```bash
+   # Pastikan password telah diset di .env sebelum menjalankan seed:
+   npm run seed:demo
    ```
 
 3. **Jalankan Development Server:**
@@ -60,32 +69,33 @@ RuangTenang Kampus adalah platform digital kesehatan emosional dan pendampingan 
 
 4. **Menjalankan Quality Gate (CI Stages):**
    ```bash
-   npm run typecheck    # 1. Typechecking
-   npm run lint         # 2. ESLint & Accessibility Audit
-   npm run test:unit    # 3. Frontend Component Unit Tests
+   npm run typecheck        # 1. Typechecking
+   npm run lint             # 2. ESLint & Security Linter
+   npm run test:unit        # 3. Frontend Component Unit Tests
    npm run test:integration # 4. Backend Integration Tests
-   npm run test:security # 5. Security & Encryption Tests
-   npm run build        # 6. Production Build
+   npm run test:security    # 5. Security, Auth, CORS, CSRF, Rate Limit Tests
+   npm run build            # 6. Production Build
    ```
 
 ---
 
-## 🗄️ Database & Migration Safety Guide
+## 🗄️ Database, Git Hygiene & Migration Safety Guide
 
-RuangTenang Kampus menggunakan **Prisma ORM** yang mendukung arsitektur multi-engine untuk **SQLite** (default pengembangan lokal & pengujian integrasi) dan **PostgreSQL** (untuk kesiapan produksi skala penuh di Cloud SQL / serverless).
+RuangTenang Kampus menggunakan **Prisma ORM** yang mendukung arsitektur multi-engine untuk **SQLite** (pengembangan lokal & pengujian integrasi) dan **PostgreSQL** (skala produksi di Cloud SQL / container).
 
-### 1. Sinkronisasi SQLite & PostgreSQL
-Secara bawaan, schema dikonfigurasi untuk SQLite untuk mempermudah setup tanpa konfigurasi server database eksternal:
-```prisma
-datasource db {
-  provider = "sqlite"
-  url      = "file:./ruangtenang_sqlite.db"
-}
-```
-Untuk bermigrasi ke **PostgreSQL** di lingkungan produksi:
-1. Ubah `provider` di `prisma/schema.prisma` menjadi `"postgresql"`.
-2. Ganti `url` untuk menggunakan variabel lingkungan, misalnya: `url = env("DATABASE_URL")`.
-3. Jalankan `npx prisma generate` untuk memperbarui Prisma Client dengan tipe PostgreSQL yang sesuai.
+### 1. Kebijakan Git Hygiene (Pemisahan Data Runtime)
+- **Zero Runtime Data in Git:** File runtime database (`*.db`, `*.sqlite`, `*.sqlite3`), runtime JSON data (`data/*.json`), backup database (`backups/`, `*.backup`, `*.dump`), report exports (`reports/*.xlsx`), serta file environment (`.env`) **diabaikan secara ketat oleh `.gitignore`** dan tidak pernah di-commit ke repositori.
+- **Fresh Clone Readiness:** Pengembang baru dapat langsung melakukan `git clone` -> `npm install` -> `npm run dev`. Sistem akan otomatis menginisialisasi database SQLite kosong yang siap digunakan tanpa ketergantungan pada artefak database lama.
+
+### 2. Sinkronisasi SQLite & PostgreSQL
+- **Development (SQLite):** Menggunakan `prisma/schema.sqlite.prisma` dan database lokal `prisma/ruangtenang_sqlite.db`.
+- **Production (PostgreSQL):** Menggunakan `prisma/schema.postgres.prisma` dengan koneksi `DATABASE_URL` PostgreSQL:
+  ```bash
+  # Generate client untuk PostgreSQL
+  npm run db:generate:postgres
+  # Terapkan migrasi ke PostgreSQL
+  npm run db:migrate:postgres
+  ```
 
 ---
 

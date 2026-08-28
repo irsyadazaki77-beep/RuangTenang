@@ -71,6 +71,11 @@ export const authRepository = {
 
   async removeActiveSession(userId: string, sessionId: string): Promise<void> {
     const hashedId = crypto.createHash('sha256').update(sessionId).digest('hex');
+    const user = await prisma.users.findUnique({ where: { id: userId } });
+    if (user && user.activeSessions && user.activeSessions !== "[]") {
+      await migrateLegacyUserDataIfNeeded(user);
+    }
+    
     await prisma.userSession.deleteMany({
       where: {
         userId,
@@ -83,8 +88,14 @@ export const authRepository = {
   },
 
   async removeAllActiveSessions(userId: string): Promise<void> {
-    await prisma.userSession.deleteMany({
-      where: { userId },
+    await prisma.$transaction(async (tx) => {
+      await tx.userSession.deleteMany({
+        where: { userId },
+      });
+      await tx.users.update({
+        where: { id: userId },
+        data: { activeSessions: "[]" }
+      });
     });
   },
 
@@ -566,22 +577,24 @@ export const authRepository = {
     newPasswordHash: string,
   ): Promise<boolean> {
     try {
-      await prisma.users.update({
-        where: { id: userId },
-        data: {
-          passwordHash: newPasswordHash,
-        },
-      });
+      await prisma.$transaction(async (tx) => {
+        await tx.users.update({
+          where: { id: userId },
+          data: {
+            passwordHash: newPasswordHash,
+            activeSessions: "[]",
+          },
+        });
 
-      // Revoke all sessions on other devices
-      await prisma.userSession.deleteMany({
-        where: { userId },
+        await tx.userSession.deleteMany({
+          where: { userId },
+        });
       });
 
       await this.addSecurityNotification(
         userId,
         "🔑 Kata Sandi Diperbarui",
-        "Kata sandi akun Anda baru saja diperbarui. Seluruh sesi aktif di perangkat lain telah dicabut.",
+        "Kata sandi akun Anda baru saja diperbarui. Seluruh sesi aktif telah dicabut.",
       );
       await auditRepository.logAudit(
         "UPDATE_PASSWORD",

@@ -41,9 +41,15 @@ export const aiRequestService = {
       };
     }
 
+    const isAnonymous = !userId || userId === 'guest';
+    const outputTokens = isAnonymous ? 300 : 800;
+    
+    const abortController = new AbortController();
+    const timeoutId = setTimeout(() => abortController.abort(), 15000);
+
     let fullSystemInstruction = systemInstruction || 'Kamu adalah Teman RuangTenang AI, asisten pendamping reflektif mahasiswa yang sangat hangat, ramah, merangkul, dan empati. Berikan tanggapan yang menenangkan dengan bahasa yang hangat serta gunakan emoji (seperti 🌿, 🤍, 🤗, ✨, ☕, 🫂, 🔐) secara alami. Tegaskan bahwa privasi dan keamanan ceritanya dijaga sesuai kebijakan privasi kami, dan kamu mendengarkan tanpa menghakimi. Kamu BUKAN profesional medis, JANGAN melakukan diagnosis medis atau merekomendasikan resep.';
 
-    if (userId) {
+    if (userId && !isAnonymous) {
        const userContext = await aiContextBuilder.buildContext({ userId });
        if (userContext) {
          fullSystemInstruction += `\n\n${userContext}`;
@@ -52,6 +58,7 @@ export const aiRequestService = {
 
     const aiClient = getGenAIClient();
     if (!aiClient) {
+      clearTimeout(timeoutId);
       return {
         text: getLocalFallbackResponse(prompt).text,
         modelUsed: 'local-fallback',
@@ -67,10 +74,13 @@ export const aiRequestService = {
            config: {
              systemInstruction: fullSystemInstruction,
              temperature: 0.6,
-             maxOutputTokens: 800
+             maxOutputTokens: outputTokens,
+             // @ts-ignore - The SDK might not explicitly type signal in this version, but native fetch underneath might support it
+             signal: abortController.signal
            }
         });
       }, { allowFallback: true });
+      clearTimeout(timeoutId);
 
       const outputText = response.text || '';
       
@@ -86,6 +96,7 @@ export const aiRequestService = {
 
       return { text: outputText, modelUsed, isFallback: false };
     } catch (err: any) {
+      clearTimeout(timeoutId);
       console.error(`[AI_REQUEST_SERVICE] Final failure: ${err.message}`);
       return {
         text: getLocalFallbackResponse(prompt).text,
@@ -117,9 +128,15 @@ export const aiRequestService = {
       throw new Error('CRISIS_DETECTED');
     }
 
+    const isAnonymous = !userId || userId === 'guest';
+    const outputTokens = isAnonymous ? 400 : 1000;
+    
+    const abortController = new AbortController();
+    const timeoutId = setTimeout(() => abortController.abort(), 20000);
+
     let fullSystemInstruction = systemInstruction || 'Kamu adalah Teman RuangTenang AI, asisten pendamping reflektif mahasiswa yang sangat hangat, ramah, merangkul, dan empati. Berikan tanggapan yang menenangkan dengan bahasa yang hangat serta gunakan emoji (seperti 🌿, 🤍, 🤗, ✨, ☕, 🫂, 🔐) secara alami. Tegaskan bahwa privasi dan keamanan ceritanya dijaga sesuai kebijakan privasi kami, dan kamu mendengarkan tanpa menghakimi. Kamu BUKAN profesional medis, JANGAN melakukan diagnosis medis atau merekomendasikan resep.';
 
-    if (userId) {
+    if (userId && !isAnonymous) {
        const userContext = await aiContextBuilder.buildContext({ userId });
        if (userContext) {
          fullSystemInstruction += `\n\n${userContext}`;
@@ -145,7 +162,9 @@ export const aiRequestService = {
            config: {
              systemInstruction: fullSystemInstruction,
              temperature: 0.6,
-             maxOutputTokens: 1000
+             maxOutputTokens: outputTokens,
+             // @ts-ignore
+             signal: abortController.signal
            }
        });
        return { stream, modelUsed: primaryModel };
@@ -159,11 +178,14 @@ export const aiRequestService = {
              config: {
                systemInstruction: fullSystemInstruction,
                temperature: 0.6,
-               maxOutputTokens: 1000
+               maxOutputTokens: outputTokens,
+               // @ts-ignore
+               signal: abortController.signal
              }
          });
          return { stream, modelUsed: fallbackModel };
       } catch (fallbackErr: any) {
+         clearTimeout(timeoutId);
          throw new Error('AI_STREAM_FAILED');
       }
     }

@@ -16,7 +16,12 @@ app.use('/api/auth', authRouter);
 app.use('/api', usabilityRouter);
 
 const generateToken = (user: any, expiresIn: string = '1h') => {
-  return jwt.sign(user, getJwtSecret(), { expiresIn: expiresIn as any });
+  return jwt.sign({ ...user, sessionId: user.sessionId || 'test-session' }, getJwtSecret(), { 
+    expiresIn: expiresIn as any,
+    issuer: 'ruangtenang',
+    audience: 'ruangtenang-web',
+    algorithm: 'HS256'
+  });
 };
 
 describe('Authentication & Security Hardening Tests', () => {
@@ -114,5 +119,91 @@ describe('Authentication & Security Hardening Tests', () => {
     expect(res.status).toBe(200);
     expect(res.body.userTier).toBe('Pro');
     expect(res.body.isDeveloper).toBe(false);
+  });
+});
+
+describe('Password Change Session Revocation Tests', () => {
+  const TEST_EMAIL = 'pass_change@test.com';
+
+  beforeAll(async () => {
+    await prisma.users.deleteMany({ where: { email: TEST_EMAIL } });
+  });
+
+  afterAll(async () => {
+    await prisma.users.deleteMany({ where: { email: TEST_EMAIL } });
+  });
+
+  it('revokes all sessions on password change', async () => {
+    // 1. Register user
+    await request(app)
+      .post('/api/auth/register')
+      .send({
+        name: 'Pass Change User',
+        email: TEST_EMAIL,
+        password: 'OldPassword123!',
+        role: 'mahasiswa'
+      });
+
+    // 2. Login session A
+    const loginA = await request(app)
+      .post('/api/auth/login')
+      .send({ email: TEST_EMAIL, password: 'OldPassword123!' });
+    
+    expect(loginA.status).toBe(200);
+    const cookieA = ((loginA.headers['set-cookie'] as unknown) as string[] | undefined)?.find((c: string) => c.startsWith('ruangtenang_session='));
+    expect(cookieA).toBeDefined();
+    
+    // 3. Login session B
+    const loginB = await request(app)
+      .post('/api/auth/login')
+      .send({ email: TEST_EMAIL, password: 'OldPassword123!' });
+    
+    expect(loginB.status).toBe(200);
+    const cookieB = ((loginB.headers['set-cookie'] as unknown) as string[] | undefined)?.find((c: string) => c.startsWith('ruangtenang_session='));
+    expect(cookieB).toBeDefined();
+
+    // 4. Change password from session A
+    const changeRes = await request(app)
+      .post('/api/auth/change-password')
+      .set('Cookie', cookieA as string)
+      .send({
+        currentPassword: 'OldPassword123!',
+        newPassword: 'NewPassword123!'
+      });
+    
+    expect(changeRes.status).toBe(200);
+    
+    // 5. Verify Session A is invalid
+    const meA = await request(app)
+      .get('/api/auth/me')
+      .set('Cookie', cookieA as string);
+    // Note: The me endpoint returns 200 with user: null and sessionRevoked: true when auth fails softly in some configurations, or 401 via requireAuth. Actually /me uses optionalAuth, so it returns 200 { user: null }.
+    expect(meA.status).toBe(200);
+    expect(meA.body.user).toBeNull();
+    
+    // Test a requireAuth endpoint to verify 401
+    const sessionsA = await request(app)
+      .get('/api/auth/sessions')
+      .set('Cookie', cookieA as string);
+    expect(sessionsA.status).toBe(401);
+
+    // 6. Verify Session B is invalid
+    const sessionsB = await request(app)
+      .get('/api/auth/sessions')
+      .set('Cookie', cookieB as string);
+    expect(sessionsB.status).toBe(401);
+
+    // 7. Verify old password fails
+    const oldLogin = await request(app)
+      .post('/api/auth/login')
+      .send({ email: TEST_EMAIL, password: 'OldPassword123!' });
+    // Expect 401 Unauthorized or 400 depending on your exact login controller behavior
+    expect([400, 401]).toContain(oldLogin.status);
+
+    // 8. Verify new password succeeds
+    const newLogin = await request(app)
+      .post('/api/auth/login')
+      .send({ email: TEST_EMAIL, password: 'NewPassword123!' });
+    expect(newLogin.status).toBe(200);
   });
 });

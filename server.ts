@@ -7,7 +7,7 @@ import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import cors from 'cors';
 
-import { serverDb, seedInitialDataIfNeeded } from './server/database.js';
+import { serverDb, seedInitialDataIfNeeded, ensureDatabaseReady } from './server/database.js';
 import {
   validateStartupEnvironment,
   requestIdAndLoggerMiddleware,
@@ -40,6 +40,7 @@ async function startServer() {
   // 1. Startup Environment Validation
   validateEnvironment();
   validateStartupEnvironment();
+  await ensureDatabaseReady();
 
   const app = express();
   

@@ -6,8 +6,10 @@ import { consentService } from '../services/consentService.js';
 import { retentionService } from '../services/retentionService.js';
 import { serverDb } from '../database.js';
 
-import { exportLimiter } from '../middleware/rateLimiters.js';
+import { exportLimiter, accountDeletionLimiter } from '../middleware/rateLimiters.js';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
+import { prisma } from '../database.js';
 
 const router = Router();
 
@@ -208,7 +210,7 @@ router.delete(['/activity', '/data'], requireAuth, async (req: Request, res: Res
 });
 
 // Erasure Request / Right to be Forgotten (Full Account & Personal Records)
-router.post(['/erasure-request', '/db/data-erasure'], requireAuth, async (req: Request, res: Response) => {
+router.post(['/erasure-request', '/db/data-erasure'], requireAuth, accountDeletionLimiter, async (req: Request, res: Response) => {
   try {
     let targetUserId = req.user!.userId;
     if (req.user!.role === 'admin' && req.body.userId) {
@@ -217,26 +219,70 @@ router.post(['/erasure-request', '/db/data-erasure'], requireAuth, async (req: R
 
     // Confirmation check for self-erasure
     if (targetUserId === req.user!.userId) {
-      const { confirmText, confirmPassword } = req.body;
+      const { confirmText, confirmPassword, mfaCode } = req.body;
       const isConfirmedText = confirmText === 'HAPUS AKUN SAYA' || req.body.confirmDelete === true;
-      if (!isConfirmedText && !confirmPassword) {
+      
+      if (!isConfirmedText) {
         return res.status(400).json({
           success: false,
           code: 'CONFIRMATION_REQUIRED',
-          error: 'Penghapusan akun memerlukan konfirmasi. Sertakan confirmText: "HAPUS AKUN SAYA" atau kata sandi Anda.'
+          error: 'Penghapusan akun memerlukan konfirmasi frasa "HAPUS AKUN SAYA".'
         });
       }
 
-      if (confirmPassword) {
-        const user = await serverDb.getUserById(req.user!.userId);
-        if (user) {
-          const isValid = await bcrypt.compare(confirmPassword, user.passwordHash);
-          if (!isValid) {
-            return res.status(401).json({
-              success: false,
-              code: 'INVALID_PASSWORD',
-              error: 'Kata sandi konfirmasi tidak sesuai.'
-            });
+      if (!confirmPassword) {
+        return res.status(400).json({
+          success: false,
+          code: 'PASSWORD_REQUIRED',
+          error: 'Penghapusan akun memerlukan konfirmasi kata sandi.'
+        });
+      }
+
+      // We need the raw database user to access sensitive fields like mfaCode and mfaExpires
+      const user = await prisma.users.findUnique({ where: { id: req.user!.userId } });
+      if (!user) {
+         return res.status(404).json({ error: 'User tidak ditemukan.' });
+      }
+
+      const isValid = await bcrypt.compare(confirmPassword, user.passwordHash);
+      if (!isValid) {
+        return res.status(401).json({
+          success: false,
+          code: 'INVALID_PASSWORD',
+          error: 'Kata sandi konfirmasi tidak sesuai.'
+        });
+      }
+
+      if (user.mfaEnabled) {
+        let isRecentAuth = false;
+        
+        if (req.user!.sessionId) {
+           const session = await prisma.userSession.findUnique({ where: { id: req.user!.sessionId } });
+           if (session) {
+              const ageMins = (new Date().getTime() - session.createdAt.getTime()) / (1000 * 60);
+              if (ageMins <= 5) {
+                 isRecentAuth = true;
+              }
+           }
+        }
+
+        if (!isRecentAuth) {
+          if (!mfaCode) {
+             return res.status(403).json({
+               success: false,
+               code: 'MFA_REQUIRED',
+               error: 'Akun Anda mengaktifkan MFA. Mohon masukkan kode MFA atau lakukan verifikasi terbaru (recent authentication).'
+             });
+          }
+          
+          const hashedCode = crypto.createHash('sha256').update(mfaCode.trim()).digest('hex');
+          const isValidMfa = user.mfaCode === hashedCode && user.mfaExpires && user.mfaExpires > new Date();
+          if (!isValidMfa) {
+             return res.status(401).json({
+               success: false,
+               code: 'INVALID_MFA_CODE',
+               error: 'Kode MFA tidak valid atau sudah kedaluwarsa.'
+             });
           }
         }
       }

@@ -18,24 +18,23 @@ export const getTokenFromReq = (req: Request) => {
 const verifyAndLoadSession = async (token: string, res: Response) => {
   try {
     const JWT_SECRET = getJwtSecret();
-    let decoded: any;
-    try {
-      decoded = jwt.verify(token, JWT_SECRET, {
-        issuer: 'ruangtenang',
-        audience: 'ruangtenang-web',
-        algorithms: ['HS256']
-      }) as any;
-    } catch (verifyErr) {
-      // Fallback decode for tokens created prior to explicit claims in local unit tests
-      decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] }) as any;
+    const decoded = jwt.verify(token, JWT_SECRET, {
+      issuer: 'ruangtenang',
+      audience: 'ruangtenang-web',
+      algorithms: ['HS256']
+    }) as any;
+    
+    if (!decoded.sessionId || (!decoded.userId && !decoded.sub)) {
+      throw new Error('INVALID_SESSION');
+    }
+
+    const userId = decoded.userId || decoded.sub;
+    
+    const isSessionValid = await serverDb.isSessionActive(userId, decoded.sessionId);
+    if (!isSessionValid) {
+      throw new Error('SESSION_REVOKED');
     }
     
-    if (decoded.sessionId && decoded.userId) {
-      const isSessionValid = await serverDb.isSessionActive(decoded.userId, decoded.sessionId);
-      if (!isSessionValid) {
-        throw new Error('SESSION_REVOKED');
-      }
-    }
     return decoded;
   } catch (err: any) {
     res.clearCookie('ruangtenang_session', { path: '/' });

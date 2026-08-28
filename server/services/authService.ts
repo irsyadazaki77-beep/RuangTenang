@@ -26,7 +26,9 @@ export const authService = {
       expiresIn: '7d',
       issuer: 'ruangtenang',
       audience: 'ruangtenang-web',
-      algorithm: 'HS256'
+      algorithm: 'HS256',
+      subject: payload.userId,
+      jwtid: crypto.randomUUID()
     });
   },
 

@@ -24,7 +24,7 @@ app.use('/api/emergency', emergencyRouter);
 app.use('/api/usability', usabilityRouter);
 app.use('/api/screenings', screeningRouter);
 
-const generateToken = (user: any) => jwt.sign(user, JWT_SECRET);
+const generateToken = (user: any) => jwt.sign({ ...user, sessionId: "test-session" }, JWT_SECRET, { issuer: 'ruangtenang', audience: 'ruangtenang-web', algorithm: 'HS256' });
 
 describe('Core Feature Integrity Integration Tests (FASE 8)', () => {
   const student1 = { userId: 'usr-student-integ-1', name: 'Budi Santoso', email: 'budi.integ@univ.ac.id', role: 'mahasiswa' };
