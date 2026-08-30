@@ -141,7 +141,8 @@ export default function MainChat({ user, setChats, onOpenSidebar, onOpenSettings
     }
     
     setFollowUps([]);
-    let assistantMsgId = '';
+    let assistantMsgId = `assistant_${Date.now()}`;
+    setStreamingMessage({ id: assistantMsgId, role: 'assistant', content: '' });
 
     await streamMessage(
       {
@@ -156,10 +157,10 @@ export default function MainChat({ user, setChats, onOpenSidebar, onOpenSettings
       {
         onMessageStart: (msgId) => {
           assistantMsgId = msgId;
-          setStreamingMessage({ id: assistantMsgId, role: 'assistant', content: '' });
+          setStreamingMessage(prev => ({ id: msgId, role: 'assistant', content: prev?.content || '' }));
         },
         onChunk: (text) => {
-          setStreamingMessage(prev => prev ? { ...prev, content: prev.content + text } : null);
+          setStreamingMessage(prev => prev ? { ...prev, content: prev.content + text } : { id: assistantMsgId, role: 'assistant', content: text });
         },
         onPluginSwitch: (pluginName) => {
           setStreamingMessage(prev => prev ? { ...prev, content: `Memuat fitur ${pluginName}...`, plugin: pluginName } : null);
@@ -287,11 +288,14 @@ export default function MainChat({ user, setChats, onOpenSidebar, onOpenSettings
       if (chatId) {
         if (confirm('Bersihkan riwayat percakapan ini?')) {
           try {
-            await apiClient.delete(`/api/v1/chat/${chatId}/messages`);
+            const res = await apiClient.delete(`/api/v1/chat/${chatId}/messages`);
+            if (!res.success) {
+              throw new Error(res.error || 'Gagal membersihkan percakapan di server.');
+            }
             setMessages([]);
             showToast('Pesan berhasil dibersihkan', 'success');
-          } catch {
-            showToast('Gagal membersihkan percakapan', 'error');
+          } catch (err: any) {
+            showToast(err?.message || 'Gagal membersihkan percakapan', 'error');
           }
         }
       } else {

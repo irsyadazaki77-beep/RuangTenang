@@ -96,7 +96,13 @@ export const BookingForm: React.FC<BookingFormProps> = ({
     }
   };
 
-  const [date, setDate] = useState("2026-08-05");
+  const getInitialBookingDate = () => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    return d.toISOString().split("T")[0];
+  };
+
+  const [date, setDate] = useState<string>(getInitialBookingDate);
   const [timeSlot, setTimeSlot] = useState("14:00");
   const [timezone, setTimezone] = useState<"WIB" | "WITA" | "WIT">(getLocalTimezone());
   const [mode, setMode] = useState<"video_call">("video_call");
@@ -422,6 +428,7 @@ export const BookingForm: React.FC<BookingFormProps> = ({
                     id="session-date-input"
                     type="date"
                     required
+                    min={new Date().toISOString().split("T")[0]}
                     value={date}
                     onChange={(e) => setDate(e.target.value)}
                     className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:border-teal-500/50 focus:ring-4 focus:ring-teal-500/10 transition-all"

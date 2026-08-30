@@ -5,6 +5,13 @@ import { requireAuth } from '../middleware/auth';
 import { sanitizeInput } from '../security';
 import { validatePagination, idempotencyMiddleware } from '../apiV1Helpers';
 import { EventEmitter } from 'events';
+import {
+  CreateAppointmentSchema as createAppointmentSchema,
+  UpdateAppointmentSchema as updateAppointmentSchema,
+  RescheduleAppointmentSchema as rescheduleAppointmentSchema
+} from '../../shared/contracts/appointments.js';
+
+export { createAppointmentSchema, updateAppointmentSchema, rescheduleAppointmentSchema };
 
 const router = Router();
 
@@ -37,38 +44,6 @@ router.get('/stream', requireAuth, (req: Request, res: Response) => {
     appointmentEvents.off('update', sendEvent);
   });
 });
-
-
-export const createAppointmentSchema = z.object({
-  counselorId: z.string().max(100).optional(),
-  counselorName: z.string().min(2, 'Nama konselor minimal 2 karakter').max(100),
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Format tanggal tidak valid (YYYY-MM-DD)'),
-  time: z.string().min(2, 'Format jam tidak valid').max(50),
-  timezone: z.enum(['WIB', 'WITA', 'WIT']).optional(),
-  mode: z.enum(['video_call', 'in_person', 'tele_counseling']).optional(),
-  notes: z.string().max(500).optional(),
-  userId: z.string().max(100).optional(),
-  studentName: z.string().max(100).optional(),
-  studentNIM: z.string().max(30).optional(),
-  studentEmail: z.string().email().optional().or(z.literal('')),
-}).strict();
-
-export const updateAppointmentSchema = z.object({
-  counselorId: z.string().max(100).optional(),
-  counselorName: z.string().max(100).optional(),
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Format tanggal tidak valid (YYYY-MM-DD)').optional(),
-  time: z.string().max(50).optional(),
-  timezone: z.enum(['WIB', 'WITA', 'WIT']).optional(),
-  mode: z.enum(['video_call', 'in_person', 'tele_counseling']).optional(),
-  notes: z.string().max(500).optional(),
-  status: z.enum(['PENDING', 'CONFIRMED', 'CANCELLED', 'REJECTED', 'Selesai', 'requested', 'confirmed', 'completed', 'cancelled']).optional(),
-  approvalStatus: z.enum(['PENDING_APPROVAL', 'APPROVED', 'REJECTED']).optional(),
-  attendanceStatus: z.enum(['SCHEDULED', 'ATTENDED', 'NO_SHOW', 'CANCELLED', 'RESCHEDULED']).optional(),
-  meetingLink: z.string().max(255).optional(),
-  studentName: z.string().max(100).optional(),
-  studentNIM: z.string().max(30).optional(),
-  studentEmail: z.string().email().optional().or(z.literal('')).optional(),
-}).strict();
 
 export interface AppointmentResponseDTO {
   id: string;
@@ -448,6 +423,104 @@ router.delete(['/:id', '/db/appointments/:id'], requireAuth, async (req: Request
   } catch (err: any) {
     console.error('Error deleting appointment:', err);
     res.status(500).json({ error: 'Gagal menghapus jadwal.' });
+  }
+});
+
+// Reschedule Appointment
+router.post(['/:id/reschedule', '/db/appointments/:id/reschedule'], requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const appt = await serverDb.findAppointmentById(id);
+    if (!appt) {
+      return res.status(404).json({ success: false, error: 'Jadwal tidak ditemukan.' });
+    }
+
+    // Role-based authorization
+    if (req.user!.role === 'mahasiswa') {
+      if (appt.userId !== req.user!.userId) {
+        return res.status(403).json({
+          success: false,
+          error: 'Akses ditolak. Anda hanya diperbolehkan menjadwal ulang janji temu milik Anda sendiri.'
+        });
+      }
+      if (['CANCELLED', 'REJECTED', 'Selesai'].includes(appt.status)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Jadwal yang sudah dibatalkan atau selesai tidak dapat dijadwalkan ulang.'
+        });
+      }
+    } else if (req.user!.role === 'konselor') {
+      const counselor = await prisma.counselors.findFirst({
+        where: { userId: req.user!.userId }
+      });
+      if (!counselor || appt.counselorId !== counselor.id) {
+        return res.status(403).json({
+          success: false,
+          error: 'Akses ditolak. Konselor hanya dapat menjadwal ulang janji temu yang ditugaskan kepada dirinya.'
+        });
+      }
+    }
+
+    const parsed = rescheduleAppointmentSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        success: false,
+        error: 'Validasi gagal.',
+        details: parsed.error.issues.map(e => ({ path: e.path.join('.'), message: e.message }))
+      });
+    }
+
+    const { date, time, timezone, reason } = parsed.data;
+
+    // Validate future/today date (reject past dates)
+    const today = new Date().toISOString().split('T')[0];
+    if (date < today) {
+      return res.status(400).json({
+        success: false,
+        error: 'Tanggal jadwal baru tidak boleh di masa lalu.'
+      });
+    }
+
+    let updatedNotes = appt.notes || '';
+    if (reason) {
+      const sanitizedReason = sanitizeInput(reason, 300);
+      updatedNotes = updatedNotes 
+        ? `${updatedNotes} | Rescheduled: ${sanitizedReason}` 
+        : `Rescheduled: ${sanitizedReason}`;
+    }
+
+    const record = await serverDb.updateAppointment(id, {
+      date,
+      time,
+      ...(timezone ? { timezone } : {}),
+      attendanceStatus: 'RESCHEDULED',
+      status: 'PENDING',
+      approvalStatus: 'PENDING_APPROVAL',
+      notes: updatedNotes
+    });
+
+    if (!record) {
+      return res.status(404).json({ success: false, error: 'Jadwal gagal dijadwalkan ulang.' });
+    }
+
+    // Emit event for SSE
+    let counselorUserId = '';
+    const counselorProfile = await prisma.counselors.findUnique({ where: { id: record.counselorId } });
+    if (counselorProfile && counselorProfile.userId) {
+      counselorUserId = counselorProfile.userId;
+    }
+    appointmentEvents.emit('update', { ...mapAppointmentToResponse(record), counselorUserId });
+
+    res.json({ success: true, record: mapAppointmentToResponse(record), message: 'Jadwal janji temu berhasil dijadwalkan ulang.' });
+  } catch (err: any) {
+    if (err.message === 'SLOT_ALREADY_BOOKED') {
+      return res.status(409).json({
+        success: false,
+        error: 'Jadwal bentrok! Slot pada tanggal dan jam baru tersebut sudah terisi oleh jadwal lain.'
+      });
+    }
+    console.error('Error rescheduling appointment:', err);
+    res.status(500).json({ success: false, error: 'Gagal menjadwalkan ulang janji temu.' });
   }
 });
 

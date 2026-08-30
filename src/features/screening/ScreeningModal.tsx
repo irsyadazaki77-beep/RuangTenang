@@ -37,7 +37,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
   const { user } = useAuth();
   useEscapeKey(onClose, !isPageMode && isOpen);
 
-  const [persistenceStatus, setPersistenceStatus] = useState<'idle' | 'saving' | 'persisted' | 'guest' | 'failed'>('idle');
+  const [persistenceStatus, setPersistenceStatus] = useState<'idle' | 'pending' | 'saved' | 'local-only' | 'failed'>('idle');
   const [persistenceError, setPersistenceError] = useState<string | null>(null);
 
   
@@ -204,17 +204,17 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
 
     const isGuest = !user || user.role === 'guest';
     if (isGuest) {
-      setPersistenceStatus('guest');
+      setPersistenceStatus('local-only');
       return;
     }
 
     if (!navigator.onLine) {
       setPersistenceStatus('failed');
-      setPersistenceError('Perangkat sedang luring. Hasil belum tersimpan ke profil Anda.');
+      setPersistenceError('Perangkat sedang luring. Hasil screening selesai, tetapi penyimpanan ke server gagal.');
       return;
     }
 
-    setPersistenceStatus('saving');
+    setPersistenceStatus('pending');
     try {
       const response = await apiClient.post<any>('/api/v1/screenings', {
         phq9Score: phqScore,
@@ -227,16 +227,16 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
       });
 
       if (response && (response.success || response.data?.id || (response as any).id)) {
-        setPersistenceStatus('persisted');
+        setPersistenceStatus('saved');
         onPersisted?.(res);
       } else {
         setPersistenceStatus('failed');
-        setPersistenceError(response?.error || 'Gagal menyimpan hasil skrining ke akun.');
+        setPersistenceError(response?.error || 'Hasil screening selesai, tetapi penyimpanan ke server gagal.');
       }
     } catch (err: any) {
       console.warn('Backend screening save failed:', err);
       setPersistenceStatus('failed');
-      const errorMessage = err instanceof Error ? err.message : 'Koneksi gagal saat menyimpan ke server.';
+      const errorMessage = err instanceof Error ? err.message : 'Hasil screening selesai, tetapi penyimpanan ke server gagal.';
       setPersistenceError(errorMessage);
     }
   };
@@ -250,9 +250,18 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
       minute: '2-digit'
     });
 
+    let storageNotice = 'Hasil tersimpan di perangkat ini.';
+    if (persistenceStatus === 'saved') {
+      storageNotice = 'Hasil berhasil disimpan ke akun Anda (Cloud Private)';
+    } else if (persistenceStatus === 'local-only') {
+      storageNotice = 'Hasil tersimpan di perangkat ini (Mode Tamu/Lokal)';
+    } else if (persistenceStatus === 'failed') {
+      storageNotice = 'Hasil screening selesai (Penyimpanan ke server gagal, tersimpan lokal)';
+    }
+
     let text = `=== RUANGTENANG - LAPORAN HASIL SKRINING KESEHATAN MENTAL MAHASISWA ===\n`;
     text += `Tanggal Pemeriksaan: ${dateStr}\n`;
-    text += `Penyimpanan Data: Tersimpan secara aman di sistem (Private)\n\n`;
+    text += `Penyimpanan Data: ${storageNotice}\n\n`;
     text += `1. HASIL PHQ-9 (SKOR DEPRESI AKADEMIS):\n`;
     text += `   - Skor Total: ${res.phq9.score} / 27\n`;
     text += `   - Tingkat Keparahan: ${res.phq9.severity}\n\n`;
@@ -505,28 +514,28 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
             </div>
 
             {/* Persistence Status Banner */}
-            {persistenceStatus === 'saving' && (
+            {persistenceStatus === 'pending' && (
               <div className="p-3.5 bg-blue-50/80 border border-blue-200 rounded-xl text-xs text-blue-800 flex items-center gap-2">
                 <Clock className="w-4 h-4 text-blue-600 animate-spin shrink-0" />
-                <span>Sedang menyimpan hasil skrining ke profil Anda...</span>
+                <span>Sedang menyimpan hasil skrining ke akun Anda...</span>
               </div>
             )}
-            {persistenceStatus === 'persisted' && (
+            {persistenceStatus === 'saved' && (
               <div className="p-3.5 bg-emerald-50/80 border border-emerald-200 rounded-xl text-xs text-emerald-800 flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span>Hasil skrining berhasil tersimpan ke profil Anda.</span>
+                <span>Hasil berhasil disimpan ke akun Anda.</span>
               </div>
             )}
-            {persistenceStatus === 'guest' && (
+            {persistenceStatus === 'local-only' && (
               <div className="p-3.5 bg-amber-50/80 border border-amber-200 rounded-xl text-xs text-amber-800 flex items-center gap-2">
                 <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
-                <span>Mode Tamu: Hasil ini tersimpan sementara pada sesi ini. Masuk atau daftar akun untuk menyimpan riwayat skrining ke profil Anda.</span>
+                <span>Mode Tamu: Hasil tersimpan di perangkat ini. Masuk atau daftar akun untuk menyimpan riwayat skrining ke profil Anda.</span>
               </div>
             )}
             {persistenceStatus === 'failed' && (
               <div className="p-3.5 bg-rose-50/80 border border-rose-200 rounded-xl text-xs text-rose-800 flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
-                <span>{persistenceError || 'Hasil skrining belum tersimpan ke akun Anda.'}</span>
+                <span>{persistenceError || 'Hasil screening selesai, tetapi penyimpanan ke server gagal.'}</span>
               </div>
             )}
 

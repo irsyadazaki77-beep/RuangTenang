@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { requireAuth } from '../middleware/auth.js';
 import { encryptionService } from '../services/encryptionService.js';
 import { generateStudentProgressPdf } from '../services/reportGenerator.js';
+import { CreateMoodSchema, UpdateMoodSchema } from '../../shared/contracts/mood.js';
 import crypto from 'crypto';
 
 const router = Router();
@@ -56,16 +57,9 @@ router.get('/mood', requireAuth, async (req: Request, res: Response) => {
   }
 });
 
-const moodSchema = z.object({
-  mood: z.union([z.string(), z.number()]),
-  notes: z.string().optional(),
-  intensity: z.number().min(0).max(24).optional(),
-  factors: z.array(z.string()).optional()
-});
-
 router.post('/mood', requireAuth, async (req: Request, res: Response) => {
   try {
-    const parsed = moodSchema.safeParse(req.body);
+    const parsed = CreateMoodSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ success: false, error: 'Validasi gagal', details: parsed.error.issues });
     }
@@ -120,7 +114,7 @@ router.put('/mood/:id', requireAuth, async (req: Request, res: Response) => {
       return res.status(403).json({ success: false, error: 'Akses ditolak. Catatan ini bukan milik Anda.' });
     }
 
-    const parsed = moodSchema.partial().safeParse(req.body);
+    const parsed = UpdateMoodSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ success: false, error: 'Validasi gagal', details: parsed.error.issues });
     }

@@ -30,7 +30,7 @@ interface MoodLog {
 interface MoodTrackerProps {
   moodLogs: MoodLog[];
   setMoodLogs: React.Dispatch<React.SetStateAction<MoodLog[]>>;
-  showToast: (msg: string) => void;
+  showToast: (msg: string, type?: 'info' | 'success' | 'warning' | 'error', title?: string) => void;
 }
 
 const MOOD_OPTIONS = [
@@ -94,6 +94,7 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
 
   const [reflectionPrompts, setReflectionPrompts] = useState<string[]>([]);
   const [isLoadingPrompts, setIsLoadingPrompts] = useState<boolean>(false);
+  const [isSubmittingMood, setIsSubmittingMood] = useState<boolean>(false);
 
   const handleToggleEmotion = (tagLabel: string) => {
     if (selectedEmotions.includes(tagLabel)) {
@@ -103,54 +104,79 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
     }
   };
 
-  const handleSaveMoodLog = (e: React.FormEvent) => {
+  const handleSaveMoodLog = async (e: React.FormEvent) => {
     e.preventDefault();
     if (selectedMood === null) {
-      showToast('Harap pilih ekspresi mood utama Anda.');
+      showToast('Harap pilih ekspresi mood utama Anda.', 'warning');
       return;
     }
 
-    const newLog: MoodLog = {
-      id: `mood-${Date.now()}`,
-      date: logDate,
-      mood: selectedMood,
-      emotions: selectedEmotions,
-      notes: journalNote.trim(),
-      sleepHours,
-      sleepQuality
-    };
+    setIsSubmittingMood(true);
+    try {
+      const res = await apiClient.post<{ success: boolean; log: any }>("/api/v1/mood", { 
+        mood: selectedMood, 
+        notes: journalNote.trim(), 
+        intensity: sleepHours, 
+        factors: selectedEmotions 
+      });
 
-    const updatedLogs = [newLog, ...moodLogs.filter(log => log.date !== logDate)].sort(
-      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-    );
+      if (!res.success || !res.data?.log) {
+        showToast(res.error || 'Gagal menyimpan catatan mood ke server.', 'error');
+        return;
+      }
 
-    setMoodLogs(updatedLogs);
-    
-    // Sync with backend
-    apiClient.post("/api/v1/mood", { 
-      mood: selectedMood, 
-      notes: journalNote.trim(), 
-      intensity: sleepHours, 
-      factors: selectedEmotions 
-    }).catch(e => console.error("Failed to sync mood with backend:", e));
+      const saved = res.data.log;
+      const canonicalDate = saved.timestamp
+        ? new Date(saved.timestamp).toISOString().split('T')[0]
+        : logDate;
 
-    // Reset fields
-    setSelectedMood(null);
-    setSelectedEmotions([]);
-    setJournalNote('');
-    setLogDate(new Date().toISOString().split('T')[0]);
-    showToast('Catatan Mood harian berhasil disimpan! 🎉');
+      const canonicalLog: MoodLog = {
+        id: saved.id,
+        date: canonicalDate,
+        mood: typeof saved.mood === 'number' ? saved.mood : (parseInt(saved.mood, 10) || selectedMood),
+        emotions: Array.isArray(saved.factors) ? saved.factors : selectedEmotions,
+        notes: saved.notes || journalNote.trim(),
+        sleepHours: saved.intensity ?? sleepHours,
+        sleepQuality
+      };
+
+      setMoodLogs(prev => {
+        const filtered = prev.filter(log => log.id !== canonicalLog.id && log.date !== canonicalLog.date);
+        return [canonicalLog, ...filtered].sort(
+          (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+        );
+      });
+
+      // Reset fields on success
+      setSelectedMood(null);
+      setSelectedEmotions([]);
+      setJournalNote('');
+      setLogDate(new Date().toISOString().split('T')[0]);
+      setShowDetails(false);
+      showToast('Catatan Mood harian berhasil disimpan! 🎉', 'success');
+    } catch (err: any) {
+      console.error("Failed to sync mood with backend:", err);
+      showToast('Terjadi kesalahan jaringan saat menyimpan catatan mood.', 'error');
+    } finally {
+      setIsSubmittingMood(false);
+    }
   };
 
   const handleDeleteMoodLog = async (id: string) => {
-    const updated = moodLogs.filter(log => log.id !== id);
-    setMoodLogs(updated);
+    const previousLogs = [...moodLogs];
+    setMoodLogs(prev => prev.filter(log => log.id !== id));
     try {
-      await apiClient.delete(`/api/v1/mood/${id}`);
-      showToast('Catatan Mood berhasil dihapus dari server.');
+      const res = await apiClient.delete(`/api/v1/mood/${id}`);
+      if (!res.success) {
+        setMoodLogs(previousLogs);
+        showToast(res.error || 'Gagal menghapus catatan mood dari server.', 'error');
+        return;
+      }
+      showToast('Catatan Mood berhasil dihapus.', 'success');
     } catch (err) {
       console.warn('Failed to delete mood log on server:', err);
-      showToast('Catatan Mood dihapus secara lokal.');
+      setMoodLogs(previousLogs);
+      showToast('Gagal menghapus catatan mood (koneksi terputus).', 'error');
     }
   };
 
@@ -671,9 +697,10 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
 
           <button
             type="submit"
-            className="w-full py-4 bg-teal-600 hover:bg-teal-700 active:bg-teal-800 text-white font-bold text-sm rounded-2xl shadow-sm transition-all active:scale-95 cursor-pointer"
+            disabled={isSubmittingMood}
+            className="w-full py-4 bg-teal-600 hover:bg-teal-700 active:bg-teal-800 text-white font-bold text-sm rounded-2xl shadow-sm transition-all active:scale-95 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            Simpan Check-In Mood
+            {isSubmittingMood ? 'Menyimpan Catatan...' : 'Simpan Check-In Mood'}
           </button>
         </form>
 

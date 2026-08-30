@@ -23,6 +23,7 @@ import { getAiClient } from './server/config/aiConfig.js';
 import { validateEnvironment } from './server/config/envValidation.js';
 import { csrfProtection } from './server/middleware/csrf.js';
 import { generalApiLimiter } from './server/middleware/rateLimiters.js';
+import { optionalAuth } from './server/middleware/auth.js';
 
 // Modular Route Handlers
 import authRouter from './server/routes/auth.js';
@@ -202,15 +203,28 @@ async function startServer() {
     });
   });
 
-  app.get(['/api/v1/verify-gemini', '/api/verify-gemini'], async (req, res) => {
+  app.get(['/api/v1/verify-gemini', '/api/verify-gemini'], optionalAuth, async (req, res) => {
+    // Security check: only allow if explicitly enabled via environment variable OR accessed by authenticated admin
+    const isDiagnosticsEnabled = process.env.ENABLE_AI_DIAGNOSTICS === 'true';
+    const isAdminUser = req.user?.role === 'admin';
+
+    if (!isDiagnosticsEnabled && !isAdminUser) {
+      return res.status(403).json({
+        success: false,
+        error: 'Akses ditolak. Endpoint diagnostik dinonaktifkan demi keamanan.',
+        timestamp: new Date().toISOString()
+      });
+    }
+
     try {
       const aiClient = getAiClient();
       
       if (!aiClient) {
         console.error('[GEMINI_VERIFICATION] API Key is missing or GenAI client failed to initialize.');
-        return res.status(500).json({
+        return res.status(503).json({
+          success: false,
           status: 'error',
-          message: 'GEMINI_API_KEY is not configured or client failed to initialize.',
+          message: 'Layanan AI belum dikonfigurasi atau tidak tersedia.',
           timestamp: new Date().toISOString()
         });
       }
@@ -218,35 +232,30 @@ async function startServer() {
       console.log('[GEMINI_VERIFICATION] Attempting to connect to Gemini API...');
       const startTime = Date.now();
       
-      // Send a very minimal prompt to verify connectivity and authentication
+      // Send a minimal ping prompt to verify connectivity
       const response = await aiClient.models.generateContent({
         model: 'gemini-3.1-flash-lite',
         contents: 'Ping! Balas dengan "Pong" saja.',
       });
       
       const latency = Date.now() - startTime;
-      const textResponse = response.text || '';
-      
-      console.log(`[GEMINI_VERIFICATION] Success. Latency: ${latency}ms. Response: ${textResponse}`);
+      const textResponse = response.text ? 'OK' : 'EMPTY_RESPONSE';
       
       res.status(200).json({
+        success: true,
         status: 'success',
         latencyMs: latency,
         modelUsed: 'gemini-3.1-flash-lite',
-        response: textResponse,
+        responseStatus: textResponse,
         timestamp: new Date().toISOString()
       });
     } catch (error: any) {
-      console.error('[GEMINI_VERIFICATION] Gemini API connection failed:', error);
+      console.error('[GEMINI_VERIFICATION] Gemini API connection failed (internal log):', error?.message || error);
       
       res.status(502).json({
+        success: false,
         status: 'error',
-        message: 'Failed to verify Gemini API connection.',
-        errorDetails: {
-          name: error.name,
-          message: error.message,
-          status: error.status,
-        },
+        message: 'Gagal memverifikasi koneksi layanan AI.',
         timestamp: new Date().toISOString()
       });
     }

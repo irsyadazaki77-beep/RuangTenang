@@ -452,9 +452,10 @@ describe('FASE 1 SECURITY HOTFIX REGRESSION TEST SUITE', () => {
         });
 
       expect(res.status).toBe(200);
-      expect(res.body.recipientName).toBe('Orang Tua Resmi User A');
-      expect(res.body.recipientPhone).toBe('081234567890');
-      expect(res.body.recipientPhone).not.toBe('089999999999');
+      expect(res.body.recipientName).toMatch(/^O(\*+)A$/);
+      expect(res.body.recipientPhone).toMatch(/^0812(\*+)890$/);
+      expect(res.body.recipientPhone).not.toContain('089999999999');
+      expect(res.body.recipientName).not.toContain('SPOOFED_TARGET_NAME');
       expect(res.body.dispatchId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
     });
 

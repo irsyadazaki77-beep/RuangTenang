@@ -5,27 +5,14 @@ import { requireAuth } from '../middleware/auth.js';
 import { consentService } from '../services/consentService.js';
 import { canAccessHealthData } from '../services/healthDataAuth.js';
 import { validatePagination } from '../apiV1Helpers.js';
+import {
+  ScreeningSubmissionSchema as createScreeningSchema,
+  UpdateScreeningStatusSchema
+} from '../../shared/contracts/screening.js';
+
+export { createScreeningSchema, UpdateScreeningStatusSchema };
 
 const router = Router();
-
-export const createScreeningSchema = z.object({
-  phq9Score: z.number().int().min(0).max(27),
-  gad7Score: z.number().int().min(0).max(21),
-  phq9Severity: z.string().optional(),
-  gad7Severity: z.string().optional(),
-  item9Score: z.number().int().min(0).max(3).optional(),
-  hasSelfHarmRisk: z.boolean().optional(),
-  riskIndicators: z.object({
-    item9Score: z.number().int().min(0).max(3),
-    hasSelfHarmRisk: z.boolean(),
-    immediateDanger: z.boolean().optional(),
-    planOrIntent: z.boolean().optional(),
-    contactedTrustedPerson: z.boolean().optional(),
-    riskCategory: z.string().optional(),
-    flaggedAt: z.string().optional(),
-  }).optional(),
-  userId: z.string().optional(),
-}).strict();
 
 export interface ScreeningResponseDTO {
   id: string;
@@ -150,10 +137,11 @@ router.get(['/', '/db/screenings'], requireAuth, async (req: Request, res: Respo
 router.put(['/:id', '/db/screenings/:id'], requireAuth, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { status } = req.body;
-    if (!status || !['Menunggu Penanganan', 'Sedang Ditangani', 'Selesai'].includes(status)) {
-      return res.status(400).json({ error: 'Status tidak valid.' });
+    const parsed = UpdateScreeningStatusSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Status tidak valid.', details: parsed.error.issues });
     }
+    const { status } = parsed.data;
     
     if (req.user!.role !== 'admin' && req.user!.role !== 'konselor') {
       return res.status(403).json({ error: 'Akses ditolak.' });

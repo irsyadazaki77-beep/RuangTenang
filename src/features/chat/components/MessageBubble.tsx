@@ -107,9 +107,26 @@ export const MessageBubble = memo(function MessageBubble({ msg, isTyping, onRege
                   Coba Lagi
                 </button>
               </div>
+            ) : isTyping && !msg.content ? (
+              <div className="inline-flex items-center gap-2.5 px-3.5 py-2 rounded-2xl bg-slate-100/90 dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800/80 shadow-3xs text-xs">
+                <div className="flex items-center gap-1 text-teal-600 dark:text-teal-400">
+                  <span className="w-1.5 h-1.5 rounded-full bg-teal-500 dark:bg-teal-400 animate-bounce [animation-delay:-0.3s]"></span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-teal-500 dark:bg-teal-400 animate-bounce [animation-delay:-0.15s]"></span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-teal-500 dark:bg-teal-400 animate-bounce"></span>
+                </div>
+                <span className="text-slate-600 dark:text-slate-300 font-medium tracking-tight animate-pulse">
+                  RuangTenang sedang memikirkan respons...
+                </span>
+              </div>
             ) : (
               <div className="prose prose-slate dark:prose-invert max-w-none break-words overflow-x-auto prose-p:leading-relaxed prose-pre:bg-slate-100 dark:prose-pre:bg-slate-900 prose-pre:border prose-pre:border-slate-200 dark:prose-pre:border-slate-800 prose-pre:text-slate-800 dark:prose-pre:text-slate-200 text-xs sm:text-sm leading-relaxed">
                 <ReactMarkdown>{msg.content}</ReactMarkdown>
+                {isTyping && (
+                  <span
+                    aria-hidden="true"
+                    className="inline-block w-1.5 h-3.5 ml-1 bg-teal-500 dark:bg-teal-400 rounded-xs animate-pulse align-middle"
+                  />
+                )}
               </div>
             )}
             

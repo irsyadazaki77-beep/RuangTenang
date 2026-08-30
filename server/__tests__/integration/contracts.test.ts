@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { sosTriggerSchema } from '../../routes/emergency';
 import { createScreeningSchema } from '../../routes/screening';
-import { createAppointmentSchema } from '../../routes/appointments';
+import { createAppointmentSchema, rescheduleAppointmentSchema } from '../../routes/appointments';
 
 describe('Frontend/Backend Payload Contracts', () => {
 
@@ -64,5 +64,30 @@ describe('Frontend/Backend Payload Contracts', () => {
     const result = createAppointmentSchema.parse(frontendPayload);
     expect(result).toBeDefined();
     expect(result.counselorName).toBe('Dr. John');
+  });
+
+  it('validates Reschedule Appointment frontend payload against backend schema', () => {
+    const frontendPayload = {
+      date: '2026-09-01',
+      time: '10:30',
+      timezone: 'WIB',
+      reason: 'Jadwal kuliah bentrok dengan praktikum'
+    };
+
+    const result = rescheduleAppointmentSchema.parse(frontendPayload);
+    expect(result).toBeDefined();
+    expect(result.date).toBe('2026-09-01');
+    expect(result.time).toBe('10:30');
+    expect(result.timezone).toBe('WIB');
+    expect(result.reason).toBe('Jadwal kuliah bentrok dengan praktikum');
+  });
+
+  it('rejects invalid reschedule date format', () => {
+    const invalidPayload = {
+      date: '01-09-2026',
+      time: '10:30'
+    };
+
+    expect(() => rescheduleAppointmentSchema.parse(invalidPayload)).toThrow();
   });
 });

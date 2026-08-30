@@ -238,8 +238,9 @@ describe('SOS Trigger API Contract & Security Integration Tests', () => {
     expect(['SENT', 'SIMULATED']).toContain(res.body.status);
     expect(res.body.dispatchId).toBeDefined();
     expect(res.body.hasUserConsent).toBe(true);
-    // Verified server-decrypted contact is used
-    expect(res.body.recipientName).toBe('Ibu Kandung');
-    expect(res.body.recipientPhone).toBe('081299887766');
+    // Verified server-decrypted and PII-masked contact is returned to client
+    expect(res.body.recipientName).toMatch(/^I(\*+)g$/);
+    expect(res.body.recipientPhone).toMatch(/^0812(\*+)766$/);
+    expect(res.body.recipientPhone).not.toContain('9988');
   });
 });

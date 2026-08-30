@@ -95,7 +95,7 @@ describe('Screening Modal Unit & Integration Tests', () => {
     // Verify persistence callback called once save succeeds
     await waitFor(() => {
       expect(onPersisted).toHaveBeenCalledTimes(1);
-      expect(screen.getByText(/Hasil skrining berhasil tersimpan ke profil Anda/i)).toBeInTheDocument();
+      expect(screen.getByText(/Hasil berhasil disimpan ke akun Anda/i)).toBeInTheDocument();
     });
   });
 
@@ -124,8 +124,8 @@ describe('Screening Modal Unit & Integration Tests', () => {
     // Persistence callback must NOT be called on error
     await waitFor(() => {
       expect(onPersisted).not.toHaveBeenCalled();
-      expect(screen.getByText(/Koneksi database bermasalah|Koneksi gagal saat menyimpan ke server/i)).toBeInTheDocument();
-      expect(screen.queryByText(/Hasil skrining berhasil tersimpan ke profil Anda/i)).not.toBeInTheDocument();
+      expect(screen.getByText(/Koneksi database bermasalah|Hasil screening selesai, tetapi penyimpanan ke server gagal/i)).toBeInTheDocument();
+      expect(screen.queryByText(/Hasil berhasil disimpan ke akun Anda/i)).not.toBeInTheDocument();
     });
   });
 
@@ -154,7 +154,7 @@ describe('Screening Modal Unit & Integration Tests', () => {
     expect(onPersisted).not.toHaveBeenCalled();
 
     // Displays clear guest message
-    expect(screen.getByText(/Mode Tamu: Hasil ini tersimpan sementara/i)).toBeInTheDocument();
-    expect(screen.queryByText(/Hasil skrining berhasil tersimpan ke profil Anda/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/Mode Tamu: Hasil tersimpan di perangkat ini/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Hasil berhasil disimpan ke akun Anda/i)).not.toBeInTheDocument();
   });
 });

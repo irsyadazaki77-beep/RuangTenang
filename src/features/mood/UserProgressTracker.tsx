@@ -184,13 +184,13 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
     }
   };
 
-  const latestMood = moodLogs.length > 0 ? moodLogs[moodLogs.length - 1].mood : 0;
+  const latestMood = moodLogs.length > 0 ? moodLogs[0].mood : 0;
   const avgScreeningScore = screenHistory.length > 0 
     ? Math.round(screenHistory.reduce((acc, curr) => acc + curr.phq9 + curr.gad7, 0) / (screenHistory.length * 2))
     : 0;
-  const currentPhq9 = screenHistory.length > 0 ? screenHistory[screenHistory.length - 1].phq9 : 0;
-  const currentGad7 = screenHistory.length > 0 ? screenHistory[screenHistory.length - 1].gad7 : 0;
-  const currentTriage = screenHistory.length > 0 ? screenHistory[screenHistory.length - 1].triage : 'Ringan';
+  const currentPhq9 = screenHistory.length > 0 ? screenHistory[0].phq9 : 0;
+  const currentGad7 = screenHistory.length > 0 ? screenHistory[0].gad7 : 0;
+  const currentTriage = screenHistory.length > 0 ? screenHistory[0].triage : 'Ringan';
 
   const uniqueActiveDays = React.useMemo(() => {
     if (!moodLogs || moodLogs.length === 0) return 0;

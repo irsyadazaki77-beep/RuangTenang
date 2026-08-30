@@ -235,19 +235,11 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
       });
   }, [counselors]);
 
-  const loadLocalStorageAppointments = () => {
-    setAppointments([]);
-  };
-
   useEffect(() => {
     if (selectedCounselorFromDir) {
       setIsBookingOpen(true);
     }
   }, [selectedCounselorFromDir]);
-
-  const saveAppointmentsToStorage = (list: Appointment[]) => {
-    // Rely on individual API calls for mutations, keeping local state updated.
-  };
 
   const requestNotificationPermission = async () => {
     if (!('Notification' in window)) {
@@ -276,22 +268,28 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
   };
 
   const confirmCancelAppointment = async (id: string) => {
-    const updated = appointments.map(a => {
-      if (a.id === id) {
-        return { ...a, status: 'Dibatalkan' as const, attendanceStatus: 'CANCELLED' as const };
-      }
-      return a;
-    });
-    saveAppointmentsToStorage(updated);
-    setCancelModalAptId(null);
-
     try {
-      await apiClient.put(`/api/v1/appointments/${id}`, {
+      const res = await apiClient.put(`/api/v1/appointments/${id}`, {
         status: 'CANCELLED',
         attendanceStatus: 'CANCELLED'
       });
-    } catch (e) {
+
+      if (!res.success) {
+        showToast(res.error || 'Gagal membatalkan jadwal di server.', 'error');
+        return;
+      }
+
+      setAppointments(prev => prev.map(a => {
+        if (a.id === id) {
+          return { ...a, status: 'Dibatalkan' as const, attendanceStatus: 'CANCELLED' as const };
+        }
+        return a;
+      }));
+      setCancelModalAptId(null);
+      showToast('Jadwal konseling berhasil dibatalkan.', 'success');
+    } catch (e: any) {
       console.warn('Backend cancel failed:', e);
+      showToast('Terjadi kesalahan saat membatalkan jadwal konseling.', 'error');
     }
   };
 
@@ -300,8 +298,7 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
   };
 
   const handleAddAppointment = (newApt: Appointment) => {
-    const updated = [newApt, ...appointments];
-    saveAppointmentsToStorage(updated);
+    setAppointments(prev => [newApt, ...prev.filter(a => a.id !== newApt.id)]);
     setUserSession(prev => ({
       ...prev,
       usageStats: {
@@ -315,66 +312,68 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
     const newTimeSlot = `${newTime} ${newTimezone}`;
 
     try {
-      const res = await apiClient.put(`/api/v1/appointments/${appointmentId}`, {
+      const res = await apiClient.post<{ success: boolean; record?: any; message?: string }>(`/api/v1/appointments/${appointmentId}/reschedule`, {
         date: newDate,
         time: newTime,
         timezone: newTimezone,
-        status: 'PENDING',
-        approvalStatus: 'PENDING_APPROVAL',
-        attendanceStatus: 'RESCHEDULED'
       });
 
       if (!res.success) {
         throw new Error(res.error || 'Gagal mengubah jadwal konseling.');
       }
 
-      const updated = appointments.map(a => {
+      const rec = (res.data as any)?.record;
+      setAppointments(prev => prev.map(a => {
         if (a.id === appointmentId) {
           return {
             ...a,
-            date: newDate,
-            timeSlot: newTimeSlot,
-            timezone: newTimezone,
+            date: rec?.date || newDate,
+            timeSlot: `${rec?.time || newTime} ${rec?.timezone || newTimezone}`,
+            timezone: (rec?.timezone || newTimezone) as 'WIB' | 'WITA' | 'WIT',
             status: 'Menunggu Konfirmasi' as const,
             approvalStatus: 'PENDING_APPROVAL' as const,
             attendanceStatus: 'RESCHEDULED' as const
           };
         }
         return a;
-      });
+      }));
 
-      saveAppointmentsToStorage(updated);
       showToast(`Jadwal Berhasil Diubah ke Tanggal ${newDate} Pukul ${newTimeSlot}! (Menunggu konfirmasi ulang)`, 'success');
     } catch (e: any) {
       console.warn('Backend reschedule failed:', e);
       showToast(e.message || 'Gagal mengubah jadwal.', 'error');
-      throw e; // rethrow so RescheduleModal displays error message
+      throw e;
     }
   };
 
   const handleCompleteSession = async (appointmentId: string, summaryNotes: string) => {
-    const updated = appointments.map(a => {
-      if (a.id === appointmentId) {
-        return {
-          ...a,
-          status: 'Selesai' as const,
-          attendanceStatus: 'ATTENDED' as const,
-          notes: summaryNotes
-        };
-      }
-      return a;
-    });
-
-    saveAppointmentsToStorage(updated);
-
     try {
-      await apiClient.put(`/api/v1/appointments/${appointmentId}`, {
+      const res = await apiClient.put(`/api/v1/appointments/${appointmentId}`, {
         status: 'Selesai',
         attendanceStatus: 'ATTENDED',
         notes: summaryNotes
       });
+
+      if (!res.success) {
+        showToast(res.error || 'Gagal memperbarui status sesi di server.', 'error');
+        return;
+      }
+
+      setAppointments(prev => prev.map(a => {
+        if (a.id === appointmentId) {
+          return {
+            ...a,
+            status: 'Selesai' as const,
+            attendanceStatus: 'ATTENDED' as const,
+            notes: summaryNotes
+          };
+        }
+        return a;
+      }));
+      showToast('Sesi konseling telah ditandai selesai.', 'success');
     } catch (err) {
       console.warn('Sync complete session with backend failed:', err);
+      showToast('Terjadi kesalahan saat memperbarui status sesi.', 'error');
     }
   };
 

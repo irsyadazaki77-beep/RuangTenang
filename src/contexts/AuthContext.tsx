@@ -89,6 +89,19 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (!res.success) {
       throw new Error(res.error || res.message || 'Logout gagal');
     }
+    
+    // Clear client-side sensitive caches and temporary session storage
+    if (typeof window !== 'undefined') {
+      try {
+        sessionStorage.removeItem('ruangtenang_auth_user');
+        sessionStorage.removeItem('ruangtenang_session');
+        sessionStorage.removeItem('active_counselor_tab');
+        sessionStorage.removeItem('ruangtenang_draft_chat');
+      } catch (e) {
+        console.warn('Failed to clear session storage during logout:', e);
+      }
+    }
+
     if (authVersionRef.current === currentVersion) {
       setUser(isTestEnv() ? DEFAULT_GUEST_USER : null);
     }

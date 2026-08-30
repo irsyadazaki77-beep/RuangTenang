@@ -8,6 +8,9 @@ import { scanAndSanitizePII } from '../services/piiService.js';
 import { aiGateway } from '../services/ai/aiGateway.js';
 import { idempotencyMiddleware } from '../apiV1Helpers.js';
 import { DistributedStateService } from '../services/distributedStateService.js';
+import { TriggerSosSchema as sosTriggerSchema } from '../../shared/contracts/emergency.js';
+
+export { sosTriggerSchema };
 
 const router = Router();
 
@@ -22,20 +25,21 @@ export function clearSosHistoryForTesting() {
   DistributedStateService.cleanExpired().catch(() => {});
 }
 
-export const sosTriggerSchema = z.object({
-  emergencyContact: z.object({
-    name: z.string().min(1).max(100),
-    phone: z.string().min(5).max(30),
-    relationship: z.string().max(50).optional(),
-  }).strict().optional(),
-  hasUserConsent: z.boolean().optional(),
-  studentName: z.string().max(100).optional(),
-  location: z.object({
-    latitude: z.number().optional(),
-    longitude: z.number().optional(),
-    address: z.string().max(300).optional(),
-  }).strict().optional(),
-}).strict();
+export function maskPhoneNumber(phone: string): string {
+  const clean = phone.trim();
+  if (clean.length <= 4) return '****';
+  const start = clean.slice(0, Math.min(4, Math.floor(clean.length / 3)));
+  const end = clean.slice(-Math.min(3, Math.floor(clean.length / 3)));
+  const middle = '*'.repeat(Math.max(3, clean.length - start.length - end.length));
+  return `${start}${middle}${end}`;
+}
+
+export function maskPersonName(name: string): string {
+  const clean = name.trim();
+  if (!clean) return 'Kontak Darurat';
+  if (clean.length <= 2) return clean.charAt(0) + '*';
+  return `${clean.charAt(0)}***${clean.charAt(clean.length - 1)}`;
+}
 
 export const crisisClassifierSchema = z.object({
   text: z.string().min(1).max(1000),
@@ -180,7 +184,8 @@ router.post(
       sosDispatchHistory.set(userId, userHistory);
       await DistributedStateService.recordSosDispatch(userId, 180);
 
-      const maskedRecipient = decryptedName ? `${decryptedName.charAt(0)}***` : 'Emergency Contact';
+      const maskedPhone = maskPhoneNumber(decryptedPhone);
+      const maskedName = maskPersonName(decryptedName);
       safeLog(`[SOS DISPATCH SECURED] ID: ${dispatchId} | User: ${userId} | Status: ${gatewayResult.status}`);
       await serverDb.logAudit(
         'SOS_DISPATCH_TRIGGER',
@@ -193,10 +198,10 @@ router.post(
 
       if (gatewayResult.status === 'delivered') {
         responseStatus = 'SENT';
-        statusMessage = `Sinyal SOS darurat terkirim via SMS/WhatsApp ke ${decryptedName} (${decryptedPhone}).`;
+        statusMessage = `Sinyal SOS darurat terkirim via SMS/WhatsApp ke ${maskedName} (${maskedPhone}).`;
       } else if (gatewayResult.status === 'mock_mode' || gatewayResult.status === 'not_configured') {
         responseStatus = 'SIMULATED';
-        statusMessage = `Mode Simulasi: Gateway SMS produksi belum dikonfigurasi. Sinyal SOS dicatat secara internal pada server (${decryptedName}: ${decryptedPhone}). Untuk bantuan nyata, hubungi nomor hotline 119 / LISA.`;
+        statusMessage = `Mode Simulasi: Gateway SMS produksi belum dikonfigurasi. Sinyal SOS dicatat secara internal pada server (${maskedName}: ${maskedPhone}). Untuk bantuan nyata, hubungi nomor hotline 119 / LISA.`;
       } else {
         responseStatus = 'FAILED';
         statusMessage = `Pengiriman sinyal SOS gagal (${gatewayResult.error || 'kesalahan gateway'}). Segera hubungi hotline darurat 119 atau LISA.`;
@@ -208,8 +213,8 @@ router.post(
         status: responseStatus,
         rawGatewayStatus: gatewayResult.status,
         timestamp,
-        recipientName: decryptedName,
-        recipientPhone: decryptedPhone,
+        recipientName: maskedName,
+        recipientPhone: maskedPhone,
         hasUserConsent: true,
         message: statusMessage
       });

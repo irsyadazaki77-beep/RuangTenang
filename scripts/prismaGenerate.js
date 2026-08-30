@@ -2,16 +2,13 @@ import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
-const isProd = process.env.NODE_ENV === 'production' && !process.env.VITEST;
 const dbUrl = (process.env.DATABASE_URL || '').trim();
-const rawProvider = (
-  process.env.DB_PROVIDER ||
-  (dbUrl.startsWith('postgres') ? 'postgresql' :
-   dbUrl.startsWith('file:') || dbUrl.startsWith('sqlite:') ? 'sqlite' :
-   (isProd ? 'postgresql' : 'sqlite'))
-).toLowerCase().trim();
+const hasPostgresUrl = dbUrl.startsWith('postgresql://') || dbUrl.startsWith('postgres://');
+const explicitProvider = (process.env.DB_PROVIDER || '').toLowerCase().trim();
 
-const isPostgres = rawProvider === 'postgresql' || rawProvider === 'postgres';
+// Use PostgreSQL ONLY if a valid postgres URL is present or explicitly configured with valid connection string
+const isPostgres = hasPostgresUrl || (explicitProvider === 'postgresql' && hasPostgresUrl);
+const rawProvider = isPostgres ? 'postgresql' : 'sqlite';
 const schemaPath = isPostgres
   ? 'prisma/schema.postgres.prisma'
   : 'prisma/schema.sqlite.prisma';
@@ -25,8 +22,8 @@ try {
   process.exit(1);
 }
 
-// Auto-initialize SQLite database and synchronize schema if absent in development/test
-if (!isPostgres && !isProd) {
+// Auto-initialize SQLite database and synchronize schema if absent
+if (!isPostgres) {
   const dbPath = path.resolve(process.cwd(), 'prisma', 'ruangtenang_sqlite.db');
   if (!fs.existsSync(dbPath)) {
     console.log('[PRISMA INIT] SQLite database not detected. Auto-creating database and synchronizing schema...');

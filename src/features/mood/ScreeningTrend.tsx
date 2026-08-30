@@ -39,16 +39,24 @@ export const ScreeningTrend: React.FC<ScreeningTrendProps> = ({
 }) => {
   const [chartType, setChartType] = useState<'line' | 'bar'>('line');
 
-  // Calculate Deltas (Recent vs Previous)
+  // Calculate Deltas (Recent [0] vs Previous [1])
   let phqDelta = 0;
   let gadDelta = 0;
   
   if (screenHistory.length >= 2) {
-    const recent = screenHistory[screenHistory.length - 1];
-    const previous = screenHistory[screenHistory.length - 2];
+    const recent = screenHistory[0];
+    const previous = screenHistory[1];
     phqDelta = recent.phq9 - previous.phq9;
     gadDelta = recent.gad7 - previous.gad7;
   }
+
+  // Reverse history so time progresses chronologically from left to right on the graph
+  const chronologicalHistory = React.useMemo(() => [...screenHistory].reverse(), [screenHistory]);
+
+  const oldestScreening = screenHistory.length > 0 ? screenHistory[screenHistory.length - 1] : null;
+  const newestScreening = screenHistory.length > 0 ? screenHistory[0] : null;
+  const hasImproved = !!(oldestScreening && newestScreening && screenHistory.length > 1 && newestScreening.phq9 < oldestScreening.phq9);
+  const scoreDiff = hasImproved && oldestScreening && newestScreening ? (oldestScreening.phq9 - newestScreening.phq9) : 0;
 
   const renderDelta = (delta: number, isLowerBetter: boolean = true) => {
     if (delta === 0) return (
@@ -176,8 +184,8 @@ export const ScreeningTrend: React.FC<ScreeningTrendProps> = ({
 
             {/* SVG Graph Drawing */}
             <svg className="w-full h-full absolute inset-0 z-10" viewBox="0 0 500 200" preserveAspectRatio="none">
-              {screenHistory.length > 1 && (() => {
-                const pointsCount = screenHistory.length;
+              {chronologicalHistory.length > 1 && (() => {
+                const pointsCount = chronologicalHistory.length;
                 const getX = (i: number) => 40 + i * (420 / (pointsCount - 1));
                 const getPhqY = (score: number) => 170 - (score / 27) * 130;
                 const getGadY = (score: number) => 170 - (score / 21) * 130;
@@ -185,7 +193,7 @@ export const ScreeningTrend: React.FC<ScreeningTrendProps> = ({
                 let phqPath = '';
                 let gadPath = '';
 
-                screenHistory.forEach((item, idx) => {
+                chronologicalHistory.forEach((item, idx) => {
                   const x = getX(idx);
                   const py = getPhqY(item.phq9);
                   const gy = getGadY(item.gad7);
@@ -222,7 +230,7 @@ export const ScreeningTrend: React.FC<ScreeningTrendProps> = ({
                     <path d={gadPath} fill="none" stroke="#f59e0b" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
 
                     {/* Coordinate Circles */}
-                    {screenHistory.map((item, idx) => {
+                    {chronologicalHistory.map((item, idx) => {
                       const x = getX(idx);
                       const py = getPhqY(item.phq9);
                       const gy = getGadY(item.gad7);
@@ -249,7 +257,7 @@ export const ScreeningTrend: React.FC<ScreeningTrendProps> = ({
 
             {/* X Axis Labels */}
             <div className="absolute bottom-0 left-0 right-0 flex justify-between px-6 sm:px-11 text-[9px] sm:text-xs text-slate-600 font-mono">
-              {screenHistory.map((item) => (
+              {chronologicalHistory.map((item) => (
                 <div key={item.id} className="text-center">
                   <span className="block text-white font-medium">{item.date.split(' ')[0]} {item.date.split(' ')[1]}</span>
                   <span className="text-[9px] text-slate-600 hidden sm:block truncate max-w-[70px] mt-0.5">{item.label}</span>
@@ -267,7 +275,7 @@ export const ScreeningTrend: React.FC<ScreeningTrendProps> = ({
             </div>
 
             <div className="relative h-full flex items-end justify-between px-3 sm:px-14 z-10 pt-4 pb-8">
-              {screenHistory.map((item) => {
+              {chronologicalHistory.map((item) => {
                 const phqHeight = Math.min(100, (item.phq9 / 27) * 100);
                 const gadHeight = Math.min(100, (item.gad7 / 21) * 100);
 
@@ -379,8 +387,8 @@ export const ScreeningTrend: React.FC<ScreeningTrendProps> = ({
         <div>
            <h4 className="text-sm font-semibold text-teal-900 mb-1">Milestone Pemulihan Emosional</h4>
            <p className="text-xs text-teal-800/80 leading-relaxed">
-             {screenHistory.length > 1 && screenHistory[screenHistory.length - 1].phq9 < screenHistory[0].phq9
-               ? `Luar Biasa! Terdapat penurunan skor depresi sebesar ${screenHistory[0].phq9 - screenHistory[screenHistory.length - 1].phq9} poin dibandingkan tes awal Anda. Tetap pertahankan rutinitas self-care dan konseling.`
+             {hasImproved
+               ? `Luar Biasa! Terdapat penurunan skor depresi sebesar ${scoreDiff} poin dibandingkan tes awal Anda. Tetap pertahankan rutinitas self-care dan konseling.`
                : moodLogs.length > 5 
                ? 'Konsistensi Anda dalam melacak mood sangat baik. Pemahaman diri adalah langkah pertama menuju ketahanan emosional.'
                : 'Perjalanan pemulihan Anda baru dimulai. Rutin melakukan check-in harian akan membantu mengidentifikasi pola pemicu stres.'

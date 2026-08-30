@@ -126,6 +126,7 @@ export const RescheduleModal: React.FC<RescheduleModalProps> = ({
             <input
               type="date"
               required
+              min={new Date().toISOString().split('T')[0]}
               value={rescheduleDate}
               onChange={(e) => setRescheduleDate(e.target.value)}
               className="w-full bg-white border border-slate-300 rounded-lg px-4 py-2.5 text-slate-800 focus:outline-none focus:border-slate-800"
