@@ -63,6 +63,27 @@ export function getLocalFallbackResponse(userMessage: string = '', chatMode = 'T
   }
 
   // 5. Context-based response generation based on mental health topic matches
+
+  // Cognitive Reframing / Reflection / Thought Restructuring (e.g., Quick Prompt: "Bantu saya merefleksikan dan menyusun ulang sudut pandang pikiran saya...")
+  if (cleanMsg.includes('refleksi') || cleanMsg.includes('sudut pandang') || cleanMsg.includes('menyusun ulang') || cleanMsg.includes('restrukturisasi') || cleanMsg.includes('reframing') || cleanMsg.includes('pola pikir') || cleanMsg.includes('perspektif') || cleanMsg.includes('urai') || cleanMsg.includes('benang kusut')) {
+    return {
+      text: `Mari kita urai benang kusut di pikiranmu bersama-sama dengan tenang yaa 🌿✨. Mengubah cara kita memandang situasi (*restrukturisasi kognitif*) adalah langkah yang sangat ampuh untuk menemukan kedamaian pikiran 🤍.\n\nCoba kita gunakan **3 Langkah Refleksi Diri** ini:\n\n1. 💭 **Identifikasi Pikiran Otomatis**: Tuliskan 1 kalimat pikiran yang paling membebanimu saat ini (misal: *"Saya takut tidak cukup baik"* atau *"Saya merasa sangat kewalahan"*).\n2. 🔍 **Uji Bukti Realita**: Apakah pikiran ini 100% fakta absolut, ataukah ada sudut pandang lain yang lebih adil dan penuh kasih pada dirimu?\n3. 🌸 **Susun Sudut Pandang Baru (Reframing)**: Ubah kalimat itu menjadi pernyataan yang ramah & realistis (misal: *"Saya sedang belajar dan berproses, wajar jika ini butuh waktu"*).\n\nBoleh ceritakan 1 pikiran yang sedang paling mengganggu pikiranmu saat ini? Aku siap mendengarkan dan membantumu merangkainya ulang secara lembut 🫂☕`
+    };
+  }
+
+  // Daily Storytelling / Emotion Journaling (e.g., Quick Prompt: "Saya ingin menceritakan apa yang saya alami dan rasakan hari ini...")
+  if (cleanMsg.includes('menceritakan apa') || cleanMsg.includes('cerita hari ini') || cleanMsg.includes('apa yang saya alami') || cleanMsg.includes('pengalaman hari ini') || cleanMsg.includes('curhat hari ini') || cleanMsg.includes('hal yang membebani')) {
+    return {
+      text: `Aku di sini, siap menyimak seluruh ceritamu dengan penuh perhatian dan kasih sayang ☕🌿. Tidak perlu terburu-buru dan tidak perlu ditahan, keluarkan saja apa yang terasa mengganjal di hatimu 🤍.\n\nPercakapan kita terjaga secara privat dan aman 🔐. Untuk membantumu mulai bercerita, coba jawab salah satu pertanyaan ini yaa:\n- 🌸 Apa momen atau kejadian hari ini yang paling menguras energimu?\n- 💭 Perasaan apa yang paling dominan kamu rasakan sekarang?\n\nTuliskan apa saja yang terlintas, aku akan selalu mendampingimu 🫂✨`
+    };
+  }
+
+  // Guided Breathing & Relaxation (e.g., Quick Prompt: "Tolong pandu saya latihan pernapasan santai...")
+  if (cleanMsg.includes('latihan pernapasan') || cleanMsg.includes('pandu saya') || cleanMsg.includes('relaksasi napas') || cleanMsg.includes('4-7-8') || cleanMsg.includes('pernapasan santai') || cleanMsg.includes('meredakan ketegangan')) {
+    return {
+      text: `Mari kita ambil jeda sejenak untuk melonggarkan ketegangan tubuh dan pikiranmu melalui **Teknik Pernapasan 4-7-8** yang menenangkan 🌿✨.\n\nSilakan duduk dengan rileks, tegakkan bahumu perlahan, lalu ikuti langkah berikut:\n\n1. 🌬️ **Tarik napas** lembut lewat hidung selama **4 detik** (rasakan udara segar memenuhi dadamu)...\n2. 🌸 **Tahan napasmu** selama **7 detik** (biarkan sensasi tenang menyebar ke seluruh tubuh)...\n3. 💨 **Hembuskan napas** perlahan melalui mulut selama **8 detik** (lepaskan semua beban dan kecemasan)...\n\nUlangi siklus ini 3 hingga 4 kali yaa ☕. Bagaimana rasanya? Apakah tubuhmu mulai merasa sedikit lebih ringan? 🤍`
+    };
+  }
   
   // Overthinking / Anxiety / Worry / Panic
   if (cleanMsg.includes('overthinking') || cleanMsg.includes('cemas') || cleanMsg.includes('khawatir') || cleanMsg.includes('panik') || cleanMsg.includes('deg-degan') || cleanMsg.includes('gelisah') || cleanMsg.includes('tidak bisa tidur') || cleanMsg.includes('insomnia')) {
@@ -112,7 +133,15 @@ export function getLocalFallbackResponse(userMessage: string = '', chatMode = 'T
     };
   }
 
-  // Default "Teman Cerita" / "Seimbang" Response
+  // 7. Context-Aware Dynamic Fallback Response (for any user message)
+  if (userMessage && userMessage.trim().length > 0) {
+    const userPreview = userMessage.length > 50 ? userMessage.substring(0, 50) + '...' : userMessage;
+    return {
+      text: `Terima kasih sudah memberanikan diri untuk bercerita denganku di RuangTenang 🤍. Mengenai *"...${userPreview}"*, aku sangat mengerti bahwa hal ini tentu memengaruhi perasaan dan ketenangan pikiranmu 🌿.\n\nSetiap perasaan dan pemikiran yang kamu alami sangat valid dan diterima di sini tanpa penghakiman. Di RuangTenang, privasi ceritamu senantiasa terjaga secara rahasia dan aman 🔐.\n\nBolehkah kamu ceritakan sedikit lebih dalam, apa hal utama yang paling kamu butuhkan atau rasakan saat ini? Aku siap mendampingimu mengurai ini perlahan-lahan 🫂✨`
+    };
+  }
+
+  // Fallback default
   return {
     text: `Aku di sini mendengarkan dan merangkulmu dengan hangat, kawan 🫂🤍. Wajar sekali jika kamu merasa lelah atau berat menanggung perasaan ini sendirian... Terima kasih yaa sudah memberanikan diri untuk berbagi cerita denganku di RuangTenang 🤗.\n\nJangan takut bercerita yaa, semua ceritamu terjaga secara aman dan privat sesuai kebijakan privasi kami 🔐, serta tidak akan pernah dihakimi. Tumpahkan saja apa yang ada di hatimu, aku siap menyimak dengan penuh kasih sayang 🌿✨`
   };

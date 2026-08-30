@@ -1,8 +1,6 @@
 import { useEscapeKey } from '../../hooks/useEscapeKey';
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  ShieldCheck,
-  HelpCircle,
   ArrowRight,
   CheckCircle2,
   RotateCcw,
@@ -10,39 +8,37 @@ import {
   HeartPulse,
   Download,
   History,
-  Calendar,
-  ShieldAlert,
-  PhoneCall,
-  Send,
   AlertTriangle,
-  Phone,
-  MessageSquare,
-  UserCheck
+  AlertCircle,
+  Clock,
 } from 'lucide-react';
 import { ScreeningResult } from '../../types';
-import { getPhq9Severity, getGad7Severity, CLINICAL_DISCLAIMER } from '../../lib/clinicalScoring';
-import { EMERGENCY_CONTACTS } from '../../lib/emergencyResources';
+import { getPhq9Severity, getGad7Severity } from '../../lib/clinicalScoring';
 import { apiClient } from '../../lib/apiClient';
 import { PHQ9_QUESTIONS, GAD7_QUESTIONS, OPTIONS } from './constants';
 import { SafetyCheckModal } from './components/SafetyCheckModal';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface ScreeningModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onComplete: (result: ScreeningResult) => void;
+  onComplete?: (result: ScreeningResult) => void;
+  onPersisted?: (result: ScreeningResult) => void;
   isPageMode?: boolean;
 }
-
-const SCREENING_HISTORY_KEY = 'ruangtenang_screening_history';
-const EMERGENCY_CONTACT_KEY = 'ruangtenang_emergency_contact';
 
 export const ScreeningModal: React.FC<ScreeningModalProps> = ({
   isOpen,
   onClose,
   onComplete,
+  onPersisted,
   isPageMode = false
 }) => {
+  const { user } = useAuth();
   useEscapeKey(onClose, !isPageMode && isOpen);
+
+  const [persistenceStatus, setPersistenceStatus] = useState<'idle' | 'saving' | 'persisted' | 'guest' | 'failed'>('idle');
+  const [persistenceError, setPersistenceError] = useState<string | null>(null);
 
   
   const modalRef = useRef<HTMLDivElement>(null);
@@ -158,7 +154,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
   const isPhq9Complete = phq9Answers.every(v => v !== -1);
   const isGad7Complete = gad7Answers.every(v => v !== -1);
 
-  const calculateResults = () => {
+  const calculateResults = async () => {
     const phqScore = phq9Answers.reduce((a, b) => a + b, 0);
     const gadScore = gad7Answers.reduce((a, b) => a + b, 0);
     const item9Score = phq9Answers[8] !== -1 ? phq9Answers[8] : 0;
@@ -200,25 +196,48 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
     const newHistory = [res, ...historyList];
     setHistoryList(newHistory);
     
-
     setFinalResult(res);
-    onComplete(res);
     setStep('result');
 
-    if (navigator.onLine) {
-      // Post to persistent backend database with separate risk indicators
-      apiClient.post('/api/v1/screenings', {
+    // Signal local calculation completion
+    onComplete?.(res);
+
+    const isGuest = !user || user.role === 'guest';
+    if (isGuest) {
+      setPersistenceStatus('guest');
+      return;
+    }
+
+    if (!navigator.onLine) {
+      setPersistenceStatus('failed');
+      setPersistenceError('Perangkat sedang luring. Hasil belum tersimpan ke profil Anda.');
+      return;
+    }
+
+    setPersistenceStatus('saving');
+    try {
+      const response = await apiClient.post<any>('/api/v1/screenings', {
         phq9Score: phqScore,
         gad7Score: gadScore,
         phq9Severity: getPhqSeverity(phqScore),
         gad7Severity: getGadSeverity(gadScore),
         item9Score,
         hasSelfHarmRisk,
-        riskIndicators,
-        userId: 'mahasiswa-anon'
-      }).catch(err => {
-        console.warn('Backend screening save failed:', err);
+        riskIndicators
       });
+
+      if (response && (response.success || response.data?.id || (response as any).id)) {
+        setPersistenceStatus('persisted');
+        onPersisted?.(res);
+      } else {
+        setPersistenceStatus('failed');
+        setPersistenceError(response?.error || 'Gagal menyimpan hasil skrining ke akun.');
+      }
+    } catch (err: any) {
+      console.warn('Backend screening save failed:', err);
+      setPersistenceStatus('failed');
+      const errorMessage = err instanceof Error ? err.message : 'Koneksi gagal saat menyimpan ke server.';
+      setPersistenceError(errorMessage);
     }
   };
 
@@ -482,8 +501,34 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
           <div className="space-y-6">
             <div className="text-center py-4 bg-slate-50 rounded-xl">
               <h3 className="text-xl font-sans font-semibold tracking-tight text-slate-900">Hasil Analisis Skrining Kesehatan Mental</h3>
-              <p className="text-sm text-slate-600 mt-1">Hasil ini telah diintegrasikan dengan sesi AI Konselormu.</p>
+              <p className="text-sm text-slate-600 mt-1">Hasil evaluasi mandiri awal untuk PHQ-9 & GAD-7.</p>
             </div>
+
+            {/* Persistence Status Banner */}
+            {persistenceStatus === 'saving' && (
+              <div className="p-3.5 bg-blue-50/80 border border-blue-200 rounded-xl text-xs text-blue-800 flex items-center gap-2">
+                <Clock className="w-4 h-4 text-blue-600 animate-spin shrink-0" />
+                <span>Sedang menyimpan hasil skrining ke profil Anda...</span>
+              </div>
+            )}
+            {persistenceStatus === 'persisted' && (
+              <div className="p-3.5 bg-emerald-50/80 border border-emerald-200 rounded-xl text-xs text-emerald-800 flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>Hasil skrining berhasil tersimpan ke profil Anda.</span>
+              </div>
+            )}
+            {persistenceStatus === 'guest' && (
+              <div className="p-3.5 bg-amber-50/80 border border-amber-200 rounded-xl text-xs text-amber-800 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>Mode Tamu: Hasil ini tersimpan sementara pada sesi ini. Masuk atau daftar akun untuk menyimpan riwayat skrining ke profil Anda.</span>
+              </div>
+            )}
+            {persistenceStatus === 'failed' && (
+              <div className="p-3.5 bg-rose-50/80 border border-rose-200 rounded-xl text-xs text-rose-800 flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>{persistenceError || 'Hasil skrining belum tersimpan ke akun Anda.'}</span>
+              </div>
+            )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
               {/* PHQ-9 Card */}

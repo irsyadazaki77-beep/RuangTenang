@@ -55,7 +55,7 @@ export function validateStartupEnvironment(): {
 
   const warnings: string[] = [];
   const env = process.env.NODE_ENV || 'development';
-  const port = process.env.PORT || '3000';
+  const port = '3000';
   const jwtSecret = process.env.JWT_SECRET;
   const geminiKey = process.env.GEMINI_API_KEY;
 

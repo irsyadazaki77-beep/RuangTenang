@@ -25,30 +25,36 @@ export class DistributedLockService {
     // 1. Try Redis Atomic Lock (SET key val NX EX)
     const redisAcquired = await redisService.setnx(redisLockKey, holder, ttlSeconds);
     if (redisAcquired) {
-      // Async sync to DB for monitoring/fallback
-      prisma.distributedLock.upsert({
-        where: { id: lockId },
-        create: {
-          id: lockId,
-          holder,
-          acquiredAt: now,
-          expiresAt,
-        },
-        update: {
-          holder,
-          acquiredAt: now,
-          expiresAt,
-        },
-      }).catch(() => {});
+      // Sync to DB for monitoring/fallback
+      try {
+        await prisma.distributedLock.upsert({
+          where: { id: lockId },
+          create: {
+            id: lockId,
+            holder,
+            acquiredAt: now,
+            expiresAt,
+          },
+          update: {
+            holder,
+            acquiredAt: now,
+            expiresAt,
+          },
+        });
+      } catch (_) {}
 
       return true;
     }
 
     // Check if Redis lock exists and belongs to holder (renew lock)
     const existingHolder = await redisService.get<string>(redisLockKey);
-    if (existingHolder === holder) {
-      await redisService.set(redisLockKey, holder, ttlSeconds);
-      return true;
+    if (existingHolder) {
+      if (existingHolder === holder) {
+        await redisService.set(redisLockKey, holder, ttlSeconds);
+        return true;
+      }
+      // Redis lock is actively held by another instance
+      return false;
     }
 
     // 2. Fallback to Database Lock if Redis did not acquire

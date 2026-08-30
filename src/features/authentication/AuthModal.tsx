@@ -321,26 +321,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
   };
 
-  let authLogout: (() => Promise<void>) | null = null;
-  try {
-    const auth = useAuth();
-    authLogout = auth.logout;
-  } catch {
-    authLogout = null;
-  }
+  const { logout: authLogout } = useAuth();
 
   const handleLogoutClick = async () => {
     setLoading(true);
     try {
-      if (authLogout) {
-        await authLogout();
-      } else {
-        await apiClient.post<any>('/api/v1/auth/logout', {});
-      }
+      await authLogout();
       onLogout();
       onClose();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Logout error:', err);
+      setErrorMsg(err.message || 'Logout gagal.');
     } finally {
       setLoading(false);
     }
@@ -367,13 +358,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <p className="text-xs text-teal-400 font-medium">Autentikasi & Keamanan Sesi</p>
               </div>
             </div>
-            <button
-              onClick={onClose}
-              className="text-slate-300 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition-colors"
-              aria-label="Tutup Sesi"
-            >
-              <X className="w-5 h-5" />
-            </button>
+            {currentSession && (
+              <button
+                onClick={onClose}
+                className="text-slate-300 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition-colors"
+                aria-label="Tutup Sesi"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            )}
           </div>
         </div>
 

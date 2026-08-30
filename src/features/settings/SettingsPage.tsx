@@ -1,6 +1,6 @@
 import { useEscapeKey } from '../../hooks/useEscapeKey';
-import React, { useState, useEffect } from 'react';
-import { Settings, User,
+import React, { useState, useEffect, useCallback } from 'react';
+import { User,
   HeartPulse,
   ShieldCheck,
   CreditCard,
@@ -33,7 +33,7 @@ interface SettingsPageProps {
   onOpenLegal: () => void;
   onOpenPrivacyCenter?: () => void;
   onOpenAuth?: () => void;
-  screeningResult?: ScreeningResult | null;
+  // screeningResult removed
 }
 
 const DEFAULT_GUEST_USER: UserSession = {
@@ -48,11 +48,11 @@ const DEFAULT_GUEST_USER: UserSession = {
 export const SettingsPage: React.FC<SettingsPageProps> = ({
   userSession,
   setUserSession,
-  onOpenScreening,
+   
   onOpenLegal,
   onOpenPrivacyCenter,
   onOpenAuth,
-  screeningResult
+   
 }) => {
   const safeUser = userSession || DEFAULT_GUEST_USER;
   const [loading, setLoading] = useState(false);
@@ -80,7 +80,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
     setTimeout(() => setSuccessMsg(null), 3000);
   };
 
-  const [usageStats, setUsageStats] = useState<{
+  const [, setUsageStats] = useState<{
     dailyLimit: number;
     dailyUsage: number;
     userTier: string;
@@ -95,7 +95,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   const [confirmPassword, setConfirmPassword] = useState('');
   const [secMsg, setSecMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  const fetchSecurityData = async () => {
+  const fetchSecurityData = useCallback(async () => {
     if (safeUser.id === 'guest') return;
     try {
       // Active Sessions
@@ -112,11 +112,11 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
     } catch (err) {
       console.error('Error loading security info:', err);
     }
-  };
+  }, [safeUser.id]);
 
   useEffect(() => {
     fetchSecurityData();
-  }, [safeUser.id]);
+  }, [fetchSecurityData]);
 
   const handleRevokeSession = async (sessionId: string) => {
     try {
@@ -178,7 +178,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
     }
   };
 
-  const fetchUsage = async () => {
+  const fetchUsage = useCallback(async () => {
     try {
       const res = await apiClient.get<any>(`/api/v1/user/usage-stats?userId=${safeUser.id}&userTier=${safeUser.tier}`);
       if (res.success && res.data) {
@@ -192,11 +192,11 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
     } catch (err) {
       console.error('Error fetching usage stats in settings:', err);
     }
-  };
+  }, [safeUser.id, safeUser.tier]);
 
   useEffect(() => {
     fetchUsage();
-  }, [safeUser.tier]);
+  }, [fetchUsage]);
 
   const handleSelectTier = async (selectedTier: SubscriptionTier, password?: string) => {
     if (selectedTier === 'Developer' && !password) {

@@ -55,7 +55,7 @@ try {
     if (duration > 200) {
       console.warn(`[SLOW_QUERY_WARN] (${duration}ms): ${sanitizedQuery} | params: ${sanitizedParams}`);
     } else if (process.env.NODE_ENV === 'development') {
-      console.log(`[PRISMA_QUERY] (${duration}ms): ${sanitizedQuery}`);
+      // console.log(`[PRISMA_QUERY] (${duration}ms): ${sanitizedQuery}`);
     }
   });
 } catch {

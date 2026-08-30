@@ -4,8 +4,10 @@ import { ChatStreamingClient, StreamPayload } from '../services/chatStreamingCli
 export function useChatStreaming() {
   const [isTyping, setIsTyping] = useState(false);
   const clientRef = useRef<ChatStreamingClient | null>(null);
+  const currentTokenRef = useRef(0);
 
   const abortStream = useCallback(() => {
+    currentTokenRef.current++;
     if (clientRef.current) {
       clientRef.current.abort();
       clientRef.current = null;
@@ -15,6 +17,7 @@ export function useChatStreaming() {
 
   useEffect(() => {
     return () => {
+      currentTokenRef.current++;
       if (clientRef.current) {
         clientRef.current.abort();
         clientRef.current = null;
@@ -34,33 +37,57 @@ export function useChatStreaming() {
       onChatCreated?: (chatId: string) => void;
     }
   ) => {
+    const token = ++currentTokenRef.current;
+
     // Ensure previous active stream is aborted
     if (clientRef.current) {
       clientRef.current.abort();
     }
-    clientRef.current = new ChatStreamingClient();
+    const client = new ChatStreamingClient();
+    clientRef.current = client;
     setIsTyping(true);
 
     try {
-      await clientRef.current.stream(payload, {
-        ...callbacks,
+      await client.stream(payload, {
         onMessageStart: (msgId) => {
+          if (token !== currentTokenRef.current) return;
           setIsTyping(true);
           callbacks.onMessageStart(msgId);
         },
+        onChunk: (text) => {
+          if (token !== currentTokenRef.current) return;
+          callbacks.onChunk(text);
+        },
+        onPluginSwitch: (pluginName) => {
+          if (token !== currentTokenRef.current) return;
+          callbacks.onPluginSwitch(pluginName);
+        },
         onMessageComplete: (text) => {
+          if (token !== currentTokenRef.current) return;
           setIsTyping(false);
           callbacks.onMessageComplete(text);
         },
         onError: (err) => {
+          if (token !== currentTokenRef.current) return;
           setIsTyping(false);
           callbacks.onError(err);
+        },
+        onFollowUps: (followUps) => {
+          if (token !== currentTokenRef.current) return;
+          callbacks.onFollowUps?.(followUps);
+        },
+        onChatCreated: (chatId) => {
+          if (token !== currentTokenRef.current) return;
+          callbacks.onChatCreated?.(chatId);
         }
       });
     } finally {
-      setIsTyping(false);
+      if (token === currentTokenRef.current) {
+        setIsTyping(false);
+      }
     }
   }, []);
 
   return { isTyping, streamMessage, abortStream };
 }
+

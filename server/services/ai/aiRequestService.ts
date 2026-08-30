@@ -169,8 +169,8 @@ export const aiRequestService = {
        });
        return { stream, modelUsed: primaryModel };
     } catch (err: any) {
-      console.warn(`[AI_REQUEST_SERVICE] Stream primary failed (${err.message}), attempting fallback.`);
-      const fallbackModel = 'gemini-2.5-flash';
+      console.error(`[AI_REQUEST_SERVICE] Stream primary failed:`, err);
+      const fallbackModel = 'gemini-3.1-flash-lite';
       try {
          const stream = await aiClient.models.generateContentStream({
              model: fallbackModel,
@@ -185,6 +185,7 @@ export const aiRequestService = {
          });
          return { stream, modelUsed: fallbackModel };
       } catch (fallbackErr: any) {
+         console.error(`[AI_REQUEST_SERVICE] Stream fallback failed:`, fallbackErr);
          clearTimeout(timeoutId);
          throw new Error('AI_STREAM_FAILED');
       }

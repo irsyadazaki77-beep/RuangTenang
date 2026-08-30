@@ -402,7 +402,7 @@ router.post('/chat/stream', optionalAuth, aiAbuseLimiter, async (req: Request, r
     });
 
     if (pipelineRes.isConsentFallback) {
-      return runLocalFallback();
+      console.log('Consent fallback triggered!'); return runLocalFallback();
     }
 
     if (pipelineRes.isPromptInjectionOverride) {
@@ -441,7 +441,7 @@ router.post('/chat/stream', optionalAuth, aiAbuseLimiter, async (req: Request, r
     responseStream = pipelineRes.stream;
 
     if (!responseStream) {
-      await runLocalFallback();
+      console.log('Stream falsy fallback triggered!'); await runLocalFallback();
       return;
     }
 

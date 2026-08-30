@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Settings, Search, MessageSquare, MoreHorizontal, Edit2, Trash2, Pin, Archive, X, Heart, Stethoscope, Users, AlertCircle, LogOut, Sun, Moon } from 'lucide-react';
+import { Plus, Settings, Search, MessageSquare, MoreHorizontal, Edit2, Trash2, Pin, Archive, X, Heart, Stethoscope, Users, AlertCircle, LogOut, LogIn, Sun, Moon } from 'lucide-react';
 import { isToday, isYesterday } from 'date-fns';
 import { Chat } from '../../features/chat/types';
 import { motion, AnimatePresence } from 'motion/react';
@@ -21,10 +21,12 @@ interface SidebarProps {
   onToggleArchive: (id: string) => void;
   onLogout?: () => void;
   onOpenSettings?: () => void;
+  onOpenAuth?: () => void;
+  user?: any;
   isLoading?: boolean;
 }
 
-export default function Sidebar({ isOpen, setIsOpen, onNewChat, chats, currentChatId, onSelectChat, onDeleteChat, onUpdateTitle, onTogglePin, onToggleArchive, onLogout, onOpenSettings, isLoading }: SidebarProps) {
+export default function Sidebar({ isOpen, setIsOpen, onNewChat, chats, currentChatId, onSelectChat, onDeleteChat, onUpdateTitle, onTogglePin, onToggleArchive, onLogout, onOpenSettings, onOpenAuth, user, isLoading }: SidebarProps) {
   const navigate = useNavigate();
   const { actualTheme, toggleTheme } = useTheme();
   const [search, setSearch] = useState('');
@@ -335,13 +337,22 @@ export default function Sidebar({ isOpen, setIsOpen, onNewChat, chats, currentCh
           >
             <Settings className="w-4 h-4 text-slate-500 dark:text-slate-400 shrink-0" /> Pengaturan & Profil
           </button>
-          {onLogout && (
+          {user?.role === 'guest' ? (
             <button 
-              onClick={onLogout} 
-              className="w-full flex items-center gap-2.5 px-3 min-h-[38px] rounded-xl hover:bg-rose-50 dark:hover:bg-rose-950/40 text-rose-600 dark:text-rose-400 font-medium transition-colors cursor-pointer"
+              onClick={() => { onOpenAuth?.(); setIsOpen(false); }} 
+              className="w-full flex items-center gap-2.5 px-3 min-h-[38px] rounded-xl hover:bg-teal-50 dark:hover:bg-teal-950/40 text-teal-600 dark:text-teal-400 font-semibold transition-colors cursor-pointer border border-teal-200/50 dark:border-teal-800/50"
             >
-              <LogOut className="w-4 h-4 shrink-0" /> Keluar
+              <LogIn className="w-4 h-4 shrink-0" /> Masuk / Registrasi
             </button>
+          ) : (
+            onLogout && (
+              <button 
+                onClick={onLogout} 
+                className="w-full flex items-center gap-2.5 px-3 min-h-[38px] rounded-xl hover:bg-rose-50 dark:hover:bg-rose-950/40 text-rose-600 dark:text-rose-400 font-medium transition-colors cursor-pointer"
+              >
+                <LogOut className="w-4 h-4 shrink-0" /> Keluar
+              </button>
+            )
           )}
           <div className="pt-1.5 px-2 flex items-center justify-between text-[10px] text-slate-400 dark:text-slate-500 font-medium">
             <div className="flex items-center gap-1.5">

@@ -90,8 +90,20 @@ router.post(
         prisma.userConsents.findUnique({ where: { userId } })
       ]);
 
+      // Verify server-stored contact exists
+      if (!serverContact || !serverContact.phone) {
+        return res.status(400).json({
+          success: false,
+          dispatchId,
+          status: 'CONTACT_MISSING',
+          timestamp,
+          hasUserConsent: Boolean(serverConsent?.consentForEmergencySOS),
+          message: 'Kontak darurat belum tersimpan pada server. Silakan daftarkan kontak darurat pada menu Pengaturan.'
+        });
+      }
+
       // Verify active server consent
-      const hasContactConsent = Boolean(serverContact?.hasConsent);
+      const hasContactConsent = Boolean(serverContact.hasConsent);
       const hasUserConsentSetting = Boolean(serverConsent?.consentForEmergencySOS);
       const isConsentActive = hasContactConsent && hasUserConsentSetting;
 
@@ -108,18 +120,6 @@ router.post(
           timestamp,
           hasUserConsent: false,
           message: 'Persetujuan (consent) SOS darurat belum diaktifkan dalam akun Anda di server. Silakan beri persetujuan pada menu Pengaturan sebelum menggunakan pemicu SOS.'
-        });
-      }
-
-      // Verify server-stored contact exists
-      if (!serverContact || !serverContact.phone) {
-        return res.status(400).json({
-          success: false,
-          dispatchId,
-          status: 'CONTACT_MISSING',
-          timestamp,
-          hasUserConsent: true,
-          message: 'Kontak darurat belum tersimpan pada server. Silakan daftarkan kontak darurat pada menu Pengaturan.'
         });
       }
 

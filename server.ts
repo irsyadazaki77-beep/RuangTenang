@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
@@ -44,11 +45,7 @@ async function startServer() {
 
   const app = express();
   
-  const rawPort = process.env.PORT || '3000';
-  const PORT = parseInt(rawPort, 10);
-  if (isNaN(PORT) || PORT < 1 || PORT > 65535) {
-    throw new Error(`FATAL: Invalid port configured: ${rawPort}`);
-  }
+  const PORT = 3000;
 
   // Trust proxy setup for Cloud Run / reverse proxies
   const trustProxySetting = process.env.TRUST_PROXY || '1';
@@ -203,6 +200,56 @@ async function startServer() {
       },
       environment: process.env.NODE_ENV || 'development'
     });
+  });
+
+  app.get(['/api/v1/verify-gemini', '/api/verify-gemini'], async (req, res) => {
+    try {
+      const aiClient = getAiClient();
+      
+      if (!aiClient) {
+        console.error('[GEMINI_VERIFICATION] API Key is missing or GenAI client failed to initialize.');
+        return res.status(500).json({
+          status: 'error',
+          message: 'GEMINI_API_KEY is not configured or client failed to initialize.',
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      console.log('[GEMINI_VERIFICATION] Attempting to connect to Gemini API...');
+      const startTime = Date.now();
+      
+      // Send a very minimal prompt to verify connectivity and authentication
+      const response = await aiClient.models.generateContent({
+        model: 'gemini-3.1-flash-lite',
+        contents: 'Ping! Balas dengan "Pong" saja.',
+      });
+      
+      const latency = Date.now() - startTime;
+      const textResponse = response.text || '';
+      
+      console.log(`[GEMINI_VERIFICATION] Success. Latency: ${latency}ms. Response: ${textResponse}`);
+      
+      res.status(200).json({
+        status: 'success',
+        latencyMs: latency,
+        modelUsed: 'gemini-3.1-flash-lite',
+        response: textResponse,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error: any) {
+      console.error('[GEMINI_VERIFICATION] Gemini API connection failed:', error);
+      
+      res.status(502).json({
+        status: 'error',
+        message: 'Failed to verify Gemini API connection.',
+        errorDetails: {
+          name: error.name,
+          message: error.message,
+          status: error.status,
+        },
+        timestamp: new Date().toISOString()
+      });
+    }
   });
 
   // 5. Mount Modular API Routers

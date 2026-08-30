@@ -66,7 +66,7 @@ export const aiModelRouter = {
         throw err;
       }
       console.warn(`[AI_MODEL_ROUTER] Switching to fallback from ${primaryModel}`);
-      const fallbackModel = 'gemini-2.5-flash';
+      const fallbackModel = 'gemini-3.1-flash-lite';
       try {
          const response = await this.executeWithTimeoutAndRetry(fallbackModel, generateFn, { timeoutMs: 10000, retries: 1 });
          return { response, modelUsed: fallbackModel };

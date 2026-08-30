@@ -155,12 +155,12 @@ export default function App() {
   const handleLogout = async () => {
     try {
       await logout();
-    } catch (err) {
-      console.error('Logout error:', err);
-    } finally {
       setChats([]);
       navigate('/');
       showToast('Anda telah keluar dari akun.', 'info');
+    } catch (err: any) {
+      console.error('Logout error:', err);
+      showToast(err.message || 'Logout gagal.', 'error');
     }
   };
 
@@ -232,6 +232,8 @@ export default function App() {
         onToggleArchive={handleToggleArchive}
         onLogout={handleLogout}
         onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenAuth={() => setIsAuthModalOpen(true)}
+        user={user}
         isLoading={isLoadingChats}
       />
       
@@ -293,10 +295,12 @@ export default function App() {
                     <ScreeningModal
                       isOpen={true}
                       isPageMode={true}
-                      onClose={() => navigate('/')}
+                      onClose={() => navigate('/mood')}
                       onComplete={() => {
+                        // Local completion
+                      }}
+                      onPersisted={() => {
                         showToast('Skrining berhasil disimpan ke profil Anda.', 'success');
-                        navigate('/mood');
                       }}
                     />
                   </WorkspaceLayout>

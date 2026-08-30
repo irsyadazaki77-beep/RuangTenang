@@ -22,10 +22,12 @@ export interface StreamPayload {
 }
 
 export class ChatStreamingClient {
+  private activeToken = 0;
   private abortController: AbortController | null = null;
   private state: StreamState = 'idle';
 
-  private changeState(state: StreamState, callback?: (s: StreamState) => void) {
+  private changeState(token: number, state: StreamState, callback?: (s: StreamState) => void) {
+    if (token !== this.activeToken) return;
     this.state = state;
     if (callback) {
       try {
@@ -37,23 +39,38 @@ export class ChatStreamingClient {
   }
 
   async stream(payload: StreamPayload, callbacks: StreamCallbacks): Promise<void> {
-    this.abortController = new AbortController();
+    const token = ++this.activeToken;
+
+    if (this.abortController) {
+      try {
+        this.abortController.abort();
+      } catch (e) {}
+    }
+
+    const abortController = new AbortController();
+    this.abortController = abortController;
     const assistantMsgId = `msg_${Date.now() + 1}`;
     let currentText = '';
     let pluginName = '';
 
-    this.changeState('connecting', callbacks.onStateChange);
+    this.changeState(token, 'connecting', callbacks.onStateChange);
 
     try {
-      if (callbacks.onMessageStart) callbacks.onMessageStart(assistantMsgId);
+      if (token === this.activeToken && callbacks.onMessageStart) {
+        callbacks.onMessageStart(assistantMsgId);
+      }
 
       const response = await fetch('/api/v1/chat/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify(payload),
-        signal: this.abortController.signal
+        signal: abortController.signal
       });
+
+      if (token !== this.activeToken) {
+        return;
+      }
 
       if (!response.ok) {
         let errorMsg = `HTTP Kesalahan ${response.status}`;
@@ -66,7 +83,7 @@ export class ChatStreamingClient {
 
       if (!response.body) throw new Error("No response body");
 
-      this.changeState('streaming', callbacks.onStateChange);
+      this.changeState(token, 'streaming', callbacks.onStateChange);
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
@@ -76,6 +93,11 @@ export class ChatStreamingClient {
 
       const readLoop = async () => {
         while (!done) {
+          if (token !== this.activeToken) {
+            try { reader.cancel(); } catch (e) {}
+            return;
+          }
+
           let timerId: any = null;
           const timeoutPromise = new Promise<never>((_, reject) => {
             timerId = setTimeout(() => reject(new Error('Read timeout')), READ_TIMEOUT_MS);
@@ -89,6 +111,11 @@ export class ChatStreamingClient {
 
             if (timerId) clearTimeout(timerId);
 
+            if (token !== this.activeToken) {
+              try { reader.cancel(); } catch (e) {}
+              return;
+            }
+
             const { value, done: readerDone } = result;
             done = readerDone;
 
@@ -99,6 +126,8 @@ export class ChatStreamingClient {
               buffer = lines.pop() || '';
 
               for (const line of lines) {
+                if (token !== this.activeToken) return;
+
                 const trimmed = line.trim();
                 if (!trimmed) continue;
 
@@ -115,15 +144,23 @@ export class ChatStreamingClient {
                       throw new Error(parsed.text || parsed.error || 'Gagal memproses respons');
                     } else if (parsed.tool_call || (parsed.type === 'plugin' && parsed.plugin)) {
                       pluginName = parsed.tool_call || parsed.plugin;
-                      if (callbacks.onPluginSwitch) callbacks.onPluginSwitch(pluginName);
+                      if (token === this.activeToken && callbacks.onPluginSwitch) {
+                        callbacks.onPluginSwitch(pluginName);
+                      }
                     } else if (parsed.text || (parsed.type === 'text' && parsed.content)) {
                       const content = parsed.text || parsed.content;
                       currentText += content;
-                      if (callbacks.onChunk) callbacks.onChunk(content);
+                      if (token === this.activeToken && callbacks.onChunk) {
+                        callbacks.onChunk(content);
+                      }
                     } else if (parsed.type === 'followup' && parsed.questions) {
-                      if (callbacks.onFollowUps) callbacks.onFollowUps(parsed.questions);
+                      if (token === this.activeToken && callbacks.onFollowUps) {
+                        callbacks.onFollowUps(parsed.questions);
+                      }
                     } else if (parsed.chatId) {
-                      if (callbacks.onChatCreated) callbacks.onChatCreated(parsed.chatId);
+                      if (token === this.activeToken && callbacks.onChatCreated) {
+                        callbacks.onChatCreated(parsed.chatId);
+                      }
                     }
                   } catch (e: any) {
                     if (e.message !== 'Unexpected end of JSON input' && e.message !== 'Unexpected token' && !e.message.includes('JSON')) {
@@ -140,7 +177,7 @@ export class ChatStreamingClient {
         }
 
         // Flush remaining buffer
-        if (buffer.trim()) {
+        if (token === this.activeToken && buffer.trim()) {
           const trimmed = buffer.trim();
           if (trimmed.startsWith('data: ')) {
             const dataStr = trimmed.substring(6).trim();
@@ -150,7 +187,9 @@ export class ChatStreamingClient {
                 if (parsed.text || (parsed.type === 'text' && parsed.content)) {
                   const content = parsed.text || parsed.content;
                   currentText += content;
-                  if (callbacks.onChunk) callbacks.onChunk(content);
+                  if (token === this.activeToken && callbacks.onChunk) {
+                    callbacks.onChunk(content);
+                  }
                 }
               } catch (e) {}
             }
@@ -160,36 +199,50 @@ export class ChatStreamingClient {
 
       await readLoop();
       
-      this.changeState('completed', callbacks.onStateChange);
+      if (token !== this.activeToken) {
+        return;
+      }
+
+      this.changeState(token, 'completed', callbacks.onStateChange);
 
       if (!pluginName && callbacks.onMessageComplete) {
         callbacks.onMessageComplete(currentText);
       }
 
     } catch (err: any) {
+      if (token !== this.activeToken) {
+        return;
+      }
+
       if (err.name === 'AbortError' || (err.message && err.message.toLowerCase().includes('abort'))) {
         console.log('Stream aborted by client');
-        this.changeState('aborted', callbacks.onStateChange);
+        this.changeState(token, 'aborted', callbacks.onStateChange);
         // Only trigger completion with existing text if there was content streamed
         if (callbacks.onMessageComplete && currentText.trim()) {
           callbacks.onMessageComplete(currentText);
         }
       } else {
         console.error('Streaming client error:', err);
-        this.changeState('failed', callbacks.onStateChange);
+        this.changeState(token, 'failed', callbacks.onStateChange);
         if (callbacks.onError) {
           callbacks.onError(err.message || 'Koneksi terputus.');
         }
       }
     } finally {
-      this.abortController = null;
+      if (this.abortController === abortController) {
+        this.abortController = null;
+      }
     }
   }
 
   abort() {
+    this.activeToken++;
     if (this.abortController) {
-      this.abortController.abort();
+      try {
+        this.abortController.abort();
+      } catch (e) {}
       this.abortController = null;
     }
+    this.state = 'aborted';
   }
 }

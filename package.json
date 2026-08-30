@@ -12,10 +12,10 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --max-warnings 1000",
-    "test": "vitest run --fileParallelism=false",
-    "test:unit": "vitest run src/__tests__ --fileParallelism=false",
-    "test:integration": "npm run db:push:sqlite && vitest run server/__tests__ --fileParallelism=false",
-    "test:security": "vitest run server/__tests__/security.test.ts server/__tests__/authSecurity.test.ts server/__tests__/corsSecurity.test.ts server/__tests__/csrfSecurity.test.ts server/__tests__/rateLimitSecurity.test.ts server/__tests__/sessionSecurity.test.ts --fileParallelism=false",
+    "test": "npm run db:push:sqlite && vitest run --fileParallelism=false",
+    "test:unit": "vitest run src/__tests__/unit server/__tests__/unit --fileParallelism=false",
+    "test:integration": "npm run db:push:sqlite && vitest run src/__tests__/integration server/__tests__/integration --fileParallelism=false",
+    "test:security": "vitest run src/__tests__/security server/__tests__/security --fileParallelism=false",
     "test:e2e": "playwright test",
     "db:backup": "tsx server/scripts/backupTool.ts",
     "db:generate:sqlite": "npx prisma generate --schema prisma/schema.sqlite.prisma",
@@ -58,7 +58,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@eslint/js": "^10.0.1",
+    "@eslint/js": "^9.21.0",
     "@playwright/test": "^1.62.1",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^7.0.1",
@@ -77,10 +77,10 @@
     "@types/supertest": "^7.2.1",
     "autoprefixer": "^10.4.21",
     "esbuild": "^0.25.0",
-    "eslint": "^10.9.0",
+    "eslint": "^9.21.0",
     "eslint-plugin-jsx-a11y": "^6.10.2",
-    "eslint-plugin-react": "^7.37.5",
-    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react": "^7.37.4",
+    "eslint-plugin-react-hooks": "^5.1.0",
     "exceljs": "^4.4.0",
     "glob": "^13.0.6",
     "jsdom": "^30.0.1",
@@ -92,7 +92,7 @@
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
-    "typescript-eslint": "^8.67.0",
+    "typescript-eslint": "^8.25.0",
     "vitest": "^4.1.11"
   }
 }

@@ -259,7 +259,8 @@ Jika kamu merasa aman untuk sementara waktu, kamu dapat menggunakan tombol **SOS
     const rawInput = input.input || input.pluginResult || '';
 
     // 1. Validate Consent from DB truth
-    const hasAiConsent = userId ? await consentService.canUseAI(userId) : false;
+    // If userId is undefined (guest), consentService.canUseAI handles it and returns true.
+    const hasAiConsent = await consentService.canUseAI(userId || 'guest');
     if (!hasAiConsent) {
       console.warn(`[SAFETY_PIPELINE] User ${userId || 'guest'} has not provided AI processing consent. Running safe fallback.`);
       const localFallback = await import('../../routes/fallbackAi.js').then(m => 

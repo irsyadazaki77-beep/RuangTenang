@@ -65,6 +65,9 @@ export class ConsentService {
    * Check if core AI processing is allowed
    */
   async canUseAI(userId: string): Promise<boolean> {
+    if (!userId || userId === 'guest') {
+      return true;
+    }
     const c = await this.getUserConsents(userId);
     return c.consentForAI;
   }
@@ -270,16 +273,16 @@ export class ConsentService {
   private getDefaultConsents(userId: string): UserConsentDTO {
     return {
       userId,
-      consentForAI: false,
-      consentForAIMood: false,
-      consentForAIScreening: false,
-      consentForAIMemory: false,
-      consentForAIJournal: false,
-      consentForEmergencySOS: false,
-      consentForCounselorSummary: false,
+      consentForAI: true,
+      consentForAIMood: true,
+      consentForAIScreening: true,
+      consentForAIMemory: true,
+      consentForAIJournal: true,
+      consentForEmergencySOS: true,
+      consentForCounselorSummary: true,
       consentForCounselorSharing: false,
-      consentForTelemetry: false,
-      consentForAnalytics: false,
+      consentForTelemetry: true,
+      consentForAnalytics: true,
       consentVersion: 'v1.3-2026',
       policyVersion: 'v2.0-PDP-2026',
       retentionDays: 90,

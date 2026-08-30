@@ -2,8 +2,14 @@ import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
-const isProd = process.env.NODE_ENV === 'production';
-const rawProvider = (process.env.DB_PROVIDER || (isProd ? 'postgresql' : 'sqlite')).toLowerCase().trim();
+const isProd = process.env.NODE_ENV === 'production' && !process.env.VITEST;
+const dbUrl = (process.env.DATABASE_URL || '').trim();
+const rawProvider = (
+  process.env.DB_PROVIDER ||
+  (dbUrl.startsWith('postgres') ? 'postgresql' :
+   dbUrl.startsWith('file:') || dbUrl.startsWith('sqlite:') ? 'sqlite' :
+   (isProd ? 'postgresql' : 'sqlite'))
+).toLowerCase().trim();
 
 const isPostgres = rawProvider === 'postgresql' || rawProvider === 'postgres';
 const schemaPath = isPostgres

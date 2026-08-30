@@ -16,6 +16,7 @@ import { EMERGENCY_CONTACTS, VERIFIED_HELPLINES } from '../lib/emergencyResource
 import { EmergencyContact, SOSDispatchStatus } from "../types";
 import { useToast } from "./Toast";
 import { apiClient } from "../lib/apiClient";
+import { useAuth } from "../contexts/AuthContext";
 
 interface EmergencyCenterProps {
   onTriggerSOS?: () => void;
@@ -26,6 +27,7 @@ const EMERGENCY_CONTACT_KEY = "ruangtenang_emergency_contact";
 export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
   onTriggerSOS,
 }) => {
+  const { user } = useAuth();
   const { showToast } = useToast();
   const [sosStatus, setSosStatus] = useState<SOSDispatchStatus | null>(null);
   const [isTriggeringSOS, setIsTriggeringSOS] = useState(false);
@@ -84,10 +86,16 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
 
     try {
       const response = await apiClient.post<any>("/api/v1/sos/trigger", {
-        emergencyContact: contact,
+        emergencyContact: contact ? {
+          name: contact.name,
+          phone: contact.phone,
+          relationship: contact.relationship,
+        } : undefined,
         hasUserConsent: contact.hasConsent,
-        studentName: "Mahasiswa",
-        location: "Kampus / Kos",
+        studentName: user?.name || "Mahasiswa",
+        location: {
+          address: "Kampus / Kos",
+        },
       });
 
       if (!response.success && !response.data) throw new Error(response.error || "Network response failure");

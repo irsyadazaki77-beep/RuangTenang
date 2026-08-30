@@ -71,12 +71,13 @@ export default function MainChat({ user, setChats, onOpenSidebar, onOpenSettings
   const [showScrollBottom, setShowScrollBottom] = useState(false);
 
   useEffect(() => {
+    abortStream();
     if (chatId && chatId !== loadedChatIdRef.current) {
       fetchMessages();
     } else if (!chatId) {
       setMessages([]);
     }
-  }, [chatId, fetchMessages, setMessages]);
+  }, [chatId, fetchMessages, setMessages, abortStream]);
 
   const handleLoadMore = () => {
     if (nextCursor && !isLoadingMore) {
@@ -207,7 +208,7 @@ export default function MainChat({ user, setChats, onOpenSidebar, onOpenSettings
 
     try {
       if (chatId) {
-        const res = await apiClient.post(`/api/v1/chat/${chatId}/truncate`, { messageId: msgId });
+        const res = await apiClient.post<{summary?: string}>(`/api/v1/chat/${chatId}/truncate`, { messageId: msgId });
         if (!res.success) {
           throw new Error(res.error || res.message || 'Gagal memotong riwayat pesan');
         }
@@ -308,7 +309,7 @@ export default function MainChat({ user, setChats, onOpenSidebar, onOpenSettings
       setIsSummarizing(true);
       try {
         if (chatId) {
-          const res = await apiClient.post(`/api/v1/chat/summary`, { chatId });
+          const res = await apiClient.post<{summary?: string}>(`/api/v1/chat/summary`, { chatId });
           if (res.success && res.data?.summary) {
             showToast(`Ringkasan: ${res.data.summary}`, 'success');
           } else {
