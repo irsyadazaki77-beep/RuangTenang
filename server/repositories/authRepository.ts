@@ -296,8 +296,8 @@ export const authRepository = {
       return false;
     }
 
-    const hashedInput = crypto.createHash('sha256').update(code).digest('hex');
-    if (user.emailVerificationCode === code || user.emailVerificationCode === hashedInput) {
+    const hashedInput = crypto.createHash('sha256').update(code.trim()).digest('hex');
+    if (user.emailVerificationCode === hashedInput) {
       await prisma.users.update({
         where: { id: userId },
         data: {
@@ -323,7 +323,7 @@ export const authRepository = {
     });
     if (!user) return false;
 
-    const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+    const hashedToken = crypto.createHash('sha256').update(token.trim()).digest('hex');
     await prisma.users.update({
       where: { id: user.id },
       data: {
@@ -343,14 +343,9 @@ export const authRepository = {
     token: string,
     newPasswordHash: string,
   ): Promise<{ success: boolean; message: string; userId?: string }> {
-    const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+    const hashedToken = crypto.createHash('sha256').update(token.trim()).digest('hex');
     const user = await prisma.users.findFirst({
-      where: {
-        OR: [
-          { passwordResetToken: token },
-          { passwordResetToken: hashedToken }
-        ]
-      },
+      where: { passwordResetToken: hashedToken },
     });
 
     if (!user) {
@@ -423,12 +418,7 @@ export const authRepository = {
     const hashedToken = crypto.createHash('sha256').update(trimmedToken).digest('hex');
 
     const user = await prisma.users.findFirst({
-      where: {
-        OR: [
-          { mfaToken: hashedToken },
-          { mfaToken: trimmedToken } // Legacy plaintext support
-        ]
-      },
+      where: { mfaToken: hashedToken },
     });
     if (!user) return null;
 
@@ -444,16 +434,12 @@ export const authRepository = {
 
     if (!user.mfaCode) return null;
 
-    // Constant-time timing-safe comparison
+    // Constant-time timing-safe comparison on hash
     const hashedInput = crypto.createHash('sha256').update(trimmedCode).digest('hex');
     let isMatch = false;
 
     if (user.mfaCode.length === 64) {
       const inputBuf = Buffer.from(hashedInput, 'utf-8');
-      const storedBuf = Buffer.from(user.mfaCode, 'utf-8');
-      isMatch = inputBuf.length === storedBuf.length && crypto.timingSafeEqual(inputBuf, storedBuf);
-    } else {
-      const inputBuf = Buffer.from(trimmedCode, 'utf-8');
       const storedBuf = Buffer.from(user.mfaCode, 'utf-8');
       isMatch = inputBuf.length === storedBuf.length && crypto.timingSafeEqual(inputBuf, storedBuf);
     }

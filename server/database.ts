@@ -319,11 +319,12 @@ export interface CounselorRecord {
 
 // Ensure database is ready and initialized on fresh clone
 export async function ensureDatabaseReady(): Promise<void> {
-  const isProd = process.env.NODE_ENV === 'production';
-  const rawProvider = (process.env.DB_PROVIDER || (isProd ? 'postgresql' : 'sqlite')).toLowerCase().trim();
-  const isPostgres = rawProvider === 'postgresql' || rawProvider === 'postgres';
+  const dbUrl = (process.env.DATABASE_URL || '').trim();
+  const explicitProvider = (process.env.DB_PROVIDER || '').toLowerCase().trim();
+  const hasPostgresUrl = dbUrl.startsWith('postgresql://') || dbUrl.startsWith('postgres://');
+  const isPostgres = hasPostgresUrl || (explicitProvider === 'postgresql' && hasPostgresUrl);
 
-  if (!isPostgres && !isProd) {
+  if (!isPostgres) {
     try {
       await prisma.users.count();
     } catch {

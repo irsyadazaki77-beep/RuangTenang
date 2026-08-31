@@ -5,6 +5,7 @@ import { isToday, isYesterday } from 'date-fns';
 import { Chat } from '../../features/chat/types';
 import { motion, AnimatePresence } from 'motion/react';
 import { AiQuotaBadge } from '../AiQuotaBadge';
+import { VersionBadge } from '../changelog/VersionBadge';
 import { apiClient } from '../../lib/apiClient';
 import { useTheme } from '../../contexts/ThemeContext';
 
@@ -22,11 +23,12 @@ interface SidebarProps {
   onLogout?: () => void;
   onOpenSettings?: () => void;
   onOpenAuth?: () => void;
+  onOpenChangelog?: () => void;
   user?: any;
   isLoading?: boolean;
 }
 
-export default function Sidebar({ isOpen, setIsOpen, onNewChat, chats, currentChatId, onSelectChat, onDeleteChat, onUpdateTitle, onTogglePin, onToggleArchive, onLogout, onOpenSettings, onOpenAuth, user, isLoading }: SidebarProps) {
+export default function Sidebar({ isOpen, setIsOpen, onNewChat, chats, currentChatId, onSelectChat, onDeleteChat, onUpdateTitle, onTogglePin, onToggleArchive, onLogout, onOpenSettings, onOpenAuth, onOpenChangelog, user, isLoading }: SidebarProps) {
   const navigate = useNavigate();
   const { actualTheme, toggleTheme } = useTheme();
   const [search, setSearch] = useState('');
@@ -354,10 +356,21 @@ export default function Sidebar({ isOpen, setIsOpen, onNewChat, chats, currentCh
               </button>
             )
           )}
-          <div className="pt-1.5 px-2 flex items-center justify-between text-[10px] text-slate-400 dark:text-slate-500 font-medium">
+          {/* Version & Changelog Trigger Badge */}
+          <div className="pt-1">
+            <VersionBadge 
+              variant="sidebar" 
+              onClick={() => {
+                onOpenChangelog?.();
+                setIsOpen(false);
+              }} 
+            />
+          </div>
+
+          <div className="pt-1 px-2 flex items-center justify-between text-[10px] text-slate-400 dark:text-slate-500 font-medium">
             <div className="flex items-center gap-1.5">
               <img src="/favicon.svg" alt="" className="w-3.5 h-3.5 object-contain" />
-              <span>RuangTenang V2</span>
+              <span>RuangTenang Web App</span>
             </div>
             <span className="text-teal-600/80 dark:text-teal-400/80 font-mono text-[9.5px]">Protected</span>
           </div>

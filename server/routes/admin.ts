@@ -1,8 +1,11 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
-import { serverDb } from '../database.js';
+import crypto from 'crypto';
+import { prisma, serverDb } from '../database.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
+import { adminDeletionLimiter } from '../middleware/rateLimiters.js';
+import { retentionService } from '../services/retentionService.js';
 import { sanitizeInput } from '../security.js';
 import { provisionUserSchema } from '../validators/authSchemas.js';
 import { authService } from '../services/authService.js';
@@ -294,5 +297,130 @@ router.get('/reports/excel', requireAuth, requireRole(['admin']), async (req: Re
     res.status(500).json({ error: 'Gagal membuat laporan Excel.' });
   }
 });
+
+// Admin Delete User with Step-Up Authentication
+router.post(
+  ['/users/:userId/erase', '/admin/users/:userId/erase'],
+  requireAuth,
+  requireRole(['admin']),
+  adminDeletionLimiter,
+  async (req: Request, res: Response) => {
+    try {
+      const targetUserId = req.params.userId;
+      if (!targetUserId) {
+        return res.status(400).json({ success: false, code: 'TARGET_USER_REQUIRED', error: 'ID user target wajib ditentukan.' });
+      }
+
+      // Check target exists
+      const targetUser = await prisma.users.findUnique({ where: { id: targetUserId } });
+      if (!targetUser) {
+        return res.status(404).json({ success: false, code: 'USER_NOT_FOUND', error: 'User target tidak ditemukan.' });
+      }
+
+      // Prevent accidental self erasure via admin endpoint
+      if (targetUserId === req.user!.userId) {
+        return res.status(400).json({
+          success: false,
+          code: 'SELF_ERASURE_NOT_ALLOWED',
+          error: 'Gunakan endpoint penghapusan akun mandiri (/api/v1/privacy/erasure-request) untuk menghapus akun Anda sendiri.'
+        });
+      }
+
+      const { confirmText, reason, password, mfaCode } = req.body;
+
+      if (confirmText !== 'HAPUS DATA USER') {
+        return res.status(400).json({
+          success: false,
+          code: 'CONFIRMATION_REQUIRED',
+          error: 'Penghapusan data user oleh admin memerlukan konfirmasi frasa "HAPUS DATA USER".'
+        });
+      }
+
+      if (!reason || typeof reason !== 'string' || !reason.trim()) {
+        return res.status(400).json({
+          success: false,
+          code: 'REASON_REQUIRED',
+          error: 'Alasan penghapusan data user wajib diisi.'
+        });
+      }
+
+      if (!password) {
+        return res.status(400).json({
+          success: false,
+          code: 'PASSWORD_REQUIRED',
+          error: 'Kata sandi admin diperlukan untuk mengonfirmasi tindakan destruktif ini.'
+        });
+      }
+
+      // Step-up verification: Verify acting admin's password
+      const adminUser = await prisma.users.findUnique({ where: { id: req.user!.userId } });
+      if (!adminUser) {
+        return res.status(404).json({ success: false, error: 'Akun admin tidak ditemukan.' });
+      }
+
+      const isPasswordValid = await bcrypt.compare(password, adminUser.passwordHash);
+      if (!isPasswordValid) {
+        return res.status(401).json({
+          success: false,
+          code: 'INVALID_PASSWORD',
+          error: 'Kata sandi admin tidak sesuai.'
+        });
+      }
+
+      // Check MFA if enabled on admin account
+      if (adminUser.mfaEnabled) {
+        let isRecentAuth = false;
+        if (req.user!.sessionId) {
+          const session = await prisma.userSession.findUnique({ where: { id: req.user!.sessionId } });
+          if (session) {
+            const ageMins = (new Date().getTime() - session.createdAt.getTime()) / (1000 * 60);
+            if (ageMins <= 5) {
+              isRecentAuth = true;
+            }
+          }
+        }
+
+        if (!isRecentAuth) {
+          if (!mfaCode) {
+            return res.status(403).json({
+              success: false,
+              code: 'MFA_REQUIRED',
+              error: 'Akun admin Anda mengaktifkan MFA. Mohon masukkan kode MFA atau lakukan verifikasi terbaru.'
+            });
+          }
+
+          const hashedCode = crypto.createHash('sha256').update(String(mfaCode).trim()).digest('hex');
+          const isValidMfa = adminUser.mfaCode === hashedCode && adminUser.mfaExpires && adminUser.mfaExpires > new Date();
+          if (!isValidMfa) {
+            return res.status(401).json({
+              success: false,
+              code: 'INVALID_MFA_CODE',
+              error: 'Kode MFA tidak valid atau sudah kedaluwarsa.'
+            });
+          }
+        }
+      }
+
+      // Erase user data
+      const result = await retentionService.eraseUserData(targetUserId, req.user!.name);
+
+      // Audit log (MUST NOT contain password or MFA code!)
+      await serverDb.logAudit(
+        'ADMIN_DELETE_USER',
+        `Admin ID ${req.user!.userId} (${req.user!.email}) menghapus user ID ${targetUserId}. Alasan: ${sanitizeInput(reason, 200)}. Request ID: ${req.requestId || 'n/a'}`,
+        'admin'
+      );
+
+      res.json({
+        success: true,
+        message: `Data user ID ${targetUserId} telah berhasil dihapus secara permanen oleh admin.`,
+        ...result
+      });
+    } catch (err: any) {
+      console.error('Error in admin delete user:', err);
+      res.status(500).json({ error: 'Gagal memproses penghapusan user oleh admin.' });
+    }
+  }
+);
 
 export default router;

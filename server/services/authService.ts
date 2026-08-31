@@ -46,8 +46,8 @@ export const authService = {
     };
 
     res.cookie(COOKIE_NAME, token, cookieOptions);
-    // Legacy fallback cookie for existing client compat
-    res.cookie('token', token, cookieOptions);
+    // Deprecated legacy 'token' cookie: stop issuing new ones, clear legacy if present
+    res.clearCookie('token', { httpOnly: true, secure: isProduction, sameSite: 'lax' as const, path: '/' });
   },
 
   /**

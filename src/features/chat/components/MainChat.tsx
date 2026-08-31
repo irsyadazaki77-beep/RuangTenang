@@ -27,9 +27,10 @@ interface MainChatProps {
   setChats: React.Dispatch<React.SetStateAction<Chat[]>>;
   onOpenSidebar?: () => void;
   onOpenSettings?: () => void;
+  onOpenChangelog?: () => void;
 }
 
-export default function MainChat({ user, setChats, onOpenSidebar, onOpenSettings }: MainChatProps) {
+export default function MainChat({ user, setChats, onOpenSidebar, onOpenSettings, onOpenChangelog }: MainChatProps) {
   const { chatId } = useParams();
   const navigate = useNavigate();
   const { showToast } = useToast();
@@ -398,6 +399,7 @@ export default function MainChat({ user, setChats, onOpenSidebar, onOpenSettings
         user={user}
         onOpenSidebar={onOpenSidebar}
         onOpenSettings={onOpenSettings}
+        onOpenChangelog={onOpenChangelog}
         chatMode={chatMode}
         setChatMode={setChatMode}
         responseStyle={responseStyle}

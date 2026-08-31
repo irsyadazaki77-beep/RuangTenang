@@ -2,6 +2,7 @@ import React from 'react';
 import { Menu, Settings, Moon, Sun, Sparkles, Ghost, Shield } from 'lucide-react';
 import { ChatMode, ResponseStyle } from '../types';
 import { AiQuotaBadge } from '../../../components/AiQuotaBadge';
+import { VersionBadge } from '../../../components/changelog/VersionBadge';
 import { AVAILABLE_AI_MODELS } from '../../../lib/aiModels';
 import { UserSession } from '../../../types';
 import { useTheme } from '../../../contexts/ThemeContext';
@@ -10,6 +11,7 @@ interface ChatHeaderProps {
   user: UserSession | null;
   onOpenSidebar?: () => void;
   onOpenSettings?: () => void;
+  onOpenChangelog?: () => void;
   chatMode: ChatMode;
   setChatMode: (mode: ChatMode) => void;
   responseStyle: ResponseStyle;
@@ -23,7 +25,7 @@ interface ChatHeaderProps {
 }
 
 export function ChatHeader({
-  user, onOpenSidebar, onOpenSettings,
+  user, onOpenSidebar, onOpenSettings, onOpenChangelog,
   chatMode, setChatMode, responseStyle, setResponseStyle,
   aiModel, setAiModel, isTemporary, setIsTemporary,
   activePlugin, setActivePlugin
@@ -77,8 +79,9 @@ export function ChatHeader({
         </div>
       </div>
       
-      {/* Right side: AI Quota Badge, Theme Toggle, Chat Settings */}
+      {/* Right side: Version Badge, AI Quota Badge, Theme Toggle, Chat Settings */}
       <div className="flex items-center gap-1.5 sm:gap-2 relative shrink-0">
+        <VersionBadge variant="compact" onClick={onOpenChangelog} />
         <AiQuotaBadge userId={user?.id} userTier={user?.tier} variant="compact" onOpenSettings={onOpenSettings} />
         
         {/* Theme Toggle Button */}

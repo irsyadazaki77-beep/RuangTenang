@@ -2,12 +2,14 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Menu, MessageSquare } from 'lucide-react';
 import { motion } from 'motion/react';
+import { VersionBadge } from '../changelog/VersionBadge';
 
 interface WorkspaceLayoutProps {
   title: string;
   subtitle?: string;
   badge?: string;
   onOpenSidebar?: () => void;
+  onOpenChangelog?: () => void;
   children: React.ReactNode;
   headerActions?: React.ReactNode;
 }
@@ -17,6 +19,7 @@ export const WorkspaceLayout: React.FC<WorkspaceLayoutProps> = ({
   subtitle,
   badge,
   onOpenSidebar,
+  onOpenChangelog,
   children,
   headerActions,
 }) => {
@@ -68,6 +71,7 @@ export const WorkspaceLayout: React.FC<WorkspaceLayoutProps> = ({
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
+          <VersionBadge variant="compact" onClick={onOpenChangelog} />
           {headerActions}
           <button
             onClick={() => navigate('/')}

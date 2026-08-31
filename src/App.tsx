@@ -21,6 +21,8 @@ import { Counselor } from './types';
 const AuthModal = lazyWithRetry(() => import('./features/authentication/AuthModal').then(module => ({ default: module.AuthModal })));
 const SettingsPage = lazyWithRetry(() => import('./features/settings/SettingsPage').then(module => ({ default: module.SettingsPage })));
 const CounselorDashboard = lazyWithRetry(() => import('./features/counselors/CounselorDashboard').then(module => ({ default: module.CounselorDashboard })));
+const ChangelogModal = lazyWithRetry(() => import('./components/changelog/ChangelogModal').then(module => ({ default: module.ChangelogModal })));
+import { NewUpdateToast } from './components/changelog/NewUpdateToast';
 
 export default function App() {
   const { user, setUser, loading, isOffline, logout } = useAuth();
@@ -29,6 +31,7 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isLegalDocsOpen, setIsLegalDocsOpen] = useState(false);
+  const [isChangelogOpen, setIsChangelogOpen] = useState(false);
   const [chats, setChats] = useState<Chat[]>([]);
   const [isLoadingChats, setIsLoadingChats] = useState(true);
   const [selectedCounselor, setSelectedCounselor] = useState<Counselor | null>(null);
@@ -233,6 +236,7 @@ export default function App() {
         onLogout={handleLogout}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenAuth={() => setIsAuthModalOpen(true)}
+        onOpenChangelog={() => setIsChangelogOpen(true)}
         user={user}
         isLoading={isLoadingChats}
       />
@@ -250,6 +254,7 @@ export default function App() {
                    userSession={user} 
                    setUserSession={(u) => setUser(u)} 
                    onOpenAuth={() => setIsAuthModalOpen(true)} 
+                   onOpenChangelog={() => setIsChangelogOpen(true)}
                    onOpenScreening={() => {
                      setIsSettingsOpen(false);
                      navigate('/screening');
@@ -265,8 +270,8 @@ export default function App() {
         ) : (
           <Suspense fallback={<div className="flex h-full items-center justify-center bg-white dark:bg-slate-950"><div className="w-8 h-8 border-4 border-teal-500 border-t-transparent rounded-full animate-spin"></div></div>}>
             <Routes>
-              <Route path="/" element={<MainChat user={user} setChats={setChats} onOpenSidebar={() => setIsSidebarOpen(true)} onOpenSettings={() => setIsSettingsOpen(true)} />} />
-              <Route path="/c/:chatId" element={<MainChat user={user} setChats={setChats} onOpenSidebar={() => setIsSidebarOpen(true)} onOpenSettings={() => setIsSettingsOpen(true)} />} />
+              <Route path="/" element={<MainChat user={user} setChats={setChats} onOpenSidebar={() => setIsSidebarOpen(true)} onOpenSettings={() => setIsSettingsOpen(true)} onOpenChangelog={() => setIsChangelogOpen(true)} />} />
+              <Route path="/c/:chatId" element={<MainChat user={user} setChats={setChats} onOpenSidebar={() => setIsSidebarOpen(true)} onOpenSettings={() => setIsSettingsOpen(true)} onOpenChangelog={() => setIsChangelogOpen(true)} />} />
               <Route
                 path="/mood"
                 element={
@@ -275,6 +280,7 @@ export default function App() {
                     subtitle="Pantau perkembangan kesehatan mental dan emosi Anda secara berkala"
                     badge="Lokal & Privat"
                     onOpenSidebar={() => setIsSidebarOpen(true)}
+                    onOpenChangelog={() => setIsChangelogOpen(true)}
                   >
                     <UserProgressTracker
                       onOpenScreening={() => navigate('/screening')}
@@ -291,6 +297,7 @@ export default function App() {
                     subtitle="Instrumen skrining awal mandiri. BUKAN alat diagnosis medis."
                     badge="UNVERIFIED"
                     onOpenSidebar={() => setIsSidebarOpen(true)}
+                    onOpenChangelog={() => setIsChangelogOpen(true)}
                   >
                     <ScreeningModal
                       isOpen={true}
@@ -314,6 +321,7 @@ export default function App() {
                     subtitle="Temui konselor atau psikolog berlisensi untuk pendampingan."
                     badge="Terverifikasi"
                     onOpenSidebar={() => setIsSidebarOpen(true)}
+                    onOpenChangelog={() => setIsChangelogOpen(true)}
                   >
                     <div className="max-w-7xl mx-auto flex flex-col xl:flex-row gap-6 p-3 sm:p-6 w-full">
                       <div className="flex-1 xl:w-2/3">
@@ -338,6 +346,7 @@ export default function App() {
                     subtitle="Layanan tanggap cepat, tele-konseling krisis, dan tombol darurat SOS 24 jam"
                     badge="24 Jam"
                     onOpenSidebar={() => setIsSidebarOpen(true)}
+                    onOpenChangelog={() => setIsChangelogOpen(true)}
                   >
                     <div className="max-w-4xl mx-auto p-3 sm:p-6 w-full">
                       <EmergencyCenter onTriggerSOS={() => showToast('Sinyal SOS darurat diaktifkan.', 'info')} />
@@ -375,6 +384,14 @@ export default function App() {
           <LegalDocsModal isOpen={isLegalDocsOpen} onClose={() => setIsLegalDocsOpen(false)} />
         </Suspense>
       )}
+
+      {isChangelogOpen && (
+        <Suspense fallback={null}>
+          <ChangelogModal isOpen={isChangelogOpen} onClose={() => setIsChangelogOpen(false)} />
+        </Suspense>
+      )}
+
+      <NewUpdateToast onOpenChangelog={() => setIsChangelogOpen(true)} />
     </div>
   );
 }

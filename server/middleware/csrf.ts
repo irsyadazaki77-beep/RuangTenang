@@ -70,6 +70,8 @@ export function csrfProtection(req: Request, res: Response, next: NextFunction) 
         if (o.trim()) allowedOrigins.add(o.trim().toLowerCase());
       });
     }
+    allowedOrigins.add('https://ruangtenang.ai.studio');
+    allowedOrigins.add('https://ruangtenang.ui.ac.id');
 
     // Exact host match
     const isSameHost = host && (sourceHost === host.toLowerCase() || sourceHost.split(':')[0] === host.toLowerCase().split(':')[0]);

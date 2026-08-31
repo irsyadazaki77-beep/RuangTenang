@@ -2,6 +2,7 @@ import React from 'react';
 import { Menu, Ghost, ChevronLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { AiQuotaBadge } from '../AiQuotaBadge';
+import { VersionBadge } from '../changelog/VersionBadge';
 
 interface TopbarProps {
   onOpenSidebar?: () => void;
@@ -9,10 +10,11 @@ interface TopbarProps {
   showBackButton?: boolean;
   user?: any;
   onOpenSettings?: () => void;
+  onOpenChangelog?: () => void;
   rightElement?: React.ReactNode;
 }
 
-export function Topbar({ onOpenSidebar, title = 'RuangTenang', showBackButton, user, onOpenSettings, rightElement }: TopbarProps) {
+export function Topbar({ onOpenSidebar, title = 'RuangTenang', showBackButton, user, onOpenSettings, onOpenChangelog, rightElement }: TopbarProps) {
   const navigate = useNavigate();
 
   return (
@@ -54,6 +56,7 @@ export function Topbar({ onOpenSidebar, title = 'RuangTenang', showBackButton, u
       </div>
       
       <div className="flex items-center gap-1.5 sm:gap-2 relative shrink-0">
+        <VersionBadge variant="compact" onClick={onOpenChangelog} />
         <AiQuotaBadge userId={user?.id} userTier={user?.tier} variant="compact" onOpenSettings={onOpenSettings} />
         {rightElement}
       </div>

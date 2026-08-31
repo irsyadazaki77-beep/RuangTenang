@@ -209,90 +209,82 @@ router.delete(['/activity', '/data'], requireAuth, async (req: Request, res: Res
   }
 });
 
-// Erasure Request / Right to be Forgotten (Full Account & Personal Records)
+// Erasure Request / Right to be Forgotten (Self Account & Personal Records)
 router.post(['/erasure-request', '/db/data-erasure'], requireAuth, accountDeletionLimiter, async (req: Request, res: Response) => {
   try {
-    let targetUserId = req.user!.userId;
-    if (req.user!.role === 'admin' && req.body.userId) {
-      targetUserId = req.body.userId;
-    }
+    const targetUserId = req.user!.userId;
 
     // Confirmation check for self-erasure
-    if (targetUserId === req.user!.userId) {
-      const { confirmText, confirmPassword, mfaCode } = req.body;
-      const isConfirmedText = confirmText === 'HAPUS AKUN SAYA' || req.body.confirmDelete === true;
+    const { confirmText, confirmPassword, mfaCode } = req.body;
+    const isConfirmedText = confirmText === 'HAPUS AKUN SAYA' || req.body.confirmDelete === true;
+    
+    if (!isConfirmedText) {
+      return res.status(400).json({
+        success: false,
+        code: 'CONFIRMATION_REQUIRED',
+        error: 'Penghapusan akun memerlukan konfirmasi frasa "HAPUS AKUN SAYA".'
+      });
+    }
+
+    if (!confirmPassword) {
+      return res.status(400).json({
+        success: false,
+        code: 'PASSWORD_REQUIRED',
+        error: 'Penghapusan akun memerlukan konfirmasi kata sandi.'
+      });
+    }
+
+    // We need the raw database user to access sensitive fields like mfaCode and mfaExpires
+    const user = await prisma.users.findUnique({ where: { id: req.user!.userId } });
+    if (!user) {
+       return res.status(404).json({ error: 'User tidak ditemukan.' });
+    }
+
+    const isValid = await bcrypt.compare(confirmPassword, user.passwordHash);
+    if (!isValid) {
+      return res.status(401).json({
+        success: false,
+        code: 'INVALID_PASSWORD',
+        error: 'Kata sandi konfirmasi tidak sesuai.'
+      });
+    }
+
+    if (user.mfaEnabled) {
+      let isRecentAuth = false;
       
-      if (!isConfirmedText) {
-        return res.status(400).json({
-          success: false,
-          code: 'CONFIRMATION_REQUIRED',
-          error: 'Penghapusan akun memerlukan konfirmasi frasa "HAPUS AKUN SAYA".'
-        });
+      if (req.user!.sessionId) {
+         const session = await prisma.userSession.findUnique({ where: { id: req.user!.sessionId } });
+         if (session) {
+            const ageMins = (new Date().getTime() - session.createdAt.getTime()) / (1000 * 60);
+            if (ageMins <= 5) {
+               isRecentAuth = true;
+            }
+         }
       }
 
-      if (!confirmPassword) {
-        return res.status(400).json({
-          success: false,
-          code: 'PASSWORD_REQUIRED',
-          error: 'Penghapusan akun memerlukan konfirmasi kata sandi.'
-        });
-      }
-
-      // We need the raw database user to access sensitive fields like mfaCode and mfaExpires
-      const user = await prisma.users.findUnique({ where: { id: req.user!.userId } });
-      if (!user) {
-         return res.status(404).json({ error: 'User tidak ditemukan.' });
-      }
-
-      const isValid = await bcrypt.compare(confirmPassword, user.passwordHash);
-      if (!isValid) {
-        return res.status(401).json({
-          success: false,
-          code: 'INVALID_PASSWORD',
-          error: 'Kata sandi konfirmasi tidak sesuai.'
-        });
-      }
-
-      if (user.mfaEnabled) {
-        let isRecentAuth = false;
-        
-        if (req.user!.sessionId) {
-           const session = await prisma.userSession.findUnique({ where: { id: req.user!.sessionId } });
-           if (session) {
-              const ageMins = (new Date().getTime() - session.createdAt.getTime()) / (1000 * 60);
-              if (ageMins <= 5) {
-                 isRecentAuth = true;
-              }
-           }
+      if (!isRecentAuth) {
+        if (!mfaCode) {
+           return res.status(403).json({
+             success: false,
+             code: 'MFA_REQUIRED',
+             error: 'Akun Anda mengaktifkan MFA. Mohon masukkan kode MFA atau lakukan verifikasi terbaru (recent authentication).'
+           });
         }
-
-        if (!isRecentAuth) {
-          if (!mfaCode) {
-             return res.status(403).json({
-               success: false,
-               code: 'MFA_REQUIRED',
-               error: 'Akun Anda mengaktifkan MFA. Mohon masukkan kode MFA atau lakukan verifikasi terbaru (recent authentication).'
-             });
-          }
-          
-          const hashedCode = crypto.createHash('sha256').update(mfaCode.trim()).digest('hex');
-          const isValidMfa = user.mfaCode === hashedCode && user.mfaExpires && user.mfaExpires > new Date();
-          if (!isValidMfa) {
-             return res.status(401).json({
-               success: false,
-               code: 'INVALID_MFA_CODE',
-               error: 'Kode MFA tidak valid atau sudah kedaluwarsa.'
-             });
-          }
+        
+        const hashedCode = crypto.createHash('sha256').update(mfaCode.trim()).digest('hex');
+        const isValidMfa = user.mfaCode === hashedCode && user.mfaExpires && user.mfaExpires > new Date();
+        if (!isValidMfa) {
+           return res.status(401).json({
+             success: false,
+             code: 'INVALID_MFA_CODE',
+             error: 'Kode MFA tidak valid atau sudah kedaluwarsa.'
+           });
         }
       }
     }
 
     const result = await retentionService.eraseUserData(targetUserId, req.user!.name);
-
-    if (targetUserId === req.user!.userId) {
-      authService.clearSessionCookie(res);
-    }
+    authService.clearSessionCookie(res);
 
     res.json({
       success: true,

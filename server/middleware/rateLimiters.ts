@@ -108,14 +108,44 @@ export const exportLimiter = rateLimit({
   }
 });
 
-export const accountDeletionLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 mins
-  max: 20, // Increased for tests
+export const diagnosticsLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 min
+  max: process.env.NODE_ENV === 'test' ? 50 : 5, // 5 requests per min in production/dev
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { keyGeneratorIpFallback: false },
+  keyGenerator: (req: any) => req.user?.userId || req.ip || 'unknown',
+  message: {
+    success: false,
+    code: 'DIAGNOSTICS_RATE_LIMIT_EXCEEDED',
+    error: 'Batas penggunaan diagnostik AI tercapai (maks 5 req/menit).'
+  }
+});
+
+export const accountDeletionLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 mins
+  max: process.env.NODE_ENV === 'production' ? 5 : (process.env.NODE_ENV === 'test' ? 100 : 15),
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { keyGeneratorIpFallback: false },
+  keyGenerator: (req: any) => req.user?.userId || req.ip || 'unknown',
   message: {
     success: false,
     code: 'DELETION_RATE_LIMIT_EXCEEDED',
-    error: 'Batas percobaan penghapusan akun tercapai (maks 20x). Silakan coba lagi setelah 15 menit.'
+    error: 'Batas percobaan penghapusan akun tercapai. Silakan coba lagi setelah 15 menit.'
+  }
+});
+
+export const adminDeletionLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 mins
+  max: process.env.NODE_ENV === 'production' ? 5 : (process.env.NODE_ENV === 'test' ? 100 : 10),
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { keyGeneratorIpFallback: false },
+  keyGenerator: (req: any) => req.user?.userId || req.ip || 'unknown',
+  message: {
+    success: false,
+    code: 'ADMIN_DELETION_RATE_LIMIT_EXCEEDED',
+    error: 'Batas percobaan penghapusan akun oleh admin tercapai. Silakan coba lagi setelah 15 menit.'
   }
 });

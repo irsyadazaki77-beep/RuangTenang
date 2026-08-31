@@ -1,7 +1,6 @@
 import { useEscapeKey } from '../../hooks/useEscapeKey';
 import React, { useState, useEffect, useCallback } from 'react';
 import { User,
-  HeartPulse,
   ShieldCheck,
   CreditCard,
   Check,
@@ -9,8 +8,6 @@ import { User,
   Zap,
   RotateCcw,
   ShieldAlert,
-  HelpCircle,
-  Clock,
   UserCheck,
   Terminal,
   KeyRound,
@@ -19,12 +16,13 @@ import { User,
   ChevronRight,
   ChevronLeft
 } from 'lucide-react';
-import { UserSession, ScreeningResult, SubscriptionTier } from '../../types';
-import { Brain, MessageSquare, Gauge, Cpu, CheckCircle2 } from 'lucide-react';
+import { UserSession, SubscriptionTier } from '../../types';
+import { Brain, MessageSquare, Gauge, Cpu, CheckCircle2, History, Calendar } from 'lucide-react';
 import { DEFAULT_AI_MODEL_ID, AVAILABLE_AI_MODELS } from '../../lib/aiModels';
 import { safeLocalStorage } from '../../lib/storage';
 import { AiQuotaBadge } from '../../components/AiQuotaBadge';
 import { apiClient } from '../../lib/apiClient';
+import { CURRENT_APP_VERSION, LAST_UPDATED_DATE, APP_CHANGELOG, CATEGORY_METADATA } from '../../data/changelogData';
 
 interface SettingsPageProps {
   userSession: UserSession | null;
@@ -33,6 +31,7 @@ interface SettingsPageProps {
   onOpenLegal: () => void;
   onOpenPrivacyCenter?: () => void;
   onOpenAuth?: () => void;
+  onOpenChangelog?: () => void;
   // screeningResult removed
 }
 
@@ -48,11 +47,10 @@ const DEFAULT_GUEST_USER: UserSession = {
 export const SettingsPage: React.FC<SettingsPageProps> = ({
   userSession,
   setUserSession,
-   
   onOpenLegal,
   onOpenPrivacyCenter,
   onOpenAuth,
-   
+  onOpenChangelog,
 }) => {
   const safeUser = userSession || DEFAULT_GUEST_USER;
   const [loading, setLoading] = useState(false);
@@ -244,7 +242,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
     }
   };
 
-  const [activeTab, setActiveTab] = useState<'akun'|'ai'|'privasi'|'memory'|'keamanan'|'langganan'>('akun');
+  const [activeTab, setActiveTab] = useState<'akun'|'ai'|'privasi'|'memory'|'keamanan'|'langganan'|'versi'>('akun');
   const [showMobileDetail, setShowMobileDetail] = useState(false);
   
   const TABS = [
@@ -253,7 +251,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
     { id: 'privasi', label: 'Privasi', icon: ShieldCheck },
     { id: 'memory', label: 'Memory', icon: RotateCcw },
     { id: 'keamanan', label: 'Keamanan', icon: Lock },
-    { id: 'langganan', label: 'Langganan', icon: CreditCard }
+    { id: 'langganan', label: 'Langganan', icon: CreditCard },
+    { id: 'versi', label: 'Versi & Pembaruan', icon: Sparkles }
   ] as const;
 
   return (
@@ -911,6 +910,159 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                 </div>
               </div>
 
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Tab Versi & Pembaruan */}
+      {activeTab === 'versi' && (
+        <div className="space-y-6 animate-in fade-in duration-200">
+          {/* Main Hero Version Card */}
+          <div className="p-5 sm:p-6 bg-gradient-to-br from-teal-500/10 via-sky-500/5 to-transparent border border-teal-200/80 dark:border-teal-800/80 rounded-2xl space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-teal-600 text-white flex items-center justify-center shadow-3xs shrink-0">
+                  <Sparkles className="w-6 h-6" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+                      RuangTenang Web App
+                    </h3>
+                    <span className="font-mono px-2.5 py-0.5 text-xs font-extrabold bg-teal-100 dark:bg-teal-900/80 text-teal-800 dark:text-teal-200 rounded-full border border-teal-300 dark:border-teal-700">
+                      {CURRENT_APP_VERSION}
+                    </span>
+                    <span className="px-2 py-0.5 text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 rounded-full border border-emerald-200 dark:border-emerald-800">
+                      Stabil & Terkini
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    Dirilis pada {LAST_UPDATED_DATE} • Build production otomatis
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={onOpenChangelog}
+                  className="px-4 py-2 bg-teal-600 hover:bg-teal-700 active:scale-[0.98] text-white text-xs font-bold rounded-xl transition-all shadow-3xs flex items-center gap-1.5 cursor-pointer"
+                >
+                  <History className="w-4 h-4" />
+                  <span>Buka Popup Catatan Rilis</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 text-xs">
+              <div className="p-3 bg-white/80 dark:bg-slate-800/80 border border-slate-200/70 dark:border-slate-700 rounded-xl">
+                <span className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 block">Siklus Pembaruan</span>
+                <span className="font-semibold text-slate-800 dark:text-slate-200 mt-0.5 block">Harian (Continuous Delivery)</span>
+              </div>
+              <div className="p-3 bg-white/80 dark:bg-slate-800/80 border border-slate-200/70 dark:border-slate-700 rounded-xl">
+                <span className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 block">Proteksi Enkripsi</span>
+                <span className="font-semibold text-teal-700 dark:text-teal-300 mt-0.5 block">AES-256-GCM + SHA-256</span>
+              </div>
+              <div className="p-3 bg-white/80 dark:bg-slate-800/80 border border-slate-200/70 dark:border-slate-700 rounded-xl">
+                <span className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 block">Status Server</span>
+                <span className="font-semibold text-emerald-600 dark:text-emerald-400 mt-0.5 flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" /> Operasional 100%
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Timeline of Updates */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                <History className="w-4 h-4 text-teal-600" /> Riwayat Catatan Pembaruan
+              </h4>
+              <span className="text-xs text-slate-400">
+                {APP_CHANGELOG.length} Versi Terdokumentasi
+              </span>
+            </div>
+
+            <div className="space-y-4">
+              {APP_CHANGELOG.map((rel) => (
+                <div 
+                  key={rel.version}
+                  className={`p-4 sm:p-5 bg-white dark:bg-slate-900 border rounded-2xl space-y-3.5 shadow-3xs ${
+                    rel.isLatest 
+                      ? 'border-teal-500/80 dark:border-teal-500/60 ring-2 ring-teal-500/10' 
+                      : 'border-slate-200 dark:border-slate-800'
+                  }`}
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-mono font-extrabold text-sm sm:text-base text-slate-900 dark:text-white">
+                        {rel.version}
+                      </span>
+                      {rel.badge && (
+                        <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full border ${
+                          rel.isLatest
+                            ? 'bg-teal-500 text-white border-teal-600'
+                            : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+                        }`}>
+                          {rel.badge}
+                        </span>
+                      )}
+                      <span className="px-2 py-0.5 text-[10px] font-medium bg-stone-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-full">
+                        {rel.periodLabel}
+                      </span>
+                      <span className="text-xs text-slate-400 flex items-center gap-1">
+                        <Calendar className="w-3 h-3" /> {rel.releaseTime || rel.date}
+                      </span>
+                    </div>
+
+                    {rel.buildNumber && (
+                      <span className="text-[10px] font-mono text-slate-400">
+                        {rel.buildNumber}
+                      </span>
+                    )}
+                  </div>
+
+                  <div>
+                    <h5 className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                      {rel.title}
+                    </h5>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                      {rel.tagline}
+                    </p>
+                  </div>
+
+                  {/* Changes */}
+                  <div className="space-y-2 pt-1">
+                    {rel.changes.map(ch => {
+                      const cat = CATEGORY_METADATA[ch.category];
+                      return (
+                        <div 
+                          key={ch.id}
+                          className="p-3 bg-stone-50/70 dark:bg-slate-800/50 border border-slate-200/70 dark:border-slate-700/60 rounded-xl space-y-1"
+                        >
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className={`px-2 py-0.5 rounded text-[9.5px] font-bold border ${cat.bgClass} ${cat.colorClass} ${cat.borderClass}`}>
+                              {cat.label}
+                            </span>
+                            <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                              {ch.title}
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-600 dark:text-slate-300 pl-0.5">
+                            {ch.description}
+                          </p>
+                          {ch.impact && (
+                            <div className="text-[11px] text-teal-800 dark:text-teal-300 bg-teal-50/60 dark:bg-teal-950/40 px-2 py-0.5 rounded border border-teal-100 dark:border-teal-900/50 mt-1">
+                              <span className="font-semibold">Manfaat: </span>{ch.impact}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>
