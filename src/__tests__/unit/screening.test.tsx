@@ -18,8 +18,8 @@ describe('Screening Modal Unit & Integration Tests', () => {
   });
 
   const completeAllQuestions = () => {
-    // Click "Mulai Skrining Mandiri" from intro
-    const startBtn = screen.getByRole('button', { name: /Mulai Skrining Mandiri/i });
+    // Click "Mulai Cek Kondisi" from intro
+    const startBtn = screen.getByRole('button', { name: /Mulai Cek Kondisi/i });
     fireEvent.click(startBtn);
 
     // PHQ-9 (9 questions): click first option (Tidak sama sekali = 0) for each
@@ -34,8 +34,8 @@ describe('Screening Modal Unit & Integration Tests', () => {
     const gadButtons = screen.getAllByRole('button', { name: /Tidak sama sekali/i });
     gadButtons.forEach(btn => fireEvent.click(btn));
 
-    // Click "Lihat Hasil Skrining"
-    const submitBtn = screen.getByRole('button', { name: /Lihat Hasil Skrining/i });
+    // Click "Lihat Hasil"
+    const submitBtn = screen.getByRole('button', { name: /Lihat Hasil/i });
     fireEvent.click(submitBtn);
   };
 
@@ -51,8 +51,8 @@ describe('Screening Modal Unit & Integration Tests', () => {
 
     render(<ScreeningModal isOpen={true} onClose={vi.fn()} onComplete={vi.fn()} />);
 
-    expect(screen.getByText(/Skrining Kesehatan Mental Mahasiswa/i)).toBeInTheDocument();
-    expect(screen.getByText(/bukan diagnosis medis/i)).toBeInTheDocument();
+    expect(screen.getByText(/Cek Kondisi Mental Mahasiswa/i)).toBeInTheDocument();
+    expect(screen.getByText(/bukan pengganti diagnosis medis/i)).toBeInTheDocument();
   });
 
   it('handles authenticated user submit with successful backend persistence', async () => {

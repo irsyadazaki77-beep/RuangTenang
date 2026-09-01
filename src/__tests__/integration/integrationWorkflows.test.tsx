@@ -25,18 +25,18 @@ describe('P1 Integration Workflows & Callbacks', () => {
     const onComplete = vi.fn();
     render(<ScreeningModal isOpen={true} onClose={onClose} onComplete={onComplete} />);
 
-    expect(screen.getByText(/bukan diagnosis medis/i)).toBeInTheDocument();
+    expect(screen.getByText(/bukan pengganti diagnosis medis/i)).toBeInTheDocument();
   });
 
   it('emergency center triggers SOS callback and disables button during dispatch', async () => {
     const onTrigger = vi.fn();
     render(<EmergencyCenter onTriggerSOS={onTrigger} />);
 
-    const sosButton = screen.getByRole('button', { name: /Picu Sinyal SOS|Mengirim Sinyal SOS/i });
+    const sosButton = screen.getByRole('button', { name: /Kirim Sinyal Darurat|Mengirim/i });
     expect(sosButton).not.toBeDisabled();
 
     fireEvent.click(sosButton);
     expect(onTrigger).toHaveBeenCalledTimes(1);
-    expect(sosButton).toBeDisabled();
+    await waitFor(() => expect(sosButton).toBeDisabled());
   });
 });

@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useEscapeKey } from '../../hooks/useEscapeKey';
+import { calculateStreak } from '../../utils/streak';
 import { 
   Smile, 
   SmilePlus, 
@@ -14,6 +15,7 @@ import {
   TrendingUp, 
   CheckCircle2, 
   Lightbulb,
+  Plus,
   X, 
   ChevronRight 
 } from 'lucide-react';
@@ -185,29 +187,10 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
   };
 
   // Streak Calculation
+  // Streak Calculation
   const streakCount = useMemo(() => {
     if (!moodLogs || moodLogs.length === 0) return 0;
-    
-    const dates = Array.from(new Set(moodLogs.map(l => l.date))).sort().reverse();
-    const today = new Date().toISOString().split('T')[0];
-    const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
-
-    // If no log today or yesterday, streak is 0
-    if (!dates.includes(today) && !dates.includes(yesterday)) return 0;
-
-    const current = dates.includes(today) ? new Date(today) : new Date(yesterday);
-    let streak = 0;
-
-    while (true) {
-      const checkStr = current.toISOString().split('T')[0];
-      if (dates.includes(checkStr)) {
-        streak++;
-        current.setDate(current.getDate() - 1);
-      } else {
-        break;
-      }
-    }
-    return streak;
+    return calculateStreak(moodLogs.map(l => l.date));
   }, [moodLogs]);
 
   // Average mood calculation

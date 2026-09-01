@@ -1,5 +1,7 @@
 import { apiClient } from "../../lib/apiClient";
 import React, { useState, useEffect } from 'react';
+import { useAuth } from "../../contexts/AuthContext";
+import { calculateStreak } from "../../utils/streak";
 import {
   TrendingUp,
   Activity,
@@ -62,12 +64,21 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
   const [loadingUsage, setLoadingUsage] = useState<boolean>(false);
   const [usageStats, setUsageStats] = useState<any>(null);
   
-  const [selfCareChecklist, setSelfCareChecklist] = useState<{ id: string; task: string; done: boolean }[]>([
+  const { user } = useAuth();
+  const CHECKLIST_KEY = `rt_self_care_${user?.id || "guest"}`;
+  const [selfCareChecklist, setSelfCareChecklist] = useState<{ id: string; task: string; done: boolean }[]>(() => {
+    const saved = localStorage.getItem(CHECKLIST_KEY);
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) {}
+    }
+    return [
+
     { id: 'sc1', task: 'Lakukan Teknik Grounding 5-4-3-2-1 sekali sehari', done: true },
     { id: 'sc2', task: 'Terapkan Pomodoro 25 menit untuk skripsi', done: false },
     { id: 'sc3', task: 'Jalan santai di luar kos selama 15 menit tanpa HP', done: false },
     { id: 'sc4', task: 'Matikan gawai 30 menit sebelum jadwal tidur malam', done: true }
-  ]);
+  ];
+  });
 
   const fetchUsageStats = async () => {
     setLoadingUsage(true);
@@ -192,10 +203,14 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
   const currentGad7 = screenHistory.length > 0 ? screenHistory[0].gad7 : 0;
   const currentTriage = screenHistory.length > 0 ? screenHistory[0].triage : 'Ringan';
 
-  const uniqueActiveDays = React.useMemo(() => {
+  const totalActiveDays = React.useMemo(() => {
     if (!moodLogs || moodLogs.length === 0) return 0;
-    const uniqueDates = new Set(moodLogs.map(l => l.date));
-    return uniqueDates.size;
+    return new Set(moodLogs.map(l => l.date)).size;
+  }, [moodLogs]);
+
+  const streakCount = React.useMemo(() => {
+    if (!moodLogs || moodLogs.length === 0) return 0;
+    return calculateStreak(moodLogs.map(l => l.date));
   }, [moodLogs]);
 
   const getTriageBadge = (triage: TriageCategory) => {
@@ -212,9 +227,11 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
   };
 
   const handleToggleSelfCare = (id: string) => {
-    setSelfCareChecklist(prev =>
-      prev.map(item => item.id === id ? { ...item, done: !item.done } : item)
-    );
+    setSelfCareChecklist(prev => {
+      const next = prev.map(item => item.id === id ? { ...item, done: !item.done } : item);
+      localStorage.setItem(CHECKLIST_KEY, JSON.stringify(next));
+      return next;
+    });
     showToast('Tugas perawatan mandiri diperbarui!');
   };
 
@@ -261,7 +278,7 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
         </motion.div>
 
         {/* Summary Cards */}
-        <motion.div variants={itemVariants} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <motion.div variants={itemVariants} className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-4">
           <div className="surface-card p-5 rounded-2xl flex flex-col justify-between relative overflow-hidden">
             <div className="flex items-center justify-between mb-4">
               <span className="text-secondary text-sm font-medium">Mood Terakhir</span>
@@ -274,14 +291,25 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
 
           <div className="surface-card p-5 rounded-2xl flex flex-col justify-between">
             <div className="flex items-center justify-between mb-4">
+              <span className="text-secondary text-sm font-medium">Total Hari Aktif</span>
+              <div className="p-2 bg-indigo-50 dark:bg-indigo-900/30 rounded-lg text-indigo-600 dark:text-indigo-400"><Clock className="w-4 h-4" /></div>
+            </div>
+            <div>
+              <span className="text-2xl font-bold text-primary">{totalActiveDays === 0 ? 'Belum ada data' : `${totalActiveDays} hari`}</span>
+            </div>
+          </div>
+
+          <div className="surface-card p-5 rounded-2xl flex flex-col justify-between">
+            <div className="flex items-center justify-between mb-4">
               <span className="text-secondary text-sm font-medium">Streak Saat Ini</span>
               <div className="p-2 bg-orange-50 dark:bg-orange-900/30 rounded-lg text-orange-600 dark:text-orange-400"><TrendingUp className="w-4 h-4" /></div>
             </div>
             <div>
-              <span className="text-2xl font-bold text-primary">{uniqueActiveDays === 0 ? 'Belum ada data' : `${uniqueActiveDays} hari`}</span>
+              <span className="text-2xl font-bold text-primary">{streakCount === 0 ? 'Belum ada data' : `${streakCount} hari`}</span>
             </div>
           </div>
           
+
           <div className="surface-card p-5 rounded-2xl flex flex-col justify-between">
             <div className="flex items-center justify-between mb-4">
               <span className="text-secondary text-sm font-medium">PHQ-9 Terbaru</span>
@@ -292,6 +320,7 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
               {screenHistory.length > 0 && <span className="text-sm text-secondary ml-1">/ 27</span>}
             </div>
           </div>
+
 
           <div className="surface-card p-5 rounded-2xl flex flex-col justify-between">
             <div className="flex items-center justify-between mb-4">
@@ -371,7 +400,7 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
                         </h4>
                         <p className="text-slate-600 text-sm leading-relaxed mb-4">
                           {moodLogs.length >= 3
-                            ? `Tercatat ${uniqueActiveDays} hari aktif dengan ${moodLogs.length} entri mood. Keteraturan Anda membantu mengenali pola stres dan keseimbangan aktivitas akademis.`
+                            ? `Tercatat ${totalActiveDays} hari aktif dengan ${moodLogs.length} entri mood. Keteraturan Anda membantu mengenali pola stres dan keseimbangan aktivitas akademis.`
                             : `Data awal Anda telah tercatat (${moodLogs.length} log). Terus catat secara berkala untuk analisis pola emosi yang lebih mendalam.`}
                         </p>
                         
@@ -379,7 +408,7 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
                           <div className="mt-4 pt-4 border-t border-slate-100 space-y-3 animate-in fade-in slide-in-from-top-2">
                             <div className="flex gap-3 items-start">
                               <CheckCircle2 className="w-5 h-5 text-teal-500 shrink-0 mt-0.5" />
-                              <p className="text-sm text-slate-700">Log tersimpan secara aman di database profil Anda.</p>
+                              <p className="text-sm text-slate-700">Log tersimpan di profil Anda.</p>
                             </div>
                             {currentPhq9 > 9 && (
                               <div className="flex gap-3 items-start">

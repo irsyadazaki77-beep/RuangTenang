@@ -9,7 +9,7 @@ import {
   X,
   Calendar,
   MessageSquare,
-  Lock,
+  
   Filter,
 } from "lucide-react";
 import { Counselor } from "../../types";
@@ -25,29 +25,25 @@ export const CounselorDirectory: React.FC<CounselorDirectoryProps> = ({
   onSelectCounselorForBooking,
 }) => {
   const [searchQuery, setSearchQuery] = useState("");
-  const { counselors, loading, error } = useCounselors();
-
   const [selectedConcern, setSelectedConcern] = useState<string>("Semua");
-  const [scheduleFilter, setScheduleFilter] = useState<
-    "Semua" | "Hari Ini" | "Minggu Ini"
-  >("Semua");
-  const [genderFilter, setGenderFilter] = useState<"Semua" | "Perempuan" | "Laki-laki">("Semua");
   const [methodFilter, setMethodFilter] = useState<string>("Semua");
   const [costFilter, setCostFilter] = useState<string>("Semua");
   const [campusFilter, setCampusFilter] = useState<string>("Semua");
   const [languageFilter, setLanguageFilter] = useState<string>("Semua");
   const [availabilityFilter, setAvailabilityFilter] = useState<string>("Semua");
+  const { counselors } = useCounselors();
+
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [selectedCounselorModal, setSelectedCounselorModal] =
     useState<Counselor | null>(null);
   useEscapeKey(() => setSelectedCounselorModal(null), !!selectedCounselorModal);
 
   const CONCERN_CATEGORIES = [
-    "Semua",
-    "Kendala Akademik & Skripsi",
-    "Kecemasan & Burnout",
-    "Hubungan & Sosial Kampus",
-    "Suasana Hati & Depresi",
+    { id: "Semua", label: "Semua" },
+    { id: "akademik", label: "Kendala Akademik & Skripsi" },
+    { id: "kecemasan", label: "Kecemasan & Burnout" },
+    { id: "sosial", label: "Hubungan & Sosial Kampus" },
+    { id: "mood", label: "Suasana Hati & Depresi" },
   ];
 
   const filteredCounselors = counselors.filter((c) => {
@@ -58,24 +54,12 @@ export const CounselorDirectory: React.FC<CounselorDirectoryProps> = ({
         s.toLowerCase().includes(searchQuery.toLowerCase()),
       );
 
+    const selectedConcernCategory = CONCERN_CATEGORIES.find(cat => cat.id === selectedConcern);
     const matchesConcern =
       selectedConcern === "Semua" ||
       c.specialties.some((s) =>
-        s.toLowerCase().includes(selectedConcern.toLowerCase().split(" ")[0]),
+        s.toLowerCase().includes((selectedConcernCategory?.label || "").toLowerCase()),
       );
-
-    const matchesGender =
-      genderFilter === "Semua" ||
-      (genderFilter === "Perempuan" &&
-        (c.name.includes("Dr.") ||
-          c.name.includes("S.Psi") ||
-          c.name.includes("Anindya") ||
-          c.name.includes("Larasati") ||
-          c.name.includes("Aulia"))) ||
-      (genderFilter === "Laki-laki" &&
-        !c.name.includes("Anindya") &&
-        !c.name.includes("Larasati") &&
-        !c.name.includes("Aulia"));
 
     const matchesMethod = methodFilter === "Semua" || c.consultationType.includes(methodFilter as any);
     const matchesCost = costFilter === "Semua" || (costFilter === "Gratis" ? c.isFreeForStudents : !c.isFreeForStudents);
@@ -83,7 +67,7 @@ export const CounselorDirectory: React.FC<CounselorDirectoryProps> = ({
     const matchesLanguage = languageFilter === "Semua" || (c.languages && c.languages.includes(languageFilter));
     const matchesAvailability = availabilityFilter === "Semua" || (availabilityFilter === "Hari Ini" ? c.availableToday : true);
 
-    return matchesSearch && matchesConcern && matchesGender && matchesMethod && matchesCost && matchesCampus && matchesLanguage && matchesAvailability;
+    return matchesSearch && matchesConcern && matchesMethod && matchesCost && matchesCampus && matchesLanguage && matchesAvailability;
   });
 
   return (
@@ -92,7 +76,7 @@ export const CounselorDirectory: React.FC<CounselorDirectoryProps> = ({
       <div className="surface-card rounded-2xl p-6 space-y-2">
         <div className="flex items-center gap-2">
           <span className="text-xs font-semibold text-teal-700 dark:text-teal-400 bg-teal-50 dark:bg-teal-950/50 px-3 py-1 rounded-full border border-teal-200 dark:border-teal-900">
-            Direktori Konselor Terverifikasi
+            Direktori Konselor & Psikolog
           </span>
         </div>
         <h2 className="text-xl font-bold text-primary tracking-tight">
@@ -121,11 +105,9 @@ export const CounselorDirectory: React.FC<CounselorDirectoryProps> = ({
 
           <div className="flex items-center gap-2">
             <select value={selectedConcern} onChange={(e) => setSelectedConcern(e.target.value)} className="surface-page border border-default text-primary text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:border-teal-500 min-h-[48px]">
-              <option value="Semua">Kebutuhan: Semua</option>
-              <option value="Kendala Akademik & Skripsi">Skripsi & Akademik</option>
-              <option value="Kecemasan & Burnout">Kecemasan & Burnout</option>
-              <option value="Hubungan & Sosial Kampus">Hubungan & Sosial</option>
-              <option value="Suasana Hati & Depresi">Suasana Hati & Depresi</option>
+              {CONCERN_CATEGORIES.map((cat) => (
+                <option key={cat.id} value={cat.id}>Kebutuhan: {cat.label === 'Semua' ? 'Semua' : cat.label}</option>
+              ))}
             </select>
             
             <button
@@ -168,29 +150,12 @@ export const CounselorDirectory: React.FC<CounselorDirectoryProps> = ({
               <option value="Hari Ini">Tersedia Hari Ini</option>
             </select>
 
-            <div className="flex items-center surface-card p-1 rounded-xl text-sm font-medium border border-default">
-              {(["Semua", "Perempuan", "Laki-laki"] as const).map((g) => (
-                <button
-                  key={g}
-                  onClick={() => setGenderFilter(g)}
-                  className={`px-4 py-2 rounded-lg transition-all cursor-pointer min-h-[40px] ${
-                    genderFilter === g
-                      ? "surface-muted text-teal-600 dark:text-teal-400 border border-default shadow-3xs"
-                      : "text-secondary hover:text-primary"
-                  }`}
-                >
-                  {g}
-                </button>
-              ))}
-            </div>
-            
             <div className="flex-1" />
             
             <button
               onClick={() => {
                 setSearchQuery("");
                 setSelectedConcern("Semua");
-                setGenderFilter("Semua");
                 setMethodFilter("Semua");
                 setCostFilter("Semua");
                 setCampusFilter("Semua");
@@ -223,7 +188,6 @@ export const CounselorDirectory: React.FC<CounselorDirectoryProps> = ({
             onClick={() => {
               setSearchQuery("");
               setSelectedConcern("Semua");
-              setGenderFilter("Semua");
               setMethodFilter("Semua");
               setCostFilter("Semua");
               setCampusFilter("Semua");

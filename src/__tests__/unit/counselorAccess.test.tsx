@@ -8,7 +8,7 @@ describe('Counselor Directory Access Unit Tests', () => {
 
     render(<CounselorDirectory onSelectCounselorForBooking={onSelect} />);
 
-    expect(screen.getByText(/Temui Konselor & Psikolog Kampus/i)).toBeInTheDocument();
+    expect(screen.getByText(/Temui Konselor & Psikolog/i)).toBeInTheDocument();
     expect(screen.getByPlaceholderText(/Cari nama konselor, kampus, atau topik/i)).toBeInTheDocument();
   });
 

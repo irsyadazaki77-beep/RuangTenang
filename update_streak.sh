@@ -1,0 +1,1 @@
+sed -i '/const streakCount = useMemo/,/}, \[moodLogs\]);/c\  // Streak Calculation\n  const streakCount = useMemo(() => {\n    if (!moodLogs || moodLogs.length === 0) return 0;\n    return calculateStreak(moodLogs.map(l => l.date));\n  }, [moodLogs]);' src/features/mood/MoodTracker.tsx

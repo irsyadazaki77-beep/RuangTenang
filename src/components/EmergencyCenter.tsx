@@ -65,21 +65,20 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
       if (!navigator.geolocation) {
         return resolve(undefined);
       }
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          resolve({
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-          });
-        },
-        () => {
+      
+      navigator.permissions.query({ name: "geolocation" as any }).then((perm) => {
+        if (perm.state === "granted") {
+          navigator.geolocation.getCurrentPosition(
+            (position) => resolve({ latitude: position.coords.latitude, longitude: position.coords.longitude }),
+            () => resolve(undefined),
+            { timeout: 2000, maximumAge: 60000 }
+          );
+        } else {
           resolve(undefined);
-        },
-        { timeout: 5000 }
-      );
+        }
+      }).catch(() => resolve(undefined));
     });
   };
-
   const handleSendSOS = async () => {
     setIsTriggeringSOS(true);
     setSosStatus(null);
@@ -141,7 +140,7 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
         message:
           "Tidak dapat terhubung ke server. Hubungi nomor " + EMERGENCY_CONTACTS[0].phone + " atau hotline 119 secara langsung.",
       });
-      showToast("Gagal menghubungi gateway SOS. Hubungi bantuan darurat langsung.", "error");
+      showToast("Panggilan SOS gagal karena masalah jaringan. Silakan hubungi darurat manual.", "error");
     } finally {
       setIsTriggeringSOS(false);
     }
