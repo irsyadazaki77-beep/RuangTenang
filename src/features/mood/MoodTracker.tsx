@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { useEscapeKey } from '../../hooks/useEscapeKey';
 import { 
   Smile, 
   SmilePlus, 
@@ -12,7 +13,8 @@ import {
   RefreshCw, 
   TrendingUp, 
   CheckCircle2, 
-  Lightbulb, 
+  Lightbulb,
+  X, 
   ChevronRight 
 } from 'lucide-react';
 import { apiClient } from '../../lib/apiClient';
@@ -72,10 +74,12 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
   setMoodLogs,
   showToast
 }) => {
+  const [isFormModalOpen, setIsFormModalOpen] = useState<boolean>(false);
+  useEscapeKey(() => setIsFormModalOpen(false), isFormModalOpen);
+
   const [selectedMood, setSelectedMood] = useState<number | null>(null);
   const [selectedEmotions, setSelectedEmotions] = useState<string[]>([]);
   const [journalNote, setJournalNote] = useState<string>('');
-  const [showDetails, setShowDetails] = useState<boolean>(false);
   const [sleepHours, setSleepHours] = useState<number>(7);
   const [sleepQuality, setSleepQuality] = useState<'Nyenyak' | 'Kurang Nyenyak' | 'Insomnia'>('Nyenyak');
   const [logDate, setLogDate] = useState<string>(new Date().toISOString().split('T')[0]);
@@ -152,7 +156,7 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
       setSelectedEmotions([]);
       setJournalNote('');
       setLogDate(new Date().toISOString().split('T')[0]);
-      setShowDetails(false);
+      setIsFormModalOpen(false);
       showToast('Catatan Mood harian berhasil disimpan! 🎉', 'success');
     } catch (err: any) {
       console.error("Failed to sync mood with backend:", err);
@@ -517,27 +521,49 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
         )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* INPUT FORM */}
-        <form onSubmit={handleSaveMoodLog} className="lg:col-span-5 bg-white rounded-3xl p-6 space-y-6 border border-slate-100 shadow-sm transition-all hover:shadow-md">
-          <div className="flex items-center gap-2 text-slate-800 font-bold text-sm sm:text-base pb-3">
-            <Smile className="w-5 h-5 text-teal-600" />
-            <span>Bagaimana perasaan Anda hari ini?</span>
-          </div>
+      <div className="flex justify-between items-center mb-6">
+        <h3 className="font-semibold text-primary">Riwayat Catatan Mood</h3>
+        <button
+          onClick={() => setIsFormModalOpen(true)}
+          className="btn-primary flex items-center gap-2 px-4 py-2 rounded-xl text-sm"
+        >
+          <Plus className="w-4 h-4" />
+          <span>Tambah Catatan</span>
+        </button>
+      </div>
 
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Tanggal Catatan</label>
-            <input
-              type="date"
-              value={logDate}
-              onChange={(e) => setLogDate(e.target.value)}
-              max={new Date().toISOString().split('T')[0]}
-              className="w-full text-sm p-3 bg-stone-50 border border-slate-200/60 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500/20"
-            />
-          </div>
+      {/* INPUT FORM MODAL */}
+      {isFormModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="absolute inset-0" onClick={() => setIsFormModalOpen(false)} />
+          <div className="relative w-full max-w-lg surface-card rounded-3xl shadow-xl overflow-hidden flex flex-col max-h-full animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between p-4 sm:p-5 border-b border-default shrink-0">
+              <div className="flex items-center gap-2 text-primary font-bold text-sm sm:text-base">
+                <Smile className="w-5 h-5 text-teal-600 dark:text-teal-400" />
+                <span>Bagaimana perasaan Anda hari ini?</span>
+              </div>
+              <button
+                onClick={() => setIsFormModalOpen(false)}
+                className="p-2 text-secondary hover:text-primary hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <form onSubmit={handleSaveMoodLog} className="p-4 sm:p-5 space-y-6 overflow-y-auto custom-scrollbar">
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-secondary uppercase tracking-wider block">Tanggal Catatan</label>
+                <input
+                  type="date"
+                  value={logDate}
+                  onChange={(e) => setLogDate(e.target.value)}
+                  max={new Date().toISOString().split('T')[0]}
+                  className="w-full text-sm p-3 surface-muted border border-default rounded-xl text-primary focus:outline-none focus:ring-2 focus:ring-teal-500/20"
+                />
+              </div>
 
-          {/* Mood Options */}
-          <div className="space-y-2">
+              {/* Mood Options */}
+              <div className="space-y-2">
             <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Pilih Mood Utama</label>
             <div className="grid grid-cols-5 gap-2">
               {MOOD_OPTIONS.map((opt) => {
@@ -611,23 +637,14 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
             </div>
           </div>
 
-          {!showDetails ? (
-            <button
-              type="button"
-              onClick={() => setShowDetails(true)}
-              className="w-full py-3 border-2 border-dashed border-slate-200 text-slate-500 text-sm font-semibold rounded-2xl hover:bg-stone-50 hover:text-slate-700 transition-colors cursor-pointer"
-            >
-              + Tambah Detail (Durasi Tidur & Jurnal Refleksi)
-            </button>
-          ) : (
-            <div className="space-y-5 animate-in fade-in duration-300">
-              <div className="grid grid-cols-2 gap-4 pt-2">
-                <div className="space-y-2">
-                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Durasi Tidur: {sleepHours} Jam</label>
-                  <input
-                    type="range"
-                    min="1"
-                    max="12"
+          <div className="space-y-5 pt-2">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-secondary uppercase tracking-wider block">Durasi Tidur: {sleepHours} Jam</label>
+                <input
+                  type="range"
+                  min="1"
+                  max="12"
                     step="0.5"
                     value={sleepHours}
                     onChange={(e) => setSleepHours(parseFloat(e.target.value))}
@@ -693,35 +710,39 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
                 </div>
               </div>
             </div>
-          )}
 
           <button
             type="submit"
             disabled={isSubmittingMood}
-            className="w-full py-4 bg-teal-600 hover:bg-teal-700 active:bg-teal-800 text-white font-bold text-sm rounded-2xl shadow-sm transition-all active:scale-95 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+            className="w-full py-4 btn-primary rounded-2xl shadow-sm transition-all active:scale-95 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
           >
             {isSubmittingMood ? 'Menyimpan Catatan...' : 'Simpan Check-In Mood'}
           </button>
         </form>
+      </div>
+    </div>
+  )}
 
-        {/* LOG HISTORY & SEARCH */}
-        <div className="lg:col-span-7 space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-            <span className="text-xs font-semibold text-slate-900 uppercase tracking-wider">
-              Riwayat Jurnal Mood Harian
-            </span>
-
-            {/* Search Input */}
-            <div className="relative">
-              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
-              <input
-                type="text"
-                placeholder="Cari catatan atau emosi..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="text-xs bg-white border border-slate-200 rounded-xl pl-8 pr-3 py-1.5 text-slate-800 focus:outline-none focus:border-slate-400 w-full sm:w-48"
-              />
-            </div>
+  {/* LOG HISTORY & SEARCH */}
+  <div className="space-y-4 mt-2">
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 hidden">
+      <span className="text-xs font-semibold text-primary uppercase tracking-wider">
+        Riwayat Jurnal Mood Harian
+      </span>
+    </div>
+    
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+      {/* Search Input */}
+      <div className="relative w-full sm:max-w-xs">
+        <Search className="w-3.5 h-3.5 text-secondary absolute left-3 top-2.5" />
+        <input
+          type="text"
+          placeholder="Cari catatan atau emosi..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="text-sm surface-muted border border-default rounded-xl pl-8 pr-3 py-1.5 text-primary focus:outline-none focus:border-teal-500 w-full"
+        />
+      </div>
           </div>
 
           {/* Quick Factor Filter Badges */}
@@ -826,7 +847,6 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
           )}
         </div>
       </div>
-    </div>
   );
 };
 

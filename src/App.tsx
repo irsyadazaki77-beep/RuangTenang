@@ -293,9 +293,9 @@ export default function App() {
                 path="/screening"
                 element={
                   <WorkspaceLayout
-                    title="Skrining Mandiri (PHQ-9 & GAD-7)"
-                    subtitle="Instrumen skrining awal mandiri. BUKAN alat diagnosis medis."
-                    badge="UNVERIFIED"
+                    title="Cek Kondisi Mental"
+                    subtitle="Instrumen cek kondisi awal mandiri. BUKAN alat diagnosis medis."
+                    badge="Cek Kondisi"
                     onOpenSidebar={() => setIsSidebarOpen(true)}
                     onOpenChangelog={() => setIsChangelogOpen(true)}
                   >

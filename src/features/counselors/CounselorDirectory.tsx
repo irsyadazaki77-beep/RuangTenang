@@ -37,6 +37,7 @@ export const CounselorDirectory: React.FC<CounselorDirectoryProps> = ({
   const [campusFilter, setCampusFilter] = useState<string>("Semua");
   const [languageFilter, setLanguageFilter] = useState<string>("Semua");
   const [availabilityFilter, setAvailabilityFilter] = useState<string>("Semua");
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [selectedCounselorModal, setSelectedCounselorModal] =
     useState<Counselor | null>(null);
   useEscapeKey(() => setSelectedCounselorModal(null), !!selectedCounselorModal);
@@ -88,87 +89,133 @@ export const CounselorDirectory: React.FC<CounselorDirectoryProps> = ({
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6 font-sans">
       {/* Header Section */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-2">
+      <div className="surface-card rounded-2xl p-6 space-y-2">
         <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold text-teal-700 bg-teal-50 px-3 py-1 rounded-full border border-teal-200">
+          <span className="text-xs font-semibold text-teal-700 dark:text-teal-400 bg-teal-50 dark:bg-teal-950/50 px-3 py-1 rounded-full border border-teal-200 dark:border-teal-900">
             Direktori Konselor Terverifikasi
           </span>
         </div>
-        <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
-          Temui Konselor & Psikolog Kampus
-        </h1>
-        <p className="text-xs sm:text-sm text-slate-600 leading-relaxed max-w-2xl">
+        <h2 className="text-xl font-bold text-primary tracking-tight">
+          Temui Konselor & Psikolog
+        </h2>
+        <p className="text-sm text-secondary leading-relaxed max-w-2xl">
           Konseling profesional & rahasia untuk masalah skripsi, adaptasi
           perkuliahan, kecemasan, atau masalah pribadi.
         </p>
       </div>
 
       {/* Filter Controls */}
-      <div className="bg-white border border-slate-200/70 rounded-2xl p-4 shadow-sm space-y-4">
+      <div className="surface-card rounded-2xl p-4 space-y-4">
         <div className="flex flex-col md:flex-row gap-3">
           {/* Search Box */}
           <div className="flex-1 relative">
-            <Search className="w-5 h-5 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
+            <Search className="w-5 h-5 text-secondary absolute left-4 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               placeholder="Cari nama konselor, kampus, atau topik..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-slate-50/50 rounded-xl pl-12 pr-4 py-3 text-sm text-slate-800 placeholder-slate-400 border border-slate-200/80 focus:outline-none focus:border-teal-500/50 focus:ring-4 focus:ring-teal-500/10 transition-all min-h-[48px]"
+              className="w-full surface-page rounded-xl pl-12 pr-4 py-3 text-sm text-primary placeholder-slate-400 border border-default focus:outline-none focus:border-teal-500/50 focus:ring-4 focus:ring-teal-500/10 transition-all min-h-[48px]"
             />
           </div>
 
-          {/* Gender Filter */}
-          <div className="flex items-center bg-slate-50/50 p-1 rounded-xl text-sm font-medium border border-slate-200/80">
-            {(["Semua", "Perempuan", "Laki-laki"] as const).map((g) => (
-              <button
-                key={g}
-                onClick={() => setGenderFilter(g)}
-                className={`px-4 py-2 rounded-lg transition-all cursor-pointer min-h-[40px] ${
-                  genderFilter === g
-                    ? "bg-white text-teal-700 shadow-sm border border-slate-200/60"
-                    : "text-slate-500 hover:text-slate-800"
-                }`}
-              >
-                {g}
-              </button>
-            ))}
+          <div className="flex items-center gap-2">
+            <select value={selectedConcern} onChange={(e) => setSelectedConcern(e.target.value)} className="surface-page border border-default text-primary text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:border-teal-500 min-h-[48px]">
+              <option value="Semua">Kebutuhan: Semua</option>
+              <option value="Kendala Akademik & Skripsi">Skripsi & Akademik</option>
+              <option value="Kecemasan & Burnout">Kecemasan & Burnout</option>
+              <option value="Hubungan & Sosial Kampus">Hubungan & Sosial</option>
+              <option value="Suasana Hati & Depresi">Suasana Hati & Depresi</option>
+            </select>
+            
+            <button
+              onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+              className={`p-3 rounded-xl border transition-all cursor-pointer min-h-[48px] flex items-center gap-2 text-sm font-medium ${
+                showAdvancedFilters ? 'bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-400 border-teal-200 dark:border-teal-800' : 'surface-page border-default text-secondary hover:text-primary'
+              }`}
+            >
+              <Filter className="w-4 h-4" />
+              <span className="hidden sm:inline">Filter Lainnya</span>
+            </button>
           </div>
         </div>
         
         {/* Advanced Filters */}
-        <div className="flex flex-wrap gap-3 pt-3 border-t border-slate-100">
-          <select value={campusFilter} onChange={(e) => setCampusFilter(e.target.value)} className="bg-white border border-slate-200/80 text-slate-600 text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:border-teal-500 min-h-[44px]">
-            <option value="Semua">Semua Kampus</option>
-            <option value="UI">UI</option>
-            <option value="ITB">ITB</option>
-            <option value="UGM">UGM</option>
-            <option value="UNAIR">UNAIR</option>
-          </select>
-          <select value={costFilter} onChange={(e) => setCostFilter(e.target.value)} className="bg-white border border-slate-200/80 text-slate-600 text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:border-teal-500 min-h-[44px]">
-            <option value="Semua">Semua Biaya</option>
-            <option value="Gratis">Gratis (Mahasiswa)</option>
-            <option value="Berbayar">Berbayar</option>
-          </select>
-          <select value={methodFilter} onChange={(e) => setMethodFilter(e.target.value)} className="bg-white border border-slate-200/80 text-slate-600 text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:border-teal-500 min-h-[44px]">
-            <option value="Semua">Semua Metode</option>
-            <option value="video_call">Video Call</option>
-            <option value="in_person">Tatap Muka</option>
-          </select>
-        </div>
+        {showAdvancedFilters && (
+          <div className="flex flex-wrap gap-3 pt-3 border-t border-default animate-in slide-in-from-top-2 fade-in">
+            <select value={methodFilter} onChange={(e) => setMethodFilter(e.target.value)} className="surface-card border border-default text-primary text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:border-teal-500 min-h-[44px]">
+              <option value="Semua">Semua Metode</option>
+              <option value="video_call">Video Call</option>
+              <option value="in_person">Tatap Muka</option>
+            </select>
+
+            <select value={costFilter} onChange={(e) => setCostFilter(e.target.value)} className="surface-card border border-default text-primary text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:border-teal-500 min-h-[44px]">
+              <option value="Semua">Semua Biaya</option>
+              <option value="Gratis">Gratis (Mahasiswa)</option>
+              <option value="Berbayar">Berbayar</option>
+            </select>
+
+            <select value={campusFilter} onChange={(e) => setCampusFilter(e.target.value)} className="surface-card border border-default text-primary text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:border-teal-500 min-h-[44px]">
+              <option value="Semua">Semua Kampus</option>
+              <option value="UI">UI</option>
+              <option value="ITB">ITB</option>
+              <option value="UGM">UGM</option>
+              <option value="UNAIR">UNAIR</option>
+            </select>
+            
+            <select value={availabilityFilter} onChange={(e) => setAvailabilityFilter(e.target.value)} className="surface-card border border-default text-primary text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:border-teal-500 min-h-[44px]">
+              <option value="Semua">Semua Ketersediaan</option>
+              <option value="Hari Ini">Tersedia Hari Ini</option>
+            </select>
+
+            <div className="flex items-center surface-card p-1 rounded-xl text-sm font-medium border border-default">
+              {(["Semua", "Perempuan", "Laki-laki"] as const).map((g) => (
+                <button
+                  key={g}
+                  onClick={() => setGenderFilter(g)}
+                  className={`px-4 py-2 rounded-lg transition-all cursor-pointer min-h-[40px] ${
+                    genderFilter === g
+                      ? "surface-muted text-teal-600 dark:text-teal-400 border border-default shadow-3xs"
+                      : "text-secondary hover:text-primary"
+                  }`}
+                >
+                  {g}
+                </button>
+              ))}
+            </div>
+            
+            <div className="flex-1" />
+            
+            <button
+              onClick={() => {
+                setSearchQuery("");
+                setSelectedConcern("Semua");
+                setGenderFilter("Semua");
+                setMethodFilter("Semua");
+                setCostFilter("Semua");
+                setCampusFilter("Semua");
+                setLanguageFilter("Semua");
+                setAvailabilityFilter("Semua");
+              }}
+              className="px-4 py-2 text-rose-600 dark:text-rose-400 text-sm font-medium hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-xl transition-colors cursor-pointer"
+            >
+              Reset
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Directory Grid */}
       {filteredCounselors.length === 0 ? (
-        <div className="bg-white border border-slate-200/70 rounded-2xl p-12 text-center space-y-4 shadow-sm">
-          <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto">
-             <Users className="w-8 h-8 text-slate-400" />
+        <div className="surface-card rounded-2xl p-12 text-center space-y-4">
+          <div className="w-16 h-16 surface-page rounded-full flex items-center justify-center mx-auto">
+             <Users className="w-8 h-8 text-secondary" />
           </div>
           <div>
-            <h3 className="font-semibold text-slate-800 text-lg">
+            <h3 className="font-semibold text-primary text-lg">
               Tidak Ada Konselor Ditemukan
             </h3>
-            <p className="text-slate-500 text-sm mt-1 max-w-sm mx-auto">
+            <p className="text-secondary text-sm mt-1 max-w-sm mx-auto">
               Coba ubah kata kunci pencarian atau sesuaikan filter kriteria.
             </p>
           </div>
@@ -183,7 +230,7 @@ export const CounselorDirectory: React.FC<CounselorDirectoryProps> = ({
               setLanguageFilter("Semua");
               setAvailabilityFilter("Semua");
             }}
-            className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium text-sm rounded-xl transition-all cursor-pointer min-h-[44px]"
+            className="px-5 py-2.5 surface-muted text-primary font-medium text-sm rounded-xl transition-all cursor-pointer min-h-[44px]"
           >
             Reset Filter
           </button>

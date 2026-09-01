@@ -271,7 +271,7 @@ export function ChatComposer({ onSend, isTyping, onStop, chatId, onCommand, onOp
                 handleSend();
               }
             }}
-            placeholder="Tulis pesan atau ketik '/' untuk perintah..."
+            placeholder="Tulis pesan..."
             className="flex-1 max-h-32 bg-transparent border-none focus:ring-0 resize-none py-2 px-1 text-xs sm:text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 leading-relaxed outline-none min-w-0"
             rows={1}
             disabled={isTyping}

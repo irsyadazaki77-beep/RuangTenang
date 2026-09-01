@@ -210,7 +210,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
 
     if (!navigator.onLine) {
       setPersistenceStatus('failed');
-      setPersistenceError('Perangkat sedang luring. Hasil screening selesai, tetapi penyimpanan ke server gagal.');
+      setPersistenceError('Perangkat sedang luring. Pengecekan selesai, tetapi penyimpanan ke server gagal.');
       return;
     }
 
@@ -231,12 +231,12 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
         onPersisted?.(res);
       } else {
         setPersistenceStatus('failed');
-        setPersistenceError(response?.error || 'Hasil screening selesai, tetapi penyimpanan ke server gagal.');
+        setPersistenceError(response?.error || 'Pengecekan selesai, tetapi penyimpanan ke server gagal.');
       }
     } catch (err: any) {
       console.warn('Backend screening save failed:', err);
       setPersistenceStatus('failed');
-      const errorMessage = err instanceof Error ? err.message : 'Hasil screening selesai, tetapi penyimpanan ke server gagal.';
+      const errorMessage = err instanceof Error ? err.message : 'Pengecekan selesai, tetapi penyimpanan ke server gagal.';
       setPersistenceError(errorMessage);
     }
   };
@@ -256,7 +256,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
     } else if (persistenceStatus === 'local-only') {
       storageNotice = 'Hasil tersimpan di perangkat ini (Mode Tamu/Lokal)';
     } else if (persistenceStatus === 'failed') {
-      storageNotice = 'Hasil screening selesai (Penyimpanan ke server gagal, tersimpan lokal)';
+      storageNotice = 'Pengecekan selesai (Penyimpanan ke server gagal, tersimpan lokal)';
     }
 
     let text = `=== RUANGTENANG - LAPORAN HASIL SKRINING KESEHATAN MENTAL MAHASISWA ===\n`;
@@ -275,7 +275,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `Hasil_Skrining_PHQ9_GAD7_${new Date().toISOString().slice(0, 10)}.txt`;
+    a.download = `Hasil_Cek_Kondisi_${new Date().toISOString().slice(0, 10)}.txt`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 100);
   };
@@ -298,7 +298,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
         {!isPageMode && (
           <button
             onClick={onClose}
-            aria-label="Tutup Skrining"
+            aria-label="Tutup"
             className="absolute top-4 right-4 p-2 text-slate-600 hover:text-slate-900 rounded-lg hover:bg-slate-100 transition-all z-10"
           >
             <X className="w-5 h-5" />
@@ -306,79 +306,60 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
         )}
 
         {/* Header */}
-        <div className="flex items-center gap-3 mb-6 border-b border-slate-200 pb-5">
-          <div className="p-2.5 bg-slate-50 text-slate-900 rounded-xl border border-slate-300">
+        <div className="flex items-center gap-3 mb-6 border-b border-default pb-5">
+          <div className="p-2.5 surface-muted text-primary rounded-xl border border-default">
             <HeartPulse className="w-6 h-6" />
           </div>
           <div>
-            <h2 id="screening-modal-title" className="text-xl font-sans font-semibold tracking-tight text-slate-900">Skrining Kesehatan Mental Mahasiswa (PHQ-9 & GAD-7)</h2>
-            <p className="text-sm text-slate-600 mt-0.5">Instrumen evaluasi psikologis untuk menilai tingkat depresi & kecemasan.</p>
+            <h2 id="screening-modal-title" className="text-xl font-semibold tracking-tight text-primary">Cek Kondisi Mental Mahasiswa</h2>
+            <p className="text-sm text-secondary mt-0.5">Jawab pertanyaan singkat untuk memahami kondisi emosional Anda dalam dua minggu terakhir.</p>
           </div>
         </div>
 
         {/* STEP 1: INTRO */}
         {step === 'intro' && (
           <div className="space-y-5">
-            <div className="bg-teal-50 p-5 rounded-xl border border-teal-200 text-sm text-slate-600 space-y-2">
-              <p className="font-medium text-teal-600 text-base">Mengapa Tes Ini Sangat Penting?</p>
-              <p className="leading-relaxed">
-                Tekanan skripsi, beban UKT, dan adaptasi kuliah sering kali memicu stres yang tidak terlihat.
-                Hasil tes akan <strong className="text-teal-800 font-medium">disimpan secara aman di sistem</strong> untuk memantau perkembangan Anda. Konselor hanya dapat melihat hasil tes ini jika Anda telah memberikan izin akses.
-              </p>
-              <p className="text-xs text-amber-800 bg-amber-50/80 p-2.5 rounded-lg border border-amber-200/80 mt-2">
-                <strong>Catatan Penting:</strong> Instrumen ini adalah alat evaluasi mandiri awal dan bukan diagnosis medis pengganti konsultasi profesional.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-              <div className="p-4 bg-slate-50 rounded-xl">
-                <p className="font-medium text-slate-900 mb-1.5">PHQ-9 (9 Pertanyaan)</p>
-                <p className="text-slate-600 text-xs">Mengukur indikator depresi & tingkat kelelahan emosional selama 2 minggu terakhir.</p>
-              </div>
-              <div className="p-4 bg-slate-50 rounded-xl">
-                <p className="font-medium text-slate-900 mb-1.5">GAD-7 (7 Pertanyaan)</p>
-                <p className="text-slate-600 text-xs">Mengukur tingkat kecemasan, kegelisahan, dan rasa khawatir berlebihan.</p>
-              </div>
+            <div className="surface-muted p-5 rounded-xl text-sm text-secondary space-y-2">
+              <p className="font-medium text-primary text-base">Tentang Pengecekan Ini</p>
+              <ul className="list-disc pl-5 space-y-1 mt-2">
+                <li><strong className="text-primary font-medium">Tujuan:</strong> Membantu memetakan tingkat stres, kecemasan, dan depresi ringan.</li>
+                <li><strong className="text-primary font-medium">Durasi:</strong> Sekitar 2-3 menit.</li>
+                <li><strong className="text-primary font-medium">Privasi:</strong> Hasil tersimpan di akun Anda untuk riwayat pribadi.</li>
+                <li><strong className="text-primary font-medium">Bukan Diagnosis:</strong> Alat ini adalah skrining awal mandiri, bukan pengganti diagnosis medis profesional.</li>
+              </ul>
             </div>
 
             {historyList.length > 0 && (
-              <div className="bg-slate-50 p-5 rounded-xl space-y-4">
+              <div className="surface-card p-5 rounded-xl space-y-4">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-slate-900 flex items-center gap-2">
-                    <History className="w-4 h-4 text-slate-800" /> Riwayat Tes Terakhir ({historyList.length})
+                  <span className="text-sm font-medium text-primary flex items-center gap-2">
+                    <History className="w-4 h-4 text-secondary" /> Riwayat Tes Terakhir ({historyList.length})
                   </span>
-                  <span className="text-[11px] text-slate-600 font-medium uppercase tracking-wider">Tersimpan di Sistem</span>
+                  <span className="text-[11px] text-secondary font-medium uppercase tracking-wider">Tersimpan Privat</span>
                 </div>
                 <div className="space-y-3 max-h-40 overflow-y-auto pr-2">
                   {historyList.slice(0, 3).map((item, idx) => (
-                    <div key={idx} className="flex items-center justify-between bg-white p-3 rounded-xl border border-slate-300 text-sm shadow-sm">
+                    <div key={idx} className="flex items-center justify-between surface-muted p-3 rounded-xl border border-default text-sm">
                       <div>
-                        <p className="font-medium text-slate-900">
-                          PHQ-9: <span className="text-teal-600">{item.phq9.severity} ({item.phq9.score})</span> • GAD-7: <span className="text-amber-500">{item.gad7.severity} ({item.gad7.score})</span>
+                        <p className="font-medium text-primary">
+                          PHQ-9: <span className="text-teal-600 dark:text-teal-400">{item.phq9.severity}</span> • GAD-7: <span className="text-teal-600 dark:text-teal-400">{item.gad7.severity}</span>
                         </p>
-                        <p className="text-xs text-slate-600 mt-1">
+                        <p className="text-xs text-secondary mt-1">
                           {new Date(item.phq9.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
                         </p>
                       </div>
-                      <button
-                        onClick={() => downloadReportTxt(item)}
-                        className="p-2 text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-[#E6E4DD] rounded-lg transition-colors border border-transparent hover:border-slate-300"
-                        title="Unduh Laporan"
-                      >
-                        <Download className="w-4 h-4" />
-                      </button>
                     </div>
                   ))}
                 </div>
               </div>
             )}
 
-            <div className="flex justify-end pt-5 border-t border-slate-100">
+            <div className="flex justify-end pt-5 border-t border-default">
               <button
                 onClick={() => setStep('phq9')}
-                className="flex items-center gap-2 px-6 py-2.5 min-h-[44px] bg-teal-600 hover:bg-teal-700 text-white font-medium rounded-xl text-sm transition-all active:scale-95 shadow-sm cursor-pointer"
+                className="btn-primary flex items-center gap-2 px-6 py-2.5 min-h-[44px] rounded-xl text-sm"
               >
-                <span>Mulai Skrining Mandiri</span>
+                <span>Mulai Cek Kondisi</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>
@@ -499,7 +480,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
                 }`}
               >
                 <CheckCircle2 className="w-4 h-4" />
-                <span>Lihat Hasil Skrining</span>
+                <span>Lihat Hasil</span>
               </button>
             </div>
           </div>
@@ -509,7 +490,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
         {step === 'result' && finalResult && (
           <div className="space-y-6">
             <div className="text-center py-4 bg-slate-50 rounded-xl">
-              <h3 className="text-xl font-sans font-semibold tracking-tight text-slate-900">Hasil Analisis Skrining Kesehatan Mental</h3>
+              <h3 className="text-xl font-sans font-semibold tracking-tight text-slate-900">Hasil Cek Kondisi Mental</h3>
               <p className="text-sm text-slate-600 mt-1">Hasil evaluasi mandiri awal untuk PHQ-9 & GAD-7.</p>
             </div>
 
@@ -535,7 +516,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
             {persistenceStatus === 'failed' && (
               <div className="p-3.5 bg-rose-50/80 border border-rose-200 rounded-xl text-xs text-rose-800 flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
-                <span>{persistenceError || 'Hasil screening selesai, tetapi penyimpanan ke server gagal.'}</span>
+                <span>{persistenceError || 'Pengecekan selesai, tetapi penyimpanan ke server gagal.'}</span>
               </div>
             )}
 

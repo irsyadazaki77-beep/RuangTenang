@@ -341,7 +341,8 @@ export interface SOSDispatchStatus {
     | "PENDING"
     | "SENT_TO_SERVER"
     | "DELIVERED_SIMULATED"
-    | "DIRECT_CALL_ONLY";
+    | "DIRECT_CALL_ONLY"
+    | "GUEST_DIRECT_CALL_ONLY";
   timestamp: string;
   recipientName?: string;
   recipientPhone?: string;

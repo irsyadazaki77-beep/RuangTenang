@@ -40,7 +40,7 @@ describe('Security Hardening Audit & Regression Test Suite', () => {
         name: 'Admin Sec Audit',
         passwordHash: adminHash,
         role: 'admin',
-        tier: 'Enterprise',
+        tier: 'Developer',
         university: 'Universitas Indonesia',
         emailVerified: true
       }
@@ -67,7 +67,7 @@ describe('Security Hardening Audit & Regression Test Suite', () => {
       userId: admin.id,
       email: admin.email,
       role: 'admin',
-      tier: 'Enterprise',
+      tier: 'Developer',
       sessionId: 'sess_admin_audit',
       name: admin.name
     });

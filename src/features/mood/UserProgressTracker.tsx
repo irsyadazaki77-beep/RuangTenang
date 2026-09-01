@@ -245,8 +245,8 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
         {/* Header Section */}
         <motion.div variants={itemVariants} className="flex flex-col md:flex-row md:items-end justify-between gap-4">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">Progress & Aktivitas</h1>
-            <p className="text-sm text-slate-500 mt-1">Pantau perkembangan kesejahteraan mental Anda dari waktu ke waktu.</p>
+            <h1 className="text-2xl font-bold text-primary tracking-tight">Progress & Aktivitas</h1>
+            <p className="text-sm text-secondary mt-1">Pantau perkembangan kesejahteraan mental Anda dari waktu ke waktu.</p>
           </div>
           <button
             onClick={() => {
@@ -261,36 +261,46 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
         </motion.div>
 
         {/* Summary Cards */}
-        <motion.div variants={itemVariants} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <div className="bg-white p-5 rounded-2xl border border-slate-200/60 shadow-sm flex flex-col justify-between">
+        <motion.div variants={itemVariants} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="surface-card p-5 rounded-2xl flex flex-col justify-between relative overflow-hidden">
             <div className="flex items-center justify-between mb-4">
-              <span className="text-slate-500 text-sm font-medium">Mood Terakhir</span>
+              <span className="text-secondary text-sm font-medium">Mood Terakhir</span>
               <div className={`p-2 rounded-lg ${getMoodColor(latestMood)}`}><Brain className="w-4 h-4" /></div>
             </div>
             <div>
-              <span className="text-3xl font-bold text-slate-900">{getMoodLabel(latestMood)}</span>
+              <span className="text-2xl font-bold text-primary">{latestMood === 0 ? 'Belum ada data' : getMoodLabel(latestMood)}</span>
             </div>
           </div>
 
-          <div className="bg-white p-5 rounded-2xl border border-slate-200/60 shadow-sm flex flex-col justify-between">
+          <div className="surface-card p-5 rounded-2xl flex flex-col justify-between">
             <div className="flex items-center justify-between mb-4">
-              <span className="text-slate-500 text-sm font-medium">Rata-rata Skor Skrining</span>
-              <div className="p-2 bg-blue-50 rounded-lg text-blue-600"><Activity className="w-4 h-4" /></div>
+              <span className="text-secondary text-sm font-medium">Streak Saat Ini</span>
+              <div className="p-2 bg-orange-50 dark:bg-orange-900/30 rounded-lg text-orange-600 dark:text-orange-400"><TrendingUp className="w-4 h-4" /></div>
             </div>
             <div>
-              <span className="text-3xl font-bold text-slate-900">{avgScreeningScore}</span>
-              <span className="text-sm text-slate-500 ml-2">/ 27</span>
+              <span className="text-2xl font-bold text-primary">{uniqueActiveDays === 0 ? 'Belum ada data' : `${uniqueActiveDays} hari`}</span>
             </div>
           </div>
           
-          <div className="bg-white p-5 rounded-2xl border border-slate-200/60 shadow-sm flex flex-col justify-between">
+          <div className="surface-card p-5 rounded-2xl flex flex-col justify-between">
             <div className="flex items-center justify-between mb-4">
-              <span className="text-slate-500 text-sm font-medium">Streak Aktivitas</span>
-              <div className="p-2 bg-orange-50 rounded-lg text-orange-600"><TrendingUp className="w-4 h-4" /></div>
+              <span className="text-secondary text-sm font-medium">PHQ-9 Terbaru</span>
+              <div className="p-2 bg-blue-50 dark:bg-blue-900/30 rounded-lg text-blue-600 dark:text-blue-400"><Activity className="w-4 h-4" /></div>
             </div>
             <div>
-              <span className="text-3xl font-bold text-slate-900">{uniqueActiveDays}</span>
-              <span className="text-sm text-slate-500 ml-2">hari aktif</span>
+              <span className="text-2xl font-bold text-primary">{screenHistory.length === 0 ? 'Belum ada data' : currentPhq9}</span>
+              {screenHistory.length > 0 && <span className="text-sm text-secondary ml-1">/ 27</span>}
+            </div>
+          </div>
+
+          <div className="surface-card p-5 rounded-2xl flex flex-col justify-between">
+            <div className="flex items-center justify-between mb-4">
+              <span className="text-secondary text-sm font-medium">GAD-7 Terbaru</span>
+              <div className="p-2 bg-teal-50 dark:bg-teal-900/30 rounded-lg text-teal-600 dark:text-teal-400"><Activity className="w-4 h-4" /></div>
+            </div>
+            <div>
+              <span className="text-2xl font-bold text-primary">{screenHistory.length === 0 ? 'Belum ada data' : currentGad7}</span>
+              {screenHistory.length > 0 && <span className="text-sm text-secondary ml-1">/ 21</span>}
             </div>
           </div>
         </motion.div>

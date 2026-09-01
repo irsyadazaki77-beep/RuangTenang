@@ -41,33 +41,41 @@ import userDataRouter from './server/routes/userData.js';
 import counselorsRouter from './server/routes/counselors.js';
 
 async function startServer() {
-  // Ensure required secrets and configs have robust production defaults if omitted or insecure in deployment
+  const isProd = process.env.NODE_ENV === 'production';
   const knownInsecure = ['admin123', 'secret', 'default-key', 'ruangtenang-secret', '1234567890', 'change-me-in-production'];
-  
-  if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32 || knownInsecure.includes(process.env.JWT_SECRET.toLowerCase())) {
-    process.env.JWT_SECRET = process.env.JWT_SECRET && process.env.JWT_SECRET.trim()
-      ? crypto.createHash('sha256').update(`ruangtenang-jwt:${process.env.JWT_SECRET}`).digest('hex')
-      : 'a8f7c6e5d4b3a2f1e0d9c8b7a6f5e4d3c2b1a0f9e8d7c6b5a4f3e2d1c0b9a8f7';
+
+  // Apply fallback/derived keys ONLY in development/testing mode
+  if (!isProd) {
+    if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32 || knownInsecure.includes(process.env.JWT_SECRET.toLowerCase())) {
+      process.env.JWT_SECRET = process.env.JWT_SECRET && process.env.JWT_SECRET.trim()
+        ? crypto.createHash('sha256').update(`ruangtenang-jwt:${process.env.JWT_SECRET}`).digest('hex')
+        : 'a8f7c6e5d4b3a2f1e0d9c8b7a6f5e4d3c2b1a0f9e8d7c6b5a4f3e2d1c0b9a8f7';
+    }
+
+    const rawEncKey = process.env.DATA_ENCRYPTION_KEY || process.env.ENCRYPTION_KEY;
+    if (!rawEncKey || rawEncKey.length < 32 || knownInsecure.includes(rawEncKey.toLowerCase())) {
+      const derivedKey = rawEncKey && rawEncKey.trim()
+        ? crypto.createHash('sha256').update(`ruangtenang-enc:${rawEncKey}`).digest('hex')
+        : 'e8f7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f3a2b1c0d9e8f7';
+      process.env.ENCRYPTION_KEY = derivedKey;
+      process.env.DATA_ENCRYPTION_KEY = derivedKey;
+    }
+
+    if (!process.env.DATABASE_URL) {
+      process.env.DATABASE_URL = 'file:./prisma/ruangtenang_sqlite.db';
+    }
   }
 
-  const rawEncKey = process.env.DATA_ENCRYPTION_KEY || process.env.ENCRYPTION_KEY;
-  if (!rawEncKey || rawEncKey.length < 32 || knownInsecure.includes(rawEncKey.toLowerCase())) {
-    const derivedKey = rawEncKey && rawEncKey.trim()
-      ? crypto.createHash('sha256').update(`ruangtenang-enc:${rawEncKey}`).digest('hex')
-      : 'e8f7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f3a2b1c0d9e8f7';
-    process.env.ENCRYPTION_KEY = derivedKey;
-    process.env.DATA_ENCRYPTION_KEY = derivedKey;
-  }
-
-  if (!process.env.DATABASE_URL) {
-    process.env.DATABASE_URL = 'file:./prisma/ruangtenang_sqlite.db';
-  }
-
-  // 1. Startup Environment Validation
+  // 1. Startup Environment Validation (Fail-fast in production)
   try {
     validateEnvironment();
   } catch (envErr: any) {
-    console.warn('[STARTUP WARNING] Environment validation note:', envErr?.message || envErr);
+    if (isProd) {
+      console.error('FATAL PRODUCTION CONFIGURATION ERROR:', envErr?.message || envErr);
+      process.exit(1);
+    } else {
+      console.warn('[STARTUP WARNING] Environment validation note:', envErr?.message || envErr);
+    }
   }
   
   validateStartupEnvironment();
@@ -75,7 +83,10 @@ async function startServer() {
   try {
     await ensureDatabaseReady();
   } catch (dbErr: any) {
-    console.error('[DATABASE INIT WARNING] ensureDatabaseReady error:', dbErr?.message || dbErr);
+    console.error('FATAL DATABASE INIT ERROR:', dbErr?.message || dbErr);
+    if (isProd) {
+      process.exit(1);
+    }
   }
 
   const app = express();
@@ -86,7 +97,7 @@ async function startServer() {
   const trustProxySetting = process.env.TRUST_PROXY || '1';
   app.set('trust proxy', trustProxySetting === 'true' ? true : isNaN(Number(trustProxySetting)) ? trustProxySetting : Number(trustProxySetting));
 
-  const isProd = process.env.NODE_ENV === 'production';
+  // isProd is already declared at startServer level
   
   // CORS Allowlist Setup
   const allowedOrigins = new Set<string>();
@@ -126,13 +137,15 @@ async function startServer() {
                                 lowerOrigin.includes('localhost') ||
                                 lowerOrigin.includes('127.0.0.1');
 
-      if (allowedOrigins.has(lowerOrigin) || isAIStudioPreview) {
-        return callback(null, true);
-      }
-
       if (isProd) {
+        if (allowedOrigins.has(lowerOrigin)) {
+          return callback(null, true);
+        }
         return callback(new Error(`CORS Blocked: Origin ${origin} is not allowed in production.`));
       } else {
+        if (allowedOrigins.has(lowerOrigin) || isAIStudioPreview) {
+          return callback(null, true);
+        }
         return callback(new Error(`CORS Blocked: Origin ${origin} is not allowed.`));
       }
     },
@@ -169,7 +182,7 @@ async function startServer() {
         frameAncestors: frameAncestorsList,
       }
     },
-    frameguard: false,
+    frameguard: isProd ? { action: 'sameorigin' } : false,
     hsts: isProd ? { maxAge: 31536000, includeSubDomains: true, preload: true } : false,
   }));
 

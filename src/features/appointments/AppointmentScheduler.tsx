@@ -384,11 +384,11 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
   return (
     <div className="max-w-6xl mx-auto px-2 sm:px-4 py-4 space-y-4">
       {/* Header */}
-      <div className="bg-white/80 backdrop-blur rounded-xl p-4 sm:p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
+      <div className="surface-card rounded-xl p-4 sm:p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="space-y-1">
-          <h1 className="font-sans font-semibold text-lg sm:text-xl tracking-tight text-slate-900">Jadwal Bimbingan</h1>
-          <p className="text-xs text-slate-600 max-w-xl leading-relaxed">
-            Kelola pengajuan jadwal bimbingan konseling dengan konselor pilihan Anda.
+          <h2 className="font-semibold text-lg text-primary">Jadwal Anda</h2>
+          <p className="text-xs text-secondary max-w-xl leading-relaxed">
+            Kelola pengajuan jadwal bimbingan konseling.
           </p>
         </div>
 

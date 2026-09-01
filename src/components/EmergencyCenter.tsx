@@ -22,8 +22,6 @@ interface EmergencyCenterProps {
   onTriggerSOS?: () => void;
 }
 
-const EMERGENCY_CONTACT_KEY = "ruangtenang_emergency_contact";
-
 export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
   onTriggerSOS,
 }) => {
@@ -34,12 +32,12 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
   const [hotlineQuery, setHotlineQuery] = useState("");
 
   const [contact, setContact] = useState<EmergencyContact>({
-    name: "Ibu / Ayah / Sahabat",
-    relationship: "Orang Tua",
-    phone: "0812-9988-7766",
-    whatsapp: "6281299887766",
-    hasConsent: true,
-    consentDate: new Date().toLocaleDateString("id-ID"),
+    name: "",
+    relationship: "",
+    phone: "",
+    whatsapp: "",
+    hasConsent: false,
+    consentDate: null,
   });
 
   const [isSavedSuccessfully, setIsSavedSuccessfully] = useState(false);
@@ -50,17 +48,37 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
         const data = res.data;
         if (data && !data.error && !data.code) {
           setContact({
-            name: data.name || "Ibu / Ayah / Sahabat",
-            relationship: data.relationship || "Orang Tua",
-            phone: data.phone || "0812-9988-7766",
-            whatsapp: data.whatsapp || "6281299887766",
-            hasConsent: data.hasConsent ?? true,
-            consentDate: data.consentDate || new Date().toLocaleDateString("id-ID")
+            name: data.name || "",
+            relationship: data.relationship || "",
+            phone: data.phone || "",
+            whatsapp: data.whatsapp || "",
+            hasConsent: data.hasConsent ?? false,
+            consentDate: data.consentDate || null
           });
         }
       })
       .catch(e => console.warn("Failed to load emergency contact from backend:", e));
   }, []);
+
+  const getCoordinates = (): Promise<{ latitude: number; longitude: number } | undefined> => {
+    return new Promise((resolve) => {
+      if (!navigator.geolocation) {
+        return resolve(undefined);
+      }
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          resolve({
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+          });
+        },
+        () => {
+          resolve(undefined);
+        },
+        { timeout: 5000 }
+      );
+    });
+  };
 
   const handleSendSOS = async () => {
     setIsTriggeringSOS(true);
@@ -77,25 +95,30 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
         timestamp: new Date().toISOString(),
         hasUserConsent: contact.hasConsent,
         message:
-          "Koneksi luring. Silakan lakukan panggilan telepon seluler langsung ke nomor " + EMERGENCY_CONTACTS[0].phone + ".",
+          "SOS digital tidak dapat dikirim karena perangkat sedang offline. Gunakan tombol Telepon Langsung untuk menghubungi bantuan.",
       });
       setIsTriggeringSOS(false);
-      showToast("Sinyal SOS diaktifkan secara lokal (Luring).", "warning");
+      showToast("Koneksi offline. Silakan gunakan Telepon Langsung.", "warning");
       return;
     }
 
     try {
+      const coords = await getCoordinates();
+      const locationPayload = coords ? {
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+        address: `Koordinat: ${coords.latitude.toFixed(6)}, ${coords.longitude.toFixed(6)}`
+      } : undefined;
+
       const response = await apiClient.post<any>("/api/v1/sos/trigger", {
-        emergencyContact: contact ? {
+        emergencyContact: contact && contact.name && contact.phone ? {
           name: contact.name,
           phone: contact.phone,
           relationship: contact.relationship,
         } : undefined,
         hasUserConsent: contact.hasConsent,
         studentName: user?.name || "Mahasiswa",
-        location: {
-          address: "Kampus / Kos",
-        },
+        location: locationPayload,
       });
 
       if (!response.success && !response.data) throw new Error(response.error || "Network response failure");
@@ -108,7 +131,7 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
       } else {
         showToast("Sinyal SOS gagal terkirim. Segera hubungi hotline darurat 119.", "error");
       }
-    } catch (e) {
+    } catch (e: any) {
       setSosStatus({
         success: false,
         dispatchId: "SOS-LOCAL-" + Date.now().toString().slice(-4),
@@ -143,16 +166,16 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
   return (
     <div className="max-w-5xl mx-auto px-2 sm:px-4 py-4 sm:py-6 space-y-6 font-sans">
       {/* Alert Header */}
-      <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 sm:p-6 border border-rose-100/80 dark:border-rose-950/60 flex flex-col sm:flex-row items-center sm:items-start gap-4 sm:gap-5 shadow-sm">
+      <div className="surface-card rounded-3xl p-5 sm:p-6 border border-rose-100/80 dark:border-rose-950/60 flex flex-col sm:flex-row items-center sm:items-start gap-4 sm:gap-5">
         <div className="w-12 h-12 rounded-2xl bg-rose-50 dark:bg-rose-950/80 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0 border border-rose-200/50 dark:border-rose-900/60">
           <ShieldAlert className="w-6 h-6" />
         </div>
         <div className="text-center sm:text-left space-y-1 flex-1 min-w-0">
-          <h1 className="font-bold text-slate-900 dark:text-slate-100 text-lg sm:text-xl tracking-tight">
-            Layanan Bantuan Darurat & Krisis (24 Jam)
-          </h1>
-          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 leading-relaxed max-w-2xl">
-            Jika Anda atau kerabat berada dalam situasi krisis atau memerlukan pertolongan segera, hubungi kontak di bawah ini. Layanan darurat aktif 24 jam.
+          <h2 className="font-bold text-primary text-lg sm:text-xl tracking-tight">
+            Pusat Krisis (24 Jam)
+          </h2>
+          <p className="text-sm text-secondary leading-relaxed max-w-2xl">
+            Jika Anda atau kerabat berada dalam situasi krisis atau memerlukan pertolongan segera, hubungi kontak di bawah ini.
           </p>
         </div>
       </div>
@@ -160,7 +183,7 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
       {/* Main 1-Click Action Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
         {/* ACTION CARD 1: DIRECT HOTLINE DIAL */}
-        <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 sm:p-6 shadow-xs border border-slate-200/80 dark:border-slate-800 flex flex-col justify-between space-y-5 group hover:shadow-md transition-all">
+        <div className="surface-card rounded-3xl p-5 sm:p-6 flex flex-col justify-between space-y-5 group hover:shadow-md transition-all">
           <div className="space-y-2">
             <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100">
               {EMERGENCY_CONTACTS[0].name}
@@ -179,7 +202,7 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
         </div>
 
         {/* ACTION CARD 2: INSTANT SOS SIGNAL */}
-        <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 sm:p-6 shadow-xs border border-slate-200/80 dark:border-slate-800 flex flex-col justify-between space-y-5 group hover:shadow-md transition-all">
+        <div className="surface-card rounded-3xl p-5 sm:p-6 flex flex-col justify-between space-y-5 group hover:shadow-md transition-all">
           <div className="space-y-2">
             <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100">
               Sinyal Pesan Darurat ke Kampus / Wali
@@ -194,15 +217,15 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
               type="button"
               onClick={handleSendSOS}
               disabled={isTriggeringSOS}
-              className="w-full py-3.5 px-4 bg-slate-900 hover:bg-slate-800 dark:bg-teal-600 dark:hover:bg-teal-700 text-white font-semibold text-xs sm:text-sm rounded-2xl shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer min-h-[44px] disabled:opacity-50"
+              className="btn-danger w-full py-3.5 px-4 rounded-2xl text-sm flex items-center justify-center gap-2 min-h-[44px] disabled:opacity-50"
             >
               <ShieldAlert
-                className={`w-4 h-4 ${isTriggeringSOS ? "animate-spin" : "text-rose-400 dark:text-rose-200"}`}
+                className={`w-4 h-4 ${isTriggeringSOS ? "animate-spin" : "text-white"}`}
               />
               <span>
                 {isTriggeringSOS
-                  ? "Mengirim Sinyal SOS..."
-                  : "Picu Sinyal SOS Digital"}
+                  ? "Mengirim..."
+                  : "Kirim Sinyal Darurat"}
               </span>
             </button>
 
@@ -210,7 +233,7 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
               <div className={`p-3.5 rounded-xl border text-xs space-y-1.5 animate-fade-in ${
                 sosStatus.status === 'SENT' 
                   ? 'bg-emerald-50/70 dark:bg-emerald-950/60 border-emerald-200 dark:border-emerald-900 text-emerald-950 dark:text-emerald-200'
-                  : sosStatus.status === 'SIMULATED'
+                  : (sosStatus.status === 'SIMULATED' || sosStatus.status === 'DIRECT_CALL_ONLY')
                   ? 'bg-amber-50/80 dark:bg-amber-950/60 border-amber-200 dark:border-amber-900 text-amber-950 dark:text-amber-200'
                   : 'bg-rose-50/70 dark:bg-rose-950/60 border-rose-200 dark:border-rose-900 text-rose-950 dark:text-rose-200'
               }`}>
@@ -224,6 +247,16 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
                     <>
                       <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
                       <span className="text-amber-900 dark:text-amber-200">Sinyal SOS Dicatat (Mode Simulasi Server)</span>
+                    </>
+                  ) : sosStatus.status === 'DIRECT_CALL_ONLY' ? (
+                    <>
+                      <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                      <span className="text-amber-900 dark:text-amber-200">Mode Telepon Langsung (Offline)</span>
+                    </>
+                  ) : sosStatus.status === 'GUEST_DIRECT_CALL_ONLY' ? (
+                    <>
+                      <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                      <span className="text-rose-900 dark:text-rose-200">Sesi Tamu: Gunakan Telepon Langsung</span>
                     </>
                   ) : (
                     <>
@@ -250,7 +283,7 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
       {/* Grid of Helpline Directory & Contact Settings */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 sm:gap-6">
         {/* LEFT/MAIN COLUMN: HELPLINE DIRECTORY (7 cols) */}
-        <div className="lg:col-span-7 bg-white dark:bg-slate-900 rounded-3xl p-4 sm:p-6 shadow-xs border border-slate-200/80 dark:border-slate-800 space-y-4">
+        <div className="lg:col-span-7 surface-card rounded-3xl p-4 sm:p-6 space-y-4">
           <div className="space-y-1">
             <h2 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
               <HeartHandshake className="w-4.5 h-4.5 text-teal-600 dark:text-teal-400" />
@@ -318,7 +351,7 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
         </div>
 
         {/* RIGHT COLUMN: EMERGENCY CONTACT MANAGER (5 cols) */}
-        <div className="lg:col-span-5 bg-white dark:bg-slate-900 rounded-3xl p-4 sm:p-6 shadow-xs border border-slate-200/80 dark:border-slate-800 flex flex-col justify-between space-y-4">
+        <div className="lg:col-span-5 surface-card rounded-3xl p-4 sm:p-6 flex flex-col justify-between space-y-4">
           <div className="space-y-1">
             <h2 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
               <User className="w-4.5 h-4.5 text-teal-600 dark:text-teal-400" />
@@ -344,7 +377,7 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
                     setContact({ ...contact, name: e.target.value })
                   }
                   className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pl-9 pr-3.5 py-1.5 text-xs sm:text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:border-teal-600 min-h-[38px]"
-                  placeholder="Nama wali / sahabat"
+                  placeholder="Contoh: Ibu"
                 />
               </div>
             </div>
@@ -360,6 +393,7 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
                 }
                 className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-xs sm:text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:border-teal-600 min-h-[38px]"
               >
+                <option value="">-- Pilih Hubungan --</option>
                 <option value="Orang Tua">Orang Tua (Ayah / Ibu)</option>
                 <option value="Saudara Kandung">Saudara Kandung</option>
                 <option value="Wali / Kerabat">Wali / Kerabat Kampus</option>
@@ -382,9 +416,28 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
                     setContact({ ...contact, phone: e.target.value })
                   }
                   className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pl-9 pr-3.5 py-1.5 text-xs sm:text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:border-teal-600 font-mono min-h-[38px]"
-                  placeholder="Contoh: 0812-xxxx-xxxx"
+                  placeholder="Contoh: 081234567890"
                 />
               </div>
+            </div>
+
+            <div className="flex items-start gap-2 pt-1 pb-2">
+              <input
+                type="checkbox"
+                id="hasConsent"
+                checked={contact.hasConsent}
+                onChange={(e) =>
+                  setContact({
+                    ...contact,
+                    hasConsent: e.target.checked,
+                    consentDate: e.target.checked ? new Date().toLocaleDateString("id-ID") : null
+                  })
+                }
+                className="mt-1 h-4 w-4 rounded-sm border-slate-300 text-teal-600 focus:ring-teal-500"
+              />
+              <label htmlFor="hasConsent" className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed select-none">
+                Saya memberikan persetujuan (consent) untuk menghubungi kontak darurat ini secara otomatis jika saya memicu sinyal SOS.
+              </label>
             </div>
 
             <button

@@ -31,7 +31,6 @@
     min-height: 100dvh;
     font-size: 14px;
     overscroll-behavior-y: none;
-    -webkit-touch-callout: none;
   }
 
 
@@ -155,6 +154,42 @@
 }
 
 @layer utilities {
+  .surface-page {
+    @apply bg-stone-50/60 dark:bg-slate-950;
+  }
+  .surface-card {
+    @apply bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm;
+  }
+  .surface-elevated {
+    @apply bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-md;
+  }
+  .surface-muted {
+    @apply bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-700/50;
+  }
+  .text-primary {
+    @apply text-slate-900 dark:text-slate-100;
+  }
+  .text-secondary {
+    @apply text-slate-500 dark:text-slate-400;
+  }
+  .text-muted {
+    @apply text-slate-400 dark:text-slate-500;
+  }
+  .border-default {
+    @apply border-slate-200/80 dark:border-slate-800;
+  }
+  .border-strong {
+    @apply border-slate-300 dark:border-slate-700;
+  }
+  .btn-primary {
+    @apply bg-teal-600 hover:bg-teal-700 text-white font-semibold transition-all cursor-pointer;
+  }
+  .btn-secondary {
+    @apply bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 transition-all cursor-pointer;
+  }
+  .btn-danger {
+    @apply bg-rose-600 hover:bg-rose-700 text-white font-semibold transition-all cursor-pointer;
+  }
   .safe-area-top {
     padding-top: env(safe-area-inset-top);
   }
