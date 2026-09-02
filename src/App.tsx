@@ -250,12 +250,6 @@ export default function App() {
 
   return (
     <div className="flex w-full h-[100dvh] bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans relative overflow-hidden">
-      {isOffline && (
-        <div className="absolute top-0 left-0 right-0 z-50 bg-amber-500 text-white px-4 py-2 text-sm font-medium flex items-center justify-center gap-2 shadow-md animate-in slide-in-from-top">
-          <WifiOff size={16} />
-          Koneksi ke server terputus. Beberapa fitur mungkin tidak berfungsi.
-        </div>
-      )}
       <Sidebar 
         isOpen={isSidebarOpen} 
         setIsOpen={setIsSidebarOpen} 
@@ -276,7 +270,13 @@ export default function App() {
         isLoading={isLoadingChats}
       />
       
-      <div className="flex-1 flex flex-col relative min-w-0">
+      <div className="flex-1 flex flex-col relative min-w-0 h-full overflow-hidden">
+        {isOffline && (
+          <div className="shrink-0 z-30 bg-amber-500 text-white px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium flex items-center justify-center gap-2 shadow-sm text-center">
+            <WifiOff className="w-4 h-4 shrink-0" />
+            <span>Koneksi ke server terputus. Beberapa fitur mungkin tidak berfungsi.</span>
+          </div>
+        )}
         {isSettingsOpen ? (
           <div className="absolute inset-0 bg-slate-50 dark:bg-slate-900 z-20 flex flex-col overflow-hidden">
             <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center bg-white dark:bg-slate-900 shadow-sm shrink-0">

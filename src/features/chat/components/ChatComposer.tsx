@@ -190,7 +190,7 @@ export function ChatComposer({ onSend, isTyping, onStop, chatId, onCommand, onOp
                     key={p.id}
                     type="button"
                     onClick={() => handlePluginClick(p.id)}
-                    className="w-full flex items-center gap-2.5 p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl text-left transition-colors text-xs font-medium text-slate-700 dark:text-slate-200 cursor-pointer min-h-[40px]"
+                    className="w-full flex items-center gap-2.5 p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl text-left transition-colors text-xs font-medium text-slate-700 dark:text-slate-200 cursor-pointer min-h-[44px]"
                     role="menuitem"
                   >
                     <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${p.color}`}>
@@ -216,7 +216,7 @@ export function ChatComposer({ onSend, isTyping, onStop, chatId, onCommand, onOp
               setShowPlugins(!showPlugins);
               setShowCommands(false);
             }}
-            className={`w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center rounded-xl transition-colors shrink-0 cursor-pointer ${
+            className={`w-10 h-10 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl transition-colors shrink-0 cursor-pointer ${
               showPlugins
                 ? 'bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-300'
                 : 'text-slate-500 hover:text-slate-800 hover:bg-slate-200/70 dark:text-slate-400 dark:hover:text-slate-100 dark:hover:bg-slate-800'
@@ -283,7 +283,7 @@ export function ChatComposer({ onSend, isTyping, onStop, chatId, onCommand, onOp
             <button
               type="button"
               onClick={onStop}
-              className="w-9 h-9 sm:w-10 sm:h-10 bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl flex items-center justify-center shrink-0 transition-colors cursor-pointer"
+              className="w-10 h-10 min-h-[44px] min-w-[44px] bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl flex items-center justify-center shrink-0 transition-colors cursor-pointer"
               aria-label="Hentikan Jawaban"
               title="Hentikan respons AI"
             >
@@ -294,7 +294,7 @@ export function ChatComposer({ onSend, isTyping, onStop, chatId, onCommand, onOp
               type="button"
               onClick={handleSend}
               disabled={!input.trim()}
-              className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0 transition-all ${
+              className={`w-10 h-10 min-h-[44px] min-w-[44px] rounded-xl flex items-center justify-center shrink-0 transition-all ${
                 input.trim()
                   ? 'bg-teal-600 hover:bg-teal-700 active:scale-95 text-white shadow-2xs cursor-pointer'
                   : 'bg-slate-200/80 dark:bg-slate-800 text-slate-400 dark:text-slate-600 cursor-not-allowed'

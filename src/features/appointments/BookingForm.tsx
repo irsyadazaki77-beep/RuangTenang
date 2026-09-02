@@ -305,16 +305,16 @@ export const BookingForm: React.FC<BookingFormProps> = ({
     counselors[0];
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-800/80 backdrop-blur-sm flex items-center justify-center max-sm:items-end p-3 sm:p-4 max-sm:p-0 overflow-y-auto font-sans animate-fade-in">
-      <div className="bg-white text-slate-800 rounded-3xl max-sm:rounded-b-none max-w-xl w-full p-5 sm:p-7 shadow-lg relative max-h-[92dvh] overflow-y-auto flex flex-col justify-between max-sm:animate-slide-up transition-transform duration-300">
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center max-sm:items-end p-3 sm:p-4 max-sm:p-0 overflow-y-auto font-sans animate-fade-in">
+      <div className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 border border-slate-100 dark:border-slate-800 rounded-3xl max-sm:rounded-b-none max-w-xl w-full p-5 sm:p-7 shadow-xl relative max-h-[92dvh] overflow-y-auto flex flex-col justify-between max-sm:animate-slide-up transition-transform duration-300">
         {/* Drag handle for mobile bottom sheet */}
-        <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto my-3 sm:hidden shrink-0" />
+        <div className="w-12 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full mx-auto my-2 sm:hidden shrink-0" />
 
         {/* Header & Stepper */}
         <div>
           <div className="flex items-center justify-between pb-4">
             <div>
-              <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
+              <p className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1">
                 Langkah {currentStep} dari 4
               </p>
               <h2 className="text-xl font-medium text-slate-800 dark:text-slate-100">
@@ -326,7 +326,7 @@ export const BookingForm: React.FC<BookingFormProps> = ({
             </div>
             <button
               onClick={onClose}
-              className="p-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors cursor-pointer"
+              className="p-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors cursor-pointer min-h-[44px] min-w-[44px] flex items-center justify-center"
               aria-label="Tutup Form"
             >
               <XCircle className="w-5 h-5" />
@@ -603,7 +603,7 @@ export const BookingForm: React.FC<BookingFormProps> = ({
             <button
               type="button"
               onClick={handlePrevStep}
-              className="px-5 py-3 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 text-sm font-medium rounded-xl transition-colors flex items-center gap-2 cursor-pointer"
+              className="px-5 py-3 min-h-[44px] hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 text-sm font-medium rounded-xl transition-colors flex items-center gap-2 cursor-pointer"
             >
               <ChevronLeft className="w-4 h-4" />
               <span>Kembali</span>
@@ -612,7 +612,7 @@ export const BookingForm: React.FC<BookingFormProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-5 py-3 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 text-sm font-medium rounded-xl transition-colors cursor-pointer"
+              className="px-5 py-3 min-h-[44px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 text-sm font-medium rounded-xl transition-colors cursor-pointer"
             >
               Batal
             </button>
@@ -622,7 +622,7 @@ export const BookingForm: React.FC<BookingFormProps> = ({
             <button
               type="button"
               onClick={handleNextStep}
-              className="px-6 py-3 bg-slate-900 dark:bg-white hover:bg-slate-800 dark:hover:bg-slate-100 text-white dark:text-slate-900 text-sm font-medium rounded-xl shadow-sm transition-all flex items-center gap-2 cursor-pointer ml-auto"
+              className="px-6 py-3 min-h-[44px] bg-slate-900 dark:bg-white hover:bg-slate-800 dark:hover:bg-slate-100 text-white dark:text-slate-900 text-sm font-medium rounded-xl shadow-sm transition-all flex items-center gap-2 cursor-pointer ml-auto"
             >
               <span>Lanjut</span>
               <ChevronRight className="w-4 h-4" />
@@ -632,7 +632,7 @@ export const BookingForm: React.FC<BookingFormProps> = ({
               type="button"
               onClick={handleCreateAppointment}
               disabled={isSubmitting}
-              className="px-6 py-3 bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium rounded-xl shadow-sm transition-all disabled:opacity-50 cursor-pointer ml-auto"
+              className="px-6 py-3 min-h-[44px] bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium rounded-xl shadow-sm transition-all disabled:opacity-50 cursor-pointer ml-auto"
             >
               {isSubmitting ? "Memproses..." : "Konfirmasi Sesi"}
             </button>

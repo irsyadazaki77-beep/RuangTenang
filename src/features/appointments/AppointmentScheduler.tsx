@@ -404,16 +404,16 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
       </div>
 
       {/* Notification Banner Controls */}
-      <div className="bg-white/80 backdrop-blur rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm">
+      <div className="surface-card rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm border border-default">
         <div className="flex items-center gap-2.5">
-          <div className="p-1.5 bg-amber-50 text-amber-600 rounded-md border border-amber-200 shrink-0">
+          <div className="p-1.5 bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 rounded-md border border-amber-200 dark:border-amber-900/50 shrink-0">
             <BellRing className="w-4 h-4 text-amber-500" />
           </div>
           <div>
-            <h3 className="font-medium text-slate-900 text-xs">Sistem Notifikasi Pengingat Pertemuan</h3>
-            <p className="text-[11px] text-slate-600 mt-0.5">
+            <h3 className="font-medium text-primary text-xs">Sistem Notifikasi Pengingat Pertemuan</h3>
+            <p className="text-[11px] text-secondary mt-0.5">
               Status Browser:{' '}
-              <span className={`font-medium ${notificationPermission === 'granted' ? 'text-teal-600' : 'text-amber-600'}`}>
+              <span className={`font-medium ${notificationPermission === 'granted' ? 'text-teal-600 dark:text-teal-400' : 'text-amber-600 dark:text-amber-400'}`}>
                 {notificationPermission === 'granted' ? 'Aktif' : 'Belum Diizinkan'}
               </span>
             </p>
@@ -424,16 +424,16 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
           {notificationPermission !== 'granted' ? (
             <button
               onClick={requestNotificationPermission}
-              className="w-full sm:w-auto px-3 py-1 bg-amber-500 hover:bg-[#B77C00] text-white font-medium text-xs rounded-md transition-all shadow-2xs flex items-center justify-center"
+              className="w-full sm:w-auto px-4 py-2 min-h-[40px] bg-amber-500 hover:bg-[#B77C00] text-white font-medium text-xs rounded-lg transition-all shadow-2xs flex items-center justify-center cursor-pointer"
             >
               Aktifkan Notifikasi
             </button>
           ) : (
             <button
               onClick={triggerTestNotification}
-              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 font-medium text-sm rounded-lg transition-all flex items-center gap-1.5"
+              className="px-4 py-2 min-h-[40px] surface-card hover:bg-slate-100 dark:hover:bg-slate-800 text-primary border border-default font-medium text-xs rounded-lg transition-all flex items-center gap-1.5 cursor-pointer"
             >
-              <Bell className="w-4 h-4 text-slate-800" />
+              <Bell className="w-4 h-4" />
               <span>Uji Coba Pengingat</span>
             </button>
           )}
@@ -442,18 +442,18 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
 
       {/* APPOINTMENTS LIST / RIWAYAT APPOINTMENT (with progressive disclosure) */}
       <div className="space-y-6">
-        <h2 className="font-sans font-semibold tracking-tight text-xl font-medium text-slate-900 flex items-center gap-2 border-b border-slate-200 pb-3">
-          <CalendarCheck className="w-5 h-5 text-slate-800" />
+        <h2 className="font-sans font-semibold tracking-tight text-xl text-primary flex items-center gap-2 border-b border-default pb-3">
+          <CalendarCheck className="w-5 h-5 text-teal-600 dark:text-teal-400" />
           <span>Daftar Pertemuan Terjadwal ({appointments.length})</span>
         </h2>
 
         {appointments.length === 0 ? (
-          <div className="bg-white/80 backdrop-blur rounded-xl p-12 text-center space-y-4 shadow-sm">
-            <CalendarIcon className="w-12 h-12 text-slate-300 mx-auto" />
-            <p className="text-slate-600 text-sm">Belum ada sesi konseling yang dijadwalkan.</p>
+          <div className="surface-card rounded-2xl p-8 sm:p-12 text-center space-y-4 shadow-sm border border-default">
+            <CalendarIcon className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto" />
+            <p className="text-secondary text-sm">Belum ada sesi konseling yang dijadwalkan.</p>
             <button
               onClick={() => setIsBookingOpen(true)}
-              className="mt-2 px-6 py-3 bg-slate-800 text-white font-medium text-sm rounded-lg shadow-sm"
+              className="mt-2 px-6 py-3 min-h-[44px] bg-slate-800 dark:bg-white hover:bg-slate-900 dark:hover:bg-slate-100 text-white dark:text-slate-900 font-medium text-sm rounded-xl shadow-sm cursor-pointer"
             >
               Jadwalkan Sesi Pertama
             </button>
@@ -463,10 +463,10 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
             {appointments.map((apt) => (
               <div
                 key={apt.id}
-                className="bg-white/80 backdrop-blur rounded-xl p-6 space-y-5 shadow-sm transition-all"
+                className="surface-card rounded-2xl p-5 sm:p-6 space-y-5 shadow-sm border border-default transition-all"
               >
                 <div className="flex items-start justify-between gap-4">
-                  <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-3.5">
                     <img
                       src={apt.counselorAvatar}
                       alt={apt.counselorName}
@@ -474,58 +474,58 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
                       height={56}
                       loading="lazy"
                       decoding="async"
-                      className="w-14 h-14 rounded-xl object-cover border border-slate-200 shadow-sm"
+                      className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl object-cover border border-default shadow-sm shrink-0"
                     />
-                    <div>
-                      <h3 className="font-sans font-semibold tracking-tight text-slate-900 text-base">{apt.counselorName}</h3>
-                      <p className="text-sm text-slate-600 font-medium mt-0.5">{apt.counselorTitle}</p>
+                    <div className="min-w-0">
+                      <h3 className="font-sans font-semibold tracking-tight text-primary text-sm sm:text-base truncate">{apt.counselorName}</h3>
+                      <p className="text-xs sm:text-sm text-secondary font-medium mt-0.5 truncate">{apt.counselorTitle}</p>
                     </div>
                   </div>
-                  <div className="flex flex-col items-end gap-1.5">
-                    <span className={`px-3 py-1 text-xs font-medium rounded-md border ${
+                  <div className="flex flex-col items-end gap-1.5 shrink-0">
+                    <span className={`px-2.5 py-1 text-xs font-medium rounded-lg border ${
                       apt.status === 'Dibatalkan'
-                        ? 'bg-rose-50 text-rose-600 border-rose-200'
+                        ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-900/50'
                         : apt.status === 'Ditolak'
-                        ? 'bg-red-50 text-red-700 border-red-200'
+                        ? 'bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-400 border-red-200 dark:border-red-900/50'
                         : apt.status === 'Menunggu Konfirmasi'
-                        ? 'bg-amber-50 text-amber-700 border-amber-300'
+                        ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-900/50'
                         : apt.status === 'Selesai'
-                        ? 'bg-slate-100 text-slate-700 border-slate-300'
-                        : 'bg-teal-50 text-teal-600 border-teal-200'
+                        ? 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700'
+                        : 'bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400 border-teal-200 dark:border-teal-900/50'
                     }`}>
                       {apt.status === 'Menunggu Konfirmasi' ? '⏳ Menunggu Konfirmasi' : apt.status}
                     </span>
                     {apt.attendanceStatus && (
-                      <span className="text-xs font-mono font-medium text-slate-600">
+                      <span className="text-[11px] font-mono font-medium text-secondary">
                         {apt.attendanceStatus === 'SCHEDULED' ? 'Terjadwal' : apt.attendanceStatus === 'ATTENDED' ? 'Selesai (Hadir)' : apt.attendanceStatus === 'RESCHEDULED' ? 'Dijadwalkan Ulang' : 'Dibatalkan'}
                       </span>
                     )}
                   </div>
                 </div>
 
-                <div className="bg-slate-50 p-4 rounded-xl text-sm space-y-2.5">
-                  <div className="flex items-center justify-between text-slate-800">
-                    <span className="flex items-center gap-2 text-slate-600">
-                      <CalendarIcon className="w-4 h-4 text-slate-600" /> Tanggal & Waktu:
+                <div className="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-xl text-xs sm:text-sm space-y-2.5 border border-slate-100 dark:border-slate-800">
+                  <div className="flex items-center justify-between text-primary">
+                    <span className="flex items-center gap-2 text-secondary">
+                      <CalendarIcon className="w-4 h-4 text-secondary" /> Tanggal & Waktu:
                     </span>
-                    <span className="font-medium text-slate-900">{apt.date} | {apt.timeSlot}</span>
+                    <span className="font-medium text-primary">{apt.date} | {apt.timeSlot}</span>
                   </div>
-                  <div className="flex items-center justify-between text-slate-800">
-                    <span className="flex items-center gap-2 text-slate-600">
-                      <Video className="w-4 h-4 text-slate-600" /> Format:
+                  <div className="flex items-center justify-between text-primary">
+                    <span className="flex items-center gap-2 text-secondary">
+                      <Video className="w-4 h-4 text-secondary" /> Format:
                     </span>
-                    <span className="font-medium text-slate-900">{apt.mode}</span>
+                    <span className="font-medium text-primary">{apt.mode}</span>
                   </div>
                   
                   {/* Virtual Meeting Link */}
                   {apt.meetingLink && apt.mode === 'video_call' && apt.status !== 'Selesai' && (
-                    <div className="flex items-center justify-between pt-2.5 border-t border-slate-200">
-                      <span className="text-slate-600 font-medium">Link Pertemuan:</span>
+                    <div className="flex items-center justify-between pt-2.5 border-t border-slate-200 dark:border-slate-700">
+                      <span className="text-secondary font-medium">Link Pertemuan:</span>
                       <a
                         href={apt.meetingLink}
                         target="_blank"
                         rel="noreferrer"
-                        className="text-slate-800 hover:underline font-mono font-medium flex items-center gap-1.5"
+                        className="text-teal-600 dark:text-teal-400 hover:underline font-mono font-medium flex items-center gap-1.5"
                       >
                         <Video className="w-3.5 h-3.5" />
                         <span>Buka Link Sesi</span>
@@ -533,11 +533,11 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
                     </div>
                   )}
 
-                  <div className="flex items-center justify-between text-slate-800">
-                    <span className="flex items-center gap-2 text-slate-600">
-                      <Bell className="w-4 h-4 text-slate-600" /> Pengingat:
+                  <div className="flex items-center justify-between text-primary">
+                    <span className="flex items-center gap-2 text-secondary">
+                      <Bell className="w-4 h-4 text-secondary" /> Pengingat:
                     </span>
-                    <span className="text-slate-600">{apt.reminderMinutesBefore} Menit Sebelum Sesi</span>
+                    <span className="text-secondary">{apt.reminderMinutesBefore} Menit Sebelum Sesi</span>
                   </div>
                 </div>
 
@@ -547,9 +547,9 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
                     <>
                       <button
                         onClick={() => setSelectedCalendarApt(apt)}
-                        className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 shadow-xs cursor-pointer"
+                        className="flex-1 py-2.5 min-h-[44px] bg-slate-800 dark:bg-white hover:bg-slate-900 dark:hover:bg-slate-100 text-white dark:text-slate-900 rounded-xl text-xs sm:text-sm font-medium transition-all flex items-center justify-center gap-2 shadow-xs cursor-pointer"
                       >
-                        <Bell className="w-4 h-4 text-amber-400" />
+                        <Bell className="w-4 h-4 text-amber-400 dark:text-amber-600" />
                         <span>Pengingat & Kalender</span>
                       </button>
 
@@ -557,7 +557,7 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
                         href={generateGoogleCalendarUrl(apt)}
                         target="_blank"
                         rel="noreferrer"
-                        className="py-2.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-1.5"
+                        className="py-2.5 px-3 min-h-[44px] surface-card hover:bg-slate-100 dark:hover:bg-slate-800 text-primary border border-default rounded-xl text-xs sm:text-sm font-medium transition-all flex items-center justify-center gap-1.5"
                         title="Buka di Google Calendar"
                       >
                         <ExternalLink className="w-4 h-4" />
@@ -568,7 +568,7 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
                       {apt.status !== 'Dibatalkan' && (
                         <button
                           onClick={() => setRescheduleApt(apt)}
-                          className="px-3.5 py-2.5 bg-amber-50 hover:bg-[#FEF5D9] text-amber-700 border border-amber-200 rounded-lg text-sm font-medium transition-all cursor-pointer"
+                          className="px-3.5 py-2.5 min-h-[44px] bg-amber-50 dark:bg-amber-950/40 hover:bg-[#FEF5D9] text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-900/50 rounded-xl text-xs sm:text-sm font-medium transition-all cursor-pointer"
                         >
                           Reschedule
                         </button>
@@ -576,7 +576,7 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
 
                       <button
                         onClick={() => downloadIcsFile(apt)}
-                        className="p-2.5 bg-transparent hover:bg-slate-100 text-slate-600 border border-slate-200 rounded-lg transition-all cursor-pointer"
+                        className="p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center bg-transparent hover:bg-slate-100 dark:hover:bg-slate-800 text-secondary border border-default rounded-xl transition-all cursor-pointer"
                         title="Unduh File Kalender (.ics)"
                       >
                         <Download className="w-4 h-4" />
@@ -585,7 +585,7 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
                       {apt.status !== 'Dibatalkan' && (
                         <button
                           onClick={() => handleCancelAppointment(apt.id)}
-                          className="p-2.5 bg-transparent hover:bg-rose-50 text-slate-600 hover:text-rose-500 border border-slate-200 hover:border-rose-200 rounded-lg transition-all cursor-pointer"
+                          className="p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center bg-transparent hover:bg-rose-50 dark:hover:bg-rose-950/40 text-secondary hover:text-rose-500 border border-default hover:border-rose-200 dark:hover:border-rose-900/50 rounded-xl transition-all cursor-pointer"
                           title="Batalkan Sesi Konseling"
                         >
                           <XCircle className="w-4 h-4" />

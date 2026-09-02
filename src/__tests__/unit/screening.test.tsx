@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { ScreeningModal } from '../../features/screening/ScreeningModal';
 import { apiClient } from '../../lib/apiClient';
 import * as AuthContextModule from '../../contexts/AuthContext';
@@ -16,6 +17,10 @@ describe('Screening Modal Unit & Integration Tests', () => {
     vi.clearAllMocks();
     (apiClient.get as any).mockResolvedValue({ success: true, data: [] });
   });
+
+  const renderWithRouter = (ui: React.ReactElement) => {
+    return render(<MemoryRouter>{ui}</MemoryRouter>);
+  };
 
   const completeAllQuestions = () => {
     // Click "Mulai Cek Kondisi" from intro
@@ -49,7 +54,7 @@ describe('Screening Modal Unit & Integration Tests', () => {
       logout: vi.fn()
     });
 
-    render(<ScreeningModal isOpen={true} onClose={vi.fn()} onComplete={vi.fn()} />);
+    renderWithRouter(<ScreeningModal isOpen={true} onClose={vi.fn()} onComplete={vi.fn()} />);
 
     expect(screen.getByText(/Cek Kondisi Mental Mahasiswa/i)).toBeInTheDocument();
     expect(screen.getByText(/bukan pengganti diagnosis medis/i)).toBeInTheDocument();
@@ -73,7 +78,7 @@ describe('Screening Modal Unit & Integration Tests', () => {
     const onComplete = vi.fn();
     const onPersisted = vi.fn();
 
-    render(<ScreeningModal isOpen={true} onClose={vi.fn()} onComplete={onComplete} onPersisted={onPersisted} />);
+    renderWithRouter(<ScreeningModal isOpen={true} onClose={vi.fn()} onComplete={onComplete} onPersisted={onPersisted} />);
 
     completeAllQuestions();
 
@@ -114,7 +119,7 @@ describe('Screening Modal Unit & Integration Tests', () => {
     const onComplete = vi.fn();
     const onPersisted = vi.fn();
 
-    render(<ScreeningModal isOpen={true} onClose={vi.fn()} onComplete={onComplete} onPersisted={onPersisted} />);
+    renderWithRouter(<ScreeningModal isOpen={true} onClose={vi.fn()} onComplete={onComplete} onPersisted={onPersisted} />);
 
     completeAllQuestions();
 
@@ -142,7 +147,7 @@ describe('Screening Modal Unit & Integration Tests', () => {
     const onComplete = vi.fn();
     const onPersisted = vi.fn();
 
-    render(<ScreeningModal isOpen={true} onClose={vi.fn()} onComplete={onComplete} onPersisted={onPersisted} />);
+    renderWithRouter(<ScreeningModal isOpen={true} onClose={vi.fn()} onComplete={onComplete} onPersisted={onPersisted} />);
 
     completeAllQuestions();
 

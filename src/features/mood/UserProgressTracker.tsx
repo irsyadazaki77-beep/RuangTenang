@@ -89,7 +89,7 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
     
     // Fetch from backend for authenticated users
     const dateStr = new Date().toISOString().split('T')[0];
-    apiClient.get(`/api/v1/user/selfcare?date=${dateStr}`).then(res => {
+    apiClient.get<any>(`/api/v1/user/selfcare?date=${dateStr}`).then(res => {
       if (res.success && res.data && res.data.tasks) {
         const backendTasks = res.data.tasks;
         setSelfCareChecklist(prev => {
@@ -285,7 +285,7 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
       } catch (err) {
         // Rollback on failure
         setSelfCareChecklist(prev => prev.map(item => item.id === id ? { ...item, done: !newStatus } : item));
-        showToast('Gagal menyimpan tugas', 'error');
+        showToast('Gagal menyimpan tugas');
       }
     } else {
       showToast('Tugas perawatan mandiri diperbarui!');

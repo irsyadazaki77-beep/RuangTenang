@@ -39,7 +39,17 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
   isPageMode = false
 }) => {
   const { user } = useAuth();
-  const navigate = useNavigate();
+  let navigate: (to: string) => void;
+  try {
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    navigate = useNavigate();
+  } catch {
+    navigate = (to: string) => {
+      if (typeof window !== 'undefined') {
+        window.location.href = to;
+      }
+    };
+  }
   useEscapeKey(onClose, !isPageMode && isOpen);
 
   const [persistenceStatus, setPersistenceStatus] = useState<'idle' | 'pending' | 'saved' | 'local-only' | 'failed'>('idle');

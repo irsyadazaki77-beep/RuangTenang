@@ -22,41 +22,59 @@ const KNOWN_INSECURE_DEMO_SECRETS = [
 
 export function validateEnvironment(): void {
   const isProd = process.env.NODE_ENV === 'production';
-  
-  if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32 || isKnownInsecureDemoSecret(process.env.JWT_SECRET)) {
-    const fallbackSecret = crypto.createHash('sha256').update(`ruangtenang-jwt:${process.env.JWT_SECRET || 'default-jwt-secret-seed'}`).digest('hex');
-    process.env.JWT_SECRET = fallbackSecret;
-    if (isProd) {
-      console.warn('[SECURITY NOTICE] JWT_SECRET was missing or short; auto-initialized secure 256-bit key.');
+  const jwtSecret = process.env.JWT_SECRET;
+  const encryptionKey = process.env.DATA_ENCRYPTION_KEY || process.env.ENCRYPTION_KEY;
+
+  if (isProd) {
+    if (!jwtSecret) {
+      throw new Error('FATAL SECURITY ERROR: JWT_SECRET environment variable is missing in production.');
     }
-  }
-
-  const rawEncKey = process.env.DATA_ENCRYPTION_KEY || process.env.ENCRYPTION_KEY;
-  if (!rawEncKey || rawEncKey.length < 32 || isKnownInsecureDemoSecret(rawEncKey)) {
-    const fallbackEncKey = crypto.createHash('sha256').update(`ruangtenang-enc:${rawEncKey || 'default-enc-key-seed'}`).digest('hex');
-    process.env.ENCRYPTION_KEY = fallbackEncKey;
-    process.env.DATA_ENCRYPTION_KEY = fallbackEncKey;
-    if (isProd) {
-      console.warn('[SECURITY NOTICE] ENCRYPTION_KEY was missing or short; auto-initialized secure 256-bit key.');
+    if (jwtSecret.length < 32) {
+      throw new Error('FATAL SECURITY ERROR: JWT_SECRET must be at least 32 characters long in production.');
     }
-  }
+    if (KNOWN_INSECURE_DEMO_SECRETS.some(s => jwtSecret.toLowerCase() === s.toLowerCase() || jwtSecret.toLowerCase().includes(s.toLowerCase()))) {
+      throw new Error('FATAL SECURITY ERROR: Insecure or compromise-prone JWT_SECRET detected in production.');
+    }
 
-  if (!process.env.DATABASE_URL) {
-    process.env.DATABASE_URL = 'file:./prisma/ruangtenang_sqlite.db';
-  }
+    if (!encryptionKey) {
+      throw new Error('FATAL SECURITY ERROR: ENCRYPTION_KEY environment variable is missing in production.');
+    }
+    if (encryptionKey.length < 32) {
+      throw new Error('FATAL SECURITY ERROR: ENCRYPTION_KEY must be at least 32 characters long in production.');
+    }
+    if (KNOWN_INSECURE_DEMO_SECRETS.some(s => encryptionKey.toLowerCase() === s.toLowerCase() || encryptionKey.toLowerCase().includes(s.toLowerCase()))) {
+      throw new Error('FATAL SECURITY ERROR: Insecure or compromise-prone ENCRYPTION_KEY detected in production.');
+    }
 
-  try {
+    // Validate PostgreSQL Database Configuration in Production
     resolveDatabaseConfiguration();
-  } catch (err: any) {
-    console.warn('[DATABASE CONFIG NOTICE]', err?.message || err);
+  } else {
+    // Local development/test: safely set development secrets if completely unset
+    if (!process.env.JWT_SECRET) {
+      process.env.JWT_SECRET = 'fallback-secret-for-development-ruangtenang-long-key-32';
+    }
+    if (!process.env.ENCRYPTION_KEY) {
+      process.env.ENCRYPTION_KEY = 'local-dev-aes-encryption-key-ruangtenang-32-chars-long';
+    }
+    if (!process.env.DATABASE_URL) {
+      process.env.DATABASE_URL = 'file:./prisma/ruangtenang_sqlite.db';
+    }
   }
 }
 
 export function getValidatedJwtSecret(): string {
-  if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
-    validateEnvironment();
+  const secret = process.env.JWT_SECRET;
+  const isProd = process.env.NODE_ENV === 'production';
+  if (!secret) {
+    if (isProd) {
+      throw new Error('FATAL SECURITY ERROR: JWT_SECRET is missing in production execution.');
+    }
+    return 'fallback-secret-for-development-ruangtenang-long-key-32';
   }
-  return process.env.JWT_SECRET!;
+  if (isProd && (secret.length < 32 || isKnownInsecureDemoSecret(secret))) {
+    throw new Error('FATAL SECURITY ERROR: Insecure JWT_SECRET in production.');
+  }
+  return secret;
 }
 
 function isKnownInsecureDemoSecret(secret: string): boolean {
