@@ -15,6 +15,7 @@ import {
 import { Counselor, UserSession, Appointment, TIER_LIMITS } from "../../types";
 import { useCounselors } from "../../hooks/useCounselors";
 import { apiClient } from "../../lib/apiClient";
+import { addNotification } from "../../lib/notificationStore";
 
 interface BookingFormProps {
   isOpen: boolean;
@@ -278,6 +279,11 @@ export const BookingForm: React.FC<BookingFormProps> = ({
       };
 
       onAddAppointment(createdAppointment);
+      addNotification(
+        "Sesi Konseling Dijadwalkan 🗓️",
+        `Pertemuan dengan ${counselorObj.name} telah berhasil dijadwalkan pada ${date} pukul ${fullTimeSlot}.`,
+        "warning"
+      );
       onClose();
       setFormError(null);
       showToast(
@@ -327,12 +333,51 @@ export const BookingForm: React.FC<BookingFormProps> = ({
             </button>
           </div>
 
-          {/* Stepper Progress Bar */}
-          <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-1 mb-8 overflow-hidden">
-            <div
-              className="bg-teal-500 h-1 transition-all duration-500 ease-out"
-              style={{ width: `${(currentStep / 4) * 100}%` }}
-            />
+          {/* Visual Stepper Indicators */}
+          <div className="grid grid-cols-4 gap-2 mb-8 relative">
+            {[
+              { label: "Konselor", step: 1 },
+              { label: "Jadwal", step: 2 },
+              { label: "Data Diri", step: 3 },
+              { label: "Konfirmasi", step: 4 },
+            ].map((s) => {
+              const isCompleted = currentStep > s.step;
+              const isActive = currentStep === s.step;
+              return (
+                <div key={s.step} className="flex flex-col items-center text-center relative z-10">
+                  <div
+                    className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs border transition-all duration-300 ${
+                      isCompleted
+                        ? "bg-teal-500 border-teal-500 text-white"
+                        : isActive
+                        ? "bg-white dark:bg-slate-900 border-teal-500 text-teal-600 ring-4 ring-teal-500/10 font-bold"
+                        : "bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-800 text-slate-400"
+                    }`}
+                  >
+                    {isCompleted ? "✓" : s.step}
+                  </div>
+                  <span
+                    className={`text-[10px] mt-1.5 font-bold uppercase tracking-wider transition-colors duration-300 select-none ${
+                      isActive
+                        ? "text-teal-600 dark:text-teal-400"
+                        : isCompleted
+                        ? "text-slate-700 dark:text-slate-300"
+                        : "text-slate-400"
+                    }`}
+                  >
+                    {s.label}
+                  </span>
+                </div>
+              );
+            })}
+            
+            {/* Connecting line */}
+            <div className="absolute top-3.5 left-[12.5%] right-[12.5%] h-0.5 bg-slate-100 dark:bg-slate-800 -z-0">
+              <div
+                className="bg-teal-500 h-full transition-all duration-500 ease-out"
+                style={{ width: `${((currentStep - 1) / 3) * 100}%` }}
+              />
+            </div>
           </div>
 
           {formError && (

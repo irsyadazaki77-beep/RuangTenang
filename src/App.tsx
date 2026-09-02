@@ -16,7 +16,9 @@ const CounselorDirectory = lazyWithRetry(() => import('./features/counselors/Cou
 const AppointmentScheduler = lazyWithRetry(() => import('./features/appointments/AppointmentScheduler').then(module => ({ default: module.AppointmentScheduler })));
 const EmergencyCenter = lazyWithRetry(() => import('./components/EmergencyCenter').then(module => ({ default: module.EmergencyCenter })));
 const LegalDocsModal = lazyWithRetry(() => import('./features/privacy/LegalDocsModal').then(module => ({ default: module.LegalDocsModal })));
+import { OnboardingFlow } from './features/onboarding/OnboardingFlow';
 import { Counselor } from './types';
+import { NotificationCenter } from './components/notifications/NotificationCenter';
 
 const AuthModal = lazyWithRetry(() => import('./features/authentication/AuthModal').then(module => ({ default: module.AuthModal })));
 const SettingsPage = lazyWithRetry(() => import('./features/settings/SettingsPage').then(module => ({ default: module.SettingsPage })));
@@ -35,8 +37,21 @@ export default function App() {
   const [chats, setChats] = useState<Chat[]>([]);
   const [isLoadingChats, setIsLoadingChats] = useState(true);
   const [selectedCounselor, setSelectedCounselor] = useState<Counselor | null>(null);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+
+  useEffect(() => {
+    if (user?.id && user.role !== 'konselor') {
+      const completed = localStorage.getItem(`rt_onboarding_completed_${user.id}`);
+      if (!completed) {
+        setShowOnboarding(true);
+      }
+    } else {
+      setShowOnboarding(false);
+    }
+  }, [user?.id, user?.role]);
 
   useEffect(() => {
     if (location.state && (location.state as any).selectedCounselor) {
@@ -256,6 +271,7 @@ export default function App() {
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenAuth={() => setIsAuthModalOpen(true)}
         onOpenChangelog={() => setIsChangelogOpen(true)}
+        onOpenNotifications={() => setIsNotificationOpen(true)}
         user={user}
         isLoading={isLoadingChats}
       />
@@ -409,6 +425,12 @@ export default function App() {
           <ChangelogModal isOpen={isChangelogOpen} onClose={() => setIsChangelogOpen(false)} />
         </Suspense>
       )}
+
+      {showOnboarding && user?.id && (
+        <OnboardingFlow userId={user.id} onComplete={() => setShowOnboarding(false)} />
+      )}
+
+      <NotificationCenter isOpen={isNotificationOpen} onClose={() => setIsNotificationOpen(false)} />
 
       <NewUpdateToast onOpenChangelog={() => setIsChangelogOpen(true)} />
     </div>

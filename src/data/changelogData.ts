@@ -22,19 +22,67 @@ export interface ReleaseNote {
   buildNumber?: string;
 }
 
-export const CURRENT_APP_VERSION = 'v0.9.0';
+export const CURRENT_APP_VERSION = 'v3.0.0';
 export const LAST_UPDATED_DATE = '2 September 2026';
 
 export const APP_CHANGELOG: ReleaseNote[] = [
   {
-    version: 'v0.9.0',
+    version: 'v3.0.0',
+    date: '2026-09-02',
+    releaseTime: 'Hari Ini, 18:43 WIB',
+    periodLabel: 'Hari Ini',
+    title: 'Sistem Notifikasi Terpadu, Alur "Mood-to-Chat" Otomatis, dan Penyempurnaan Sesi Konseling',
+    tagline: 'Integrasi preferensi notifikasi terperinci, alur pembahasan mood harian di ruang obrolan, visualisasi penjadwalan multi-step, dan profil konselor komprehensif.',
+    badge: 'Terbaru',
+    isLatest: true,
+    highlights: [
+      'Pusat Notifikasi Global (Notification Drawer) untuk melacak persetujuan jadwal & skrining',
+      'Preferensi Notifikasi Granular (Daily Reminders, Sesi Konseling, Newsletter/Artikel)',
+      'Jembatan Refleksi Mood-to-Chat (Integrasi instan catatan suasana hati harian ke percakapan AI)',
+      'Sistem Stepper Interaktif pada Form Penjadwalan Sesi Konseling (Kebutuhan -> Jadwal -> Konfirmasi)',
+      'Profil Detail Konselor Komprehensif (Verifikasi SIP/Lisensi, Biografi Terapi, Pengalaman, & Hari Layanan)'
+    ],
+    changes: [
+      {
+        id: 'ch-100-1',
+        category: 'feature',
+        title: 'Pusat Notifikasi Global & Preferensi Granular',
+        description: 'Menyediakan drawer notifikasi real-time untuk pesan konfirmasi jadwal dan skrining. Pengguna dapat mengonfigurasi preferensi notifikasi harian dan edukasi secara lokal di menu Pengaturan.',
+        impact: 'Memudahkan mahasiswa memantau status persetujuan sesi konseling dan menjaga konsistensi latihan emosi harian.'
+      },
+      {
+        id: 'ch-100-2',
+        category: 'feature',
+        title: 'Jembatan Alur Mood-to-Chat dengan Persetujuan Transparan',
+        description: 'Memungkinkan pengguna mendiskusikan catatan mood harian secara langsung dengan asisten AI melalui pengiriman metadata emosi dan pemicu secara privat.',
+        impact: 'Membantu mengurai kecemasan atau kesedihan harian menjadi wawasan psikologis secara aman dan interaktif.'
+      },
+      {
+        id: 'ch-100-3',
+        category: 'improvement',
+        title: 'Mekanisme Stepper Interaktif pada Form Jadwal',
+        description: 'Mengubah progress bar monoton menjadi indikator langkah interaktif (Pilih Konselor, Pilih Jadwal, Data Diri, Konfirmasi) di form pemesanan sesi konseling.',
+        impact: 'Menyediakan panduan alur pengisian data yang lebih jelas, profesional, dan mudah dipahami.'
+      },
+      {
+        id: 'ch-100-4',
+        category: 'improvement',
+        title: 'Pembaruan Profil Detail Konselor Medis Terverifikasi',
+        description: 'Menyajikan informasi komprehensif profil psikolog meliputi No. SIP/Lisensi resmi, riwayat keahlian, biografi metode terapi, bahasa layanan, dan slot hari aktif.',
+        impact: 'Meningkatkan rasa aman dan kepercayaan mahasiswa dalam menentukan psikolog pendamping yang sesuai.'
+      }
+    ],
+    buildNumber: 'build.20260902.01'
+  },
+  {
+    version: 'v2.8.0',
     date: '2026-09-02',
     releaseTime: 'Hari Ini, 09:00 WIB',
     periodLabel: 'Hari Ini',
     title: 'UI/UX & Motion Design Overhaul, Sistem "Calm Motion", dan Penguatan Keamanan Klinis',
     tagline: 'Standardisasi visual yang tenang, transisi antarmuka yang lembut, sistem darurat non-blocking, dan perbaikan logika zona waktu lokal.',
-    badge: 'Terbaru',
-    isLatest: true,
+    badge: 'Pembaruan Sistem',
+    isLatest: false,
     highlights: [
       'Sistem Gerak "Calm Motion" & Aksesibilitas Menyeluruh (dukungan prefers-reduced-motion)',
       'Standardisasi Token Desain, Skala Tipografi, dan Kontras Dark Mode yang Tenang',

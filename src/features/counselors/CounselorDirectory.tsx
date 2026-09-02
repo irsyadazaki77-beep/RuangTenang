@@ -9,8 +9,12 @@ import {
   X,
   Calendar,
   MessageSquare,
-  
   Filter,
+  Briefcase,
+  Award,
+  Languages,
+  MapPin,
+  Star,
 } from "lucide-react";
 import { Counselor } from "../../types";
 import { CounselorSpecialtyId, mapSpecialtiesToIds } from "./counselorUtils";
@@ -266,66 +270,140 @@ export const CounselorDirectory: React.FC<CounselorDirectoryProps> = ({
 
       {/* Detail Modal */}
       {selectedCounselorModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="surface-card border border-default rounded-2xl max-w-md w-full p-6 shadow-xl space-y-4 relative text-primary animate-fade-in">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <div className="surface-card border border-default rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-xl space-y-5 relative text-primary animate-fade-in my-8 max-h-[90vh] overflow-y-auto">
             <button
               onClick={() => setSelectedCounselorModal(null)}
-              className="absolute top-4 right-4 p-1.5 text-secondary hover:text-primary rounded-lg transition-colors cursor-pointer min-h-[44px]"
+              className="absolute top-4 right-4 p-2 text-secondary hover:text-primary rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer min-h-[44px]"
             >
               <X className="w-5 h-5" />
             </button>
 
-            <div className="flex items-start gap-4">
+            {/* Profile Header */}
+            <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 text-center sm:text-left">
               <img
                 src={selectedCounselorModal.avatar}
                 alt={selectedCounselorModal.name}
-                width={64}
-                height={64}
-                className="w-16 h-16 rounded-xl object-cover border border-default shadow-xs"
+                width={80}
+                height={80}
+                className="w-20 h-20 rounded-2xl object-cover border border-default shadow-xs shrink-0"
               />
               <div className="space-y-1 min-w-0 flex-1">
                 {selectedCounselorModal.isDemoData ? (
-                  <span className="px-2.5 py-0.5 bg-yellow-50 dark:bg-yellow-950/50 text-yellow-700 dark:text-yellow-400 font-semibold text-xs rounded-full border border-yellow-200 dark:border-yellow-900 inline-flex items-center gap-1">
+                  <span className="px-2.5 py-0.5 bg-yellow-50 dark:bg-yellow-950/50 text-yellow-700 dark:text-yellow-400 font-bold text-[10px] uppercase tracking-wider rounded-full border border-yellow-200 dark:border-yellow-900 inline-flex items-center gap-1">
                     <ShieldCheck className="w-3.5 h-3.5 text-yellow-600 dark:text-yellow-400" /> Demo Data
                   </span>
                 ) : selectedCounselorModal.licenseNumber ? (
-                  <span className="px-2.5 py-0.5 bg-teal-50 dark:bg-teal-950/50 text-teal-700 dark:text-teal-400 font-semibold text-xs rounded-full border border-teal-200 dark:border-teal-900 inline-flex items-center gap-1">
+                  <span className="px-2.5 py-0.5 bg-teal-50 dark:bg-teal-950/50 text-teal-700 dark:text-teal-400 font-bold text-[10px] uppercase tracking-wider rounded-full border border-teal-200 dark:border-teal-900 inline-flex items-center gap-1">
                     <ShieldCheck className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" /> Psikolog Terverifikasi
                   </span>
                 ) : (
-                  <span className="px-2.5 py-0.5 surface-muted text-secondary font-semibold text-xs rounded-full border border-default inline-flex items-center gap-1">
+                  <span className="px-2.5 py-0.5 surface-muted text-secondary font-bold text-[10px] uppercase tracking-wider rounded-full border border-default inline-flex items-center gap-1">
                     <Users className="w-3.5 h-3.5 text-secondary" /> Belum Terverifikasi
                   </span>
                 )}
-                <h2 className="font-bold text-base text-primary truncate">
+                <h2 className="font-bold text-lg sm:text-xl text-primary tracking-tight">
                   {selectedCounselorModal.name}
                 </h2>
-                <p className="text-xs text-secondary font-medium truncate">
+                <p className="text-xs sm:text-sm text-secondary font-medium">
                   {selectedCounselorModal.title}
                 </p>
-                <p className="text-xs text-muted truncate">
-                  {selectedCounselorModal.university}
+                <p className="text-xs text-muted flex items-center justify-center sm:justify-start gap-1">
+                  <GraduationCap className="w-3.5 h-3.5 shrink-0" />
+                  <span className="truncate">{selectedCounselorModal.university}</span>
                 </p>
               </div>
             </div>
 
+            {/* Quick Metrics Row */}
+            <div className="grid grid-cols-3 gap-3 p-3 bg-slate-50 dark:bg-slate-900/60 rounded-2xl border border-slate-100 dark:border-slate-800 text-center">
+              <div>
+                <span className="text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-wider block font-bold">Pengalaman</span>
+                <span className="text-sm font-bold text-slate-700 dark:text-slate-300 flex items-center justify-center gap-1 mt-0.5">
+                  <Briefcase className="w-3.5 h-3.5 text-teal-500" />
+                  {selectedCounselorModal.experienceYears} Tahun
+                </span>
+              </div>
+              <div>
+                <span className="text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-wider block font-bold">Rating</span>
+                <span className="text-sm font-bold text-slate-700 dark:text-slate-300 flex items-center justify-center gap-1 mt-0.5">
+                  <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                  {selectedCounselorModal.rating.toFixed(1)}
+                </span>
+              </div>
+              <div>
+                <span className="text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-wider block font-bold">No. Lisensi / SIP</span>
+                <span className="text-xs font-semibold text-slate-600 dark:text-slate-400 block mt-1 truncate" title={selectedCounselorModal.licenseNumber || "N/A"}>
+                  {selectedCounselorModal.licenseNumber || "N/A"}
+                </span>
+              </div>
+            </div>
+
+            {/* Specialties */}
             <div className="space-y-1.5">
-              <h4 className="text-xs font-bold text-primary">
-                Pendekatan Konseling
+              <h4 className="text-xs font-bold text-primary uppercase tracking-wider flex items-center gap-1">
+                <Award className="w-3.5 h-3.5 text-teal-600" /> Spesialisasi & Keahlian
               </h4>
-              <p className="text-xs text-secondary leading-relaxed surface-muted p-3.5 rounded-xl max-h-32 overflow-y-auto">
-                {selectedCounselorModal.bio}
+              <div className="flex flex-wrap gap-1.5">
+                {selectedCounselorModal.specialties.map((spec, idx) => (
+                  <span
+                    key={idx}
+                    className="px-2.5 py-1 text-[10px] font-semibold bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-400 rounded-lg border border-teal-100 dark:border-teal-900"
+                  >
+                    {spec}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            {/* Biography */}
+            <div className="space-y-1.5">
+              <h4 className="text-xs font-bold text-primary uppercase tracking-wider">
+                Biografi & Pendekatan Terapi
+              </h4>
+              <p className="text-xs text-secondary leading-relaxed bg-white dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800 p-3.5 rounded-2xl max-h-36 overflow-y-auto">
+                {selectedCounselorModal.bio || "Konselor berpengalaman yang siap mendampingi mahasiswa mengatasi tantangan akademik maupun personal dengan pendekatan yang ramah, hangat, dan solutif."}
               </p>
             </div>
 
-            <div className="flex items-center justify-between pt-3 border-t border-default">
+            {/* Additional Info Row */}
+            <div className="grid grid-cols-2 gap-4 pt-1">
+              <div className="space-y-1">
+                <span className="text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-wider block font-bold">Bahasa</span>
+                <span className="text-xs font-medium text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                  <Languages className="w-3.5 h-3.5 text-slate-400" />
+                  {selectedCounselorModal.languages?.join(", ") || "Bahasa Indonesia"}
+                </span>
+              </div>
+              <div className="space-y-1">
+                <span className="text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-wider block font-bold">Lokasi Praktik</span>
+                <span className="text-xs font-medium text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                  <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                  <span className="truncate">{selectedCounselorModal.location || "Kampus Utama"}</span>
+                </span>
+              </div>
+            </div>
+
+            {/* Availability Days */}
+            <div className="space-y-1.5 pt-1">
+              <span className="text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-wider block font-bold">Hari Layanan Aktif</span>
+              <div className="flex flex-wrap gap-1">
+                {selectedCounselorModal.availableDays.map((day, idx) => (
+                  <span
+                    key={idx}
+                    className="px-2 py-0.5 text-[9px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-md"
+                  >
+                    {day}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            {/* Modal Actions Footer */}
+            <div className="flex items-center justify-between pt-4 border-t border-default">
               <div>
-                <p className="text-xs text-secondary font-medium">
-                  Layanan Konseling:
-                </p>
-                <p className="text-xs font-bold text-primary">
-                  Khusus Mahasiswa Perguruan Tinggi
-                </p>
+                <p className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">Layanan Konseling</p>
+                <p className="text-xs font-bold text-teal-600 dark:text-teal-400">Gratis untuk Mahasiswa</p>
               </div>
 
               <button
@@ -334,9 +412,9 @@ export const CounselorDirectory: React.FC<CounselorDirectoryProps> = ({
                   setSelectedCounselorModal(null);
                   onSelectCounselorForBooking(counselor);
                 }}
-                className="px-4 py-2.5 bg-teal-700 hover:bg-teal-800 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer min-h-[44px]"
+                className="px-5 py-2.5 bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs sm:text-sm rounded-xl shadow-sm transition-all flex items-center gap-1.5 cursor-pointer min-h-[44px]"
               >
-                <span>Pilih & Jadwalkan</span>
+                <span>Pilih & Jadwalkan Sesi</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>

@@ -1,5 +1,6 @@
 import { useEscapeKey } from '../../hooks/useEscapeKey';
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   ArrowRight,
   CheckCircle2,
@@ -11,6 +12,8 @@ import {
   AlertTriangle,
   AlertCircle,
   Clock,
+  MessageSquare,
+  Calendar,
 } from 'lucide-react';
 import { ScreeningResult } from '../../types';
 import { getPhq9Severity, getGad7Severity } from '../../lib/clinicalScoring';
@@ -18,6 +21,7 @@ import { apiClient } from '../../lib/apiClient';
 import { PHQ9_QUESTIONS, GAD7_QUESTIONS, OPTIONS } from './constants';
 import { SafetyCheckModal } from './components/SafetyCheckModal';
 import { useAuth } from '../../contexts/AuthContext';
+import { addNotification } from '../../lib/notificationStore';
 
 interface ScreeningModalProps {
   isOpen: boolean;
@@ -35,6 +39,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
   isPageMode = false
 }) => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   useEscapeKey(onClose, !isPageMode && isOpen);
 
   const [persistenceStatus, setPersistenceStatus] = useState<'idle' | 'pending' | 'saved' | 'local-only' | 'failed'>('idle');
@@ -199,6 +204,12 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
     setFinalResult(res);
     setStep('result');
 
+    addNotification(
+      "Skrining Kesehatan Selesai 🧠",
+      `Hasil skrining awal Anda telah dianalisis. PHQ-9 (Depresi): ${res.phq9.severity}, GAD-7 (Kecemasan): ${res.gad7.severity}.`,
+      "success"
+    );
+
     // Signal local calculation completion
     onComplete?.(res);
 
@@ -262,10 +273,10 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
     let text = `=== RUANGTENANG - LAPORAN HASIL SKRINING KESEHATAN MENTAL MAHASISWA ===\n`;
     text += `Tanggal Pemeriksaan: ${dateStr}\n`;
     text += `Penyimpanan Data: ${storageNotice}\n\n`;
-    text += `1. HASIL PHQ-9 (PHQ-9 (Skor Gejala Depresi)):\n`;
+    text += `1. HASIL PHQ-9 (Skor Gejala Depresi):\n`;
     text += `   - Skor Total: ${res.phq9.score} / 27\n`;
     text += `   - Tingkat Keparahan: ${res.phq9.severity}\n\n`;
-    text += `2. HASIL GAD-7 (GAD-7 (Skor Gejala Kecemasan)):\n`;
+    text += `2. HASIL GAD-7 (Skor Gejala Kecemasan):\n`;
     text += `   - Skor Total: ${res.gad7.score} / 21\n`;
     text += `   - Tingkat Keparahan: ${res.gad7.severity}\n\n`;
     text += `REKOMENDASI RUANGTENANG:\n`;
@@ -582,6 +593,45 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
                 </p>
               </div>
             )}
+
+            {/* Next Best Action Section */}
+            <div className="bg-slate-50 dark:bg-slate-900/60 p-4 sm:p-5 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-3.5">
+              <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                🚀 Langkah Rekomendasi Selanjutnya
+              </h4>
+              <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                Berdasarkan skor evaluasi awal Anda, berikut langkah terbaik yang disarankan untuk menjaga kesehatan emosional Anda:
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                <button
+                  onClick={() => {
+                    onClose();
+                    navigate('/');
+                  }}
+                  className="p-3.5 rounded-xl border border-teal-200/60 dark:border-teal-900 hover:border-teal-300 dark:hover:border-teal-800 bg-teal-50/40 dark:bg-teal-950/20 hover:bg-teal-50 dark:hover:bg-teal-950/40 text-left transition-all group flex items-start gap-3 cursor-pointer"
+                >
+                  <MessageSquare className="w-5 h-5 text-teal-600 dark:text-teal-400 mt-0.5 shrink-0 group-hover:scale-110 transition-transform" />
+                  <div>
+                    <span className="text-xs font-bold text-teal-800 dark:text-teal-300 block mb-0.5">Diskusikan Hasil di Chat</span>
+                    <span className="text-[11px] text-teal-600 dark:text-teal-400/80 leading-snug block">Bimbing asisten AI untuk mengurai perasaan Anda secara aman dan personal.</span>
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => {
+                    onClose();
+                    navigate('/counselors');
+                  }}
+                  className="p-3.5 rounded-xl border border-indigo-200/60 dark:border-indigo-900 hover:border-indigo-300 dark:hover:border-indigo-800 bg-indigo-50/40 dark:bg-indigo-950/20 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 text-left transition-all group flex items-start gap-3 cursor-pointer"
+                >
+                  <Calendar className="w-5 h-5 text-indigo-600 dark:text-indigo-400 mt-0.5 shrink-0 group-hover:scale-110 transition-transform" />
+                  <div>
+                    <span className="text-xs font-bold text-indigo-800 dark:text-indigo-300 block mb-0.5">Jadwalkan Sesi Konseling</span>
+                    <span className="text-[11px] text-indigo-600 dark:text-indigo-400/80 leading-snug block">Temui psikolog profesional kampus berlisensi untuk penanganan terarah.</span>
+                  </div>
+                </button>
+              </div>
+            </div>
 
             <div className="bg-amber-50/50 border border-amber-200/50 rounded-xl p-4 mt-4 mb-4">
               <p className="text-sm text-amber-800 text-center font-medium">

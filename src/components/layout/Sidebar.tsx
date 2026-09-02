@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Settings, Search, MessageSquare, MoreHorizontal, Edit2, Trash2, Pin, Archive, X, Heart, Stethoscope, Users, AlertCircle, LogOut, LogIn, Sun, Moon } from 'lucide-react';
+import { Plus, Settings, Search, MessageSquare, MoreHorizontal, Edit2, Trash2, Pin, Archive, X, Heart, Stethoscope, Users, AlertCircle, LogOut, LogIn, Sun, Moon, Bell } from 'lucide-react';
 import { isToday, isYesterday } from 'date-fns';
 import { Chat } from '../../features/chat/types';
 import { motion, AnimatePresence } from 'motion/react';
 import { apiClient } from '../../lib/apiClient';
 import { useTheme } from '../../contexts/ThemeContext';
+import { getNotifications } from '../../lib/notificationStore';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -22,11 +23,12 @@ interface SidebarProps {
   onOpenSettings?: () => void;
   onOpenAuth?: () => void;
   onOpenChangelog?: () => void;
+  onOpenNotifications?: () => void;
   user?: any;
   isLoading?: boolean;
 }
 
-export default function Sidebar({ isOpen, setIsOpen, onNewChat, chats, currentChatId, onSelectChat, onDeleteChat, onUpdateTitle, onTogglePin, onToggleArchive, onLogout, onOpenSettings, onOpenAuth, user, isLoading }: SidebarProps) {
+export default function Sidebar({ isOpen, setIsOpen, onNewChat, chats, currentChatId, onSelectChat, onDeleteChat, onUpdateTitle, onTogglePin, onToggleArchive, onLogout, onOpenSettings, onOpenAuth, onOpenNotifications, user, isLoading }: SidebarProps) {
   const navigate = useNavigate();
   const { actualTheme, toggleTheme } = useTheme();
   const [search, setSearch] = useState('');
@@ -35,6 +37,21 @@ export default function Sidebar({ isOpen, setIsOpen, onNewChat, chats, currentCh
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [searchResults, setSearchResults] = useState<Chat[]>([]);
+  const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
+
+  useEffect(() => {
+    const updateUnread = () => {
+      try {
+        const list = getNotifications();
+        setUnreadNotificationsCount(list.filter(n => !n.read).length);
+      } catch (err) {
+        console.warn(err);
+      }
+    };
+    updateUnread();
+    window.addEventListener('ruangtenang_notifications_updated', updateUnread);
+    return () => window.removeEventListener('ruangtenang_notifications_updated', updateUnread);
+  }, []);
 
   useEffect(() => {
     if (!search.trim()) {
@@ -315,6 +332,19 @@ export default function Sidebar({ isOpen, setIsOpen, onNewChat, chats, currentCh
             className="w-full flex items-center gap-3 px-3 min-h-[40px] rounded-[10px] hover:bg-slate-100/80 dark:hover:bg-slate-800/70 text-slate-700 dark:text-slate-300 font-medium transition-colors cursor-pointer text-[13px]"
           >
             <Users className="w-[18px] h-[18px] text-slate-500 shrink-0" /> Konselor
+          </button>
+          <button 
+            onClick={() => { onOpenNotifications?.(); setIsOpen(false); }} 
+            className="w-full flex items-center justify-between px-3 min-h-[40px] rounded-[10px] hover:bg-slate-100/80 dark:hover:bg-slate-800/70 text-slate-700 dark:text-slate-300 font-medium transition-colors cursor-pointer text-[13px]"
+          >
+            <div className="flex items-center gap-3">
+              <Bell className="w-[18px] h-[18px] text-slate-500 shrink-0" /> Notifikasi
+            </div>
+            {unreadNotificationsCount > 0 && (
+              <span className="bg-rose-500 text-white font-bold text-[10px] h-4.5 px-1.5 rounded-full flex items-center justify-center animate-pulse">
+                {unreadNotificationsCount}
+              </span>
+            )}
           </button>
           <button 
             onClick={() => { navigate('/emergency'); setIsOpen(false); }} 

@@ -1,7 +1,7 @@
 {
   "name": "ruang-tenang-kampus",
   "private": true,
-  "version": "0.9.0",
+  "version": "3.0.0",
   "type": "module",
   "scripts": {
     "dev": "node scripts/prismaGenerate.js && tsx server.ts",

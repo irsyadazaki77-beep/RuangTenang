@@ -17,7 +17,7 @@ import { User,
   ChevronLeft
 } from 'lucide-react';
 import { UserSession, SubscriptionTier } from '../../types';
-import { Brain, MessageSquare, Gauge, Cpu, CheckCircle2, History, Calendar } from 'lucide-react';
+import { Brain, MessageSquare, Gauge, Cpu, CheckCircle2, History, Calendar, Bell } from 'lucide-react';
 import { DEFAULT_AI_MODEL_ID, AVAILABLE_AI_MODELS } from '../../lib/aiModels';
 import { safeLocalStorage } from '../../lib/storage';
 import { AiQuotaBadge } from '../../components/AiQuotaBadge';
@@ -63,6 +63,15 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
 
   const [aiModel, setAiModel] = useState(() => safeLocalStorage.getItem('aiModel') || DEFAULT_AI_MODEL_ID);
   const [responseStyle, setResponseStyle] = useState(() => safeLocalStorage.getItem('responseStyle') || 'Seimbang');
+  
+  const [prefDailyReminders, setPrefDailyReminders] = useState(() => safeLocalStorage.getItem('pref_daily_reminders') !== 'false');
+  const [prefCounselingUpdates, setPrefCounselingUpdates] = useState(() => safeLocalStorage.getItem('pref_counseling_updates') !== 'false');
+  const [prefNewsletter, setPrefNewsletter] = useState(() => safeLocalStorage.getItem('pref_newsletter') !== 'false');
+
+  const triggerNotificationSaved = () => {
+    setSuccessMsg('Preferensi notifikasi berhasil diperbarui.');
+    setTimeout(() => setSuccessMsg(null), 3000);
+  };
 
   const handleSelectAiModel = (modelId: string) => {
     setAiModel(modelId);
@@ -242,12 +251,13 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
     }
   };
 
-  const [activeTab, setActiveTab] = useState<'akun'|'ai'|'privasi'|'memory'|'keamanan'|'langganan'|'versi'>('akun');
+  const [activeTab, setActiveTab] = useState<'akun'|'ai'|'privasi'|'memory'|'keamanan'|'langganan'|'versi'|'notifikasi'>('akun');
   const [showMobileDetail, setShowMobileDetail] = useState(false);
   
   const TABS = [
     { id: 'akun', label: 'Akun', icon: User },
     { id: 'ai', label: 'Preferensi AI', icon: Brain },
+    { id: 'notifikasi', label: 'Notifikasi', icon: Bell },
     { id: 'privasi', label: 'Privasi', icon: ShieldCheck },
     { id: 'memory', label: 'Memory', icon: RotateCcw },
     { id: 'keamanan', label: 'Keamanan', icon: Lock },
@@ -1063,6 +1073,89 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'notifikasi' && (
+        <div className="space-y-6 animate-in fade-in duration-200">
+          <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-5">
+            <div>
+              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-2">
+                <Bell className="w-4.5 h-4.5 text-teal-600" />
+                Preferensi Notifikasi
+              </h3>
+              <p className="text-xs text-slate-500 mt-1">
+                Atur jenis notifikasi penting yang ingin Anda terima di platform RuangTenang.
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              {/* Checkbox 1 */}
+              <label className="flex items-start gap-3 p-3.5 hover:bg-slate-50/55 rounded-xl border border-slate-200 transition-colors cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={prefDailyReminders}
+                  onChange={(e) => {
+                    setPrefDailyReminders(e.target.checked);
+                    safeLocalStorage.setItem('pref_daily_reminders', e.target.checked ? 'true' : 'false');
+                    triggerNotificationSaved();
+                  }}
+                  className="mt-1 rounded border-slate-300 text-teal-600 focus:ring-teal-500 w-4 h-4 cursor-pointer"
+                />
+                <div className="space-y-0.5">
+                  <span className="text-xs font-bold text-slate-800 block">Daily Reminders (Pengingat Harian)</span>
+                  <span className="text-[11px] text-slate-500 block leading-relaxed">
+                    Pengingat otomatis setiap sore untuk mengisi Daily Mood Check-in di RuangTenang.
+                  </span>
+                </div>
+              </label>
+
+              {/* Checkbox 2 */}
+              <label className="flex items-start gap-3 p-3.5 hover:bg-slate-50/55 rounded-xl border border-slate-200 transition-colors cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={prefCounselingUpdates}
+                  onChange={(e) => {
+                    setPrefCounselingUpdates(e.target.checked);
+                    safeLocalStorage.setItem('pref_counseling_updates', e.target.checked ? 'true' : 'false');
+                    triggerNotificationSaved();
+                  }}
+                  className="mt-1 rounded border-slate-300 text-teal-600 focus:ring-teal-500 w-4 h-4 cursor-pointer"
+                />
+                <div className="space-y-0.5">
+                  <span className="text-xs font-bold text-slate-850 block">Sesi Konseling (Penjadwalan & Pengingat)</span>
+                  <span className="text-[11px] text-slate-500 block leading-relaxed">
+                    Pemberitahuan real-time terkait status persetujuan jadwal, link Jitsi, dan pengingat 15 menit sebelum sesi dimulai.
+                  </span>
+                </div>
+              </label>
+
+              {/* Checkbox 3 */}
+              <label className="flex items-start gap-3 p-3.5 hover:bg-slate-50/55 rounded-xl border border-slate-200 transition-colors cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={prefNewsletter}
+                  onChange={(e) => {
+                    setPrefNewsletter(e.target.checked);
+                    safeLocalStorage.setItem('pref_newsletter', e.target.checked ? 'true' : 'false');
+                    triggerNotificationSaved();
+                  }}
+                  className="mt-1 rounded border-slate-300 text-teal-600 focus:ring-teal-500 w-4 h-4 cursor-pointer"
+                />
+                <div className="space-y-0.5">
+                  <span className="text-xs font-bold text-slate-850 block">Newsletter & Artikel Edukasi E-Health</span>
+                  <span className="text-[11px] text-slate-500 block leading-relaxed">
+                    Rilis berkala artikel tips kesehatan mental mahasiswa, pernapasan kesadaran, dan artikel pendukung dari psikolog RuangTenang.
+                  </span>
+                </div>
+              </label>
+            </div>
+
+            <div className="p-3 bg-teal-50/50 border border-teal-100 rounded-lg text-[11px] text-teal-800 flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
+              <span>Seluruh perubahan preferensi tersimpan secara instan di peramban Anda.</span>
             </div>
           </div>
         </div>

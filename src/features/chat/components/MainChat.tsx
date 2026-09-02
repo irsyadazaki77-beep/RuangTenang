@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { MessageBubble } from './MessageBubble';
 import { ChatComposer } from './ChatComposer';
 import { Message, ChatMode, ResponseStyle, Chat } from '../types';
@@ -33,6 +33,7 @@ interface MainChatProps {
 export default function MainChat({ user, setChats, onOpenSidebar, onOpenSettings, onOpenChangelog }: MainChatProps) {
   const { chatId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { showToast } = useToast();
 
   const [chatMode, setChatMode] = useState<ChatMode>(() => safeLocalStorage.getItem('chatMode') as ChatMode || 'Teman Cerita');
@@ -50,6 +51,39 @@ export default function MainChat({ user, setChats, onOpenSidebar, onOpenSettings
 
   const handleOpenPlugin = (plugin: string) => setActivePlugin(plugin);
   const handleClosePlugin = () => setActivePlugin(null);
+
+  useEffect(() => {
+    if (location.state && (location.state as any).discussMood) {
+      const moodLog = (location.state as any).discussMood;
+      // Clear navigation state instantly to respect privacy and prevent double triggers
+      window.history.replaceState({}, document.title);
+
+      const moodLabels: Record<number, string> = {
+        1: 'Sangat Buruk 😢',
+        2: 'Buruk 🙁',
+        3: 'Biasa Saja 😐',
+        4: 'Baik 🙂',
+        5: 'Sangat Baik 😊'
+      };
+
+      const moodLabel = moodLabels[moodLog.mood] || 'N/A';
+      const emotionsList = moodLog.emotions && moodLog.emotions.length > 0 
+        ? moodLog.emotions.join(', ') 
+        : 'Tidak ada emosi spesifik';
+      const factorsList = moodLog.factors && moodLog.factors.length > 0 
+        ? moodLog.factors.join(', ') 
+        : 'Tidak ada faktor spesifik';
+
+      const initialPrompt = `Halo! Saya baru saja mencatat mood saya hari ini:\n- Mood utama: ${moodLabel}\n- Emosi: ${emotionsList}\n- Faktor pemicu: ${factorsList}${moodLog.notes ? `\n- Catatan tambahan: "${moodLog.notes}"` : ''}\n\nSaya ingin berkonsultasi mengenai perasaan saya hari ini.`;
+
+      // Trigger automatic discussion safely after history clean
+      const delay = setTimeout(() => {
+        handleSend(initialPrompt);
+      }, 600);
+
+      return () => clearTimeout(delay);
+    }
+  }, [location.state]);
 
   useEffect(() => {
     const handleOpenPluginEvent = (e: Event) => {

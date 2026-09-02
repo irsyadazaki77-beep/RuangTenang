@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useEscapeKey } from '../../hooks/useEscapeKey';
 import { calculateStreak } from '../../utils/streak';
 import { 
@@ -77,8 +78,13 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
   setMoodLogs,
   showToast
 }) => {
+  const navigate = useNavigate();
   const [isFormModalOpen, setIsFormModalOpen] = useState<boolean>(false);
-  useEscapeKey(() => setIsFormModalOpen(false), isFormModalOpen);
+  const [savedLogForBridge, setSavedLogForBridge] = useState<MoodLog | null>(null);
+  useEscapeKey(() => {
+    setIsFormModalOpen(false);
+    setSavedLogForBridge(null);
+  }, isFormModalOpen || !!savedLogForBridge);
 
   const [selectedMood, setSelectedMood] = useState<number | null>(null);
   const [selectedEmotions, setSelectedEmotions] = useState<string[]>([]);
@@ -171,6 +177,7 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
       setJournalNote('');
       setLogDate(new Date().toISOString().split('T')[0]);
       setIsFormModalOpen(false);
+      setSavedLogForBridge(canonicalLog);
       showToast('Catatan Mood harian berhasil disimpan! 🎉', 'success');
     } catch (err: any) {
       console.error("Failed to sync mood with backend:", err);
@@ -851,6 +858,61 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
             </div>
           )}
         </div>
+
+        {/* MOOD TO CHAT BRIDGE OPT-IN MODAL */}
+        {savedLogForBridge && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="absolute inset-0" onClick={() => setSavedLogForBridge(null)} />
+            <div className="relative w-full max-w-sm bg-white dark:bg-slate-900 rounded-3xl shadow-xl overflow-hidden flex flex-col p-6 space-y-4 animate-in zoom-in-95 duration-200">
+              <div className="p-3 bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400 rounded-2xl w-12 h-12 flex items-center justify-center mx-auto">
+                <Sparkles className="w-6 h-6 animate-pulse" />
+              </div>
+              
+              <div className="space-y-1.5 text-center">
+                <h4 className="text-sm font-bold text-slate-900 dark:text-slate-150">Diskusikan Hasil di Chat?</h4>
+                <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                  Apakah Anda ingin membahas catatan suasana hati hari ini bersama AI Pendamping di Chat? Anda dapat merefleksikan emosi secara lebih mendalam dan mencari solusinya bersama.
+                </p>
+              </div>
+
+              <div className="p-3.5 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-200 dark:border-slate-800 space-y-1.5">
+                <span className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 block">Data yang akan ditransmisikan secara privat:</span>
+                <div className="flex flex-wrap gap-1.5 items-center mt-1">
+                  <span className="px-2 py-0.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded text-[10.5px] text-slate-700 dark:text-slate-300">
+                    Mood: {savedLogForBridge.mood === 5 ? '😊 Sangat Baik' : savedLogForBridge.mood === 4 ? '🙂 Baik' : savedLogForBridge.mood === 3 ? '😐 Biasa Saja' : savedLogForBridge.mood === 2 ? '🙁 Buruk' : '😢 Sangat Buruk'}
+                  </span>
+                  {savedLogForBridge.emotions.map(e => (
+                    <span key={e} className="px-2 py-0.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded text-[10.5px] text-slate-700 dark:text-slate-300">
+                      {e}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setSavedLogForBridge(null)}
+                  className="flex-1 py-2.5 min-h-[40px] bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                >
+                  Tutup
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const log = savedLogForBridge;
+                    setSavedLogForBridge(null);
+                    navigate('/', { state: { discussMood: log } });
+                  }}
+                  className="flex-1 py-2.5 min-h-[40px] bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm active:scale-95"
+                >
+                  <span>Buka Chat</span>
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
   );
 };
