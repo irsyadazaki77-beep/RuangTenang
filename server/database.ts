@@ -319,24 +319,37 @@ export interface CounselorRecord {
 
 // Ensure database is ready and initialized on fresh clone
 export async function ensureDatabaseReady(): Promise<void> {
-  const dbUrl = (process.env.DATABASE_URL || '').trim();
-  const explicitProvider = (process.env.DB_PROVIDER || '').toLowerCase().trim();
-  const hasPostgresUrl = dbUrl.startsWith('postgresql://') || dbUrl.startsWith('postgres://');
-  const isPostgres = hasPostgresUrl || (explicitProvider === 'postgresql' && hasPostgresUrl);
+  try {
+    const dbUrl = (process.env.DATABASE_URL || '').trim();
+    const explicitProvider = (process.env.DB_PROVIDER || '').toLowerCase().trim();
+    const hasPostgresUrl = dbUrl.startsWith('postgresql://') || dbUrl.startsWith('postgres://');
+    const isPostgres = hasPostgresUrl || (explicitProvider === 'postgresql' && hasPostgresUrl);
 
-  if (!isPostgres) {
-    try {
-      await prisma.users.count();
-    } catch {
-      console.log('[DATABASE INIT] Initializing SQLite database schema...');
+    if (!isPostgres) {
       try {
-        const { execSync } = await import('child_process');
-        execSync('npx prisma db push --schema prisma/schema.sqlite.prisma --skip-generate', { stdio: 'inherit' });
-        console.log('[DATABASE INIT] SQLite database schema initialized successfully.');
-      } catch (err: any) {
-        console.error('[DATABASE INIT] Could not auto-push schema:', err?.message || err);
+        const { existsSync, mkdirSync } = await import('fs');
+        const { resolve } = await import('path');
+        const prismaDir = resolve(process.cwd(), 'prisma');
+        if (!existsSync(prismaDir)) {
+          mkdirSync(prismaDir, { recursive: true });
+        }
+      } catch {}
+
+      try {
+        await prisma.users.count();
+      } catch {
+        console.log('[DATABASE INIT] Initializing SQLite database schema...');
+        try {
+          const { execSync } = await import('child_process');
+          execSync('npx prisma db push --schema prisma/schema.sqlite.prisma --skip-generate', { stdio: 'inherit' });
+          console.log('[DATABASE INIT] SQLite database schema initialized successfully.');
+        } catch (err: any) {
+          console.warn('[DATABASE INIT] Note on schema initialization:', err?.message || err);
+        }
       }
     }
+  } catch (outerErr: any) {
+    console.warn('[DATABASE INIT] Non-blocking init notice:', outerErr?.message || outerErr);
   }
 }
 
