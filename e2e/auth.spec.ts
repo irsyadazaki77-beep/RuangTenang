@@ -12,12 +12,12 @@ test.describe('Auth E2E', () => {
     // Using UI for login/register if possible.
     // In our app, there's a login button somewhere or we can use the API directly for test setup.
     // Let's use UI.
-    const loginButton = page.locator('button', { hasText: 'Login' });
+    const loginButton = page.locator('button', { hasText: 'Masuk Akun' });
     if (await loginButton.isVisible()) {
       await loginButton.click();
       
       // Assume modal opens
-      const registerTab = page.locator('button', { hasText: 'Daftar' });
+      const registerTab = page.locator('button', { hasText: 'Registrasi' });
       await registerTab.click();
       
       const email = `testuser_${Date.now()}@ui.ac.id`;
@@ -25,7 +25,7 @@ test.describe('Auth E2E', () => {
       await page.fill('input[type="password"]', 'Password123!');
       await page.fill('input[placeholder*="Nama"]', 'Test User');
       
-      await page.click('button:has-text("Daftar Sekarang")');
+      await page.click('button:has-text("Daftar Akun")');
       
       // Wait for login success
       await expect(page.locator('text=Test User').first()).toBeVisible({ timeout: 10000 });
@@ -38,10 +38,10 @@ test.describe('Auth E2E', () => {
       const profileBtn = page.locator('button:has-text("Test User")');
       await profileBtn.click();
       
-      const logoutBtn = page.locator('button:has-text("Logout")');
+      const logoutBtn = page.locator('button:has-text("Keluar")');
       await logoutBtn.click();
       
-      await expect(page.locator('button', { hasText: 'Login' })).toBeVisible();
+      await expect(page.locator('button', { hasText: 'Masuk' })).toBeVisible();
     }
   });
 });

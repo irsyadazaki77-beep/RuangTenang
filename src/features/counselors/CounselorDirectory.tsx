@@ -13,6 +13,7 @@ import {
   Filter,
 } from "lucide-react";
 import { Counselor } from "../../types";
+import { CounselorSpecialtyId, mapSpecialtiesToIds } from "./counselorUtils";
 
 
 interface CounselorDirectoryProps {
@@ -29,8 +30,7 @@ export const CounselorDirectory: React.FC<CounselorDirectoryProps> = ({
   const [methodFilter, setMethodFilter] = useState<string>("Semua");
   const [costFilter, setCostFilter] = useState<string>("Semua");
   const [campusFilter, setCampusFilter] = useState<string>("Semua");
-  const [languageFilter, setLanguageFilter] = useState<string>("Semua");
-  const [availabilityFilter, setAvailabilityFilter] = useState<string>("Semua");
+    const [availabilityFilter, setAvailabilityFilter] = useState<string>("Semua");
   const { counselors } = useCounselors();
 
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
@@ -38,16 +38,16 @@ export const CounselorDirectory: React.FC<CounselorDirectoryProps> = ({
     useState<Counselor | null>(null);
   useEscapeKey(() => setSelectedCounselorModal(null), !!selectedCounselorModal);
 
-  const CONCERN_CATEGORIES = [
-    { id: "Semua", label: "Semua" },
-    { id: "akademik", label: "Kendala Akademik & Skripsi" },
-    { id: "kecemasan", label: "Kecemasan & Burnout" },
-    { id: "sosial", label: "Hubungan & Sosial Kampus" },
-    { id: "mood", label: "Suasana Hati & Depresi" },
+  const CONCERN_CATEGORIES: { id: string; label: string; specialtyIds: CounselorSpecialtyId[] }[] = [
+    { id: "Semua", label: "Semua", specialtyIds: [] },
+    { id: "akademik", label: "Kendala Akademik & Skripsi", specialtyIds: ["akademik"] },
+    { id: "kecemasan", label: "Kecemasan & Burnout", specialtyIds: ["kecemasan", "burnout"] },
+    { id: "sosial", label: "Hubungan & Sosial Kampus", specialtyIds: ["sosial"] },
+    { id: "mood", label: "Suasana Hati & Depresi", specialtyIds: ["mood", "krisis"] },
   ];
 
   const filteredCounselors = counselors.filter((c) => {
-    const matchesSearch =
+    const matchesSearch = searchQuery.trim() === "" ||
       c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       c.university.toLowerCase().includes(searchQuery.toLowerCase()) ||
       c.specialties.some((s) =>
@@ -55,19 +55,18 @@ export const CounselorDirectory: React.FC<CounselorDirectoryProps> = ({
       );
 
     const selectedConcernCategory = CONCERN_CATEGORIES.find(cat => cat.id === selectedConcern);
+    const cSpecialtyIds = mapSpecialtiesToIds(c.specialties);
     const matchesConcern =
       selectedConcern === "Semua" ||
-      c.specialties.some((s) =>
-        s.toLowerCase().includes((selectedConcernCategory?.label || "").toLowerCase()),
-      );
+      !selectedConcernCategory ||
+      selectedConcernCategory.specialtyIds.some(id => cSpecialtyIds.includes(id));
 
     const matchesMethod = methodFilter === "Semua" || c.consultationType.includes(methodFilter as any);
     const matchesCost = costFilter === "Semua" || (costFilter === "Gratis" ? c.isFreeForStudents : !c.isFreeForStudents);
     const matchesCampus = campusFilter === "Semua" || c.university.includes(campusFilter);
-    const matchesLanguage = languageFilter === "Semua" || (c.languages && c.languages.includes(languageFilter));
-    const matchesAvailability = availabilityFilter === "Semua" || (availabilityFilter === "Hari Ini" ? c.availableToday : true);
+        const matchesAvailability = availabilityFilter === "Semua" || (availabilityFilter === "Hari Ini" ? c.availableToday : true);
 
-    return matchesSearch && matchesConcern && matchesMethod && matchesCost && matchesCampus && matchesLanguage && matchesAvailability;
+    return matchesSearch && matchesConcern && matchesMethod && matchesCost && matchesCampus && matchesAvailability;
   });
 
   return (
@@ -159,8 +158,7 @@ export const CounselorDirectory: React.FC<CounselorDirectoryProps> = ({
                 setMethodFilter("Semua");
                 setCostFilter("Semua");
                 setCampusFilter("Semua");
-                setLanguageFilter("Semua");
-                setAvailabilityFilter("Semua");
+                                setAvailabilityFilter("Semua");
               }}
               className="px-4 py-2 text-rose-600 dark:text-rose-400 text-sm font-medium hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-xl transition-colors cursor-pointer"
             >
@@ -191,8 +189,7 @@ export const CounselorDirectory: React.FC<CounselorDirectoryProps> = ({
               setMethodFilter("Semua");
               setCostFilter("Semua");
               setCampusFilter("Semua");
-              setLanguageFilter("Semua");
-              setAvailabilityFilter("Semua");
+                            setAvailabilityFilter("Semua");
             }}
             className="px-5 py-2.5 surface-muted text-primary font-medium text-sm rounded-xl transition-all cursor-pointer min-h-[44px]"
           >
@@ -215,7 +212,7 @@ export const CounselorDirectory: React.FC<CounselorDirectoryProps> = ({
                     width={64}
                     height={64}
                     loading="lazy"
-                    className="w-16 h-16 rounded-full object-cover border border-default shadow-sm shrink-0 cursor-pointer group-hover:scale-105 transition-transform"
+                    className="w-16 h-16 rounded-full object-cover border border-default shadow-sm shrink-0 cursor-pointer group-hover:scale-[1.02] transition-transform"
                     onClick={() => setSelectedCounselorModal(counselor)}
                   />
                   <div className="space-y-0.5 flex-1 min-w-0">

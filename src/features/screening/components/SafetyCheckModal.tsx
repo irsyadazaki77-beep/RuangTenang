@@ -27,7 +27,7 @@ export const SafetyCheckModal: React.FC<SafetyCheckModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-[60] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
-      <div className="bg-white border border-rose-300 text-slate-900 rounded-2xl max-w-xl w-full p-6 shadow-xl space-y-5">
+      <div className="bg-white dark:bg-slate-800 border border-rose-300 text-slate-900 rounded-2xl max-w-xl w-full p-6 shadow-xl space-y-5">
         <div className="flex items-start gap-3 bg-rose-50 border border-rose-200 p-4 rounded-xl text-rose-950">
           <ShieldAlert className="w-7 h-7 text-rose-600 flex-shrink-0 mt-0.5" />
           <div>
@@ -50,7 +50,7 @@ export const SafetyCheckModal: React.FC<SafetyCheckModalProps> = ({
                 className={`flex-1 py-1.5 px-3 min-h-[44px] rounded-lg text-xs font-medium border transition-all active:scale-95 ${
                   safetyAssessment.immediateDanger === true
                     ? 'bg-rose-600 text-white border-rose-600'
-                    : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
+                    : 'bg-white dark:bg-slate-800 text-slate-700 border-slate-300 hover:bg-slate-100'
                 }`}
               >
                 Ya, Saya Dalam Bahaya
@@ -60,7 +60,7 @@ export const SafetyCheckModal: React.FC<SafetyCheckModalProps> = ({
                 className={`flex-1 py-1.5 px-3 min-h-[44px] rounded-lg text-xs font-medium border transition-all active:scale-95 ${
                   safetyAssessment.immediateDanger === false
                     ? 'bg-teal-700 text-white border-teal-700'
-                    : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
+                    : 'bg-white dark:bg-slate-800 text-slate-700 border-slate-300 hover:bg-slate-100'
                 }`}
               >
                 Tidak Saat Ini
@@ -77,7 +77,7 @@ export const SafetyCheckModal: React.FC<SafetyCheckModalProps> = ({
                 className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-medium border transition-all ${
                   safetyAssessment.planOrIntent === true
                     ? 'bg-rose-600 text-white border-rose-600'
-                    : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
+                    : 'bg-white dark:bg-slate-800 text-slate-700 border-slate-300 hover:bg-slate-100'
                 }`}
               >
                 Ya, Ada Rencana/Niat
@@ -87,7 +87,7 @@ export const SafetyCheckModal: React.FC<SafetyCheckModalProps> = ({
                 className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-medium border transition-all ${
                   safetyAssessment.planOrIntent === false
                     ? 'bg-teal-700 text-white border-teal-700'
-                    : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
+                    : 'bg-white dark:bg-slate-800 text-slate-700 border-slate-300 hover:bg-slate-100'
                 }`}
               >
                 Tidak Ada Rencana/Niat
@@ -104,7 +104,7 @@ export const SafetyCheckModal: React.FC<SafetyCheckModalProps> = ({
                 className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-medium border transition-all ${
                   safetyAssessment.wantsTrustedContact === true
                     ? 'bg-slate-800 text-white border-slate-800'
-                    : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
+                    : 'bg-white dark:bg-slate-800 text-slate-700 border-slate-300 hover:bg-slate-100'
                 }`}
               >
                 Ya, Tampilkan Bantuan Kontak
@@ -114,7 +114,7 @@ export const SafetyCheckModal: React.FC<SafetyCheckModalProps> = ({
                 className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-medium border transition-all ${
                   safetyAssessment.wantsTrustedContact === false
                     ? 'bg-slate-800 text-white border-slate-800'
-                    : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
+                    : 'bg-white dark:bg-slate-800 text-slate-700 border-slate-300 hover:bg-slate-100'
                 }`}
               >
                 Nanti Saja
@@ -133,7 +133,7 @@ export const SafetyCheckModal: React.FC<SafetyCheckModalProps> = ({
                 <a
                   key={contact.id}
                   href={contact.url}
-                  className="p-2.5 bg-white border border-amber-300 rounded-lg flex items-center justify-between hover:bg-amber-100/50 transition-colors"
+                  className="p-2.5 bg-white dark:bg-slate-800 border border-amber-300 rounded-lg flex items-center justify-between hover:bg-amber-100/50 transition-colors"
                 >
                   <div>
                     <p className="font-semibold text-slate-900">{contact.name}</p>

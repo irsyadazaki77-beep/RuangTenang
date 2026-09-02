@@ -25,9 +25,23 @@ export const aiModelRouter = {
         lastError = err;
         attempt++;
         
+        const errMsg = (err.message || String(err)).toLowerCase();
         console.warn(`[AI_MODEL_ROUTER] Attempt ${attempt} failed for ${modelName}: ${err.message || 'Unknown error'}`);
         
-        if (err.message && err.message.includes('SAFETY_BLOCK')) {
+        // Define non-transient error classification
+        const isNonTransient = 
+          errMsg.includes('safety_block') || 
+          errMsg.includes('safety') || 
+          errMsg.includes('policy') || 
+          errMsg.includes('validation') || 
+          errMsg.includes('unauthorized') || 
+          errMsg.includes('api_key') || 
+          errMsg.includes('invalid') || 
+          errMsg.includes('auth') ||
+          (err.status && [400, 401, 403, 422].includes(Number(err.status)));
+
+        if (isNonTransient) {
+          console.log(`[AI_MODEL_ROUTER] Non-transient failure detected (${err.message || err}). Aborting retry loop immediately.`);
           break;
         }
         

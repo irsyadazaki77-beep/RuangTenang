@@ -67,18 +67,40 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
   
   const { user } = useAuth();
   const CHECKLIST_KEY = `rt_self_care_${user?.id || "guest"}`;
-  const [selfCareChecklist, setSelfCareChecklist] = useState<{ id: string; task: string; done: boolean }[]>(() => {
-    const saved = localStorage.getItem(CHECKLIST_KEY);
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) {}
+  const defaultTasks = [
+    { id: 'sc1', task: 'Lakukan Teknik Grounding 5-4-3-2-1 sekali hari ini', done: false },
+    { id: 'sc2', task: 'Terapkan rehat sejenak 25 menit saat mengerjakan tugas/skripsi', done: false },
+    { id: 'sc3', task: 'Jalan santai di luar ruangan selama 15 menit tanpa HP', done: false },
+    { id: 'sc4', task: 'Sediakan waktu 30 menit bebas layar sebelum tidur malam', done: false }
+  ];
+  const [selfCareChecklist, setSelfCareChecklist] = useState<{ id: string; task: string; done: boolean }[]>(defaultTasks);
+  
+  useEffect(() => {
+    if (!user || user.role === 'guest') {
+      const saved = localStorage.getItem(CHECKLIST_KEY);
+      if (saved) {
+        try { 
+          const parsed = JSON.parse(saved);
+          setSelfCareChecklist(parsed);
+        } catch (e) {}
+      }
+      return;
     }
-    return [
-      { id: 'sc1', task: 'Lakukan Teknik Grounding 5-4-3-2-1 sekali hari ini', done: false },
-      { id: 'sc2', task: 'Terapkan rehat sejenak 25 menit saat mengerjakan tugas/skripsi', done: false },
-      { id: 'sc3', task: 'Jalan santai di luar ruangan selama 15 menit tanpa HP', done: false },
-      { id: 'sc4', task: 'Sediakan waktu 30 menit bebas layar sebelum tidur malam', done: false }
-    ];
-  });
+    
+    // Fetch from backend for authenticated users
+    const dateStr = new Date().toISOString().split('T')[0];
+    apiClient.get(`/api/v1/user/selfcare?date=${dateStr}`).then(res => {
+      if (res.success && res.data && res.data.tasks) {
+        const backendTasks = res.data.tasks;
+        setSelfCareChecklist(prev => {
+          return prev.map(t => {
+            const bt = backendTasks.find((b: any) => b.taskId === t.id);
+            return bt ? { ...t, done: bt.isDone } : { ...t, done: false }; // always default to false from backend if not found
+          });
+        });
+      }
+    }).catch(console.error);
+  }, [user]);
 
   const fetchUsageStats = async () => {
     setLoadingUsage(true);
@@ -115,15 +137,24 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
 
             let parsedEmotions: string[] = [];
             try {
-              if (d.factors) parsedEmotions = typeof d.factors === 'string' ? JSON.parse(d.factors) : d.factors;
+              if (d.emotions) {
+                parsedEmotions = typeof d.emotions === 'string' ? JSON.parse(d.emotions) : d.emotions;
+              }
+            } catch {}
+
+            let parsedFactors: string[] = [];
+            try {
+              if (d.factors) {
+                parsedFactors = typeof d.factors === 'string' ? JSON.parse(d.factors) : d.factors;
+              }
             } catch {}
 
             return {
               id: d.id,
               date: dateStr,
               mood: parseInt(d.mood) || 3,
-              emotions: parsedEmotions,
-              factors: Array.isArray(d.factors) ? d.factors : [],
+              emotions: Array.isArray(parsedEmotions) ? parsedEmotions : [],
+              factors: Array.isArray(parsedFactors) ? parsedFactors : [],
               notes: d.notes || '',
               sleepHours: typeof d.sleepHours === 'number' ? d.sleepHours : (d.intensity || 0),
               sleepQuality: d.sleepQuality || null
@@ -161,7 +192,7 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
               phq9: d.phq9Score || 0,
               gad7: d.gad7Score || 0,
               label: 'Screening Mandiri',
-              triage: (d.phq9Score >= 15 || d.gad7Score >= 15) ? 'Krisis' : (d.phq9Score >= 10 || d.gad7Score >= 10 ? 'Prioritas' : 'Ringan')
+              triage: (d.hasSelfHarmRisk || (d.item9Score !== undefined && d.item9Score > 0) || d.riskLevel === 'Tinggi' || d.riskCategory === 'KRISIS_SANGAT_TINGGI' || d.riskCategory === 'RISIKO_MENYAKITI_DIRI') ? 'Krisis' : (d.phq9Score >= 15 || d.gad7Score >= 15 ? 'Prioritas' : 'Ringan')
             };
           });
           setScreenHistory(parsedScreenings);
@@ -227,13 +258,38 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  const handleToggleSelfCare = (id: string) => {
+  const handleToggleSelfCare = async (id: string) => {
+    const dateStr = new Date().toISOString().split('T')[0];
+    const itemToToggle = selfCareChecklist.find(i => i.id === id);
+    if (!itemToToggle) return;
+    const newStatus = !itemToToggle.done;
+
+    // Optimistic UI
     setSelfCareChecklist(prev => {
-      const next = prev.map(item => item.id === id ? { ...item, done: !item.done } : item);
-      localStorage.setItem(CHECKLIST_KEY, JSON.stringify(next));
+      const next = prev.map(item => item.id === id ? { ...item, done: newStatus } : item);
+      if (!user || user.role === 'guest') {
+        localStorage.setItem(CHECKLIST_KEY, JSON.stringify(next));
+      }
       return next;
     });
-    showToast('Tugas perawatan mandiri diperbarui!');
+
+    if (user && user.role !== 'guest') {
+      try {
+        const res = await apiClient.put('/api/v1/user/selfcare', {
+          taskId: id,
+          date: dateStr,
+          isDone: newStatus
+        });
+        if (!res.success) throw new Error(res.error);
+        showToast('Tugas perawatan mandiri diperbarui!');
+      } catch (err) {
+        // Rollback on failure
+        setSelfCareChecklist(prev => prev.map(item => item.id === id ? { ...item, done: !newStatus } : item));
+        showToast('Gagal menyimpan tugas', 'error');
+      }
+    } else {
+      showToast('Tugas perawatan mandiri diperbarui!');
+    }
   };
 
   const containerVariants = {
@@ -241,7 +297,7 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
     show: {
       opacity: 1,
       transition: {
-        staggerChildren: 0.1
+        staggerChildren: 0.05
       }
     }
   };
@@ -279,7 +335,7 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
         </motion.div>
 
         {/* Summary Cards */}
-        <motion.div variants={itemVariants} className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+        <motion.div variants={itemVariants} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="surface-card p-5 rounded-2xl flex flex-col justify-between relative overflow-hidden">
             <div className="flex items-center justify-between mb-4">
               <span className="text-secondary text-sm font-medium">Mood Terakhir</span>
@@ -292,21 +348,12 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
 
           <div className="surface-card p-5 rounded-2xl flex flex-col justify-between">
             <div className="flex items-center justify-between mb-4">
-              <span className="text-secondary text-sm font-medium">Total Hari Aktif</span>
-              <div className="p-2 bg-indigo-50 dark:bg-indigo-950/50 rounded-lg text-indigo-600 dark:text-indigo-400"><Clock className="w-4 h-4" /></div>
-            </div>
-            <div>
-              <span className="text-2xl font-bold text-primary">{totalActiveDays === 0 ? 'Belum ada data' : `${totalActiveDays} hari`}</span>
-            </div>
-          </div>
-
-          <div className="surface-card p-5 rounded-2xl flex flex-col justify-between">
-            <div className="flex items-center justify-between mb-4">
               <span className="text-secondary text-sm font-medium">Streak Saat Ini</span>
               <div className="p-2 bg-orange-50 dark:bg-orange-950/50 rounded-lg text-orange-600 dark:text-orange-400"><TrendingUp className="w-4 h-4" /></div>
             </div>
             <div>
-              <span className="text-2xl font-bold text-primary">{streakCount === 0 ? 'Belum ada data' : `${streakCount} hari`}</span>
+              <div className="text-2xl font-bold text-primary">{streakCount === 0 ? 'Belum ada data' : `${streakCount} hari`}</div>
+              <div className="text-[11px] text-secondary mt-1 font-medium">{totalActiveDays} hari aktif secara total</div>
             </div>
           </div>
           

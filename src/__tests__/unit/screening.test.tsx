@@ -154,7 +154,7 @@ describe('Screening Modal Unit & Integration Tests', () => {
     expect(onPersisted).not.toHaveBeenCalled();
 
     // Displays clear guest message
-    expect(screen.getByText(/Mode Tamu: Hasil tersimpan di perangkat ini/i)).toBeInTheDocument();
+    expect(screen.getByText(/Mode Tamu: Hasil tidak disimpan ke akun/i)).toBeInTheDocument();
     expect(screen.queryByText(/Hasil berhasil disimpan ke akun Anda/i)).not.toBeInTheDocument();
   });
 });

@@ -11,7 +11,7 @@ test.describe('Responsive Layout E2E', () => {
   for (const vp of viewports) {
     test(`Viewport: ${vp.name}`, async ({ page }) => {
       await page.setViewportSize({ width: vp.width, height: vp.height });
-      await page.goto('/');
+      await page.goto('/?__test__=true');
       await expect(page.locator('textarea')).toBeVisible();
     });
   }

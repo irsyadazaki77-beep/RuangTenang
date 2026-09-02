@@ -174,11 +174,34 @@ router.put('/mood/:id', requireAuth, async (req: Request, res: Response) => {
       where: { id },
       data: updates
     });
+    
+    let parsedFactors = parsed.data.factors;
+    if (parsedFactors === undefined) {
+      if (updated.factors) {
+        const dec = encryptionService.decryptSensitive(updated.factors);
+        try { parsedFactors = JSON.parse(dec || updated.factors); } catch { parsedFactors = []; }
+      } else {
+        parsedFactors = [];
+      }
+    }
+
+    let parsedEmotions = parsed.data.emotions;
+    if (parsedEmotions === undefined) {
+      if (updated.emotions) {
+        const dec = encryptionService.decryptSensitive(updated.emotions);
+        try { parsedEmotions = JSON.parse(dec || updated.emotions); } catch { parsedEmotions = []; }
+      } else {
+        parsedEmotions = [];
+      }
+    }
+
     res.json({
       success: true,
       log: {
         ...updated,
-        notes: parsed.data.notes !== undefined ? parsed.data.notes : (encryptionService.decryptSensitive(updated.notes) || updated.notes || '')
+        notes: parsed.data.notes !== undefined ? parsed.data.notes : (encryptionService.decryptSensitive(updated.notes) || updated.notes || ''),
+        factors: parsedFactors,
+        emotions: parsedEmotions
       }
     });
   } catch (e: any) {
@@ -337,3 +360,53 @@ router.get('/export-progress-pdf', requireAuth, async (req: Request, res: Respon
 });
 
 export default router;
+
+// --- Self Care Tasks ---
+router.get('/selfcare', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { date } = req.query;
+    if (!date) return res.status(400).json({ success: false, error: 'Tanggal diperlukan' });
+
+    const tasks = await prisma.selfCareTasks.findMany({
+      where: {
+        userId: req.user!.userId,
+        date: String(date)
+      }
+    });
+    res.json({ success: true, tasks });
+  } catch (e) {
+    sendError(res, 'FETCH_SELFCARE_FAILED', 'Gagal mengambil data self-care');
+  }
+});
+
+router.put('/selfcare', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { taskId, date, isDone } = req.body;
+    if (!taskId || !date || typeof isDone !== 'boolean') {
+      return res.status(400).json({ success: false, error: 'Parameter tidak valid' });
+    }
+
+    const task = await prisma.selfCareTasks.upsert({
+      where: {
+        userId_taskId_date: {
+          userId: req.user!.userId,
+          taskId: String(taskId),
+          date: String(date)
+        }
+      },
+      update: {
+        isDone
+      },
+      create: {
+        userId: req.user!.userId,
+        taskId: String(taskId),
+        date: String(date),
+        isDone
+      }
+    });
+
+    res.json({ success: true, task });
+  } catch (e) {
+    sendError(res, 'UPDATE_SELFCARE_FAILED', 'Gagal memperbarui data self-care');
+  }
+});

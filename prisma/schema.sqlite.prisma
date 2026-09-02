@@ -1,5 +1,6 @@
-// Prisma Schema for RuangTenang Platform (Development / Test SQLite Datasource)
-// Configuration: Uses DATABASE_URL environment variable with fallback to local sqlite database
+// Prisma Schema for RuangTenang Platform
+// Production Target: PostgreSQL 15+
+// Configuration: Uses DATABASE_URL environment variable
 
 datasource db {
   provider = "sqlite"
@@ -37,6 +38,7 @@ model Users {
   // Relations
   chats                     Chats[]
   moodLogs                  MoodLogs[]
+  selfCareTasks             SelfCareTasks[]
   screenings                Screenings[]
   appointments              Appointments[]
   consent                   UserConsents?
@@ -45,7 +47,6 @@ model Users {
   sessions                  UserSession[]
   loginEvents               LoginEvent[]
   notifications             SecurityNotification[]
-  selfCareTasks             SelfCareTasks[]
 }
 
 model Appointments {
@@ -294,7 +295,6 @@ model Counselors {
   location          String?
   isDemoData        Boolean  @default(false)
   userId            String?
-  gender            String?
   createdAt         DateTime @default(now())
 
   // Relations
@@ -304,16 +304,16 @@ model Counselors {
 }
 
 model MoodLogs {
-  id           String   @id
-  userId       String
-  mood         String
-  notes        String?
-  intensity    Int?
-  factors      String? // JSON array
-  emotions     String? // JSON array
-  sleepHours   Int?
+  id        String   @id
+  userId    String
+  mood      String
+  notes     String?
+  intensity Int?
+  factors   String? // JSON array
+  emotions  String? // JSON array
+  sleepHours Int?
   sleepQuality String?
-  timestamp    DateTime @default(now())
+  timestamp DateTime @default(now())
 
   // Relations
   user      Users    @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -321,18 +321,6 @@ model MoodLogs {
   @@index([userId])
   @@index([userId, timestamp])
   @@index([timestamp])
-}
-
-model SelfCareTasks {
-  id        String   @id
-  userId    String
-  taskId    String
-  isDone    Boolean  @default(false)
-  date      String   // YYYY-MM-DD
-  updatedAt DateTime @updatedAt
-  user      Users    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  @@unique([userId, taskId, date])
 }
 
 model EmergencyContacts {
@@ -436,4 +424,18 @@ model DistributedLock {
   expiresAt  DateTime
 
   @@index([expiresAt])
+}
+
+
+model SelfCareTasks {
+  id        String   @id @default(uuid())
+  userId    String
+  taskId    String
+  date      String   // YYYY-MM-DD
+  isDone    Boolean  @default(false)
+  updatedAt DateTime @default(now()) @updatedAt
+  user      Users    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, taskId, date])
+  @@index([userId, date])
 }

@@ -28,7 +28,8 @@ const isTestEnv = (): boolean => {
     return (
       (window as any).__vitest_worker__ !== undefined ||
       window.location.search.includes('__test__=true') ||
-      (window as any).isE2ETest === true
+      (window as any).isE2ETest === true ||
+      window.navigator.webdriver === true
     );
   }
   return typeof process !== 'undefined' && process.env.NODE_ENV === 'test';

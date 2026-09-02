@@ -22,13 +22,13 @@ export interface ReleaseNote {
   buildNumber?: string;
 }
 
-export const CURRENT_APP_VERSION = 'v2.8.0';
-export const LAST_UPDATED_DATE = '1 September 2026';
+export const CURRENT_APP_VERSION = 'v0.9.0';
+export const LAST_UPDATED_DATE = '2 September 2026';
 
 export const APP_CHANGELOG: ReleaseNote[] = [
   {
-    version: 'v2.8.0',
-    date: '2026-09-01',
+    version: 'v0.9.0',
+    date: '2026-09-02',
     releaseTime: 'Hari Ini, 09:00 WIB',
     periodLabel: 'Hari Ini',
     title: 'UI/UX & Motion Design Overhaul, Sistem "Calm Motion", dan Penguatan Keamanan Klinis',

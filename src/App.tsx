@@ -55,15 +55,34 @@ export default function App() {
       const res = await apiClient.get<Chat[]>('/api/v1/chat/history');
       if (res.success && Array.isArray(res.data)) {
         setChats(res.data);
+        localStorage.setItem(`ruangtenang_cached_chats_${user.id}`, JSON.stringify(res.data));
       } else {
-        setChats([]);
+        const cached = localStorage.getItem(`ruangtenang_cached_chats_${user.id}`);
+        if (cached) {
+          try {
+            setChats(JSON.parse(cached));
+          } catch {
+            setChats([]);
+          }
+        } else {
+          setChats([]);
+        }
         if (res.status !== 401) {
           console.warn('Fetch chats failed:', res.error);
         }
       }
     } catch (err) {
       console.warn('Failed to fetch chat history:', err);
-      setChats([]);
+      const cached = localStorage.getItem(`ruangtenang_cached_chats_${user.id}`);
+      if (cached) {
+        try {
+          setChats(JSON.parse(cached));
+        } catch {
+          setChats([]);
+        }
+      } else {
+        setChats([]);
+      }
     } finally {
       setIsLoadingChats(false);
     }

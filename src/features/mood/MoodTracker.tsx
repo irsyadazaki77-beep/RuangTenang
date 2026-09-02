@@ -316,8 +316,7 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
         log.emotions.some(e => e.toLowerCase().includes(searchQuery.toLowerCase()));
       
       const matchesFactor = !selectedFactorFilter || 
-        (log.factors && log.factors.includes(selectedFactorFilter)) || 
-        (log.emotions && log.emotions.includes(selectedFactorFilter));
+        (log.factors && log.factors.includes(selectedFactorFilter));
       return matchesSearch && matchesFactor;
     });
   }, [moodLogs, searchQuery, selectedFactorFilter]);
@@ -453,7 +452,8 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
                 <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover:block bg-slate-950 text-white border border-slate-700 px-2.5 py-1.5 rounded-lg text-[10px] whitespace-nowrap z-50 shadow-xl pointer-events-none">
                   <p className="font-bold text-teal-300">{cell.label}</p>
                   <p>{cell.log ? `Mood: ${MOOD_OPTIONS[cell.log.mood - 1].label} (${cell.log.sleepHours} Jam)` : 'Tidak ada catatan'}</p>
-                  {cell.log?.emotions?.length ? <p className="text-[9px] text-slate-400 mt-0.5">Tag: {cell.log.emotions.join(', ')}</p> : null}
+                  {cell.log?.emotions?.length ? <p className="text-[9px] text-slate-400 mt-0.5">Emosi: {cell.log.emotions.join(', ')}</p> : null}
+                  {cell.log?.factors?.length ? <p className="text-[9px] text-slate-400 mt-0.5">Faktor: {cell.log.factors.join(', ')}</p> : null}
                 </div>
               </div>
             );
@@ -822,11 +822,19 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
 
                     <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] pt-1">
                       <div className="flex flex-wrap gap-1">
-                        {log.emotions.map((em, i) => {
-                          const matchObj = [...EMOTION_TAGS, ...FACTOR_TAGS].find(t => t.label === em);
+                        {log.emotions && log.emotions.map((em, i) => {
+                          const matchObj = EMOTION_TAGS.find(t => t.label === em);
                           return (
-                            <span key={i} className="px-2 py-0.5 bg-slate-100 text-slate-700 border border-slate-200 rounded-md text-[10px] font-semibold">
+                            <span key={`em-${i}`} className="px-2 py-0.5 bg-slate-100 text-slate-700 border border-slate-200 rounded-md text-[10px] font-semibold">
                               {matchObj ? matchObj.icon : '🏷️'} {em}
+                            </span>
+                          );
+                        })}
+                        {log.factors && log.factors.map((fac, i) => {
+                          const matchObj = FACTOR_TAGS.find(t => t.label === fac);
+                          return (
+                            <span key={`fac-${i}`} className="px-2 py-0.5 bg-teal-50 text-teal-700 border border-teal-200 rounded-md text-[10px] font-semibold">
+                              {matchObj ? matchObj.icon : '🏷️'} {fac}
                             </span>
                           );
                         })}

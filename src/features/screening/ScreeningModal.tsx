@@ -250,22 +250,22 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
       minute: '2-digit'
     });
 
-    let storageNotice = 'Hasil tersimpan di perangkat ini.';
+    let storageNotice = 'Hasil tersedia selama sesi ini.';
     if (persistenceStatus === 'saved') {
-      storageNotice = 'Hasil berhasil disimpan ke akun Anda (Cloud Private)';
+      storageNotice = 'Hasil berhasil disimpan ke akun Anda.';
     } else if (persistenceStatus === 'local-only') {
-      storageNotice = 'Hasil tersimpan di perangkat ini (Mode Tamu/Lokal)';
+      storageNotice = 'Hasil tidak disimpan ke akun. Hasil hanya tersedia selama sesi ini.';
     } else if (persistenceStatus === 'failed') {
-      storageNotice = 'Pengecekan selesai (Penyimpanan ke server gagal, tersimpan lokal)';
+      storageNotice = 'Pengecekan selesai, tetapi penyimpanan ke akun mungkin gagal.';
     }
 
     let text = `=== RUANGTENANG - LAPORAN HASIL SKRINING KESEHATAN MENTAL MAHASISWA ===\n`;
     text += `Tanggal Pemeriksaan: ${dateStr}\n`;
     text += `Penyimpanan Data: ${storageNotice}\n\n`;
-    text += `1. HASIL PHQ-9 (SKOR DEPRESI AKADEMIS):\n`;
+    text += `1. HASIL PHQ-9 (PHQ-9 (Skor Gejala Depresi)):\n`;
     text += `   - Skor Total: ${res.phq9.score} / 27\n`;
     text += `   - Tingkat Keparahan: ${res.phq9.severity}\n\n`;
-    text += `2. HASIL GAD-7 (SKOR KECEMASAN AKADEMIS):\n`;
+    text += `2. HASIL GAD-7 (GAD-7 (Skor Gejala Kecemasan)):\n`;
     text += `   - Skor Total: ${res.gad7.score} / 21\n`;
     text += `   - Tingkat Keparahan: ${res.gad7.severity}\n\n`;
     text += `REKOMENDASI RUANGTENANG:\n`;
@@ -324,7 +324,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
               <ul className="list-disc pl-5 space-y-1 mt-2">
                 <li><strong className="text-primary font-medium">Tujuan:</strong> Membantu memetakan tingkat stres, kecemasan, dan depresi ringan.</li>
                 <li><strong className="text-primary font-medium">Durasi:</strong> Sekitar 2-3 menit.</li>
-                <li><strong className="text-primary font-medium">Privasi:</strong> Hasil tersimpan di akun Anda untuk riwayat pribadi.</li>
+                <li><strong className="text-primary font-medium">Privasi:</strong> {user && user.role !== 'guest' ? 'Hasil dapat disimpan ke akun Anda untuk membantu melihat riwayat.' : 'Hasil tidak disimpan ke akun. Hasil hanya tersedia selama sesi ini.'}</li>
                 <li><strong className="text-primary font-medium">Bukan Diagnosis:</strong> Alat ini adalah skrining awal mandiri, bukan pengganti diagnosis medis profesional.</li>
               </ul>
             </div>
@@ -335,7 +335,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
                   <span className="text-sm font-medium text-primary flex items-center gap-2">
                     <History className="w-4 h-4 text-secondary" /> Riwayat Tes Terakhir ({historyList.length})
                   </span>
-                  <span className="text-[11px] text-secondary font-medium uppercase tracking-wider">Tersimpan Privat</span>
+                  <span className="text-[11px] text-secondary font-medium uppercase tracking-wider">Riwayat Pribadi</span>
                 </div>
                 <div className="space-y-3 max-h-40 overflow-y-auto pr-2">
                   {historyList.slice(0, 3).map((item, idx) => (
@@ -510,7 +510,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
             {persistenceStatus === 'local-only' && (
               <div className="p-3.5 bg-amber-50/80 border border-amber-200 rounded-xl text-xs text-amber-800 flex items-center gap-2">
                 <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
-                <span>Mode Tamu: Hasil tersimpan di perangkat ini. Masuk atau daftar akun untuk menyimpan riwayat skrining ke profil Anda.</span>
+                <span>Mode Tamu: Hasil tidak disimpan ke akun. Hasil hanya tersedia selama sesi ini. Masuk atau daftar untuk menyimpan riwayat skrining ke profil Anda.</span>
               </div>
             )}
             {persistenceStatus === 'failed' && (

@@ -245,7 +245,7 @@ export default function Sidebar({ isOpen, setIsOpen, onNewChat, chats, currentCh
               className="w-full bg-white dark:bg-slate-800 border border-slate-200/70 dark:border-slate-700 rounded-[10px] pl-8 pr-8 py-1.5 min-h-[40px] text-[13px] text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:border-teal-500/80 transition-colors"
             />
             <div className="absolute right-2.5 flex items-center pointer-events-none">
-              <span className="text-[10px] font-medium text-slate-400 border border-slate-200 dark:border-slate-700 rounded px-1.5 py-0.5">⌘K</span>
+              <span className="hidden lg:inline text-[10px] font-medium text-slate-400 border border-slate-200 dark:border-slate-700 rounded px-1.5 py-0.5">Ctrl/⌘ K</span>
             </div>
           </div>
         </div>

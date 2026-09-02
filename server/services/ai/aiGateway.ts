@@ -7,6 +7,7 @@ import { aiModelRouter } from './aiModelRouter.js';
 import { formatEmergencyContactsForAiPrompt, getVerifiedEmergencyContacts } from '../../config/emergencyRegistry.js';
 import { analyzeMessageSentiment } from '../../../src/lib/crisisDetector.js';
 import { validateAndSanitizeToolCall, ValidToolName } from './aiToolSchemas.js';
+import { z } from 'zod';
 
 export interface ChatStreamGatewayParams {
   userId?: string;
@@ -143,16 +144,18 @@ Format keluaran JSON murni: {"prompts": ["pertanyaan 1", "pertanyaan 2", "pertan
         });
       }, { allowFallback: true });
 
-      const parsed = JSON.parse(response.text || '{}');
-      if (Array.isArray(parsed.prompts) && parsed.prompts.length > 0) {
-        const cleanedPrompts = parsed.prompts
-          .slice(0, 3)
-          .map((p: any) => typeof p === 'string' ? scanAndSanitizePII(p).sanitizedText : '')
-          .filter(Boolean);
+      const parsedRaw = JSON.parse(response.text || '{}');
+      const reflectionSchema = z.object({
+        prompts: z.array(z.string()).min(1)
+      });
+      const parsed = reflectionSchema.parse(parsedRaw);
+      const cleanedPrompts = parsed.prompts
+        .slice(0, 3)
+        .map((p: string) => scanAndSanitizePII(p).sanitizedText)
+        .filter(Boolean);
 
-        if (cleanedPrompts.length > 0) {
-          return { prompts: cleanedPrompts, source: 'ai' };
-        }
+      if (cleanedPrompts.length > 0) {
+        return { prompts: cleanedPrompts, source: 'ai' };
       }
     } catch (err) {
       console.warn('[AI_GATEWAY] Reflection prompt generation fallback triggered:', err);
@@ -240,7 +243,13 @@ Berikan analisis dalam format JSON murni:
         });
       }, { allowFallback: true });
 
-      const parsed = JSON.parse(response.text || '{}');
+      const parsedRaw = JSON.parse(response.text || '{}');
+      const moodInsightsSchema = z.object({
+        summary: z.string(),
+        patterns: z.array(z.string()),
+        recommendations: z.array(z.string())
+      });
+      const parsed = moodInsightsSchema.parse(parsedRaw);
       const validation = aiSafetyService.validateOutput(parsed.summary || '');
       if (!validation.isValid) {
         return {
@@ -252,9 +261,9 @@ Berikan analisis dalam format JSON murni:
       }
 
       return {
-        summary: parsed.summary || fallbackSummary,
-        patterns: Array.isArray(parsed.patterns) && parsed.patterns.length > 0 ? parsed.patterns : fallbackPatterns,
-        recommendations: Array.isArray(parsed.recommendations) && parsed.recommendations.length > 0 ? parsed.recommendations : fallbackActions,
+        summary: parsed.summary,
+        patterns: parsed.patterns.length > 0 ? parsed.patterns : fallbackPatterns,
+        recommendations: parsed.recommendations.length > 0 ? parsed.recommendations : fallbackActions,
         source: 'ai'
       };
     } catch (err) {

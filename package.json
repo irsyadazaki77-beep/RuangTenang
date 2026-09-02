@@ -1,7 +1,7 @@
 {
   "name": "ruang-tenang-kampus",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.9.0",
   "type": "module",
   "scripts": {
     "dev": "node scripts/prismaGenerate.js && tsx server.ts",
@@ -25,7 +25,8 @@
     "db:deploy:postgres": "npx prisma migrate deploy --schema prisma/schema.postgres.prisma",
     "db:encrypt": "tsx server/scripts/migrateEncryption.ts",
     "seed:demo": "tsx server/scripts/seedDemoData.ts",
-    "admin:bootstrap": "tsx server/scripts/bootstrapAdmin.ts"
+    "admin:bootstrap": "tsx server/scripts/bootstrapAdmin.ts",
+    "db:rehearse": "tsx server/scripts/rehearsePostgres.ts"
   },
   "dependencies": {
     "@google/genai": "^2.15.0",
@@ -48,6 +49,7 @@
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",
     "node-cron": "^4.6.0",
+    "pg": "^8.23.0",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
     "react-markdown": "^10.1.0",
@@ -74,6 +76,7 @@
     "@types/node": "^22.20.1",
     "@types/node-cron": "^3.0.11",
     "@types/pdfkit": "^0.17.6",
+    "@types/pg": "^8.23.1",
     "@types/supertest": "^7.2.1",
     "autoprefixer": "^10.4.21",
     "esbuild": "^0.25.0",

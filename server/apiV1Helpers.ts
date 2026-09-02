@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import { z } from 'zod';
 import { prisma } from './database.js';
 import { validateEnvironment } from './config/envValidation.js';
+import { logger } from './utils/logger.js';
 
 declare global {
   namespace Express {
@@ -621,15 +622,29 @@ export function logAiTelemetry(data: AiTelemetryData) {
 // ==========================================
 export function centralizedErrorHandler(err: any, req: Request, res: Response, _next: NextFunction) {
   const requestId = req.requestId || 'unknown';
-  
-  // Redact sensitive data from logs (Phase 5 requirement)
   const isProd = process.env.NODE_ENV === 'production';
   const errorMessage = err?.message || 'Unknown error';
   
-  if (isProd) {
-    console.error(`[CENTRALIZED_ERROR] reqId=${requestId} url=${req.originalUrl || req.url}: ${errorMessage} (details redacted for security)`);
+  // Custom HTTP status error
+  const statusCode = err.statusCode || err.status || (err instanceof z.ZodError || err?.name === 'ZodError' || (err instanceof SyntaxError && 'body' in err) ? 400 : 500);
+
+  // Distinguish logical error (4xx) vs operational/system error (5xx) in logs
+  if (statusCode >= 500) {
+    logger.error('OPERATIONAL_SYSTEM_ERROR', err, {
+      requestId,
+      url: req.originalUrl || req.url,
+      method: req.method,
+      statusCode
+    });
   } else {
-    console.error(`[CENTRALIZED_ERROR] reqId=${requestId} url=${req.originalUrl || req.url}:`, err);
+    logger.warn('LOGICAL_CLIENT_ERROR', {
+      requestId,
+      url: req.originalUrl || req.url,
+      method: req.method,
+      statusCode,
+      errorName: err.name,
+      errorMessage: isProd ? '[REDACTED_PROD]' : errorMessage
+    });
   }
 
   // Zod Validation Errors
@@ -656,8 +671,6 @@ export function centralizedErrorHandler(err: any, req: Request, res: Response, _
     });
   }
 
-  // Custom HTTP status error
-  const statusCode = err.statusCode || err.status || 500;
   const userMessage = err.message || 'Terjadi kesalahan internal pada server.';
 
   res.status(statusCode).json({

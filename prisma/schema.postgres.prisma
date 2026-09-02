@@ -38,6 +38,7 @@ model Users {
   // Relations
   chats                     Chats[]
   moodLogs                  MoodLogs[]
+  selfCareTasks             SelfCareTasks[]
   screenings                Screenings[]
   appointments              Appointments[]
   consent                   UserConsents?
@@ -309,6 +310,9 @@ model MoodLogs {
   notes     String?
   intensity Int?
   factors   String? // JSON array
+  emotions  String? // JSON array
+  sleepHours Int?
+  sleepQuality String?
   timestamp DateTime @default(now())
 
   // Relations
@@ -420,4 +424,18 @@ model DistributedLock {
   expiresAt  DateTime
 
   @@index([expiresAt])
+}
+
+
+model SelfCareTasks {
+  id        String   @id @default(uuid())
+  userId    String
+  taskId    String
+  date      String   // YYYY-MM-DD
+  isDone    Boolean  @default(false)
+  updatedAt DateTime @default(now()) @updatedAt
+  user      Users    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, taskId, date])
+  @@index([userId, date])
 }
