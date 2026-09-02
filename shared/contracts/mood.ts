@@ -3,9 +3,12 @@ import { z } from 'zod';
 export const CreateMoodSchema = z.object({
   mood: z.union([z.string(), z.number()]),
   notes: z.string().max(1000).optional(),
-  intensity: z.number().min(0).max(24).optional(),
-  factors: z.array(z.string()).optional()
+  emotions: z.array(z.string()).max(10).optional(),
+  factors: z.array(z.string()).max(10).optional(),
+  sleepHours: z.number().min(0).max(24).optional().nullable(),
+  sleepQuality: z.enum(['very_poor', 'poor', 'fair', 'good', 'excellent']).optional().nullable()
 });
+
 export type CreateMoodInput = z.infer<typeof CreateMoodSchema>;
 
 export const UpdateMoodSchema = CreateMoodSchema.partial();

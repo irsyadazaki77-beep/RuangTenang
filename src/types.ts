@@ -365,6 +365,7 @@ export interface MoodLog {
   mood: number; // 1-5
   emotions: string[];
   notes: string;
-  sleepHours: number;
-  sleepQuality: "Nyenyak" | "Kurang Nyenyak" | "Insomnia";
+  factors: string[];
+  sleepHours: number | null;
+  sleepQuality: "very_poor" | "poor" | "fair" | "good" | "excellent" | null;
 }

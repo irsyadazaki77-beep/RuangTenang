@@ -22,19 +22,73 @@ export interface ReleaseNote {
   buildNumber?: string;
 }
 
-export const CURRENT_APP_VERSION = 'v2.7.0';
-export const LAST_UPDATED_DATE = '31 Agustus 2026';
+export const CURRENT_APP_VERSION = 'v2.8.0';
+export const LAST_UPDATED_DATE = '1 September 2026';
 
 export const APP_CHANGELOG: ReleaseNote[] = [
   {
-    version: 'v2.7.0',
-    date: '2026-08-31',
-    releaseTime: 'Hari Ini, 10:30 WIB',
+    version: 'v2.8.0',
+    date: '2026-09-01',
+    releaseTime: 'Hari Ini, 09:00 WIB',
     periodLabel: 'Hari Ini',
-    title: 'Pusat Catatan Pembaruan Harian & Peningkatan Kestabilan AI',
-    tagline: 'Transparansi penuh pembaruan fitur setiap hari, pelacak versi interaktif, dan optimalisasi koneksi server.',
+    title: 'UI/UX & Motion Design Overhaul, Sistem "Calm Motion", dan Penguatan Keamanan Klinis',
+    tagline: 'Standardisasi visual yang tenang, transisi antarmuka yang lembut, sistem darurat non-blocking, dan perbaikan logika zona waktu lokal.',
     badge: 'Terbaru',
     isLatest: true,
+    highlights: [
+      'Sistem Gerak "Calm Motion" & Aksesibilitas Menyeluruh (dukungan prefers-reduced-motion)',
+      'Standardisasi Token Desain, Skala Tipografi, dan Kontras Dark Mode yang Tenang',
+      'Pusat Krisis SOS Non-Blocking dengan Dispatch Otomatis Geolocation',
+      'Perbaikan Akurasi Logika Streak Berbasis Zona Waktu Lokal & Filter Konselor Terstruktur',
+      'Penyederhanaan Antarmuka Chat & Form Skrining Klinis dengan Disclaimer Standar Medis'
+    ],
+    changes: [
+      {
+        id: 'ch-280-1',
+        category: 'feature',
+        title: 'Sistem Gerak "Calm Motion" & Reduksi Animasi Agresif',
+        description: 'Mengimplementasikan transisi antarmuka yang lembut dan tenang (80% subtle fade/translate 120–220ms, 15% hover micro-interaction) serta kepatuhan penuh prefers-reduced-motion untuk kenyamanan navigasi jangka panjang.',
+        impact: 'Pengguna dengan sensitivitas visual dapat menggunakan aplikasi dengan nyaman tanpa gangguan distraksi atau efek visual yang memicu kecemasan.'
+      },
+      {
+        id: 'ch-280-2',
+        category: 'improvement',
+        title: 'Standardisasi Desain Semantik, Tipografi & Dark Mode',
+        description: 'Penyelarasan palet warna Teal semantik, Slate neutral, serta hierarki tipografi Playfair Display & Plus Jakarta Sans yang memenuhi standar aksesibilitas kontras WCAG AA.',
+        impact: 'Tampilan aplikasi terasa lebih konsisten, tenang, bersih, dan profesional di seluruh perangkat.'
+      },
+      {
+        id: 'ch-280-3',
+        category: 'security',
+        title: 'Pusat Darurat SOS Non-Blocking & Geolocation Fallback',
+        description: 'Pembaruan mekanisme pemicu sinyal SOS darurat agar tidak tertahan oleh izin lokasi browser, serta fallback otomatis koordinat agar bantuan tetap terkirim secara instan.',
+        impact: 'Memastikan sinyal darurat terkirim secepatnya tanpa hambatan dialog perizinan saat kondisi krisis.'
+      },
+      {
+        id: 'ch-280-4',
+        category: 'improvement',
+        title: 'Penyempurnaan Disclaimer Skrining Medis PHQ-9 & GAD-7',
+        description: 'Penyempurnaan panduan hasil evaluasi kesehatan mental dengan penegasan disclaimer non-medis resmi dan penghapusan klaim sistem yang berlebihan.',
+        impact: 'Menjaga akurasi dan etika klinis bahwa alat skrining adalah panduan awal untuk konsultasi profesional.'
+      },
+      {
+        id: 'ch-280-5',
+        category: 'fix',
+        title: 'Logika Streak Zona Waktu Lokal & Filter Spesialisasi Konselor',
+        description: 'Penyempurnaan penghitungan konsistensi aktivitas harian (streak) terhadap offset zona waktu Asia/Jakarta dan perbaikan filter pencarian konselor berbasis ID terstruktur.',
+        impact: 'Catatan progres emosi dan pencarian bantuan konselor kini 100% akurat tanpa salah kategorisasi atau reset streak mendadak.'
+      }
+    ],
+    buildNumber: 'build.20260901.01'
+  },
+  {
+    version: 'v2.7.0',
+    date: '2026-08-31',
+    releaseTime: 'Kemarin, 10:30 WIB',
+    periodLabel: 'Kemarin',
+    title: 'Pusat Catatan Pembaruan Harian & Peningkatan Kestabilan AI',
+    tagline: 'Transparansi penuh pembaruan fitur setiap hari, pelacak versi interaktif, dan optimalisasi koneksi server.',
+    badge: 'Fitur Mayor',
     highlights: [
       'Pusat Catatan Pembaruan (Changelog) interaktif dengan filter kategori & pencarian',
       'Indikator versi aplikasi realtime di Topbar, Sidebar, dan Pengaturan',
@@ -76,8 +130,8 @@ export const APP_CHANGELOG: ReleaseNote[] = [
   {
     version: 'v2.6.4',
     date: '2026-08-30',
-    releaseTime: 'Kemarin, 19:15 WIB',
-    periodLabel: 'Kemarin',
+    releaseTime: '2 Hari Lalu',
+    periodLabel: 'Minggu Ini',
     title: 'Peningkatan Manajemen Sesi Multi-Perangkat & Proteksi Kunci',
     tagline: 'Audit keamanan perangkat aktif, fitur cabut sesi dari jarak jauh, dan penataan ulang rute server.',
     badge: 'Keamanan',

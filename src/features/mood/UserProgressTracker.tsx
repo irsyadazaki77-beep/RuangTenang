@@ -45,8 +45,9 @@ interface MoodLog {
   mood: number; // 1-5
   emotions: string[];
   notes: string;
-  sleepHours: number;
-  sleepQuality: 'Nyenyak' | 'Kurang Nyenyak' | 'Insomnia';
+  factors: string[];
+  sleepHours: number | null;
+  sleepQuality: 'very_poor' | 'poor' | 'fair' | 'good' | 'excellent' | null;
 }
 
 export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
@@ -123,9 +124,10 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
               date: dateStr,
               mood: parseInt(d.mood) || 3,
               emotions: parsedEmotions,
+              factors: Array.isArray(d.factors) ? d.factors : [],
               notes: d.notes || '',
-              sleepHours: d.intensity || 0,
-              sleepQuality: 'Nyenyak'
+              sleepHours: typeof d.sleepHours === 'number' ? d.sleepHours : (d.intensity || 0),
+              sleepQuality: d.sleepQuality || null
             };
           });
           setMoodLogs(parsedLogs);

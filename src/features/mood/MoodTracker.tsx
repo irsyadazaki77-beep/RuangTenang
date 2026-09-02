@@ -27,8 +27,9 @@ interface MoodLog {
   mood: number;
   emotions: string[];
   notes: string;
-  sleepHours: number;
-  sleepQuality: 'Nyenyak' | 'Kurang Nyenyak' | 'Insomnia';
+  factors: string[];
+  sleepHours: number | null;
+  sleepQuality: 'very_poor' | 'poor' | 'fair' | 'good' | 'excellent' | null;
 }
 
 interface MoodTrackerProps {
@@ -81,6 +82,7 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
 
   const [selectedMood, setSelectedMood] = useState<number | null>(null);
   const [selectedEmotions, setSelectedEmotions] = useState<string[]>([]);
+  const [selectedFactors, setSelectedFactors] = useState<string[]>([]);
   const [journalNote, setJournalNote] = useState<string>('');
   const [sleepHours, setSleepHours] = useState<number>(7);
   const [sleepQuality, setSleepQuality] = useState<'Nyenyak' | 'Kurang Nyenyak' | 'Insomnia'>('Nyenyak');
@@ -97,7 +99,6 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
     recommendations: string[];
   } | null>(null);
   const [isLoadingInsight, setIsLoadingInsight] = useState<boolean>(false);
-
   const [reflectionPrompts, setReflectionPrompts] = useState<string[]>([]);
   const [isLoadingPrompts, setIsLoadingPrompts] = useState<boolean>(false);
   const [isSubmittingMood, setIsSubmittingMood] = useState<boolean>(false);
@@ -107,6 +108,14 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
       setSelectedEmotions(prev => prev.filter(e => e !== tagLabel));
     } else {
       setSelectedEmotions(prev => [...prev, tagLabel]);
+    }
+  };
+
+  const handleToggleFactor = (tagLabel: string) => {
+    if (selectedFactors.includes(tagLabel)) {
+      setSelectedFactors(prev => prev.filter(e => e !== tagLabel));
+    } else {
+      setSelectedFactors(prev => [...prev, tagLabel]);
     }
   };
 
@@ -122,8 +131,10 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
       const res = await apiClient.post<{ success: boolean; log: any }>("/api/v1/mood", { 
         mood: selectedMood, 
         notes: journalNote.trim(), 
-        intensity: sleepHours, 
-        factors: selectedEmotions 
+        sleepHours,
+        sleepQuality: sleepQuality === 'Nyenyak' ? 'good' : sleepQuality === 'Insomnia' ? 'very_poor' : 'poor',
+        factors: selectedFactors,
+        emotions: selectedEmotions 
       });
 
       if (!res.success || !res.data?.log) {
@@ -140,10 +151,11 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
         id: saved.id,
         date: canonicalDate,
         mood: typeof saved.mood === 'number' ? saved.mood : (parseInt(saved.mood, 10) || selectedMood),
-        emotions: Array.isArray(saved.factors) ? saved.factors : selectedEmotions,
+        emotions: Array.isArray(saved.emotions) ? saved.emotions : selectedEmotions,
         notes: saved.notes || journalNote.trim(),
-        sleepHours: saved.intensity ?? sleepHours,
-        sleepQuality
+        factors: Array.isArray(saved.factors) ? saved.factors : selectedFactors,
+        sleepHours: saved.sleepHours ?? sleepHours,
+        sleepQuality: saved.sleepQuality ?? (sleepQuality === 'Nyenyak' ? 'good' : sleepQuality === 'Insomnia' ? 'very_poor' : 'poor')
       };
 
       setMoodLogs(prev => {
@@ -600,12 +612,12 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
             <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Faktor / Pemicu Terkait</label>
             <div className="flex flex-wrap gap-2">
               {FACTOR_TAGS.map((factor) => {
-                const isSelected = selectedEmotions.includes(factor.label);
+                const isSelected = selectedFactors.includes(factor.label);
                 return (
                   <button
                     key={factor.label}
                     type="button"
-                    onClick={() => handleToggleEmotion(factor.label)}
+                    onClick={() => handleToggleFactor(factor.label)}
                     className={`px-3 py-1.5 text-xs rounded-xl border transition-all flex items-center gap-1.5 cursor-pointer ${
                       isSelected
                         ? 'bg-blue-600 border-blue-600 text-white font-semibold shadow-sm'

@@ -45,6 +45,7 @@ model Users {
   sessions                  UserSession[]
   loginEvents               LoginEvent[]
   notifications             SecurityNotification[]
+  selfCareTasks             SelfCareTasks[]
 }
 
 model Appointments {
@@ -293,6 +294,7 @@ model Counselors {
   location          String?
   isDemoData        Boolean  @default(false)
   userId            String?
+  gender            String?
   createdAt         DateTime @default(now())
 
   // Relations
@@ -302,13 +304,16 @@ model Counselors {
 }
 
 model MoodLogs {
-  id        String   @id
-  userId    String
-  mood      String
-  notes     String?
-  intensity Int?
-  factors   String? // JSON array
-  timestamp DateTime @default(now())
+  id           String   @id
+  userId       String
+  mood         String
+  notes        String?
+  intensity    Int?
+  factors      String? // JSON array
+  emotions     String? // JSON array
+  sleepHours   Int?
+  sleepQuality String?
+  timestamp    DateTime @default(now())
 
   // Relations
   user      Users    @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -316,6 +321,18 @@ model MoodLogs {
   @@index([userId])
   @@index([userId, timestamp])
   @@index([timestamp])
+}
+
+model SelfCareTasks {
+  id        String   @id
+  userId    String
+  taskId    String
+  isDone    Boolean  @default(false)
+  date      String   // YYYY-MM-DD
+  updatedAt DateTime @updatedAt
+  user      Users    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, taskId, date])
 }
 
 model EmergencyContacts {
