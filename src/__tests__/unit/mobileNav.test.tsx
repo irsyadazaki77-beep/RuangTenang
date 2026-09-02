@@ -32,6 +32,6 @@ describe('Mobile Navigation Drawer Unit Tests', () => {
       </ThemeProvider>
     );
 
-    expect(screen.getByRole('button', { name: /Mulai Chat Baru/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Chat Baru/i })).toBeInTheDocument();
   });
 });

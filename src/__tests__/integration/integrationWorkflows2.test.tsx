@@ -72,7 +72,7 @@ describe('P2 Comprehensive E2E & Route Fallback Coverage', () => {
     renderTestApp('/');
 
     await waitFor(() => {
-      expect(screen.getByText(/Riwayat Chat/i)).toBeInTheDocument();
+      expect(screen.getByText(/Riwayat/i)).toBeInTheDocument();
     });
   });
 
@@ -80,7 +80,7 @@ describe('P2 Comprehensive E2E & Route Fallback Coverage', () => {
     renderTestApp('/unknown-route-typo-123');
 
     await waitFor(() => {
-      expect(screen.getByText(/Riwayat Chat/i)).toBeInTheDocument();
+      expect(screen.getByText(/Riwayat/i)).toBeInTheDocument();
     });
   });
 

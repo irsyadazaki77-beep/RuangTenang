@@ -4,8 +4,6 @@ import { Plus, Settings, Search, MessageSquare, MoreHorizontal, Edit2, Trash2, P
 import { isToday, isYesterday } from 'date-fns';
 import { Chat } from '../../features/chat/types';
 import { motion, AnimatePresence } from 'motion/react';
-import { AiQuotaBadge } from '../AiQuotaBadge';
-import { VersionBadge } from '../changelog/VersionBadge';
 import { apiClient } from '../../lib/apiClient';
 import { useTheme } from '../../contexts/ThemeContext';
 
@@ -28,7 +26,7 @@ interface SidebarProps {
   isLoading?: boolean;
 }
 
-export default function Sidebar({ isOpen, setIsOpen, onNewChat, chats, currentChatId, onSelectChat, onDeleteChat, onUpdateTitle, onTogglePin, onToggleArchive, onLogout, onOpenSettings, onOpenAuth, onOpenChangelog, user, isLoading }: SidebarProps) {
+export default function Sidebar({ isOpen, setIsOpen, onNewChat, chats, currentChatId, onSelectChat, onDeleteChat, onUpdateTitle, onTogglePin, onToggleArchive, onLogout, onOpenSettings, onOpenAuth, user, isLoading }: SidebarProps) {
   const navigate = useNavigate();
   const { actualTheme, toggleTheme } = useTheme();
   const [search, setSearch] = useState('');
@@ -44,21 +42,29 @@ export default function Sidebar({ isOpen, setIsOpen, onNewChat, chats, currentCh
       return;
     }
     
+    let isCancelled = false;
     const delay = setTimeout(() => {
       apiClient.get(`/api/v1/chat/search?q=${encodeURIComponent(search.trim())}`)
         .then(res => {
-          if (res.success && Array.isArray(res.data)) {
-            setSearchResults(res.data);
-          } else {
-            setSearchResults([]);
+          if (!isCancelled) {
+            if (res.success && Array.isArray(res.data)) {
+              setSearchResults(res.data);
+            } else {
+              setSearchResults([]);
+            }
           }
         })
         .catch(err => {
-          console.error('Failed to search chats:', err);
-          setSearchResults([]);
+          if (!isCancelled) {
+            console.error('Failed to search chats:', err);
+            setSearchResults([]);
+          }
         });
     }, 300);
-    return () => clearTimeout(delay);
+    return () => {
+      isCancelled = true;
+      clearTimeout(delay);
+    };
   }, [search]);
 
   const displayChats = search.trim() ? searchResults : chats;
@@ -83,10 +89,19 @@ export default function Sidebar({ isOpen, setIsOpen, onNewChat, chats, currentCh
     return parsed ? isYesterday(parsed) : false;
   };
 
+  const isWithin7DaysSafe = (d: any) => {
+    const parsed = safeParseDate(d);
+    if (!parsed) return false;
+    const now = new Date();
+    const diffDays = (now.getTime() - parsed.getTime()) / (1000 * 3600 * 24);
+    return diffDays <= 7 && !isToday(parsed) && !isYesterday(parsed);
+  };
+
   const groups = {
     'Hari Ini': unpinnedChats.filter(c => isTodaySafe(c.updatedAt)),
     'Kemarin': unpinnedChats.filter(c => isYesterdaySafe(c.updatedAt)),
-    'Sebelumnya': unpinnedChats.filter(c => !isTodaySafe(c.updatedAt) && !isYesterdaySafe(c.updatedAt))
+    '7 Hari Terakhir': unpinnedChats.filter(c => isWithin7DaysSafe(c.updatedAt)),
+    'Lebih Lama': unpinnedChats.filter(c => !isTodaySafe(c.updatedAt) && !isYesterdaySafe(c.updatedAt) && !isWithin7DaysSafe(c.updatedAt))
   };
 
   const handleEditSubmit = (id: string) => {
@@ -99,13 +114,13 @@ export default function Sidebar({ isOpen, setIsOpen, onNewChat, chats, currentCh
     return (
       <div 
         key={c.id} 
-        className={`group relative flex items-center gap-2.5 w-full px-2.5 py-2 min-h-[44px] rounded-xl text-xs transition-all text-left ${
+        className={`group relative flex items-center gap-2.5 w-full px-2.5 py-1 min-h-[40px] rounded-[10px] text-[13px] transition-colors text-left ${
           isActive 
-            ? 'bg-teal-50/90 dark:bg-teal-950/60 text-teal-950 dark:text-teal-200 font-semibold border-l-2 border-teal-600 dark:border-teal-400 shadow-3xs' 
-            : 'hover:bg-slate-100/80 dark:hover:bg-slate-800/70 text-slate-700 dark:text-slate-300 font-medium'
+            ? 'bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300 font-medium' 
+            : 'hover:bg-slate-100/80 dark:hover:bg-slate-800/70 text-slate-700 dark:text-slate-300'
         }`}
       >
-        <MessageSquare className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-teal-600 dark:text-teal-400' : 'text-slate-400 dark:text-slate-500'}`} />
+        <MessageSquare className={`w-4 h-4 shrink-0 ${isActive ? 'text-teal-600 dark:text-teal-400' : 'text-slate-400 dark:text-slate-500'}`} />
         
         {editingId === c.id ? (
           <input 
@@ -114,12 +129,12 @@ export default function Sidebar({ isOpen, setIsOpen, onNewChat, chats, currentCh
             onChange={e => setEditTitle(e.target.value)}
             onBlur={() => handleEditSubmit(c.id)}
             onKeyDown={e => e.key === 'Enter' && handleEditSubmit(c.id)}
-            className="flex-1 bg-white dark:bg-slate-800 border border-teal-500 rounded-lg px-2 py-1 text-base sm:text-xs text-slate-900 dark:text-slate-100 outline-none ring-2 ring-teal-500/20"
+            className="flex-1 bg-white dark:bg-slate-800 border border-teal-500 rounded px-2 py-1 text-[13px] text-slate-900 dark:text-slate-100 outline-none ring-2 ring-teal-500/20"
           />
         ) : (
           <button 
             onClick={() => { onSelectChat(c.id); setIsOpen(false); }} 
-            className="flex-1 truncate text-left min-h-[44px] flex items-center"
+            className="flex-1 truncate text-left min-h-[40px] flex items-center"
           >
             {c.title}
           </button>
@@ -129,7 +144,7 @@ export default function Sidebar({ isOpen, setIsOpen, onNewChat, chats, currentCh
           <button 
             aria-label="Menu Percakapan" 
             onClick={(e) => { e.stopPropagation(); setMenuOpenId(menuOpenId === c.id ? null : c.id); }} 
-            className={`p-2 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg hover:bg-slate-200/80 dark:hover:bg-slate-700/80 text-slate-500 dark:text-slate-400 transition-opacity ${
+            className={`p-1.5 min-h-[32px] min-w-[32px] flex items-center justify-center rounded-lg hover:bg-slate-200/80 dark:hover:bg-slate-700/80 text-slate-500 transition-opacity ${
               menuOpenId === c.id ? 'opacity-100' : 'md:opacity-0 md:group-hover:opacity-100 opacity-100 focus-within:opacity-100'
             }`}
           >
@@ -142,7 +157,8 @@ export default function Sidebar({ isOpen, setIsOpen, onNewChat, chats, currentCh
                 initial={{ opacity: 0, scale: 0.95 }} 
                 animate={{ opacity: 1, scale: 1 }} 
                 exit={{ opacity: 0, scale: 0.95 }}
-                className="absolute right-0 top-full mt-1 w-36 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-md rounded-xl py-1 z-50 text-xs text-slate-700 dark:text-slate-200"
+                transition={{ duration: 0.15 }}
+                className="absolute right-0 top-full mt-1 w-36 bg-white dark:bg-slate-800 border border-slate-200/70 dark:border-slate-700 shadow-sm rounded-xl py-1 z-50 text-[13px] text-slate-700 dark:text-slate-200"
               >
                 <button onClick={(e) => { e.stopPropagation(); setEditingId(c.id); setEditTitle(c.title); setMenuOpenId(null); }} className="w-full text-left px-3 py-2 hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2">
                   <Edit2 className="w-3.5 h-3.5 text-slate-400" /> Ubah Nama
@@ -184,94 +200,94 @@ export default function Sidebar({ isOpen, setIsOpen, onNewChat, chats, currentCh
     <>
       {isOpen && (
         <div 
-          className="fixed inset-0 bg-slate-950/50 z-40 lg:hidden backdrop-blur-xs transition-opacity duration-200" 
+          className="fixed inset-0 bg-slate-900/40 z-40 lg:hidden backdrop-blur-sm transition-opacity duration-200" 
           onClick={() => setIsOpen(false)} 
         />
       )}
-      <aside className={`fixed lg:sticky lg:top-0 lg:h-[100dvh] inset-y-0 left-0 z-50 w-[min(84vw,300px)] lg:w-64 shrink-0 bg-stone-50 dark:bg-slate-900 border-r border-slate-200/80 dark:border-slate-800 flex flex-col transform transition-transform duration-200 ease-out ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
+      <aside className={`fixed lg:sticky lg:top-0 lg:h-[100dvh] inset-y-0 left-0 z-50 w-[min(86vw,300px)] lg:w-64 shrink-0 bg-stone-50 dark:bg-slate-900 border-r border-slate-200/70 dark:border-slate-800 flex flex-col transform transition-transform duration-200 ease-out ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
         
         {/* Top Header */}
-        <div className="p-3 sm:px-4 flex items-center justify-between border-b border-slate-200/60 dark:border-slate-800 h-14 shrink-0">
+        <div className="px-4 flex items-center justify-between border-b border-slate-200/70 dark:border-slate-800 h-[56px] shrink-0">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-teal-200/80 dark:border-teal-900 shadow-3xs flex items-center justify-center shrink-0 p-1">
+            <div className="w-[30px] h-[30px] rounded-lg bg-white dark:bg-slate-800 border border-slate-200/70 dark:border-slate-700 shadow-sm flex items-center justify-center shrink-0 p-1">
               <img src="/favicon.svg" alt="RuangTenang Logo" className="w-full h-full object-contain" />
             </div>
-            <div className="flex flex-col min-w-0">
-              <span className="font-bold text-sm tracking-tight text-slate-900 dark:text-slate-100 leading-none">RuangTenang</span>
-              <span className="text-[10px] text-teal-700 dark:text-teal-400 font-semibold tracking-tight mt-0.5 truncate">Kesehatan Mental AI</span>
-            </div>
+            <span className="font-bold text-[15px] tracking-tight text-slate-900 dark:text-slate-100 leading-none truncate">RuangTenang</span>
           </div>
           <button 
             onClick={() => setIsOpen(false)} 
-            className="lg:hidden p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-800 rounded-xl cursor-pointer" 
+            className="lg:hidden p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-lg cursor-pointer min-h-[44px] min-w-[44px] flex items-center justify-center" 
             aria-label="Tutup Sidebar"
           >
-            <X className="w-4 h-4" />
+            <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* New Chat Primary CTA */}
-        <div className="p-3 pb-1.5">
+        <div className="p-3 pb-1">
           <button 
             onClick={() => { onNewChat(); setIsOpen(false); }} 
-            className="w-full flex items-center justify-center gap-2 bg-teal-600 hover:bg-teal-700 active:scale-[0.99] text-white rounded-xl py-2.5 px-3.5 text-xs font-semibold transition-all shadow-3xs cursor-pointer min-h-[40px]" 
-            title="Chat Baru (Ctrl+Shift+O)"
+            className="w-full flex items-center justify-center gap-2 bg-teal-600 hover:bg-teal-700 text-white rounded-[10px] py-2 px-4 text-[13px] font-semibold transition-colors cursor-pointer min-h-[44px]" 
+            title="Chat Baru"
           >
-            <Plus className="w-4 h-4" /> Mulai Chat Baru
+            <Plus className="w-4 h-4" /> Chat Baru
           </button>
         </div>
 
         {/* Search */}
         <div className="px-3 pb-2">
-          <div className="relative">
-            <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
+          <div className="relative flex items-center">
+            <Search className="w-4 h-4 absolute left-2.5 text-slate-400" />
             <input 
               ref={searchInputRef}
               value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="Cari percakapan (Ctrl+K)..." 
-              className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pl-8 pr-2.5 py-1.5 text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-teal-500/80 transition-all"
+              placeholder="Cari percakapan" 
+              className="w-full bg-white dark:bg-slate-800 border border-slate-200/70 dark:border-slate-700 rounded-[10px] pl-8 pr-8 py-1.5 min-h-[40px] text-[13px] text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:border-teal-500/80 transition-colors"
             />
+            <div className="absolute right-2.5 flex items-center pointer-events-none">
+              <span className="text-[10px] font-medium text-slate-400 border border-slate-200 dark:border-slate-700 rounded px-1.5 py-0.5">⌘K</span>
+            </div>
           </div>
         </div>
 
         {/* Toggle Archive */}
-        <div className="px-3.5 py-1 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
-          <span className="font-medium">{showArchived ? 'Arsip Percakapan' : 'Riwayat Chat'}</span>
+        <div className="px-4 py-1 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
+          <span className="font-medium uppercase tracking-wider">{showArchived ? 'Arsip Percakapan' : 'Riwayat'}</span>
           <button 
             onClick={() => setShowArchived(!showArchived)} 
-            className="hover:text-teal-600 dark:hover:text-teal-400 font-semibold cursor-pointer"
+            className="hover:text-teal-600 dark:hover:text-teal-400 font-semibold cursor-pointer min-h-[24px]"
           >
             {showArchived ? 'Lihat Aktif' : 'Arsip'}
           </button>
         </div>
 
         {/* History List */}
-        <div className="flex-1 overflow-y-auto px-2 space-y-3 py-2 custom-scrollbar" onClick={() => setMenuOpenId(null)}>
+        <div className="flex-1 overflow-y-auto px-2 space-y-1.5 py-1 custom-scrollbar" onClick={() => setMenuOpenId(null)}>
           {isLoading ? (
-            <div className="space-y-3 px-2 pt-2">
+            <div className="space-y-2 px-2 pt-2">
               {[1, 2, 3].map(i => (
-                <div key={i} className="animate-pulse space-y-1.5">
-                  <div className="h-2.5 w-12 bg-slate-200 dark:bg-slate-700 rounded"></div>
-                  <div className="h-8 bg-slate-200/70 dark:bg-slate-800/70 rounded-xl"></div>
+                <div key={i} className="animate-pulse space-y-1">
+                  <div className="h-2 w-10 bg-slate-200 dark:bg-slate-800 rounded"></div>
+                  <div className="h-9 bg-slate-200/70 dark:bg-slate-800/70 rounded-[10px]"></div>
                 </div>
               ))}
             </div>
           ) : pinnedChats.length === 0 && Object.values(groups).every(g => g.length === 0) ? (
-            <div className="text-center text-slate-400 dark:text-slate-500 mt-8 text-xs px-3">
-              {search ? 'Tidak ada percakapan ditemukan.' : (showArchived ? 'Belum ada arsip.' : 'Belum ada percakapan.')}
+            <div className="text-center text-slate-400 dark:text-slate-500 mt-6 text-[12px] px-3">
+              {search ? 'Tidak ada percakapan.' : (showArchived ? 'Belum ada arsip.' : 'Belum ada percakapan.')}
             </div>
           ) : (
             <>
               {pinnedChats.length > 0 && (
                 <div>
-                  <div className="px-2.5 mb-1 text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider flex items-center gap-1"><Pin className="w-2.5 h-2.5" /> Pinned</div>
+                  <div className="px-2.5 mb-1 mt-1 text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider flex items-center gap-1">Pinned</div>
                   <div className="space-y-0.5">{pinnedChats.map(renderChatItem)}</div>
                 </div>
               )}
 
               {Object.entries(groups).map(([label, groupChats]) => groupChats.length > 0 && (
                 <div key={label}>
-                  <div className="px-2.5 mb-1 text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">{label}</div>
+                  <div className="px-2.5 mb-1 mt-2 text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">{label}</div>
                   <div className="space-y-0.5">{groupChats.map(renderChatItem)}</div>
                 </div>
               ))}
@@ -280,104 +296,102 @@ export default function Sidebar({ isOpen, setIsOpen, onNewChat, chats, currentCh
         </div>
 
         {/* Secondary Tools Navigation */}
-        <div className="p-2.5 border-t border-slate-200/60 dark:border-slate-800 space-y-0.5 text-xs">
-          <div className="px-2 mb-1 text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Layanan Utama</div>
+        <div className="px-2 py-2 space-y-0.5 border-t border-slate-200/70 dark:border-slate-800">
+          <div className="px-2 mb-1.5 text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Layanan</div>
           <button 
             onClick={() => { navigate('/mood'); setIsOpen(false); }} 
-            className="w-full flex items-center gap-2.5 px-3 min-h-[38px] rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium transition-colors cursor-pointer"
+            className="w-full flex items-center gap-3 px-3 min-h-[40px] rounded-[10px] hover:bg-slate-100/80 dark:hover:bg-slate-800/70 text-slate-700 dark:text-slate-300 font-medium transition-colors cursor-pointer text-[13px]"
           >
-            <Heart className="w-4 h-4 text-rose-500 shrink-0" /> Mood Tracker & Progress
+            <Heart className="w-[18px] h-[18px] text-slate-500 shrink-0" /> Mood & Progress
           </button>
           <button 
             onClick={() => { navigate('/screening'); setIsOpen(false); }} 
-            className="w-full flex items-center gap-2.5 px-3 min-h-[38px] rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium transition-colors cursor-pointer"
+            className="w-full flex items-center gap-3 px-3 min-h-[40px] rounded-[10px] hover:bg-slate-100/80 dark:hover:bg-slate-800/70 text-slate-700 dark:text-slate-300 font-medium transition-colors cursor-pointer text-[13px]"
           >
-            <Stethoscope className="w-4 h-4 text-blue-500 shrink-0" /> Skrining Mandiri
+            <Stethoscope className="w-[18px] h-[18px] text-slate-500 shrink-0" /> Skrining
           </button>
           <button 
             onClick={() => { navigate('/counselors'); setIsOpen(false); }} 
-            className="w-full flex items-center gap-2.5 px-3 min-h-[38px] rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium transition-colors cursor-pointer"
+            className="w-full flex items-center gap-3 px-3 min-h-[40px] rounded-[10px] hover:bg-slate-100/80 dark:hover:bg-slate-800/70 text-slate-700 dark:text-slate-300 font-medium transition-colors cursor-pointer text-[13px]"
           >
-            <Users className="w-4 h-4 text-teal-600 dark:text-teal-400 shrink-0" /> Konselor Kampus
+            <Users className="w-[18px] h-[18px] text-slate-500 shrink-0" /> Konselor
           </button>
           <button 
             onClick={() => { navigate('/emergency'); setIsOpen(false); }} 
-            className="w-full flex items-center gap-2.5 px-3 min-h-[38px] rounded-xl hover:bg-rose-50 dark:hover:bg-rose-950/40 text-rose-600 dark:text-rose-400 font-medium transition-colors cursor-pointer"
+            className="w-full flex items-center gap-3 px-3 min-h-[40px] rounded-[10px] hover:bg-rose-50 dark:hover:bg-rose-950/40 text-rose-600 dark:text-rose-400 font-medium transition-colors cursor-pointer text-[13px]"
           >
-            <AlertCircle className="w-4 h-4 shrink-0" /> Darurat SOS
+            <AlertCircle className="w-[18px] h-[18px] shrink-0" /> Darurat
           </button>
         </div>
 
+        <div className="h-px bg-slate-200/70 dark:bg-slate-800 mx-3 my-1" />
+
         {/* Bottom Profile & Settings & Theme */}
-        <div className="p-2.5 border-t border-slate-200/60 dark:border-slate-800 space-y-1 text-xs">
-          <div className="px-0.5 pb-1">
-            <AiQuotaBadge variant="compact" onOpenSettings={onOpenSettings} className="w-full justify-between" />
-          </div>
+        <div className="px-2 pb-3 pt-1 space-y-0.5">
+          <button 
+            onClick={() => { onOpenSettings?.(); setIsOpen(false); }} 
+            className="w-full flex items-center gap-3 px-3 min-h-[40px] rounded-[10px] hover:bg-slate-100/80 dark:hover:bg-slate-800/70 text-slate-700 dark:text-slate-300 font-medium transition-colors cursor-pointer text-[13px]"
+          >
+            <Settings className="w-[18px] h-[18px] text-slate-500 shrink-0" /> Pengaturan
+          </button>
           
-          {/* Theme Toggle Button */}
           <button 
             onClick={toggleTheme} 
-            className="w-full flex items-center justify-between px-3 min-h-[38px] rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium transition-colors cursor-pointer"
-            title="Ganti Mode Tampilan (Terang / Gelap)"
+            className="w-full flex items-center justify-between px-3 min-h-[40px] rounded-[10px] hover:bg-slate-100/80 dark:hover:bg-slate-800/70 text-slate-700 dark:text-slate-300 font-medium transition-colors cursor-pointer text-[13px]"
+            title="Ganti Mode Tampilan"
           >
-            <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-3">
               {actualTheme === 'dark' ? (
-                <Moon className="w-4 h-4 text-amber-400 shrink-0" />
+                <Moon className="w-[18px] h-[18px] text-slate-500 shrink-0" />
               ) : (
-                <Sun className="w-4 h-4 text-amber-500 shrink-0" />
+                <Sun className="w-[18px] h-[18px] text-slate-500 shrink-0" />
               )}
-              <span>Mode Gelap</span>
+              Tema
             </div>
-            <div className={`w-8 h-4.5 rounded-full p-0.5 transition-colors ${actualTheme === 'dark' ? 'bg-teal-600' : 'bg-slate-300 dark:bg-slate-700'}`}>
-              <div className={`w-3.5 h-3.5 rounded-full bg-white shadow-xs transform transition-transform ${actualTheme === 'dark' ? 'translate-x-3.5' : 'translate-x-0'}`} />
+            <div className={`w-[26px] h-[14px] rounded-full p-0.5 transition-colors flex items-center ${actualTheme === 'dark' ? 'bg-teal-600' : 'bg-slate-300 dark:bg-slate-600'}`}>
+              <div className={`w-2.5 h-2.5 rounded-full bg-white shadow-sm transform transition-transform ${actualTheme === 'dark' ? 'translate-x-3' : 'translate-x-0'}`} />
             </div>
           </button>
 
-          <button 
-            onClick={() => { onOpenSettings?.(); setIsOpen(false); }} 
-            className="w-full flex items-center gap-2.5 px-3 min-h-[38px] rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium transition-colors cursor-pointer"
-          >
-            <Settings className="w-4 h-4 text-slate-500 dark:text-slate-400 shrink-0" /> Pengaturan & Profil
-          </button>
           {user?.role === 'guest' ? (
             <button 
               onClick={() => { onOpenAuth?.(); setIsOpen(false); }} 
-              className="w-full flex items-center gap-2.5 px-3 min-h-[38px] rounded-xl hover:bg-teal-50 dark:hover:bg-teal-950/40 text-teal-600 dark:text-teal-400 font-semibold transition-colors cursor-pointer border border-teal-200/50 dark:border-teal-800/50"
+              className="w-full flex items-center gap-3 px-3 mt-1 min-h-[40px] rounded-[10px] hover:bg-slate-100/80 dark:hover:bg-slate-800/70 text-slate-700 dark:text-slate-300 font-medium transition-colors cursor-pointer text-[13px]"
             >
-              <LogIn className="w-4 h-4 shrink-0" /> Masuk / Registrasi
+              <LogIn className="w-[18px] h-[18px] text-slate-500 shrink-0" /> Masuk
             </button>
           ) : (
-            onLogout && (
-              <button 
-                onClick={onLogout} 
-                className="w-full flex items-center gap-2.5 px-3 min-h-[38px] rounded-xl hover:bg-rose-50 dark:hover:bg-rose-950/40 text-rose-600 dark:text-rose-400 font-medium transition-colors cursor-pointer"
+            <div className="flex items-center justify-between px-1.5 py-1 mt-1">
+              <button
+                onClick={() => { onOpenSettings?.(); setIsOpen(false); }}
+                className="flex flex-1 items-center gap-2.5 min-w-0 hover:bg-slate-100/80 dark:hover:bg-slate-800/70 p-1.5 rounded-[10px] transition-colors text-left cursor-pointer"
               >
-                <LogOut className="w-4 h-4 shrink-0" /> Keluar
+                <div className="w-7 h-7 rounded-full bg-teal-100 dark:bg-teal-900/50 text-teal-700 dark:text-teal-300 flex items-center justify-center shrink-0 font-bold text-xs">
+                  {user?.name?.charAt(0)?.toUpperCase() || 'U'}
+                </div>
+                <div className="flex flex-col min-w-0">
+                  <span className="text-[13px] font-bold text-slate-900 dark:text-slate-100 truncate leading-tight">{user?.name || 'User'}</span>
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400 truncate leading-tight mt-0.5">
+                    {user?.email || (user?.role === 'counselor' ? 'Konselor' : 'Mahasiswa')}
+                  </span>
+                </div>
               </button>
-            )
-          )}
-          {/* Version & Changelog Trigger Badge */}
-          <div className="pt-1">
-            <VersionBadge 
-              variant="sidebar" 
-              onClick={() => {
-                onOpenChangelog?.();
-                setIsOpen(false);
-              }} 
-            />
-          </div>
-
-          <div className="pt-1 px-2 flex items-center justify-between text-[10px] text-slate-400 dark:text-slate-500 font-medium">
-            <div className="flex items-center gap-1.5">
-              <img src="/favicon.svg" alt="" className="w-3.5 h-3.5 object-contain" />
-              <span>RuangTenang Web App</span>
+              {onLogout && (
+                <button 
+                  onClick={onLogout}
+                  title="Keluar"
+                  className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg transition-colors shrink-0 min-h-[40px] min-w-[40px] flex items-center justify-center cursor-pointer"
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
+              )}
             </div>
-            <span className="text-teal-600/80 dark:text-teal-400/80 font-mono text-[9.5px]">Protected</span>
-          </div>
+          )}
         </div>
       </aside>
     </>
   );
 }
+
 
 

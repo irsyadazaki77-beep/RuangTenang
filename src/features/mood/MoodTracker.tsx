@@ -315,7 +315,9 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
         log.notes.toLowerCase().includes(searchQuery.toLowerCase()) ||
         log.emotions.some(e => e.toLowerCase().includes(searchQuery.toLowerCase()));
       
-      const matchesFactor = !selectedFactorFilter || log.emotions.includes(selectedFactorFilter);
+      const matchesFactor = !selectedFactorFilter || 
+        (log.factors && log.factors.includes(selectedFactorFilter)) || 
+        (log.emotions && log.emotions.includes(selectedFactorFilter));
       return matchesSearch && matchesFactor;
     });
   }, [moodLogs, searchQuery, selectedFactorFilter]);

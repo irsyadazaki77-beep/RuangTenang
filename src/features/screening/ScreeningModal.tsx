@@ -288,8 +288,8 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
         aria-modal={isPageMode ? undefined : "true"}
         aria-labelledby="screening-modal-title"
         className={isPageMode
-          ? "bg-white border border-slate-200/80 text-slate-900 rounded-3xl w-full p-6 md:p-8 shadow-sm relative overflow-hidden"
-          : "bg-white border border-teal-50/50 text-slate-900 rounded-3xl max-w-2xl w-full p-6 md:p-8 shadow-2xl relative max-h-[88dvh] max-sm:max-h-[92dvh] max-sm:rounded-b-none max-sm:w-full overflow-y-auto transition-transform duration-300 animate-scale-up max-sm:animate-slide-up"
+          ? "surface-card border border-default text-primary rounded-3xl w-full p-6 md:p-8 shadow-sm relative overflow-hidden"
+          : "surface-card border border-default text-primary rounded-3xl max-w-2xl w-full p-6 md:p-8 shadow-2xl relative max-h-[88dvh] max-sm:max-h-[92dvh] max-sm:rounded-b-none max-sm:w-full overflow-y-auto transition-transform duration-300 animate-scale-up max-sm:animate-slide-up"
         }
       >
         {/* Drag handle for mobile bottom sheet */}
@@ -522,22 +522,22 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
               {/* PHQ-9 Card */}
-              <div className="p-6 bg-white rounded-2xl border border-slate-200/60 shadow-sm flex flex-col h-full">
+              <div className="p-6 surface-card rounded-2xl border border-default shadow-sm flex flex-col h-full">
                 <div className="flex items-center justify-between mb-4">
-                  <span className="text-sm font-semibold text-slate-700">Skor PHQ-9 (Depresi)</span>
+                  <span className="text-sm font-semibold text-secondary">Skor PHQ-9 (Depresi)</span>
                   <span className={`px-2.5 py-1 rounded-md text-[10px] font-bold border ${
-                    finalResult.phq9.severity === 'Minimal' ? 'bg-teal-50 text-teal-700 border-teal-200' :
-                    finalResult.phq9.severity === 'Ringan' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                    finalResult.phq9.severity === 'Sedang' ? 'bg-amber-50 text-amber-600 border-amber-200' : 'bg-rose-50 text-rose-600 border-rose-200'
+                    finalResult.phq9.severity === 'Minimal' ? 'bg-teal-50 dark:bg-teal-950/50 text-teal-700 dark:text-teal-400 border-teal-200 dark:border-teal-900' :
+                    finalResult.phq9.severity === 'Ringan' ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-900' :
+                    finalResult.phq9.severity === 'Sedang' ? 'bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-900' : 'bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-900'
                   }`}>
                     Tingkat {finalResult.phq9.severity}
                   </span>
                 </div>
                 <div className="flex items-baseline gap-2 mb-4">
-                   <p className="text-5xl font-sans font-bold tracking-tight text-slate-900">{finalResult.phq9.score}</p>
-                   <span className="text-sm font-medium text-slate-500">/ 27</span>
+                   <p className="text-5xl font-sans font-bold tracking-tight text-primary">{finalResult.phq9.score}</p>
+                   <span className="text-sm font-medium text-secondary">/ 27</span>
                 </div>
-                <p className="text-xs text-slate-600 leading-relaxed mt-auto border-t border-slate-100 pt-4">
+                <p className="text-xs text-secondary leading-relaxed mt-auto border-t border-default pt-4">
                   {finalResult.phq9.severity === 'Minimal' && 'Skor menunjukkan kondisi emosional relatif stabil. Pertahankan pola istirahat dan aktivitas positif.'}
                   {finalResult.phq9.severity === 'Ringan' && 'Skor menunjukkan indikasi gejala stres/kelelahan emosional ringan. Disarankan latihan relaksasi & bimbingan AI.'}
                   {finalResult.phq9.severity === 'Sedang' && 'Skor menunjukkan indikasi gejala depresi sedang. Sangat disarankan berkonsultasi dengan konselor kampus.'}
@@ -546,22 +546,22 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
               </div>
 
               {/* GAD-7 Card */}
-              <div className="p-6 bg-white rounded-2xl border border-slate-200/60 shadow-sm flex flex-col h-full">
+              <div className="p-6 surface-card rounded-2xl border border-default shadow-sm flex flex-col h-full">
                 <div className="flex items-center justify-between mb-4">
-                  <span className="text-sm font-semibold text-slate-700">Skor GAD-7 (Kecemasan)</span>
+                  <span className="text-sm font-semibold text-secondary">Skor GAD-7 (Kecemasan)</span>
                   <span className={`px-2.5 py-1 rounded-md text-[10px] font-bold border ${
-                    finalResult.gad7.severity === 'Minimal' ? 'bg-teal-50 text-teal-700 border-teal-200' :
-                    finalResult.gad7.severity === 'Ringan' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                    finalResult.gad7.severity === 'Sedang' ? 'bg-amber-50 text-amber-600 border-amber-200' : 'bg-rose-50 text-rose-600 border-rose-200'
+                    finalResult.gad7.severity === 'Minimal' ? 'bg-teal-50 dark:bg-teal-950/50 text-teal-700 dark:text-teal-400 border-teal-200 dark:border-teal-900' :
+                    finalResult.gad7.severity === 'Ringan' ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-900' :
+                    finalResult.gad7.severity === 'Sedang' ? 'bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-900' : 'bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-900'
                   }`}>
                     Tingkat {finalResult.gad7.severity}
                   </span>
                 </div>
                 <div className="flex items-baseline gap-2 mb-4">
-                  <p className="text-5xl font-sans font-bold tracking-tight text-slate-900">{finalResult.gad7.score}</p>
-                  <span className="text-sm font-medium text-slate-500">/ 21</span>
+                  <p className="text-5xl font-sans font-bold tracking-tight text-primary">{finalResult.gad7.score}</p>
+                  <span className="text-sm font-medium text-secondary">/ 21</span>
                 </div>
-                <p className="text-xs text-slate-600 leading-relaxed mt-auto border-t border-slate-100 pt-4">
+                <p className="text-xs text-secondary leading-relaxed mt-auto border-t border-default pt-4">
                   {finalResult.gad7.severity === 'Minimal' && 'Skor menunjukkan tingkat kecemasan dalam batas wajar.'}
                   {finalResult.gad7.severity === 'Ringan' && 'Skor menunjukkan indikasi kecemasan ringan terkait rutinitas. Baik untuk melatih pernapasan rutin.'}
                   {finalResult.gad7.severity === 'Sedang' && 'Skor menunjukkan indikasi kecemasan sedang yang mengganggu konsentrasi belajar & tidur.'}

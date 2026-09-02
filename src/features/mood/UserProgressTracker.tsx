@@ -73,12 +73,11 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
       try { return JSON.parse(saved); } catch (e) {}
     }
     return [
-
-    { id: 'sc1', task: 'Lakukan Teknik Grounding 5-4-3-2-1 sekali sehari', done: true },
-    { id: 'sc2', task: 'Terapkan Pomodoro 25 menit untuk skripsi', done: false },
-    { id: 'sc3', task: 'Jalan santai di luar kos selama 15 menit tanpa HP', done: false },
-    { id: 'sc4', task: 'Matikan gawai 30 menit sebelum jadwal tidur malam', done: true }
-  ];
+      { id: 'sc1', task: 'Lakukan Teknik Grounding 5-4-3-2-1 sekali hari ini', done: false },
+      { id: 'sc2', task: 'Terapkan rehat sejenak 25 menit saat mengerjakan tugas/skripsi', done: false },
+      { id: 'sc3', task: 'Jalan santai di luar ruangan selama 15 menit tanpa HP', done: false },
+      { id: 'sc4', task: 'Sediakan waktu 30 menit bebas layar sebelum tidur malam', done: false }
+    ];
   });
 
   const fetchUsageStats = async () => {
@@ -248,12 +247,12 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
   };
 
   const itemVariants = {
-    hidden: { opacity: 0, y: 20 },
-    show: { opacity: 1, y: 0, transition: { type: "spring" as const, stiffness: 300, damping: 24 } }
+    hidden: { opacity: 0, y: 8 },
+    show: { opacity: 1, y: 0, transition: { duration: 0.2, ease: "easeOut" as const } }
   };
 
   return (
-    <div className="flex flex-col h-full bg-slate-50/50 w-full overflow-y-auto">
+    <div className="flex flex-col h-full surface-page w-full overflow-y-auto">
       <motion.div 
         variants={containerVariants}
         initial="hidden"
@@ -272,9 +271,9 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
               showToast('Menyiapkan dokumen PDF Anda...');
               window.open('/api/v1/user/export-progress-pdf', '_blank');
             }}
-            className="flex items-center gap-2 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 px-4 py-2.5 rounded-xl font-medium text-sm transition-all shadow-sm"
+            className="flex items-center gap-2 surface-card border border-default hover:bg-slate-100 dark:hover:bg-slate-800 text-primary px-4 py-2.5 rounded-xl font-medium text-sm transition-all shadow-sm cursor-pointer min-h-[44px]"
           >
-            <Activity className="w-4 h-4 text-teal-600" />
+            <Activity className="w-4 h-4 text-teal-600 dark:text-teal-400" />
             <span>Unduh Ringkasan Perkembangan Saya (.PDF)</span>
           </button>
         </motion.div>
@@ -294,7 +293,7 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
           <div className="surface-card p-5 rounded-2xl flex flex-col justify-between">
             <div className="flex items-center justify-between mb-4">
               <span className="text-secondary text-sm font-medium">Total Hari Aktif</span>
-              <div className="p-2 bg-indigo-50 dark:bg-indigo-900/30 rounded-lg text-indigo-600 dark:text-indigo-400"><Clock className="w-4 h-4" /></div>
+              <div className="p-2 bg-indigo-50 dark:bg-indigo-950/50 rounded-lg text-indigo-600 dark:text-indigo-400"><Clock className="w-4 h-4" /></div>
             </div>
             <div>
               <span className="text-2xl font-bold text-primary">{totalActiveDays === 0 ? 'Belum ada data' : `${totalActiveDays} hari`}</span>
@@ -304,7 +303,7 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
           <div className="surface-card p-5 rounded-2xl flex flex-col justify-between">
             <div className="flex items-center justify-between mb-4">
               <span className="text-secondary text-sm font-medium">Streak Saat Ini</span>
-              <div className="p-2 bg-orange-50 dark:bg-orange-900/30 rounded-lg text-orange-600 dark:text-orange-400"><TrendingUp className="w-4 h-4" /></div>
+              <div className="p-2 bg-orange-50 dark:bg-orange-950/50 rounded-lg text-orange-600 dark:text-orange-400"><TrendingUp className="w-4 h-4" /></div>
             </div>
             <div>
               <span className="text-2xl font-bold text-primary">{streakCount === 0 ? 'Belum ada data' : `${streakCount} hari`}</span>
@@ -315,7 +314,7 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
           <div className="surface-card p-5 rounded-2xl flex flex-col justify-between">
             <div className="flex items-center justify-between mb-4">
               <span className="text-secondary text-sm font-medium">PHQ-9 Terbaru</span>
-              <div className="p-2 bg-blue-50 dark:bg-blue-900/30 rounded-lg text-blue-600 dark:text-blue-400"><Activity className="w-4 h-4" /></div>
+              <div className="p-2 bg-blue-50 dark:bg-blue-950/50 rounded-lg text-blue-600 dark:text-blue-400"><Activity className="w-4 h-4" /></div>
             </div>
             <div>
               <span className="text-2xl font-bold text-primary">{screenHistory.length === 0 ? 'Belum ada data' : currentPhq9}</span>
@@ -327,7 +326,7 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
           <div className="surface-card p-5 rounded-2xl flex flex-col justify-between">
             <div className="flex items-center justify-between mb-4">
               <span className="text-secondary text-sm font-medium">GAD-7 Terbaru</span>
-              <div className="p-2 bg-teal-50 dark:bg-teal-900/30 rounded-lg text-teal-600 dark:text-teal-400"><Activity className="w-4 h-4" /></div>
+              <div className="p-2 bg-teal-50 dark:bg-teal-950/50 rounded-lg text-teal-600 dark:text-teal-400"><Activity className="w-4 h-4" /></div>
             </div>
             <div>
               <span className="text-2xl font-bold text-primary">{screenHistory.length === 0 ? 'Belum ada data' : currentGad7}</span>
@@ -338,8 +337,8 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
 
         {/* Main Chart (Progress Tracker & Screening) */}
         <motion.div variants={itemVariants} className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="bg-white rounded-2xl border border-slate-200/60 shadow-sm p-6">
-            <h3 className="font-semibold text-slate-800 mb-4">Tren Skrining (PHQ-9 & GAD-7)</h3>
+          <div className="surface-card rounded-2xl border border-default p-6">
+            <h3 className="font-semibold text-primary mb-4">Tren Skrining (PHQ-9 & GAD-7)</h3>
             <div className="overflow-hidden">
                <ScreeningTrend 
                  screenHistory={screenHistory as any}
@@ -356,8 +355,8 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl border border-slate-200/60 shadow-sm p-6">
-            <h3 className="font-semibold text-slate-800 mb-4">Log Mood Harian</h3>
+          <div className="surface-card rounded-2xl border border-default p-6">
+            <h3 className="font-semibold text-primary mb-4">Log Mood Harian</h3>
             <div className="overflow-hidden">
                <MoodTracker 
                  moodLogs={moodLogs}
@@ -371,12 +370,12 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
         {/* Insight Perkembangan & Timeline Tasks */}
         <motion.div variants={itemVariants} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-6">
-            <div className="bg-white rounded-2xl border border-slate-200/60 shadow-sm overflow-hidden">
-              <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-                <h3 className="font-semibold text-slate-800">Insight Perkembangan</h3>
+            <div className="surface-card rounded-2xl border border-default overflow-hidden">
+              <div className="p-5 border-b border-default flex justify-between items-center surface-muted">
+                <h3 className="font-semibold text-primary">Insight Perkembangan</h3>
                 <button 
                   onClick={() => setIsExpandedInsight(!isExpandedInsight)}
-                  className="text-sm text-teal-600 font-medium hover:text-teal-700 flex items-center gap-1"
+                  className="text-sm text-teal-600 dark:text-teal-400 font-medium hover:text-teal-700 flex items-center gap-1 cursor-pointer"
                 >
                   {isExpandedInsight ? 'Tutup Detail' : 'Lihat Detail'}
                   <ChevronDown className={`w-4 h-4 transition-transform ${isExpandedInsight ? 'rotate-180' : ''}`} />
@@ -384,38 +383,38 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
               </div>
               <div className="p-6">
                 <div className="flex gap-4 items-start">
-                  <div className="p-3 bg-teal-50 rounded-xl text-teal-600 shrink-0">
+                  <div className="p-3 bg-teal-50 dark:bg-teal-950/50 rounded-xl text-teal-600 dark:text-teal-400 shrink-0">
                     <Award className="w-6 h-6" />
                   </div>
                   <div>
                     {moodLogs.length === 0 && screenHistory.length === 0 ? (
                       <div>
-                        <h4 className="text-lg font-semibold text-slate-900 mb-2">Mulai Catat Perjalanan Anda</h4>
-                        <p className="text-slate-600 text-sm leading-relaxed mb-2">
+                        <h4 className="text-lg font-semibold text-primary mb-2">Mulai Catat Perjalanan Anda</h4>
+                        <p className="text-secondary text-sm leading-relaxed mb-2">
                           Belum ada catatan aktivitas. Mulai dengan mencatat log mood harian pertama Anda atau lakukan skrining mandiri PHQ-9 & GAD-7 untuk mendapatkan wawasan personalisasi perkembangan kesejahteraan emosional.
                         </p>
                       </div>
                     ) : (
                       <div>
-                        <h4 className="text-lg font-semibold text-slate-900 mb-2">
+                        <h4 className="text-lg font-semibold text-primary mb-2">
                           {latestMood >= 3 ? 'Perkembangan Positif Terpantau!' : 'Tetap Semangat & Luangkan Waktu Rehat'}
                         </h4>
-                        <p className="text-slate-600 text-sm leading-relaxed mb-4">
+                        <p className="text-secondary text-sm leading-relaxed mb-4">
                           {moodLogs.length >= 3
                             ? `Tercatat ${totalActiveDays} hari aktif dengan ${moodLogs.length} entri mood. Keteraturan Anda membantu mengenali pola stres dan keseimbangan aktivitas akademis.`
                             : `Data awal Anda telah tercatat (${moodLogs.length} log). Terus catat secara berkala untuk analisis pola emosi yang lebih mendalam.`}
                         </p>
                         
                         {isExpandedInsight && (
-                          <div className="mt-4 pt-4 border-t border-slate-100 space-y-3 animate-in fade-in slide-in-from-top-2">
+                          <div className="mt-4 pt-4 border-t border-default space-y-3 animate-in fade-in slide-in-from-top-2">
                             <div className="flex gap-3 items-start">
                               <CheckCircle2 className="w-5 h-5 text-teal-500 shrink-0 mt-0.5" />
-                              <p className="text-sm text-slate-700">Log tersimpan di profil Anda.</p>
+                              <p className="text-sm text-secondary">Log tersimpan di profil Anda.</p>
                             </div>
                             {currentPhq9 > 9 && (
                               <div className="flex gap-3 items-start">
                                 <AlertCircle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
-                                <p className="text-sm text-slate-700">Skor skrining terakhir menunjukkan perlunya istirahat atau konsultasi dengan konselor.</p>
+                                <p className="text-sm text-secondary">Skor skrining terakhir menunjukkan perlunya istirahat atau konsultasi dengan konselor.</p>
                               </div>
                             )}
                           </div>
@@ -427,8 +426,8 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
               </div>
             </div>
 
-            <div className="bg-white rounded-2xl border border-slate-200/60 shadow-sm p-6">
-              <h3 className="font-semibold text-slate-800 mb-4">Tugas & Rutinitas</h3>
+            <div className="surface-card rounded-2xl border border-default p-6">
+              <h3 className="font-semibold text-primary mb-4">Perawatan Diri Hari Ini</h3>
               <TimelineTasks 
                 selfCareChecklist={selfCareChecklist} 
                 onToggleSelfCare={handleToggleSelfCare} 
@@ -438,18 +437,18 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
           </div>
 
           <div className="space-y-6">
-            <div className="bg-white rounded-2xl border border-slate-200/60 shadow-sm p-6">
-              <h3 className="font-semibold text-slate-800 mb-4 text-sm flex items-center justify-between">
+            <div className="surface-card rounded-2xl border border-default p-6">
+              <h3 className="font-semibold text-primary mb-4 text-sm flex items-center justify-between">
                 <span>Penggunaan AI</span>
-                <span className="text-xs font-normal text-slate-500">Bulan ini</span>
+                <span className="text-xs font-normal text-muted">Bulan ini</span>
               </h3>
               <AiLimits usageStats={usageStats} loadingUsage={loadingUsage} onRefreshUsage={fetchUsageStats} />
             </div>
 
-            <div className="bg-white rounded-2xl border border-slate-200/60 shadow-sm p-6">
-              <h3 className="font-semibold text-slate-800 mb-4 text-sm flex items-center justify-between">
+            <div className="surface-card rounded-2xl border border-default p-6">
+              <h3 className="font-semibold text-primary mb-4 text-sm flex items-center justify-between">
                 <span>Akses Konselor</span>
-                <span className="text-xs font-normal text-slate-500">Izin Data</span>
+                <span className="text-xs font-normal text-muted">Izin Data</span>
               </h3>
               <CounselorConsent 
                 shareConsent={shareConsent} 
