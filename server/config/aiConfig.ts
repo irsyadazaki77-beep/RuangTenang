@@ -8,7 +8,9 @@ export const DEFAULT_AI_MODEL = 'gemini-3.1-flash-lite';
 
 export const AI_MODELS = {
   DEFAULT_FAST: 'gemini-3.1-flash-lite',
+  LATEST_FLASH_38: 'gemini-3.8-flash',
   LATEST_FLASH: 'gemini-3.7-flash',
+  DYNAMIC_FLASH: 'gemini-flash-latest',
   PRO_REASONING: 'gemini-3.1-pro-preview',
   BALANCED: 'gemini-2.5-flash',
   PRO_LEGACY: 'gemini-2.5-pro',
@@ -32,11 +34,20 @@ export interface AiModelInfo {
 
 export const AVAILABLE_AI_MODELS: AiModelInfo[] = [
   {
+    id: 'gemini-3.8-flash',
+    name: 'Gemini 3.8 Flash',
+    category: 'Gemini 3.x Series',
+    tag: 'Terbaru • Cepat & Cerdas',
+    description: 'Model teks dan multimodal generasi 3.8 terbaru dari Google AI. Keseimbangan terbaik antara pemahaman emosional mendalam, penalaran adaptif, dan respon instan.',
+    speed: 'Sangat Cepat',
+    reasoning: 'Tinggi'
+  },
+  {
     id: 'gemini-3.1-flash-lite',
     name: 'Gemini 3.1 Flash Lite',
     category: 'Gemini 3.x Series',
-    tag: 'Default • Ultra Cepat',
-    description: 'Model generasi 3.1 paling ringan dan responsif, latensi sangat rendah, ideal untuk percakapan pendampingan harian.',
+    tag: 'Default • Ultra Cepat & Ringan',
+    description: 'Model generasi 3.1 paling ringan dan responsif dengan latensi sangat rendah, ideal untuk percakapan pendampingan harian dan koneksi hemat kuota.',
     isDefault: true,
     speed: 'Sangat Cepat',
     reasoning: 'Standar'
@@ -45,8 +56,8 @@ export const AVAILABLE_AI_MODELS: AiModelInfo[] = [
     id: 'gemini-3.7-flash',
     name: 'Gemini 3.7 Flash',
     category: 'Gemini 3.x Series',
-    tag: 'Terbaru • Cerdas & Empatik',
-    description: 'Model multimodal generasi 3.7 terkini dengan penalaran adaptif, active listening, dan pemahaman emosi mendalam.',
+    tag: 'Cerdas & Empatik',
+    description: 'Model multimodal generasi 3.7 dengan penalaran adaptif, active listening terfokus, dan pemahaman nuansa psikologis yang mendalam.',
     speed: 'Cepat',
     reasoning: 'Tinggi'
   },
@@ -55,16 +66,25 @@ export const AVAILABLE_AI_MODELS: AiModelInfo[] = [
     name: 'Gemini 3.1 Pro',
     category: 'Gemini 3.x Series',
     tag: 'Pro • Penalaran Lanjut',
-    description: 'Model penalaran tingkat tinggi untuk pemecahan masalah emosional kompleks dan analisis kognitif mendalam.',
+    description: 'Model penalaran tingkat tinggi untuk analisis kognitif mendalam, CBT lanjutan, dan pemecahan masalah emosional bertingkat.',
     speed: 'Sedang',
     reasoning: 'Sangat Tinggi'
+  },
+  {
+    id: 'gemini-flash-latest',
+    name: 'Gemini Flash Latest',
+    category: 'Gemini Dynamic',
+    tag: 'Auto-Updated • Rilis Terkini',
+    description: 'Alias model dinamis yang otomatis menggunakan versi Flash paling mutakhir yang disediakan oleh Google AI.',
+    speed: 'Sangat Cepat',
+    reasoning: 'Tinggi'
   },
   {
     id: 'gemini-2.5-flash',
     name: 'Gemini 2.5 Flash',
     category: 'Gemini 2.5 Series',
-    tag: 'Stabil & Seimbang',
-    description: 'Model stabil dan cepat dengan keseimbangan prima antara kecepatan respon dan kualitas refleksi emosional.',
+    tag: 'Stabil & Teruji',
+    description: 'Model generasi 2.5 dengan stabilitas tinggi dan konsistensi respon pendampingan terpercaya.',
     speed: 'Cepat',
     reasoning: 'Standar'
   },
@@ -73,7 +93,7 @@ export const AVAILABLE_AI_MODELS: AiModelInfo[] = [
     name: 'Gemini 2.5 Pro',
     category: 'Gemini 2.5 Series',
     tag: 'Refleksi Terstruktur',
-    description: 'Model berorientasi penalaran mendalam untuk eksplorasi psikologis dan restrukturisasi kognitif bertahap.',
+    description: 'Model berorientasi penalaran terstruktur untuk eksplorasi psikologis dan latihan pemikiran bertahap.',
     speed: 'Sedang',
     reasoning: 'Tinggi'
   },
@@ -81,7 +101,7 @@ export const AVAILABLE_AI_MODELS: AiModelInfo[] = [
     id: 'gemini-2.5-flash-lite',
     name: 'Gemini 2.5 Flash Lite',
     category: 'Gemini 2.5 Series',
-    tag: 'Ringan & Efisien',
+    tag: 'Ringan & Hemat Kuota',
     description: 'Model ringkas hemat resource untuk obrolan santai dan catatan harian cepat.',
     speed: 'Sangat Cepat',
     reasoning: 'Standar'

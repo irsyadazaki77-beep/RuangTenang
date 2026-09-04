@@ -1,7 +1,7 @@
 {
   "name": "ruang-tenang-kampus",
   "private": true,
-  "version": "3.0.0",
+  "version": "3.1.1",
   "type": "module",
   "scripts": {
     "dev": "node scripts/prismaGenerate.js && tsx server.ts",
@@ -26,7 +26,8 @@
     "db:encrypt": "tsx server/scripts/migrateEncryption.ts",
     "seed:demo": "tsx server/scripts/seedDemoData.ts",
     "admin:bootstrap": "tsx server/scripts/bootstrapAdmin.ts",
-    "db:rehearse": "tsx server/scripts/rehearsePostgres.ts"
+    "db:rehearse": "tsx server/scripts/rehearsePostgres.ts",
+    "maintenance:daily": "tsx server/scripts/dailyMaintenance.ts"
   },
   "dependencies": {
     "@google/genai": "^2.15.0",

@@ -26,41 +26,41 @@ export const SafetyCheckModal: React.FC<SafetyCheckModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[60] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
-      <div className="bg-white dark:bg-slate-800 border border-rose-300 text-slate-900 rounded-2xl max-w-xl w-full p-6 shadow-xl space-y-5">
-        <div className="flex items-start gap-3 bg-rose-50 border border-rose-200 p-4 rounded-xl text-rose-950">
-          <ShieldAlert className="w-7 h-7 text-rose-600 flex-shrink-0 mt-0.5" />
+    <div className="fixed inset-0 z-[60] bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+      <div className="bg-white dark:bg-slate-800 border border-rose-300 dark:border-rose-900 text-slate-900 dark:text-slate-100 rounded-xl max-w-lg w-full p-4 sm:p-5 shadow-xl space-y-3.5 font-sans">
+        <div className="flex items-start gap-2.5 bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900 p-3 rounded-lg text-rose-950 dark:text-rose-200">
+          <ShieldAlert className="w-5 h-5 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
           <div>
-            <h3 className="font-semibold text-base text-rose-900">Prosedur Keselamatan (Safety Check)</h3>
-            <p className="text-xs text-rose-800 leading-relaxed mt-1">
+            <h3 className="font-semibold text-xs sm:text-sm text-rose-900 dark:text-rose-300">Prosedur Keselamatan (Safety Check)</h3>
+            <p className="text-[11px] text-rose-800 dark:text-rose-400 leading-relaxed mt-0.5">
               Jawaban pada pertanyaan ke-9 menunjukkan adanya pikiran menyakiti diri. Keselamatan dan kesehatan emosionalmu adalah prioritas utama kami.
             </p>
           </div>
         </div>
 
-        <div className="space-y-4">
-          <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Penilaian Risiko Keselamatan Langsung</h4>
+        <div className="space-y-2.5">
+          <h4 className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Penilaian Risiko Keselamatan Langsung</h4>
 
           {/* Question 1: Immediate Danger */}
-          <div className="p-3.5 bg-slate-50 rounded-xl space-y-2">
-            <p className="text-xs font-medium text-slate-900">1. Apakah kamu saat ini berada dalam bahaya langsung?</p>
+          <div className="p-2.5 sm:p-3 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-lg space-y-1.5">
+            <p className="text-xs font-medium text-slate-900 dark:text-slate-100">1. Apakah kamu saat ini berada dalam bahaya langsung?</p>
             <div className="flex gap-2">
               <button
                 onClick={() => setSafetyAssessment(prev => ({ ...prev, immediateDanger: true }))}
-                className={`flex-1 py-1.5 px-3 min-h-[44px] rounded-lg text-xs font-medium border transition-all active:scale-95 ${
+                className={`flex-1 py-1 px-2.5 min-h-[38px] sm:min-h-[36px] rounded-lg text-xs font-medium border transition-all active:scale-95 cursor-pointer ${
                   safetyAssessment.immediateDanger === true
-                    ? 'bg-rose-600 text-white border-rose-600'
-                    : 'bg-white dark:bg-slate-800 text-slate-700 border-slate-300 hover:bg-slate-100'
+                    ? 'bg-rose-600 text-white border-rose-600 shadow-3xs'
+                    : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
                 }`}
               >
                 Ya, Saya Dalam Bahaya
               </button>
               <button
                 onClick={() => setSafetyAssessment(prev => ({ ...prev, immediateDanger: false }))}
-                className={`flex-1 py-1.5 px-3 min-h-[44px] rounded-lg text-xs font-medium border transition-all active:scale-95 ${
+                className={`flex-1 py-1 px-2.5 min-h-[38px] sm:min-h-[36px] rounded-lg text-xs font-medium border transition-all active:scale-95 cursor-pointer ${
                   safetyAssessment.immediateDanger === false
-                    ? 'bg-teal-700 text-white border-teal-700'
-                    : 'bg-white dark:bg-slate-800 text-slate-700 border-slate-300 hover:bg-slate-100'
+                    ? 'bg-teal-700 text-white border-teal-700 shadow-3xs'
+                    : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
                 }`}
               >
                 Tidak Saat Ini
@@ -69,25 +69,25 @@ export const SafetyCheckModal: React.FC<SafetyCheckModalProps> = ({
           </div>
 
           {/* Question 2: Plan/Access/Intent */}
-          <div className="p-3.5 bg-slate-50 rounded-xl space-y-2">
-            <p className="text-xs font-medium text-slate-900">2. Apakah ada rencana spesifik, akses terhadap alat membahayakan, atau niat segera?</p>
+          <div className="p-2.5 sm:p-3 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-lg space-y-1.5">
+            <p className="text-xs font-medium text-slate-900 dark:text-slate-100">2. Apakah ada rencana spesifik, akses terhadap alat membahayakan, atau niat segera?</p>
             <div className="flex gap-2">
               <button
                 onClick={() => setSafetyAssessment(prev => ({ ...prev, planOrIntent: true }))}
-                className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-medium border transition-all ${
+                className={`flex-1 py-1 px-2.5 min-h-[38px] sm:min-h-[36px] rounded-lg text-xs font-medium border transition-all cursor-pointer ${
                   safetyAssessment.planOrIntent === true
-                    ? 'bg-rose-600 text-white border-rose-600'
-                    : 'bg-white dark:bg-slate-800 text-slate-700 border-slate-300 hover:bg-slate-100'
+                    ? 'bg-rose-600 text-white border-rose-600 shadow-3xs'
+                    : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
                 }`}
               >
                 Ya, Ada Rencana/Niat
               </button>
               <button
                 onClick={() => setSafetyAssessment(prev => ({ ...prev, planOrIntent: false }))}
-                className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-medium border transition-all ${
+                className={`flex-1 py-1 px-2.5 min-h-[38px] sm:min-h-[36px] rounded-lg text-xs font-medium border transition-all cursor-pointer ${
                   safetyAssessment.planOrIntent === false
-                    ? 'bg-teal-700 text-white border-teal-700'
-                    : 'bg-white dark:bg-slate-800 text-slate-700 border-slate-300 hover:bg-slate-100'
+                    ? 'bg-teal-700 text-white border-teal-700 shadow-3xs'
+                    : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
                 }`}
               >
                 Tidak Ada Rencana/Niat
@@ -96,25 +96,25 @@ export const SafetyCheckModal: React.FC<SafetyCheckModalProps> = ({
           </div>
 
           {/* Question 3: Trusted Contact */}
-          <div className="p-3.5 bg-slate-50 rounded-xl space-y-2">
-            <p className="text-xs font-medium text-slate-900">3. Apakah kamu ingin bantuan menghubungi orang tepercaya (keluarga/sahabat)?</p>
+          <div className="p-2.5 sm:p-3 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-lg space-y-1.5">
+            <p className="text-xs font-medium text-slate-900 dark:text-slate-100">3. Apakah kamu ingin bantuan menghubungi orang tepercaya (keluarga/sahabat)?</p>
             <div className="flex gap-2">
               <button
                 onClick={() => setSafetyAssessment(prev => ({ ...prev, wantsTrustedContact: true }))}
-                className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-medium border transition-all ${
+                className={`flex-1 py-1 px-2.5 min-h-[38px] sm:min-h-[36px] rounded-lg text-xs font-medium border transition-all cursor-pointer ${
                   safetyAssessment.wantsTrustedContact === true
-                    ? 'bg-slate-800 text-white border-slate-800'
-                    : 'bg-white dark:bg-slate-800 text-slate-700 border-slate-300 hover:bg-slate-100'
+                    ? 'bg-slate-800 text-white border-slate-800 shadow-3xs'
+                    : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
                 }`}
               >
-                Ya, Tampilkan Bantuan Kontak
+                Ya, Tampilkan Bantuan
               </button>
               <button
                 onClick={() => setSafetyAssessment(prev => ({ ...prev, wantsTrustedContact: false }))}
-                className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-medium border transition-all ${
+                className={`flex-1 py-1 px-2.5 min-h-[38px] sm:min-h-[36px] rounded-lg text-xs font-medium border transition-all cursor-pointer ${
                   safetyAssessment.wantsTrustedContact === false
-                    ? 'bg-slate-800 text-white border-slate-800'
-                    : 'bg-white dark:bg-slate-800 text-slate-700 border-slate-300 hover:bg-slate-100'
+                    ? 'bg-slate-800 text-white border-slate-800 shadow-3xs'
+                    : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
                 }`}
               >
                 Nanti Saja
@@ -123,9 +123,9 @@ export const SafetyCheckModal: React.FC<SafetyCheckModalProps> = ({
           </div>
 
           {/* Direct Emergency Contact Panel */}
-          <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl space-y-3">
-            <div className="flex items-center gap-2 font-medium text-amber-900 text-xs">
-              <PhoneCall className="w-4 h-4 text-amber-600" />
+          <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 p-3 rounded-lg space-y-2">
+            <div className="flex items-center gap-1.5 font-medium text-amber-900 dark:text-amber-200 text-xs">
+              <PhoneCall className="w-3.5 h-3.5 text-amber-600" />
               <span>Kontak Bantuan Krisis Cepat (Aktif 24 Jam):</span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
@@ -133,32 +133,32 @@ export const SafetyCheckModal: React.FC<SafetyCheckModalProps> = ({
                 <a
                   key={contact.id}
                   href={contact.url}
-                  className="p-2.5 bg-white dark:bg-slate-800 border border-amber-300 rounded-lg flex items-center justify-between hover:bg-amber-100/50 transition-colors"
+                  className="p-2 bg-white dark:bg-slate-800 border border-amber-200 dark:border-amber-900 rounded-lg flex items-center justify-between hover:bg-amber-100/50 dark:hover:bg-amber-900/40 transition-colors"
                 >
                   <div>
-                    <p className="font-semibold text-slate-900">{contact.name}</p>
-                    <p className="text-[10px] text-slate-500">{contact.type}</p>
+                    <p className="font-semibold text-slate-900 dark:text-slate-100 text-xs">{contact.name}</p>
+                    <p className="text-[9.5px] text-slate-500 dark:text-slate-400">{contact.type}</p>
                   </div>
-                  <span className="font-bold text-rose-600 text-sm">{contact.phone}</span>
+                  <span className="font-bold text-rose-600 text-xs">{contact.phone}</span>
                 </a>
               ))}
             </div>
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-200">
+        <div className="flex items-center justify-end gap-2 pt-2.5 border-t border-slate-200 dark:border-slate-700">
           <a
             href="tel:119"
-            className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-medium rounded-lg flex items-center gap-1.5 transition-colors"
+            className="px-3 py-1.5 min-h-[38px] sm:min-h-[36px] bg-rose-600 hover:bg-rose-700 text-white text-xs font-medium rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer"
           >
             <Phone className="w-3.5 h-3.5" />
             <span>Hubungi Hotline 119</span>
           </a>
           <button
             onClick={onClose}
-            className="px-5 py-2 min-h-[44px] bg-slate-800 hover:bg-slate-900 text-white text-xs font-medium rounded-lg transition-all active:scale-95"
+            className="px-4 py-1.5 min-h-[38px] sm:min-h-[36px] bg-slate-800 hover:bg-slate-900 text-white text-xs font-medium rounded-lg transition-all active:scale-95 cursor-pointer"
           >
-            Saya Aman, Lanjutkan Skrining
+            Saya Aman, Lanjutkan
           </button>
         </div>
       </div>

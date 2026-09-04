@@ -9,6 +9,7 @@ import { retentionService } from '../services/retentionService.js';
 import { sanitizeInput } from '../security.js';
 import { provisionUserSchema } from '../validators/authSchemas.js';
 import { authService } from '../services/authService.js';
+import { executeDailyMaintenance } from '../scripts/dailyMaintenance.js';
 
 const router = Router();
 
@@ -422,5 +423,30 @@ router.post(
     }
   }
 );
+
+// Trigger Daily Maintenance (Admin Only)
+router.post(['/maintenance/daily', '/api/maintenance/daily'], requireAuth, requireRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    await serverDb.logAudit(
+      'ADMIN_TRIGGER_DAILY_MAINTENANCE',
+      `Admin ${req.user!.name} (${req.user!.email}) memicu eksekusi pemeliharaan harian sistem secara manual.`,
+      'admin'
+    );
+
+    const report = await executeDailyMaintenance();
+    res.json({
+      success: true,
+      message: 'Pemeliharaan harian sistem telah selesai dilaksanakan.',
+      report
+    });
+  } catch (err: any) {
+    console.error('Error in admin triggered daily maintenance:', err);
+    res.status(500).json({
+      success: false,
+      error: 'Gagal menjalankan pemeliharaan harian sistem.',
+      details: err?.message
+    });
+  }
+});
 
 export default router;

@@ -80,7 +80,7 @@ export const BookingForm: React.FC<BookingFormProps> = ({
     "Kendala Akademik & Skripsi",
   );
   const [selectedCounselorId, setSelectedCounselorId] = useState<string>(
-    selectedCounselorFromDir?.id || "c-1"
+    selectedCounselorFromDir?.id || ""
   );
   const [studentName, setStudentName] = useState(userSession.name || "");
   const [studentNIM, setStudentNIM] = useState("");
@@ -104,19 +104,14 @@ export const BookingForm: React.FC<BookingFormProps> = ({
   };
 
   const [date, setDate] = useState<string>(getInitialBookingDate);
-  const [timeSlot, setTimeSlot] = useState("14:00");
+  const [timeSlot, setTimeSlot] = useState("");
   const [timezone, setTimezone] = useState<"WIB" | "WITA" | "WIT">(getLocalTimezone());
   const [mode, setMode] = useState<"video_call">("video_call");
   const [reminderMinutes, setReminderMinutes] = useState<number>(30);
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const [availableSlots, setAvailableSlots] = useState<string[]>([
-    "09:00",
-    "10:30",
-    "14:00",
-    "16:00",
-  ]);
+  const [availableSlots, setAvailableSlots] = useState<string[]>([]);
   const [isFullyBooked, setIsFullyBooked] = useState(false);
   const [isLoadingSlots, setIsLoadingSlots] = useState(false);
 
@@ -124,10 +119,13 @@ export const BookingForm: React.FC<BookingFormProps> = ({
     if (selectedCounselorFromDir) {
       setSelectedCounselorId(selectedCounselorFromDir.id);
       setCurrentStep(1); // Auto jump
+    } else if (!selectedCounselorId && counselors.length > 0) {
+      setSelectedCounselorId(counselors[0].id);
     }
-  }, [selectedCounselorFromDir]);
+  }, [selectedCounselorFromDir, counselors, selectedCounselorId]);
 
   useEffect(() => {
+    if (!selectedCounselorId || !date) return;
     let isMounted = true;
     setIsLoadingSlots(true);
     apiClient.get<{ availableSlots: string[]; fullyBooked?: boolean }>(
@@ -154,6 +152,7 @@ export const BookingForm: React.FC<BookingFormProps> = ({
       .catch((err) => {
         if (!isMounted) return;
         setIsLoadingSlots(false);
+        setAvailableSlots([]);
         console.warn("Failed to check server availability:", err);
       });
 
@@ -212,10 +211,13 @@ export const BookingForm: React.FC<BookingFormProps> = ({
       return;
     }
 
+    const counselorObj = counselors.find((c) => c.id === selectedCounselorId);
+    if (!counselorObj) {
+      setFormError("Pilih konselor yang valid.");
+      return;
+    }
+
     setIsSubmitting(true);
-    const counselorObj =
-      counselors.find((c) => c.id === selectedCounselorId) ||
-      counselors[0];
     const fullTimeSlot = `${timeSlot} ${timezone}`;
 
     try {
@@ -260,7 +262,7 @@ export const BookingForm: React.FC<BookingFormProps> = ({
         studentName: record.studentName || studentName.trim(),
         studentNIM: record.studentNIM || studentNIM.trim(),
         studentEmail: record.studentEmail || studentEmail.trim(),
-        studentPhone: studentPhone.trim() || "081234567890",
+        studentPhone: studentPhone.trim() || undefined,
         date: record.date,
         timeSlot: `${record.time} ${record.timezone || timezone}`,
         timezone: record.timezone || timezone,
@@ -270,9 +272,7 @@ export const BookingForm: React.FC<BookingFormProps> = ({
           record.status === "PENDING" ? "Menunggu Konfirmasi" : "Konfirmasi",
         approvalStatus: record.approvalStatus || "PENDING_APPROVAL",
         attendanceStatus: record.attendanceStatus || "SCHEDULED",
-        meetingLink:
-          record.meetingLink ||
-          `https://meet.jit.si/ruangtenang-session-${record.id}`,
+        meetingLink: record.meetingLink || undefined,
         reminderEnabled: true,
         reminderMinutesBefore: reminderMinutes,
         createdAt: record.createdAt || new Date().toISOString(),

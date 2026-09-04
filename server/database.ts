@@ -317,14 +317,15 @@ export interface CounselorRecord {
   createdAt: string;
 }
 
-// Ensure database is ready and initialized on fresh clone
+// Ensure database is ready and initialized
 export async function ensureDatabaseReady(): Promise<void> {
-  try {
-    const dbUrl = (process.env.DATABASE_URL || '').trim();
-    const explicitProvider = (process.env.DB_PROVIDER || '').toLowerCase().trim();
-    const hasPostgresUrl = dbUrl.startsWith('postgresql://') || dbUrl.startsWith('postgres://');
-    const isPostgres = hasPostgresUrl || (explicitProvider === 'postgresql' && hasPostgresUrl);
+  const isProd = process.env.NODE_ENV === 'production';
+  const dbUrl = (process.env.DATABASE_URL || '').trim();
+  const explicitProvider = (process.env.DB_PROVIDER || '').toLowerCase().trim();
+  const hasPostgresUrl = dbUrl.startsWith('postgresql://') || dbUrl.startsWith('postgres://');
+  const isPostgres = hasPostgresUrl || (explicitProvider === 'postgresql' && hasPostgresUrl);
 
+  try {
     if (!isPostgres) {
       try {
         const { existsSync, mkdirSync } = await import('fs');
@@ -347,9 +348,14 @@ export async function ensureDatabaseReady(): Promise<void> {
           console.warn('[DATABASE INIT] Note on schema initialization:', err?.message || err);
         }
       }
+      await prisma.$queryRaw`SELECT 1`;
+      console.log('[DATABASE READY] SQLite database connection verified.');
+    } else {
+      await prisma.$queryRaw`SELECT 1`;
+      console.log('[DATABASE READY] PostgreSQL database connection verified.');
     }
   } catch (outerErr: any) {
-    console.warn('[DATABASE INIT] Non-blocking init notice:', outerErr?.message || outerErr);
+    console.warn('[DATABASE INIT] Database initialization notice:', outerErr?.message || outerErr);
   }
 }
 

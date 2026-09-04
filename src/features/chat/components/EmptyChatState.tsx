@@ -89,32 +89,32 @@ export function EmptyChatState({ userName, onSelectPrompt }: EmptyChatStateProps
   };
 
   return (
-    <div className="w-full max-w-[660px] mx-auto flex flex-col items-center text-center px-4 pt-4 sm:pt-8 pb-4 my-auto space-y-6">
+    <div className="w-full max-w-[620px] mx-auto flex flex-col items-center text-center px-3 pt-3 sm:pt-6 pb-2 my-auto space-y-4">
       {/* Compact Logo */}
-      <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl surface-card flex items-center justify-center p-2 shrink-0 border border-default shadow-3xs">
+      <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl surface-card flex items-center justify-center p-1.5 shrink-0 border border-default shadow-3xs">
         <img src="/favicon.svg" alt="RuangTenang" className="w-full h-full object-contain" />
       </div>
       
       {/* Greeting */}
-      <div className="space-y-1">
-        <h2 className="text-xl sm:text-2xl font-bold text-primary tracking-tight">
+      <div className="space-y-0.5">
+        <h2 className="text-lg sm:text-xl font-bold text-primary tracking-tight">
           Halo, {userName || "Tamu"}.
         </h2>
-        <p className="text-xs sm:text-sm text-secondary max-w-sm sm:max-w-md leading-relaxed mx-auto">
+        <p className="text-xs text-secondary max-w-sm sm:max-w-md leading-relaxed mx-auto">
           Percakapan dikelola sesuai pengaturan privasi Anda. Ceritakan apa yang sedang dirasakan atau pilih panduan di bawah.
         </p>
       </div>
 
       {/* Daily Check-in Widget */}
-      <div className="w-full bg-slate-50/70 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800 rounded-2xl p-4 sm:p-5 text-left space-y-4">
+      <div className="w-full bg-slate-50/70 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800 rounded-xl p-3 sm:p-3.5 text-left space-y-2.5">
         <div className="flex items-center justify-between">
-          <span className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+          <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
             Cek Mood Hari Ini
           </span>
-          <span className="text-[10px] text-slate-400">Pilih perasaan Anda</span>
+          <span className="text-[9.5px] text-slate-400">Pilih perasaan Anda</span>
         </div>
 
-        <div className="flex justify-between items-center gap-1 sm:gap-2">
+        <div className="flex justify-between items-center gap-1 sm:gap-1.5">
           {MOOD_CHOICES.map(choice => (
             <button
               key={choice.value}
@@ -123,14 +123,14 @@ export function EmptyChatState({ userName, onSelectPrompt }: EmptyChatStateProps
                 setSaveStatus('idle');
               }}
               aria-label={`Mood: ${choice.label}`}
-              className={`flex-1 flex flex-col items-center p-2.5 rounded-xl border transition-all cursor-pointer ${
+              className={`flex-1 flex flex-col items-center p-1.5 sm:p-2 rounded-lg border transition-all cursor-pointer ${
                 selectedMood?.value === choice.value
-                  ? 'bg-white dark:bg-slate-800 border-teal-500 shadow-sm scale-105'
+                  ? 'bg-white dark:bg-slate-800 border-teal-500 shadow-xs scale-105'
                   : 'bg-transparent border-transparent ' + choice.bg
               }`}
             >
-              <span className="text-2xl sm:text-3xl filter drop-shadow-3xs">{choice.emoji}</span>
-              <span className="text-[10px] text-slate-400 mt-1 hidden sm:inline truncate w-full text-center">
+              <span className="text-xl sm:text-2xl filter drop-shadow-3xs">{choice.emoji}</span>
+              <span className="text-[9.5px] text-slate-400 mt-0.5 hidden sm:inline truncate w-full text-center">
                 {choice.label}
               </span>
             </button>
@@ -144,36 +144,36 @@ export function EmptyChatState({ userName, onSelectPrompt }: EmptyChatStateProps
               animate={{ opacity: 1, height: 'auto' }}
               exit={{ opacity: 0, height: 0 }}
               transition={{ duration: 0.2 }}
-              className="pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 overflow-hidden"
+              className="pt-2 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2 overflow-hidden"
             >
-              <div className="text-xs text-slate-500 dark:text-slate-400">
-                Anda memilih <span className="font-bold text-teal-600">{selectedMood.label} {selectedMood.emoji}</span>. Apa langkah berikutnya?
+              <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                Anda memilih <span className="font-bold text-teal-600">{selectedMood.label} {selectedMood.emoji}</span>.
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
                 <button
                   onClick={handleSaveToProgress}
                   disabled={saveStatus === 'saving' || saveStatus === 'saved'}
-                  className="px-3 py-1.5 rounded-xl border border-default text-[11px] font-semibold text-slate-600 hover:text-slate-800 bg-white dark:bg-slate-800 flex items-center gap-1.5 transition-all cursor-pointer min-h-[32px] disabled:opacity-50"
+                  className="px-2.5 py-1 rounded-lg border border-default text-[10.5px] font-semibold text-slate-600 hover:text-slate-800 bg-white dark:bg-slate-800 flex items-center gap-1 transition-all cursor-pointer min-h-[30px] disabled:opacity-50"
                 >
                   {saveStatus === 'saving' ? (
                     'Menyimpan...'
                   ) : saveStatus === 'saved' ? (
                     <>
-                      <Check className="w-3.5 h-3.5 text-emerald-500" /> Simpan Berhasil!
+                      <Check className="w-3 h-3 text-emerald-500" /> Tersimpan!
                     </>
                   ) : saveStatus === 'error' ? (
-                    'Gagal menyimpan'
+                    'Gagal'
                   ) : (
                     <>
-                      <Save className="w-3.5 h-3.5 text-slate-400" /> Simpan ke Progress
+                      <Save className="w-3 h-3 text-slate-400" /> Simpan
                     </>
                   )}
                 </button>
                 <button
                   onClick={handleDiscussInChat}
-                  className="px-3 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer min-h-[32px]"
+                  className="px-2.5 py-1 rounded-lg bg-teal-600 hover:bg-teal-700 text-white text-[10.5px] font-bold flex items-center gap-1 transition-all cursor-pointer min-h-[30px]"
                 >
-                  <MessageSquare className="w-3.5 h-3.5" /> Diskusikan di Chat
+                  <MessageSquare className="w-3 h-3" /> Diskusikan
                 </button>
               </div>
             </motion.div>
@@ -182,7 +182,7 @@ export function EmptyChatState({ userName, onSelectPrompt }: EmptyChatStateProps
       </div>
       
       {/* Quick Action Cards Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full text-left">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-2.5 w-full text-left">
         {QUICK_ACTIONS.map(action => {
           const Icon = action.icon;
           return (
@@ -190,16 +190,16 @@ export function EmptyChatState({ userName, onSelectPrompt }: EmptyChatStateProps
               key={action.title}
               onClick={() => onSelectPrompt(action.query)}
               aria-label={`${action.title}: ${action.desc}`}
-              className="group relative flex items-center gap-3 p-3 sm:py-3.5 sm:px-4 rounded-xl sm:rounded-2xl surface-card hover:bg-slate-50 dark:hover:bg-slate-800/80 hover:border-teal-500/40 dark:hover:border-teal-500/40 hover:shadow-xs active:scale-[0.99] transition-all cursor-pointer min-h-[56px] sm:min-h-[64px]"
+              className="group relative flex items-center gap-2.5 p-2.5 sm:py-3 sm:px-3.5 rounded-xl surface-card hover:bg-slate-50 dark:hover:bg-slate-800/80 hover:border-teal-500/40 dark:hover:border-teal-500/40 hover:shadow-xs active:scale-[0.99] transition-all cursor-pointer min-h-[48px] sm:min-h-[52px]"
             >
-              <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-105 ${action.iconBg}`}>
-                <Icon className={`w-4 h-4 sm:w-5 sm:h-5 ${action.iconColor}`} />
+              <div className={`w-8 h-8 sm:w-8.5 sm:h-8.5 rounded-lg flex items-center justify-center shrink-0 transition-transform group-hover:scale-105 ${action.iconBg}`}>
+                <Icon className={`w-4 h-4 ${action.iconColor}`} />
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-semibold text-primary group-hover:text-teal-700 dark:group-hover:text-teal-400 truncate transition-colors">
+                <div className="text-[13px] font-semibold text-primary group-hover:text-teal-700 dark:group-hover:text-teal-400 truncate transition-colors">
                   {action.title}
                 </div>
-                <div className="text-xs text-secondary line-clamp-2 mt-0.5 leading-snug">
+                <div className="text-[11.5px] text-secondary line-clamp-1 mt-0.2 leading-snug">
                   {action.desc}
                 </div>
               </div>

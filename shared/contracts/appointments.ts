@@ -8,6 +8,7 @@ export const CreateAppointmentSchema = z.object({
   timezone: z.enum(['WIB', 'WITA', 'WIT']).optional(),
   mode: z.enum(['video_call', 'in_person', 'tele_counseling']).optional(),
   notes: z.string().max(500).optional(),
+  meetingLink: z.string().max(255).optional(),
   userId: z.string().max(100).optional(),
   studentName: z.string().max(100).optional(),
   studentNIM: z.string().max(30).optional(),

@@ -113,10 +113,53 @@ export const appointmentRepository = {
     return await prisma.$transaction(async (tx) => {
       const isCancelledOrRejected = ["CANCELLED", "REJECTED"].includes(initialStatus);
 
+      let resolvedCounselorId = appt.counselorId;
+      if (!resolvedCounselorId && appt.counselorName) {
+        const found = await tx.counselors.findFirst({
+          where: { name: appt.counselorName }
+        });
+        if (found) {
+          resolvedCounselorId = found.id;
+        } else {
+          const newCns = await tx.counselors.create({
+            data: {
+              id: "cns-" + Date.now() + "-" + Math.floor(Math.random() * 1000),
+              name: appt.counselorName,
+              role: "Konselor Mahasiswa",
+              specialties: JSON.stringify(["Konseling Umum"]),
+              imageUrl: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150",
+              availability: JSON.stringify(["Senin", "Selasa", "Rabu", "Kamis", "Jumat"]),
+              isVerified: true
+            }
+          });
+          resolvedCounselorId = newCns.id;
+        }
+      }
+
+      if (!resolvedCounselorId) {
+        const fallbackCns = await tx.counselors.findFirst();
+        if (fallbackCns) {
+          resolvedCounselorId = fallbackCns.id;
+        } else {
+          const defaultCns = await tx.counselors.create({
+            data: {
+              id: "cons-1",
+              name: appt.counselorName || "Dr. Anita Rahmawati, M.Psi.",
+              role: "Konselor Mahasiswa",
+              specialties: JSON.stringify(["Konseling Umum"]),
+              imageUrl: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150",
+              availability: JSON.stringify(["Senin", "Selasa", "Rabu", "Kamis", "Jumat"]),
+              isVerified: true
+            }
+          });
+          resolvedCounselorId = defaultCns.id;
+        }
+      }
+
       const created = await tx.appointments.create({
         data: {
           id,
-          counselorId: appt.counselorId,
+          counselorId: resolvedCounselorId,
           counselorName: appt.counselorName,
           date: appt.date,
           time: appt.time,
@@ -125,9 +168,7 @@ export const appointmentRepository = {
           status: initialStatus,
           approvalStatus: initialApproval,
           attendanceStatus: appt.attendanceStatus || "SCHEDULED",
-          meetingLink:
-            appt.meetingLink ||
-            `https://meet.jit.si/ruangtenang-session-${Date.now().toString().slice(-6)}`,
+          meetingLink: appt.meetingLink || "",
           mode: appt.mode || "Virtual Video Call",
           userId: appt.userId || null,
           studentName: appt.studentName || null,
@@ -138,12 +179,12 @@ export const appointmentRepository = {
 
       if (!isCancelledOrRejected) {
         // Enforce slot constraint at database level
-        const slotId = `slot-${appt.counselorId}-${appt.date}-${appt.time}`;
+        const slotId = `slot-${resolvedCounselorId}-${appt.date}-${appt.time}`;
         try {
           await tx.appointmentSlot.create({
             data: {
               id: slotId,
-              counselorId: appt.counselorId,
+              counselorId: resolvedCounselorId,
               date: appt.date,
               time: appt.time,
               appointmentId: id,
@@ -173,7 +214,7 @@ export const appointmentRepository = {
       }
 
       // Invalidate slot availability cache
-      await redisService.del(`availability:${appt.counselorId}:${appt.date}`);
+      await redisService.del(`availability:${resolvedCounselorId}:${appt.date}`);
 
       return mapDbAppointmentToRecord(created);
     });

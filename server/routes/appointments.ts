@@ -237,7 +237,7 @@ router.post(['/', '/db/appointments'], requireAuth, idempotencyMiddleware, async
     const finalStudentNIM = isMahasiswa ? (req.body.studentNIM || '') : (validated.studentNIM || '');
 
     const record = await serverDb.addAppointment({
-      counselorId: validated.counselorId || 'cons-1',
+      counselorId: validated.counselorId,
       counselorName: validated.counselorName,
       date: validated.date,
       time: validated.time,
@@ -247,7 +247,7 @@ router.post(['/', '/db/appointments'], requireAuth, idempotencyMiddleware, async
       status: 'PENDING',
       approvalStatus: 'PENDING_APPROVAL',
       attendanceStatus: 'SCHEDULED',
-      meetingLink: `https://meet.jit.si/ruangtenang-session-${Date.now().toString().slice(-6)}`,
+      meetingLink: validated.meetingLink || '',
       userId: finalUserId,
       studentName: sanitizeInput(finalStudentName, 100),
       studentNIM: sanitizeInput(finalStudentNIM, 30),

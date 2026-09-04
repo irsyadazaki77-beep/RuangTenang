@@ -279,9 +279,9 @@ export default function App() {
         )}
         {isSettingsOpen ? (
           <div className="absolute inset-0 bg-slate-50 dark:bg-slate-900 z-20 flex flex-col overflow-hidden">
-            <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center bg-white dark:bg-slate-900 shadow-sm shrink-0">
-              <button onClick={() => setIsSettingsOpen(false)} className="mr-4 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200" aria-label="Kembali">&larr; Kembali</button>
-              <h2 className="font-bold text-slate-900 dark:text-slate-100">Pengaturan & Profil</h2>
+            <div className="p-3 sm:p-3.5 border-b border-slate-200 dark:border-slate-800 flex items-center bg-white dark:bg-slate-900 shadow-xs shrink-0">
+              <button onClick={() => setIsSettingsOpen(false)} className="mr-3 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 text-xs sm:text-sm font-medium" aria-label="Kembali">&larr; Kembali</button>
+              <h2 className="font-semibold text-xs sm:text-sm text-slate-900 dark:text-slate-100">Pengaturan & Profil</h2>
             </div>
             <div className="flex-1 overflow-y-auto min-w-0">
                <Suspense fallback={<div className="p-4 text-center text-slate-500 dark:text-slate-400">Memuat pengaturan...</div>}>
@@ -358,7 +358,7 @@ export default function App() {
                     onOpenSidebar={() => setIsSidebarOpen(true)}
                     onOpenChangelog={() => setIsChangelogOpen(true)}
                   >
-                    <div className="max-w-7xl mx-auto flex flex-col xl:flex-row gap-6 p-3 sm:p-6 w-full">
+                    <div className="max-w-7xl mx-auto flex flex-col xl:flex-row gap-3.5 sm:gap-4.5 p-3 sm:p-4 md:p-5 w-full">
                       <div className="flex-1 xl:w-2/3">
                         <CounselorDirectory onSelectCounselorForBooking={(c) => setSelectedCounselor(c)} />
                       </div>
@@ -383,7 +383,7 @@ export default function App() {
                     onOpenSidebar={() => setIsSidebarOpen(true)}
                     onOpenChangelog={() => setIsChangelogOpen(true)}
                   >
-                    <div className="max-w-4xl mx-auto p-3 sm:p-6 w-full">
+                    <div className="max-w-4xl mx-auto p-3 sm:p-4 md:p-5 w-full">
                       <EmergencyCenter onTriggerSOS={() => showToast('Sinyal SOS darurat diaktifkan.', 'info')} />
                     </div>
                   </WorkspaceLayout>

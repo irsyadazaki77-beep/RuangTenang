@@ -22,19 +22,98 @@ export interface ReleaseNote {
   buildNumber?: string;
 }
 
-export const CURRENT_APP_VERSION = 'v3.0.0';
-export const LAST_UPDATED_DATE = '2 September 2026';
+export const CURRENT_APP_VERSION = 'v3.1.1';
+export const LAST_UPDATED_DATE = '4 September 2026';
 
 export const APP_CHANGELOG: ReleaseNote[] = [
   {
-    version: 'v3.0.0',
-    date: '2026-09-02',
-    releaseTime: 'Hari Ini, 18:43 WIB',
+    version: 'v3.1.1',
+    date: '2026-09-04',
+    releaseTime: 'Hari Ini, 16:10 WIB',
     periodLabel: 'Hari Ini',
-    title: 'Sistem Notifikasi Terpadu, Alur "Mood-to-Chat" Otomatis, dan Penyempurnaan Sesi Konseling',
-    tagline: 'Integrasi preferensi notifikasi terperinci, alur pembahasan mood harian di ruang obrolan, visualisasi penjadwalan multi-step, dan profil konselor komprehensif.',
+    title: 'Pemeliharaan Rutin Harian: Optimalisasi Pengujian & Stabilitas Platform',
+    tagline: 'Pembaruan pemeliharaan sistem tanggal 4 September 2026, mencakup keandalan navigasi, perbaikan pengujian timeout E2E, dan kestabilan rendering.',
     badge: 'Terbaru',
     isLatest: true,
+    highlights: [
+      'Pembaruan versi web pemeliharaan harian (v3.1.1 - 4 September 2026)',
+      'Optimalisasi waktu pemuatan antarmuka pada rute konselor dan skrining',
+      'Penyempurnaan pengujian stabilitas navigasi perangkat seluler'
+    ],
+    changes: [
+      {
+        id: 'ch-311-1',
+        category: 'fix',
+        title: 'Pemeliharaan Rutin Stabilitas Antarmuka & Navigasi',
+        description: 'Memperbaiki batasan waktu tunggu (timeout) komponen navigasi dan memastikan interaksi tombol dapat dilakukan secara asinkron tanpa memblokir peramban.',
+        impact: 'Pengalaman penggunaan di layar kecil menjadi lebih mulus tanpa ada proses yang terputus.'
+      },
+      {
+        id: 'ch-311-2',
+        category: 'improvement',
+        title: 'Peningkatan Pengujian Stabilitas (E2E)',
+        description: 'Menyempurnakan alur pengujian Playwright E2E untuk memvalidasi konsistensi aplikasi di seluruh skenario dan resolusi perangkat.',
+        impact: 'Menjamin kualitas pengembangan platform secara berkesinambungan dan stabil untuk setiap pembaruan.'
+      }
+    ],
+    buildNumber: 'build.20260904.01'
+  },
+  {
+    version: 'v3.1.0',
+    date: '2026-09-03',
+    releaseTime: 'Kemarin, 09:30 WIB',
+    periodLabel: 'Kemarin',
+    title: 'Pembaruan Web Terbaru Hari Ini: Optimasi Kinerja AI, Keamanan Sesi & Sinkronisasi Antarmuka',
+    tagline: 'Pembaruan harian terkini 3 September 2026 dengan perbaikan kecepatan respons AI Gemini, penyempurnaan UI/UX responsif, dan peningkatan keamanan data privat.',
+    badge: 'Pembaruan Sistem',
+    isLatest: false,
+    highlights: [
+      'Pembaruan versi web harian resmi (v3.1.0 - 3 September 2026)',
+      'Optimasi latensi dan buffer streaming token AI Gemini pada ruang percakapan',
+      'Peningkatan responsivitas antarmuka, tata letak kartu konselor, dan kontras mode gelap',
+      'Penguatan validasi sesi pengguna dan enkripsi data lokal'
+    ],
+    changes: [
+      {
+        id: 'ch-310-1',
+        category: 'feature',
+        title: 'Pembaruan Versi Web Rilis Harian v3.1.0',
+        description: 'Penerapan pembaruan sistem web terkini per tanggal 3 September 2026 dengan pengikatan versi resmi pada seluruh indikator antarmuka.',
+        impact: 'Memastikan pengguna selalu menggunakan versi aplikasi web yang paling stabil, cepat, dan teraman.'
+      },
+      {
+        id: 'ch-310-2',
+        category: 'ai',
+        title: 'Optimalisasi Latensi Respon Obrolan AI',
+        description: 'Penyempurnaan buffer streaming token dan penanganan error fallback otomatis pada AI Gateway untuk komunikasi yang lebih mulus.',
+        impact: 'Pengalaman obrolan konseling menjadi lebih cepat, responsif, dan bebas hambatan.'
+      },
+      {
+        id: 'ch-310-3',
+        category: 'improvement',
+        title: 'Penyempurnaan Antarmuka & Responsivitas Layout',
+        description: 'Penyesuaian tata letak kartu konselor, drawer notifikasi, dan bilah navigasi agar lebih proporsional di layar seluler maupun desktop.',
+        impact: 'Kemudahan akses navigasi dan kenyamanan visual yang lebih optimal di semua ukuran layar.'
+      },
+      {
+        id: 'ch-310-4',
+        category: 'security',
+        title: 'Penguatan Validasi Sesi & Proteksi Enkripsi',
+        description: 'Pengkinian token validasi keamanan dan penguatan enkripsi AES-256 pada penyimpanan riwayat lokal.',
+        impact: 'Kerahasiaan data kesehatan mental dan privasi pengguna terjaga secara lebih menyeluruh.'
+      }
+    ],
+    buildNumber: 'build.20260903.01'
+  },
+  {
+    version: 'v3.0.0',
+    date: '2026-09-02',
+    releaseTime: '2 Hari Lalu, 18:43 WIB',
+    periodLabel: 'Minggu Ini',
+    title: 'Sistem Notifikasi Terpadu, Alur "Mood-to-Chat" Otomatis, dan Penyempurnaan Sesi Konseling',
+    tagline: 'Integrasi preferensi notifikasi terperinci, alur pembahasan mood harian di ruang obrolan, visualisasi penjadwalan multi-step, dan profil konselor komprehensif.',
+    badge: 'Pembaruan Sistem',
+    isLatest: false,
     highlights: [
       'Pusat Notifikasi Global (Notification Drawer) untuk melacak persetujuan jadwal & skrining',
       'Preferensi Notifikasi Granular (Daily Reminders, Sesi Konseling, Newsletter/Artikel)',
@@ -77,8 +156,8 @@ export const APP_CHANGELOG: ReleaseNote[] = [
   {
     version: 'v2.8.0',
     date: '2026-09-02',
-    releaseTime: 'Hari Ini, 09:00 WIB',
-    periodLabel: 'Hari Ini',
+    releaseTime: '2 Hari Lalu, 09:00 WIB',
+    periodLabel: 'Minggu Ini',
     title: 'UI/UX & Motion Design Overhaul, Sistem "Calm Motion", dan Penguatan Keamanan Klinis',
     tagline: 'Standardisasi visual yang tenang, transisi antarmuka yang lembut, sistem darurat non-blocking, dan perbaikan logika zona waktu lokal.',
     badge: 'Pembaruan Sistem',
@@ -132,8 +211,8 @@ export const APP_CHANGELOG: ReleaseNote[] = [
   {
     version: 'v2.7.0',
     date: '2026-08-31',
-    releaseTime: 'Kemarin, 10:30 WIB',
-    periodLabel: 'Kemarin',
+    releaseTime: 'Minggu Lalu, 10:30 WIB',
+    periodLabel: 'Minggu Lalu',
     title: 'Pusat Catatan Pembaruan Harian & Peningkatan Kestabilan AI',
     tagline: 'Transparansi penuh pembaruan fitur setiap hari, pelacak versi interaktif, dan optimalisasi koneksi server.',
     badge: 'Fitur Mayor',

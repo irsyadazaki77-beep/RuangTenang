@@ -302,47 +302,47 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
   };
 
   return (
-    <div className={isPageMode ? "w-full max-w-3xl mx-auto p-3 sm:p-6 my-2" : "fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center max-sm:items-end p-4 max-sm:p-0 overflow-y-auto animate-fade-in"}>
+    <div className={isPageMode ? "w-full max-w-3xl mx-auto px-3.5 sm:px-4 md:px-5 py-3.5 sm:py-4 md:py-5 font-sans" : "fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center max-sm:items-end p-3 sm:p-4 max-sm:p-0 overflow-y-auto animate-fade-in font-sans"}>
       <div
         ref={modalRef}
         role={isPageMode ? undefined : "dialog"}
         aria-modal={isPageMode ? undefined : "true"}
         aria-labelledby="screening-modal-title"
         className={isPageMode
-          ? "surface-card border border-default text-primary rounded-3xl w-full p-6 md:p-8 shadow-sm relative overflow-hidden"
-          : "surface-card border border-default text-primary rounded-3xl max-w-2xl w-full p-6 md:p-8 shadow-2xl relative max-h-[88dvh] max-sm:max-h-[92dvh] max-sm:rounded-b-none max-sm:w-full overflow-y-auto transition-transform duration-300 animate-scale-up max-sm:animate-slide-up"
+          ? "surface-card border border-default text-primary rounded-xl w-full p-4 sm:p-5 shadow-3xs relative overflow-hidden"
+          : "surface-card border border-default text-primary rounded-xl max-w-2xl w-full p-4 sm:p-5 shadow-xl relative max-h-[88dvh] max-sm:max-h-[92dvh] max-sm:rounded-b-none max-sm:w-full overflow-y-auto transition-transform duration-300 animate-scale-up max-sm:animate-slide-up"
         }
       >
         {/* Drag handle for mobile bottom sheet */}
-        {!isPageMode && <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-4 sm:hidden shrink-0" />}
+        {!isPageMode && <div className="w-10 h-1 bg-slate-200 dark:bg-slate-700 rounded-full mx-auto mb-3 sm:hidden shrink-0" />}
 
         {!isPageMode && (
           <button
             onClick={onClose}
             aria-label="Tutup"
-            className="absolute top-4 right-4 p-2 text-slate-600 hover:text-slate-900 rounded-lg hover:bg-slate-100 transition-all z-10"
+            className="absolute top-3 right-3 p-1.5 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-all z-10 cursor-pointer min-h-[36px] min-w-[36px] flex items-center justify-center"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         )}
 
         {/* Header */}
-        <div className="flex items-center gap-3 mb-6 border-b border-default pb-5">
-          <div className="p-2.5 surface-muted text-primary rounded-xl border border-default">
-            <HeartPulse className="w-6 h-6" />
+        <div className="flex items-center gap-2.5 mb-4 border-b border-default pb-3.5">
+          <div className="p-2 surface-muted text-primary rounded-lg border border-default">
+            <HeartPulse className="w-5 h-5 text-teal-600 dark:text-teal-400" />
           </div>
           <div>
-            <h2 id="screening-modal-title" className="text-xl font-semibold tracking-tight text-primary">Cek Kondisi Mental Mahasiswa</h2>
-            <p className="text-sm text-secondary mt-0.5">Jawab pertanyaan singkat untuk memahami kondisi emosional Anda dalam dua minggu terakhir.</p>
+            <h2 id="screening-modal-title" className="text-base sm:text-lg font-semibold tracking-tight text-primary">Cek Kondisi Mental Mahasiswa</h2>
+            <p className="text-xs text-secondary mt-0.5">Jawab pertanyaan singkat untuk memahami kondisi emosional Anda dalam dua minggu terakhir.</p>
           </div>
         </div>
 
         {/* STEP 1: INTRO */}
         {step === 'intro' && (
-          <div className="space-y-5">
-            <div className="surface-muted p-5 rounded-xl text-sm text-secondary space-y-2">
-              <p className="font-medium text-primary text-base">Tentang Pengecekan Ini</p>
-              <ul className="list-disc pl-5 space-y-1 mt-2">
+          <div className="space-y-3.5">
+            <div className="surface-muted p-3.5 rounded-lg text-xs text-secondary space-y-1.5">
+              <p className="font-semibold text-primary text-xs sm:text-sm">Tentang Pengecekan Ini</p>
+              <ul className="list-disc pl-4 space-y-1 mt-1 leading-relaxed">
                 <li><strong className="text-primary font-medium">Tujuan:</strong> Membantu memetakan tingkat stres, kecemasan, dan depresi ringan.</li>
                 <li><strong className="text-primary font-medium">Durasi:</strong> Sekitar 2-3 menit.</li>
                 <li><strong className="text-primary font-medium">Privasi:</strong> {user && user.role !== 'guest' ? 'Hasil dapat disimpan ke akun Anda untuk membantu melihat riwayat.' : 'Hasil tidak disimpan ke akun. Hasil hanya tersedia selama sesi ini.'}</li>
@@ -351,21 +351,21 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
             </div>
 
             {historyList.length > 0 && (
-              <div className="surface-card p-5 rounded-xl space-y-4">
+              <div className="surface-card p-3.5 rounded-lg space-y-2.5 border border-default">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-primary flex items-center gap-2">
-                    <History className="w-4 h-4 text-secondary" /> Riwayat Tes Terakhir ({historyList.length})
+                  <span className="text-xs font-semibold text-primary flex items-center gap-1.5">
+                    <History className="w-3.5 h-3.5 text-secondary" /> Riwayat Tes Terakhir ({historyList.length})
                   </span>
-                  <span className="text-[11px] text-secondary font-medium uppercase tracking-wider">Riwayat Pribadi</span>
+                  <span className="text-[10px] text-secondary font-medium uppercase tracking-wider">Riwayat Pribadi</span>
                 </div>
-                <div className="space-y-3 max-h-40 overflow-y-auto pr-2">
+                <div className="space-y-2 max-h-36 overflow-y-auto pr-1">
                   {historyList.slice(0, 3).map((item, idx) => (
-                    <div key={idx} className="flex items-center justify-between surface-muted p-3 rounded-xl border border-default text-sm">
+                    <div key={idx} className="flex items-center justify-between surface-muted p-2.5 rounded-lg border border-default text-xs">
                       <div>
-                        <p className="font-medium text-primary">
+                        <p className="font-medium text-primary text-xs">
                           PHQ-9: <span className="text-teal-600 dark:text-teal-400">{item.phq9.severity}</span> • GAD-7: <span className="text-teal-600 dark:text-teal-400">{item.gad7.severity}</span>
                         </p>
-                        <p className="text-xs text-secondary mt-1">
+                        <p className="text-[10.5px] text-secondary mt-0.5">
                           {new Date(item.phq9.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
                         </p>
                       </div>
@@ -375,13 +375,13 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
               </div>
             )}
 
-            <div className="flex justify-end pt-5 border-t border-default">
+            <div className="flex justify-end pt-3 border-t border-default">
               <button
                 onClick={() => setStep('phq9')}
-                className="btn-primary flex items-center gap-2 px-6 py-2.5 min-h-[44px] rounded-xl text-sm"
+                className="btn-primary flex items-center gap-1.5 px-4 py-2 min-h-[38px] sm:min-h-[36px] rounded-lg text-xs sm:text-sm cursor-pointer"
               >
                 <span>Mulai Cek Kondisi</span>
-                <ArrowRight className="w-4 h-4" />
+                <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </div>
           </div>
@@ -389,31 +389,31 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
 
         {/* STEP 2: PHQ-9 */}
         {step === 'phq9' && (
-          <div className="space-y-6">
+          <div className="space-y-3.5">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-slate-800 uppercase tracking-widest">Bagian 1/2: PHQ-9 (Depresi)</span>
-              <span className="text-xs text-slate-600 font-medium bg-slate-100 px-2 py-1 rounded-md border border-slate-300">
+              <span className="text-xs font-semibold text-slate-800 dark:text-slate-200 uppercase tracking-wider">Bagian 1/2: PHQ-9 (Depresi)</span>
+              <span className="text-xs text-slate-600 dark:text-slate-400 font-medium bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-700">
                 Terisi: {phq9Answers.filter(v => v !== -1).length}/9
               </span>
             </div>
 
-            <p className="text-sm text-slate-600 bg-slate-50 p-4 rounded-xl">
-              Dalam <strong className="text-slate-900 font-medium">2 minggu terakhir</strong>, seberapa sering kamu terganggu oleh masalah-masalah berikut?
+            <p className="text-xs text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800/60 p-3 rounded-lg leading-relaxed">
+              Dalam <strong className="text-slate-900 dark:text-slate-100 font-medium">2 minggu terakhir</strong>, seberapa sering kamu terganggu oleh masalah-masalah berikut?
             </p>
 
-            <div className="space-y-4 max-h-[360px] overflow-y-auto pr-2 custom-scrollbar">
+            <div className="space-y-2.5 max-h-[340px] overflow-y-auto pr-1.5 custom-scrollbar">
               {PHQ9_QUESTIONS.map((q, idx) => (
-                <div key={idx} className="p-4 bg-white rounded-xl border border-slate-300 space-y-3 shadow-sm hover:border-slate-200 transition-colors">
-                  <p className="text-sm font-medium text-slate-900">{idx + 1}. {q}</p>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div key={idx} className="p-3 bg-white dark:bg-slate-900/60 rounded-lg border border-slate-200 dark:border-slate-800 space-y-2 shadow-3xs hover:border-slate-300 dark:hover:border-slate-700 transition-colors">
+                  <p className="text-xs sm:text-sm font-medium text-slate-900 dark:text-slate-100">{idx + 1}. {q}</p>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
                     {OPTIONS.map((opt) => (
                       <button
                         key={opt.value}
                         onClick={() => handleSelectPhq9(idx, opt.value)}
-                        className={`px-3 py-2 min-h-[44px] rounded-xl text-[11px] sm:text-xs font-medium border text-center transition-all active:scale-95 focus:outline-none focus:ring-2 focus:ring-teal-500/20 cursor-pointer ${
+                        className={`px-2 py-1.5 min-h-[38px] sm:min-h-[36px] rounded-lg text-[11px] sm:text-xs font-medium border text-center transition-all active:scale-95 focus:outline-none focus:ring-2 focus:ring-teal-500/20 cursor-pointer ${
                           phq9Answers[idx] === opt.value
-                            ? 'bg-teal-600 text-white border-teal-600 shadow-sm'
-                            : 'bg-stone-50 text-slate-600 border-slate-200/60 hover:text-slate-900 hover:bg-stone-100 hover:border-slate-300'
+                            ? 'bg-teal-600 text-white border-teal-600 shadow-3xs'
+                            : 'bg-stone-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200/60 dark:border-slate-700 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-stone-100 dark:hover:bg-slate-700/60'
                         }`}
                       >
                         {opt.label}
@@ -424,24 +424,24 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
               ))}
             </div>
 
-            <div className="flex justify-between items-center pt-5 border-t border-slate-100">
+            <div className="flex justify-between items-center pt-3 border-t border-slate-100 dark:border-slate-800">
               <button
                 onClick={() => setStep('intro')}
-                className="px-5 py-2.5 min-h-[44px] text-sm font-medium text-slate-500 hover:text-slate-800 hover:bg-stone-50 rounded-xl transition-all cursor-pointer"
+                className="px-3.5 py-1.5 min-h-[38px] sm:min-h-[36px] text-xs sm:text-sm font-medium text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-stone-50 dark:hover:bg-slate-800 rounded-lg transition-all cursor-pointer"
               >
                 Kembali
               </button>
               <button
                 disabled={!isPhq9Complete}
                 onClick={() => setStep('gad7')}
-                className={`flex items-center gap-2 px-6 py-2.5 min-h-[44px] rounded-xl text-sm font-medium transition-all active:scale-95 cursor-pointer ${
+                className={`flex items-center gap-1.5 px-4 py-2 min-h-[38px] sm:min-h-[36px] rounded-lg text-xs sm:text-sm font-medium transition-all active:scale-95 cursor-pointer ${
                   isPhq9Complete
-                    ? 'bg-teal-600 text-white hover:bg-teal-700 shadow-sm'
-                    : 'bg-stone-50 text-slate-400 border border-slate-200/60 cursor-not-allowed'
+                    ? 'bg-teal-600 text-white hover:bg-teal-700 shadow-3xs'
+                    : 'bg-stone-50 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-slate-200/60 dark:border-slate-700 cursor-not-allowed'
                 }`}
               >
                 <span>Lanjut ke GAD-7</span>
-                <ArrowRight className="w-4 h-4" />
+                <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </div>
           </div>
@@ -449,31 +449,31 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
 
         {/* STEP 3: GAD-7 */}
         {step === 'gad7' && (
-          <div className="space-y-6">
+          <div className="space-y-3.5">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-slate-800 uppercase tracking-widest">Bagian 2/2: GAD-7 (Kecemasan)</span>
-              <span className="text-xs text-slate-600 font-medium bg-slate-100 px-2 py-1 rounded-md border border-slate-300">
+              <span className="text-xs font-semibold text-slate-800 dark:text-slate-200 uppercase tracking-wider">Bagian 2/2: GAD-7 (Kecemasan)</span>
+              <span className="text-xs text-slate-600 dark:text-slate-400 font-medium bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-700">
                 Terisi: {gad7Answers.filter(v => v !== -1).length}/7
               </span>
             </div>
 
-            <p className="text-sm text-slate-600 bg-slate-50 p-4 rounded-xl">
-              Dalam <strong className="text-slate-900 font-medium">2 minggu terakhir</strong>, seberapa sering kamu terganggu oleh perasaan gelisah/cemas berikut?
+            <p className="text-xs text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800/60 p-3 rounded-lg leading-relaxed">
+              Dalam <strong className="text-slate-900 dark:text-slate-100 font-medium">2 minggu terakhir</strong>, seberapa sering kamu terganggu oleh perasaan gelisah/cemas berikut?
             </p>
 
-            <div className="space-y-4 max-h-[360px] overflow-y-auto pr-2 custom-scrollbar">
+            <div className="space-y-2.5 max-h-[340px] overflow-y-auto pr-1.5 custom-scrollbar">
               {GAD7_QUESTIONS.map((q, idx) => (
-                <div key={idx} className="p-4 bg-white rounded-xl border border-slate-300 space-y-3 shadow-sm hover:border-slate-200 transition-colors">
-                  <p className="text-sm font-medium text-slate-900">{idx + 1}. {q}</p>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div key={idx} className="p-3 bg-white dark:bg-slate-900/60 rounded-lg border border-slate-200 dark:border-slate-800 space-y-2 shadow-3xs hover:border-slate-300 dark:hover:border-slate-700 transition-colors">
+                  <p className="text-xs sm:text-sm font-medium text-slate-900 dark:text-slate-100">{idx + 1}. {q}</p>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
                     {OPTIONS.map((opt) => (
                       <button
                         key={opt.value}
                         onClick={() => handleSelectGad7(idx, opt.value)}
-                        className={`px-3 py-2 min-h-[44px] rounded-xl text-[11px] sm:text-xs font-medium border text-center transition-all active:scale-95 focus:outline-none focus:ring-2 focus:ring-teal-500/20 cursor-pointer ${
+                        className={`px-2 py-1.5 min-h-[38px] sm:min-h-[36px] rounded-lg text-[11px] sm:text-xs font-medium border text-center transition-all active:scale-95 focus:outline-none focus:ring-2 focus:ring-teal-500/20 cursor-pointer ${
                           gad7Answers[idx] === opt.value
-                            ? 'bg-teal-600 text-white border-teal-600 shadow-sm'
-                            : 'bg-stone-50 text-slate-600 border-slate-200/60 hover:text-slate-900 hover:bg-stone-100 hover:border-slate-300'
+                            ? 'bg-teal-600 text-white border-teal-600 shadow-3xs'
+                            : 'bg-stone-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200/60 dark:border-slate-700 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-stone-100 dark:hover:bg-slate-700/60'
                         }`}
                       >
                         {opt.label}
@@ -484,23 +484,23 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
               ))}
             </div>
 
-            <div className="flex justify-between items-center pt-5 border-t border-slate-100">
+            <div className="flex justify-between items-center pt-3 border-t border-slate-100 dark:border-slate-800">
               <button
                 onClick={() => setStep('phq9')}
-                className="px-5 py-2.5 min-h-[44px] text-sm font-medium text-slate-500 hover:text-slate-800 hover:bg-stone-50 rounded-xl transition-all cursor-pointer"
+                className="px-3.5 py-1.5 min-h-[38px] sm:min-h-[36px] text-xs sm:text-sm font-medium text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-stone-50 dark:hover:bg-slate-800 rounded-lg transition-all cursor-pointer"
               >
                 Kembali
               </button>
               <button
                 onClick={calculateResults}
                 disabled={!isGad7Complete}
-                className={`flex items-center gap-2 px-6 py-2.5 min-h-[44px] rounded-xl text-sm font-medium transition-all active:scale-95 cursor-pointer ${
+                className={`flex items-center gap-1.5 px-4 py-2 min-h-[38px] sm:min-h-[36px] rounded-lg text-xs sm:text-sm font-medium transition-all active:scale-95 cursor-pointer ${
                   isGad7Complete
-                    ? 'bg-teal-600 text-white hover:bg-teal-700 shadow-sm'
-                    : 'bg-stone-50 text-slate-400 border border-slate-200/60 cursor-not-allowed'
+                    ? 'bg-teal-600 text-white hover:bg-teal-700 shadow-3xs'
+                    : 'bg-stone-50 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-slate-200/60 dark:border-slate-700 cursor-not-allowed'
                 }`}
               >
-                <CheckCircle2 className="w-4 h-4" />
+                <CheckCircle2 className="w-3.5 h-3.5" />
                 <span>Lihat Hasil</span>
               </button>
             </div>
@@ -509,44 +509,44 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
 
         {/* STEP 4: RESULT */}
         {step === 'result' && finalResult && (
-          <div className="space-y-6">
-            <div className="text-center py-4 bg-slate-50 rounded-xl">
-              <h3 className="text-xl font-sans font-semibold tracking-tight text-slate-900">Hasil Cek Kondisi Mental</h3>
-              <p className="text-sm text-slate-600 mt-1">Hasil evaluasi mandiri awal untuk PHQ-9 & GAD-7.</p>
+          <div className="space-y-3.5">
+            <div className="text-center py-2.5 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
+              <h3 className="text-base sm:text-lg font-sans font-semibold tracking-tight text-slate-900 dark:text-slate-100">Hasil Cek Kondisi Mental</h3>
+              <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">Hasil evaluasi mandiri awal untuk PHQ-9 & GAD-7.</p>
             </div>
 
             {/* Persistence Status Banner */}
             {persistenceStatus === 'pending' && (
-              <div className="p-3.5 bg-blue-50/80 border border-blue-200 rounded-xl text-xs text-blue-800 flex items-center gap-2">
-                <Clock className="w-4 h-4 text-blue-600 animate-spin shrink-0" />
+              <div className="p-2.5 bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900 rounded-lg text-xs text-blue-800 dark:text-blue-200 flex items-center gap-2">
+                <Clock className="w-3.5 h-3.5 text-blue-600 animate-spin shrink-0" />
                 <span>Sedang menyimpan hasil skrining ke akun Anda...</span>
               </div>
             )}
             {persistenceStatus === 'saved' && (
-              <div className="p-3.5 bg-emerald-50/80 border border-emerald-200 rounded-xl text-xs text-emerald-800 flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <div className="p-2.5 bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 rounded-lg text-xs text-emerald-800 dark:text-emerald-200 flex items-center gap-2">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                 <span>Hasil berhasil disimpan ke akun Anda.</span>
               </div>
             )}
             {persistenceStatus === 'local-only' && (
-              <div className="p-3.5 bg-amber-50/80 border border-amber-200 rounded-xl text-xs text-amber-800 flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
-                <span>Mode Tamu: Hasil tidak disimpan ke akun. Hasil hanya tersedia selama sesi ini. Masuk atau daftar untuk menyimpan riwayat skrining ke profil Anda.</span>
+              <div className="p-2.5 bg-amber-50/80 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 rounded-lg text-xs text-amber-800 dark:text-amber-200 flex items-center gap-2">
+                <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                <span>Mode Tamu: Hasil tidak disimpan ke akun. Hasil hanya tersedia selama sesi ini.</span>
               </div>
             )}
             {persistenceStatus === 'failed' && (
-              <div className="p-3.5 bg-rose-50/80 border border-rose-200 rounded-xl text-xs text-rose-800 flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+              <div className="p-2.5 bg-rose-50/80 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-lg text-xs text-rose-800 dark:text-rose-200 flex items-center gap-2">
+                <AlertTriangle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
                 <span>{persistenceError || 'Pengecekan selesai, tetapi penyimpanan ke server gagal.'}</span>
               </div>
             )}
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {/* PHQ-9 Card */}
-              <div className="p-6 surface-card rounded-2xl border border-default shadow-sm flex flex-col h-full">
-                <div className="flex items-center justify-between mb-4">
-                  <span className="text-sm font-semibold text-secondary">Skor PHQ-9 (Depresi)</span>
-                  <span className={`px-2.5 py-1 rounded-md text-[10px] font-bold border ${
+              <div className="p-3.5 sm:p-4 surface-card rounded-xl border border-default shadow-3xs flex flex-col h-full">
+                <div className="flex items-center justify-between mb-2.5">
+                  <span className="text-xs font-semibold text-secondary">Skor PHQ-9 (Depresi)</span>
+                  <span className={`px-2 py-0.5 rounded text-[9.5px] font-bold border ${
                     finalResult.phq9.severity === 'Minimal' ? 'bg-teal-50 dark:bg-teal-950/50 text-teal-700 dark:text-teal-400 border-teal-200 dark:border-teal-900' :
                     finalResult.phq9.severity === 'Ringan' ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-900' :
                     finalResult.phq9.severity === 'Sedang' ? 'bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-900' : 'bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-900'
@@ -554,11 +554,11 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
                     Tingkat {finalResult.phq9.severity}
                   </span>
                 </div>
-                <div className="flex items-baseline gap-2 mb-4">
-                   <p className="text-5xl font-sans font-bold tracking-tight text-primary">{finalResult.phq9.score}</p>
-                   <span className="text-sm font-medium text-secondary">/ 27</span>
+                <div className="flex items-baseline gap-1.5 mb-2.5">
+                   <p className="text-3xl sm:text-4xl font-sans font-bold tracking-tight text-primary">{finalResult.phq9.score}</p>
+                   <span className="text-xs font-medium text-secondary">/ 27</span>
                 </div>
-                <p className="text-xs text-secondary leading-relaxed mt-auto border-t border-default pt-4">
+                <p className="text-[11px] text-secondary leading-relaxed mt-auto border-t border-default pt-2.5">
                   {finalResult.phq9.severity === 'Minimal' && 'Skor menunjukkan kondisi emosional relatif stabil. Pertahankan pola istirahat dan aktivitas positif.'}
                   {finalResult.phq9.severity === 'Ringan' && 'Skor menunjukkan indikasi gejala stres/kelelahan emosional ringan. Disarankan latihan relaksasi & bimbingan AI.'}
                   {finalResult.phq9.severity === 'Sedang' && 'Skor menunjukkan indikasi gejala depresi sedang. Sangat disarankan berkonsultasi dengan konselor kampus.'}
@@ -567,10 +567,10 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
               </div>
 
               {/* GAD-7 Card */}
-              <div className="p-6 surface-card rounded-2xl border border-default shadow-sm flex flex-col h-full">
-                <div className="flex items-center justify-between mb-4">
-                  <span className="text-sm font-semibold text-secondary">Skor GAD-7 (Kecemasan)</span>
-                  <span className={`px-2.5 py-1 rounded-md text-[10px] font-bold border ${
+              <div className="p-3.5 sm:p-4 surface-card rounded-xl border border-default shadow-3xs flex flex-col h-full">
+                <div className="flex items-center justify-between mb-2.5">
+                  <span className="text-xs font-semibold text-secondary">Skor GAD-7 (Kecemasan)</span>
+                  <span className={`px-2 py-0.5 rounded text-[9.5px] font-bold border ${
                     finalResult.gad7.severity === 'Minimal' ? 'bg-teal-50 dark:bg-teal-950/50 text-teal-700 dark:text-teal-400 border-teal-200 dark:border-teal-900' :
                     finalResult.gad7.severity === 'Ringan' ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-900' :
                     finalResult.gad7.severity === 'Sedang' ? 'bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-900' : 'bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-900'
@@ -578,11 +578,11 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
                     Tingkat {finalResult.gad7.severity}
                   </span>
                 </div>
-                <div className="flex items-baseline gap-2 mb-4">
-                  <p className="text-5xl font-sans font-bold tracking-tight text-primary">{finalResult.gad7.score}</p>
-                  <span className="text-sm font-medium text-secondary">/ 21</span>
+                <div className="flex items-baseline gap-1.5 mb-2.5">
+                  <p className="text-3xl sm:text-4xl font-sans font-bold tracking-tight text-primary">{finalResult.gad7.score}</p>
+                  <span className="text-xs font-medium text-secondary">/ 21</span>
                 </div>
-                <p className="text-xs text-secondary leading-relaxed mt-auto border-t border-default pt-4">
+                <p className="text-[11px] text-secondary leading-relaxed mt-auto border-t border-default pt-2.5">
                   {finalResult.gad7.severity === 'Minimal' && 'Skor menunjukkan tingkat kecemasan dalam batas wajar.'}
                   {finalResult.gad7.severity === 'Ringan' && 'Skor menunjukkan indikasi kecemasan ringan terkait rutinitas. Baik untuk melatih pernapasan rutin.'}
                   {finalResult.gad7.severity === 'Sedang' && 'Skor menunjukkan indikasi kecemasan sedang yang mengganggu konsentrasi belajar & tidur.'}
@@ -593,37 +593,37 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
 
             {/* Risk Indicator Summary Banner */}
             {finalResult.riskIndicators?.hasSelfHarmRisk && (
-              <div className="p-5 bg-rose-50 border border-rose-200/80 rounded-2xl space-y-2 text-xs text-rose-900">
-                <div className="flex items-center gap-2 font-bold text-rose-800">
-                  <AlertTriangle className="w-4 h-4 text-rose-600" />
+              <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-xl space-y-1 text-xs text-rose-900 dark:text-rose-200">
+                <div className="flex items-center gap-1.5 font-bold text-rose-800 dark:text-rose-300">
+                  <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />
                   <span>Catatan Keselamatan Khusus (Pertanyaan #9 PHQ-9)</span>
                 </div>
-                <p className="leading-relaxed">
+                <p className="leading-relaxed text-[11px]">
                   Skor pertanyaan ke-9 menunjukkan adanya respon positif terkait pikiran menyakiti diri. Indikator risiko ini dicatat secara terpisah & aman untuk penanganan darurat. Jika kamu butuh teman bicara saat ini, kontak bantuan darurat selalu aktif.
                 </p>
               </div>
             )}
 
             {/* Next Best Action Section */}
-            <div className="bg-slate-50 dark:bg-slate-900/60 p-4 sm:p-5 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-3.5">
-              <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2">
-                🚀 Langkah Rekomendasi Selanjutnya
+            <div className="bg-slate-50 dark:bg-slate-900/60 p-3 sm:p-3.5 rounded-xl border border-slate-200/80 dark:border-slate-800 space-y-2.5">
+              <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                <span>🚀</span> Langkah Rekomendasi Selanjutnya
               </h4>
-              <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
                 Berdasarkan skor evaluasi awal Anda, berikut langkah terbaik yang disarankan untuk menjaga kesehatan emosional Anda:
               </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-0.5">
                 <button
                   onClick={() => {
                     onClose();
                     navigate('/');
                   }}
-                  className="p-3.5 rounded-xl border border-teal-200/60 dark:border-teal-900 hover:border-teal-300 dark:hover:border-teal-800 bg-teal-50/40 dark:bg-teal-950/20 hover:bg-teal-50 dark:hover:bg-teal-950/40 text-left transition-all group flex items-start gap-3 cursor-pointer"
+                  className="p-3 rounded-lg border border-teal-200/60 dark:border-teal-900 hover:border-teal-300 dark:hover:border-teal-800 bg-teal-50/40 dark:bg-teal-950/20 hover:bg-teal-50 dark:hover:bg-teal-950/40 text-left transition-all group flex items-start gap-2.5 cursor-pointer"
                 >
-                  <MessageSquare className="w-5 h-5 text-teal-600 dark:text-teal-400 mt-0.5 shrink-0 group-hover:scale-110 transition-transform" />
+                  <MessageSquare className="w-4 h-4 text-teal-600 dark:text-teal-400 mt-0.5 shrink-0 group-hover:scale-110 transition-transform" />
                   <div>
                     <span className="text-xs font-bold text-teal-800 dark:text-teal-300 block mb-0.5">Diskusikan Hasil di Chat</span>
-                    <span className="text-[11px] text-teal-600 dark:text-teal-400/80 leading-snug block">Bimbing asisten AI untuk mengurai perasaan Anda secara aman dan personal.</span>
+                    <span className="text-[10.5px] text-teal-600 dark:text-teal-400/80 leading-snug block">Bimbing asisten AI untuk mengurai perasaan Anda secara aman dan personal.</span>
                   </div>
                 </button>
 
@@ -632,43 +632,43 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
                     onClose();
                     navigate('/counselors');
                   }}
-                  className="p-3.5 rounded-xl border border-indigo-200/60 dark:border-indigo-900 hover:border-indigo-300 dark:hover:border-indigo-800 bg-indigo-50/40 dark:bg-indigo-950/20 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 text-left transition-all group flex items-start gap-3 cursor-pointer"
+                  className="p-3 rounded-lg border border-indigo-200/60 dark:border-indigo-900 hover:border-indigo-300 dark:hover:border-indigo-800 bg-indigo-50/40 dark:bg-indigo-950/20 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 text-left transition-all group flex items-start gap-2.5 cursor-pointer"
                 >
-                  <Calendar className="w-5 h-5 text-indigo-600 dark:text-indigo-400 mt-0.5 shrink-0 group-hover:scale-110 transition-transform" />
+                  <Calendar className="w-4 h-4 text-indigo-600 dark:text-indigo-400 mt-0.5 shrink-0 group-hover:scale-110 transition-transform" />
                   <div>
                     <span className="text-xs font-bold text-indigo-800 dark:text-indigo-300 block mb-0.5">Jadwalkan Sesi Konseling</span>
-                    <span className="text-[11px] text-indigo-600 dark:text-indigo-400/80 leading-snug block">Temui psikolog profesional kampus berlisensi untuk penanganan terarah.</span>
+                    <span className="text-[10.5px] text-indigo-600 dark:text-indigo-400/80 leading-snug block">Temui psikolog profesional kampus berlisensi untuk penanganan terarah.</span>
                   </div>
                 </button>
               </div>
             </div>
 
-            <div className="bg-amber-50/50 border border-amber-200/50 rounded-xl p-4 mt-4 mb-4">
-              <p className="text-sm text-amber-800 text-center font-medium">
+            <div className="bg-amber-50/60 dark:bg-amber-950/30 border border-amber-200/60 dark:border-amber-900/60 rounded-lg p-2.5">
+              <p className="text-xs text-amber-800 dark:text-amber-200 text-center font-medium">
                 ⚠️ Skor ini hanya alat skrining awal, bukan diagnosis medis.
               </p>
             </div>
 
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-6 border-t border-slate-100">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5 pt-3 border-t border-slate-100 dark:border-slate-800">
               <button
                 onClick={() => downloadReportTxt(finalResult)}
-                className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 min-h-[44px] bg-white hover:bg-stone-50 text-slate-700 text-sm font-semibold rounded-xl border border-slate-200/60 transition-all cursor-pointer"
+                className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-3.5 py-1.5 min-h-[38px] sm:min-h-[36px] bg-white dark:bg-slate-800 hover:bg-stone-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-lg border border-slate-200/60 dark:border-slate-700 transition-all cursor-pointer"
               >
-                <Download className="w-4 h-4" />
+                <Download className="w-3.5 h-3.5" />
                 <span>Unduh Laporan (.txt)</span>
               </button>
 
-              <div className="flex flex-col sm:flex-row w-full sm:w-auto items-center gap-3">
+              <div className="flex flex-col sm:flex-row w-full sm:w-auto items-center gap-2">
                 <button
                   onClick={() => setStep('intro')}
-                  className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 min-h-[44px] bg-stone-50 hover:bg-slate-100 text-slate-600 text-sm font-semibold rounded-xl transition-all cursor-pointer"
+                  className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-3.5 py-1.5 min-h-[38px] sm:min-h-[36px] bg-stone-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-semibold rounded-lg transition-all cursor-pointer"
                 >
-                  <RotateCcw className="w-4 h-4" />
+                  <RotateCcw className="w-3.5 h-3.5" />
                   <span>Tes Ulang</span>
                 </button>
                 <button
                   onClick={onClose}
-                  className="w-full sm:w-auto px-6 py-2.5 min-h-[44px] bg-teal-600 hover:bg-teal-700 text-white text-sm font-bold rounded-xl shadow-sm transition-all cursor-pointer"
+                  className="w-full sm:w-auto px-5 py-1.5 min-h-[38px] sm:min-h-[36px] bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold rounded-lg shadow-3xs transition-all cursor-pointer"
                 >
                   Selesai
                 </button>

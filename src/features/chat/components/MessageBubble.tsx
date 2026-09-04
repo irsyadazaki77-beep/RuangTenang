@@ -41,18 +41,18 @@ export const MessageBubble = memo(function MessageBubble({ msg, isTyping, onRege
       initial={{ opacity: 0, y: 8, scale: 0.99 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.2, ease: 'easeOut' }}
-      className={`flex gap-2.5 sm:gap-3 group w-full ${msg.role === 'user' ? 'justify-end' : ''}`}
+      className={`flex gap-2 sm:gap-2.5 group w-full ${msg.role === 'user' ? 'justify-end' : ''}`}
     >
       {msg.role === 'assistant' && (
-        <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-xl bg-teal-50 dark:bg-teal-950/80 border border-teal-200/80 dark:border-teal-900 flex items-center justify-center shrink-0 mt-0.5 shadow-3xs p-1">
+        <div className="w-5.5 h-5.5 sm:w-6 sm:h-6 rounded-lg bg-teal-50 dark:bg-teal-950/80 border border-teal-200/80 dark:border-teal-900 flex items-center justify-center shrink-0 mt-0.5 shadow-3xs p-0.5">
           <img src="/favicon.svg" alt="RuangTenang AI" className="w-full h-full object-contain" />
         </div>
       )}
       
       <div className={`max-w-[88%] sm:max-w-[80%] ${
         msg.role === 'user' 
-          ? 'bg-slate-900 dark:bg-slate-800 text-white px-3.5 py-2.5 sm:px-4 sm:py-3 rounded-2xl rounded-tr-xs relative shadow-3xs border border-slate-800 dark:border-slate-700' 
-          : 'text-slate-800 dark:text-slate-200 space-y-2 pt-0.5 w-full min-w-0'
+          ? 'bg-slate-900 dark:bg-slate-800 text-white px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-xl rounded-tr-xs relative shadow-3xs border border-slate-800 dark:border-slate-700' 
+          : 'text-slate-800 dark:text-slate-200 space-y-1.5 pt-0.5 w-full min-w-0'
       }`}>
         {msg.role === 'user' ? (
           <>

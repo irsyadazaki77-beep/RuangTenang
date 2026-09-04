@@ -1,7 +1,6 @@
 import cron from 'node-cron';
 import { prisma } from '../database';
 import { DistributedLockService } from '../services/distributedLockService';
-import fetch from 'node-fetch';
 
 /**
  * Appointment Reminder Job Queue

@@ -14,13 +14,23 @@ export function resolveDatabaseConfiguration(): DatabaseConfiguration {
   const isProduction = process.env.NODE_ENV === 'production';
   const dbUrl = (process.env.DATABASE_URL || '').trim();
   const hasPostgresUrl = dbUrl.startsWith('postgresql://') || dbUrl.startsWith('postgres://');
-  const rawProvider = (process.env.DB_PROVIDER || (hasPostgresUrl ? 'postgresql' : 'sqlite')).toLowerCase().trim();
-  const isPostgres = hasPostgresUrl || (rawProvider === 'postgresql' && hasPostgresUrl);
+  const explicitProvider = (process.env.DB_PROVIDER || '').toLowerCase().trim();
+
+  // Production requires PostgreSQL and must not fall back to SQLite if PostgreSQL is requested or expected
+  if (isProduction && explicitProvider === 'postgresql' && !hasPostgresUrl) {
+    throw new Error('FATAL CONFIG ERROR: Production database requires a valid PostgreSQL DATABASE_URL starting with postgresql:// or postgres://');
+  }
+
+  const isPostgres = hasPostgresUrl || (explicitProvider === 'postgresql' && hasPostgresUrl);
 
   const provider: DatabaseProvider = isPostgres ? 'postgresql' : 'sqlite';
   const defaultUrl = isPostgres
     ? dbUrl
     : (dbUrl && dbUrl.startsWith('file:') ? dbUrl : 'file:./prisma/ruangtenang_sqlite.db');
+
+  if (isProduction && !isPostgres) {
+    console.warn('[DATABASE CONFIG] Running in production mode with SQLite database provider. For distributed multi-instance deployment, configure a PostgreSQL DATABASE_URL.');
+  }
 
   return {
     provider,

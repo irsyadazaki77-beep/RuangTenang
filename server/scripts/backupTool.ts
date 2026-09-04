@@ -44,8 +44,12 @@ export async function runBackup() {
     }
   } else if (dbConfig.provider === 'sqlite') {
     // Audit SQLite path logic
-    const dbPath = dbConfig.url.replace('file:', '').replace('sqlite:', '');
-    const absoluteDbPath = path.resolve(process.cwd(), 'prisma', dbPath);
+    const rawPath = dbConfig.url.replace('file:', '').replace('sqlite:', '').trim();
+    const absoluteDbPath = path.isAbsolute(rawPath)
+      ? rawPath
+      : (rawPath.startsWith('./prisma/') || rawPath.startsWith('prisma/'))
+        ? path.resolve(process.cwd(), rawPath)
+        : path.resolve(process.cwd(), 'prisma', rawPath);
     const backupPath = path.join(backupDir, `sqlite-backup-${timestamp}.db`);
 
     try {
@@ -54,7 +58,14 @@ export async function runBackup() {
       }
       console.log(`[BACKUP] Copying SQLite DB from ${absoluteDbPath} to ${backupPath}...`);
       fs.copyFileSync(absoluteDbPath, backupPath);
-      console.log(`[BACKUP] SQLite Backup completed successfully at ${backupPath}`);
+      const stat = fs.statSync(backupPath);
+      console.log(`[BACKUP] SQLite Backup completed successfully at ${backupPath} (${stat.size} bytes)`);
+      return {
+        provider: 'sqlite',
+        backupPath,
+        sizeBytes: stat.size,
+        timestamp
+      };
     } catch (err: any) {
       console.error(`[BACKUP] SQLite Backup failed:`, err.message);
       throw err;

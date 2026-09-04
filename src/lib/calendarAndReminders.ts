@@ -177,10 +177,10 @@ export function generateGoogleCalendarUrl(apt: Appointment): string {
 
   const title = encodeURIComponent(`Sesi Konseling Psikolog: ${apt.counselorName}`);
   const details = encodeURIComponent(
-    `Sesi Konseling Mental Mahasiswa (${apt.mode})\nTopik: ${apt.primaryConcern}\nLink Video Call: ${apt.meetingLink || 'https://meet.jit.si/ruangtenang'}\nKerahasiaan sesi terjamin.`
+    `Sesi Konseling Mental Mahasiswa (${apt.mode})\nTopik: ${apt.primaryConcern}\nLink Video Call: ${apt.meetingLink || 'Akan dikonfirmasi oleh konselor'}\nKerahasiaan sesi terjamin.`
   );
   const location = encodeURIComponent(
-    apt.mode === 'video_call' ? (apt.meetingLink || 'Online Video Call Jitsi') : 'Pusat Bimbingan & Konseling Kampus'
+    apt.mode === 'video_call' ? (apt.meetingLink || 'Sesi Video Daring RuangTenang') : 'Pusat Bimbingan & Konseling Kampus'
   );
 
   return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&details=${details}&location=${location}&dates=${startIcsStr}/${endIcsStr}`;

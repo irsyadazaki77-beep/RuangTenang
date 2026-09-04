@@ -156,7 +156,7 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
               emotions: Array.isArray(parsedEmotions) ? parsedEmotions : [],
               factors: Array.isArray(parsedFactors) ? parsedFactors : [],
               notes: d.notes || '',
-              sleepHours: typeof d.sleepHours === 'number' ? d.sleepHours : (d.intensity || 0),
+              sleepHours: typeof d.sleepHours === 'number' ? d.sleepHours : null,
               sleepQuality: d.sleepQuality || null
             };
           });
@@ -228,9 +228,6 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
   };
 
   const latestMood = moodLogs.length > 0 ? moodLogs[0].mood : 0;
-  const avgScreeningScore = screenHistory.length > 0 
-    ? Math.round(screenHistory.reduce((acc, curr) => acc + curr.phq9 + curr.gad7, 0) / (screenHistory.length * 2))
-    : 0;
   const currentPhq9 = screenHistory.length > 0 ? screenHistory[0].phq9 : 0;
   const currentGad7 = screenHistory.length > 0 ? screenHistory[0].gad7 : 0;
   const currentTriage = screenHistory.length > 0 ? screenHistory[0].triage : 'Ringan';
@@ -313,79 +310,79 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
         variants={containerVariants}
         initial="hidden"
         animate="show"
-        className="max-w-5xl mx-auto w-full p-4 sm:p-6 lg:p-8 space-y-8"
+        className="max-w-5xl mx-auto w-full p-3.5 sm:p-4 md:p-5 space-y-4 sm:space-y-5"
       >
         
         {/* Header Section */}
-        <motion.div variants={itemVariants} className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+        <motion.div variants={itemVariants} className="flex flex-col md:flex-row md:items-end justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-bold text-primary tracking-tight">Progress & Aktivitas</h1>
-            <p className="text-sm text-secondary mt-1">Pantau perkembangan kesejahteraan mental Anda dari waktu ke waktu.</p>
+            <h1 className="text-xl sm:text-2xl font-bold text-primary tracking-tight">Progress & Aktivitas</h1>
+            <p className="text-xs sm:text-sm text-secondary mt-0.5">Pantau perkembangan kesejahteraan mental Anda dari waktu ke waktu.</p>
           </div>
           <button
             onClick={() => {
               showToast('Menyiapkan dokumen PDF Anda...');
               window.open('/api/v1/user/export-progress-pdf', '_blank');
             }}
-            className="flex items-center gap-2 surface-card border border-default hover:bg-slate-100 dark:hover:bg-slate-800 text-primary px-4 py-2.5 rounded-xl font-medium text-sm transition-all shadow-sm cursor-pointer min-h-[44px]"
+            className="flex items-center gap-2 surface-card border border-default hover:bg-slate-100 dark:hover:bg-slate-800 text-primary px-3.5 py-2 rounded-xl font-medium text-xs sm:text-sm transition-all shadow-3xs cursor-pointer min-h-[40px] sm:min-h-[36px]"
           >
             <Activity className="w-4 h-4 text-teal-600 dark:text-teal-400" />
-            <span>Unduh Ringkasan Perkembangan Saya (.PDF)</span>
+            <span>Unduh Ringkasan Perkembangan (.PDF)</span>
           </button>
         </motion.div>
 
         {/* Summary Cards */}
-        <motion.div variants={itemVariants} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="surface-card p-5 rounded-2xl flex flex-col justify-between relative overflow-hidden">
-            <div className="flex items-center justify-between mb-4">
-              <span className="text-secondary text-sm font-medium">Mood Terakhir</span>
-              <div className={`p-2 rounded-lg ${getMoodColor(latestMood)}`}><Brain className="w-4 h-4" /></div>
+        <motion.div variants={itemVariants} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-3.5">
+          <div className="surface-card p-3.5 sm:p-4 rounded-xl flex flex-col justify-between relative overflow-hidden border border-default shadow-3xs">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-secondary text-xs sm:text-sm font-medium">Mood Terakhir</span>
+              <div className={`p-1.5 rounded-lg ${getMoodColor(latestMood)}`}><Brain className="w-3.5 h-3.5" /></div>
             </div>
             <div>
-              <span className="text-2xl font-bold text-primary">{latestMood === 0 ? 'Belum ada data' : getMoodLabel(latestMood)}</span>
+              <span className="text-xl sm:text-2xl font-bold text-primary">{latestMood === 0 ? 'Belum ada data' : getMoodLabel(latestMood)}</span>
             </div>
           </div>
 
-          <div className="surface-card p-5 rounded-2xl flex flex-col justify-between">
-            <div className="flex items-center justify-between mb-4">
-              <span className="text-secondary text-sm font-medium">Streak Saat Ini</span>
-              <div className="p-2 bg-orange-50 dark:bg-orange-950/50 rounded-lg text-orange-600 dark:text-orange-400"><TrendingUp className="w-4 h-4" /></div>
+          <div className="surface-card p-3.5 sm:p-4 rounded-xl flex flex-col justify-between border border-default shadow-3xs">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-secondary text-xs sm:text-sm font-medium">Streak Saat Ini</span>
+              <div className="p-1.5 bg-orange-50 dark:bg-orange-950/50 rounded-lg text-orange-600 dark:text-orange-400"><TrendingUp className="w-3.5 h-3.5" /></div>
             </div>
             <div>
-              <div className="text-2xl font-bold text-primary">{streakCount === 0 ? 'Belum ada data' : `${streakCount} hari`}</div>
-              <div className="text-[11px] text-secondary mt-1 font-medium">{totalActiveDays} hari aktif secara total</div>
+              <div className="text-xl sm:text-2xl font-bold text-primary">{streakCount === 0 ? 'Belum ada data' : `${streakCount} hari`}</div>
+              <div className="text-[11px] text-secondary mt-0.5 font-medium">{totalActiveDays} hari aktif total</div>
             </div>
           </div>
           
 
-          <div className="surface-card p-5 rounded-2xl flex flex-col justify-between">
-            <div className="flex items-center justify-between mb-4">
-              <span className="text-secondary text-sm font-medium">PHQ-9 Terbaru</span>
-              <div className="p-2 bg-blue-50 dark:bg-blue-950/50 rounded-lg text-blue-600 dark:text-blue-400"><Activity className="w-4 h-4" /></div>
+          <div className="surface-card p-3.5 sm:p-4 rounded-xl flex flex-col justify-between border border-default shadow-3xs">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-secondary text-xs sm:text-sm font-medium">PHQ-9 Terbaru</span>
+              <div className="p-1.5 bg-blue-50 dark:bg-blue-950/50 rounded-lg text-blue-600 dark:text-blue-400"><Activity className="w-3.5 h-3.5" /></div>
             </div>
             <div>
-              <span className="text-2xl font-bold text-primary">{screenHistory.length === 0 ? 'Belum ada data' : currentPhq9}</span>
-              {screenHistory.length > 0 && <span className="text-sm text-secondary ml-1">/ 27</span>}
+              <span className="text-xl sm:text-2xl font-bold text-primary">{screenHistory.length === 0 ? 'Belum ada data' : currentPhq9}</span>
+              {screenHistory.length > 0 && <span className="text-xs text-secondary ml-1">/ 27</span>}
             </div>
           </div>
 
 
-          <div className="surface-card p-5 rounded-2xl flex flex-col justify-between">
-            <div className="flex items-center justify-between mb-4">
-              <span className="text-secondary text-sm font-medium">GAD-7 Terbaru</span>
-              <div className="p-2 bg-teal-50 dark:bg-teal-950/50 rounded-lg text-teal-600 dark:text-teal-400"><Activity className="w-4 h-4" /></div>
+          <div className="surface-card p-3.5 sm:p-4 rounded-xl flex flex-col justify-between border border-default shadow-3xs">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-secondary text-xs sm:text-sm font-medium">GAD-7 Terbaru</span>
+              <div className="p-1.5 bg-teal-50 dark:bg-teal-950/50 rounded-lg text-teal-600 dark:text-teal-400"><Activity className="w-3.5 h-3.5" /></div>
             </div>
             <div>
-              <span className="text-2xl font-bold text-primary">{screenHistory.length === 0 ? 'Belum ada data' : currentGad7}</span>
-              {screenHistory.length > 0 && <span className="text-sm text-secondary ml-1">/ 21</span>}
+              <span className="text-xl sm:text-2xl font-bold text-primary">{screenHistory.length === 0 ? 'Belum ada data' : currentGad7}</span>
+              {screenHistory.length > 0 && <span className="text-xs text-secondary ml-1">/ 21</span>}
             </div>
           </div>
         </motion.div>
 
         {/* Main Chart (Progress Tracker & Screening) */}
-        <motion.div variants={itemVariants} className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="surface-card rounded-2xl border border-default p-6">
-            <h3 className="font-semibold text-primary mb-4">Tren Skrining (PHQ-9 & GAD-7)</h3>
+        <motion.div variants={itemVariants} className="grid grid-cols-1 lg:grid-cols-2 gap-3.5 sm:gap-4">
+          <div className="surface-card rounded-xl border border-default p-3.5 sm:p-4 shadow-3xs">
+            <h3 className="font-semibold text-sm sm:text-base text-primary mb-3">Tren Skrining (PHQ-9 & GAD-7)</h3>
             <div className="overflow-hidden">
                <ScreeningTrend 
                  screenHistory={screenHistory as any}
@@ -402,8 +399,8 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
             </div>
           </div>
 
-          <div className="surface-card rounded-2xl border border-default p-6">
-            <h3 className="font-semibold text-primary mb-4">Log Mood Harian</h3>
+          <div className="surface-card rounded-xl border border-default p-3.5 sm:p-4 shadow-3xs">
+            <h3 className="font-semibold text-sm sm:text-base text-primary mb-3">Log Mood Harian</h3>
             <div className="overflow-hidden">
                <MoodTracker 
                  moodLogs={moodLogs}
@@ -415,53 +412,53 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
         </motion.div>
 
         {/* Insight Perkembangan & Timeline Tasks */}
-        <motion.div variants={itemVariants} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 space-y-6">
-            <div className="surface-card rounded-2xl border border-default overflow-hidden">
-              <div className="p-5 border-b border-default flex justify-between items-center surface-muted">
-                <h3 className="font-semibold text-primary">Insight Perkembangan</h3>
+        <motion.div variants={itemVariants} className="grid grid-cols-1 lg:grid-cols-3 gap-3.5 sm:gap-4">
+          <div className="lg:col-span-2 space-y-3.5 sm:space-y-4">
+            <div className="surface-card rounded-xl border border-default overflow-hidden shadow-3xs">
+              <div className="p-3.5 sm:p-4 border-b border-default flex justify-between items-center surface-muted">
+                <h3 className="font-semibold text-sm sm:text-base text-primary">Insight Perkembangan</h3>
                 <button 
                   onClick={() => setIsExpandedInsight(!isExpandedInsight)}
-                  className="text-sm text-teal-600 dark:text-teal-400 font-medium hover:text-teal-700 flex items-center gap-1 cursor-pointer"
+                  className="text-xs sm:text-sm text-teal-600 dark:text-teal-400 font-medium hover:text-teal-700 flex items-center gap-1 cursor-pointer"
                 >
-                  {isExpandedInsight ? 'Tutup Detail' : 'Lihat Detail'}
-                  <ChevronDown className={`w-4 h-4 transition-transform ${isExpandedInsight ? 'rotate-180' : ''}`} />
+                  {isExpandedInsight ? 'Tutup' : 'Detail'}
+                  <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isExpandedInsight ? 'rotate-180' : ''}`} />
                 </button>
               </div>
-              <div className="p-6">
-                <div className="flex gap-4 items-start">
-                  <div className="p-3 bg-teal-50 dark:bg-teal-950/50 rounded-xl text-teal-600 dark:text-teal-400 shrink-0">
-                    <Award className="w-6 h-6" />
+              <div className="p-3.5 sm:p-4">
+                <div className="flex gap-3 items-start">
+                  <div className="p-2 bg-teal-50 dark:bg-teal-950/50 rounded-lg text-teal-600 dark:text-teal-400 shrink-0">
+                    <Award className="w-5 h-5" />
                   </div>
                   <div>
                     {moodLogs.length === 0 && screenHistory.length === 0 ? (
                       <div>
-                        <h4 className="text-lg font-semibold text-primary mb-2">Mulai Catat Perjalanan Anda</h4>
-                        <p className="text-secondary text-sm leading-relaxed mb-2">
+                        <h4 className="text-sm sm:text-base font-semibold text-primary mb-1">Mulai Catat Perjalanan Anda</h4>
+                        <p className="text-secondary text-xs sm:text-sm leading-relaxed mb-1">
                           Belum ada catatan aktivitas. Mulai dengan mencatat log mood harian pertama Anda atau lakukan skrining mandiri PHQ-9 & GAD-7 untuk mendapatkan wawasan personalisasi perkembangan kesejahteraan emosional.
                         </p>
                       </div>
                     ) : (
                       <div>
-                        <h4 className="text-lg font-semibold text-primary mb-2">
+                        <h4 className="text-sm sm:text-base font-semibold text-primary mb-1">
                           {latestMood >= 3 ? 'Perkembangan Positif Terpantau!' : 'Tetap Semangat & Luangkan Waktu Rehat'}
                         </h4>
-                        <p className="text-secondary text-sm leading-relaxed mb-4">
+                        <p className="text-secondary text-xs sm:text-sm leading-relaxed mb-2">
                           {moodLogs.length >= 3
                             ? `Tercatat ${totalActiveDays} hari aktif dengan ${moodLogs.length} entri mood. Keteraturan Anda membantu mengenali pola stres dan keseimbangan aktivitas akademis.`
                             : `Data awal Anda telah tercatat (${moodLogs.length} log). Terus catat secara berkala untuk analisis pola emosi yang lebih mendalam.`}
                         </p>
                         
                         {isExpandedInsight && (
-                          <div className="mt-4 pt-4 border-t border-default space-y-3 animate-in fade-in slide-in-from-top-2">
-                            <div className="flex gap-3 items-start">
-                              <CheckCircle2 className="w-5 h-5 text-teal-500 shrink-0 mt-0.5" />
-                              <p className="text-sm text-secondary">Log tersimpan di profil Anda.</p>
+                          <div className="mt-3 pt-3 border-t border-default space-y-2 animate-in fade-in slide-in-from-top-2">
+                            <div className="flex gap-2.5 items-start">
+                              <CheckCircle2 className="w-4 h-4 text-teal-500 shrink-0 mt-0.5" />
+                              <p className="text-xs sm:text-sm text-secondary">Log tersimpan di profil Anda.</p>
                             </div>
                             {currentPhq9 > 9 && (
-                              <div className="flex gap-3 items-start">
-                                <AlertCircle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
-                                <p className="text-sm text-secondary">Skor skrining terakhir menunjukkan perlunya istirahat atau konsultasi dengan konselor.</p>
+                              <div className="flex gap-2.5 items-start">
+                                <AlertCircle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                                <p className="text-xs sm:text-sm text-secondary">Skor skrining terakhir menunjukkan perlunya istirahat atau konsultasi dengan konselor.</p>
                               </div>
                             )}
                           </div>
@@ -473,8 +470,8 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
               </div>
             </div>
 
-            <div className="surface-card rounded-2xl border border-default p-6">
-              <h3 className="font-semibold text-primary mb-4">Perawatan Diri Hari Ini</h3>
+            <div className="surface-card rounded-xl border border-default p-3.5 sm:p-4 shadow-3xs">
+              <h3 className="font-semibold text-sm sm:text-base text-primary mb-3">Perawatan Diri Hari Ini</h3>
               <TimelineTasks 
                 selfCareChecklist={selfCareChecklist} 
                 onToggleSelfCare={handleToggleSelfCare} 
@@ -483,19 +480,19 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
             </div>
           </div>
 
-          <div className="space-y-6">
-            <div className="surface-card rounded-2xl border border-default p-6">
-              <h3 className="font-semibold text-primary mb-4 text-sm flex items-center justify-between">
+          <div className="space-y-3.5 sm:space-y-4">
+            <div className="surface-card rounded-xl border border-default p-3.5 sm:p-4 shadow-3xs">
+              <h3 className="font-semibold text-primary mb-3 text-xs sm:text-sm flex items-center justify-between">
                 <span>Penggunaan AI</span>
-                <span className="text-xs font-normal text-muted">Bulan ini</span>
+                <span className="text-[11px] font-normal text-muted">Bulan ini</span>
               </h3>
               <AiLimits usageStats={usageStats} loadingUsage={loadingUsage} onRefreshUsage={fetchUsageStats} />
             </div>
 
-            <div className="surface-card rounded-2xl border border-default p-6">
-              <h3 className="font-semibold text-primary mb-4 text-sm flex items-center justify-between">
+            <div className="surface-card rounded-xl border border-default p-3.5 sm:p-4 shadow-3xs">
+              <h3 className="font-semibold text-primary mb-3 text-xs sm:text-sm flex items-center justify-between">
                 <span>Akses Konselor</span>
-                <span className="text-xs font-normal text-muted">Izin Data</span>
+                <span className="text-[11px] font-normal text-muted">Izin Data</span>
               </h3>
               <CounselorConsent 
                 shareConsent={shareConsent} 

@@ -30,14 +30,20 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ userId, onComple
     if (step < 3) {
       setStep(prev => prev + 1);
     } else {
-      // Complete onboarding
+      // Complete onboarding and persist goals
       localStorage.setItem(`rt_onboarding_completed_${userId}`, 'true');
+      if (selectedGoals.length > 0) {
+        localStorage.setItem(`rt_user_goals_${userId}`, JSON.stringify(selectedGoals));
+      }
       onComplete();
     }
   };
 
   const handleSkip = () => {
     localStorage.setItem(`rt_onboarding_completed_${userId}`, 'true');
+    if (selectedGoals.length > 0) {
+      localStorage.setItem(`rt_user_goals_${userId}`, JSON.stringify(selectedGoals));
+    }
     onComplete();
   };
 
@@ -154,12 +160,12 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ userId, onComple
                 </h3>
                 <div className="space-y-3.5 text-xs sm:text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
                   <p>
-                    Data kesehatan mental Anda dilindungi dengan standar keamanan medis yang ketat:
+                    Data kesehatan mental Anda dilindungi dengan tata kelola privasi yang transparan:
                   </p>
                   <ul className="space-y-2 bg-slate-50 dark:bg-slate-800/60 p-4 rounded-xl border border-slate-100 dark:border-slate-800">
                     <li className="flex items-start gap-2">
                       <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0 mt-1.5" />
-                      <span><strong>Enkripsi End-to-End:</strong> Catatan mood, jurnal pribadi, dan pesan chat Anda dienkripsi secara aman.</span>
+                      <span><strong>Enkripsi Transit & Penyimpanan:</strong> Catatan mood, jurnal pribadi, dan pesan chat disimulasikan dan disimpan dengan enkripsi terproteksi.</span>
                     </li>
                     <li className="flex items-start gap-2">
                       <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0 mt-1.5" />

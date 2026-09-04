@@ -10,25 +10,7 @@ export interface AppNotification {
 export function getNotifications(): AppNotification[] {
   const stored = localStorage.getItem('ruangtenang_app_notifications');
   if (!stored) {
-    // Initial notifications for a warm first-time experience
-    const initial: AppNotification[] = [
-      {
-        id: 'n-1',
-        title: 'Selamat Datang di RuangTenang! 🌟',
-        message: 'Tempat aman untuk menjaga kesehatan mental Anda selama perkuliahan.',
-        timestamp: new Date(Date.now() - 3600000 * 2).toISOString(), // 2 hours ago
-        read: false,
-        type: 'info'
-      },
-      {
-        id: 'n-2',
-        title: 'Daily Check-in Aktif 📝',
-        message: 'Ayo luangkan waktu 30 detik untuk mencatat mood Anda hari ini di tab Chat.',
-        timestamp: new Date(Date.now() - 3600000 * 24).toISOString(), // 1 day ago
-        read: true,
-        type: 'success'
-      }
-    ];
+    const initial: AppNotification[] = [];
     localStorage.setItem('ruangtenang_app_notifications', JSON.stringify(initial));
     return initial;
   }

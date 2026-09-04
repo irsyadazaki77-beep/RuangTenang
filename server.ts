@@ -44,40 +44,46 @@ import counselorsRouter from './server/routes/counselors.js';
 async function startServer() {
   const isProd = process.env.NODE_ENV === 'production';
 
-  // Resilient secret & database initialization for container / Cloud Run environments
-  // Ensures container never crashes during startup if environment variables are not yet configured in UI
-  const containerId = process.env.HOSTNAME || process.env.K_SERVICE || process.env.CONTAINER_ID || 'ruangtenang-cloudrun';
-
+  // Ensure mandatory runtime secrets exist; if unset, generate cryptographically secure 256-bit runtime keys
   if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
-    process.env.JWT_SECRET = crypto.createHash('sha256').update(`jwt-secret-seed-${containerId}-production-salt-2026`).digest('hex');
-    console.warn('[CONFIG RESILIENCE] JWT_SECRET not provided or <32 chars. Initialized persistent secure 256-bit key.');
+    if (isProd) {
+      process.env.JWT_SECRET = crypto.randomBytes(32).toString('hex');
+      console.warn('[SECURITY NOTICE] JWT_SECRET was not provided in production. Auto-generated cryptographically secure runtime JWT_SECRET.');
+    } else {
+      process.env.JWT_SECRET = 'local-development-fallback-secret-ruangtenang-key-32';
+      console.warn('[DEV NOTICE] Using development JWT_SECRET.');
+    }
   }
 
   const rawEncKey = process.env.DATA_ENCRYPTION_KEY || process.env.ENCRYPTION_KEY;
   if (!rawEncKey || rawEncKey.length < 32) {
-    const generatedEncKey = crypto.createHash('sha256').update(`encryption-key-seed-${containerId}-production-salt-2026`).digest('hex');
-    process.env.ENCRYPTION_KEY = generatedEncKey;
-    process.env.DATA_ENCRYPTION_KEY = generatedEncKey;
-    console.warn('[CONFIG RESILIENCE] ENCRYPTION_KEY not provided or <32 chars. Initialized persistent secure 256-bit key.');
+    if (isProd) {
+      const autoKey = crypto.randomBytes(32).toString('hex');
+      process.env.ENCRYPTION_KEY = autoKey;
+      process.env.DATA_ENCRYPTION_KEY = autoKey;
+      console.warn('[SECURITY NOTICE] ENCRYPTION_KEY was not provided in production. Auto-generated cryptographically secure runtime ENCRYPTION_KEY.');
+    } else {
+      process.env.ENCRYPTION_KEY = 'local-dev-aes-encryption-key-ruangtenang-32-chars-long';
+      process.env.DATA_ENCRYPTION_KEY = process.env.ENCRYPTION_KEY;
+      console.warn('[DEV NOTICE] Using development ENCRYPTION_KEY.');
+    }
   }
 
   if (!process.env.DATABASE_URL) {
     process.env.DATABASE_URL = 'file:./prisma/ruangtenang_sqlite.db';
   }
 
-  // 1. Startup Environment Validation (Non-blocking in container environments)
   try {
     validateEnvironment();
     validateStartupEnvironment();
   } catch (envErr: any) {
-    console.warn('[STARTUP WARNING] Environment validation notice:', envErr?.message || envErr);
+    console.warn('[STARTUP CONFIG] Environment validation notice:', envErr?.message || envErr);
   }
 
-  // 2. Database Readiness Check (Non-blocking in container environments)
   try {
     await ensureDatabaseReady();
   } catch (dbErr: any) {
-    console.warn('[DATABASE INIT] Non-blocking database init notice:', dbErr?.message || dbErr);
+    console.warn('[STARTUP DATABASE] Database readiness notice:', dbErr?.message || dbErr);
   }
 
   const app = express();
@@ -88,7 +94,7 @@ async function startServer() {
   const trustProxySetting = process.env.TRUST_PROXY || '1';
   app.set('trust proxy', trustProxySetting === 'true' ? true : isNaN(Number(trustProxySetting)) ? trustProxySetting : Number(trustProxySetting));
 
-  // CORS Allowlist Setup
+  // CORS Exact Allowlist Setup
   const allowedOrigins = new Set<string>();
   if (process.env.APP_ORIGIN) {
     allowedOrigins.add(process.env.APP_ORIGIN.trim().toLowerCase());
@@ -99,39 +105,54 @@ async function startServer() {
     });
   }
 
-  allowedOrigins.add('https://ruangtenang.ai.studio');
-  allowedOrigins.add('https://ruangtenang.ui.ac.id');
-  allowedOrigins.add('http://localhost:3000');
-  allowedOrigins.add('http://127.0.0.1:3000');
-  allowedOrigins.add('http://localhost:5173');
-  allowedOrigins.add('http://127.0.0.1:5173');
+  if (!isProd) {
+    allowedOrigins.add('https://ruangtenang.ai.studio');
+    allowedOrigins.add('https://ruangtenang.ui.ac.id');
+    allowedOrigins.add('http://localhost:3000');
+    allowedOrigins.add('http://127.0.0.1:3000');
+    allowedOrigins.add('http://localhost:5173');
+    allowedOrigins.add('http://127.0.0.1:5173');
+  }
 
   app.use(cors({
     origin: (origin, callback) => {
-      // Allow requests without Origin header (e.g. health checks, server-to-server, reverse proxy)
+      // Allow requests without Origin header (e.g. health checks, server-to-server, reverse proxy, static files)
       if (!origin) {
         return callback(null, true);
       }
       
       const lowerOrigin = origin.toLowerCase();
-      const isAIStudioOrCloudRun = lowerOrigin.endsWith('.run.app') ||
-                                  lowerOrigin.endsWith('.studio') ||
-                                  lowerOrigin.endsWith('.ai.studio') ||
-                                  lowerOrigin === 'https://ai.studio' ||
-                                  lowerOrigin.endsWith('.google.com') ||
-                                  lowerOrigin.endsWith('.google.dev') ||
-                                  lowerOrigin.includes('localhost') ||
-                                  lowerOrigin.includes('127.0.0.1');
 
-      if (allowedOrigins.has(lowerOrigin) || isAIStudioOrCloudRun) {
+      // Always allow AI Studio preview/deploy domains so the app works regardless of env vars
+      const isPlatformDomain = lowerOrigin.endsWith('.run.app') ||
+                               lowerOrigin.endsWith('.ai.studio') ||
+                               lowerOrigin === 'https://ai.studio';
+
+      if (isPlatformDomain || allowedOrigins.has(lowerOrigin)) {
         return callback(null, true);
       }
-      return callback(new Error(`CORS Blocked: Origin ${origin} is not allowed.`));
+
+      // Production strict match fallback
+      if (isProd) {
+         // Return false to block CORS headers without throwing a 500 error
+         return callback(null, false);
+      }
+
+      // Development / test: Allow local preview
+      const isDevAllowed = lowerOrigin.includes('localhost') ||
+                           lowerOrigin.includes('127.0.0.1');
+
+      if (isDevAllowed) {
+        return callback(null, true);
+      }
+      
+      // Default block without 500 error
+      return callback(null, false);
     },
     credentials: true,
   }));
 
-  // Clickjacking & Security Headers (Helmet)
+  // Frame ancestors (Clickjacking Protection)
   const frameAncestorsList = [
     "'self'",
     "https://*.google.com",
@@ -140,6 +161,17 @@ async function startServer() {
     "https://*.studio",
     "https://*.ai.studio",
     "https://ai.studio",
+    ...(process.env.APP_ORIGIN ? [process.env.APP_ORIGIN.trim()] : [])
+  ];
+
+  const connectSrcList = [
+    "'self'", 
+    "https://generativelanguage.googleapis.com", 
+    "https://*.run.app", 
+    "https://*.ai.studio", 
+    "https://ai.studio", 
+    "ws:", 
+    "wss:",
     ...(process.env.APP_ORIGIN ? [process.env.APP_ORIGIN.trim()] : [])
   ];
 
@@ -155,11 +187,11 @@ async function startServer() {
         styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
         fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
         imgSrc: ["'self'", "data:", "blob:", "https://images.unsplash.com", "https://api.dicebear.com", "https://*.google.com", "https://*.googleapis.com"],
-        connectSrc: ["'self'", "https://generativelanguage.googleapis.com", "https://*.run.app", "https://*.ai.studio", "https://ai.studio", "https://*", "wss://*", "ws://*"],
+        connectSrc: connectSrcList,
         frameAncestors: frameAncestorsList,
       }
     },
-    frameguard: false,
+    frameguard: isProd ? { action: 'sameorigin' } : false,
     hsts: isProd ? { maxAge: 31536000, includeSubDomains: true, preload: true } : false,
   }));
 
@@ -348,20 +380,47 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), 'dist');
-    if (fs.existsSync(distPath)) {
-      app.use(express.static(distPath, {
+    // Security filter: Deny direct access to server build artifacts, source maps, prisma schemas, and env files
+    app.use((req, res, next) => {
+      const normalizedPath = req.path.toLowerCase();
+      if (
+        normalizedPath.endsWith('.cjs') ||
+        normalizedPath.endsWith('.cjs.map') ||
+        normalizedPath.endsWith('.map') ||
+        normalizedPath.endsWith('.env') ||
+        normalizedPath.endsWith('.prisma') ||
+        normalizedPath.endsWith('.ts') ||
+        normalizedPath.includes('server.') ||
+        normalizedPath.includes('database.')
+      ) {
+        return res.status(404).send('Not Found');
+      }
+      next();
+    });
+
+    const clientDistPath = path.join(process.cwd(), 'dist', 'client');
+    const rootDistPath = path.join(process.cwd(), 'dist');
+    const staticPath = fs.existsSync(clientDistPath) ? clientDistPath : rootDistPath;
+
+    if (fs.existsSync(staticPath)) {
+      app.use(express.static(staticPath, {
         maxAge: '1d',
+        dotfiles: 'deny',
+        index: 'index.html',
         setHeaders: (res, filePath) => {
           if (filePath.endsWith('.html')) {
             res.setHeader('Cache-Control', 'no-cache');
+          } else if (filePath.endsWith('.map') || filePath.endsWith('.cjs')) {
+            // Defense in depth
+            res.setHeader('Cache-Control', 'no-store');
           } else {
             res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
           }
         }
       }));
+
       app.get('*', (_req, res) => {
-        const indexPath = path.join(distPath, 'index.html');
+        const indexPath = path.join(staticPath, 'index.html');
         if (fs.existsSync(indexPath)) {
           res.sendFile(indexPath);
         } else {
@@ -399,18 +458,6 @@ async function startServer() {
 }
 
 startServer().catch((err) => {
-  console.error('Fatal error starting RuangTenang server:', err);
-  try {
-    const fallbackPort = parsePort(process.env.PORT, 3000);
-    const emergencyApp = express();
-    emergencyApp.get(['/api/v1/health', '/api/health', '/health', '/healthz', '*'], (_req, res) => {
-      res.status(200).json({ status: 'initializing', message: 'RuangTenang Service Initializing...' });
-    });
-    emergencyApp.listen(fallbackPort, '0.0.0.0', () => {
-      console.log(`[EMERGENCY LISTENER] Fallback port bound on 0.0.0.0:${fallbackPort}`);
-    });
-  } catch (bindErr) {
-    console.error('Critical failure binding emergency listener:', bindErr);
-    process.exit(1);
-  }
+  console.error('FATAL STARTUP ERROR: RuangTenang server failed to initialize:', err?.message || err);
+  process.exit(1);
 });

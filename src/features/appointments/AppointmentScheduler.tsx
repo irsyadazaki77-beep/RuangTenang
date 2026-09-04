@@ -518,18 +518,24 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
                   </div>
                   
                   {/* Virtual Meeting Link */}
-                  {apt.meetingLink && apt.mode === 'video_call' && apt.status !== 'Selesai' && (
+                  {apt.mode === 'video_call' && apt.status !== 'Selesai' && (
                     <div className="flex items-center justify-between pt-2.5 border-t border-slate-200 dark:border-slate-700">
                       <span className="text-secondary font-medium">Link Pertemuan:</span>
-                      <a
-                        href={apt.meetingLink}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-teal-600 dark:text-teal-400 hover:underline font-mono font-medium flex items-center gap-1.5"
-                      >
-                        <Video className="w-3.5 h-3.5" />
-                        <span>Buka Link Sesi</span>
-                      </a>
+                      {apt.meetingLink ? (
+                        <a
+                          href={apt.meetingLink}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-teal-600 dark:text-teal-400 hover:underline font-mono font-medium flex items-center gap-1.5"
+                        >
+                          <Video className="w-3.5 h-3.5" />
+                          <span>Buka Link Sesi</span>
+                        </a>
+                      ) : (
+                        <span className="text-xs text-slate-500 dark:text-slate-400 italic">
+                          Belum tersedia (menunggu konfirmasi konselor)
+                        </span>
+                      )}
                     </div>
                   )}
 
