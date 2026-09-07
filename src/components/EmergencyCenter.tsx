@@ -193,7 +193,7 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
           </div>
           <a
             href={EMERGENCY_CONTACTS[0].url}
-            className="w-full py-2.5 px-3.5 bg-rose-50 dark:bg-rose-950/60 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 rounded-lg font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 transition-colors border border-rose-200 dark:border-rose-900 cursor-pointer min-h-[38px] sm:min-h-[36px]"
+            className="w-full py-2.5 px-3.5 bg-rose-50 dark:bg-rose-950/60 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 rounded-lg font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 transition-colors border border-rose-200 dark:border-rose-900 cursor-pointer min-h-[44px] sm:min-h-[36px]"
           >
             <Phone className="w-3.5 h-3.5" />
             <span>Telepon Langsung {EMERGENCY_CONTACTS[0].phone}</span>
@@ -216,7 +216,7 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
               type="button"
               onClick={handleSendSOS}
               disabled={isTriggeringSOS}
-              className="btn-danger w-full py-2.5 px-3.5 rounded-lg text-xs sm:text-sm flex items-center justify-center gap-2 min-h-[38px] sm:min-h-[36px] disabled:opacity-50"
+              className="btn-danger w-full py-2.5 px-3.5 rounded-lg text-xs sm:text-sm flex items-center justify-center gap-2 min-h-[44px] sm:min-h-[36px] disabled:opacity-50 cursor-pointer"
             >
               <ShieldAlert
                 className={`w-3.5 h-3.5 ${isTriggeringSOS ? "animate-spin" : "text-white"}`}
@@ -300,7 +300,7 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
               placeholder="Cari nama kampus atau layanan (UI, ITB, UGM, LISA)..."
               value={hotlineQuery}
               onChange={(e) => setHotlineQuery(e.target.value)}
-              className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg pl-9 pr-3.5 py-1.5 text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-teal-600 transition-all min-h-[38px] sm:min-h-[36px]"
+              className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg pl-9 pr-3.5 py-1.5 text-base sm:text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-teal-600 transition-all min-h-[44px] sm:min-h-[36px]"
             />
           </div>
 
@@ -334,9 +334,9 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
                   </div>
                   <a
                     href={`tel:${item.number.replace(/\D/g, "")}`}
-                    className="w-full sm:w-auto px-2.5 py-1.5 bg-rose-50 dark:bg-rose-950/60 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 font-semibold text-xs rounded-lg transition-all flex items-center justify-center gap-1 cursor-pointer min-h-[34px] border border-rose-200 dark:border-rose-900 shrink-0"
+                    className="w-full sm:w-auto px-3 py-2 bg-rose-50 dark:bg-rose-950/60 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 font-semibold text-xs rounded-lg transition-all flex items-center justify-center gap-1 cursor-pointer min-h-[44px] sm:min-h-[34px] border border-rose-200 dark:border-rose-900 shrink-0"
                   >
-                    <PhoneCall className="w-3 h-3" />
+                    <PhoneCall className="w-3.5 h-3.5" />
                     <span>Telepon ({item.number})</span>
                   </a>
                 </div>
@@ -375,7 +375,7 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
                   onChange={(e) =>
                     setContact({ ...contact, name: e.target.value })
                   }
-                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg pl-8 pr-3 py-1.5 text-xs sm:text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:border-teal-600 min-h-[36px]"
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg pl-8 pr-3 py-1.5 text-base sm:text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:border-teal-600 min-h-[44px] sm:min-h-[36px]"
                   placeholder="Contoh: Ibu"
                 />
               </div>
@@ -390,7 +390,7 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
                 onChange={(e) =>
                   setContact({ ...contact, relationship: e.target.value })
                 }
-                className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs sm:text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:border-teal-600 min-h-[36px]"
+                className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-base sm:text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:border-teal-600 min-h-[44px] sm:min-h-[36px]"
               >
                 <option value="">-- Pilih Hubungan --</option>
                 <option value="Orang Tua">Orang Tua (Ayah / Ibu)</option>
@@ -414,7 +414,7 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
                   onChange={(e) =>
                     setContact({ ...contact, phone: e.target.value })
                   }
-                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg pl-8 pr-3 py-1.5 text-xs sm:text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:border-teal-600 font-mono min-h-[36px]"
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg pl-8 pr-3 py-1.5 text-base sm:text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:border-teal-600 font-mono min-h-[44px] sm:min-h-[36px]"
                   placeholder="Contoh: 081234567890"
                 />
               </div>
@@ -432,16 +432,16 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
                     consentDate: e.target.checked ? new Date().toLocaleDateString("id-ID") : null
                   })
                 }
-                className="mt-0.5 h-3.5 w-3.5 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+                className="mt-1 h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
               />
-              <label htmlFor="hasConsent" className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed select-none">
+              <label htmlFor="hasConsent" className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed select-none cursor-pointer">
                 Saya memberikan persetujuan (consent) untuk menghubungi kontak darurat ini secara otomatis jika saya memicu sinyal SOS.
               </label>
             </div>
 
             <button
               type="submit"
-              className="w-full py-2 px-3.5 bg-teal-600 hover:bg-teal-700 text-white font-semibold text-xs rounded-lg shadow-3xs transition-all flex items-center justify-center gap-1.5 cursor-pointer min-h-[36px] border-none"
+              className="w-full py-2.5 px-3.5 bg-teal-600 hover:bg-teal-700 text-white font-semibold text-xs sm:text-sm rounded-lg shadow-3xs transition-all flex items-center justify-center gap-1.5 cursor-pointer min-h-[44px] sm:min-h-[36px] border-none"
             >
               <Save className="w-3.5 h-3.5" />
               <span>

@@ -34,6 +34,7 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ userId, onComple
       localStorage.setItem(`rt_onboarding_completed_${userId}`, 'true');
       if (selectedGoals.length > 0) {
         localStorage.setItem(`rt_user_goals_${userId}`, JSON.stringify(selectedGoals));
+        localStorage.setItem('rt_user_goals', JSON.stringify(selectedGoals));
       }
       onComplete();
     }
@@ -43,32 +44,38 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ userId, onComple
     localStorage.setItem(`rt_onboarding_completed_${userId}`, 'true');
     if (selectedGoals.length > 0) {
       localStorage.setItem(`rt_user_goals_${userId}`, JSON.stringify(selectedGoals));
+      localStorage.setItem('rt_user_goals', JSON.stringify(selectedGoals));
     }
     onComplete();
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
-      <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-xl border border-slate-100 dark:border-slate-800 flex flex-col justify-between min-h-[460px] max-h-[90dvh] overflow-y-auto text-slate-800 dark:text-slate-100 relative">
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+      <div className="surface-card rounded-2xl max-w-md w-full p-4 sm:p-6 shadow-md border-default flex flex-col justify-between max-h-[90dvh] overflow-y-auto text-primary relative">
         
         {/* Skip button top right */}
         <button
           onClick={handleSkip}
-          className="absolute top-4 right-5 text-xs font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors py-2 px-3 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer min-h-[36px]"
+          className="absolute top-3.5 right-4 text-xs font-semibold text-secondary hover:text-primary transition-colors py-1.5 px-2.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer min-h-[44px] flex items-center"
         >
           Lewati
         </button>
 
         {/* Step Indicator */}
-        <div className="flex gap-1.5 justify-start items-center mb-6">
-          {[1, 2, 3].map(s => (
-            <div
-              key={s}
-              className={`h-1.5 rounded-full transition-all duration-300 ${
-                s === step ? 'w-8 bg-teal-600' : 'w-2 bg-slate-200 dark:bg-slate-700'
-              }`}
-            />
-          ))}
+        <div className="flex justify-between items-center mb-3.5">
+          <div className="flex gap-1.5 items-center">
+            {[1, 2, 3].map(s => (
+              <div
+                key={s}
+                className={`h-1.5 rounded-full transition-all duration-200 ${
+                  s === step ? 'w-6 bg-teal-600' : 'w-2 bg-slate-200 dark:bg-slate-700'
+                }`}
+              />
+            ))}
+          </div>
+          <span className="text-[11px] font-medium text-secondary">
+            Langkah {step} dari 3
+          </span>
         </div>
 
         {/* Body content with animations */}
@@ -77,20 +84,20 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ userId, onComple
             {step === 1 && (
               <motion.div
                 key="step1"
-                initial={{ opacity: 0, y: 15 }}
+                initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -15 }}
-                transition={{ duration: 0.25 }}
-                className="space-y-4"
+                exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.18 }}
+                className="space-y-3.5"
               >
-                <div className="w-12 h-12 bg-teal-50 dark:bg-teal-950/40 border border-teal-100 dark:border-teal-900/50 rounded-2xl flex items-center justify-center text-teal-600 dark:text-teal-400">
-                  <Sparkles className="w-6 h-6" />
+                <div className="w-10 h-10 bg-teal-50 dark:bg-teal-950/40 border border-teal-100 dark:border-teal-900/50 rounded-xl flex items-center justify-center text-teal-600 dark:text-teal-400">
+                  <Sparkles className="w-5 h-5" />
                 </div>
-                <h3 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
+                <h3 className="text-lg sm:text-xl font-bold text-primary tracking-tight">
                   Selamat Datang di RuangTenang
                 </h3>
-                <p className="text-sm sm:text-base text-slate-500 dark:text-slate-400 leading-relaxed">
-                  RuangTenang adalah suaka kesehatan mental digital yang dirancang khusus untuk mahasiswa. Kami membantu Anda menavigasi stress akademik, kecemasan, dan tantangan kampus dalam lingkungan yang tenang, privat, dan aman.
+                <p className="text-xs sm:text-sm text-secondary leading-relaxed">
+                  RuangTenang adalah platform kesehatan mental digital untuk mahasiswa kampus. Kami siap mendampingi Anda menavigasi stress akademik, kecemasan, dan tantangan sehari-hari dalam ruang yang tenang, privat, dan suportif.
                 </p>
               </motion.div>
             )}
@@ -98,24 +105,24 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ userId, onComple
             {step === 2 && (
               <motion.div
                 key="step2"
-                initial={{ opacity: 0, y: 15 }}
+                initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -15 }}
-                transition={{ duration: 0.25 }}
-                className="space-y-4"
+                exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.18 }}
+                className="space-y-3.5"
               >
-                <div className="w-12 h-12 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-900/50 rounded-2xl flex items-center justify-center text-emerald-600 dark:text-emerald-400">
-                  <HeartHandshake className="w-6 h-6" />
+                <div className="w-10 h-10 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-900/50 rounded-xl flex items-center justify-center text-emerald-600 dark:text-emerald-400">
+                  <HeartHandshake className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
+                  <h3 className="text-lg sm:text-xl font-bold text-primary tracking-tight">
                     Apa fokus utama Anda hari ini?
                   </h3>
-                  <p className="text-xs sm:text-sm text-slate-400 dark:text-slate-500 mt-1">
-                    Pilih satu atau beberapa tujuan (opsional) untuk menyesuaikan pengalaman Anda.
+                  <p className="text-xs text-secondary mt-0.5">
+                    Pilih topik utama agar saran percakapan dan check-in dapat disesuaikan.
                   </p>
                 </div>
-                <div className="space-y-2 pt-2">
+                <div className="space-y-2 pt-1">
                   {goals.map(goal => {
                     const isSelected = selectedGoals.includes(goal.id);
                     return (
@@ -123,16 +130,16 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ userId, onComple
                         key={goal.id}
                         type="button"
                         onClick={() => handleToggleGoal(goal.id)}
-                        className={`w-full flex items-center gap-3 p-3 rounded-xl border text-left text-xs sm:text-sm transition-all cursor-pointer min-h-[44px] ${
+                        className={`w-full flex items-center gap-2.5 p-2.5 sm:p-3 rounded-xl border text-left text-xs sm:text-sm transition-all cursor-pointer min-h-[44px] ${
                           isSelected
                             ? 'border-teal-500 bg-teal-50/50 dark:bg-teal-950/30 text-teal-900 dark:text-teal-200 font-medium'
-                            : 'border-slate-100 dark:border-slate-800 hover:border-slate-200 dark:hover:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300'
+                            : 'border-default hover:bg-slate-50 dark:hover:bg-slate-800/60 text-secondary'
                         }`}
                       >
-                        <span className="text-base sm:text-lg shrink-0">{goal.icon}</span>
+                        <span className="text-base shrink-0">{goal.icon}</span>
                         <span className="flex-1 truncate">{goal.label}</span>
                         {isSelected && (
-                          <div className="w-5 h-5 rounded-full bg-teal-600 flex items-center justify-center text-white shrink-0">
+                          <div className="w-4.5 h-4.5 rounded-full bg-teal-600 flex items-center justify-center text-white shrink-0">
                             <Check className="w-3 h-3" strokeWidth={3} />
                           </div>
                         )}
@@ -146,34 +153,34 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ userId, onComple
             {step === 3 && (
               <motion.div
                 key="step3"
-                initial={{ opacity: 0, y: 15 }}
+                initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -15 }}
-                transition={{ duration: 0.25 }}
-                className="space-y-4"
+                exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.18 }}
+                className="space-y-3.5"
               >
-                <div className="w-12 h-12 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/50 rounded-2xl flex items-center justify-center text-indigo-600 dark:text-indigo-400">
-                  <ShieldCheck className="w-6 h-6" />
+                <div className="w-10 h-10 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/50 rounded-xl flex items-center justify-center text-indigo-600 dark:text-indigo-400">
+                  <ShieldCheck className="w-5 h-5" />
                 </div>
-                <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
+                <h3 className="text-lg sm:text-xl font-bold text-primary tracking-tight">
                   Privasi & Keamanan Data Anda
                 </h3>
-                <div className="space-y-3.5 text-xs sm:text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+                <div className="space-y-2.5 text-xs sm:text-sm text-secondary leading-relaxed">
                   <p>
-                    Data kesehatan mental Anda dilindungi dengan tata kelola privasi yang transparan:
+                    Data kesehatan mental Anda dilindungi dengan tata kelola privasi transparan:
                   </p>
-                  <ul className="space-y-2 bg-slate-50 dark:bg-slate-800/60 p-4 rounded-xl border border-slate-100 dark:border-slate-800">
+                  <ul className="space-y-2 surface-muted p-3.5 rounded-xl border border-default">
                     <li className="flex items-start gap-2">
                       <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0 mt-1.5" />
-                      <span><strong>Enkripsi Transit & Penyimpanan:</strong> Catatan mood, jurnal pribadi, dan pesan chat disimulasikan dan disimpan dengan enkripsi terproteksi.</span>
+                      <span><strong>Proteksi Data:</strong> Catatan mood, jurnal, dan percakapan diproses dan disimpan secara terproteksi.</span>
                     </li>
                     <li className="flex items-start gap-2">
                       <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0 mt-1.5" />
-                      <span><strong>Persetujuan Eksplisit:</strong> Riwayat Anda tidak akan pernah dibagikan dengan konselor kecuali Anda mengizinkannya secara sadar.</span>
+                      <span><strong>Persetujuan Eksplisit:</strong> Riwayat Anda tidak dibagikan ke konselor tanpa persetujuan eksplisit Anda.</span>
                     </li>
                     <li className="flex items-start gap-2">
                       <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0 mt-1.5" />
-                      <span><strong>Koreksi & Penghapusan:</strong> Anda memegang kendali penuh. Anda dapat mengekspor atau menghapus seluruh riwayat Anda kapan saja via Pusat Privasi.</span>
+                      <span><strong>Hak Akses & Penghapusan:</strong> Anda dapat mengekspor atau mengajukan penghapusan riwayat akun melalui Pusat Privasi sesuai kebijakan retensi.</span>
                     </li>
                   </ul>
                 </div>
@@ -183,11 +190,11 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ userId, onComple
         </div>
 
         {/* Footer actions */}
-        <div className="flex justify-between items-center mt-8 pt-4 border-t border-slate-100 dark:border-slate-800 shrink-0">
+        <div className="flex justify-between items-center mt-5 pt-3.5 border-t border-default shrink-0">
           {step > 1 ? (
             <button
               onClick={() => setStep(prev => prev - 1)}
-              className="text-xs sm:text-sm font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors py-2 px-4 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer min-h-[44px]"
+              className="text-xs sm:text-sm font-semibold text-secondary hover:text-primary transition-colors py-2 px-3 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer min-h-[44px] flex items-center"
             >
               Kembali
             </button>
@@ -197,9 +204,9 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ userId, onComple
 
           <button
             onClick={handleNext}
-            className="px-5 py-2.5 bg-teal-600 hover:bg-teal-700 text-white text-xs sm:text-sm font-semibold rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer min-h-[44px]"
+            className="px-4.5 py-2.5 bg-teal-600 hover:bg-teal-700 active:scale-[0.98] text-white text-xs sm:text-sm font-semibold rounded-xl shadow-3xs transition-all flex items-center gap-1.5 cursor-pointer min-h-[44px]"
           >
-            <span>{step === 3 ? 'Mulai Perjalanan' : 'Lanjut'}</span>
+            <span>{step === 3 ? 'Mulai Sekarang' : 'Lanjut'}</span>
             <ChevronRight className="w-4 h-4" />
           </button>
         </div>

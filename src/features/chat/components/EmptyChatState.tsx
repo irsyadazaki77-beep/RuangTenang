@@ -8,38 +8,51 @@ interface EmptyChatStateProps {
   onSelectPrompt: (prompt: string) => void;
 }
 
-const QUICK_ACTIONS = [
+const ALL_ACTIONS = [
   {
-    title: 'Menceritakan hari saya',
-    desc: 'Bagi pengalaman atau hal yang membebani pikiran',
+    id: 'academic',
+    title: 'Tekanan tugas & skripsi',
+    desc: 'Urai beban akademik menjadi target terukur',
     icon: NotebookPen,
-    iconColor: 'text-teal-600 dark:text-teal-400',
-    iconBg: 'bg-teal-50 dark:bg-teal-950/60 border border-teal-200/60 dark:border-teal-900/60',
-    query: 'Saya ingin menceritakan apa yang saya alami dan rasakan hari ini...'
+    iconColor: 'text-amber-600 dark:text-amber-400',
+    iconBg: 'bg-amber-50 dark:bg-amber-950/60 border border-amber-200/60 dark:border-amber-900/60',
+    query: 'Saya merasa kewalahan dengan beban tugas dan skripsi, bantu saya menyusun langkah teratur...'
   },
   {
-    title: 'Saya merasa cemas',
-    desc: 'Kurangi ketegangan dan temukan ketenangan',
+    id: 'anxiety',
+    title: 'Meredakan kecemasan',
+    desc: 'Kurangi ketegangan fisik dan pikiran',
     icon: HeartPulse,
     iconColor: 'text-rose-600 dark:text-rose-400',
     iconBg: 'bg-rose-50 dark:bg-rose-950/60 border border-rose-200/60 dark:border-rose-900/60',
     query: 'Saya sedang merasa cemas dan tegang, tolong bantu saya merasa lebih tenang...'
   },
   {
-    title: 'Refleksi pikiran',
-    desc: 'Urai benang kusut dalam pikiran',
-    icon: Sparkles,
-    iconColor: 'text-indigo-600 dark:text-indigo-400',
-    iconBg: 'bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200/60 dark:border-indigo-900/60',
-    query: 'Bantu saya merefleksikan dan menyusun ulang sudut pandang pikiran saya...'
-  },
-  {
+    id: 'mindfulness',
     title: 'Latihan pernapasan',
     desc: 'Teknik relaksasi napas terpandu',
     icon: Wind,
     iconColor: 'text-sky-600 dark:text-sky-400',
     iconBg: 'bg-sky-50 dark:bg-sky-950/60 border border-sky-200/60 dark:border-sky-900/60',
     query: 'Tolong pandu saya latihan pernapasan santai untuk meredakan ketegangan...'
+  },
+  {
+    id: 'relations',
+    title: 'Relasi & interaksi kampus',
+    desc: 'Diskusi dinamika sosial dan komunikasi',
+    icon: Sparkles,
+    iconColor: 'text-indigo-600 dark:text-indigo-400',
+    iconBg: 'bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200/60 dark:border-indigo-900/60',
+    query: 'Saya sedang memikirkan dinamika relasi dan komunikasi di kampus, mari berdiskusi...'
+  },
+  {
+    id: 'general',
+    title: 'Menceritakan hari saya',
+    desc: 'Bagi pengalaman atau hal yang membebani pikiran',
+    icon: NotebookPen,
+    iconColor: 'text-teal-600 dark:text-teal-400',
+    iconBg: 'bg-teal-50 dark:bg-teal-950/60 border border-teal-200/60 dark:border-teal-900/60',
+    query: 'Saya ingin menceritakan apa yang saya alami dan rasakan hari ini...'
   }
 ];
 
@@ -55,6 +68,25 @@ export function EmptyChatState({ userName, onSelectPrompt }: EmptyChatStateProps
   const [selectedMood, setSelectedMood] = useState<typeof MOOD_CHOICES[0] | null>(null);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
 
+  const userGoals = React.useMemo<string[]>(() => {
+    try {
+      const stored = localStorage.getItem('rt_user_goals');
+      if (stored) return JSON.parse(stored);
+    } catch {
+      // fallback
+    }
+    return [];
+  }, []);
+
+  const displayedActions = React.useMemo(() => {
+    if (userGoals.length === 0) {
+      return ALL_ACTIONS.slice(0, 4);
+    }
+    const prioritized = ALL_ACTIONS.filter(a => userGoals.includes(a.id));
+    const remaining = ALL_ACTIONS.filter(a => !userGoals.includes(a.id));
+    return [...prioritized, ...remaining].slice(0, 4);
+  }, [userGoals]);
+
   const handleSaveToProgress = async () => {
     if (!selectedMood) return;
     setSaveStatus('saving');
@@ -62,8 +94,8 @@ export function EmptyChatState({ userName, onSelectPrompt }: EmptyChatStateProps
       const res = await apiClient.post('/api/v1/mood', {
         mood: selectedMood.value,
         notes: `Log mood harian via pintasan check-in cepat. Mood: ${selectedMood.label}.`,
-        sleepHours: 7,
-        sleepQuality: 'good',
+        sleepHours: null,
+        sleepQuality: null,
         factors: [],
         emotions: [selectedMood.label]
       });
@@ -89,32 +121,32 @@ export function EmptyChatState({ userName, onSelectPrompt }: EmptyChatStateProps
   };
 
   return (
-    <div className="w-full max-w-[620px] mx-auto flex flex-col items-center text-center px-3 pt-3 sm:pt-6 pb-2 my-auto space-y-4">
+    <div className="w-full max-w-[620px] mx-auto flex flex-col items-center text-center px-2.5 sm:px-3 pt-2 sm:pt-5 pb-2 my-auto space-y-2.5 sm:space-y-4">
       {/* Compact Logo */}
-      <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl surface-card flex items-center justify-center p-1.5 shrink-0 border border-default shadow-3xs">
+      <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl surface-card flex items-center justify-center p-1.5 shrink-0 border border-default shadow-3xs">
         <img src="/favicon.svg" alt="RuangTenang" className="w-full h-full object-contain" />
       </div>
       
       {/* Greeting */}
       <div className="space-y-0.5">
-        <h2 className="text-lg sm:text-xl font-bold text-primary tracking-tight">
+        <h2 className="text-base sm:text-xl font-bold text-primary tracking-tight">
           Halo, {userName || "Tamu"}.
         </h2>
-        <p className="text-xs text-secondary max-w-sm sm:max-w-md leading-relaxed mx-auto">
-          Percakapan dikelola sesuai pengaturan privasi Anda. Ceritakan apa yang sedang dirasakan atau pilih panduan di bawah.
+        <p className="text-[11px] sm:text-xs text-secondary max-w-sm sm:max-w-md leading-relaxed mx-auto">
+          Percakapan dikelola sesuai privasi Anda. Ceritakan apa yang dirasakan atau pilih panduan di bawah.
         </p>
       </div>
 
       {/* Daily Check-in Widget */}
-      <div className="w-full bg-slate-50/70 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800 rounded-xl p-3 sm:p-3.5 text-left space-y-2.5">
+      <div className="w-full bg-slate-50/70 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800 rounded-xl p-2.5 sm:p-3.5 text-left space-y-2">
         <div className="flex items-center justify-between">
-          <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+          <span className="text-[10px] sm:text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
             Cek Mood Hari Ini
           </span>
-          <span className="text-[9.5px] text-slate-400">Pilih perasaan Anda</span>
+          <span className="text-[9px] sm:text-[9.5px] text-slate-400">Pilih perasaan</span>
         </div>
 
-        <div className="flex justify-between items-center gap-1 sm:gap-1.5">
+        <div className="grid grid-cols-5 gap-1 sm:gap-1.5">
           {MOOD_CHOICES.map(choice => (
             <button
               key={choice.value}
@@ -123,14 +155,14 @@ export function EmptyChatState({ userName, onSelectPrompt }: EmptyChatStateProps
                 setSaveStatus('idle');
               }}
               aria-label={`Mood: ${choice.label}`}
-              className={`flex-1 flex flex-col items-center p-1.5 sm:p-2 rounded-lg border transition-all cursor-pointer ${
+              className={`flex flex-col items-center justify-center p-1.5 sm:p-2 rounded-lg border transition-all cursor-pointer min-h-[44px] ${
                 selectedMood?.value === choice.value
                   ? 'bg-white dark:bg-slate-800 border-teal-500 shadow-xs scale-105'
                   : 'bg-transparent border-transparent ' + choice.bg
               }`}
             >
-              <span className="text-xl sm:text-2xl filter drop-shadow-3xs">{choice.emoji}</span>
-              <span className="text-[9.5px] text-slate-400 mt-0.5 hidden sm:inline truncate w-full text-center">
+              <span className="text-xl sm:text-2xl filter drop-shadow-3xs leading-none">{choice.emoji}</span>
+              <span className="text-[9px] text-slate-400 mt-0.5 hidden sm:inline truncate w-full text-center">
                 {choice.label}
               </span>
             </button>
@@ -153,7 +185,7 @@ export function EmptyChatState({ userName, onSelectPrompt }: EmptyChatStateProps
                 <button
                   onClick={handleSaveToProgress}
                   disabled={saveStatus === 'saving' || saveStatus === 'saved'}
-                  className="px-2.5 py-1 rounded-lg border border-default text-[10.5px] font-semibold text-slate-600 hover:text-slate-800 bg-white dark:bg-slate-800 flex items-center gap-1 transition-all cursor-pointer min-h-[30px] disabled:opacity-50"
+                  className="flex-1 sm:flex-initial px-2.5 py-1 rounded-lg border border-default text-[11px] sm:text-[10.5px] font-semibold text-slate-600 hover:text-slate-800 bg-white dark:bg-slate-800 flex items-center justify-center gap-1 transition-all cursor-pointer min-h-[36px] sm:min-h-[30px] disabled:opacity-50"
                 >
                   {saveStatus === 'saving' ? (
                     'Menyimpan...'
@@ -171,7 +203,7 @@ export function EmptyChatState({ userName, onSelectPrompt }: EmptyChatStateProps
                 </button>
                 <button
                   onClick={handleDiscussInChat}
-                  className="px-2.5 py-1 rounded-lg bg-teal-600 hover:bg-teal-700 text-white text-[10.5px] font-bold flex items-center gap-1 transition-all cursor-pointer min-h-[30px]"
+                  className="flex-1 sm:flex-initial px-2.5 py-1 rounded-lg bg-teal-600 hover:bg-teal-700 text-white text-[11px] sm:text-[10.5px] font-bold flex items-center justify-center gap-1 transition-all cursor-pointer min-h-[36px] sm:min-h-[30px]"
                 >
                   <MessageSquare className="w-3 h-3" /> Diskusikan
                 </button>
@@ -182,24 +214,24 @@ export function EmptyChatState({ userName, onSelectPrompt }: EmptyChatStateProps
       </div>
       
       {/* Quick Action Cards Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-2.5 w-full text-left">
-        {QUICK_ACTIONS.map(action => {
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 sm:gap-2.5 w-full text-left">
+        {displayedActions.map(action => {
           const Icon = action.icon;
           return (
             <button
               key={action.title}
               onClick={() => onSelectPrompt(action.query)}
               aria-label={`${action.title}: ${action.desc}`}
-              className="group relative flex items-center gap-2.5 p-2.5 sm:py-3 sm:px-3.5 rounded-xl surface-card hover:bg-slate-50 dark:hover:bg-slate-800/80 hover:border-teal-500/40 dark:hover:border-teal-500/40 hover:shadow-xs active:scale-[0.99] transition-all cursor-pointer min-h-[48px] sm:min-h-[52px]"
+              className="group relative flex items-center gap-2.5 p-2 sm:py-3 sm:px-3.5 rounded-xl surface-card hover:bg-slate-50 dark:hover:bg-slate-800/80 hover:border-teal-500/40 dark:hover:border-teal-500/40 hover:shadow-xs active:scale-[0.99] transition-all cursor-pointer min-h-[46px] sm:min-h-[52px]"
             >
-              <div className={`w-8 h-8 sm:w-8.5 sm:h-8.5 rounded-lg flex items-center justify-center shrink-0 transition-transform group-hover:scale-105 ${action.iconBg}`}>
-                <Icon className={`w-4 h-4 ${action.iconColor}`} />
+              <div className={`w-7 h-7 sm:w-8.5 sm:h-8.5 rounded-lg flex items-center justify-center shrink-0 transition-transform group-hover:scale-105 ${action.iconBg}`}>
+                <Icon className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${action.iconColor}`} />
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-[13px] font-semibold text-primary group-hover:text-teal-700 dark:group-hover:text-teal-400 truncate transition-colors">
+                <div className="text-[12.5px] sm:text-[13px] font-semibold text-primary group-hover:text-teal-700 dark:group-hover:text-teal-400 truncate transition-colors">
                   {action.title}
                 </div>
-                <div className="text-[11.5px] text-secondary line-clamp-1 mt-0.2 leading-snug">
+                <div className="text-[11px] sm:text-[11.5px] text-secondary line-clamp-1 mt-0.2 leading-snug">
                   {action.desc}
                 </div>
               </div>

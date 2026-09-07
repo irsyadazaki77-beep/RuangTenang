@@ -328,6 +328,10 @@ export async function ensureDatabaseReady(): Promise<void> {
   const hasPostgresUrl = dbUrl.startsWith('postgresql://') || dbUrl.startsWith('postgres://');
   const isPostgres = hasPostgresUrl || (explicitProvider === 'postgresql' && hasPostgresUrl);
 
+  if (isProd && !isPostgres) {
+    throw new Error('FATAL DATABASE ERROR: Production requires PostgreSQL. SQLite fallback is strictly prohibited in production.');
+  }
+
   try {
     if (!isPostgres) {
       try {
@@ -358,6 +362,9 @@ export async function ensureDatabaseReady(): Promise<void> {
       console.log('[DATABASE READY] PostgreSQL database connection verified.');
     }
   } catch (outerErr: any) {
+    if (isProd) {
+      throw new Error(`FATAL DATABASE ERROR: Failed to verify database readiness in production: ${outerErr?.message || outerErr}`);
+    }
     console.warn('[DATABASE INIT] Database initialization notice:', outerErr?.message || outerErr);
   }
 }

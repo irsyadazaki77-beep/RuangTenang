@@ -44,46 +44,40 @@ import counselorsRouter from './server/routes/counselors.js';
 async function startServer() {
   const isProd = process.env.NODE_ENV === 'production';
 
-  // Ensure mandatory runtime secrets exist; if unset, generate cryptographically secure 256-bit runtime keys
-  if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
-    if (isProd) {
-      process.env.JWT_SECRET = crypto.randomBytes(32).toString('hex');
-      console.warn('[SECURITY NOTICE] JWT_SECRET was not provided in production. Auto-generated cryptographically secure runtime JWT_SECRET.');
-    } else {
+  if (isProd) {
+    // In production, secrets and database configuration must be explicitly provided and valid.
+    // Auto-generating secrets at runtime in production is prohibited to ensure multi-instance integrity.
+    validateEnvironment();
+    validateStartupEnvironment();
+    await ensureDatabaseReady();
+  } else {
+    // Local development/test: initialize dev fallbacks if unset
+    if (!process.env.JWT_SECRET) {
       process.env.JWT_SECRET = 'local-development-fallback-secret-ruangtenang-key-32';
       console.warn('[DEV NOTICE] Using development JWT_SECRET.');
     }
-  }
-
-  const rawEncKey = process.env.DATA_ENCRYPTION_KEY || process.env.ENCRYPTION_KEY;
-  if (!rawEncKey || rawEncKey.length < 32) {
-    if (isProd) {
-      const autoKey = crypto.randomBytes(32).toString('hex');
-      process.env.ENCRYPTION_KEY = autoKey;
-      process.env.DATA_ENCRYPTION_KEY = autoKey;
-      console.warn('[SECURITY NOTICE] ENCRYPTION_KEY was not provided in production. Auto-generated cryptographically secure runtime ENCRYPTION_KEY.');
-    } else {
+    const rawEncKey = process.env.DATA_ENCRYPTION_KEY || process.env.ENCRYPTION_KEY;
+    if (!rawEncKey) {
       process.env.ENCRYPTION_KEY = 'local-dev-aes-encryption-key-ruangtenang-32-chars-long';
       process.env.DATA_ENCRYPTION_KEY = process.env.ENCRYPTION_KEY;
       console.warn('[DEV NOTICE] Using development ENCRYPTION_KEY.');
     }
-  }
+    if (!process.env.DATABASE_URL) {
+      process.env.DATABASE_URL = 'file:./prisma/ruangtenang_sqlite.db';
+    }
 
-  if (!process.env.DATABASE_URL) {
-    process.env.DATABASE_URL = 'file:./prisma/ruangtenang_sqlite.db';
-  }
+    try {
+      validateEnvironment();
+      validateStartupEnvironment();
+    } catch (envErr: any) {
+      console.warn('[STARTUP CONFIG] Environment validation notice (dev):', envErr?.message || envErr);
+    }
 
-  try {
-    validateEnvironment();
-    validateStartupEnvironment();
-  } catch (envErr: any) {
-    console.warn('[STARTUP CONFIG] Environment validation notice:', envErr?.message || envErr);
-  }
-
-  try {
-    await ensureDatabaseReady();
-  } catch (dbErr: any) {
-    console.warn('[STARTUP DATABASE] Database readiness notice:', dbErr?.message || dbErr);
+    try {
+      await ensureDatabaseReady();
+    } catch (dbErr: any) {
+      console.warn('[STARTUP DATABASE] Database readiness notice (dev):', dbErr?.message || dbErr);
+    }
   }
 
   const app = express();
@@ -97,7 +91,9 @@ async function startServer() {
   // CORS Exact Allowlist Setup
   const allowedOrigins = new Set<string>();
   if (process.env.APP_ORIGIN) {
-    allowedOrigins.add(process.env.APP_ORIGIN.trim().toLowerCase());
+    process.env.APP_ORIGIN.split(',').forEach(o => {
+      if (o.trim()) allowedOrigins.add(o.trim().toLowerCase());
+    });
   }
   if (process.env.CORS_ALLOWED_ORIGINS) {
     process.env.CORS_ALLOWED_ORIGINS.split(',').forEach(o => {
@@ -123,57 +119,68 @@ async function startServer() {
       
       const lowerOrigin = origin.toLowerCase();
 
-      // Always allow AI Studio preview/deploy domains so the app works regardless of env vars
+      // Strict allowlist checking in production
+      if (isProd) {
+        if (allowedOrigins.has(lowerOrigin)) {
+          return callback(null, true);
+        }
+        return callback(null, false);
+      }
+
+      // Development / staging / preview convenience
       const isPlatformDomain = lowerOrigin.endsWith('.run.app') ||
                                lowerOrigin.endsWith('.ai.studio') ||
-                               lowerOrigin === 'https://ai.studio';
+                               lowerOrigin === 'https://ai.studio' ||
+                               lowerOrigin.endsWith('.google.com') ||
+                               lowerOrigin.endsWith('.google.dev');
 
-      if (isPlatformDomain || allowedOrigins.has(lowerOrigin)) {
-        return callback(null, true);
-      }
-
-      // Production strict match fallback
-      if (isProd) {
-         // Return false to block CORS headers without throwing a 500 error
-         return callback(null, false);
-      }
-
-      // Development / test: Allow local preview
       const isDevAllowed = lowerOrigin.includes('localhost') ||
                            lowerOrigin.includes('127.0.0.1');
 
-      if (isDevAllowed) {
+      if (isPlatformDomain || isDevAllowed || allowedOrigins.has(lowerOrigin)) {
         return callback(null, true);
       }
       
-      // Default block without 500 error
       return callback(null, false);
     },
     credentials: true,
   }));
 
-  // Frame ancestors (Clickjacking Protection)
-  const frameAncestorsList = [
-    "'self'",
-    "https://*.google.com",
-    "https://*.google.dev",
-    "https://*.run.app",
-    "https://*.studio",
-    "https://*.ai.studio",
-    "https://ai.studio",
-    ...(process.env.APP_ORIGIN ? [process.env.APP_ORIGIN.trim()] : [])
+  const trustedOriginsList = [
+    ...(process.env.APP_ORIGIN ? process.env.APP_ORIGIN.split(',').map(o => o.trim()).filter(Boolean) : []),
+    ...(process.env.CORS_ALLOWED_ORIGINS ? process.env.CORS_ALLOWED_ORIGINS.split(',').map(o => o.trim()).filter(Boolean) : []),
   ];
 
-  const connectSrcList = [
-    "'self'", 
-    "https://generativelanguage.googleapis.com", 
-    "https://*.run.app", 
-    "https://*.ai.studio", 
-    "https://ai.studio", 
-    "ws:", 
-    "wss:",
-    ...(process.env.APP_ORIGIN ? [process.env.APP_ORIGIN.trim()] : [])
-  ];
+  // Frame ancestors (Clickjacking Protection)
+  // In production, strictly restrict to exact trusted origins. Wildcard platform domains only in dev/staging.
+  const frameAncestorsList = isProd
+    ? ["'self'", ...trustedOriginsList]
+    : [
+        "'self'",
+        "https://*.google.com",
+        "https://*.google.dev",
+        "https://*.run.app",
+        "https://*.ai.studio",
+        "https://ai.studio",
+        ...trustedOriginsList
+      ];
+
+  const connectSrcList = isProd
+    ? [
+        "'self'", 
+        "https://generativelanguage.googleapis.com", 
+        ...trustedOriginsList,
+      ]
+    : [
+        "'self'", 
+        "https://generativelanguage.googleapis.com", 
+        "https://*.run.app", 
+        "https://*.ai.studio", 
+        "https://ai.studio", 
+        "ws:", 
+        "wss:",
+        ...trustedOriginsList
+      ];
 
   app.use(helmet({
     contentSecurityPolicy: {
@@ -181,8 +188,8 @@ async function startServer() {
         defaultSrc: ["'self'"],
         objectSrc: ["'none'"],
         baseUri: ["'self'"],
-        scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
-        scriptSrcAttr: ["'unsafe-inline'"],
+        scriptSrc: ["'self'", "'unsafe-inline'"],
+        scriptSrcAttr: ["'none'"],
         styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
         fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
         imgSrc: ["'self'", "data:", "blob:", "https://images.unsplash.com", "https://api.dicebear.com", "https://*.google.com", "https://*.googleapis.com", "https://*.googleusercontent.com"],
@@ -191,10 +198,14 @@ async function startServer() {
         workerSrc: ["'self'", "blob:"]
       }
     },
-    frameguard: false,
+    // Clickjacking protection: frameguard enforces SAMEORIGIN for legacy clients in production
+    frameguard: isProd ? { action: 'sameorigin' } : false,
+    // COEP disabled with explicit documentation: external CDN assets (Google Fonts, Unsplash, Dicebear) do not serve CORP headers
     crossOriginEmbedderPolicy: false,
-    crossOriginOpenerPolicy: false,
-    crossOriginResourcePolicy: false,
+    // COOP set to same-origin-allow-popups to isolate window context while supporting OAuth/external popup workflows
+    crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
+    // CORP set to same-origin to prevent cross-origin resource theft
+    crossOriginResourcePolicy: { policy: 'same-origin' },
     hsts: isProd ? { maxAge: 31536000, includeSubDomains: true, preload: true } : false,
   }));
 
@@ -388,10 +399,11 @@ async function startServer() {
       const normalizedPath = req.path.toLowerCase();
       if (
         normalizedPath.endsWith('.cjs') ||
-        normalizedPath.endsWith('.cjs.map') ||
         normalizedPath.endsWith('.map') ||
-        normalizedPath.endsWith('.env') ||
+        normalizedPath.includes('.env') ||
         normalizedPath.endsWith('.prisma') ||
+        normalizedPath.includes('/prisma') ||
+        normalizedPath.includes('schema.') ||
         normalizedPath.endsWith('.ts') ||
         normalizedPath.includes('server.') ||
         normalizedPath.includes('database.')

@@ -98,7 +98,7 @@ export interface Appointment {
   studentName: string;
   studentNIM?: string;
   studentEmail: string;
-  studentPhone: string;
+  studentPhone?: string;
   date: string;
   timeSlot: string;
   timezone?: "WIB" | "WITA" | "WIT";

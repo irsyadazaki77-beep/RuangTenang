@@ -304,7 +304,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
         {showMobileDetail && (
           <button 
             onClick={() => setShowMobileDetail(false)} 
-            className="md:hidden flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-teal-600 hover:text-teal-700 px-3 py-2 mb-2 rounded-lg bg-teal-50 hover:bg-teal-100 cursor-pointer transition-all self-start"
+            className="md:hidden flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-teal-600 hover:text-teal-700 px-3.5 py-2 mb-2 rounded-lg bg-teal-50 hover:bg-teal-100 cursor-pointer transition-all self-start min-h-[44px]"
           >
             <ChevronLeft className="w-4 h-4" /> Kembali ke Daftar Pengaturan
           </button>
@@ -1169,9 +1169,10 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
           <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-sm overflow-hidden p-5 space-y-4 font-sans relative">
             <button 
               onClick={() => setShowDevModal(false)}
-              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1 rounded-lg transition"
+              className="absolute top-3 right-3 text-slate-400 hover:text-slate-600 p-1.5 rounded-lg transition min-h-[44px] min-w-[44px] flex items-center justify-center cursor-pointer"
+              aria-label="Tutup Dialog Verifikasi"
             >
-              <X className="w-4 h-4" />
+              <X className="w-5 h-5" />
             </button>
 
             <div className="flex items-center gap-3">
@@ -1211,7 +1212,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                     placeholder="Masukkan password..."
                     autoFocus
                     required
-                    className="w-full pl-9 pr-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                    className="w-full pl-9 pr-3 py-2 text-base sm:text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 min-h-[44px] sm:min-h-[38px]"
                   />
                 </div>
               </div>
@@ -1220,14 +1221,14 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                 <button
                   type="button"
                   onClick={() => setShowDevModal(false)}
-                  className="flex-1 py-2 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-lg text-xs font-medium transition"
+                  className="flex-1 py-2 min-h-[44px] sm:min-h-[38px] bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-lg text-xs font-medium transition cursor-pointer flex items-center justify-center"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
                   disabled={loading || !devPassword}
-                  className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold shadow-sm transition disabled:opacity-50"
+                  className="flex-1 py-2 min-h-[44px] sm:min-h-[38px] bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold shadow-sm transition disabled:opacity-50 cursor-pointer flex items-center justify-center"
                 >
                   {loading ? 'Memverifikasi...' : 'Verifikasi & Aktifkan'}
                 </button>

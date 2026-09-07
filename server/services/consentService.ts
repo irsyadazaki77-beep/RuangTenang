@@ -66,10 +66,10 @@ export class ConsentService {
    */
   async canUseAI(userId: string): Promise<boolean> {
     if (!userId || userId === 'guest') {
-      return true;
+      return false;
     }
     const c = await this.getUserConsents(userId);
-    return c.consentForAI;
+    return Boolean(c.consentForAI);
   }
 
   /**
@@ -269,20 +269,21 @@ export class ConsentService {
 
   /**
    * Strict Opt-In Default Representation
+   * Strictly FALSE for all sensitive processing until explicit consent is given.
    */
   private getDefaultConsents(userId: string): UserConsentDTO {
     return {
       userId,
-      consentForAI: true,
-      consentForAIMood: true,
-      consentForAIScreening: true,
-      consentForAIMemory: true,
-      consentForAIJournal: true,
-      consentForEmergencySOS: true,
-      consentForCounselorSummary: true,
+      consentForAI: false,
+      consentForAIMood: false,
+      consentForAIScreening: false,
+      consentForAIMemory: false,
+      consentForAIJournal: false,
+      consentForEmergencySOS: false,
+      consentForCounselorSummary: false,
       consentForCounselorSharing: false,
-      consentForTelemetry: true,
-      consentForAnalytics: true,
+      consentForTelemetry: false,
+      consentForAnalytics: false,
       consentVersion: 'v1.3-2026',
       policyVersion: 'v2.0-PDP-2026',
       retentionDays: 90,

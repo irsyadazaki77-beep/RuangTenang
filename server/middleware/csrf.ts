@@ -63,15 +63,19 @@ export function csrfProtection(req: Request, res: Response, next: NextFunction) 
     // Resolve configured allowed origins
     const allowedOrigins = new Set<string>();
     if (process.env.APP_ORIGIN) {
-      allowedOrigins.add(process.env.APP_ORIGIN.trim().toLowerCase());
+      process.env.APP_ORIGIN.split(',').forEach(o => {
+        if (o.trim()) allowedOrigins.add(o.trim().toLowerCase());
+      });
     }
     if (process.env.CORS_ALLOWED_ORIGINS) {
       process.env.CORS_ALLOWED_ORIGINS.split(',').forEach(o => {
         if (o.trim()) allowedOrigins.add(o.trim().toLowerCase());
       });
     }
-    allowedOrigins.add('https://ruangtenang.ai.studio');
-    allowedOrigins.add('https://ruangtenang.ui.ac.id');
+    if (!isProd) {
+      allowedOrigins.add('https://ruangtenang.ai.studio');
+      allowedOrigins.add('https://ruangtenang.ui.ac.id');
+    }
 
     // Exact host match
     const isSameHost = host && (sourceHost === host.toLowerCase() || sourceHost.split(':')[0] === host.toLowerCase().split(':')[0]);
@@ -84,7 +88,12 @@ export function csrfProtection(req: Request, res: Response, next: NextFunction) 
                              sourceHostname.endsWith('.google.com') ||
                              sourceHostname.endsWith('.google.dev');
 
-    if (isSameHost || isExplicitlyAllowed || isPlatformDomain || isLocalhost) {
+    // In production, strictly enforce same host or explicit allowlist. Wildcard platform domains only allowed in dev/staging.
+    const isMatch = isProd
+      ? (isSameHost || isExplicitlyAllowed)
+      : (isSameHost || isExplicitlyAllowed || isPlatformDomain || isLocalhost);
+
+    if (isMatch) {
       return next();
     }
 

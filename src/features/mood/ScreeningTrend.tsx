@@ -335,12 +335,15 @@ export const ScreeningTrend: React.FC<ScreeningTrendProps> = ({
             
             <div className="relative h-full w-full flex items-end justify-between z-10">
               {moodLogs.slice(0, 14).reverse().map((log, i) => {
-                const sleepHeight = Math.min(100, (log.sleepHours / 12) * 100);
+                const hasSleep = log.sleepHours !== null && log.sleepHours !== undefined;
+                const sleepHeight = hasSleep ? Math.min(100, ((log.sleepHours as number) / 12) * 100) : 0;
                 const moodY = 100 - ((log.mood - 1) / 4) * 100; // 0 (top) to 100 (bottom) based on 1-5 scale
                 
                 return (
                   <div key={log.id} className="relative flex flex-col items-center flex-1 h-full group">
-                    <div className="absolute bottom-0 w-4 sm:w-6 bg-indigo-100 rounded-t-sm" style={{ height: `${sleepHeight}%` }}></div>
+                    {hasSleep && (
+                      <div className="absolute bottom-0 w-4 sm:w-6 bg-indigo-100 rounded-t-sm" style={{ height: `${sleepHeight}%` }}></div>
+                    )}
                     <div 
                       className="absolute w-2 h-2 rounded-full bg-teal-500 z-20 shadow border border-white transition-all group-hover:scale-150" 
                       style={{ top: `${moodY}%` }}
@@ -352,7 +355,7 @@ export const ScreeningTrend: React.FC<ScreeningTrendProps> = ({
                     
                     {/* Tooltip */}
                     <div className="opacity-0 group-hover:opacity-100 absolute -top-8 bg-slate-800 text-white text-[10px] p-1.5 rounded whitespace-nowrap z-30 transition-opacity">
-                      Tidur: {log.sleepHours} Jam | Mood: {log.mood}/5
+                      {hasSleep ? `Tidur: ${log.sleepHours} Jam | ` : ''}Mood: {log.mood}/5
                     </div>
                   </div>
                 );

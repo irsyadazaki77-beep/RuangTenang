@@ -5,7 +5,7 @@ export const appointmentBookingSchema = z.object({
   studentName: z.string().min(2, 'Nama minimal 2 karakter').max(100, 'Nama terlalu panjang'),
   studentNIM: z.string().min(5, 'NIM minimal 5 karakter').max(30, 'NIM terlalu panjang'),
   studentEmail: z.string().email('Format email tidak valid (contoh: nama@kampus.ac.id)'),
-  studentPhone: z.string().min(10, 'Nomor HP minimal 10 digit').max(15, 'Nomor HP terlalu panjang'),
+  studentPhone: z.string().min(10, 'Nomor HP minimal 10 digit').max(15, 'Nomor HP terlalu panjang').optional().or(z.literal('')),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Format tanggal tidak valid (YYYY-MM-DD)'),
   timeSlot: z.string().min(2, 'Pilih slot jam konseling'),
   timezone: z.enum(['WIB', 'WITA', 'WIT']),

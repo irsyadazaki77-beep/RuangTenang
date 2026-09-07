@@ -102,12 +102,12 @@ export const CounselorDirectory: React.FC<CounselorDirectoryProps> = ({
               placeholder="Cari nama konselor, kampus, atau topik..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full surface-page rounded-lg pl-10 pr-3.5 py-2 text-xs sm:text-sm text-primary placeholder-slate-400 border border-default focus:outline-none focus:border-teal-500/50 focus:ring-2 focus:ring-teal-500/15 transition-all min-h-[42px]"
+              className="w-full surface-page rounded-lg pl-10 pr-3.5 py-2 text-xs sm:text-sm text-primary placeholder-slate-400 border border-default focus:outline-none focus:border-teal-500/50 focus:ring-2 focus:ring-teal-500/15 transition-all min-h-[44px] sm:min-h-[42px]"
             />
           </div>
 
           <div className="flex items-center gap-2">
-            <select value={selectedConcern} onChange={(e) => setSelectedConcern(e.target.value)} className="surface-page border border-default text-primary text-xs sm:text-sm rounded-lg px-2.5 py-2 focus:outline-none focus:border-teal-500 min-h-[42px]">
+            <select value={selectedConcern} onChange={(e) => setSelectedConcern(e.target.value)} className="surface-page border border-default text-primary text-xs sm:text-sm rounded-lg px-2.5 py-2 focus:outline-none focus:border-teal-500 min-h-[44px] sm:min-h-[42px]">
               {CONCERN_CATEGORIES.map((cat) => (
                 <option key={cat.id} value={cat.id}>Kebutuhan: {cat.label === 'Semua' ? 'Semua' : cat.label}</option>
               ))}
@@ -115,7 +115,7 @@ export const CounselorDirectory: React.FC<CounselorDirectoryProps> = ({
             
             <button
               onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
-              className={`p-2 sm:px-3 rounded-lg border transition-all cursor-pointer min-h-[42px] flex items-center gap-1.5 text-xs sm:text-sm font-medium ${
+              className={`p-2.5 sm:px-3 rounded-lg border transition-all cursor-pointer min-h-[44px] sm:min-h-[42px] flex items-center gap-1.5 text-xs sm:text-sm font-medium ${
                 showAdvancedFilters ? 'bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-400 border-teal-200 dark:border-teal-800' : 'surface-page border-default text-secondary hover:text-primary'
               }`}
             >
@@ -128,19 +128,19 @@ export const CounselorDirectory: React.FC<CounselorDirectoryProps> = ({
         {/* Advanced Filters */}
         {showAdvancedFilters && (
           <div className="flex flex-wrap gap-2 pt-2.5 border-t border-default animate-in slide-in-from-top-2 fade-in">
-            <select value={methodFilter} onChange={(e) => setMethodFilter(e.target.value)} className="surface-card border border-default text-primary text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-teal-500 min-h-[38px]">
+            <select value={methodFilter} onChange={(e) => setMethodFilter(e.target.value)} className="surface-card border border-default text-primary text-xs rounded-lg px-2.5 py-2 focus:outline-none focus:border-teal-500 min-h-[44px] sm:min-h-[38px]">
               <option value="Semua">Semua Metode</option>
               <option value="video_call">Video Call</option>
               <option value="in_person">Tatap Muka</option>
             </select>
 
-            <select value={costFilter} onChange={(e) => setCostFilter(e.target.value)} className="surface-card border border-default text-primary text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-teal-500 min-h-[38px]">
+            <select value={costFilter} onChange={(e) => setCostFilter(e.target.value)} className="surface-card border border-default text-primary text-xs rounded-lg px-2.5 py-2 focus:outline-none focus:border-teal-500 min-h-[44px] sm:min-h-[38px]">
               <option value="Semua">Semua Biaya</option>
               <option value="Gratis">Gratis (Mahasiswa)</option>
               <option value="Berbayar">Berbayar</option>
             </select>
 
-            <select value={campusFilter} onChange={(e) => setCampusFilter(e.target.value)} className="surface-card border border-default text-primary text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-teal-500 min-h-[38px]">
+            <select value={campusFilter} onChange={(e) => setCampusFilter(e.target.value)} className="surface-card border border-default text-primary text-xs rounded-lg px-2.5 py-2 focus:outline-none focus:border-teal-500 min-h-[44px] sm:min-h-[38px]">
               <option value="Semua">Semua Kampus</option>
               <option value="UI">UI</option>
               <option value="ITB">ITB</option>
@@ -148,7 +148,7 @@ export const CounselorDirectory: React.FC<CounselorDirectoryProps> = ({
               <option value="UNAIR">UNAIR</option>
             </select>
             
-            <select value={availabilityFilter} onChange={(e) => setAvailabilityFilter(e.target.value)} className="surface-card border border-default text-primary text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-teal-500 min-h-[38px]">
+            <select value={availabilityFilter} onChange={(e) => setAvailabilityFilter(e.target.value)} className="surface-card border border-default text-primary text-xs rounded-lg px-2.5 py-2 focus:outline-none focus:border-teal-500 min-h-[44px] sm:min-h-[38px]">
               <option value="Semua">Semua Ketersediaan</option>
               <option value="Hari Ini">Tersedia Hari Ini</option>
             </select>
@@ -164,7 +164,7 @@ export const CounselorDirectory: React.FC<CounselorDirectoryProps> = ({
                 setCampusFilter("Semua");
                 setAvailabilityFilter("Semua");
               }}
-              className="px-3 py-1.5 text-rose-600 dark:text-rose-400 text-xs font-medium hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg transition-colors cursor-pointer"
+              className="px-3 py-2 text-rose-600 dark:text-rose-400 text-xs font-medium hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg transition-colors cursor-pointer min-h-[44px] sm:min-h-[36px] flex items-center"
             >
               Reset
             </button>
@@ -250,14 +250,14 @@ export const CounselorDirectory: React.FC<CounselorDirectoryProps> = ({
                 <div className="flex items-center gap-2 pt-0.5">
                   <button
                     onClick={() => setSelectedCounselorModal(counselor)}
-                    className="px-3 py-2 surface-muted border border-default hover:bg-slate-100 dark:hover:bg-slate-800 text-primary text-xs sm:text-sm font-medium rounded-lg transition-all cursor-pointer min-h-[38px] sm:min-h-[36px]"
+                    className="px-3 py-2 surface-muted border border-default hover:bg-slate-100 dark:hover:bg-slate-800 text-primary text-xs sm:text-sm font-medium rounded-lg transition-all cursor-pointer min-h-[44px] sm:min-h-[36px]"
                   >
                     Profil
                   </button>
 
                   <button
                     onClick={() => onSelectCounselorForBooking(counselor)}
-                    className="flex-1 py-2 bg-teal-600 hover:bg-teal-700 text-white font-medium text-xs sm:text-sm rounded-lg shadow-3xs transition-all flex items-center justify-center gap-1.5 cursor-pointer min-h-[38px] sm:min-h-[36px]"
+                    className="flex-1 py-2 bg-teal-600 hover:bg-teal-700 text-white font-medium text-xs sm:text-sm rounded-lg shadow-3xs transition-all flex items-center justify-center gap-1.5 cursor-pointer min-h-[44px] sm:min-h-[36px]"
                   >
                     <span>Jadwalkan</span>
                   </button>
@@ -274,9 +274,10 @@ export const CounselorDirectory: React.FC<CounselorDirectoryProps> = ({
           <div className="surface-card border border-default rounded-2xl max-w-lg w-full p-4 sm:p-5 shadow-xl space-y-3.5 relative text-primary animate-fade-in my-4 max-h-[92vh] overflow-y-auto">
             <button
               onClick={() => setSelectedCounselorModal(null)}
-              className="absolute top-3 right-3 p-1.5 text-secondary hover:text-primary rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer min-h-[36px] min-w-[36px] flex items-center justify-center"
+              className="absolute top-3 right-3 p-1.5 text-secondary hover:text-primary rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer min-h-[44px] min-w-[44px] sm:min-h-[36px] sm:min-w-[36px] flex items-center justify-center"
+              aria-label="Tutup Detail Konselor"
             >
-              <X className="w-4 h-4" />
+              <X className="w-5 h-5 sm:w-4 sm:h-4" />
             </button>
 
             {/* Profile Header */}
@@ -397,7 +398,7 @@ export const CounselorDirectory: React.FC<CounselorDirectoryProps> = ({
                   setSelectedCounselorModal(null);
                   onSelectCounselorForBooking(counselor);
                 }}
-                className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs sm:text-sm rounded-lg shadow-3xs transition-all flex items-center gap-1.5 cursor-pointer min-h-[38px] sm:min-h-[36px]"
+                className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs sm:text-sm rounded-lg shadow-3xs transition-all flex items-center justify-center gap-1.5 cursor-pointer min-h-[44px] sm:min-h-[36px]"
               >
                 <span>Pilih & Jadwalkan</span>
                 <ArrowRight className="w-3.5 h-3.5" />

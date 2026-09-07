@@ -84,7 +84,7 @@ export function ChatHeader({
         {/* Theme Toggle Button */}
         <button 
           onClick={toggleTheme} 
-          className="p-1.5 text-secondary hover:text-primary hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer min-w-[36px] min-h-[36px] md:min-w-[32px] md:min-h-[32px] flex items-center justify-center" 
+          className="p-1.5 text-secondary hover:text-primary hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer min-w-[44px] min-h-[44px] sm:min-w-[36px] sm:min-h-[36px] flex items-center justify-center" 
           aria-label="Ganti Tema Tampilan"
           title={actualTheme === 'dark' ? 'Beralih ke Mode Terang' : 'Beralih ke Mode Gelap'}
         >
@@ -94,7 +94,7 @@ export function ChatHeader({
         {/* Chat Parameters Popover Toggle */}
         <button
           onClick={() => setActivePlugin(activePlugin === 'chat_settings' ? null : 'chat_settings')}
-          className={`p-1.5 rounded-lg transition-colors cursor-pointer min-w-[36px] min-h-[36px] md:min-w-[32px] md:min-h-[32px] flex items-center justify-center ${
+          className={`p-1.5 rounded-lg transition-colors cursor-pointer min-w-[44px] min-h-[44px] sm:min-w-[36px] sm:min-h-[36px] flex items-center justify-center ${
             activePlugin === 'chat_settings'
               ? 'bg-slate-200 dark:bg-slate-700 text-primary'
               : 'text-secondary hover:text-primary hover:bg-slate-100 dark:hover:bg-slate-800'

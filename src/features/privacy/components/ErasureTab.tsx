@@ -19,20 +19,20 @@ export const ErasureTab: React.FC<ErasureTabProps> = ({
   handleExecuteErasure
 }) => {
   return (
-    <div className="space-y-4 border border-rose-200 bg-rose-50/30 p-5 rounded-2xl">
+    <div className="space-y-3.5 border border-rose-200 dark:border-rose-900/50 bg-rose-50/40 dark:bg-rose-950/20 p-4 sm:p-5 rounded-2xl">
       <div>
-        <h3 className="text-sm font-bold text-rose-900 flex items-center gap-2">
-          <Trash2 className="w-4 h-4 text-rose-600" />
+        <h3 className="text-sm font-bold text-rose-900 dark:text-rose-300 flex items-center gap-2">
+          <Trash2 className="w-4 h-4 text-rose-600 dark:text-rose-400" />
           Hak untuk Dilupakan (Right to be Forgotten)
         </h3>
-        <p className="text-xs text-rose-800 mt-1">
+        <p className="text-xs text-rose-800 dark:text-rose-400/90 mt-1">
           Tindakan ini menghapus <strong>seluruh rekam jejak secara permanen</strong> tanpa dapat dikembalikan.
         </p>
       </div>
 
-      <div className="bg-white border border-rose-200 p-4 rounded-xl text-xs text-slate-700 space-y-2">
-        <strong className="text-rose-900 block font-bold">Data yang Akan Dihapus Permanen:</strong>
-        <ul className="list-disc list-inside space-y-1 text-slate-600">
+      <div className="surface-card border border-rose-200 dark:border-rose-900/40 p-3.5 rounded-xl text-xs space-y-2">
+        <strong className="text-rose-900 dark:text-rose-300 block font-semibold">Data yang Akan Dihapus Permanen:</strong>
+        <ul className="list-disc list-inside space-y-1 text-secondary">
           <li>Akun pengguna dan kredensial login</li>
           <li>Seluruh riwayat sesi aktif dan login history</li>
           <li>Seluruh riwayat skrining (PHQ-9 & GAD-7)</li>
@@ -43,17 +43,17 @@ export const ErasureTab: React.FC<ErasureTabProps> = ({
       </div>
 
       {/* Option to clear only activity history without deleting account */}
-      <div className="p-4 bg-white border border-slate-200 rounded-xl space-y-2">
-        <div className="flex items-center justify-between">
+      <div className="p-3.5 surface-card border border-default rounded-xl space-y-2">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
           <div>
-            <h4 className="text-xs font-bold text-slate-800">Bersihkan Riwayat Aktivitas Saja</h4>
-            <p className="text-[11px] text-slate-500">Hapus riwayat chat, mood log, dan hasil skrining tanpa menghapus akun atau jadwal konseling Anda.</p>
+            <h4 className="text-xs font-bold text-primary">Bersihkan Riwayat Aktivitas Saja</h4>
+            <p className="text-[11px] text-secondary mt-0.5">Hapus riwayat chat, mood log, dan hasil skrining tanpa menghapus akun atau jadwal konseling Anda.</p>
           </div>
           <button
             type="button"
             disabled={loading}
             onClick={handleClearActivityData}
-            className="px-3 py-1.5 bg-slate-100 hover:bg-rose-50 hover:text-rose-700 border border-slate-300 text-slate-700 rounded-lg text-xs font-bold transition shrink-0 ml-3"
+            className="px-3 py-1.5 min-h-[40px] surface-muted hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-600 border border-default text-secondary rounded-xl text-xs font-semibold transition shrink-0 cursor-pointer active:scale-[0.98]"
           >
             Bersihkan Aktivitas
           </button>
@@ -61,13 +61,13 @@ export const ErasureTab: React.FC<ErasureTabProps> = ({
       </div>
 
       {erasureStatus && (
-        <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-900">
+        <div className="p-3 bg-teal-50 dark:bg-teal-950/30 border border-teal-200 dark:border-teal-900/50 rounded-xl text-xs text-teal-900 dark:text-teal-300">
           Status Eksekusi Terakhir: <strong>{erasureStatus.status}</strong> • Total {erasureStatus.erasedRecordsCount} item dibersihkan pada {new Date(erasureStatus.completedAt).toLocaleString('id-ID')}
         </div>
       )}
 
-      <div className="space-y-2 pt-2">
-        <label className="block text-xs font-bold text-rose-900">
+      <div className="space-y-1.5 pt-1">
+        <label className="block text-xs font-bold text-rose-900 dark:text-rose-300">
           Ketik <span className="underline select-all">HAPUS SEMUA DATA SAYA</span> untuk mengonfirmasi:
         </label>
         <input
@@ -75,7 +75,7 @@ export const ErasureTab: React.FC<ErasureTabProps> = ({
           value={deleteConfirmInput}
           onChange={(e) => setDeleteConfirmInput(e.target.value)}
           placeholder="HAPUS SEMUA DATA SAYA"
-          className="w-full px-3 py-2 text-xs border border-rose-300 rounded-lg focus:ring-2 focus:ring-rose-500 focus:outline-none"
+          className="w-full px-3 py-2 text-base sm:text-xs surface-card border border-rose-300 dark:border-rose-900/60 rounded-xl text-primary focus:ring-1 focus:ring-rose-500 focus:outline-none min-h-[44px]"
         />
       </div>
 
@@ -83,7 +83,7 @@ export const ErasureTab: React.FC<ErasureTabProps> = ({
         type="button"
         disabled={loading || deleteConfirmInput.trim() !== 'HAPUS SEMUA DATA SAYA'}
         onClick={handleExecuteErasure}
-        className="w-full py-2.5 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition shadow-sm flex items-center justify-center gap-2"
+        className="w-full py-2.5 min-h-[44px] bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white rounded-xl text-xs sm:text-sm font-semibold transition shadow-3xs flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98]"
       >
         <Trash2 className="w-4 h-4" />
         <span>{loading ? 'Memproses Penghapusan...' : 'Eksekusi Hapus Semua Data Saya Permanen'}</span>

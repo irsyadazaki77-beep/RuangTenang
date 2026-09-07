@@ -241,8 +241,11 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
     .slice(0, 3)
     .map(([emotion]) => emotion);
 
-  const averageSleep = moodLogs.length > 0
-    ? (moodLogs.reduce((acc, log) => acc + log.sleepHours, 0) / moodLogs.length).toFixed(1)
+  const logsWithSleep = moodLogs.filter(
+    log => log.sleepHours !== null && log.sleepHours !== undefined && typeof log.sleepHours === 'number' && !isNaN(log.sleepHours)
+  );
+  const averageSleep = logsWithSleep.length > 0
+    ? (logsWithSleep.reduce((acc, log) => acc + (log.sleepHours as number), 0) / logsWithSleep.length).toFixed(1)
     : 'N/A';
 
   // Dynamic grid generation for 7, 30, or 90 days
@@ -307,7 +310,7 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
       showToast('Wawasan pola mood lokal dimuat.');
       setAiInsight({
         summary: `Catatan emosimu dalam beberapa hari terakhir memiliki rata-rata ${averageMood}/5 dengan konsistensi streak ${streakCount} hari.`,
-        patterns: ["Korelasi log menunjukkan istirahat yang cukup membantu kestabilan emosi."],
+        patterns: ["Pencatatan emosi rutin membantu mengidentifikasi dinamika suasana hati Anda secara bertahap tanpa spekulasi sebab-akibat."],
         recommendations: ["Jadwalkan 15 menit relaksasi bebas gawai di malam hari.", "Tuliskan 3 prioritas utama harian."]
       });
     } finally {
@@ -458,7 +461,7 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
                 )}
                 <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover:block bg-slate-950 text-white border border-slate-700 px-2.5 py-1.5 rounded-lg text-[10px] whitespace-nowrap z-50 shadow-xl pointer-events-none">
                   <p className="font-bold text-teal-300">{cell.label}</p>
-                  <p>{cell.log ? `Mood: ${MOOD_OPTIONS[cell.log.mood - 1].label} (${cell.log.sleepHours} Jam)` : 'Tidak ada catatan'}</p>
+                  <p>{cell.log ? `Mood: ${MOOD_OPTIONS[cell.log.mood - 1].label}${cell.log.sleepHours != null ? ` (${cell.log.sleepHours} Jam)` : ''}` : 'Tidak ada catatan'}</p>
                   {cell.log?.emotions?.length ? <p className="text-[9px] text-slate-400 mt-0.5">Emosi: {cell.log.emotions.join(', ')}</p> : null}
                   {cell.log?.factors?.length ? <p className="text-[9px] text-slate-400 mt-0.5">Faktor: {cell.log.factors.join(', ')}</p> : null}
                 </div>
@@ -847,10 +850,12 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
                         })}
                       </div>
 
-                      <div className="flex items-center gap-1.5 text-slate-500 font-medium">
-                        <Moon className="w-3 h-3 text-slate-400" />
-                        <span>{log.sleepHours} Jam ({log.sleepQuality})</span>
-                      </div>
+                      {log.sleepHours != null && (
+                        <div className="flex items-center gap-1.5 text-slate-500 font-medium">
+                          <Moon className="w-3 h-3 text-slate-400" />
+                          <span>{log.sleepHours} Jam {log.sleepQuality ? `(${log.sleepQuality})` : ''}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 );

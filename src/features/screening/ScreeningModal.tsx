@@ -320,9 +320,9 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
           <button
             onClick={onClose}
             aria-label="Tutup"
-            className="absolute top-3 right-3 p-1.5 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-all z-10 cursor-pointer min-h-[36px] min-w-[36px] flex items-center justify-center"
+            className="absolute top-3 right-3 p-1.5 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-all z-10 cursor-pointer min-h-[44px] min-w-[44px] sm:min-h-[36px] sm:min-w-[36px] flex items-center justify-center"
           >
-            <X className="w-4 h-4" />
+            <X className="w-5 h-5 sm:w-4 sm:h-4" />
           </button>
         )}
 
@@ -378,7 +378,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
             <div className="flex justify-end pt-3 border-t border-default">
               <button
                 onClick={() => setStep('phq9')}
-                className="btn-primary flex items-center gap-1.5 px-4 py-2 min-h-[38px] sm:min-h-[36px] rounded-lg text-xs sm:text-sm cursor-pointer"
+                className="btn-primary flex items-center justify-center gap-1.5 px-4 py-2 min-h-[44px] sm:min-h-[36px] rounded-lg text-xs sm:text-sm cursor-pointer"
               >
                 <span>Mulai Cek Kondisi</span>
                 <ArrowRight className="w-3.5 h-3.5" />
@@ -410,7 +410,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
                       <button
                         key={opt.value}
                         onClick={() => handleSelectPhq9(idx, opt.value)}
-                        className={`px-2 py-1.5 min-h-[38px] sm:min-h-[36px] rounded-lg text-[11px] sm:text-xs font-medium border text-center transition-all active:scale-95 focus:outline-none focus:ring-2 focus:ring-teal-500/20 cursor-pointer ${
+                        className={`px-2 py-1.5 min-h-[44px] sm:min-h-[36px] rounded-lg text-[11px] sm:text-xs font-medium border text-center transition-all active:scale-95 focus:outline-none focus:ring-2 focus:ring-teal-500/20 cursor-pointer flex items-center justify-center ${
                           phq9Answers[idx] === opt.value
                             ? 'bg-teal-600 text-white border-teal-600 shadow-3xs'
                             : 'bg-stone-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200/60 dark:border-slate-700 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-stone-100 dark:hover:bg-slate-700/60'
@@ -427,14 +427,14 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
             <div className="flex justify-between items-center pt-3 border-t border-slate-100 dark:border-slate-800">
               <button
                 onClick={() => setStep('intro')}
-                className="px-3.5 py-1.5 min-h-[38px] sm:min-h-[36px] text-xs sm:text-sm font-medium text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-stone-50 dark:hover:bg-slate-800 rounded-lg transition-all cursor-pointer"
+                className="px-3.5 py-1.5 min-h-[44px] sm:min-h-[36px] text-xs sm:text-sm font-medium text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-stone-50 dark:hover:bg-slate-800 rounded-lg transition-all cursor-pointer flex items-center justify-center"
               >
                 Kembali
               </button>
               <button
                 disabled={!isPhq9Complete}
                 onClick={() => setStep('gad7')}
-                className={`flex items-center gap-1.5 px-4 py-2 min-h-[38px] sm:min-h-[36px] rounded-lg text-xs sm:text-sm font-medium transition-all active:scale-95 cursor-pointer ${
+                className={`flex items-center justify-center gap-1.5 px-4 py-2 min-h-[44px] sm:min-h-[36px] rounded-lg text-xs sm:text-sm font-medium transition-all active:scale-95 cursor-pointer ${
                   isPhq9Complete
                     ? 'bg-teal-600 text-white hover:bg-teal-700 shadow-3xs'
                     : 'bg-stone-50 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-slate-200/60 dark:border-slate-700 cursor-not-allowed'
@@ -470,7 +470,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
                       <button
                         key={opt.value}
                         onClick={() => handleSelectGad7(idx, opt.value)}
-                        className={`px-2 py-1.5 min-h-[38px] sm:min-h-[36px] rounded-lg text-[11px] sm:text-xs font-medium border text-center transition-all active:scale-95 focus:outline-none focus:ring-2 focus:ring-teal-500/20 cursor-pointer ${
+                        className={`px-2 py-1.5 min-h-[44px] sm:min-h-[36px] rounded-lg text-[11px] sm:text-xs font-medium border text-center transition-all active:scale-95 focus:outline-none focus:ring-2 focus:ring-teal-500/20 cursor-pointer flex items-center justify-center ${
                           gad7Answers[idx] === opt.value
                             ? 'bg-teal-600 text-white border-teal-600 shadow-3xs'
                             : 'bg-stone-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200/60 dark:border-slate-700 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-stone-100 dark:hover:bg-slate-700/60'
@@ -487,14 +487,14 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
             <div className="flex justify-between items-center pt-3 border-t border-slate-100 dark:border-slate-800">
               <button
                 onClick={() => setStep('phq9')}
-                className="px-3.5 py-1.5 min-h-[38px] sm:min-h-[36px] text-xs sm:text-sm font-medium text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-stone-50 dark:hover:bg-slate-800 rounded-lg transition-all cursor-pointer"
+                className="px-3.5 py-1.5 min-h-[44px] sm:min-h-[36px] text-xs sm:text-sm font-medium text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-stone-50 dark:hover:bg-slate-800 rounded-lg transition-all cursor-pointer flex items-center justify-center"
               >
                 Kembali
               </button>
               <button
                 onClick={calculateResults}
                 disabled={!isGad7Complete}
-                className={`flex items-center gap-1.5 px-4 py-2 min-h-[38px] sm:min-h-[36px] rounded-lg text-xs sm:text-sm font-medium transition-all active:scale-95 cursor-pointer ${
+                className={`flex items-center justify-center gap-1.5 px-4 py-2 min-h-[44px] sm:min-h-[36px] rounded-lg text-xs sm:text-sm font-medium transition-all active:scale-95 cursor-pointer ${
                   isGad7Complete
                     ? 'bg-teal-600 text-white hover:bg-teal-700 shadow-3xs'
                     : 'bg-stone-50 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-slate-200/60 dark:border-slate-700 cursor-not-allowed'
@@ -652,7 +652,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
             <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5 pt-3 border-t border-slate-100 dark:border-slate-800">
               <button
                 onClick={() => downloadReportTxt(finalResult)}
-                className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-3.5 py-1.5 min-h-[38px] sm:min-h-[36px] bg-white dark:bg-slate-800 hover:bg-stone-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-lg border border-slate-200/60 dark:border-slate-700 transition-all cursor-pointer"
+                className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-3.5 py-2 min-h-[44px] sm:min-h-[36px] bg-white dark:bg-slate-800 hover:bg-stone-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-lg border border-slate-200/60 dark:border-slate-700 transition-all cursor-pointer"
               >
                 <Download className="w-3.5 h-3.5" />
                 <span>Unduh Laporan (.txt)</span>
@@ -661,14 +661,14 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
               <div className="flex flex-col sm:flex-row w-full sm:w-auto items-center gap-2">
                 <button
                   onClick={() => setStep('intro')}
-                  className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-3.5 py-1.5 min-h-[38px] sm:min-h-[36px] bg-stone-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-semibold rounded-lg transition-all cursor-pointer"
+                  className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-3.5 py-2 min-h-[44px] sm:min-h-[36px] bg-stone-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-semibold rounded-lg transition-all cursor-pointer"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
                   <span>Tes Ulang</span>
                 </button>
                 <button
                   onClick={onClose}
-                  className="w-full sm:w-auto px-5 py-1.5 min-h-[38px] sm:min-h-[36px] bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold rounded-lg shadow-3xs transition-all cursor-pointer"
+                  className="w-full sm:w-auto px-5 py-2 min-h-[44px] sm:min-h-[36px] bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold rounded-lg shadow-3xs transition-all cursor-pointer flex items-center justify-center"
                 >
                   Selesai
                 </button>

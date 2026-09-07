@@ -47,7 +47,7 @@ export const SafetyCheckModal: React.FC<SafetyCheckModalProps> = ({
             <div className="flex gap-2">
               <button
                 onClick={() => setSafetyAssessment(prev => ({ ...prev, immediateDanger: true }))}
-                className={`flex-1 py-1 px-2.5 min-h-[38px] sm:min-h-[36px] rounded-lg text-xs font-medium border transition-all active:scale-95 cursor-pointer ${
+                className={`flex-1 py-1 px-2.5 min-h-[44px] sm:min-h-[36px] rounded-lg text-xs font-medium border transition-all active:scale-95 cursor-pointer flex items-center justify-center text-center ${
                   safetyAssessment.immediateDanger === true
                     ? 'bg-rose-600 text-white border-rose-600 shadow-3xs'
                     : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
@@ -57,7 +57,7 @@ export const SafetyCheckModal: React.FC<SafetyCheckModalProps> = ({
               </button>
               <button
                 onClick={() => setSafetyAssessment(prev => ({ ...prev, immediateDanger: false }))}
-                className={`flex-1 py-1 px-2.5 min-h-[38px] sm:min-h-[36px] rounded-lg text-xs font-medium border transition-all active:scale-95 cursor-pointer ${
+                className={`flex-1 py-1 px-2.5 min-h-[44px] sm:min-h-[36px] rounded-lg text-xs font-medium border transition-all active:scale-95 cursor-pointer flex items-center justify-center text-center ${
                   safetyAssessment.immediateDanger === false
                     ? 'bg-teal-700 text-white border-teal-700 shadow-3xs'
                     : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
@@ -74,7 +74,7 @@ export const SafetyCheckModal: React.FC<SafetyCheckModalProps> = ({
             <div className="flex gap-2">
               <button
                 onClick={() => setSafetyAssessment(prev => ({ ...prev, planOrIntent: true }))}
-                className={`flex-1 py-1 px-2.5 min-h-[38px] sm:min-h-[36px] rounded-lg text-xs font-medium border transition-all cursor-pointer ${
+                className={`flex-1 py-1 px-2.5 min-h-[44px] sm:min-h-[36px] rounded-lg text-xs font-medium border transition-all cursor-pointer flex items-center justify-center text-center ${
                   safetyAssessment.planOrIntent === true
                     ? 'bg-rose-600 text-white border-rose-600 shadow-3xs'
                     : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
@@ -84,7 +84,7 @@ export const SafetyCheckModal: React.FC<SafetyCheckModalProps> = ({
               </button>
               <button
                 onClick={() => setSafetyAssessment(prev => ({ ...prev, planOrIntent: false }))}
-                className={`flex-1 py-1 px-2.5 min-h-[38px] sm:min-h-[36px] rounded-lg text-xs font-medium border transition-all cursor-pointer ${
+                className={`flex-1 py-1 px-2.5 min-h-[44px] sm:min-h-[36px] rounded-lg text-xs font-medium border transition-all cursor-pointer flex items-center justify-center text-center ${
                   safetyAssessment.planOrIntent === false
                     ? 'bg-teal-700 text-white border-teal-700 shadow-3xs'
                     : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
@@ -101,7 +101,7 @@ export const SafetyCheckModal: React.FC<SafetyCheckModalProps> = ({
             <div className="flex gap-2">
               <button
                 onClick={() => setSafetyAssessment(prev => ({ ...prev, wantsTrustedContact: true }))}
-                className={`flex-1 py-1 px-2.5 min-h-[38px] sm:min-h-[36px] rounded-lg text-xs font-medium border transition-all cursor-pointer ${
+                className={`flex-1 py-1 px-2.5 min-h-[44px] sm:min-h-[36px] rounded-lg text-xs font-medium border transition-all cursor-pointer flex items-center justify-center text-center ${
                   safetyAssessment.wantsTrustedContact === true
                     ? 'bg-slate-800 text-white border-slate-800 shadow-3xs'
                     : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
@@ -111,7 +111,7 @@ export const SafetyCheckModal: React.FC<SafetyCheckModalProps> = ({
               </button>
               <button
                 onClick={() => setSafetyAssessment(prev => ({ ...prev, wantsTrustedContact: false }))}
-                className={`flex-1 py-1 px-2.5 min-h-[38px] sm:min-h-[36px] rounded-lg text-xs font-medium border transition-all cursor-pointer ${
+                className={`flex-1 py-1 px-2.5 min-h-[44px] sm:min-h-[36px] rounded-lg text-xs font-medium border transition-all cursor-pointer flex items-center justify-center text-center ${
                   safetyAssessment.wantsTrustedContact === false
                     ? 'bg-slate-800 text-white border-slate-800 shadow-3xs'
                     : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
@@ -133,7 +133,7 @@ export const SafetyCheckModal: React.FC<SafetyCheckModalProps> = ({
                 <a
                   key={contact.id}
                   href={contact.url}
-                  className="p-2 bg-white dark:bg-slate-800 border border-amber-200 dark:border-amber-900 rounded-lg flex items-center justify-between hover:bg-amber-100/50 dark:hover:bg-amber-900/40 transition-colors"
+                  className="p-2.5 min-h-[44px] bg-white dark:bg-slate-800 border border-amber-200 dark:border-amber-900 rounded-lg flex items-center justify-between hover:bg-amber-100/50 dark:hover:bg-amber-900/40 transition-colors"
                 >
                   <div>
                     <p className="font-semibold text-slate-900 dark:text-slate-100 text-xs">{contact.name}</p>
@@ -149,14 +149,14 @@ export const SafetyCheckModal: React.FC<SafetyCheckModalProps> = ({
         <div className="flex items-center justify-end gap-2 pt-2.5 border-t border-slate-200 dark:border-slate-700">
           <a
             href="tel:119"
-            className="px-3 py-1.5 min-h-[38px] sm:min-h-[36px] bg-rose-600 hover:bg-rose-700 text-white text-xs font-medium rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer"
+            className="px-3.5 py-2 min-h-[44px] sm:min-h-[36px] bg-rose-600 hover:bg-rose-700 text-white text-xs font-medium rounded-lg flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
           >
             <Phone className="w-3.5 h-3.5" />
             <span>Hubungi Hotline 119</span>
           </a>
           <button
             onClick={onClose}
-            className="px-4 py-1.5 min-h-[38px] sm:min-h-[36px] bg-slate-800 hover:bg-slate-900 text-white text-xs font-medium rounded-lg transition-all active:scale-95 cursor-pointer"
+            className="px-4 py-2 min-h-[44px] sm:min-h-[36px] bg-slate-800 hover:bg-slate-900 text-white text-xs font-medium rounded-lg transition-all active:scale-95 cursor-pointer flex items-center justify-center"
           >
             Saya Aman, Lanjutkan
           </button>

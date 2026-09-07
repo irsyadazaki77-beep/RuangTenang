@@ -43,10 +43,10 @@ export function LoginForm({ onSuccess, onRequireMfa, onForgotPassword, setGlobal
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+    <form onSubmit={handleSubmit} className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-200">
       <div className="space-y-3">
         <div className="space-y-1">
-          <label className="text-xs font-semibold text-slate-700">Email Kampus</label>
+          <label className="text-xs font-semibold text-secondary">Email Kampus</label>
           <div className="relative">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <Mail className="w-4 h-4 text-slate-400" />
@@ -56,7 +56,7 @@ export function LoginForm({ onSuccess, onRequireMfa, onForgotPassword, setGlobal
               required
               value={email}
               onChange={e => setEmail(e.target.value)}
-              className="w-full pl-9 pr-3 py-2.5 text-base sm:text-sm min-h-[44px] bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all text-slate-800"
+              className="w-full pl-9 pr-3 py-2.5 text-base sm:text-sm min-h-[44px] surface-muted border border-default rounded-xl focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all text-primary"
               placeholder="nama@kampus.ac.id"
             />
           </div>
@@ -64,11 +64,11 @@ export function LoginForm({ onSuccess, onRequireMfa, onForgotPassword, setGlobal
 
         <div className="space-y-1">
           <div className="flex justify-between items-center">
-            <label className="text-xs font-semibold text-slate-700">Kata Sandi</label>
+            <label className="text-xs font-semibold text-secondary">Kata Sandi</label>
             <button 
               type="button"
               onClick={onForgotPassword}
-              className="text-[11px] font-semibold text-teal-600 hover:text-teal-700 hover:underline"
+              className="text-[11px] font-semibold text-teal-600 dark:text-teal-400 hover:text-teal-700 hover:underline min-h-[32px] flex items-center"
             >
               Lupa Sandi?
             </button>
@@ -82,7 +82,7 @@ export function LoginForm({ onSuccess, onRequireMfa, onForgotPassword, setGlobal
               required
               value={password}
               onChange={e => setPassword(e.target.value)}
-              className="w-full pl-9 pr-3 py-2.5 text-base sm:text-sm min-h-[44px] bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all text-slate-800"
+              className="w-full pl-9 pr-3 py-2.5 text-base sm:text-sm min-h-[44px] surface-muted border border-default rounded-xl focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all text-primary"
               placeholder="••••••••"
             />
           </div>
@@ -92,7 +92,7 @@ export function LoginForm({ onSuccess, onRequireMfa, onForgotPassword, setGlobal
       <button
         type="submit"
         disabled={loading || !email.trim() || !password}
-        className="w-full h-11 bg-teal-600 hover:bg-teal-700 text-white rounded-xl font-bold text-sm shadow-sm hover:shadow active:scale-[0.98] transition-all disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center gap-2 mt-2"
+        className="w-full min-h-[44px] bg-teal-600 hover:bg-teal-700 text-white rounded-xl font-bold text-sm shadow-3xs hover:shadow active:scale-[0.98] transition-all disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center gap-2 mt-2 cursor-pointer"
       >
         {loading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <>Masuk ke Akun <ArrowRight className="w-4 h-4" /></>}
       </button>

@@ -272,7 +272,7 @@ export function ChatComposer({ onSend, isTyping, onStop, chatId, onCommand, onOp
               }
             }}
             placeholder="Tulis pesan..."
-            className="flex-1 max-h-32 bg-transparent border-none focus:ring-0 resize-none py-1.5 px-1 text-xs sm:text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 leading-relaxed outline-none min-w-0"
+            className="flex-1 max-h-32 bg-transparent border-none focus:ring-0 resize-none py-1.5 px-1.5 text-base sm:text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 leading-relaxed outline-none min-w-0"
             rows={1}
             disabled={isTyping}
             aria-label="Ketik pesan konsultasi atau perintah"

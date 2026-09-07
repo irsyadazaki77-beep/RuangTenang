@@ -178,7 +178,7 @@ Format keluaran JSON murni: {"prompts": ["pertanyaan 1", "pertanyaan 2", "pertan
     const { userId, logs = [], averageMood, streak } = params;
 
     const fallbackSummary = `Selama beberapa hari terakhir, rata-rata suasana hatimu berada di angka ${averageMood || '3.5'}/5 dengan konsistensi pencatatan ${streak || 1} hari berturut-turut. Terus luangkan waktu untuk jeda napas di tengah rutinitas harianmu.`;
-    const fallbackPatterns = ["Pola mood menunjukkan korelasi positif dengan waktu istirahat yang cukup dan manajemen waktu seimbang."];
+    const fallbackPatterns = ["Pola pencatatan harian membantu mengamati dinamika suasana hati secara berkesadaran tanpa asumsi sebab-akibat langsung."];
     const fallbackActions = [
       "Luangkan 10 menit tanpa layar sebelum tidur untuk merilekskan otot mata dan pikiran.",
       "Buat daftar prioritas harian maksimal 3 tugas penting untuk mencegah overthinking.",

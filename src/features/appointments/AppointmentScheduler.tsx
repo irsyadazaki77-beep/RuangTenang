@@ -395,25 +395,25 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
         <div className="flex items-center gap-2">
           <button
             onClick={() => setIsBookingOpen(true)}
-            className="w-full sm:w-auto px-3.5 py-1.5 bg-slate-800 hover:bg-slate-900 text-white font-medium text-xs rounded-lg shadow-2xs transition-all flex items-center justify-center gap-1.5 active:scale-95 shrink-0"
+            className="w-full sm:w-auto px-4 py-2 min-h-[40px] bg-teal-600 hover:bg-teal-700 text-white font-semibold text-xs rounded-xl shadow-3xs transition-all flex items-center justify-center gap-1.5 active:scale-[0.98] shrink-0 cursor-pointer"
           >
-            <Plus className="w-3.5 h-3.5" />
+            <Plus className="w-4 h-4" />
             <span>Buat Jadwal Baru</span>
           </button>
         </div>
       </div>
 
       {/* Notification Banner Controls */}
-      <div className="surface-card rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm border border-default">
+      <div className="surface-card rounded-xl p-3.5 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-3xs border border-default">
         <div className="flex items-center gap-2.5">
-          <div className="p-1.5 bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 rounded-md border border-amber-200 dark:border-amber-900/50 shrink-0">
+          <div className="p-1.5 bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 rounded-lg border border-amber-200 dark:border-amber-900/50 shrink-0">
             <BellRing className="w-4 h-4 text-amber-500" />
           </div>
           <div>
-            <h3 className="font-medium text-primary text-xs">Sistem Notifikasi Pengingat Pertemuan</h3>
+            <h3 className="font-semibold text-primary text-xs">Sistem Notifikasi Pengingat Pertemuan</h3>
             <p className="text-[11px] text-secondary mt-0.5">
               Status Browser:{' '}
-              <span className={`font-medium ${notificationPermission === 'granted' ? 'text-teal-600 dark:text-teal-400' : 'text-amber-600 dark:text-amber-400'}`}>
+              <span className={`font-semibold ${notificationPermission === 'granted' ? 'text-teal-600 dark:text-teal-400' : 'text-amber-600 dark:text-amber-400'}`}>
                 {notificationPermission === 'granted' ? 'Aktif' : 'Belum Diizinkan'}
               </span>
             </p>
@@ -424,14 +424,14 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
           {notificationPermission !== 'granted' ? (
             <button
               onClick={requestNotificationPermission}
-              className="w-full sm:w-auto px-4 py-2 min-h-[40px] bg-amber-500 hover:bg-[#B77C00] text-white font-medium text-xs rounded-lg transition-all shadow-2xs flex items-center justify-center cursor-pointer"
+              className="w-full sm:w-auto px-3.5 py-1.5 min-h-[40px] bg-amber-500 hover:bg-[#B77C00] text-white font-semibold text-xs rounded-xl transition-all shadow-3xs flex items-center justify-center cursor-pointer active:scale-[0.98]"
             >
               Aktifkan Notifikasi
             </button>
           ) : (
             <button
               onClick={triggerTestNotification}
-              className="px-4 py-2 min-h-[40px] surface-card hover:bg-slate-100 dark:hover:bg-slate-800 text-primary border border-default font-medium text-xs rounded-lg transition-all flex items-center gap-1.5 cursor-pointer"
+              className="px-3.5 py-1.5 min-h-[40px] surface-card hover:bg-slate-100 dark:hover:bg-slate-800 text-primary border border-default font-semibold text-xs rounded-xl transition-all flex items-center gap-1.5 cursor-pointer active:scale-[0.98]"
             >
               <Bell className="w-4 h-4" />
               <span>Uji Coba Pengingat</span>
@@ -441,29 +441,29 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
       </div>
 
       {/* APPOINTMENTS LIST / RIWAYAT APPOINTMENT (with progressive disclosure) */}
-      <div className="space-y-6">
-        <h2 className="font-sans font-semibold tracking-tight text-xl text-primary flex items-center gap-2 border-b border-default pb-3">
-          <CalendarCheck className="w-5 h-5 text-teal-600 dark:text-teal-400" />
+      <div className="space-y-4">
+        <h2 className="font-semibold tracking-tight text-base sm:text-lg text-primary flex items-center gap-2 border-b border-default pb-2.5">
+          <CalendarCheck className="w-4 h-4 text-teal-600 dark:text-teal-400" />
           <span>Daftar Pertemuan Terjadwal ({appointments.length})</span>
         </h2>
 
         {appointments.length === 0 ? (
-          <div className="surface-card rounded-2xl p-8 sm:p-12 text-center space-y-4 shadow-sm border border-default">
-            <CalendarIcon className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto" />
-            <p className="text-secondary text-sm">Belum ada sesi konseling yang dijadwalkan.</p>
+          <div className="surface-card rounded-xl p-6 sm:p-10 text-center space-y-3 shadow-3xs border border-default">
+            <CalendarIcon className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto" />
+            <p className="text-secondary text-xs sm:text-sm">Belum ada sesi konseling yang dijadwalkan.</p>
             <button
               onClick={() => setIsBookingOpen(true)}
-              className="mt-2 px-6 py-3 min-h-[44px] bg-slate-800 dark:bg-white hover:bg-slate-900 dark:hover:bg-slate-100 text-white dark:text-slate-900 font-medium text-sm rounded-xl shadow-sm cursor-pointer"
+              className="mt-1 px-5 py-2.5 min-h-[44px] bg-teal-600 hover:bg-teal-700 text-white font-semibold text-xs sm:text-sm rounded-xl shadow-3xs cursor-pointer active:scale-[0.98]"
             >
               Jadwalkan Sesi Pertama
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 sm:gap-4">
             {appointments.map((apt) => (
               <div
                 key={apt.id}
-                className="surface-card rounded-2xl p-5 sm:p-6 space-y-5 shadow-sm border border-default transition-all"
+                className="surface-card rounded-xl p-4 sm:p-5 space-y-3.5 shadow-3xs border border-default transition-all"
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex items-center gap-3.5">
