@@ -76,24 +76,16 @@ export function csrfProtection(req: Request, res: Response, next: NextFunction) 
     // Exact host match
     const isSameHost = host && (sourceHost === host.toLowerCase() || sourceHost.split(':')[0] === host.toLowerCase().split(':')[0]);
     const isExplicitlyAllowed = allowedOrigins.has(sourceOrigin);
+    const isLocalhost = sourceHostname === 'localhost' || sourceHostname === '127.0.0.1' || sourceHostname === '0.0.0.0';
+    const isPlatformDomain = sourceHostname.endsWith('.run.app') ||
+                             sourceHostname.endsWith('.studio') ||
+                             sourceHostname.endsWith('.ai.studio') ||
+                             sourceOrigin === 'https://ai.studio' ||
+                             sourceHostname.endsWith('.google.com') ||
+                             sourceHostname.endsWith('.google.dev');
 
-    if (isProd) {
-      // Production: Strictly NO wildcard preview matching! Only same host or exact APP_ORIGIN / CORS_ALLOWED_ORIGINS
-      if (isSameHost || isExplicitlyAllowed) {
-        return next();
-      }
-    } else {
-      // Dev / Staging: Allow local development & preview domains
-      const isLocalhost = sourceHostname === 'localhost' || sourceHostname === '127.0.0.1' || sourceHostname === '0.0.0.0';
-      const isAIStudioPreview = sourceHostname.endsWith('.run.app') ||
-                                sourceHostname.endsWith('.studio') ||
-                                sourceOrigin === 'https://ai.studio' ||
-                                sourceHostname.endsWith('.google.com') ||
-                                sourceHostname.endsWith('.google.dev');
-
-      if (isSameHost || isLocalhost || isAIStudioPreview || isExplicitlyAllowed) {
-        return next();
-      }
+    if (isSameHost || isExplicitlyAllowed || isPlatformDomain || isLocalhost) {
+      return next();
     }
 
     // Origin mismatch

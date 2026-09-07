@@ -181,17 +181,20 @@ async function startServer() {
         defaultSrc: ["'self'"],
         objectSrc: ["'none'"],
         baseUri: ["'self'"],
-        scriptSrc: isProd 
-          ? ["'self'", "'unsafe-inline'"]
-          : ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+        scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+        scriptSrcAttr: ["'unsafe-inline'"],
         styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
         fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
-        imgSrc: ["'self'", "data:", "blob:", "https://images.unsplash.com", "https://api.dicebear.com", "https://*.google.com", "https://*.googleapis.com"],
+        imgSrc: ["'self'", "data:", "blob:", "https://images.unsplash.com", "https://api.dicebear.com", "https://*.google.com", "https://*.googleapis.com", "https://*.googleusercontent.com"],
         connectSrc: connectSrcList,
         frameAncestors: frameAncestorsList,
+        workerSrc: ["'self'", "blob:"]
       }
     },
-    frameguard: isProd ? { action: 'sameorigin' } : false,
+    frameguard: false,
+    crossOriginEmbedderPolicy: false,
+    crossOriginOpenerPolicy: false,
+    crossOriginResourcePolicy: false,
     hsts: isProd ? { maxAge: 31536000, includeSubDomains: true, preload: true } : false,
   }));
 

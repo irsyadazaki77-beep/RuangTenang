@@ -28,8 +28,11 @@ function sanitizeQueryLog(query: string, params: string): { sanitizedQuery: stri
   return { sanitizedQuery, sanitizedParams };
 }
 
-// PostgreSQL connection pool tuning for Cloud Run / Docker containers
-let databaseUrl = process.env.DATABASE_URL;
+import { resolveDatabaseConfiguration } from "./config/databaseConfig.js";
+
+// PostgreSQL / SQLite connection pool and URL resolution
+const resolvedDbConfig = resolveDatabaseConfiguration();
+let databaseUrl = resolvedDbConfig.url;
 if (databaseUrl && databaseUrl.startsWith('postgres') && !databaseUrl.includes('connection_limit')) {
   const poolLimit = process.env.DB_POOL_SIZE || '15';
   const poolTimeout = process.env.DB_CONNECTION_TIMEOUT_SEC || '10';
@@ -38,7 +41,7 @@ if (databaseUrl && databaseUrl.startsWith('postgres') && !databaseUrl.includes('
 }
 
 export const prisma = globalForPrisma.prisma ?? new PrismaClient({
-  ...(databaseUrl && databaseUrl.startsWith('postgres') ? { datasources: { db: { url: databaseUrl } } } : {}),
+  datasources: { db: { url: databaseUrl } },
   log: [
     { emit: 'event', level: 'query' },
     { emit: 'stdout', level: 'warn' },

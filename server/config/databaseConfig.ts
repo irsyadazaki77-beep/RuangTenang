@@ -1,3 +1,5 @@
+import path from 'path';
+
 export type DatabaseProvider = 'sqlite' | 'postgresql';
 
 export interface DatabaseConfiguration {
@@ -22,11 +24,24 @@ export function resolveDatabaseConfiguration(): DatabaseConfiguration {
   }
 
   const isPostgres = hasPostgresUrl || (explicitProvider === 'postgresql' && hasPostgresUrl);
-
   const provider: DatabaseProvider = isPostgres ? 'postgresql' : 'sqlite';
-  const defaultUrl = isPostgres
-    ? dbUrl
-    : (dbUrl && dbUrl.startsWith('file:') ? dbUrl : 'file:./prisma/ruangtenang_sqlite.db');
+
+  let defaultUrl: string;
+  if (isPostgres) {
+    defaultUrl = dbUrl;
+  } else {
+    if (dbUrl && dbUrl.startsWith('file:')) {
+      const rawPath = dbUrl.replace('file:', '').trim();
+      const resolvedPath = path.isAbsolute(rawPath)
+        ? rawPath
+        : (rawPath.startsWith('./prisma/') || rawPath.startsWith('prisma/'))
+          ? path.resolve(process.cwd(), rawPath)
+          : path.resolve(process.cwd(), 'prisma', rawPath.replace(/^\.\//, ''));
+      defaultUrl = `file:${resolvedPath}`;
+    } else {
+      defaultUrl = `file:${path.resolve(process.cwd(), 'prisma', 'ruangtenang_sqlite.db')}`;
+    }
+  }
 
   if (isProduction && !isPostgres) {
     console.warn('[DATABASE CONFIG] Running in production mode with SQLite database provider. For distributed multi-instance deployment, configure a PostgreSQL DATABASE_URL.');
