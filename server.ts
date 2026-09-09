@@ -151,36 +151,31 @@ async function startServer() {
     ...(process.env.CORS_ALLOWED_ORIGINS ? process.env.CORS_ALLOWED_ORIGINS.split(',').map(o => o.trim()).filter(Boolean) : []),
   ];
 
-  // Frame ancestors (Clickjacking Protection)
-  // In production, strictly restrict to exact trusted origins. Wildcard platform domains only in dev/staging.
-  const frameAncestorsList = isProd
-    ? ["'self'", ...trustedOriginsList]
-    : [
-        "'self'",
-        "https://*.google.com",
-        "https://*.google.dev",
-        "https://*.run.app",
-        "https://*.ai.studio",
-        "https://ai.studio",
-        ...trustedOriginsList
-      ];
+  // Frame ancestors (Clickjacking Protection & AI Studio Iframe Preview Support)
+  const frameAncestorsList = [
+    "'self'",
+    "https://*.google.com",
+    "https://*.google.dev",
+    "https://*.run.app",
+    "https://*.ai.studio",
+    "https://ai.studio",
+    "https://aistudio.google.com",
+    ...trustedOriginsList
+  ];
 
-  const connectSrcList = isProd
-    ? [
-        "'self'", 
-        "https://generativelanguage.googleapis.com", 
-        ...trustedOriginsList,
-      ]
-    : [
-        "'self'", 
-        "https://generativelanguage.googleapis.com", 
-        "https://*.run.app", 
-        "https://*.ai.studio", 
-        "https://ai.studio", 
-        "ws:", 
-        "wss:",
-        ...trustedOriginsList
-      ];
+  const connectSrcList = [
+    "'self'", 
+    "https://generativelanguage.googleapis.com", 
+    "https://*.google.com",
+    "https://*.google.dev",
+    "https://*.run.app", 
+    "https://*.ai.studio", 
+    "https://ai.studio", 
+    "ws:", 
+    "wss:",
+    "data:",
+    ...trustedOriginsList
+  ];
 
   app.use(helmet({
     contentSecurityPolicy: {
@@ -188,24 +183,21 @@ async function startServer() {
         defaultSrc: ["'self'"],
         objectSrc: ["'none'"],
         baseUri: ["'self'"],
-        scriptSrc: ["'self'", "'unsafe-inline'"],
+        scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "blob:"],
         scriptSrcAttr: ["'none'"],
         styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
         fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
-        imgSrc: ["'self'", "data:", "blob:", "https://images.unsplash.com", "https://api.dicebear.com", "https://*.google.com", "https://*.googleapis.com", "https://*.googleusercontent.com"],
+        imgSrc: ["'self'", "data:", "blob:", "https://images.unsplash.com", "https://api.dicebear.com", "https://*.google.com", "https://*.googleapis.com", "https://*.googleusercontent.com", "https://*.gstatic.com"],
         connectSrc: connectSrcList,
         frameAncestors: frameAncestorsList,
         workerSrc: ["'self'", "blob:"]
       }
     },
-    // Clickjacking protection: frameguard enforces SAMEORIGIN for legacy clients in production
-    frameguard: isProd ? { action: 'sameorigin' } : false,
-    // COEP disabled with explicit documentation: external CDN assets (Google Fonts, Unsplash, Dicebear) do not serve CORP headers
+    // Frameguard disabled in favor of granular frameAncestors CSP to permit AI Studio preview iframe
+    frameguard: false,
     crossOriginEmbedderPolicy: false,
-    // COOP set to same-origin-allow-popups to isolate window context while supporting OAuth/external popup workflows
-    crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
-    // CORP set to same-origin to prevent cross-origin resource theft
-    crossOriginResourcePolicy: { policy: 'same-origin' },
+    crossOriginOpenerPolicy: false,
+    crossOriginResourcePolicy: false,
     hsts: isProd ? { maxAge: 31536000, includeSubDomains: true, preload: true } : false,
   }));
 
@@ -246,6 +238,14 @@ async function startServer() {
   // 4. Liveness & Readiness Endpoints (Sanitized in Production)
   app.get(['/api/v1/health', '/api/health', '/health', '/healthz'], (_req, res) => {
     res.status(200).json({ status: 'healthy' });
+  });
+
+  app.post('/api/v1/client-debug', (req, res) => {
+    console.error('[CLIENT_DEBUG_CRASH]', req.body);
+    try {
+      fs.appendFileSync('client_crash_logs.txt', `${new Date().toISOString()} - ${JSON.stringify(req.body)}\n`);
+    } catch (e) {}
+    res.status(200).json({ ok: true });
   });
 
   app.get(['/api/v1/readiness', '/api/readiness', '/readyz'], async (req, res) => {

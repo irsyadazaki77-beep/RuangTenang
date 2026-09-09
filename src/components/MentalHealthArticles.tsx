@@ -1,4 +1,5 @@
 import { useEscapeKey } from '../hooks/useEscapeKey';
+import { safeLocalStorage } from '../lib/storage';
 import React, { useState, useEffect } from 'react';
 import { 
   BookOpen, 
@@ -287,10 +288,10 @@ export const MentalHealthArticles: React.FC = () => {
   // Load saved bookmarks and read history on mount
   useEffect(() => {
     try {
-      const saved = localStorage.getItem('ruang_tenang_saved_articles');
+      const saved = safeLocalStorage.getItem('ruang_tenang_saved_articles');
       if (saved) setSavedArticleIds(JSON.parse(saved));
 
-      const read = localStorage.getItem('ruang_tenang_read_articles');
+      const read = safeLocalStorage.getItem('ruang_tenang_read_articles');
       if (read) setReadArticleIds(JSON.parse(read));
     } catch (e) {
       console.error('Error loading article data from localStorage:', e);
@@ -300,7 +301,7 @@ export const MentalHealthArticles: React.FC = () => {
   // Save bookmarks to localStorage
   const saveBookmarksToLocalStorage = (ids: string[]) => {
     try {
-      localStorage.setItem('ruang_tenang_saved_articles', JSON.stringify(ids));
+      safeLocalStorage.setItem('ruang_tenang_saved_articles', JSON.stringify(ids));
     } catch (e) {
       console.error('Error saving article bookmarks:', e);
     }
@@ -309,7 +310,7 @@ export const MentalHealthArticles: React.FC = () => {
   // Save read history to localStorage
   const saveReadToLocalStorage = (ids: string[]) => {
     try {
-      localStorage.setItem('ruang_tenang_read_articles', JSON.stringify(ids));
+      safeLocalStorage.setItem('ruang_tenang_read_articles', JSON.stringify(ids));
     } catch (e) {
       console.error('Error saving read history:', e);
     }

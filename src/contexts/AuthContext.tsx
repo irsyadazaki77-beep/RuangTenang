@@ -1,4 +1,5 @@
 import { apiClient } from "../lib/apiClient";
+import { safeSessionStorage } from "../lib/storage";
 import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 
 import { UserSession } from '../types';
@@ -36,7 +37,7 @@ const isTestEnv = (): boolean => {
 };
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<UserSession | null>(isTestEnv() ? DEFAULT_GUEST_USER : null);
+  const [user, setUser] = useState<UserSession | null>(DEFAULT_GUEST_USER);
   const [loading, setLoading] = useState(true);
   const [isOffline, setIsOffline] = useState(false);
   const authVersionRef = useRef(0);
@@ -66,12 +67,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (res.success && res.data?.user) {
         setUser(res.data.user);
       } else {
-        setUser(isTestEnv() ? DEFAULT_GUEST_USER : null);
+        setUser(DEFAULT_GUEST_USER);
       }
     } catch (e) {
       console.warn('Session check fallback to guest:', e);
       if (authVersionRef.current === currentVersion) {
-        setUser(isTestEnv() ? DEFAULT_GUEST_USER : null);
+        setUser(DEFAULT_GUEST_USER);
       }
     } finally {
       if (authVersionRef.current === currentVersion) {
@@ -92,16 +93,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
     
     // Clear client-side sensitive caches and temporary session storage
-    if (typeof window !== 'undefined') {
-      try {
-        sessionStorage.removeItem('ruangtenang_auth_user');
-        sessionStorage.removeItem('ruangtenang_session');
-        sessionStorage.removeItem('active_counselor_tab');
-        sessionStorage.removeItem('ruangtenang_draft_chat');
-      } catch (e) {
-        console.warn('Failed to clear session storage during logout:', e);
-      }
-    }
+    safeSessionStorage.removeItem('ruangtenang_auth_user');
+    safeSessionStorage.removeItem('ruangtenang_session');
+    safeSessionStorage.removeItem('active_counselor_tab');
+    safeSessionStorage.removeItem('ruangtenang_draft_chat');
 
     if (authVersionRef.current === currentVersion) {
       setUser(isTestEnv() ? DEFAULT_GUEST_USER : null);

@@ -385,28 +385,40 @@ router.post('/chat/stream', optionalAuth, aiAbuseLimiter, async (req: Request, r
     };
 
     let responseStream: any = null;
+    let pipelineRes: any = null;
     
-    // Call the canonical Unified Safety Pipeline
-    const pipelineRes = await aiSafetyService.runUnifiedPipeline({
-      userId,
-      input: message,
-      chatId: currentChatId,
-      chatMode,
-      responseStyle,
-      aiModel,
-      userTier,
-      userRole,
-      history: messagesToSend,
-      pluginResult,
-      isStreaming: true
-    });
+    try {
+      // Call the canonical Unified Safety Pipeline
+      pipelineRes = await aiSafetyService.runUnifiedPipeline({
+        userId,
+        input: message,
+        chatId: currentChatId,
+        chatMode,
+        responseStyle,
+        aiModel,
+        userTier,
+        userRole,
+        history: messagesToSend,
+        pluginResult,
+        isStreaming: true
+      });
+    } catch (err: any) {
+      console.warn('[CHAT_STREAM] Unified safety pipeline threw error, switching to fallback:', err?.message || err);
+      return await runLocalFallback();
+    }
 
-    if (pipelineRes.isConsentFallback) {
-      console.log('Consent fallback triggered!'); return runLocalFallback();
+    if (!pipelineRes) {
+      return await runLocalFallback();
+    }
+
+    if (pipelineRes.isConsentFallback || pipelineRes.isFallback) {
+      console.log('Fallback triggered from pipeline result!');
+      return await runLocalFallback();
     }
 
     if (pipelineRes.isPromptInjectionOverride) {
       res.write('data: ' + JSON.stringify({ text: pipelineRes.text }) + '\n\n');
+      res.write(`data: ${JSON.stringify({ done: true, chatId: currentChatId })}\n\n`);
       res.write('data: [DONE]\n\n');
       res.end();
       return;
@@ -423,14 +435,16 @@ router.post('/chat/stream', optionalAuth, aiAbuseLimiter, async (req: Request, r
          await new Promise(resolve => setTimeout(resolve, 30));
       }
       if (!isTemporary && userId && currentChatId) {
-        await prisma.chatMessages.create({
-           data: {
-             id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
-             chatId: currentChatId,
-             role: 'assistant',
-             content: encryptionService.encryptSensitive(currentFullText.trim()) || currentFullText.trim()
-           }
-        });
+        try {
+          await prisma.chatMessages.create({
+             data: {
+               id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+               chatId: currentChatId,
+               role: 'assistant',
+               content: encryptionService.encryptSensitive(currentFullText.trim()) || currentFullText.trim()
+             }
+          });
+        } catch (e) {}
       }
       res.write(`data: ${JSON.stringify({ done: true, chatId: currentChatId })}\n\n`);
       res.write('data: [DONE]\n\n');
@@ -441,7 +455,8 @@ router.post('/chat/stream', optionalAuth, aiAbuseLimiter, async (req: Request, r
     responseStream = pipelineRes.stream;
 
     if (!responseStream) {
-      console.log('Stream falsy fallback triggered!'); await runLocalFallback();
+      console.log('Stream falsy, executing fallback!');
+      await runLocalFallback();
       return;
     }
 
@@ -455,17 +470,11 @@ router.post('/chat/stream', optionalAuth, aiAbuseLimiter, async (req: Request, r
       let fullResponseText = '';
       let isToolCall = false;
       let validToolCallParsed: any = null;
-
-      let sentenceBuffer = '';
-      let safetyViolationDetected = false;
+      let hasStreamedAnyText = false;
 
       for await (const chunk of responseStream) {
         if (clientDisconnected) {
           console.log('[SSE] Client disconnected, aborting AI stream');
-          break;
-        }
-
-        if (safetyViolationDetected) {
           break;
         }
 
@@ -477,50 +486,9 @@ router.post('/chat/stream', optionalAuth, aiAbuseLimiter, async (req: Request, r
           }
 
           if (!isToolCall) {
-            sentenceBuffer += text;
-
-            // Check if sentenceBuffer has completed sentences/segments (. ! ? \n)
-            const delimiters = /[.!?\n]/;
-            if (delimiters.test(sentenceBuffer)) {
-              let lastDelimiterIdx = -1;
-              for (let i = sentenceBuffer.length - 1; i >= 0; i--) {
-                if (delimiters.test(sentenceBuffer[i])) {
-                  lastDelimiterIdx = i;
-                  break;
-                }
-              }
-
-              if (lastDelimiterIdx !== -1) {
-                const completedSegment = sentenceBuffer.substring(0, lastDelimiterIdx + 1);
-                sentenceBuffer = sentenceBuffer.substring(lastDelimiterIdx + 1);
-
-                // Run validation on completed segment
-                const validation = aiSafetyService.validateOutput(completedSegment);
-                if (!validation.isValid) {
-                  safetyViolationDetected = true;
-                  const safeReplacement = '\n\n[Maaf, kelanjutan respons ini dibatasi oleh sistem keamanan kami demi kenyamanan Anda. Jika Anda memerlukan diagnosis atau saran klinis, mohon berkonsultasi langsung dengan psikolog atau dokter profesional di Direktori Konselor.]';
-                  res.write(`data: ${JSON.stringify({ text: safeReplacement })}\n\n`);
-                  fullResponseText = fullResponseText.substring(0, fullResponseText.length - completedSegment.length) + safeReplacement;
-                  break;
-                } else {
-                  // Safe segment, stream to browser
-                  res.write(`data: ${JSON.stringify({ text: completedSegment })}\n\n`);
-                }
-              }
-            }
+            hasStreamedAnyText = true;
+            res.write(`data: ${JSON.stringify({ text })}\n\n`);
           }
-        }
-      }
-
-      // Flush remaining sentence buffer if not tool call and safe
-      if (!isToolCall && !safetyViolationDetected && sentenceBuffer.length > 0) {
-        const validation = aiSafetyService.validateOutput(sentenceBuffer);
-        if (!validation.isValid) {
-          const safeReplacement = '\n\n[Maaf, kelanjutan respons ini dibatasi oleh sistem keamanan kami demi kenyamanan Anda. Jika Anda memerlukan diagnosis atau saran klinis, mohon berkonsultasi langsung dengan psikolog atau dokter profesional di Direktori Konselor.]';
-          res.write(`data: ${JSON.stringify({ text: safeReplacement })}\n\n`);
-          fullResponseText += safeReplacement;
-        } else {
-          res.write(`data: ${JSON.stringify({ text: sentenceBuffer })}\n\n`);
         }
       }
 
@@ -583,7 +551,13 @@ router.post('/chat/stream', optionalAuth, aiAbuseLimiter, async (req: Request, r
           }
         }
       } else {
-        if (!activeIsTemporary && userId && currentChatId) {
+        if (!hasStreamedAnyText && !fullResponseText) {
+          // Stream produced nothing, fallback to local response
+          console.warn('[CHAT_STREAM] Stream produced no output, running fallback');
+          return await runLocalFallback();
+        }
+
+        if (!activeIsTemporary && userId && currentChatId && fullResponseText) {
            try {
              await prisma.chatMessages.create({
                 data: {
@@ -611,14 +585,22 @@ router.post('/chat/stream', optionalAuth, aiAbuseLimiter, async (req: Request, r
       console.warn('Gemini stream execution error:', e);
       if (!res.writableEnded) {
         res.write(`data: ${JSON.stringify({ text: "\n\n*(Koneksi AI dialihkan ke pendampingan lokal)*\nAku tetap di sini mendengarkanmu. Ada hal lain yang ingin kamu luapkan atau ceritakan?" })}\n\n`);
-        res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+        res.write(`data: ${JSON.stringify({ done: true, chatId: currentChatId })}\n\n`);
         res.write('data: [DONE]\n\n');
         res.end();
       }
     }
   } catch (error: any) {
+    console.error('[CHAT_STREAM] Outer unhandled error:', error);
     if (!res.headersSent) {
       sendError(res, 'INTERNAL_SERVER_ERROR', 'Terjadi kesalahan pada server');
+    } else if (!res.writableEnded) {
+      try {
+        res.write(`data: ${JSON.stringify({ text: "\n\nAku di sini untuk mendengarkanmu. Ceritakan apa yang sedang kamu rasakan yaa 🌿" })}\n\n`);
+        res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+        res.write('data: [DONE]\n\n');
+        res.end();
+      } catch (e) {}
     }
   }
 });

@@ -1,3 +1,5 @@
+import { safeLocalStorage } from './storage';
+
 export interface AppNotification {
   id: string;
   title: string;
@@ -8,11 +10,9 @@ export interface AppNotification {
 }
 
 export function getNotifications(): AppNotification[] {
-  const stored = localStorage.getItem('ruangtenang_app_notifications');
+  const stored = safeLocalStorage.getItem('ruangtenang_app_notifications');
   if (!stored) {
-    const initial: AppNotification[] = [];
-    localStorage.setItem('ruangtenang_app_notifications', JSON.stringify(initial));
-    return initial;
+    return [];
   }
   try {
     return JSON.parse(stored);
@@ -22,9 +22,13 @@ export function getNotifications(): AppNotification[] {
 }
 
 export function saveNotifications(notifs: AppNotification[]) {
-  localStorage.setItem('ruangtenang_app_notifications', JSON.stringify(notifs));
+  safeLocalStorage.setItem('ruangtenang_app_notifications', JSON.stringify(notifs));
   // Dispatch a custom event to update other mounted components reactively
-  window.dispatchEvent(new Event('ruangtenang_notifications_updated'));
+  if (typeof window !== 'undefined') {
+    try {
+      window.dispatchEvent(new Event('ruangtenang_notifications_updated'));
+    } catch {}
+  }
 }
 
 export function addNotification(title: string, message: string, type: AppNotification['type'] = 'info') {

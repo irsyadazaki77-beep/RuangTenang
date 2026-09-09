@@ -15,6 +15,53 @@
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400..700;1,400..700&display=swap" />
     <script>
       (function() {
+        function logError(payload) {
+          try {
+            var msg = String(payload.message || '').toLowerCase();
+            var stack = String(payload.stack || '').toLowerCase();
+            var src = String(payload.source || '').toLowerCase();
+            if (
+              msg.indexOf('websocket') !== -1 ||
+              stack.indexOf('websocket') !== -1 ||
+              msg.indexOf('hmr') !== -1 ||
+              stack.indexOf('vite/client') !== -1 ||
+              src.indexOf('vite/client') !== -1 ||
+              msg.indexOf('socket') !== -1
+            ) {
+              return;
+            }
+            fetch('/api/v1/client-debug', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload),
+              keepalive: true
+            }).catch(function(){});
+          } catch(e) {}
+        }
+        window.onerror = function(message, source, lineno, colno, error) {
+          logError({
+            type: 'onerror',
+            message: message,
+            source: source,
+            lineno: lineno,
+            colno: colno,
+            stack: error ? error.stack : null,
+            href: window.location.href
+          });
+        };
+        window.addEventListener('unhandledrejection', function(event) {
+          var reason = event.reason;
+          logError({
+            type: 'unhandledrejection',
+            message: reason ? (reason.message || String(reason)) : 'Unknown rejection',
+            stack: reason && reason.stack ? reason.stack : null,
+            href: window.location.href
+          });
+        });
+      })();
+    </script>
+    <script>
+      (function() {
         try {
           var theme = localStorage.getItem('ruangtenang_theme');
           var isDark = theme === 'dark' || (theme !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
@@ -29,13 +76,15 @@
   <body>
     <div id="root"></div>
     <script>
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.getRegistrations().then(function(registrations) {
-          for(let registration of registrations) {
-            registration.unregister();
-          }
-        });
-      }
+      try {
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.getRegistrations().then(function(registrations) {
+            for(let registration of registrations) {
+              registration.unregister();
+            }
+          }).catch(function(e){});
+        }
+      } catch(e) {}
     </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>

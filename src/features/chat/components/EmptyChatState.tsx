@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { NotebookPen, HeartPulse, Sparkles, Wind, Check, MessageSquare, ArrowRight, Save } from 'lucide-react';
 import { apiClient } from '../../../lib/apiClient';
 import { motion, AnimatePresence } from 'motion/react';
+import { safeLocalStorage } from '../../../lib/storage';
 
 interface EmptyChatStateProps {
   userName?: string;
@@ -70,7 +71,7 @@ export function EmptyChatState({ userName, onSelectPrompt }: EmptyChatStateProps
 
   const userGoals = React.useMemo<string[]>(() => {
     try {
-      const stored = localStorage.getItem('rt_user_goals');
+      const stored = safeLocalStorage.getItem('rt_user_goals');
       if (stored) return JSON.parse(stored);
     } catch {
       // fallback

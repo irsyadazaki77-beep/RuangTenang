@@ -1,5 +1,5 @@
 import React, { useState, memo } from 'react';
-import ReactMarkdown from 'react-markdown';
+import { LazyMarkdown } from '../../../components/common/LazyMarkdown';
 import { Message } from '../types';
 import CounselorCard from '../../plugins/CounselorCard';
 import EmergencyCard from '../../plugins/EmergencyCard';
@@ -120,7 +120,7 @@ export const MessageBubble = memo(function MessageBubble({ msg, isTyping, onRege
               </div>
             ) : (
               <div className="prose prose-slate dark:prose-invert max-w-none break-words overflow-x-auto prose-p:leading-relaxed prose-pre:bg-slate-100 dark:prose-pre:bg-slate-900 prose-pre:border prose-pre:border-slate-200 dark:prose-pre:border-slate-800 prose-pre:text-slate-800 dark:prose-pre:text-slate-200 text-xs sm:text-sm leading-relaxed">
-                <ReactMarkdown>{msg.content}</ReactMarkdown>
+                <LazyMarkdown content={msg.content} />
                 {isTyping && (
                   <span
                     aria-hidden="true"

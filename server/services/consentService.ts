@@ -66,7 +66,7 @@ export class ConsentService {
    */
   async canUseAI(userId: string): Promise<boolean> {
     if (!userId || userId === 'guest') {
-      return false;
+      return true; // Allow basic AI chat for guest sessions
     }
     const c = await this.getUserConsents(userId);
     return Boolean(c.consentForAI);

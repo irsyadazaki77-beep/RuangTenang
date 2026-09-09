@@ -352,57 +352,87 @@ Sesuaikan gaya, nada, dan panjang responsmu berdasarkan Mode Percakapan dan Gaya
     const { aiRequestService } = await import('./aiRequestService.js');
     if (!input.isStreaming) {
       // Non-streaming execution
-      const modelRes = await aiRequestService.generateChatResponse({
-        userId,
-        userTier: input.userTier || 'Free',
-        requestedModelId: input.aiModel || 'gemini-3.1-flash-lite',
-        prompt: formattedPrompt,
-        history: sanitizedHistory,
-        systemInstruction
-      });
+      try {
+        const modelRes = await aiRequestService.generateChatResponse({
+          userId,
+          userTier: input.userTier || 'Free',
+          requestedModelId: input.aiModel || 'gemini-3.1-flash-lite',
+          prompt: formattedPrompt,
+          history: sanitizedHistory,
+          systemInstruction
+        });
 
-      // 8. Output safety validation (Non-streaming)
-      const validation = this.validateOutput(modelRes.text);
-      if (!validation.isValid) {
-        console.warn(`[SAFETY_PIPELINE] Unsafe non-streaming model output blocked! Reason: ${validation.reason}`);
+        // 8. Output safety validation (Non-streaming)
+        const validation = this.validateOutput(modelRes.text);
+        if (!validation.isValid) {
+          console.warn(`[SAFETY_PIPELINE] Unsafe non-streaming model output blocked! Reason: ${validation.reason}`);
+          return {
+            text: 'Maaf, respons yang saya siapkan tidak dapat ditampilkan karena aturan keamanan. Jika Anda memerlukan bantuan khusus, mohon hubungi profesional medis atau konselor.',
+            modelUsed: 'deterministic-safety-override',
+            isFallback: true,
+            isCrisisOverride: false,
+            isPromptInjectionOverride: false,
+            isConsentFallback: false
+          };
+        }
+
         return {
-          text: 'Maaf, respons yang saya siapkan tidak dapat ditampilkan karena aturan keamanan. Jika Anda memerlukan bantuan khusus, mohon hubungi profesional medis atau konselor.',
-          modelUsed: 'deterministic-safety-override',
+          text: modelRes.text,
+          modelUsed: modelRes.modelUsed,
+          isFallback: modelRes.isFallback,
+          isCrisisOverride: false,
+          isPromptInjectionOverride: false,
+          isConsentFallback: false
+        };
+      } catch (chatErr: any) {
+        console.warn(`[SAFETY_PIPELINE] Non-streaming execution failed, falling back to local:`, chatErr?.message || chatErr);
+        const localFallback = await import('../../routes/fallbackAi.js').then(m => 
+          m.getLocalFallbackResponse(rawInput, input.chatMode, input.responseStyle)
+        );
+        return {
+          text: localFallback.text,
+          modelUsed: 'local-fallback-error',
           isFallback: true,
           isCrisisOverride: false,
           isPromptInjectionOverride: false,
           isConsentFallback: false
         };
       }
-
-      return {
-        text: modelRes.text,
-        modelUsed: modelRes.modelUsed,
-        isFallback: modelRes.isFallback,
-        isCrisisOverride: false,
-        isPromptInjectionOverride: false,
-        isConsentFallback: false
-      };
     } else {
       // Streaming execution
-      const modelRes = await aiRequestService.generateStreamResponse({
-        userId,
-        userTier: input.userTier || 'Free',
-        requestedModelId: input.aiModel || 'gemini-3.1-flash-lite',
-        prompt: formattedPrompt,
-        history: sanitizedHistory,
-        systemInstruction
-      });
+      try {
+        const modelRes = await aiRequestService.generateStreamResponse({
+          userId,
+          userTier: input.userTier || 'Free',
+          requestedModelId: input.aiModel || 'gemini-3.1-flash-lite',
+          prompt: formattedPrompt,
+          history: sanitizedHistory,
+          systemInstruction
+        });
 
-      return {
-        text: '',
-        modelUsed: modelRes.modelUsed,
-        isFallback: false,
-        isCrisisOverride: false,
-        isPromptInjectionOverride: false,
-        isConsentFallback: false,
-        stream: modelRes.stream
-      };
+        return {
+          text: '',
+          modelUsed: modelRes.modelUsed,
+          isFallback: false,
+          isCrisisOverride: false,
+          isPromptInjectionOverride: false,
+          isConsentFallback: false,
+          stream: modelRes.stream
+        };
+      } catch (streamErr: any) {
+        console.warn(`[SAFETY_PIPELINE] Streaming execution failed, falling back to local:`, streamErr?.message || streamErr);
+        const localFallback = await import('../../routes/fallbackAi.js').then(m => 
+          m.getLocalFallbackResponse(rawInput, input.chatMode, input.responseStyle)
+        );
+        return {
+          text: localFallback.text,
+          modelUsed: 'local-fallback-stream-error',
+          isFallback: true,
+          isCrisisOverride: false,
+          isPromptInjectionOverride: false,
+          isConsentFallback: false
+        };
+      }
     }
   }
 };

@@ -1,4 +1,5 @@
 import { Appointment } from '../types';
+import { safeLocalStorage } from './storage';
 
 export interface CalendarTimeData {
   startDate: Date;
@@ -269,7 +270,7 @@ export function triggerNativeNotification(title: string, body: string): void {
  */
 export function getAppointmentReminderPrefs(apptId: string): ReminderPreferences {
   try {
-    const stored = localStorage.getItem(`${STORAGE_REMINDER_PREFS_KEY}_${apptId}`);
+    const stored = safeLocalStorage.getItem(`${STORAGE_REMINDER_PREFS_KEY}_${apptId}`);
     if (stored) {
       return JSON.parse(stored);
     }
@@ -281,7 +282,7 @@ export function getAppointmentReminderPrefs(apptId: string): ReminderPreferences
 
 export function saveAppointmentReminderPrefs(apptId: string, prefs: ReminderPreferences): void {
   try {
-    localStorage.setItem(`${STORAGE_REMINDER_PREFS_KEY}_${apptId}`, JSON.stringify(prefs));
+    safeLocalStorage.setItem(`${STORAGE_REMINDER_PREFS_KEY}_${apptId}`, JSON.stringify(prefs));
   } catch (e) {
     console.warn('Failed to save reminder prefs:', e);
   }

@@ -1,4 +1,5 @@
 import { lazy, ComponentType } from 'react';
+import { safeSessionStorage } from './storage';
 
 const CHUNK_RELOAD_KEY = 'ruangtenang_chunk_reload_guard';
 
@@ -27,10 +28,10 @@ export function lazyWithRetry<T extends ComponentType<any>>(
           /importing a module script failed/i.test(retryErr?.message || '');
 
         if (isRetryChunkError && typeof window !== 'undefined') {
-          const lastReload = sessionStorage.getItem(CHUNK_RELOAD_KEY);
+          const lastReload = safeSessionStorage.getItem(CHUNK_RELOAD_KEY);
           const now = Date.now();
           if (!lastReload || now - parseInt(lastReload, 10) > 10000) {
-            sessionStorage.setItem(CHUNK_RELOAD_KEY, now.toString());
+            safeSessionStorage.setItem(CHUNK_RELOAD_KEY, now.toString());
             window.location.reload();
           }
         }

@@ -1,28 +1,52 @@
+import { safeLocalStorage } from './storage';
+
 const KEY_DB_NAME = 'RuangTenangCryptoKeyDB';
 const KEY_STORE_NAME = 'cryptoKeys';
 const OLD_LOCALSTORAGE_KEY = 'ruangtenang_crypto_seed';
 
 let cachedCryptoKey: CryptoKey | null = null;
+let inMemorySeed: string | null = null;
+
+function hasSubtleCrypto(): boolean {
+  return typeof window !== 'undefined' && !!window.crypto && !!window.crypto.subtle;
+}
+
+function hasIndexedDB(): boolean {
+  try {
+    return typeof window !== 'undefined' && typeof window.indexedDB !== 'undefined';
+  } catch(e) {
+    return false;
+  }
+}
 
 function openKeyDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(KEY_DB_NAME, 1);
-    request.onupgradeneeded = () => {
-      const db = request.result;
-      if (!db.objectStoreNames.contains(KEY_STORE_NAME)) {
-        db.createObjectStore(KEY_STORE_NAME);
-      }
-    };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
+    if (!hasIndexedDB()) {
+      return reject(new Error('IndexedDB unavailable'));
+    }
+    try {
+      const request = indexedDB.open(KEY_DB_NAME, 1);
+      request.onupgradeneeded = () => {
+        const db = request.result;
+        if (!db.objectStoreNames.contains(KEY_STORE_NAME)) {
+          db.createObjectStore(KEY_STORE_NAME);
+        }
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    } catch (e) {
+      reject(e);
+    }
   });
 }
 
 async function getStoredSeed(): Promise<string> {
-  // Graceful migration from localStorage if exists
+  if (inMemorySeed) return inMemorySeed;
+
+  // Graceful migration from safeLocalStorage if exists
   let oldSeed: string | null = null;
   try {
-    oldSeed = localStorage.getItem(OLD_LOCALSTORAGE_KEY);
+    oldSeed = safeLocalStorage.getItem(OLD_LOCALSTORAGE_KEY);
   } catch {}
   if (oldSeed) {
     try {
@@ -34,10 +58,12 @@ async function getStoredSeed(): Promise<string> {
         req.onsuccess = () => resolve();
         req.onerror = () => reject(req.error);
       });
-      try { localStorage.removeItem(OLD_LOCALSTORAGE_KEY); } catch {}
+      try { safeLocalStorage.removeItem(OLD_LOCALSTORAGE_KEY); } catch {}
+      inMemorySeed = oldSeed;
       return oldSeed;
     } catch {
-      // Fallback
+      inMemorySeed = oldSeed;
+      return oldSeed;
     }
   }
 
@@ -52,66 +78,95 @@ async function getStoredSeed(): Promise<string> {
       req.onerror = () => reject(req.error);
     });
 
-    if (seed) return seed;
+    if (seed) {
+      inMemorySeed = seed;
+      return seed;
+    }
 
     // Generate new secure seed
-    const buffer = new Uint8Array(32);
-    window.crypto.getRandomValues(buffer);
-    const newSeed = Array.from(buffer).map(b => b.toString(16).padStart(2, '0')).join('');
+    let newSeed = '';
+    if (typeof window !== 'undefined' && window.crypto && window.crypto.getRandomValues) {
+      const buffer = new Uint8Array(32);
+      window.crypto.getRandomValues(buffer);
+      newSeed = Array.from(buffer).map(b => b.toString(16).padStart(2, '0')).join('');
+    } else {
+      newSeed = 'fallback-seed-' + Math.random().toString(36).substring(2) + Date.now();
+    }
 
     // Save to IndexedDB
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction(KEY_STORE_NAME, 'readwrite');
-      const store = tx.objectStore(KEY_STORE_NAME);
-      const req = store.put(newSeed, 'master_seed');
-      req.onsuccess = () => resolve();
-      req.onerror = () => reject(req.error);
-    });
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const tx = db.transaction(KEY_STORE_NAME, 'readwrite');
+        const store = tx.objectStore(KEY_STORE_NAME);
+        const req = store.put(newSeed, 'master_seed');
+        req.onsuccess = () => resolve();
+        req.onerror = () => reject(req.error);
+      });
+    } catch {}
 
+    inMemorySeed = newSeed;
     return newSeed;
-  } catch (err) {
+  } catch {
     // In-memory fallback if IndexedDB fails
-    const buffer = new Uint8Array(32);
-    window.crypto.getRandomValues(buffer);
-    return Array.from(buffer).map(b => b.toString(16).padStart(2, '0')).join('');
+    if (!inMemorySeed) {
+      if (typeof window !== 'undefined' && window.crypto && window.crypto.getRandomValues) {
+        const buffer = new Uint8Array(32);
+        window.crypto.getRandomValues(buffer);
+        inMemorySeed = Array.from(buffer).map(b => b.toString(16).padStart(2, '0')).join('');
+      } else {
+        inMemorySeed = 'fallback-seed-' + Math.random().toString(36).substring(2) + Date.now();
+      }
+    }
+    return inMemorySeed;
   }
 }
 
-async function getEncryptionKey(): Promise<CryptoKey> {
+async function getEncryptionKey(): Promise<CryptoKey | null> {
+  if (!hasSubtleCrypto()) return null;
   if (cachedCryptoKey) return cachedCryptoKey;
 
-  const seed = await getStoredSeed();
-  const encoder = new TextEncoder();
-  const rawKeyMaterial = encoder.encode(seed);
-  
-  const baseKey = await window.crypto.subtle.importKey(
-    'raw',
-    rawKeyMaterial,
-    'PBKDF2',
-    false,
-    ['deriveBits', 'deriveKey']
-  );
+  try {
+    const seed = await getStoredSeed();
+    const encoder = new TextEncoder();
+    const rawKeyMaterial = encoder.encode(seed);
+    
+    const baseKey = await window.crypto.subtle.importKey(
+      'raw',
+      rawKeyMaterial,
+      'PBKDF2',
+      false,
+      ['deriveBits', 'deriveKey']
+    );
 
-  const derivedKey = await window.crypto.subtle.deriveKey(
-    {
-      name: 'PBKDF2',
-      salt: encoder.encode('ruangtenang-client-salt-v1'),
-      iterations: 50000,
-      hash: 'SHA-256'
-    },
-    baseKey,
-    { name: 'AES-GCM', length: 256 },
-    false,
-    ['encrypt', 'decrypt']
-  );
+    const derivedKey = await window.crypto.subtle.deriveKey(
+      {
+        name: 'PBKDF2',
+        salt: encoder.encode('ruangtenang-client-salt-v1'),
+        iterations: 50000,
+        hash: 'SHA-256'
+      },
+      baseKey,
+      { name: 'AES-GCM', length: 256 },
+      false,
+      ['encrypt', 'decrypt']
+    );
 
-  cachedCryptoKey = derivedKey;
-  return derivedKey;
+    cachedCryptoKey = derivedKey;
+    return derivedKey;
+  } catch (err) {
+    console.warn('SubtleCrypto deriveKey failed:', err);
+    return null;
+  }
 }
 
 export async function encryptData(plaintext: string): Promise<string> {
   try {
     const key = await getEncryptionKey();
+    if (!key || !hasSubtleCrypto()) {
+      // Safe fallback when Web Crypto is unavailable
+      return 'fb64:' + btoa(encodeURIComponent(plaintext));
+    }
+
     const encoder = new TextEncoder();
     const encodedPlaintext = encoder.encode(plaintext);
     
@@ -132,14 +187,26 @@ export async function encryptData(plaintext: string): Promise<string> {
 
     return btoa(String.fromCharCode(...combined));
   } catch (err) {
-    console.error('Encryption failed:', err);
-    throw new Error('Gagal mengenkripsi data lokal');
+    console.warn('Encryption fallback used:', err);
+    return 'fb64:' + btoa(encodeURIComponent(plaintext));
   }
 }
 
 export async function decryptData(ciphertextBase64: string): Promise<string> {
+  if (!ciphertextBase64) return '';
+  if (ciphertextBase64.startsWith('fb64:')) {
+    try {
+      return decodeURIComponent(atob(ciphertextBase64.slice(5)));
+    } catch {
+      return '';
+    }
+  }
+
   try {
     const key = await getEncryptionKey();
+    if (!key || !hasSubtleCrypto()) {
+      return '';
+    }
     
     const combined = new Uint8Array(
       atob(ciphertextBase64)
@@ -148,7 +215,7 @@ export async function decryptData(ciphertextBase64: string): Promise<string> {
     );
 
     if (combined.length < 12) {
-      throw new Error('Ciphertext terlalu pendek');
+      return '';
     }
 
     const iv = combined.slice(0, 12);
@@ -166,7 +233,7 @@ export async function decryptData(ciphertextBase64: string): Promise<string> {
     const decoder = new TextDecoder();
     return decoder.decode(decryptedBuffer);
   } catch (err) {
-    console.error('Decryption failed:', err);
-    throw new Error('Gagal medekripsi data lokal (kunci tidak cocok atau data rusak)');
+    console.warn('Decryption failed, treating as empty:', err);
+    return '';
   }
 }

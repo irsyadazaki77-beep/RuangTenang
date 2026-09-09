@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Sparkles, X, ArrowRight } from 'lucide-react';
-import { CURRENT_APP_VERSION, isNewUpdateAvailable, markUpdateAsSeen } from '../../data/changelogData';
+import { CURRENT_APP_VERSION, isNewUpdateAvailable, markUpdateAsSeen } from '../../data/appVersion';
 
 interface NewUpdateToastProps {
   onOpenChangelog: () => void;

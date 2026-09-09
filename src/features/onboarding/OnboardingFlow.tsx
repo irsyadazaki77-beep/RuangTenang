@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Sparkles, ShieldCheck, HeartHandshake, ArrowRight, ChevronRight, Check } from 'lucide-react';
+import { Sparkles, ShieldCheck, HeartHandshake, ChevronRight, Check } from 'lucide-react';
+import { apiClient } from '../../lib/apiClient';
+import { clientDb } from '../../lib/clientDb';
+import { safeLocalStorage } from '../../lib/storage';
 
 interface OnboardingFlowProps {
   userId: string;
@@ -26,26 +29,39 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ userId, onComple
     }
   };
 
-  const handleNext = () => {
+  const persistOnboarding = async () => {
+    safeLocalStorage.setItem(`rt_onboarding_completed_${userId}`, 'true');
+    if (selectedGoals.length > 0) {
+      safeLocalStorage.setItem(`rt_user_goals_${userId}`, JSON.stringify(selectedGoals));
+      safeLocalStorage.setItem('rt_user_goals', JSON.stringify(selectedGoals));
+    }
+
+    try {
+      await clientDb.saveEncrypted(`onboarding_${userId}`, JSON.stringify({ completed: true, goals: selectedGoals }));
+    } catch {
+      // ignore
+    }
+
+    if (userId && userId !== 'guest') {
+      try {
+        await apiClient.post('/api/v1/user/onboarding', { completed: true, goals: selectedGoals });
+      } catch (err) {
+        console.warn('Failed to sync onboarding to server:', err);
+      }
+    }
+  };
+
+  const handleNext = async () => {
     if (step < 3) {
       setStep(prev => prev + 1);
     } else {
-      // Complete onboarding and persist goals
-      localStorage.setItem(`rt_onboarding_completed_${userId}`, 'true');
-      if (selectedGoals.length > 0) {
-        localStorage.setItem(`rt_user_goals_${userId}`, JSON.stringify(selectedGoals));
-        localStorage.setItem('rt_user_goals', JSON.stringify(selectedGoals));
-      }
+      await persistOnboarding();
       onComplete();
     }
   };
 
-  const handleSkip = () => {
-    localStorage.setItem(`rt_onboarding_completed_${userId}`, 'true');
-    if (selectedGoals.length > 0) {
-      localStorage.setItem(`rt_user_goals_${userId}`, JSON.stringify(selectedGoals));
-      localStorage.setItem('rt_user_goals', JSON.stringify(selectedGoals));
-    }
+  const handleSkip = async () => {
+    await persistOnboarding();
     onComplete();
   };
 

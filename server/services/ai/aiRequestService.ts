@@ -132,7 +132,7 @@ export const aiRequestService = {
     const outputTokens = isAnonymous ? 400 : 1000;
     
     const abortController = new AbortController();
-    const timeoutId = setTimeout(() => abortController.abort(), 20000);
+    const timeoutId = setTimeout(() => abortController.abort(), 60000);
 
     let fullSystemInstruction = systemInstruction || 'Kamu adalah Teman RuangTenang AI, asisten pendamping reflektif mahasiswa yang sangat hangat, ramah, merangkul, dan empati. Berikan tanggapan yang menenangkan dengan bahasa yang hangat serta gunakan emoji (seperti 🌿, 🤍, 🤗, ✨, ☕, 🫂, 🔐) secara alami. Tegaskan bahwa privasi dan keamanan ceritanya dijaga sesuai kebijakan privasi kami, dan kamu mendengarkan tanpa menghakimi. Kamu BUKAN profesional medis, JANGAN melakukan diagnosis medis atau merekomendasikan resep.';
 
@@ -145,6 +145,7 @@ export const aiRequestService = {
 
     const aiClient = getGenAIClient();
     if (!aiClient) {
+      clearTimeout(timeoutId);
       throw new Error('AI_UNAVAILABLE');
     }
 
@@ -169,7 +170,7 @@ export const aiRequestService = {
        });
        return { stream, modelUsed: primaryModel };
     } catch (err: any) {
-      console.error(`[AI_REQUEST_SERVICE] Stream primary failed:`, err);
+      console.warn(`[AI_REQUEST_SERVICE] Stream primary (${actualPrimary}) failed:`, err?.message || err);
       const fallbackModel = 'gemini-3.1-flash-lite';
       try {
          const stream = await aiClient.models.generateContentStream({
@@ -185,7 +186,7 @@ export const aiRequestService = {
          });
          return { stream, modelUsed: fallbackModel };
       } catch (fallbackErr: any) {
-         console.error(`[AI_REQUEST_SERVICE] Stream fallback failed:`, fallbackErr);
+         console.error(`[AI_REQUEST_SERVICE] Stream fallback failed:`, fallbackErr?.message || fallbackErr);
          clearTimeout(timeoutId);
          throw new Error('AI_STREAM_FAILED');
       }

@@ -1,4 +1,5 @@
 import { apiClient } from "../../lib/apiClient";
+import { safeLocalStorage } from "../../lib/storage";
 import React, { useState, useEffect } from 'react';
 import { useAuth } from "../../contexts/AuthContext";
 import { calculateStreak } from "../../utils/streak";
@@ -77,7 +78,7 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
   
   useEffect(() => {
     if (!user || user.role === 'guest') {
-      const saved = localStorage.getItem(CHECKLIST_KEY);
+      const saved = safeLocalStorage.getItem(CHECKLIST_KEY);
       if (saved) {
         try { 
           const parsed = JSON.parse(saved);
@@ -265,7 +266,7 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
     setSelfCareChecklist(prev => {
       const next = prev.map(item => item.id === id ? { ...item, done: newStatus } : item);
       if (!user || user.role === 'guest') {
-        localStorage.setItem(CHECKLIST_KEY, JSON.stringify(next));
+        safeLocalStorage.setItem(CHECKLIST_KEY, JSON.stringify(next));
       }
       return next;
     });

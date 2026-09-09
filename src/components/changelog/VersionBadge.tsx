@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Sparkles, ArrowUpRight, CheckCircle2, History } from 'lucide-react';
-import { CURRENT_APP_VERSION, LAST_UPDATED_DATE, isNewUpdateAvailable } from '../../data/changelogData';
+import { CURRENT_APP_VERSION, LAST_UPDATED_DATE, isNewUpdateAvailable } from '../../data/appVersion';
 
 interface VersionBadgeProps {
   variant?: 'pill' | 'compact' | 'sidebar' | 'card' | 'inline';

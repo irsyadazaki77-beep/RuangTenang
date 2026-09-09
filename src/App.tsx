@@ -1,5 +1,7 @@
 import { useAuth } from "./contexts/AuthContext";
 import { apiClient } from "./lib/apiClient";
+import { clientDb } from "./lib/clientDb";
+import { safeLocalStorage } from "./lib/storage";
 import React, { useState, useEffect, Suspense } from 'react';
 import { Routes, Route, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import Sidebar from './components/layout/Sidebar';
@@ -16,15 +18,15 @@ const CounselorDirectory = lazyWithRetry(() => import('./features/counselors/Cou
 const AppointmentScheduler = lazyWithRetry(() => import('./features/appointments/AppointmentScheduler').then(module => ({ default: module.AppointmentScheduler })));
 const EmergencyCenter = lazyWithRetry(() => import('./components/EmergencyCenter').then(module => ({ default: module.EmergencyCenter })));
 const LegalDocsModal = lazyWithRetry(() => import('./features/privacy/LegalDocsModal').then(module => ({ default: module.LegalDocsModal })));
-import { OnboardingFlow } from './features/onboarding/OnboardingFlow';
+const OnboardingFlow = lazyWithRetry(() => import('./features/onboarding/OnboardingFlow').then(module => ({ default: module.OnboardingFlow })));
 import { Counselor } from './types';
-import { NotificationCenter } from './components/notifications/NotificationCenter';
+const NotificationCenter = lazyWithRetry(() => import('./components/notifications/NotificationCenter').then(module => ({ default: module.NotificationCenter })));
 
 const AuthModal = lazyWithRetry(() => import('./features/authentication/AuthModal').then(module => ({ default: module.AuthModal })));
 const SettingsPage = lazyWithRetry(() => import('./features/settings/SettingsPage').then(module => ({ default: module.SettingsPage })));
 const CounselorDashboard = lazyWithRetry(() => import('./features/counselors/CounselorDashboard').then(module => ({ default: module.CounselorDashboard })));
 const ChangelogModal = lazyWithRetry(() => import('./components/changelog/ChangelogModal').then(module => ({ default: module.ChangelogModal })));
-import { NewUpdateToast } from './components/changelog/NewUpdateToast';
+const NewUpdateToast = lazyWithRetry(() => import('./components/changelog/NewUpdateToast').then(module => ({ default: module.NewUpdateToast })));
 
 export default function App() {
   const { user, setUser, loading, isOffline, logout } = useAuth();
@@ -43,14 +45,58 @@ export default function App() {
   const location = useLocation();
 
   useEffect(() => {
-    if (user?.id && user.role !== 'konselor') {
-      const completed = localStorage.getItem(`rt_onboarding_completed_${user.id}`);
-      if (!completed) {
+    let isCancelled = false;
+    const checkOnboardingStatus = async () => {
+      if (!user?.id || user.role === 'konselor') {
+        setShowOnboarding(false);
+        return;
+      }
+
+      // Check local cache first for instant UX
+      const localCompleted = safeLocalStorage.getItem(`rt_onboarding_completed_${user.id}`);
+      if (localCompleted === 'true') {
+        setShowOnboarding(false);
+        return;
+      }
+
+      // Check encrypted IndexedDB
+      try {
+        const encryptedRecord = await clientDb.getDecrypted(`onboarding_${user.id}`);
+        if (encryptedRecord) {
+          const parsed = JSON.parse(encryptedRecord);
+          if (parsed?.completed) {
+            safeLocalStorage.setItem(`rt_onboarding_completed_${user.id}`, 'true');
+            if (!isCancelled) setShowOnboarding(false);
+            return;
+          }
+        }
+      } catch {
+        // ignore
+      }
+
+      // Check backend
+      if (user.role !== 'guest') {
+        try {
+          const res = await apiClient.get<{ completed: boolean }>('/api/v1/user/onboarding');
+          if (!isCancelled && res.success && res.data) {
+            if (res.data.completed) {
+              safeLocalStorage.setItem(`rt_onboarding_completed_${user.id}`, 'true');
+              setShowOnboarding(false);
+              return;
+            }
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      if (!isCancelled) {
         setShowOnboarding(true);
       }
-    } else {
-      setShowOnboarding(false);
-    }
+    };
+
+    checkOnboardingStatus();
+    return () => { isCancelled = true; };
   }, [user?.id, user?.role]);
 
   useEffect(() => {
@@ -70,16 +116,22 @@ export default function App() {
       const res = await apiClient.get<Chat[]>('/api/v1/chat/history');
       if (res.success && Array.isArray(res.data)) {
         setChats(res.data);
-        localStorage.setItem(`ruangtenang_cached_chats_${user.id}`, JSON.stringify(res.data));
+        // Persist to encrypted IndexedDB for security
+        try {
+          await clientDb.saveEncrypted(`chats_${user.id}`, JSON.stringify(res.data));
+        } catch {
+          // fallback
+        }
       } else {
-        const cached = localStorage.getItem(`ruangtenang_cached_chats_${user.id}`);
-        if (cached) {
-          try {
-            setChats(JSON.parse(cached));
-          } catch {
+        // Fallback to decrypted IndexedDB cache
+        try {
+          const cachedJson = await clientDb.getDecrypted(`chats_${user.id}`);
+          if (cachedJson) {
+            setChats(JSON.parse(cachedJson));
+          } else {
             setChats([]);
           }
-        } else {
+        } catch {
           setChats([]);
         }
         if (res.status !== 401) {
@@ -88,14 +140,14 @@ export default function App() {
       }
     } catch (err) {
       console.warn('Failed to fetch chat history:', err);
-      const cached = localStorage.getItem(`ruangtenang_cached_chats_${user.id}`);
-      if (cached) {
-        try {
-          setChats(JSON.parse(cached));
-        } catch {
+      try {
+        const cachedJson = await clientDb.getDecrypted(`chats_${user.id}`);
+        if (cachedJson) {
+          setChats(JSON.parse(cachedJson));
+        } else {
           setChats([]);
         }
-      } else {
+      } catch {
         setChats([]);
       }
     } finally {
@@ -427,12 +479,20 @@ export default function App() {
       )}
 
       {showOnboarding && user?.id && (
-        <OnboardingFlow userId={user.id} onComplete={() => setShowOnboarding(false)} />
+        <Suspense fallback={null}>
+          <OnboardingFlow userId={user.id} onComplete={() => setShowOnboarding(false)} />
+        </Suspense>
       )}
 
-      <NotificationCenter isOpen={isNotificationOpen} onClose={() => setIsNotificationOpen(false)} />
+      {isNotificationOpen && (
+        <Suspense fallback={null}>
+          <NotificationCenter isOpen={isNotificationOpen} onClose={() => setIsNotificationOpen(false)} />
+        </Suspense>
+      )}
 
-      <NewUpdateToast onOpenChangelog={() => setIsChangelogOpen(true)} />
+      <Suspense fallback={null}>
+        <NewUpdateToast onOpenChangelog={() => setIsChangelogOpen(true)} />
+      </Suspense>
     </div>
   );
 }

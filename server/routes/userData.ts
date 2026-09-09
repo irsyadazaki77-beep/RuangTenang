@@ -242,6 +242,67 @@ router.delete('/mood', requireAuth, async (req: Request, res: Response) => {
   }
 });
 
+// --- ONBOARDING STATUS ---
+router.get('/onboarding', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const progress = await prisma.programProgresses.findUnique({
+      where: {
+        userId_programId: {
+          userId: req.user!.userId,
+          programId: 'onboarding'
+        }
+      }
+    });
+
+    if (!progress) {
+      return res.json({ success: true, completed: false, goals: [] });
+    }
+
+    try {
+      const data = JSON.parse(progress.completedStepIds);
+      if (Array.isArray(data)) {
+        return res.json({ success: true, completed: true, goals: data });
+      } else if (data && typeof data === 'object') {
+        return res.json({ success: true, completed: Boolean(data.completed), goals: Array.isArray(data.goals) ? data.goals : [] });
+      }
+    } catch {
+      // fallback
+    }
+
+    res.json({ success: true, completed: true, goals: [] });
+  } catch (e) {
+    sendError(res, 'FETCH_ONBOARDING_FAILED', 'Gagal mengambil status onboarding');
+  }
+});
+
+router.post('/onboarding', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { completed = true, goals = [] } = req.body;
+    await prisma.programProgresses.upsert({
+      where: {
+        userId_programId: {
+          userId: req.user!.userId,
+          programId: 'onboarding'
+        }
+      },
+      update: {
+        completedStepIds: JSON.stringify({ completed: Boolean(completed), goals: Array.isArray(goals) ? goals : [] }),
+        lastUpdated: new Date()
+      },
+      create: {
+        userId: req.user!.userId,
+        programId: 'onboarding',
+        completedStepIds: JSON.stringify({ completed: Boolean(completed), goals: Array.isArray(goals) ? goals : [] }),
+        lastUpdated: new Date()
+      }
+    });
+
+    res.json({ success: true, completed: true, goals });
+  } catch (e) {
+    sendError(res, 'UPDATE_ONBOARDING_FAILED', 'Gagal memperbarui status onboarding');
+  }
+});
+
 // --- EMERGENCY CONTACT ---
 router.get('/emergency-contact', requireAuth, async (req: Request, res: Response) => {
   try {
