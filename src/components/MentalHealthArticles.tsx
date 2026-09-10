@@ -355,7 +355,7 @@ export const MentalHealthArticles: React.FC = () => {
         text: article.summary,
         url: window.location.href,
       }).catch(err => {
-        console.log('Error sharing:', err);
+        console.info('Error sharing:', err);
       });
     } else {
       navigator.clipboard.writeText(`${article.title} - Baca di RuangTenang Kampus: ${window.location.href}`);
@@ -424,7 +424,7 @@ export const MentalHealthArticles: React.FC = () => {
               placeholder="Cari artikel, panduan kognitif, teknik pernapasan..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 bg-white border border-slate-300 rounded-lg text-base sm:text-xs focus:outline-none focus:border-slate-800 text-slate-800 shadow-2xs placeholder:text-slate-600"
+              className="w-full pl-9 pr-4 py-2 surface-card border-strong rounded-lg text-base sm:text-xs focus:outline-none focus:border-slate-800 text-slate-800 shadow-2xs placeholder:text-slate-600"
             />
             {searchTerm && (
               <button 
@@ -493,7 +493,7 @@ export const MentalHealthArticles: React.FC = () => {
               <div 
                 key={article.id} 
                 onClick={() => handleOpenArticle(article)}
-                className="bg-white border border-slate-200 rounded-xl overflow-hidden hover:shadow-md hover:border-slate-300 transition-all group flex flex-col h-full cursor-pointer"
+                className="surface-card rounded-xl overflow-hidden hover:shadow-md hover:border-slate-300 transition-all group flex flex-col h-full cursor-pointer"
               >
                 {/* Card Thumbnail */}
                 <div className="h-36 overflow-hidden relative bg-slate-100">
@@ -571,9 +571,9 @@ export const MentalHealthArticles: React.FC = () => {
 
       {/* ARTICLE READER MODAL OVERLAY */}
       {activeArticle && (
-        <div className="fixed inset-0 z-50 bg-slate-900/65 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+        <div className="fixed inset-0 z-50 bg-slate-900/65 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
           <div 
-            className="bg-white border border-slate-200 text-slate-800 rounded-xl max-w-2xl w-full max-h-[92vh] flex flex-col shadow-xl animate-scale-up relative"
+            className="surface-card text-slate-800 rounded-xl max-w-2xl w-full max-h-[92vh] flex flex-col shadow-xl animate-scale-up relative"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header bar */}

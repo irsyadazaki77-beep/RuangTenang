@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { prisma } from './database.js';
 import { validateEnvironment } from './config/envValidation.js';
 import { logger } from './utils/logger.js';
+import { metricsService } from './services/metricsService.js';
 
 declare global {
   namespace Express {
@@ -119,6 +120,7 @@ export function requestIdAndLoggerMiddleware(req: Request, res: Response, next: 
   // Log outgoing response
   res.on('finish', () => {
     const durationMs = Date.now() - startTime;
+    metricsService.recordHttpRequest(res.statusCode, durationMs);
     console.log(JSON.stringify({
       event: 'HTTP_RESPONSE_OUT',
       timestamp: new Date().toISOString(),

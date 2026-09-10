@@ -275,9 +275,28 @@ router.get('/onboarding', requireAuth, async (req: Request, res: Response) => {
   }
 });
 
+const OnboardingSchema = z.object({
+  completed: z.boolean().optional().default(true),
+  goals: z.array(z.enum(['academic', 'anxiety', 'relations', 'mindfulness']))
+    .max(4)
+    .refine((arr) => new Set(arr).size === arr.length, {
+      message: "Goals must be unique and contain no duplicates"
+    })
+});
+
 router.post('/onboarding', requireAuth, async (req: Request, res: Response) => {
   try {
-    const { completed = true, goals = [] } = req.body;
+    const parsed = OnboardingSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        success: false,
+        code: 'VALIDATION_ERROR',
+        message: 'Payload onboarding tidak valid.',
+        details: parsed.error.issues.map(e => ({ path: e.path.join('.'), message: e.message }))
+      });
+    }
+
+    const { completed, goals } = parsed.data;
     await prisma.programProgresses.upsert({
       where: {
         userId_programId: {
@@ -286,13 +305,13 @@ router.post('/onboarding', requireAuth, async (req: Request, res: Response) => {
         }
       },
       update: {
-        completedStepIds: JSON.stringify({ completed: Boolean(completed), goals: Array.isArray(goals) ? goals : [] }),
+        completedStepIds: JSON.stringify({ completed, goals }),
         lastUpdated: new Date()
       },
       create: {
         userId: req.user!.userId,
         programId: 'onboarding',
-        completedStepIds: JSON.stringify({ completed: Boolean(completed), goals: Array.isArray(goals) ? goals : [] }),
+        completedStepIds: JSON.stringify({ completed, goals }),
         lastUpdated: new Date()
       }
     });

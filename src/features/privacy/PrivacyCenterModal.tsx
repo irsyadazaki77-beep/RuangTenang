@@ -17,7 +17,7 @@ import {
   UserCheck,
   Server,
   Lock,
-  FileSpreadsheet
+  FileSpreadsheet, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { UserSession } from '../../types';
 import { apiClient } from '../../lib/apiClient';
@@ -84,6 +84,7 @@ export const PrivacyCenterModal: React.FC<PrivacyCenterModalProps> = ({
     };
   }, [onClose]);
 
+  const [showMobileDetail, setShowMobileDetail] = useState(false);
   const [activeTab, setActiveTab] = useState<
     'consent' | 'export' | 'correct' | 'retention' | 'sessions' | 'access_logs' | 'erasure'
   >('consent');
@@ -370,16 +371,14 @@ export const PrivacyCenterModal: React.FC<PrivacyCenterModalProps> = ({
   ] as const;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center max-sm:items-end bg-slate-900/60 backdrop-blur-xs p-2 sm:p-4 max-sm:p-0 animate-fade-in font-sans">
+    <div className="fixed inset-0 z-50 flex items-center justify-center max-sm:items-start bg-slate-900/60 backdrop-blur-xs p-2 sm:p-4 max-sm:p-0 animate-fade-in font-sans">
       <div
         ref={modalRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="privacy-modal-title"
-        className="surface-card text-primary rounded-2xl max-sm:rounded-b-none max-sm:rounded-t-2xl shadow-xl border border-default w-full max-w-4xl max-h-[90vh] max-sm:max-h-[92vh] max-sm:w-full max-sm:animate-slide-up flex flex-col overflow-hidden relative transition-all duration-200"
+        className="surface-card text-primary rounded-2xl max-sm:rounded-none shadow-xl border border-default w-full max-w-4xl max-h-[90vh] max-sm:h-[100dvh] max-sm:max-h-[100dvh] max-sm:w-full max-sm:animate-slide-up flex flex-col overflow-hidden relative transition-all duration-200"
       >
-        {/* Drag handle for mobile bottom sheet */}
-        <div className="w-10 h-1 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto my-2 sm:hidden shrink-0" />
         
         {/* Header */}
         <div className="px-4 sm:px-6 py-3.5 surface-card text-primary flex items-center justify-between shrink-0 border-b border-default">
@@ -418,57 +417,50 @@ export const PrivacyCenterModal: React.FC<PrivacyCenterModalProps> = ({
           </div>
         )}
 
-        {/* Mobile Horizontal Tabs */}
-        <div className="md:hidden flex overflow-x-auto no-scrollbar gap-1.5 p-2 surface-muted border-b border-default shrink-0">
-          {tabItems.map((tab) => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => { setActiveTab(tab.id); setMsg(null); }}
-                className={`px-3 py-1.5 min-h-[38px] rounded-xl text-xs font-semibold whitespace-nowrap flex items-center gap-1.5 shrink-0 transition-colors cursor-pointer active:scale-[0.98] ${
-                  isActive
-                    ? tab.id === 'erasure' ? 'bg-rose-600 text-white shadow-3xs' : 'bg-teal-600 text-white shadow-3xs'
-                    : 'surface-card text-secondary hover:text-primary border border-default'
-                }`}
-              >
-                <Icon className="w-3.5 h-3.5" />
-                <span>{tab.label}</span>
-              </button>
-            );
-          })}
-        </div>
-
+        
         {/* Modal Layout: Sidebar + Main Content */}
-        <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
+        <div className="flex-1 flex flex-col md:flex-row overflow-hidden surface-page">
           
-          {/* Desktop Navigation Sidebar */}
-          <div className="hidden md:flex md:w-60 md:flex-col surface-muted border-r border-default p-2.5 space-y-1 shrink-0 overflow-y-auto">
+          {/* Unified Navigation Sidebar */}
+          <div className={`w-full md:w-64 md:flex-col surface-muted border-r border-default p-2.5 space-y-1 shrink-0 overflow-y-auto ${showMobileDetail ? 'hidden md:flex' : 'flex flex-col'}`}>
             {tabItems.map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
               return (
                 <button
                   key={tab.id}
-                  onClick={() => { setActiveTab(tab.id); setMsg(null); }}
-                  className={`w-full text-left px-3 py-2 min-h-[40px] rounded-xl text-xs font-semibold transition-colors flex items-center gap-2.5 cursor-pointer active:scale-[0.98] ${
+                  onClick={() => { setActiveTab(tab.id); setMsg(null); setShowMobileDetail(true); }}
+                  className={`w-full text-left px-3 py-2 min-h-[44px] rounded-xl text-xs font-semibold transition-colors flex items-center justify-between cursor-pointer active:scale-[0.98] ${
                     isActive
                       ? tab.id === 'erasure' ? 'bg-rose-600 text-white shadow-3xs' : 'bg-teal-600 text-white shadow-3xs'
                       : tab.id === 'erasure' ? 'text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30' : 'text-secondary hover:text-primary hover:bg-slate-200/50 dark:hover:bg-slate-800/50'
                   }`}
                 >
-                  <Icon className="w-4 h-4 shrink-0" />
-                  <span className="truncate">{tab.fullLabel}</span>
+                  <div className="flex items-center gap-2.5">
+                    <Icon className="w-4 h-4 shrink-0" />
+                    <span>{tab.fullLabel}</span>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-slate-400 md:hidden shrink-0" />
                 </button>
               );
             })}
           </div>
 
+          
+
           {/* Main Tab Panel */}
-          <div className="flex-1 p-4 sm:p-6 overflow-y-auto space-y-4 surface-card text-primary">
+          <div className={`flex-1 p-4 sm:p-6 overflow-y-auto space-y-4 surface-page text-primary ${!showMobileDetail ? 'hidden md:block' : 'block'}`}>
             
             {/* TAB 1: Consent AI & Features */}
+            {showMobileDetail && (
+              <button 
+                onClick={() => setShowMobileDetail(false)} 
+                className="md:hidden flex items-center gap-1.5 text-xs font-semibold text-teal-600 dark:text-teal-400 hover:text-teal-700 px-3.5 py-2 mb-4 rounded-lg bg-teal-50 dark:bg-teal-900/40 cursor-pointer transition-all min-h-[44px] w-fit"
+              >
+                <ChevronLeft className="w-4 h-4" /> Kembali ke Kategori
+              </button>
+            )}
+
             {activeTab === 'consent' && (
               <ConsentTab
                 loading={loading}

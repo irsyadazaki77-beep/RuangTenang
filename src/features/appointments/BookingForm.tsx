@@ -85,7 +85,6 @@ export const BookingForm: React.FC<BookingFormProps> = ({
   const [studentName, setStudentName] = useState(userSession.name || "");
   const [studentNIM, setStudentNIM] = useState("");
   const [studentEmail, setStudentEmail] = useState(userSession.email || "");
-  const [studentPhone, setStudentPhone] = useState("");
   const getLocalTimezone = (): "WIB" | "WITA" | "WIT" => {
     try {
       const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -260,7 +259,6 @@ export const BookingForm: React.FC<BookingFormProps> = ({
         studentName: record.studentName || studentName.trim(),
         studentNIM: record.studentNIM || studentNIM.trim(),
         studentEmail: record.studentEmail || studentEmail.trim(),
-        studentPhone: studentPhone.trim() || undefined,
         date: record.date,
         timeSlot: `${record.time} ${record.timezone || timezone}`,
         timezone: record.timezone || timezone,
@@ -301,7 +299,7 @@ export const BookingForm: React.FC<BookingFormProps> = ({
   const currentCounselor = counselors.find((c) => c.id === selectedCounselorId);
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center max-sm:items-end p-3 sm:p-4 max-sm:p-0 overflow-y-auto font-sans animate-fade-in">
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center max-sm:items-end p-3 sm:p-4 max-sm:p-0 font-sans animate-fade-in">
       <div className="surface-card text-primary border border-default rounded-2xl max-sm:rounded-b-none max-sm:rounded-t-2xl max-w-lg w-full p-4 sm:p-6 shadow-xl relative max-h-[92dvh] overflow-y-auto flex flex-col justify-between max-sm:animate-slide-up transition-transform duration-200">
         {/* Drag handle for mobile bottom sheet */}
         <div className="w-10 h-1 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto my-2 sm:hidden shrink-0" />
@@ -582,12 +580,6 @@ export const BookingForm: React.FC<BookingFormProps> = ({
                   <label className="block text-xs font-semibold text-secondary">Email Utama</label>
                   <input type="email" value={studentEmail} onChange={(e) => setStudentEmail(e.target.value)} placeholder="email@contoh.com" className="w-full surface-muted border border-default rounded-xl px-3.5 py-2 text-base sm:text-sm text-primary focus:outline-none focus:border-teal-600 focus:ring-1 focus:ring-teal-600 transition-all min-h-[44px]" />
                 </div>
-                <div className="space-y-1">
-                  <label className="block text-xs font-semibold text-secondary">
-                    Nomor WhatsApp / Telepon <span className="text-[10px] text-secondary font-normal">(Opsional)</span>
-                  </label>
-                  <input type="tel" value={studentPhone} onChange={(e) => setStudentPhone(e.target.value)} placeholder="0812... (opsional)" className="w-full surface-muted border border-default rounded-xl px-3.5 py-2 text-base sm:text-sm text-primary focus:outline-none focus:border-teal-600 focus:ring-1 focus:ring-teal-600 transition-all min-h-[44px]" />
-                </div>
               </div>
             </div>
           )}
@@ -609,7 +601,7 @@ export const BookingForm: React.FC<BookingFormProps> = ({
                 <div className="space-y-0.5">
                   <p className="text-[11px] font-semibold text-secondary">Data Pemesan</p>
                   <p className="text-xs sm:text-sm font-bold text-primary">{studentName}</p>
-                  <p className="text-[11px] text-secondary mt-0.5">{studentEmail} {studentPhone ? `• ${studentPhone}` : ''}</p>
+                  <p className="text-[11px] text-secondary mt-0.5">{studentEmail}</p>
                 </div>
               </div>
 

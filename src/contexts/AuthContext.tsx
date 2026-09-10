@@ -1,5 +1,6 @@
 import { apiClient } from "../lib/apiClient";
-import { safeSessionStorage } from "../lib/storage";
+import { safeSessionStorage, safeLocalStorage } from "../lib/storage";
+import { clientDb } from "../lib/clientDb";
 import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 
 import { UserSession } from '../types';
@@ -66,13 +67,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
       if (res.success && res.data?.user) {
         setUser(res.data.user);
+        safeLocalStorage.setItem('rt_active_user_id', res.data.user.id);
       } else {
         setUser(DEFAULT_GUEST_USER);
+        safeLocalStorage.setItem('rt_active_user_id', 'guest');
       }
     } catch (e) {
       console.warn('Session check fallback to guest:', e);
       if (authVersionRef.current === currentVersion) {
         setUser(DEFAULT_GUEST_USER);
+        safeLocalStorage.setItem('rt_active_user_id', 'guest');
       }
     } finally {
       if (authVersionRef.current === currentVersion) {
@@ -97,6 +101,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     safeSessionStorage.removeItem('ruangtenang_session');
     safeSessionStorage.removeItem('active_counselor_tab');
     safeSessionStorage.removeItem('ruangtenang_draft_chat');
+    safeLocalStorage.setItem('rt_active_user_id', 'guest');
+
+    // Clean up volatile clientDb memory
+    clientDb.clearAllMemory();
 
     if (authVersionRef.current === currentVersion) {
       setUser(isTestEnv() ? DEFAULT_GUEST_USER : null);
@@ -105,7 +113,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const handleSetUser = (newUser: UserSession | null) => {
     authVersionRef.current++;
-    setUser(newUser || (isTestEnv() ? DEFAULT_GUEST_USER : null));
+    const finalUser = newUser || (isTestEnv() ? DEFAULT_GUEST_USER : null);
+    setUser(finalUser);
+    safeLocalStorage.setItem('rt_active_user_id', finalUser ? finalUser.id : 'guest');
   };
 
   return (

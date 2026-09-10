@@ -266,7 +266,7 @@ export const CounselorChatSimulation: React.FC<CounselorChatSimulationProps> = (
               </div>
               <div className="flex flex-col">
                 <span className="text-[10px] font-medium text-slate-600 mb-1">{appointment.counselorName}</span>
-                <div className="bg-white border border-slate-200 rounded-2xl rounded-tl-none px-4 py-3 text-sm text-slate-600 flex items-center gap-2">
+                <div className="surface-card rounded-2xl rounded-tl-none px-4 py-3 text-sm text-slate-600 flex items-center gap-2">
                   <span className="w-1.5 h-1.5 rounded-full bg-slate-500 animate-bounce [animation-delay:-0.3s]"></span>
                   <span className="w-1.5 h-1.5 rounded-full bg-slate-500 animate-bounce [animation-delay:-0.15s]"></span>
                   <span className="w-1.5 h-1.5 rounded-full bg-slate-500 animate-bounce"></span>

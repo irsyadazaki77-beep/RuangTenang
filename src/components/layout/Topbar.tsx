@@ -18,13 +18,13 @@ export function Topbar({ onOpenSidebar, title = 'RuangTenang', showBackButton, u
   const navigate = useNavigate();
 
   return (
-    <div className="h-14 border-b border-slate-200/80 dark:border-slate-800 flex items-center justify-between px-3 sm:px-4 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md sticky top-0 z-10 w-full min-w-0 shrink-0">
+    <div className="h-14 border-b border-default flex items-center justify-between px-3 sm:px-4 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md sticky top-0 z-10 w-full min-w-0 shrink-0">
       <div className="flex items-center gap-2 min-w-0 flex-1">
         {onOpenSidebar && (
           <button 
             onClick={onOpenSidebar} 
-            className="lg:hidden p-2 -ml-1 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 active:bg-slate-200 rounded-xl shrink-0 transition-colors cursor-pointer" 
-            aria-label="Buka Menu"
+            className="lg:hidden p-2 -ml-1 text-secondary hover:bg-slate-100 dark:hover:bg-slate-800 active:bg-slate-200 rounded-xl shrink-0 transition-colors cursor-pointer min-h-[44px] min-w-[44px] flex items-center justify-center" 
+            aria-label="Buka Menu Sidebar"
           >
             <Menu className="w-5 h-5" />
           </button>
@@ -33,18 +33,18 @@ export function Topbar({ onOpenSidebar, title = 'RuangTenang', showBackButton, u
         {showBackButton && (
           <button 
             onClick={() => navigate(-1)} 
-            className="p-2 -ml-1 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 active:bg-slate-200 rounded-xl shrink-0 transition-colors cursor-pointer" 
+            className="p-2 -ml-1 text-secondary hover:bg-slate-100 dark:hover:bg-slate-800 active:bg-slate-200 rounded-xl shrink-0 transition-colors cursor-pointer" 
             aria-label="Kembali"
           >
             <ChevronLeft className="w-5 h-5" />
           </button>
         )}
 
-        <div className="flex items-center gap-2 pr-2 border-r border-slate-200/80 dark:border-slate-800 shrink-0">
+        <div className="flex items-center gap-2 pr-2 border-r border-default shrink-0">
           <div className="w-6 h-6 rounded-lg bg-teal-50 dark:bg-teal-950/70 border border-teal-200/80 dark:border-teal-900 shadow-3xs flex items-center justify-center p-0.5">
             <img src="/favicon.svg" alt="RuangTenang" className="w-full h-full object-contain" />
           </div>
-          <span className="font-bold text-xs sm:text-sm text-slate-900 dark:text-slate-100 hidden xs:inline tracking-tight">{title}</span>
+          <span className="font-bold text-xs sm:text-sm text-primary hidden xs:inline tracking-tight">{title}</span>
         </div>
 
         {user?.role === 'guest' && (

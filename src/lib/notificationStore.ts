@@ -9,8 +9,14 @@ export interface AppNotification {
   type: 'info' | 'success' | 'warning' | 'alert';
 }
 
+export function getActiveUserId(): string {
+  if (typeof window === 'undefined') return 'guest';
+  return safeLocalStorage.getItem('rt_active_user_id') || 'guest';
+}
+
 export function getNotifications(): AppNotification[] {
-  const stored = safeLocalStorage.getItem('ruangtenang_app_notifications');
+  const userId = getActiveUserId();
+  const stored = safeLocalStorage.getItem(`ruangtenang_app_notifications_${userId}`);
   if (!stored) {
     return [];
   }
@@ -22,7 +28,8 @@ export function getNotifications(): AppNotification[] {
 }
 
 export function saveNotifications(notifs: AppNotification[]) {
-  safeLocalStorage.setItem('ruangtenang_app_notifications', JSON.stringify(notifs));
+  const userId = getActiveUserId();
+  safeLocalStorage.setItem(`ruangtenang_app_notifications_${userId}`, JSON.stringify(notifs));
   // Dispatch a custom event to update other mounted components reactively
   if (typeof window !== 'undefined') {
     try {

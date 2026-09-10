@@ -29,7 +29,7 @@ export const VersionBadge: React.FC<VersionBadgeProps> = ({
         className={`group relative flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-full border transition-all cursor-pointer ${
           hasNewUpdate && showPing
             ? 'bg-teal-50 dark:bg-teal-950/80 border-teal-300 dark:border-teal-700 text-teal-800 dark:text-teal-200 shadow-3xs hover:bg-teal-100 dark:hover:bg-teal-900'
-            : 'bg-slate-100/90 dark:bg-slate-800/90 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+            : 'bg-slate-100/90 dark:bg-slate-800/90 border-slate-200 dark:border-slate-700 text-secondary hover:bg-slate-200 dark:hover:bg-slate-700'
         } ${className}`}
         title={`Versi Aplikasi: ${CURRENT_APP_VERSION} (Klik untuk melihat catatan rilis)`}
       >
@@ -55,7 +55,7 @@ export const VersionBadge: React.FC<VersionBadgeProps> = ({
         className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all border cursor-pointer ${
           hasNewUpdate && showPing
             ? 'bg-teal-50/80 dark:bg-teal-950/50 border-teal-200 dark:border-teal-800/80 text-teal-900 dark:text-teal-200 hover:bg-teal-100/80 dark:hover:bg-teal-900/60'
-            : 'bg-white dark:bg-slate-800/60 border-slate-200/80 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100/80 dark:hover:bg-slate-800'
+            : 'bg-white dark:bg-slate-800/60 border-default text-secondary hover:bg-slate-100/80 dark:hover:bg-slate-800'
         } ${className}`}
         title="Buka Catatan Pembaruan Harian"
       >
@@ -70,7 +70,7 @@ export const VersionBadge: React.FC<VersionBadgeProps> = ({
                 <span className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse shrink-0" />
               )}
             </div>
-            <span className="text-[9.5px] text-slate-400 dark:text-slate-500 truncate">
+            <span className="text-[9.5px] text-muted truncate">
               {hasNewUpdate ? 'Ada Update Baru!' : 'Update Terkini'}
             </span>
           </div>
@@ -100,7 +100,7 @@ export const VersionBadge: React.FC<VersionBadgeProps> = ({
                   Update Harian
                 </span>
               </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              <p className="text-xs text-secondary mt-0.5">
                 Rilis terbaru: {LAST_UPDATED_DATE}
               </p>
             </div>
@@ -116,11 +116,11 @@ export const VersionBadge: React.FC<VersionBadgeProps> = ({
           </button>
         </div>
 
-        <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+        <p className="text-xs text-secondary leading-relaxed">
           RuangTenang diperbarui secara berkala setiap hari untuk meningkatkan keamanan enkripsi, performa respons AI, dan fitur pendukung kesehatan mental mahasiswa.
         </p>
 
-        <div className="flex items-center justify-between text-[11px] pt-1 border-t border-teal-100 dark:border-teal-900/60 text-slate-500 dark:text-slate-400">
+        <div className="flex items-center justify-between text-[11px] pt-1 border-t border-teal-100 dark:border-teal-900/60 text-secondary">
           <span className="flex items-center gap-1">
             <CheckCircle2 className="w-3.5 h-3.5 text-teal-600" /> Auto-Updated System
           </span>
@@ -144,7 +144,7 @@ export const VersionBadge: React.FC<VersionBadgeProps> = ({
       className={`group relative inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-xl border transition-all cursor-pointer ${
         hasNewUpdate && showPing
           ? 'bg-teal-50 dark:bg-teal-950/80 border-teal-300 dark:border-teal-700 text-teal-900 dark:text-teal-200 shadow-3xs hover:bg-teal-100 dark:hover:bg-teal-900 ring-2 ring-teal-500/10'
-          : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-750'
+          : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-secondary hover:bg-slate-50 dark:hover:bg-slate-750'
       } ${className}`}
       title="Buka Catatan Pembaruan & Versi"
     >

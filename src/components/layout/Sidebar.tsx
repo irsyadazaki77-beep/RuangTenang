@@ -134,10 +134,10 @@ export default function Sidebar({ isOpen, setIsOpen, onNewChat, chats, currentCh
         className={`group relative flex items-center gap-2 w-full px-2 py-0.5 min-h-[44px] sm:min-h-[34px] rounded-lg text-[12.5px] transition-colors text-left ${
           isActive 
             ? 'bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300 font-medium' 
-            : 'hover:bg-slate-100/80 dark:hover:bg-slate-800/70 text-slate-700 dark:text-slate-300'
+            : 'hover:bg-slate-100/80 dark:hover:bg-slate-800/70 text-secondary'
         }`}
       >
-        <MessageSquare className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-teal-600 dark:text-teal-400' : 'text-slate-400 dark:text-slate-500'}`} />
+        <MessageSquare className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-teal-600 dark:text-teal-400' : 'text-muted'}`} />
         
         {editingId === c.id ? (
           <input 
@@ -146,7 +146,7 @@ export default function Sidebar({ isOpen, setIsOpen, onNewChat, chats, currentCh
             onChange={e => setEditTitle(e.target.value)}
             onBlur={() => handleEditSubmit(c.id)}
             onKeyDown={e => e.key === 'Enter' && handleEditSubmit(c.id)}
-            className="flex-1 bg-white dark:bg-slate-800 border border-teal-500 rounded px-2 py-1 text-[12px] text-slate-900 dark:text-slate-100 outline-none ring-2 ring-teal-500/20 min-h-[36px]"
+            className="flex-1 bg-white dark:bg-slate-800 border border-teal-500 rounded px-2 py-1 text-[12px] text-primary outline-none ring-2 ring-teal-500/20 min-h-[36px]"
           />
         ) : (
           <button 
@@ -240,7 +240,7 @@ export default function Sidebar({ isOpen, setIsOpen, onNewChat, chats, currentCh
             <div className="w-[26px] h-[26px] rounded-md bg-white dark:bg-slate-800 border border-slate-200/70 dark:border-slate-700 shadow-xs flex items-center justify-center shrink-0 p-0.5">
               <img src="/favicon.svg" alt="RuangTenang Logo" className="w-full h-full object-contain" />
             </div>
-            <span className="font-bold text-[14px] tracking-tight text-slate-900 dark:text-slate-100 leading-none truncate">RuangTenang</span>
+            <span className="font-bold text-[14px] tracking-tight text-primary leading-none truncate">RuangTenang</span>
           </div>
           <button 
             onClick={() => setIsOpen(false)} 
@@ -279,7 +279,7 @@ export default function Sidebar({ isOpen, setIsOpen, onNewChat, chats, currentCh
         </div>
 
         {/* Toggle Archive */}
-        <div className="px-3 py-1 flex items-center justify-between text-[11px] sm:text-[10.5px] text-slate-500 dark:text-slate-400">
+        <div className="px-3 py-1 flex items-center justify-between text-[11px] sm:text-[10.5px] text-secondary">
           <span className="font-medium uppercase tracking-wider">{showArchived ? 'Arsip Percakapan' : 'Riwayat'}</span>
           <button 
             onClick={() => setShowArchived(!showArchived)} 
@@ -301,21 +301,21 @@ export default function Sidebar({ isOpen, setIsOpen, onNewChat, chats, currentCh
               ))}
             </div>
           ) : pinnedChats.length === 0 && Object.values(groups).every(g => g.length === 0) ? (
-            <div className="text-center text-slate-400 dark:text-slate-500 mt-4 text-[11.5px] px-3">
+            <div className="text-center text-muted mt-4 text-[11.5px] px-3">
               {search ? 'Tidak ada percakapan.' : (showArchived ? 'Belum ada arsip.' : 'Belum ada percakapan.')}
             </div>
           ) : (
             <>
               {pinnedChats.length > 0 && (
                 <div>
-                  <div className="px-2 mb-0.5 mt-0.5 text-[9.5px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider flex items-center gap-1">Pinned</div>
+                  <div className="px-2 mb-0.5 mt-0.5 text-[9.5px] font-bold text-muted uppercase tracking-wider flex items-center gap-1">Pinned</div>
                   <div className="space-y-0.5">{pinnedChats.map(renderChatItem)}</div>
                 </div>
               )}
 
               {Object.entries(groups).map(([label, groupChats]) => groupChats.length > 0 && (
                 <div key={label}>
-                  <div className="px-2 mb-0.5 mt-1.5 text-[9.5px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">{label}</div>
+                  <div className="px-2 mb-0.5 mt-1.5 text-[9.5px] font-bold text-muted uppercase tracking-wider">{label}</div>
                   <div className="space-y-0.5">{groupChats.map(renderChatItem)}</div>
                 </div>
               ))}
@@ -325,28 +325,28 @@ export default function Sidebar({ isOpen, setIsOpen, onNewChat, chats, currentCh
 
         {/* Secondary Tools Navigation */}
         <div className="px-1.5 py-1.5 space-y-0.5 border-t border-slate-200/70 dark:border-slate-800">
-          <div className="px-2 mb-0.5 text-[9.5px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Layanan</div>
+          <div className="px-2 mb-0.5 text-[9.5px] font-bold text-muted uppercase tracking-wider">Layanan</div>
           <button 
             onClick={() => { navigate('/mood'); setIsOpen(false); }} 
-            className="w-full flex items-center gap-2.5 px-2.5 min-h-[44px] sm:min-h-[36px] rounded-lg hover:bg-slate-100/80 dark:hover:bg-slate-800/70 text-slate-700 dark:text-slate-300 font-medium transition-colors cursor-pointer text-[12.5px]"
+            className="w-full flex items-center gap-2.5 px-2.5 min-h-[44px] sm:min-h-[36px] rounded-lg hover:bg-slate-100/80 dark:hover:bg-slate-800/70 text-secondary font-medium transition-colors cursor-pointer text-[12.5px]"
           >
             <Heart className="w-4 h-4 text-slate-500 shrink-0" /> Mood & Progress
           </button>
           <button 
             onClick={() => { navigate('/screening'); setIsOpen(false); }} 
-            className="w-full flex items-center gap-2.5 px-2.5 min-h-[44px] sm:min-h-[36px] rounded-lg hover:bg-slate-100/80 dark:hover:bg-slate-800/70 text-slate-700 dark:text-slate-300 font-medium transition-colors cursor-pointer text-[12.5px]"
+            className="w-full flex items-center gap-2.5 px-2.5 min-h-[44px] sm:min-h-[36px] rounded-lg hover:bg-slate-100/80 dark:hover:bg-slate-800/70 text-secondary font-medium transition-colors cursor-pointer text-[12.5px]"
           >
             <Stethoscope className="w-4 h-4 text-slate-500 shrink-0" /> Skrining
           </button>
           <button 
             onClick={() => { navigate('/counselors'); setIsOpen(false); }} 
-            className="w-full flex items-center gap-2.5 px-2.5 min-h-[44px] sm:min-h-[36px] rounded-lg hover:bg-slate-100/80 dark:hover:bg-slate-800/70 text-slate-700 dark:text-slate-300 font-medium transition-colors cursor-pointer text-[12.5px]"
+            className="w-full flex items-center gap-2.5 px-2.5 min-h-[44px] sm:min-h-[36px] rounded-lg hover:bg-slate-100/80 dark:hover:bg-slate-800/70 text-secondary font-medium transition-colors cursor-pointer text-[12.5px]"
           >
             <Users className="w-4 h-4 text-slate-500 shrink-0" /> Konselor
           </button>
           <button 
             onClick={() => { onOpenNotifications?.(); setIsOpen(false); }} 
-            className="w-full flex items-center justify-between px-2.5 min-h-[44px] sm:min-h-[36px] rounded-lg hover:bg-slate-100/80 dark:hover:bg-slate-800/70 text-slate-700 dark:text-slate-300 font-medium transition-colors cursor-pointer text-[12.5px]"
+            className="w-full flex items-center justify-between px-2.5 min-h-[44px] sm:min-h-[36px] rounded-lg hover:bg-slate-100/80 dark:hover:bg-slate-800/70 text-secondary font-medium transition-colors cursor-pointer text-[12.5px]"
           >
             <div className="flex items-center gap-2.5">
               <Bell className="w-4 h-4 text-slate-500 shrink-0" /> Notifikasi
@@ -371,14 +371,14 @@ export default function Sidebar({ isOpen, setIsOpen, onNewChat, chats, currentCh
         <div className="px-1.5 pb-2 pt-0.5 space-y-0.5">
           <button 
             onClick={() => { onOpenSettings?.(); setIsOpen(false); }} 
-            className="w-full flex items-center gap-2.5 px-2.5 min-h-[44px] sm:min-h-[36px] rounded-lg hover:bg-slate-100/80 dark:hover:bg-slate-800/70 text-slate-700 dark:text-slate-300 font-medium transition-colors cursor-pointer text-[12.5px]"
+            className="w-full flex items-center gap-2.5 px-2.5 min-h-[44px] sm:min-h-[36px] rounded-lg hover:bg-slate-100/80 dark:hover:bg-slate-800/70 text-secondary font-medium transition-colors cursor-pointer text-[12.5px]"
           >
             <Settings className="w-4 h-4 text-slate-500 shrink-0" /> Pengaturan
           </button>
           
           <button 
             onClick={toggleTheme} 
-            className="w-full flex items-center justify-between px-2.5 min-h-[44px] sm:min-h-[36px] rounded-lg hover:bg-slate-100/80 dark:hover:bg-slate-800/70 text-slate-700 dark:text-slate-300 font-medium transition-colors cursor-pointer text-[12.5px]"
+            className="w-full flex items-center justify-between px-2.5 min-h-[44px] sm:min-h-[36px] rounded-lg hover:bg-slate-100/80 dark:hover:bg-slate-800/70 text-secondary font-medium transition-colors cursor-pointer text-[12.5px]"
             title="Ganti Mode Tampilan"
           >
             <div className="flex items-center gap-2.5">
@@ -390,14 +390,14 @@ export default function Sidebar({ isOpen, setIsOpen, onNewChat, chats, currentCh
               Tema
             </div>
             <div className={`w-[24px] h-[13px] rounded-full p-0.5 transition-colors flex items-center ${actualTheme === 'dark' ? 'bg-teal-600' : 'bg-slate-300 dark:bg-slate-600'}`}>
-              <div className={`w-2 h-2 rounded-full bg-white shadow-xs transform transition-transform ${actualTheme === 'dark' ? 'translate-x-2.5' : 'translate-x-0'}`} />
+              <div className={`w-2 h-2 rounded-full surface-card shadow-xs transform transition-transform ${actualTheme === 'dark' ? 'translate-x-2.5' : 'translate-x-0'}`} />
             </div>
           </button>
 
           {user?.role === 'guest' ? (
             <button 
               onClick={() => { onOpenAuth?.(); setIsOpen(false); }} 
-              className="w-full flex items-center gap-2.5 px-2.5 mt-0.5 min-h-[44px] sm:min-h-[36px] rounded-lg hover:bg-slate-100/80 dark:hover:bg-slate-800/70 text-slate-700 dark:text-slate-300 font-medium transition-colors cursor-pointer text-[12.5px]"
+              className="w-full flex items-center gap-2.5 px-2.5 mt-0.5 min-h-[44px] sm:min-h-[36px] rounded-lg hover:bg-slate-100/80 dark:hover:bg-slate-800/70 text-secondary font-medium transition-colors cursor-pointer text-[12.5px]"
             >
               <LogIn className="w-4 h-4 text-slate-500 shrink-0" /> Masuk
             </button>
@@ -411,8 +411,8 @@ export default function Sidebar({ isOpen, setIsOpen, onNewChat, chats, currentCh
                   {user?.name?.charAt(0)?.toUpperCase() || 'U'}
                 </div>
                 <div className="flex flex-col min-w-0">
-                  <span className="text-[12px] font-bold text-slate-900 dark:text-slate-100 truncate leading-tight">{user?.name || 'User'}</span>
-                  <span className="text-[10px] text-slate-500 dark:text-slate-400 truncate leading-tight">
+                  <span className="text-[12px] font-bold text-primary truncate leading-tight">{user?.name || 'User'}</span>
+                  <span className="text-[10px] text-secondary truncate leading-tight">
                     {user?.email || (user?.role === 'counselor' ? 'Konselor' : 'Mahasiswa')}
                   </span>
                 </div>

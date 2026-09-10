@@ -55,7 +55,13 @@ blob-report/
 .nyc_output/
 .vitest/
 
-# OS / Editor Artifacts
+# Bundle Analysis & Crash Logs
+stats.html
+bundle-stats.json
+*crash_logs*.txt
+*.cpuprofile
+*.heapprofile
+
 .DS_Store
 Thumbs.db
 .idea/

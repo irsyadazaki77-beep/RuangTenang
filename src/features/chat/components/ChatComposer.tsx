@@ -111,7 +111,7 @@ export function ChatComposer({ onSend, isTyping, onStop, chatId, onCommand, onOp
   return (
     <div 
       ref={composerRef}
-      className="w-full bg-white/95 dark:bg-slate-950/95 border-t border-slate-200/80 dark:border-slate-800/80 px-2.5 sm:px-4 pt-2 pb-[max(env(safe-area-inset-bottom),_0.5rem)] sticky bottom-0 z-20 shrink-0 backdrop-blur-md"
+      className="w-full bg-white/95 dark:bg-slate-950/95 border-t border-default/80 px-2.5 sm:px-4 pt-2 pb-[max(env(safe-area-inset-bottom),_0.5rem)] sticky bottom-0 z-20 shrink-0 backdrop-blur-md"
     >
       <div className="max-w-3xl mx-auto w-full relative">
         <AnimatePresence>
@@ -122,11 +122,11 @@ export function ChatComposer({ onSend, isTyping, onStop, chatId, onCommand, onOp
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 6 }}
               transition={{ duration: 0.15 }}
-              className="absolute bottom-full left-0 mb-1.5 w-full max-w-sm bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-lg rounded-xl p-1 z-30 overflow-hidden"
+              className="absolute bottom-full left-0 mb-1.5 w-full max-w-sm surface-card border border-slate-200/90 dark:border-slate-800 shadow-lg rounded-xl p-1 z-30 overflow-hidden"
               role="listbox"
               aria-label="Daftar Perintah Cepat"
             >
-              <div className="text-[10.5px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 px-2.5 py-1 flex items-center justify-between border-b border-slate-100 dark:border-slate-800/60 pb-1 mb-0.5">
+              <div className="text-[10.5px] font-semibold uppercase tracking-wider text-muted px-2.5 py-1 flex items-center justify-between border-b border-slate-100 dark:border-slate-800/60 pb-1 mb-0.5">
                 <div className="flex items-center gap-1.5">
                   <Sparkles className="w-3 h-3 text-teal-600 dark:text-teal-400" />
                   Perintah Cepat
@@ -146,7 +146,7 @@ export function ChatComposer({ onSend, isTyping, onStop, chatId, onCommand, onOp
                       className={`w-full text-left px-2.5 py-1.5 rounded-lg transition-colors flex items-center gap-2 cursor-pointer text-xs ${
                         isSelected 
                           ? 'bg-teal-50 dark:bg-teal-950/70 text-teal-950 dark:text-teal-200' 
-                          : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200'
+                          : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-primary'
                       }`}
                       role="option"
                       aria-selected={isSelected}
@@ -157,9 +157,9 @@ export function ChatComposer({ onSend, isTyping, onStop, chatId, onCommand, onOp
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between">
                           <span className="font-mono font-bold text-teal-700 dark:text-teal-300">{c.cmd}</span>
-                          <span className="text-[10.5px] text-slate-600 dark:text-slate-300 font-medium truncate ml-2">{c.label}</span>
+                          <span className="text-[10.5px] text-secondary font-medium truncate ml-2">{c.label}</span>
                         </div>
-                        <p className="text-[10px] text-slate-600 dark:text-slate-300 truncate">{c.desc}</p>
+                        <p className="text-[10px] text-secondary truncate">{c.desc}</p>
                       </div>
                     </button>
                   );
@@ -175,11 +175,11 @@ export function ChatComposer({ onSend, isTyping, onStop, chatId, onCommand, onOp
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 6 }}
               transition={{ duration: 0.15 }}
-              className="absolute bottom-full left-0 mb-1.5 w-full max-w-[270px] bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-lg rounded-xl p-1.5 z-30 space-y-0.5"
+              className="absolute bottom-full left-0 mb-1.5 w-full max-w-[270px] surface-card border border-slate-200/90 dark:border-slate-800 shadow-lg rounded-xl p-1.5 z-30 space-y-0.5"
               role="menu"
               aria-label="Menu Layanan Cepat"
             >
-              <div className="text-[10.5px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 px-2 py-0.5 flex items-center justify-between">
+              <div className="text-[10.5px] font-semibold uppercase tracking-wider text-muted px-2 py-0.5 flex items-center justify-between">
                 <span>Layanan Cepat</span>
                 <span className="text-[9.5px] text-slate-400">1-Klik</span>
               </div>
@@ -197,8 +197,8 @@ export function ChatComposer({ onSend, isTyping, onStop, chatId, onCommand, onOp
                       <Icon className="w-3.5 h-3.5" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="font-semibold text-[12px] text-slate-900 dark:text-slate-100">{p.label}</div>
-                      <div className="text-[9.5px] text-slate-600 dark:text-slate-300 truncate">{p.desc}</div>
+                      <div className="font-semibold text-[12px] text-primary">{p.label}</div>
+                      <div className="text-[9.5px] text-secondary truncate">{p.desc}</div>
                     </div>
                   </button>
                 );
@@ -272,7 +272,7 @@ export function ChatComposer({ onSend, isTyping, onStop, chatId, onCommand, onOp
               }
             }}
             placeholder="Tulis pesan..."
-            className="flex-1 max-h-32 bg-transparent border-none focus:ring-0 resize-none py-1.5 px-1.5 text-base sm:text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 leading-relaxed outline-none min-w-0"
+            className="flex-1 max-h-32 bg-transparent border-none focus:ring-0 resize-none py-1.5 px-1.5 text-base sm:text-sm text-primary placeholder-slate-400 dark:placeholder-slate-500 leading-relaxed outline-none min-w-0"
             rows={1}
             disabled={isTyping}
             aria-label="Ketik pesan konsultasi atau perintah"
@@ -308,7 +308,7 @@ export function ChatComposer({ onSend, isTyping, onStop, chatId, onCommand, onOp
         </div>
         
         {/* Subtle Disclaimer */}
-        <div className="flex justify-center mt-1 px-2 text-[10px] sm:text-[10.5px] text-slate-500 dark:text-slate-400 select-none">
+        <div className="flex justify-center mt-1 px-2 text-[10px] sm:text-[10.5px] text-secondary select-none">
           <span className="truncate text-center">RuangTenang didukung AI untuk pendampingan. Privasi Anda terlindungi.</span>
         </div>
       </div>

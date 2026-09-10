@@ -88,6 +88,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [loading, setLoading] = useState(false);
+  const [resetSubmitted, setResetSubmitted] = useState<boolean>(false);
+  const { logout: authLogout } = useAuth();
 
   if (!isOpen) return null;
 
@@ -187,7 +189,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
   };
 
-  const [resetSubmitted, setResetSubmitted] = useState<boolean>(false);
 
   const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -321,7 +322,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
   };
 
-  const { logout: authLogout } = useAuth();
 
   const handleLogoutClick = async () => {
     setLoading(true);

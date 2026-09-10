@@ -3,7 +3,7 @@ import { Heart } from 'lucide-react';
 
 export default function MoodCard({ onAction }: { onAction?: () => void }) {
   return (
-    <div className="my-3 border border-slate-200 rounded-2xl p-4 bg-white shadow-sm flex items-start gap-4">
+    <div className="my-3 border border-slate-200 rounded-2xl p-4 surface-card shadow-sm flex items-start gap-4">
       <div className="p-3 bg-rose-50 text-rose-600 rounded-xl shrink-0">
         <Heart className="w-6 h-6" />
       </div>

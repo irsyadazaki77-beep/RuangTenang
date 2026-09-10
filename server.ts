@@ -26,7 +26,10 @@ import { parsePort } from './server/config/port.js';
 import { validateEnvironment } from './server/config/envValidation.js';
 import { csrfProtection } from './server/middleware/csrf.js';
 import { generalApiLimiter, diagnosticsLimiter } from './server/middleware/rateLimiters.js';
+import { rateLimit } from 'express-rate-limit';
 import { optionalAuth, requireAuth, requireRole } from './server/middleware/auth.js';
+import { clientTelemetryService, clientDebugSchema } from './server/services/clientTelemetryService.js';
+import { metricsService } from './server/services/metricsService.js';
 
 // Modular Route Handlers
 import authRouter from './server/routes/auth.js';
@@ -82,7 +85,7 @@ async function startServer() {
 
   const app = express();
   
-  const PORT = parsePort(process.env.PORT, 3000);
+  const PORT = 3000;
 
   // Trust proxy setup for Cloud Run / reverse proxies
   const trustProxySetting = process.env.TRUST_PROXY || '1';
@@ -151,31 +154,50 @@ async function startServer() {
     ...(process.env.CORS_ALLOWED_ORIGINS ? process.env.CORS_ALLOWED_ORIGINS.split(',').map(o => o.trim()).filter(Boolean) : []),
   ];
 
-  // Frame ancestors (Clickjacking Protection & AI Studio Iframe Preview Support)
-  const frameAncestorsList = [
-    "'self'",
-    "https://*.google.com",
-    "https://*.google.dev",
-    "https://*.run.app",
-    "https://*.ai.studio",
-    "https://ai.studio",
-    "https://aistudio.google.com",
-    ...trustedOriginsList
-  ];
+  // Preview environment detection
+  const isPreviewMode = !isProd || process.env.IS_AI_STUDIO_PREVIEW === 'true' || process.env.PREVIEW_MODE === 'true';
 
-  const connectSrcList = [
-    "'self'", 
-    "https://generativelanguage.googleapis.com", 
-    "https://*.google.com",
-    "https://*.google.dev",
-    "https://*.run.app", 
-    "https://*.ai.studio", 
-    "https://ai.studio", 
-    "ws:", 
-    "wss:",
-    "data:",
-    ...trustedOriginsList
-  ];
+  // Frame ancestors (Clickjacking Protection & AI Studio Iframe Preview Support)
+  const frameAncestorsList = isPreviewMode
+    ? [
+        "'self'",
+        "https://*.google.com",
+        "https://*.google.dev",
+        "https://*.run.app",
+        "https://*.ai.studio",
+        "https://ai.studio",
+        "https://aistudio.google.com",
+        ...trustedOriginsList
+      ]
+    : [
+        "'self'",
+        ...trustedOriginsList
+      ];
+
+  const connectSrcList = isPreviewMode
+    ? [
+        "'self'", 
+        "https://generativelanguage.googleapis.com", 
+        "https://*.google.com",
+        "https://*.google.dev",
+        "https://*.run.app", 
+        "https://*.ai.studio", 
+        "https://ai.studio", 
+        "ws:", 
+        "wss:",
+        "data:",
+        ...trustedOriginsList
+      ]
+    : [
+        "'self'",
+        "https://generativelanguage.googleapis.com",
+        ...trustedOriginsList
+      ];
+
+  // In production, Vite bundle runs without eval. Only allow unsafe-eval in development mode if needed.
+  const scriptSrcDirectives = isProd
+    ? ["'self'", "'unsafe-inline'", "blob:"]
+    : ["'self'", "'unsafe-inline'", "'unsafe-eval'", "blob:"];
 
   app.use(helmet({
     contentSecurityPolicy: {
@@ -183,7 +205,7 @@ async function startServer() {
         defaultSrc: ["'self'"],
         objectSrc: ["'none'"],
         baseUri: ["'self'"],
-        scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "blob:"],
+        scriptSrc: scriptSrcDirectives,
         scriptSrcAttr: ["'none'"],
         styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
         fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
@@ -193,13 +215,22 @@ async function startServer() {
         workerSrc: ["'self'", "blob:"]
       }
     },
-    // Frameguard disabled in favor of granular frameAncestors CSP to permit AI Studio preview iframe
+    // Frameguard disabled in favor of granular frameAncestors CSP to permit controlled preview iframe embedding
     frameguard: false,
-    crossOriginEmbedderPolicy: false,
-    crossOriginOpenerPolicy: false,
-    crossOriginResourcePolicy: false,
+    crossOriginEmbedderPolicy: isPreviewMode ? false : { policy: "credentialless" },
+    crossOriginOpenerPolicy: isPreviewMode ? false : { policy: "same-origin" },
+    crossOriginResourcePolicy: isPreviewMode ? false : { policy: "same-origin" },
     hsts: isProd ? { maxAge: 31536000, includeSubDomains: true, preload: true } : false,
   }));
+
+  // Dedicated client telemetry rate limiter (max 30 requests per 15 min window)
+  const clientTelemetryLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 30,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { success: false, error: 'Terlalu banyak laporan telemetry. Silakan tunggu.', code: 'RATE_LIMIT_EXCEEDED' }
+  });
 
   // Apply general API limiter and privacy cache headers
   app.use('/api/', (req, res, next) => {
@@ -235,17 +266,60 @@ async function startServer() {
     res.send(renderSwaggerHtml());
   });
 
-  // 4. Liveness & Readiness Endpoints (Sanitized in Production)
+// 4. Liveness & Readiness Endpoints (Sanitized in Production)
   app.get(['/api/v1/health', '/api/health', '/health', '/healthz'], (_req, res) => {
     res.status(200).json({ status: 'healthy' });
   });
 
-  app.post('/api/v1/client-debug', (req, res) => {
-    console.error('[CLIENT_DEBUG_CRASH]', req.body);
+  app.get(['/api/v1/readyz', '/readyz'], async (_req, res) => {
     try {
-      fs.appendFileSync('client_crash_logs.txt', `${new Date().toISOString()} - ${JSON.stringify(req.body)}\n`);
-    } catch (e) {}
-    res.status(200).json({ ok: true });
+      await serverDb.getAppointments(undefined, 1, 0); // Minimal DB ping
+      res.status(200).json({ status: 'ready', database: 'connected' });
+    } catch (error) {
+      res.status(503).json({ status: 'not_ready', database: 'disconnected' });
+    }
+  });
+
+  // Redesigned secure asynchronous client telemetry endpoint (Zod validated, PII redacted, no synchronous disk append)
+  app.post(['/api/v1/client-debug', '/api/client-debug'], clientTelemetryLimiter, optionalAuth, async (req, res) => {
+    const parsed = clientDebugSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        success: false,
+        error: 'Payload telemetry tidak valid.',
+        details: parsed.error.issues.map(e => ({ path: e.path.join('.'), message: e.message })),
+        code: 'VALIDATION_ERROR',
+        requestId: req.requestId
+      });
+    }
+
+    const clientIp = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress;
+    const result = await clientTelemetryService.recordClientError(parsed.data, {
+      userId: req.user?.userId,
+      requestId: req.requestId || 'req-telemetry',
+      clientIp
+    });
+
+    res.status(200).json({
+      success: true,
+      data: result,
+      code: 'TELEMETRY_RECORDED',
+      requestId: req.requestId
+    });
+  });
+
+  // Observability & System Operational Metrics (Prometheus / JSON)
+  app.get(['/api/v1/metrics', '/metrics'], optionalAuth, (req, res) => {
+    const isPrometheus = req.headers.accept?.includes('text/plain');
+    if (isPrometheus) {
+      res.setHeader('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
+      return res.send(metricsService.toPrometheusText());
+    }
+    return res.json({
+      success: true,
+      data: metricsService.getSnapshot(),
+      requestId: req.requestId
+    });
   });
 
   app.get(['/api/v1/readiness', '/api/readiness', '/readyz'], async (req, res) => {
@@ -467,9 +541,29 @@ async function startServer() {
     });
   });
 
-  app.listen(PORT, '0.0.0.0', () => {
+const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server RuangTenang running on http://0.0.0.0:${PORT}`);
   });
+
+  // Graceful Shutdown
+  const shutdown = async (signal: string) => {
+    console.log(`
+[${signal}] Shutting down gracefully...`);
+    server.close(async () => {
+      console.log('HTTP server closed.');
+      // Add other cleanup here (e.g., Prisma disconnect, Redis quit)
+      process.exit(0);
+    });
+    
+    // Fallback timeout
+    setTimeout(() => {
+      console.error('Forcing shutdown after 10 seconds...');
+      process.exit(1);
+    }, 10000);
+  };
+
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
 }
 
 startServer().catch((err) => {

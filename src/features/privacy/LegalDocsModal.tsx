@@ -93,7 +93,7 @@ export const LegalDocsModal: React.FC<LegalDocsModalProps> = ({
       role="dialog"
       aria-modal="true"
       aria-labelledby="legal-docs-title"
-      className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center max-sm:items-end p-4 max-sm:p-0 overflow-y-auto"
+      className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center max-sm:items-end p-4 max-sm:p-0"
     >
       <div
         ref={modalRef}

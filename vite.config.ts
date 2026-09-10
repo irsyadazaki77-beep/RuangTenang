@@ -9,13 +9,15 @@ export default defineConfig(() => {
     plugins: [
       react(),
       tailwindcss(),
-      visualizer({
-        filename: 'dist/stats.html',
-        open: false,
-        gzipSize: true,
-        brotliSize: true,
-        template: 'treemap',
-      }),
+      ...(process.env.ANALYZE_BUNDLE === 'true' ? [
+        visualizer({
+          filename: 'stats.html',
+          open: false,
+          gzipSize: true,
+          brotliSize: true,
+          template: 'treemap',
+        }),
+      ] : []),
     ],
     test: {
       globals: true,

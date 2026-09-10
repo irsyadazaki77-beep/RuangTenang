@@ -78,17 +78,17 @@ export function ModalShell({
     >
       <div
         ref={modalRef}
-        className={`w-full ${MAX_WIDTH_MAP[maxWidth]} bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl sm:rounded-3xl shadow-2xl flex flex-col h-[90vh] sm:h-[88vh] max-h-[820px] overflow-hidden animate-slide-up focus:outline-none`}
+        className={`w-full ${MAX_WIDTH_MAP[maxWidth]} surface-card border border-slate-200/90 dark:border-slate-800 rounded-2xl sm:rounded-3xl shadow-2xl flex flex-col h-[90vh] sm:h-[88vh] max-h-[820px] overflow-hidden animate-slide-up focus:outline-none`}
         tabIndex={-1}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-100 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xs shrink-0">
           <div className="min-w-0 pr-3">
-            <h2 id="modal-title" className="font-bold text-slate-900 dark:text-slate-100 text-sm sm:text-base tracking-tight truncate">
+            <h2 id="modal-title" className="font-bold text-primary text-sm sm:text-base tracking-tight truncate">
               {title}
             </h2>
             {subtitle && (
-              <p className="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">
+              <p className="text-xs text-secondary truncate mt-0.5">
                 {subtitle}
               </p>
             )}

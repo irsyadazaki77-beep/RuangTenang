@@ -379,7 +379,7 @@ export default function MainChat({ user, setChats, onOpenSidebar, onOpenSettings
       maxWidth="3xl"
     >
       <React.Suspense fallback={
-        <div className="flex flex-col items-center justify-center h-48 p-8 text-slate-500 dark:text-slate-400 text-xs animate-pulse gap-2">
+        <div className="flex flex-col items-center justify-center h-48 p-8 text-secondary text-xs animate-pulse gap-2">
           <RefreshCw className="w-5 h-5 animate-spin text-teal-600 dark:text-teal-400" />
           <span>Memuat modul {title}...</span>
         </div>
@@ -396,7 +396,7 @@ export default function MainChat({ user, setChats, onOpenSidebar, onOpenSettings
         <ScreeningModal 
           isOpen={true} 
           onClose={handleClosePlugin} 
-          onComplete={(score) => { 
+          onComplete={(score: any) => { 
             handleClosePlugin(); 
             showToast('Skrining berhasil diselesaikan.', 'success');
             handleSend('', `Saya telah menyelesaikan skrining mandiri PHQ-9 (skor: ${score.phq9.score}, kategori: ${score.phq9.severity}) dan GAD-7 (skor: ${score.gad7.score}, kategori: ${score.gad7.severity}). Catatan: Skrining ini adalah alat evaluasi mandiri awal dan BUKAN diagnosis medis.`); 
@@ -406,7 +406,7 @@ export default function MainChat({ user, setChats, onOpenSidebar, onOpenSettings
       )}
       {activePlugin === 'counselors' && renderPluginWrapper(
         'Direktori Konselor & Psikolog Kampus',
-        <CounselorDirectory onSelectCounselorForBooking={(counselor) => {
+        <CounselorDirectory onSelectCounselorForBooking={(counselor: any) => {
           handleClosePlugin();
           navigate('/counselors', { state: { selectedCounselor: counselor } });
         }} />,
@@ -428,7 +428,7 @@ export default function MainChat({ user, setChats, onOpenSidebar, onOpenSettings
         'Layanan krisis 24 jam & nomor darurat langsung'
       )}
 
-    <div className="flex-1 flex flex-col h-full min-h-0 bg-white dark:bg-slate-950 relative min-w-0 overflow-hidden">
+    <div className="flex-1 flex flex-col h-full min-h-0 surface-page relative min-w-0 overflow-hidden">
       <ChatHeader 
         user={user}
         onOpenSidebar={onOpenSidebar}
@@ -451,7 +451,7 @@ export default function MainChat({ user, setChats, onOpenSidebar, onOpenSettings
           <div className="flex-1 flex items-center justify-center">
             <div className="flex flex-col items-center gap-3">
               <RefreshCw className="w-6 h-6 text-teal-600 dark:text-teal-400 animate-spin" />
-              <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-medium animate-pulse">Memuat percakapan...</p>
+              <p className="text-xs sm:text-sm text-secondary font-medium animate-pulse">Memuat percakapan...</p>
             </div>
           </div>
         ) : fetchMessagesError ? (
@@ -459,8 +459,8 @@ export default function MainChat({ user, setChats, onOpenSidebar, onOpenSettings
             <div className="w-12 h-12 rounded-full bg-rose-50 dark:bg-rose-950/60 text-rose-500 flex items-center justify-center mb-3">
               <AlertTriangle className="w-5 h-5" />
             </div>
-            <h3 className="text-base font-bold text-slate-800 dark:text-slate-200 mb-1">Gagal Memuat Pesan</h3>
-            <p className="text-slate-500 dark:text-slate-400 text-xs mb-4">{fetchMessagesError}</p>
+            <h3 className="text-base font-bold text-primary mb-1">Gagal Memuat Pesan</h3>
+            <p className="text-secondary text-xs mb-4">{fetchMessagesError}</p>
             <button
               onClick={() => fetchMessages()}
               className="px-3.5 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-semibold transition-colors cursor-pointer"
@@ -477,7 +477,7 @@ export default function MainChat({ user, setChats, onOpenSidebar, onOpenSettings
                 <button 
                   onClick={handleLoadMore} 
                   disabled={isLoadingMore}
-                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-full text-xs font-medium transition-colors disabled:opacity-50 flex items-center gap-1.5 min-h-[32px] cursor-pointer"
+                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-secondary rounded-full text-xs font-medium transition-colors disabled:opacity-50 flex items-center gap-1.5 min-h-[32px] cursor-pointer"
                 >
                   {isLoadingMore ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <ChevronDown className="w-3.5 h-3.5 rotate-180" />}
                   Muat pesan sebelumnya
@@ -532,7 +532,7 @@ export default function MainChat({ user, setChats, onOpenSidebar, onOpenSettings
                   <button 
                     key={idx} 
                     onClick={() => handleSend(q)} 
-                    className="px-3 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-full text-xs text-slate-700 dark:text-slate-300 hover:border-teal-500/60 dark:hover:border-teal-500/60 hover:text-teal-700 dark:hover:text-teal-400 transition-colors shadow-3xs animate-fade-in text-left cursor-pointer"
+                    className="px-3 py-1.5 bg-slate-50 dark:bg-slate-900 border border-default rounded-full text-xs text-secondary hover:border-teal-500/60 dark:hover:border-teal-500/60 hover:text-teal-700 dark:hover:text-teal-400 transition-colors shadow-3xs animate-fade-in text-left cursor-pointer"
                   >
                     {q}
                   </button>

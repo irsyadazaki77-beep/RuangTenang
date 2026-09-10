@@ -135,10 +135,10 @@ export const ChangelogModal: React.FC<ChangelogModalProps> = ({
         aria-hidden="true" 
       />
       
-      <div className="relative w-full max-w-3xl max-h-[92vh] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl flex flex-col overflow-hidden text-slate-900 dark:text-slate-100 z-10 animate-in zoom-in-95 duration-200">
+      <div className="relative w-full max-w-3xl max-h-[92vh] surface-card border border-default rounded-2xl shadow-2xl flex flex-col overflow-hidden text-primary z-10 animate-in zoom-in-95 duration-200">
         
         {/* Top Header */}
-        <div className="p-4 sm:p-5 border-b border-slate-200/80 dark:border-slate-800 bg-stone-50/80 dark:bg-slate-900/80 flex items-center justify-between shrink-0">
+        <div className="p-4 sm:p-5 border-b border-default bg-stone-50/80 dark:bg-slate-900/80 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3 min-w-0">
             <div className="w-10 h-10 rounded-xl bg-teal-50 dark:bg-teal-950/80 border border-teal-200 dark:border-teal-900 text-teal-600 dark:text-teal-400 flex items-center justify-center shrink-0 shadow-3xs">
               <Sparkles className="w-5 h-5" />
@@ -153,7 +153,7 @@ export const ChangelogModal: React.FC<ChangelogModalProps> = ({
                   {CURRENT_APP_VERSION}
                 </span>
               </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate">
+              <p className="text-xs text-secondary mt-0.5 truncate">
                 Catatan rilis harian, perbaikan, dan fitur baru RuangTenang • Terakhir diperbarui {LAST_UPDATED_DATE}
               </p>
             </div>
@@ -169,7 +169,7 @@ export const ChangelogModal: React.FC<ChangelogModalProps> = ({
         </div>
 
         {/* Filters & Search Toolbar */}
-        <div className="p-3 sm:px-5 border-b border-slate-200/60 dark:border-slate-800/80 bg-white dark:bg-slate-900 space-y-2.5 shrink-0">
+        <div className="p-3 sm:px-5 border-b border-slate-200/60 dark:border-slate-800/80 surface-card space-y-2.5 shrink-0">
           {/* Search bar & Period Pills */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
             <div className="relative flex-1">
@@ -179,7 +179,7 @@ export const ChangelogModal: React.FC<ChangelogModalProps> = ({
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Cari pembaruan (contoh: mood, sesi, keamanan, AI)..."
-                className="w-full bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl pl-9 pr-3 py-1.5 text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/10 transition-all"
+                className="w-full surface-muted/70 border border-slate-200 dark:border-slate-700 rounded-xl pl-9 pr-3 py-1.5 text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/10 transition-all"
               />
               {searchQuery && (
                 <button
@@ -205,7 +205,7 @@ export const ChangelogModal: React.FC<ChangelogModalProps> = ({
                   className={`px-2.5 py-1 rounded-lg font-medium transition-colors whitespace-nowrap cursor-pointer ${
                     selectedPeriod === p.id
                       ? 'bg-white dark:bg-slate-700 text-teal-700 dark:text-teal-300 shadow-3xs font-semibold'
-                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                      : 'text-secondary hover:text-slate-900 dark:hover:text-slate-200'
                   }`}
                 >
                   {p.label}
@@ -221,7 +221,7 @@ export const ChangelogModal: React.FC<ChangelogModalProps> = ({
               className={`px-2.5 py-1 rounded-lg font-medium transition-colors flex items-center gap-1.5 shrink-0 cursor-pointer ${
                 selectedCategory === 'all'
                   ? 'bg-teal-600 text-white font-semibold shadow-3xs'
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+                  : 'bg-slate-100 dark:bg-slate-800 text-secondary hover:bg-slate-200 dark:hover:bg-slate-700'
               }`}
             >
               <Layers className="w-3.5 h-3.5" /> Semua Kategori
@@ -237,7 +237,7 @@ export const ChangelogModal: React.FC<ChangelogModalProps> = ({
                   className={`px-2.5 py-1 rounded-lg font-medium transition-colors flex items-center gap-1.5 shrink-0 cursor-pointer border ${
                     isSelected
                       ? `${cat.bgClass} ${cat.colorClass} ${cat.borderClass} font-bold ring-1 ring-teal-500/30`
-                      : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200/80 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+                      : 'surface-muted border-slate-200/80 dark:border-slate-700 text-secondary hover:bg-slate-100 dark:hover:bg-slate-700'
                   }`}
                 >
                   {renderCategoryIcon(catKey)}
@@ -255,10 +255,10 @@ export const ChangelogModal: React.FC<ChangelogModalProps> = ({
               <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-400 flex items-center justify-center mx-auto">
                 <Info className="w-6 h-6" />
               </div>
-              <h3 className="font-bold text-sm text-slate-800 dark:text-slate-200">
+              <h3 className="font-bold text-sm text-primary">
                 Tidak ada catatan pembaruan yang cocok
               </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
+              <p className="text-xs text-secondary max-w-sm mx-auto">
                 Coba sesuaikan kata kunci pencarian atau pilih filter kategori "Semua" untuk melihat riwayat rilis lainnya.
               </p>
               <button
@@ -282,10 +282,10 @@ export const ChangelogModal: React.FC<ChangelogModalProps> = ({
               return (
                 <div 
                   key={release.version}
-                  className={`bg-white dark:bg-slate-900 rounded-2xl border transition-all shadow-3xs overflow-hidden ${
+                  className={`surface-card rounded-2xl border transition-all shadow-3xs overflow-hidden ${
                     release.isLatest 
                       ? 'border-teal-500/70 dark:border-teal-500/50 ring-2 ring-teal-500/10' 
-                      : 'border-slate-200 dark:border-slate-800'
+                      : 'border-default'
                   }`}
                 >
                   {/* Release Card Header */}
@@ -303,13 +303,13 @@ export const ChangelogModal: React.FC<ChangelogModalProps> = ({
                           <span className={`px-2 py-0.5 text-[10.5px] font-bold rounded-full border ${
                             release.isLatest 
                               ? 'bg-teal-500 text-white border-teal-600'
-                              : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+                              : 'bg-slate-100 dark:bg-slate-800 text-secondary border-slate-200 dark:border-slate-700'
                           }`}>
                             {release.badge}
                           </span>
                         )}
 
-                        <span className="px-2 py-0.5 text-[10px] font-medium bg-stone-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-full">
+                        <span className="px-2 py-0.5 text-[10px] font-medium bg-stone-100 dark:bg-slate-800 text-secondary rounded-full">
                           {release.periodLabel}
                         </span>
 
@@ -318,10 +318,10 @@ export const ChangelogModal: React.FC<ChangelogModalProps> = ({
                         </span>
                       </div>
 
-                      <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                      <h3 className="text-sm font-bold text-primary">
                         {release.title}
                       </h3>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2">
+                      <p className="text-xs text-secondary line-clamp-2">
                         {release.tagline}
                       </p>
                     </div>
@@ -378,7 +378,7 @@ export const ChangelogModal: React.FC<ChangelogModalProps> = ({
 
                       {/* Detailed Changes List */}
                       <div className="space-y-2.5">
-                        <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                        <span className="text-[11px] font-bold text-muted uppercase tracking-wider">
                           Daftar Perubahan ({filteredChanges.length})
                         </span>
                         
@@ -396,13 +396,13 @@ export const ChangelogModal: React.FC<ChangelogModalProps> = ({
                                       {renderCategoryIcon(change.category)}
                                       {cat.label}
                                     </span>
-                                    <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                                    <h4 className="text-xs font-bold text-primary">
                                       {change.title}
                                     </h4>
                                   </div>
                                 </div>
 
-                                <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed pl-0.5">
+                                <p className="text-xs text-secondary leading-relaxed pl-0.5">
                                   {change.description}
                                 </p>
 
@@ -434,8 +434,8 @@ export const ChangelogModal: React.FC<ChangelogModalProps> = ({
         </div>
 
         {/* Footer Actions */}
-        <div className="p-4 sm:px-6 border-t border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
-          <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+        <div className="p-4 sm:px-6 border-t border-default surface-card flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
+          <div className="flex items-center gap-2 text-xs text-secondary">
             <CheckCircle2 className="w-4 h-4 text-teal-600" />
             <span>Pembaruan otomatis diterapkan secara transparan tanpa perlu reload manual.</span>
           </div>

@@ -53,7 +53,7 @@ export const VideoConsultationRoom: React.FC<VideoConsultationRoomProps> = ({
           <div className="flex flex-col">
             <span className="text-white font-semibold flex items-center gap-2 pointer-events-auto">
               <Lock className="w-4 h-4 text-emerald-400" />
-              Sesi Terenkripsi End-to-End
+              Sesi Konsultasi Terenkripsi & Privat
             </span>
             <span className="text-slate-300 text-xs">ID: {appointment.id}</span>
           </div>

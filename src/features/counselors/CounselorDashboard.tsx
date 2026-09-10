@@ -95,9 +95,9 @@ export const CounselorDashboard: React.FC = () => {
     report += `Tanggal Laporan: ${new Date().toLocaleDateString('id-ID')}\n`;
     report += `Penyusun: Tim Bimbingan Konseling & Layanan Psikologi Perguruan Tinggi\n\n`;
     report += `RINGKASAN SIKLUS:\n`;
-    report += `- Total Sesi Konseling Bulan Ini: ${analytics.totalSessionsThisMonth}\n`;
-    report += `- Mahasiswa Aktif Minggu Ini: ${analytics.activeStudentsThisWeek}\n`;
-    report += `- Kasus Resiko Tinggi Terdeteksi: ${analytics.highRiskCount}\n\n`;
+    report += `- Total Sesi Konseling Bulan Ini: ${analytics?.totalSessionsThisMonth || 0}\n`;
+    report += `- Mahasiswa Aktif Minggu Ini: ${analytics?.activeStudentsThisWeek || 0}\n`;
+    report += `- Kasus Resiko Tinggi Terdeteksi: ${analytics?.highRiskCount || 0}\n\n`;
     report += `DAFTAR ANTREAN RESIKO TERDETEKSI:\n`;
     filteredAlerts.forEach((item, index) => {
       report += `${index + 1}. [${item.riskLevel.toUpperCase()}] ${item.studentAlias} (${item.university})\n`;
@@ -215,7 +215,7 @@ export const CounselorDashboard: React.FC = () => {
               <Users className="w-4 h-4 text-slate-700" />
             </div>
           </div>
-          <p className="text-xl sm:text-2xl font-sans font-bold text-slate-900">{analytics.totalSessionsThisMonth}</p>
+          <p className="text-xl sm:text-2xl font-sans font-bold text-slate-900">{analytics?.totalSessionsThisMonth || 0}</p>
           <p className="text-[11px] text-teal-600 font-medium flex items-center gap-1">
             <TrendingUp className="w-3 h-3" /> +12% dari bulan lalu
           </p>
@@ -228,7 +228,7 @@ export const CounselorDashboard: React.FC = () => {
               <ShieldAlert className="w-4 h-4 text-rose-500" />
             </div>
           </div>
-          <p className="text-xl sm:text-2xl font-sans font-bold text-rose-500">{analytics.highRiskCount}</p>
+          <p className="text-xl sm:text-2xl font-sans font-bold text-rose-500">{analytics?.highRiskCount || 0}</p>
           <p className="text-[11px] text-rose-600 font-medium">Perlu penanganan prioritas</p>
         </div>
 
@@ -525,14 +525,14 @@ export const CounselorDashboard: React.FC = () => {
             <button
               disabled={apptPage <= 1}
               onClick={() => setApptPage(prev => Math.max(1, prev - 1))}
-              className="px-2.5 py-1 bg-white border border-slate-200 rounded disabled:opacity-40 font-medium hover:border-slate-400"
+              className="px-2.5 py-1 surface-card rounded disabled:opacity-40 font-medium hover:border-slate-400"
             >
               &laquo; Prev
             </button>
             <button
               disabled={apptPage >= apptTotalPages}
               onClick={() => setApptPage(prev => Math.min(apptTotalPages, prev + 1))}
-              className="px-2.5 py-1 bg-white border border-slate-200 rounded disabled:opacity-40 font-medium hover:border-slate-400"
+              className="px-2.5 py-1 surface-card rounded disabled:opacity-40 font-medium hover:border-slate-400"
             >
               Next &raquo;
             </button>
@@ -561,7 +561,7 @@ export const CounselorDashboard: React.FC = () => {
             {/* Mobile Stacked Cards (sm:hidden) */}
             <div className="sm:hidden space-y-4">
               {counselorAppts.map((appt) => (
-                <div key={appt.id} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm space-y-3">
+                <div key={appt.id} className="surface-card rounded-xl p-4 shadow-sm space-y-3">
                   <div className="flex justify-between items-start border-b border-slate-100 pb-3">
                     <div>
                       <div className="font-semibold text-slate-900">{appt.studentName}</div>

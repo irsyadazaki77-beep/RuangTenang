@@ -490,7 +490,7 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
                         : apt.status === 'Menunggu Konfirmasi'
                         ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-900/50'
                         : apt.status === 'Selesai'
-                        ? 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700'
+                        ? 'bg-slate-100 dark:bg-slate-800 text-secondary border-strong'
                         : 'bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400 border-teal-200 dark:border-teal-900/50'
                     }`}>
                       {apt.status === 'Menunggu Konfirmasi' ? '⏳ Menunggu Konfirmasi' : apt.status}
@@ -503,7 +503,7 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
                   </div>
                 </div>
 
-                <div className="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-xl text-xs sm:text-sm space-y-2.5 border border-slate-100 dark:border-slate-800">
+                <div className="surface-muted p-4 rounded-xl text-xs sm:text-sm space-y-2.5 border border-slate-100 dark:border-slate-800">
                   <div className="flex items-center justify-between text-primary">
                     <span className="flex items-center gap-2 text-secondary">
                       <CalendarIcon className="w-4 h-4 text-secondary" /> Tanggal & Waktu:
@@ -532,7 +532,7 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
                           <span>Buka Link Sesi</span>
                         </a>
                       ) : (
-                        <span className="text-xs text-slate-500 dark:text-slate-400 italic">
+                        <span className="text-xs text-secondary italic">
                           Belum tersedia (menunggu konfirmasi konselor)
                         </span>
                       )}

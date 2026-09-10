@@ -75,7 +75,7 @@ export const aiRequestService = {
              systemInstruction: fullSystemInstruction,
              temperature: 0.6,
              maxOutputTokens: outputTokens,
-             // @ts-ignore - The SDK might not explicitly type signal in this version, but native fetch underneath might support it
+             // @ts-expect-error - The SDK might not explicitly type signal in this version, but native fetch underneath might support it
              signal: abortController.signal
            }
         });
@@ -164,7 +164,7 @@ export const aiRequestService = {
              systemInstruction: fullSystemInstruction,
              temperature: 0.6,
              maxOutputTokens: outputTokens,
-             // @ts-ignore
+             // @ts-expect-error - The SDK might not explicitly type signal in this version
              signal: abortController.signal
            }
        });
@@ -180,7 +180,7 @@ export const aiRequestService = {
                systemInstruction: fullSystemInstruction,
                temperature: 0.6,
                maxOutputTokens: outputTokens,
-               // @ts-ignore
+               // @ts-expect-error - The SDK might not explicitly type signal in this version
                signal: abortController.signal
              }
          });

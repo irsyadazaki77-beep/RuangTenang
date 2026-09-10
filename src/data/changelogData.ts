@@ -27,14 +27,53 @@ import { CURRENT_APP_VERSION } from './appVersion';
 
 export const APP_CHANGELOG: ReleaseNote[] = [
   {
-    version: 'v3.2.0',
-    date: '2026-09-07',
-    releaseTime: 'Hari Ini, 16:45 WIB',
+    version: 'v3.2.1',
+    date: '2026-09-10',
+    releaseTime: 'Hari Ini, 10:55 WIB',
     periodLabel: 'Hari Ini',
-    title: 'Pembaruan Web Resmi v3.2.0: Audit Sistem Bebas Error, Refinement UI & Pusat Hak Data Terintegrasi',
-    tagline: 'Pembaruan versi web 7 September 2026 dengan audit komprehensif 100% bebas error, peningkatan ergonomi desain, touch target adaptif, dan kepatuhan penuh hak privasi data.',
+    title: 'Pemeliharaan Rutin Harian & Pembaruan Sistem v3.2.1: Audit Enkripsi, Pembersihan Retensi & Peningkatan Kestabilan',
+    tagline: 'Pembaruan pemeliharaan harian 10 September 2026 dengan verifikasi integritas enkripsi AES-256-GCM, pencadangan snapshot otomatis, isolasi data pengguna, dan pembersihan sesi inaktif.',
     badge: 'Terbaru',
     isLatest: true,
+    highlights: [
+      'Pembaruan versi web resmi v3.2.1 (10 September 2026)',
+      'Pemeliharaan harian sukses: validasi konektivitas DB (latensi rendah), verifikasi AES-256-GCM, dan pencadangan snapshot basis data',
+      'Pembersihan otomatis retensi data & pembersihan sesi inaktif (Hygiene Purge)',
+      'Peningkatan isolasi target onboarding dan penyesuaian ergonomi input seluler'
+    ],
+    changes: [
+      {
+        id: 'ch-321-1',
+        category: 'improvement',
+        title: 'Eksekusi Pemeliharaan Harian & Pencadangan Snapshot',
+        description: 'Melaksanakan rutinitas pemeliharaan harian terstruktur: verifikasi konektivitas basis data, pembuatan cadangan snapshot SQLite/Postgres otomatis, dan verifikasi integritas kriptografi AES-256-GCM.',
+        impact: 'Menjamin keandalan data, ketersediaan tinggi (high availability), dan kepatuhan retensi data mahasiswa.'
+      },
+      {
+        id: 'ch-321-2',
+        category: 'security',
+        title: 'Pembersihan Retensi & Sesi Inaktif (Hygiene Purge)',
+        description: 'Pembersihan otomatis status terdistribusi kedaluwarsa, kunci idempotensi lama, serta sanitasi log tanpa menyimpan informasi pribadi (PII).',
+        impact: 'Mencegah penumpukan data kadaluwarsa dan menjaga kinerja basis data tetap optimal.'
+      },
+      {
+        id: 'ch-321-3',
+        category: 'fix',
+        title: 'Isolasi Akun & Aksesibilitas Formulir',
+        description: 'Penyempurnaan isolasi penyimpanan preferensi pengguna antar akun pada perangkat bersama serta standarisasi target sentuh dan responsivitas formulir.',
+        impact: 'Privasi data akun terjaga lebih aman dan interaksi di layar sentuh ponsel semakin mulus.'
+      }
+    ],
+    buildNumber: 'build.20260910.01'
+  },
+  {
+    version: 'v3.2.0',
+    date: '2026-09-07',
+    releaseTime: '7 September 2026, 16:45 WIB',
+    periodLabel: 'Minggu Ini',
+    title: 'Pembaruan Web Resmi v3.2.0: Audit Sistem Bebas Error, Refinement UI & Pusat Hak Data Terintegrasi',
+    tagline: 'Pembaruan versi web 7 September 2026 dengan audit komprehensif 100% bebas error, peningkatan ergonomi desain, touch target adaptif, dan kepatuhan penuh hak privasi data.',
+    isLatest: false,
     highlights: [
       'Pembaruan versi web resmi v3.2.0 (7 September 2026)',
       'Audit sistem menyeluruh: 100% lulus uji unit, typecheck tsc, dan linting zero-error',
@@ -393,8 +432,8 @@ export const APP_CHANGELOG: ReleaseNote[] = [
       {
         id: 'ch-250-2',
         category: 'security',
-        title: 'Enkripsi Data End-to-End untuk Catatan Konseling',
-        description: 'Data catatan dan reservasi dilindungi dengan enkripsi AES-256-GCM tingkat militer.',
+        title: 'Enkripsi Data AES-256-GCM untuk Catatan Konseling',
+        description: 'Data catatan dan reservasi dilindungi dengan enkripsi AES-256-GCM at rest dan transmisi TLS aman.',
         impact: 'Privasi penuh terjaga, data tidak dapat diakses pihak ketiga yang tidak berwenang.'
       },
       {

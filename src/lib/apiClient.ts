@@ -89,7 +89,7 @@ export async function fetchWithTimeoutAndRetry<T = unknown>(
     url.includes('/api/emergency/sos') ||
     url.includes('/api/v1/emergency/sos') ||
     url.includes('/api/v1/appointments') ||
-    url.includes('/api/v1/moods') ||
+    url.includes('/api/v1/mood') ||
     url.includes('/api/v1/privacy/delete') ||
     (options as Record<string, unknown>).allowRetry === true;
 

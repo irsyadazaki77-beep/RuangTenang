@@ -59,10 +59,10 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
   const modalRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    // In page mode, do not attach focus trap, do not trap Escape, and do not steal document focus
+    if (isPageMode || !isOpen) return;
+
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
       if (e.key === 'Tab') {
         const focusableElements = modalRef.current?.querySelectorAll(
           'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
@@ -85,7 +85,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
       }
     };
     
-    // Set initial focus
+    // Set initial focus only in modal mode
     const focusable = modalRef.current?.querySelectorAll(
       'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
     );
@@ -97,7 +97,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [onClose]);
+  }, [onClose, isPageMode, isOpen]);
 
   const [step, setStep] = useState<'intro' | 'phq9' | 'gad7' | 'result'>('intro');
   const [phq9Answers, setPhq9Answers] = useState<number[]>(Array(9).fill(-1));
@@ -302,7 +302,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
   };
 
   return (
-    <div className={isPageMode ? "w-full max-w-3xl mx-auto px-3.5 sm:px-4 md:px-5 py-3.5 sm:py-4 md:py-5 font-sans" : "fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center max-sm:items-end p-3 sm:p-4 max-sm:p-0 overflow-y-auto animate-fade-in font-sans"}>
+    <div className={isPageMode ? "w-full max-w-3xl mx-auto px-3.5 sm:px-4 md:px-5 py-3.5 sm:py-4 md:py-5 font-sans" : "fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center max-sm:items-end p-3 sm:p-4 max-sm:p-0 animate-fade-in font-sans"}>
       <div
         ref={modalRef}
         role={isPageMode ? undefined : "dialog"}
@@ -391,20 +391,20 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
         {step === 'phq9' && (
           <div className="space-y-3.5">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-800 dark:text-slate-200 uppercase tracking-wider">Bagian 1/2: PHQ-9 (Depresi)</span>
-              <span className="text-xs text-slate-600 dark:text-slate-400 font-medium bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-700">
+              <span className="text-xs font-semibold text-primary uppercase tracking-wider">Bagian 1/2: PHQ-9 (Depresi)</span>
+              <span className="text-xs text-secondary font-medium bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-700">
                 Terisi: {phq9Answers.filter(v => v !== -1).length}/9
               </span>
             </div>
 
-            <p className="text-xs text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800/60 p-3 rounded-lg leading-relaxed">
-              Dalam <strong className="text-slate-900 dark:text-slate-100 font-medium">2 minggu terakhir</strong>, seberapa sering kamu terganggu oleh masalah-masalah berikut?
+            <p className="text-xs text-secondary surface-muted p-3 rounded-lg leading-relaxed">
+              Dalam <strong className="text-primary font-medium">2 minggu terakhir</strong>, seberapa sering kamu terganggu oleh masalah-masalah berikut?
             </p>
 
             <div className="space-y-2.5 max-h-[340px] overflow-y-auto pr-1.5 custom-scrollbar">
               {PHQ9_QUESTIONS.map((q, idx) => (
-                <div key={idx} className="p-3 bg-white dark:bg-slate-900/60 rounded-lg border border-slate-200 dark:border-slate-800 space-y-2 shadow-3xs hover:border-slate-300 dark:hover:border-slate-700 transition-colors">
-                  <p className="text-xs sm:text-sm font-medium text-slate-900 dark:text-slate-100">{idx + 1}. {q}</p>
+                <div key={idx} className="p-3 surface-card/60 rounded-lg border border-default space-y-2 shadow-3xs hover:border-slate-300 dark:hover:border-slate-700 transition-colors">
+                  <p className="text-xs sm:text-sm font-medium text-primary">{idx + 1}. {q}</p>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
                     {OPTIONS.map((opt) => (
                       <button
@@ -413,7 +413,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
                         className={`px-2 py-1.5 min-h-[44px] sm:min-h-[36px] rounded-lg text-[11px] sm:text-xs font-medium border text-center transition-all active:scale-95 focus:outline-none focus:ring-2 focus:ring-teal-500/20 cursor-pointer flex items-center justify-center ${
                           phq9Answers[idx] === opt.value
                             ? 'bg-teal-600 text-white border-teal-600 shadow-3xs'
-                            : 'bg-stone-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200/60 dark:border-slate-700 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-stone-100 dark:hover:bg-slate-700/60'
+                            : 'bg-stone-50 dark:bg-slate-800 text-secondary border-slate-200/60 dark:border-slate-700 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-stone-100 dark:hover:bg-slate-700/60'
                         }`}
                       >
                         {opt.label}
@@ -427,7 +427,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
             <div className="flex justify-between items-center pt-3 border-t border-slate-100 dark:border-slate-800">
               <button
                 onClick={() => setStep('intro')}
-                className="px-3.5 py-1.5 min-h-[44px] sm:min-h-[36px] text-xs sm:text-sm font-medium text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-stone-50 dark:hover:bg-slate-800 rounded-lg transition-all cursor-pointer flex items-center justify-center"
+                className="px-3.5 py-1.5 min-h-[44px] sm:min-h-[36px] text-xs sm:text-sm font-medium text-secondary hover:text-slate-800 dark:hover:text-slate-200 hover:bg-stone-50 dark:hover:bg-slate-800 rounded-lg transition-all cursor-pointer flex items-center justify-center"
               >
                 Kembali
               </button>
@@ -437,7 +437,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
                 className={`flex items-center justify-center gap-1.5 px-4 py-2 min-h-[44px] sm:min-h-[36px] rounded-lg text-xs sm:text-sm font-medium transition-all active:scale-95 cursor-pointer ${
                   isPhq9Complete
                     ? 'bg-teal-600 text-white hover:bg-teal-700 shadow-3xs'
-                    : 'bg-stone-50 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-slate-200/60 dark:border-slate-700 cursor-not-allowed'
+                    : 'bg-stone-50 dark:bg-slate-800 text-muted border border-slate-200/60 dark:border-slate-700 cursor-not-allowed'
                 }`}
               >
                 <span>Lanjut ke GAD-7</span>
@@ -451,20 +451,20 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
         {step === 'gad7' && (
           <div className="space-y-3.5">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-800 dark:text-slate-200 uppercase tracking-wider">Bagian 2/2: GAD-7 (Kecemasan)</span>
-              <span className="text-xs text-slate-600 dark:text-slate-400 font-medium bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-700">
+              <span className="text-xs font-semibold text-primary uppercase tracking-wider">Bagian 2/2: GAD-7 (Kecemasan)</span>
+              <span className="text-xs text-secondary font-medium bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-700">
                 Terisi: {gad7Answers.filter(v => v !== -1).length}/7
               </span>
             </div>
 
-            <p className="text-xs text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800/60 p-3 rounded-lg leading-relaxed">
-              Dalam <strong className="text-slate-900 dark:text-slate-100 font-medium">2 minggu terakhir</strong>, seberapa sering kamu terganggu oleh perasaan gelisah/cemas berikut?
+            <p className="text-xs text-secondary surface-muted p-3 rounded-lg leading-relaxed">
+              Dalam <strong className="text-primary font-medium">2 minggu terakhir</strong>, seberapa sering kamu terganggu oleh perasaan gelisah/cemas berikut?
             </p>
 
             <div className="space-y-2.5 max-h-[340px] overflow-y-auto pr-1.5 custom-scrollbar">
               {GAD7_QUESTIONS.map((q, idx) => (
-                <div key={idx} className="p-3 bg-white dark:bg-slate-900/60 rounded-lg border border-slate-200 dark:border-slate-800 space-y-2 shadow-3xs hover:border-slate-300 dark:hover:border-slate-700 transition-colors">
-                  <p className="text-xs sm:text-sm font-medium text-slate-900 dark:text-slate-100">{idx + 1}. {q}</p>
+                <div key={idx} className="p-3 surface-card/60 rounded-lg border border-default space-y-2 shadow-3xs hover:border-slate-300 dark:hover:border-slate-700 transition-colors">
+                  <p className="text-xs sm:text-sm font-medium text-primary">{idx + 1}. {q}</p>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
                     {OPTIONS.map((opt) => (
                       <button
@@ -473,7 +473,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
                         className={`px-2 py-1.5 min-h-[44px] sm:min-h-[36px] rounded-lg text-[11px] sm:text-xs font-medium border text-center transition-all active:scale-95 focus:outline-none focus:ring-2 focus:ring-teal-500/20 cursor-pointer flex items-center justify-center ${
                           gad7Answers[idx] === opt.value
                             ? 'bg-teal-600 text-white border-teal-600 shadow-3xs'
-                            : 'bg-stone-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200/60 dark:border-slate-700 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-stone-100 dark:hover:bg-slate-700/60'
+                            : 'bg-stone-50 dark:bg-slate-800 text-secondary border-slate-200/60 dark:border-slate-700 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-stone-100 dark:hover:bg-slate-700/60'
                         }`}
                       >
                         {opt.label}
@@ -487,7 +487,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
             <div className="flex justify-between items-center pt-3 border-t border-slate-100 dark:border-slate-800">
               <button
                 onClick={() => setStep('phq9')}
-                className="px-3.5 py-1.5 min-h-[44px] sm:min-h-[36px] text-xs sm:text-sm font-medium text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-stone-50 dark:hover:bg-slate-800 rounded-lg transition-all cursor-pointer flex items-center justify-center"
+                className="px-3.5 py-1.5 min-h-[44px] sm:min-h-[36px] text-xs sm:text-sm font-medium text-secondary hover:text-slate-800 dark:hover:text-slate-200 hover:bg-stone-50 dark:hover:bg-slate-800 rounded-lg transition-all cursor-pointer flex items-center justify-center"
               >
                 Kembali
               </button>
@@ -497,7 +497,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
                 className={`flex items-center justify-center gap-1.5 px-4 py-2 min-h-[44px] sm:min-h-[36px] rounded-lg text-xs sm:text-sm font-medium transition-all active:scale-95 cursor-pointer ${
                   isGad7Complete
                     ? 'bg-teal-600 text-white hover:bg-teal-700 shadow-3xs'
-                    : 'bg-stone-50 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-slate-200/60 dark:border-slate-700 cursor-not-allowed'
+                    : 'bg-stone-50 dark:bg-slate-800 text-muted border border-slate-200/60 dark:border-slate-700 cursor-not-allowed'
                 }`}
               >
                 <CheckCircle2 className="w-3.5 h-3.5" />
@@ -510,9 +510,9 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
         {/* STEP 4: RESULT */}
         {step === 'result' && finalResult && (
           <div className="space-y-3.5">
-            <div className="text-center py-2.5 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
-              <h3 className="text-base sm:text-lg font-sans font-semibold tracking-tight text-slate-900 dark:text-slate-100">Hasil Cek Kondisi Mental</h3>
-              <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">Hasil evaluasi mandiri awal untuk PHQ-9 & GAD-7.</p>
+            <div className="text-center py-2.5 surface-muted/50 rounded-lg">
+              <h3 className="text-base sm:text-lg font-sans font-semibold tracking-tight text-primary">Hasil Cek Kondisi Mental</h3>
+              <p className="text-xs text-secondary mt-0.5">Hasil evaluasi mandiri awal untuk PHQ-9 & GAD-7.</p>
             </div>
 
             {/* Persistence Status Banner */}
@@ -605,11 +605,11 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
             )}
 
             {/* Next Best Action Section */}
-            <div className="bg-slate-50 dark:bg-slate-900/60 p-3 sm:p-3.5 rounded-xl border border-slate-200/80 dark:border-slate-800 space-y-2.5">
-              <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+            <div className="surface-muted p-3 sm:p-3.5 rounded-xl border border-default space-y-2.5">
+              <h4 className="text-xs font-bold text-primary flex items-center gap-1.5">
                 <span>🚀</span> Langkah Rekomendasi Selanjutnya
               </h4>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+              <p className="text-[11px] text-secondary leading-relaxed">
                 Berdasarkan skor evaluasi awal Anda, berikut langkah terbaik yang disarankan untuk menjaga kesehatan emosional Anda:
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-0.5">
@@ -661,7 +661,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
               <div className="flex flex-col sm:flex-row w-full sm:w-auto items-center gap-2">
                 <button
                   onClick={() => setStep('intro')}
-                  className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-3.5 py-2 min-h-[44px] sm:min-h-[36px] bg-stone-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-semibold rounded-lg transition-all cursor-pointer"
+                  className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-3.5 py-2 min-h-[44px] sm:min-h-[36px] bg-stone-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-secondary text-xs font-semibold rounded-lg transition-all cursor-pointer"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
                   <span>Tes Ulang</span>

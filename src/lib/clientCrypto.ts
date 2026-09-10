@@ -159,81 +159,80 @@ async function getEncryptionKey(): Promise<CryptoKey | null> {
   }
 }
 
-export async function encryptData(plaintext: string): Promise<string> {
+export async function isClientCryptoAvailable(): Promise<boolean> {
+  if (!hasSubtleCrypto()) return false;
   try {
     const key = await getEncryptionKey();
-    if (!key || !hasSubtleCrypto()) {
-      // Safe fallback when Web Crypto is unavailable
-      return 'fb64:' + btoa(encodeURIComponent(plaintext));
-    }
-
-    const encoder = new TextEncoder();
-    const encodedPlaintext = encoder.encode(plaintext);
-    
-    const iv = window.crypto.getRandomValues(new Uint8Array(12));
-    
-    const ciphertextBuffer = await window.crypto.subtle.encrypt(
-      {
-        name: 'AES-GCM',
-        iv: iv
-      },
-      key,
-      encodedPlaintext
-    );
-
-    const combined = new Uint8Array(iv.length + ciphertextBuffer.byteLength);
-    combined.set(iv, 0);
-    combined.set(new Uint8Array(ciphertextBuffer), iv.length);
-
-    return btoa(String.fromCharCode(...combined));
-  } catch (err) {
-    console.warn('Encryption fallback used:', err);
-    return 'fb64:' + btoa(encodeURIComponent(plaintext));
+    return Boolean(key);
+  } catch {
+    return false;
   }
+}
+
+export async function encryptData(plaintext: string): Promise<string> {
+  const key = await getEncryptionKey();
+  if (!key || !hasSubtleCrypto()) {
+    throw new Error('CRYPTO_UNAVAILABLE: WebCrypto AES-GCM is not supported or key derivation failed.');
+  }
+
+  const encoder = new TextEncoder();
+  const encodedPlaintext = encoder.encode(plaintext);
+  
+  const iv = window.crypto.getRandomValues(new Uint8Array(12));
+  
+  const ciphertextBuffer = await window.crypto.subtle.encrypt(
+    {
+      name: 'AES-GCM',
+      iv: iv
+    },
+    key,
+    encodedPlaintext
+  );
+
+  const combined = new Uint8Array(iv.length + ciphertextBuffer.byteLength);
+  combined.set(iv, 0);
+  combined.set(new Uint8Array(ciphertextBuffer), iv.length);
+
+  return btoa(String.fromCharCode(...combined));
 }
 
 export async function decryptData(ciphertextBase64: string): Promise<string> {
   if (!ciphertextBase64) return '';
+
+  // Explicitly reject insecure legacy base64 plaintext records
   if (ciphertextBase64.startsWith('fb64:')) {
-    try {
-      return decodeURIComponent(atob(ciphertextBase64.slice(5)));
-    } catch {
-      return '';
-    }
-  }
-
-  try {
-    const key = await getEncryptionKey();
-    if (!key || !hasSubtleCrypto()) {
-      return '';
-    }
-    
-    const combined = new Uint8Array(
-      atob(ciphertextBase64)
-        .split('')
-        .map(char => char.charCodeAt(0))
-    );
-
-    if (combined.length < 12) {
-      return '';
-    }
-
-    const iv = combined.slice(0, 12);
-    const ciphertext = combined.slice(12);
-
-    const decryptedBuffer = await window.crypto.subtle.decrypt(
-      {
-        name: 'AES-GCM',
-        iv: iv
-      },
-      key,
-      ciphertext
-    );
-
-    const decoder = new TextDecoder();
-    return decoder.decode(decryptedBuffer);
-  } catch (err) {
-    console.warn('Decryption failed, treating as empty:', err);
+    console.warn('[SECURITY] Refusing to treat legacy fb64 plaintext payload as valid ciphertext.');
     return '';
   }
+
+  const key = await getEncryptionKey();
+  if (!key || !hasSubtleCrypto()) {
+    throw new Error('CRYPTO_UNAVAILABLE: WebCrypto AES-GCM is not supported or key derivation failed.');
+  }
+  
+  const combined = new Uint8Array(
+    atob(ciphertextBase64)
+      .split('')
+      .map(char => char.charCodeAt(0))
+  );
+
+  // AES-GCM requires 12 bytes IV + at least 16 bytes authentication tag
+  if (combined.length < 28) {
+    throw new Error('CORRUPTED_CIPHERTEXT: Insufficient ciphertext buffer length for AES-GCM authentication.');
+  }
+
+  const iv = combined.slice(0, 12);
+  const ciphertext = combined.slice(12);
+
+  const decryptedBuffer = await window.crypto.subtle.decrypt(
+    {
+      name: 'AES-GCM',
+      iv: iv
+    },
+    key,
+    ciphertext
+  );
+
+  const decoder = new TextDecoder();
+  return decoder.decode(decryptedBuffer);
 }

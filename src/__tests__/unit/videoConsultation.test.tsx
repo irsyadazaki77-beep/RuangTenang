@@ -37,7 +37,7 @@ describe('VideoConsultationRoom', () => {
     );
 
     // Verify UI elements
-    expect(screen.getByText('Sesi Terenkripsi End-to-End')).toBeInTheDocument();
+    expect(screen.getByText('Sesi Konsultasi Terenkripsi & Privat')).toBeInTheDocument();
     expect(screen.getByText('ID: apt-123')).toBeInTheDocument();
     expect(screen.getByText('Dr. Jane Doe')).toBeInTheDocument();
   });

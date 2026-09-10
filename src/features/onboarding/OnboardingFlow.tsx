@@ -33,7 +33,6 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ userId, onComple
     safeLocalStorage.setItem(`rt_onboarding_completed_${userId}`, 'true');
     if (selectedGoals.length > 0) {
       safeLocalStorage.setItem(`rt_user_goals_${userId}`, JSON.stringify(selectedGoals));
-      safeLocalStorage.setItem('rt_user_goals', JSON.stringify(selectedGoals));
     }
 
     try {

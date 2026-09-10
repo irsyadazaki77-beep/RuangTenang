@@ -195,7 +195,7 @@ export const AiQuotaBadge: React.FC<AiQuotaBadgeProps> = ({
               className="fixed inset-0 z-40"
               onClick={() => setShowPopover(false)}
             />
-            <div className="absolute top-full right-0 mt-2 w-72 sm:w-80 bg-white border border-slate-200 shadow-xl rounded-2xl p-4 z-50 text-slate-800 animate-in fade-in zoom-in-95 duration-200">
+            <div className="absolute top-full right-0 mt-2 w-72 sm:w-80 surface-card shadow-xl rounded-2xl p-4 z-50 text-slate-800 animate-in fade-in zoom-in-95 duration-200">
               <div className="flex items-center justify-between pb-3 border-b border-slate-100">
                 <div className="flex items-center gap-2">
                   <div className={`p-1.5 rounded-lg ${statusTheme.bg} ${statusTheme.border} border`}>
@@ -317,7 +317,7 @@ export const AiQuotaBadge: React.FC<AiQuotaBadgeProps> = ({
 
   // VARIANT 3: CARD VIEW (Used in Settings / Sidebar / Mood Page)
   return (
-    <div className={`p-4 bg-white border border-slate-200 rounded-xl shadow-3xs space-y-3 ${className}`}>
+    <div className={`p-4 surface-card rounded-xl shadow-3xs space-y-3 ${className}`}>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div className={`p-2 rounded-lg ${statusTheme.bg} ${statusTheme.border} border`}>

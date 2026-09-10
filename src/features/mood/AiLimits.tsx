@@ -24,7 +24,7 @@ export const AiLimits: React.FC<AiLimitsProps> = ({
   return (
     <div className="space-y-6">
       {/* Card 1: Overview and Info */}
-      <div className="p-5 bg-white border border-slate-200 rounded-xl space-y-4 shadow-3xs">
+      <div className="p-5 surface-card rounded-xl space-y-4 shadow-3xs">
         <div className="flex flex-col md:flex-row items-start justify-between gap-4">
           <div className="space-y-1.5">
             <div className="flex items-center gap-2">
@@ -119,7 +119,7 @@ export const AiLimits: React.FC<AiLimitsProps> = ({
 
       {/* Card 2: Visual Chart/Histogram for past 7 days */}
       {!loadingUsage && usageStats && (
-        <div className="p-5 bg-white border border-slate-200 rounded-xl space-y-5 shadow-3xs">
+        <div className="p-5 surface-card rounded-xl space-y-5 shadow-3xs">
           <div className="border-b border-slate-100 pb-3 flex justify-between items-center">
             <span className="text-xs sm:text-sm font-semibold text-slate-900 flex items-center gap-2">
               <TrendingUp className="w-4 h-4 text-slate-600" />

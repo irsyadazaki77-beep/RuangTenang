@@ -51,6 +51,7 @@ export function sanitizeInput(text: string, maxLength: number = 1000): string {
   clean = clean.replace(/<[^>]*>?/gm, '');
   
   // Remove dangerous control characters (except newline, tab, space)
+  // eslint-disable-next-line no-control-regex
   clean = clean.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
 
   // Trim whitespace and enforce length cap

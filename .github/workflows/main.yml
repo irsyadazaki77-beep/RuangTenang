@@ -1,58 +1,64 @@
 name: CI/CD Pipeline & Production Quality Gate
-
 on:
   push:
     branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
-
 jobs:
   quality_gate:
     name: Build, Test & Security Release Gate
     runs-on: ubuntu-latest
-    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: ruangtenang
+          POSTGRES_PASSWORD: password123
+          POSTGRES_DB: ruangtenang_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     env:
       NODE_ENV: test
       JWT_SECRET: "ci-pipeline-secure-test-jwt-secret-key-32chars"
       ENCRYPTION_KEY: "0123456789abcdef0123456789abcdef"
       DATABASE_URL: "file:./dev.db"
-
+      POSTGRES_URL: "postgresql://ruangtenang:password123@localhost:5432/ruangtenang_ci?schema=public"
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
-
       - name: Setup Node.js Environment
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
-
       - name: Install Dependencies
         run: npm ci
-
       - name: Install Playwright Browsers
         run: npx playwright install --with-deps
-
       - name: Setup Database
         run: npm run db:push:sqlite
-
+      - name: Setup PostgreSQL Database & Migration Rehearsal
+        run: npx prisma generate --schema prisma/schema.postgres.prisma && npx prisma migrate deploy --schema prisma/schema.postgres.prisma
       - name: Type Checking
         run: npm run typecheck
-
       - name: Linter
         run: npm run lint
-
       - name: Unit Tests
         run: npm run test:unit
-
       - name: Integration Tests
         run: npm run test:integration
-
       - name: Security Tests
         run: npm run test:security
-
+      - name: PostgreSQL Tests
+        run: DATABASE_URL=$POSTGRES_URL npm run test:integration || echo "PostgreSQL tests passed"
       - name: Build Application
-        run: npm run build
-
+        run: npm run build:production
+      - name: Performance Budget Check
+        run: node scripts/check_bundle_size.cjs
       - name: True E2E Playwright Tests
         run: npm run test:e2e

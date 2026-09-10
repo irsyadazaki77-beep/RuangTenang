@@ -162,4 +162,54 @@ describe('Screening Modal Unit & Integration Tests', () => {
     expect(screen.getByText(/Mode Tamu: Hasil tidak disimpan ke akun/i)).toBeInTheDocument();
     expect(screen.queryByText(/Hasil berhasil disimpan ke akun Anda/i)).not.toBeInTheDocument();
   });
+
+  it('correctly behaves as a document page when isPageMode=true without modal trapping or closing on Escape', () => {
+    vi.spyOn(AuthContextModule, 'useAuth').mockReturnValue({
+      user: null,
+      setUser: vi.fn(),
+      loading: false,
+      isOffline: false,
+      refreshSession: vi.fn(),
+      logout: vi.fn()
+    });
+
+    const handleClose = vi.fn();
+    renderWithRouter(<ScreeningModal isOpen={true} onClose={handleClose} isPageMode={true} />);
+
+    // In page mode, modal dialog role should not be present
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+    // In page mode, close (X) button should not be present
+    expect(screen.queryByLabelText('Tutup')).not.toBeInTheDocument();
+
+    // Escape should NOT call onClose in page mode
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(handleClose).not.toHaveBeenCalled();
+  });
+
+  it('correctly behaves as an accessible dialog modal when isPageMode=false and handles Escape', () => {
+    vi.spyOn(AuthContextModule, 'useAuth').mockReturnValue({
+      user: null,
+      setUser: vi.fn(),
+      loading: false,
+      isOffline: false,
+      refreshSession: vi.fn(),
+      logout: vi.fn()
+    });
+
+    const handleClose = vi.fn();
+    renderWithRouter(<ScreeningModal isOpen={true} onClose={handleClose} isPageMode={false} />);
+
+    // In modal mode, dialog role must be present with aria-modal="true"
+    const dialog = screen.getByRole('dialog');
+    expect(dialog).toBeInTheDocument();
+    expect(dialog).toHaveAttribute('aria-modal', 'true');
+
+    // Close button should be present
+    expect(screen.getByLabelText('Tutup')).toBeInTheDocument();
+
+    // Escape must trigger onClose
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(handleClose).toHaveBeenCalledTimes(1);
+  });
 });

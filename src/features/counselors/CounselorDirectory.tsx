@@ -270,7 +270,7 @@ export const CounselorDirectory: React.FC<CounselorDirectoryProps> = ({
 
       {/* Detail Modal */}
       {selectedCounselorModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3.5 overflow-y-auto">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3.5">
           <div className="surface-card border border-default rounded-2xl max-w-lg w-full p-4 sm:p-5 shadow-xl space-y-3.5 relative text-primary animate-fade-in my-4 max-h-[92vh] overflow-y-auto">
             <button
               onClick={() => setSelectedCounselorModal(null)}
@@ -317,24 +317,24 @@ export const CounselorDirectory: React.FC<CounselorDirectoryProps> = ({
             </div>
 
             {/* Quick Metrics Row */}
-            <div className="grid grid-cols-3 gap-2 p-2.5 bg-slate-50 dark:bg-slate-900/60 rounded-xl border border-slate-100 dark:border-slate-800 text-center">
+            <div className="grid grid-cols-3 gap-2 p-2.5 surface-muted rounded-xl border border-slate-100 dark:border-slate-800 text-center">
               <div>
-                <span className="text-[9.5px] text-slate-400 dark:text-slate-500 uppercase tracking-wider block font-bold">Pengalaman</span>
-                <span className="text-xs sm:text-sm font-bold text-slate-700 dark:text-slate-300 flex items-center justify-center gap-1 mt-0.5">
+                <span className="text-[9.5px] text-muted uppercase tracking-wider block font-bold">Pengalaman</span>
+                <span className="text-xs sm:text-sm font-bold text-secondary flex items-center justify-center gap-1 mt-0.5">
                   <Briefcase className="w-3 h-3 text-teal-500" />
                   {selectedCounselorModal.experienceYears} Tahun
                 </span>
               </div>
               <div>
-                <span className="text-[9.5px] text-slate-400 dark:text-slate-500 uppercase tracking-wider block font-bold">Rating</span>
-                <span className="text-xs sm:text-sm font-bold text-slate-700 dark:text-slate-300 flex items-center justify-center gap-1 mt-0.5">
+                <span className="text-[9.5px] text-muted uppercase tracking-wider block font-bold">Rating</span>
+                <span className="text-xs sm:text-sm font-bold text-secondary flex items-center justify-center gap-1 mt-0.5">
                   <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
                   {selectedCounselorModal.rating.toFixed(1)}
                 </span>
               </div>
               <div>
-                <span className="text-[9.5px] text-slate-400 dark:text-slate-500 uppercase tracking-wider block font-bold">No. Lisensi</span>
-                <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 block mt-0.5 truncate" title={selectedCounselorModal.licenseNumber || "N/A"}>
+                <span className="text-[9.5px] text-muted uppercase tracking-wider block font-bold">No. Lisensi</span>
+                <span className="text-[11px] font-semibold text-secondary block mt-0.5 truncate" title={selectedCounselorModal.licenseNumber || "N/A"}>
                   {selectedCounselorModal.licenseNumber || "N/A"}
                 </span>
               </div>
@@ -362,7 +362,7 @@ export const CounselorDirectory: React.FC<CounselorDirectoryProps> = ({
               <h4 className="text-[11px] font-bold text-primary uppercase tracking-wider">
                 Biografi & Pendekatan
               </h4>
-              <p className="text-xs text-secondary leading-relaxed bg-white dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800 p-2.5 rounded-xl max-h-28 overflow-y-auto">
+              <p className="text-xs text-secondary leading-relaxed surface-card/40 border border-slate-100 dark:border-slate-800 p-2.5 rounded-xl max-h-28 overflow-y-auto">
                 {selectedCounselorModal.bio || "Konselor berpengalaman yang siap mendampingi mahasiswa mengatasi tantangan akademik maupun personal dengan pendekatan yang ramah, hangat, dan solutif."}
               </p>
             </div>
@@ -370,15 +370,15 @@ export const CounselorDirectory: React.FC<CounselorDirectoryProps> = ({
             {/* Additional Info Row */}
             <div className="grid grid-cols-2 gap-3 pt-0.5">
               <div className="space-y-0.5">
-                <span className="text-[9.5px] text-slate-400 dark:text-slate-500 uppercase tracking-wider block font-bold">Bahasa</span>
-                <span className="text-xs font-medium text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                <span className="text-[9.5px] text-muted uppercase tracking-wider block font-bold">Bahasa</span>
+                <span className="text-xs font-medium text-secondary flex items-center gap-1">
                   <Languages className="w-3 h-3 text-slate-400" />
                   {selectedCounselorModal.languages?.join(", ") || "Bahasa Indonesia"}
                 </span>
               </div>
               <div className="space-y-0.5">
-                <span className="text-[9.5px] text-slate-400 dark:text-slate-500 uppercase tracking-wider block font-bold">Lokasi Praktik</span>
-                <span className="text-xs font-medium text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                <span className="text-[9.5px] text-muted uppercase tracking-wider block font-bold">Lokasi Praktik</span>
+                <span className="text-xs font-medium text-secondary flex items-center gap-1">
                   <MapPin className="w-3 h-3 text-slate-400" />
                   <span className="truncate">{selectedCounselorModal.location || "Kampus Utama"}</span>
                 </span>

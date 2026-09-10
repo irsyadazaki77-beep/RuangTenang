@@ -7,12 +7,16 @@ export interface EncryptedRecord {
   updatedAt: string;
 }
 
-const memoryStore = new Map<string, string>();
+// Volatile memory stores for current tab/session
+// memoryCipherStore: retains valid AES-GCM ciphertext in memory
+const memoryCipherStore = new Map<string, string>();
+// memoryVolatilePlaintextStore: volatile RAM-only fallback when WebCrypto is unavailable; NEVER persisted to disk
+const memoryVolatilePlaintextStore = new Map<string, string>();
 
 function isIndexedDBAvailable(): boolean {
   try {
     return typeof window !== 'undefined' && typeof window.indexedDB !== 'undefined';
-  } catch(e) {
+  } catch {
     return false;
   }
 }
@@ -37,10 +41,17 @@ class ClientIndexedDB {
     }
   }
 
+  /**
+   * Encrypts and persists data using AES-GCM.
+   * If WebCrypto is unavailable or fails, data is retained strictly in volatile session RAM
+   * and NEVER written to persistent storage (fail-closed persistence).
+   */
   async saveEncrypted(id: string, plaintext: string): Promise<void> {
     try {
       const encryptedData = await encryptData(plaintext);
-      memoryStore.set(id, encryptedData);
+      memoryCipherStore.set(id, encryptedData);
+      memoryVolatilePlaintextStore.delete(id);
+
       if (this.encryptedStore) {
         await this.encryptedStore.put({
           id,
@@ -48,18 +59,24 @@ class ClientIndexedDB {
           updatedAt: new Date().toISOString()
         });
       }
-    } catch (e) {
-      console.warn('clientDb saveEncrypted fallback to memory:', e);
-      try {
-        const encryptedData = await encryptData(plaintext);
-        memoryStore.set(id, encryptedData);
-      } catch {}
+    } catch (e: any) {
+      console.warn('[CLIENT_DB] WebCrypto unavailable or encryption failed. Storing in volatile session memory only:', e?.message || e);
+      // Strictly volatile memory-only fallback: NEVER write plaintext or fb64 to IndexedDB or localStorage
+      memoryVolatilePlaintextStore.set(id, plaintext);
+      memoryCipherStore.delete(id);
     }
   }
 
   async getDecrypted(id: string): Promise<string | null> {
-    let encryptedData: string | undefined = memoryStore.get(id);
+    // 1. Check volatile plaintext RAM fallback first
+    if (memoryVolatilePlaintextStore.has(id)) {
+      return memoryVolatilePlaintextStore.get(id) || null;
+    }
 
+    // 2. Check in-memory ciphertext cache
+    let encryptedData: string | undefined = memoryCipherStore.get(id);
+
+    // 3. Fallback to IndexedDB persistent store
     if (!encryptedData && this.encryptedStore) {
       try {
         const record = await this.encryptedStore.get(id);
@@ -82,7 +99,8 @@ class ClientIndexedDB {
   }
 
   async deleteRecord(id: string): Promise<void> {
-    memoryStore.delete(id);
+    memoryCipherStore.delete(id);
+    memoryVolatilePlaintextStore.delete(id);
     if (this.encryptedStore) {
       try {
         await this.encryptedStore.delete(id);
@@ -90,6 +108,14 @@ class ClientIndexedDB {
         console.warn(`clientDb delete error:`, err);
       }
     }
+  }
+
+  /**
+   * Clears volatile in-memory session caches upon user logout or session termination
+   */
+  clearAllMemory(): void {
+    memoryCipherStore.clear();
+    memoryVolatilePlaintextStore.clear();
   }
 }
 

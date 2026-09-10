@@ -27,7 +27,7 @@ export const SafetyCheckModal: React.FC<SafetyCheckModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-[60] bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
-      <div className="bg-white dark:bg-slate-800 border border-rose-300 dark:border-rose-900 text-slate-900 dark:text-slate-100 rounded-xl max-w-lg w-full p-4 sm:p-5 shadow-xl space-y-3.5 font-sans">
+      <div className="bg-white dark:bg-slate-800 border border-rose-300 dark:border-rose-900 text-primary rounded-xl max-w-lg w-full p-4 sm:p-5 shadow-xl space-y-3.5 font-sans">
         <div className="flex items-start gap-2.5 bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900 p-3 rounded-lg text-rose-950 dark:text-rose-200">
           <ShieldAlert className="w-5 h-5 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
           <div>
@@ -42,15 +42,15 @@ export const SafetyCheckModal: React.FC<SafetyCheckModalProps> = ({
           <h4 className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Penilaian Risiko Keselamatan Langsung</h4>
 
           {/* Question 1: Immediate Danger */}
-          <div className="p-2.5 sm:p-3 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-lg space-y-1.5">
-            <p className="text-xs font-medium text-slate-900 dark:text-slate-100">1. Apakah kamu saat ini berada dalam bahaya langsung?</p>
+          <div className="p-2.5 sm:p-3 surface-muted border border-default rounded-lg space-y-1.5">
+            <p className="text-xs font-medium text-primary">1. Apakah kamu saat ini berada dalam bahaya langsung?</p>
             <div className="flex gap-2">
               <button
                 onClick={() => setSafetyAssessment(prev => ({ ...prev, immediateDanger: true }))}
                 className={`flex-1 py-1 px-2.5 min-h-[44px] sm:min-h-[36px] rounded-lg text-xs font-medium border transition-all active:scale-95 cursor-pointer flex items-center justify-center text-center ${
                   safetyAssessment.immediateDanger === true
                     ? 'bg-rose-600 text-white border-rose-600 shadow-3xs'
-                    : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
+                    : 'bg-white dark:bg-slate-800 text-secondary border-strong hover:bg-slate-100 dark:hover:bg-slate-700'
                 }`}
               >
                 Ya, Saya Dalam Bahaya
@@ -60,7 +60,7 @@ export const SafetyCheckModal: React.FC<SafetyCheckModalProps> = ({
                 className={`flex-1 py-1 px-2.5 min-h-[44px] sm:min-h-[36px] rounded-lg text-xs font-medium border transition-all active:scale-95 cursor-pointer flex items-center justify-center text-center ${
                   safetyAssessment.immediateDanger === false
                     ? 'bg-teal-700 text-white border-teal-700 shadow-3xs'
-                    : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
+                    : 'bg-white dark:bg-slate-800 text-secondary border-strong hover:bg-slate-100 dark:hover:bg-slate-700'
                 }`}
               >
                 Tidak Saat Ini
@@ -69,15 +69,15 @@ export const SafetyCheckModal: React.FC<SafetyCheckModalProps> = ({
           </div>
 
           {/* Question 2: Plan/Access/Intent */}
-          <div className="p-2.5 sm:p-3 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-lg space-y-1.5">
-            <p className="text-xs font-medium text-slate-900 dark:text-slate-100">2. Apakah ada rencana spesifik, akses terhadap alat membahayakan, atau niat segera?</p>
+          <div className="p-2.5 sm:p-3 surface-muted border border-default rounded-lg space-y-1.5">
+            <p className="text-xs font-medium text-primary">2. Apakah ada rencana spesifik, akses terhadap alat membahayakan, atau niat segera?</p>
             <div className="flex gap-2">
               <button
                 onClick={() => setSafetyAssessment(prev => ({ ...prev, planOrIntent: true }))}
                 className={`flex-1 py-1 px-2.5 min-h-[44px] sm:min-h-[36px] rounded-lg text-xs font-medium border transition-all cursor-pointer flex items-center justify-center text-center ${
                   safetyAssessment.planOrIntent === true
                     ? 'bg-rose-600 text-white border-rose-600 shadow-3xs'
-                    : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
+                    : 'bg-white dark:bg-slate-800 text-secondary border-strong hover:bg-slate-100 dark:hover:bg-slate-700'
                 }`}
               >
                 Ya, Ada Rencana/Niat
@@ -87,7 +87,7 @@ export const SafetyCheckModal: React.FC<SafetyCheckModalProps> = ({
                 className={`flex-1 py-1 px-2.5 min-h-[44px] sm:min-h-[36px] rounded-lg text-xs font-medium border transition-all cursor-pointer flex items-center justify-center text-center ${
                   safetyAssessment.planOrIntent === false
                     ? 'bg-teal-700 text-white border-teal-700 shadow-3xs'
-                    : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
+                    : 'bg-white dark:bg-slate-800 text-secondary border-strong hover:bg-slate-100 dark:hover:bg-slate-700'
                 }`}
               >
                 Tidak Ada Rencana/Niat
@@ -96,15 +96,15 @@ export const SafetyCheckModal: React.FC<SafetyCheckModalProps> = ({
           </div>
 
           {/* Question 3: Trusted Contact */}
-          <div className="p-2.5 sm:p-3 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-lg space-y-1.5">
-            <p className="text-xs font-medium text-slate-900 dark:text-slate-100">3. Apakah kamu ingin bantuan menghubungi orang tepercaya (keluarga/sahabat)?</p>
+          <div className="p-2.5 sm:p-3 surface-muted border border-default rounded-lg space-y-1.5">
+            <p className="text-xs font-medium text-primary">3. Apakah kamu ingin bantuan menghubungi orang tepercaya (keluarga/sahabat)?</p>
             <div className="flex gap-2">
               <button
                 onClick={() => setSafetyAssessment(prev => ({ ...prev, wantsTrustedContact: true }))}
                 className={`flex-1 py-1 px-2.5 min-h-[44px] sm:min-h-[36px] rounded-lg text-xs font-medium border transition-all cursor-pointer flex items-center justify-center text-center ${
                   safetyAssessment.wantsTrustedContact === true
                     ? 'bg-slate-800 text-white border-slate-800 shadow-3xs'
-                    : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
+                    : 'bg-white dark:bg-slate-800 text-secondary border-strong hover:bg-slate-100 dark:hover:bg-slate-700'
                 }`}
               >
                 Ya, Tampilkan Bantuan
@@ -114,7 +114,7 @@ export const SafetyCheckModal: React.FC<SafetyCheckModalProps> = ({
                 className={`flex-1 py-1 px-2.5 min-h-[44px] sm:min-h-[36px] rounded-lg text-xs font-medium border transition-all cursor-pointer flex items-center justify-center text-center ${
                   safetyAssessment.wantsTrustedContact === false
                     ? 'bg-slate-800 text-white border-slate-800 shadow-3xs'
-                    : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
+                    : 'bg-white dark:bg-slate-800 text-secondary border-strong hover:bg-slate-100 dark:hover:bg-slate-700'
                 }`}
               >
                 Nanti Saja
@@ -136,8 +136,8 @@ export const SafetyCheckModal: React.FC<SafetyCheckModalProps> = ({
                   className="p-2.5 min-h-[44px] bg-white dark:bg-slate-800 border border-amber-200 dark:border-amber-900 rounded-lg flex items-center justify-between hover:bg-amber-100/50 dark:hover:bg-amber-900/40 transition-colors"
                 >
                   <div>
-                    <p className="font-semibold text-slate-900 dark:text-slate-100 text-xs">{contact.name}</p>
-                    <p className="text-[9.5px] text-slate-500 dark:text-slate-400">{contact.type}</p>
+                    <p className="font-semibold text-primary text-xs">{contact.name}</p>
+                    <p className="text-[9.5px] text-secondary">{contact.type}</p>
                   </div>
                   <span className="font-bold text-rose-600 text-xs">{contact.phone}</span>
                 </a>

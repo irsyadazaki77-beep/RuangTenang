@@ -33,7 +33,7 @@ export const NewUpdateToast: React.FC<NewUpdateToastProps> = ({ onOpenChangelog 
   if (!isVisible) return null;
 
   return (
-    <div className="fixed bottom-4 right-4 z-40 max-w-sm w-[calc(100vw-2rem)] sm:w-auto bg-white dark:bg-slate-900 border border-teal-300 dark:border-teal-700/80 rounded-2xl shadow-xl p-3.5 sm:p-4 text-slate-900 dark:text-slate-100 animate-in slide-in-from-bottom-5 fade-in duration-300 ring-2 ring-teal-500/10">
+    <div className="fixed bottom-4 right-4 z-40 max-w-sm w-[calc(100vw-2rem)] sm:w-auto surface-card border border-teal-300 dark:border-teal-700/80 rounded-2xl shadow-xl p-3.5 sm:p-4 text-primary animate-in slide-in-from-bottom-5 fade-in duration-300 ring-2 ring-teal-500/10">
       <div className="flex items-start gap-3">
         <div className="w-8 h-8 rounded-xl bg-teal-100 dark:bg-teal-900/80 text-teal-700 dark:text-teal-300 flex items-center justify-center shrink-0 shadow-3xs mt-0.5">
           <Sparkles className="w-4 h-4" />
@@ -48,7 +48,7 @@ export const NewUpdateToast: React.FC<NewUpdateToastProps> = ({ onOpenChangelog 
               Baru
             </span>
           </div>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
+          <p className="text-xs text-secondary mt-0.5 leading-relaxed">
             Ada pembaruan fitur & peningkatan stabilitas sistem hari ini.
           </p>
 

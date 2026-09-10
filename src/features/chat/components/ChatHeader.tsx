@@ -67,7 +67,7 @@ export function ChatHeader({
               className={`flex text-[11px] font-medium px-2 py-1 rounded-full items-center gap-1 border transition-colors cursor-pointer min-h-[28px] ${
                 isTemporary
                   ? 'bg-amber-50 dark:bg-amber-950/60 border-amber-200 dark:border-amber-900 text-amber-800 dark:text-amber-300'
-                  : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
+                  : 'surface-muted border-slate-200 dark:border-slate-700 text-secondary hover:bg-slate-100 dark:hover:bg-slate-700'
               }`}
               title={isTemporary ? 'Sementara: Percakapan ini tidak disimpan ke riwayat akun.' : 'Tersimpan: Percakapan tersimpan di akun dan dapat dibuka kembali.'}
             >

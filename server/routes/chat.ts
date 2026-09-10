@@ -1,5 +1,5 @@
 import { prisma } from '../database.js';
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { requireAuth, optionalAuth } from '../middleware/auth.js';
 import { aiAbuseLimiter } from '../middleware/aiAbuseLimiter.js';
@@ -32,7 +32,7 @@ const sendError = (res: Response, code: string, message: string, status = 500) =
 };
 
 // Middleware to check ownership for a specific chat ID
-const checkChatOwnership = async (req: Request, res: Response, next: any) => {
+const checkChatOwnership = async (req: Request, res: Response, next: NextFunction) => {
   const chatId = req.params.id || req.body.chatId;
   const userId = req.user?.userId;
   if (!chatId) return sendError(res, 'MISSING_CHAT_ID', 'Chat ID wajib diisi', 400);
@@ -205,7 +205,7 @@ router.post('/chat/stream', optionalAuth, aiAbuseLimiter, async (req: Request, r
     const userId = req.user?.userId;
     const clientIp = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1';
 
-    let userTier = (req.user as any)?.tier;
+    let userTier = (req.user as { tier?: string })?.tier;
     let userRole = req.user?.role;
     if (userId) {
       const dbUser = await serverDb.getUserById(userId);
@@ -282,7 +282,7 @@ router.post('/chat/stream', optionalAuth, aiAbuseLimiter, async (req: Request, r
             }
           });
         }
-      } catch (dbErr: any) {
+      } catch (dbErr) {
         console.warn(`[CHAT_DB_WARNING] Database write failed, falling back to temporary mode: ${dbErr.message}`);
         activeIsTemporary = true;
       }

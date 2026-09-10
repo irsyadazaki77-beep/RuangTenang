@@ -87,17 +87,34 @@ export function mapAppointmentToResponse(appt: any): AppointmentResponseDTO {
   };
 }
 
+const AvailabilityQuerySchema = z.object({
+  counselorId: z.string({
+    message: 'counselorId wajib diisi'
+  }).min(1, 'counselorId tidak boleh kosong'),
+  date: z.string({
+    message: 'date wajib diisi'
+  }).regex(/^\d{4}-\d{2}-\d{2}$/, 'Format tanggal harus YYYY-MM-DD')
+});
+
 // Availability Check
 router.get(['/availability', '/appointments/availability'], async (req: Request, res: Response) => {
   try {
-    const counselorId = (req.query.counselorId as string) || 'cons-1';
-    const date = (req.query.date as string) || new Date().toISOString().split('T')[0];
+    const parsed = AvailabilityQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      return res.status(400).json({
+        success: false,
+        code: 'VALIDATION_ERROR',
+        error: 'Parameter tidak valid.',
+        details: parsed.error.issues.map(e => ({ path: e.path.join('.'), message: e.message }))
+      });
+    }
 
+    const { counselorId, date } = parsed.data;
     const availability = await serverDb.getAppointmentAvailability(counselorId, date);
     res.json(availability);
   } catch (err: any) {
     console.error('Error checking availability:', err);
-    res.status(500).json({ error: 'Gagal memeriksa ketersediaan slot.' });
+    res.status(500).json({ success: false, code: 'INTERNAL_SERVER_ERROR', error: 'Gagal memeriksa ketersediaan slot.' });
   }
 });
 

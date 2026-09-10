@@ -92,7 +92,7 @@ export const RescheduleModal: React.FC<RescheduleModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center max-sm:items-end p-3 sm:p-4 max-sm:p-0 overflow-y-auto animate-fade-in font-sans">
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center max-sm:items-end p-3 sm:p-4 max-sm:p-0 animate-fade-in font-sans">
       <div className="surface-card text-primary rounded-2xl max-sm:rounded-b-none max-sm:rounded-t-2xl max-w-md w-full p-4 sm:p-6 shadow-xl relative space-y-4 border border-default max-sm:animate-slide-up transition-transform duration-200">
         
         {/* Drag handle for mobile bottom sheet */}

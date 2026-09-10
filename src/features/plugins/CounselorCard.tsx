@@ -3,7 +3,7 @@ import { Calendar } from 'lucide-react';
 
 export default function CounselorCard({ onAction }: { onAction?: () => void }) {
   return (
-    <div className="my-3 border border-slate-200 rounded-2xl p-4 bg-white shadow-sm flex items-start gap-4">
+    <div className="my-3 border border-slate-200 rounded-2xl p-4 surface-card shadow-sm flex items-start gap-4">
       <div className="p-3 bg-teal-50 text-teal-600 rounded-xl shrink-0">
         <Calendar className="w-6 h-6" />
       </div>

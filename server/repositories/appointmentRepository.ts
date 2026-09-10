@@ -156,6 +156,22 @@ export const appointmentRepository = {
         }
       }
 
+      // Check for slot availability if it's not cancelled/rejected
+      if (!isCancelledOrRejected) {
+        const conflict = await tx.appointments.findFirst({
+          where: {
+            counselorId: resolvedCounselorId,
+            date: appt.date,
+            time: appt.time,
+            status: { notIn: ['CANCELLED', 'REJECTED'] }
+          }
+        });
+
+        if (conflict) {
+          throw new Error('SLOT_ALREADY_BOOKED');
+        }
+      }
+
       const created = await tx.appointments.create({
         data: {
           id,

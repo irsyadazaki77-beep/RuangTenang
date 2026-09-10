@@ -8,6 +8,41 @@ import { AuthProvider } from "./contexts/AuthContext";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { ErrorBoundary } from './components/ErrorBoundary';
 
+// Swallow benign Vite HMR WebSocket connection warnings caused by sandbox environment constraints
+if (typeof window !== 'undefined') {
+  const isViteWSWarning = (msg: string): boolean => {
+    return (
+      msg.includes('WebSocket') ||
+      msg.includes('websocket') ||
+      msg.includes('vite') ||
+      msg.includes('Vite') ||
+      msg.includes('HMR')
+    ) && (
+      msg.includes('closed') ||
+      msg.includes('connect') ||
+      msg.includes('fail') ||
+      msg.includes('open')
+    );
+  };
+
+  window.addEventListener('unhandledrejection', (event) => {
+    const reason = event.reason;
+    const msg = reason?.message || String(reason || '');
+    if (isViteWSWarning(msg)) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+  });
+
+  window.addEventListener('error', (event) => {
+    const msg = event.message || '';
+    if (isViteWSWarning(msg)) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+  }, true);
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary>

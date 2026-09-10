@@ -140,7 +140,7 @@ export const CalendarReminderModal: React.FC<CalendarReminderModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center max-sm:items-end p-4 max-sm:p-0 overflow-y-auto animate-fade-in">
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center max-sm:items-end p-4 max-sm:p-0 animate-fade-in">
       <div className="bg-white rounded-2xl max-sm:rounded-b-none border border-slate-200 max-w-lg w-full p-6 max-sm:p-5 space-y-5 shadow-xl relative my-8 max-sm:my-0 animate-scale-up max-sm:animate-slide-up max-h-[90vh] overflow-y-auto">
         {/* Drag handle for mobile bottom sheet */}
         <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto sm:hidden shrink-0" />

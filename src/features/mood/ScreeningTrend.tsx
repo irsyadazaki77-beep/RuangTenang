@@ -163,7 +163,8 @@ export const ScreeningTrend: React.FC<ScreeningTrendProps> = ({
             </button>
           </div>
         ) : chartType === 'line' ? (
-          <div className="relative h-52 sm:h-64 w-full">
+    <div className="overflow-x-auto custom-scrollbar w-full">
+      <div className="relative h-52 sm:h-64 min-w-[500px] w-full">
             {/* Horizontal reference lines */}
             <div className="absolute inset-0 flex flex-col justify-between text-[10px] text-slate-600 pointer-events-none pb-8 pt-4">
               <div className="border-b border-slate-800/80 pb-1 flex justify-between">
@@ -265,6 +266,7 @@ export const ScreeningTrend: React.FC<ScreeningTrendProps> = ({
                 </div>
               ))}
             </div>
+              </div>
           </div>
         ) : (
           /* BAR CHART VIEW */
@@ -315,7 +317,7 @@ export const ScreeningTrend: React.FC<ScreeningTrendProps> = ({
       </div>
 
       {/* Correlation Chart (Sleep vs Mood) */}
-      <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-2xs space-y-4">
+      <div className="surface-card rounded-xl p-5 shadow-2xs space-y-4">
         <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
           <Moon className="w-5 h-5 text-indigo-500" />
           <h3 className="font-semibold text-slate-800 text-sm">Korelasi Kualitas Tidur & Fluktuasi Mood</h3>
@@ -435,7 +437,7 @@ export const ScreeningTrend: React.FC<ScreeningTrendProps> = ({
       </div>
 
       {/* History log list Table */}
-      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
+      <div className="surface-card rounded-xl overflow-hidden shadow-2xs">
         <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
           <div className="flex items-center gap-1.5">
             <FileSpreadsheet className="w-4 h-4 text-slate-600" />

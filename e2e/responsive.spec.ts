@@ -73,24 +73,19 @@ test.describe('Responsive Layout & Density E2E Pass', () => {
           await page.goto('/?__test__=true');
           await page.waitForLoadState('domcontentloaded');
 
-          // Check if there is a menu button (might not exist depending on the auth state or layout)
+          // Check if there is a menu button
           const menuBtn = page.locator('button[aria-label="Buka Menu Sidebar"]').first();
-          try {
-            await expect(menuBtn).toBeVisible({ timeout: 5000 });
-            await menuBtn.click();
-            
-            // Sidebar should become visible
-            const sidebar = page.locator('aside');
-            await expect(sidebar).toBeVisible({ timeout: 5000 });
-            
-            // Close sidebar using the explicit mobile close button
-            const closeBtn = sidebar.locator('button[aria-label="Tutup Sidebar"]').first();
-            if (await closeBtn.isVisible()) {
-              await closeBtn.click();
-            }
-          } catch (e) {
-             // Pass gracefully if menu button not found (e.g. auth redirect, different layout)
-          }
+          await expect(menuBtn).toBeVisible({ timeout: 10000 });
+          await menuBtn.click();
+          
+          // Sidebar should become visible
+          const sidebar = page.locator('aside');
+          await expect(sidebar).toBeVisible({ timeout: 5000 });
+          
+          // Close sidebar using the explicit mobile close button
+          const closeBtn = sidebar.locator('button[aria-label="Tutup Sidebar"]').first();
+          await expect(closeBtn).toBeVisible({ timeout: 5000 });
+          await closeBtn.click();
         });
       }
 

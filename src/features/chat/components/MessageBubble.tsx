@@ -52,7 +52,7 @@ export const MessageBubble = memo(function MessageBubble({ msg, isTyping, onRege
       <div className={`max-w-[88%] sm:max-w-[80%] ${
         msg.role === 'user' 
           ? 'bg-slate-900 dark:bg-slate-800 text-white px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-xl rounded-tr-xs relative shadow-3xs border border-slate-800 dark:border-slate-700' 
-          : 'text-slate-800 dark:text-slate-200 space-y-1.5 pt-0.5 w-full min-w-0'
+          : 'text-primary space-y-1.5 pt-0.5 w-full min-w-0'
       }`}>
         {msg.role === 'user' ? (
           <>
@@ -108,13 +108,13 @@ export const MessageBubble = memo(function MessageBubble({ msg, isTyping, onRege
                 </button>
               </div>
             ) : isTyping && !msg.content ? (
-              <div className="inline-flex items-center gap-2.5 px-3.5 py-2 rounded-2xl bg-slate-100/90 dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800/80 shadow-3xs text-xs">
+              <div className="inline-flex items-center gap-2.5 px-3.5 py-2 rounded-2xl bg-slate-100/90 dark:bg-slate-900/90 border border-default/80 shadow-3xs text-xs">
                 <div className="flex items-center gap-1 text-teal-600 dark:text-teal-400">
                   <span className="w-1.5 h-1.5 rounded-full bg-teal-500 dark:bg-teal-400 animate-bounce [animation-delay:-0.3s]"></span>
                   <span className="w-1.5 h-1.5 rounded-full bg-teal-500 dark:bg-teal-400 animate-bounce [animation-delay:-0.15s]"></span>
                   <span className="w-1.5 h-1.5 rounded-full bg-teal-500 dark:bg-teal-400 animate-bounce"></span>
                 </div>
-                <span className="text-slate-600 dark:text-slate-300 font-medium tracking-tight animate-pulse">
+                <span className="text-secondary font-medium tracking-tight animate-pulse">
                   RuangTenang sedang memikirkan respons...
                 </span>
               </div>

@@ -3,6 +3,7 @@ import { NotebookPen, HeartPulse, Sparkles, Wind, Check, MessageSquare, ArrowRig
 import { apiClient } from '../../../lib/apiClient';
 import { motion, AnimatePresence } from 'motion/react';
 import { safeLocalStorage } from '../../../lib/storage';
+import { useAuth } from '../../../contexts/AuthContext';
 
 interface EmptyChatStateProps {
   userName?: string;
@@ -66,18 +67,20 @@ const MOOD_CHOICES = [
 ];
 
 export function EmptyChatState({ userName, onSelectPrompt }: EmptyChatStateProps) {
+  const { user } = useAuth();
   const [selectedMood, setSelectedMood] = useState<typeof MOOD_CHOICES[0] | null>(null);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
 
   const userGoals = React.useMemo<string[]>(() => {
     try {
-      const stored = safeLocalStorage.getItem('rt_user_goals');
+      const userId = user?.id || 'guest';
+      const stored = safeLocalStorage.getItem(`rt_user_goals_${userId}`);
       if (stored) return JSON.parse(stored);
     } catch {
       // fallback
     }
     return [];
-  }, []);
+  }, [user]);
 
   const displayedActions = React.useMemo(() => {
     if (userGoals.length === 0) {
@@ -141,7 +144,7 @@ export function EmptyChatState({ userName, onSelectPrompt }: EmptyChatStateProps
       {/* Daily Check-in Widget */}
       <div className="w-full bg-slate-50/70 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800 rounded-xl p-2.5 sm:p-3.5 text-left space-y-2">
         <div className="flex items-center justify-between">
-          <span className="text-[10px] sm:text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+          <span className="text-[10px] sm:text-[11px] font-bold text-secondary uppercase tracking-wider">
             Cek Mood Hari Ini
           </span>
           <span className="text-[9px] sm:text-[9.5px] text-slate-400">Pilih perasaan</span>
@@ -179,7 +182,7 @@ export function EmptyChatState({ userName, onSelectPrompt }: EmptyChatStateProps
               transition={{ duration: 0.2 }}
               className="pt-2 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2 overflow-hidden"
             >
-              <div className="text-[11px] text-slate-500 dark:text-slate-400">
+              <div className="text-[11px] text-secondary">
                 Anda memilih <span className="font-bold text-teal-600">{selectedMood.label} {selectedMood.emoji}</span>.
               </div>
               <div className="flex items-center gap-1.5">

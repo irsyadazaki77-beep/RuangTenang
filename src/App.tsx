@@ -77,10 +77,13 @@ export default function App() {
       // Check backend
       if (user.role !== 'guest') {
         try {
-          const res = await apiClient.get<{ completed: boolean }>('/api/v1/user/onboarding');
+          const res = await apiClient.get<{ completed: boolean; goals?: string[] }>('/api/v1/user/onboarding');
           if (!isCancelled && res.success && res.data) {
             if (res.data.completed) {
               safeLocalStorage.setItem(`rt_onboarding_completed_${user.id}`, 'true');
+              if (Array.isArray(res.data.goals) && res.data.goals.length > 0) {
+                safeLocalStorage.setItem(`rt_user_goals_${user.id}`, JSON.stringify(res.data.goals));
+              }
               setShowOnboarding(false);
               return;
             }
@@ -254,12 +257,12 @@ export default function App() {
   };
 
   if (loading) {
-    return <div className="flex h-[100dvh] items-center justify-center bg-white dark:bg-slate-950"><div className="w-8 h-8 border-4 border-teal-500 border-t-transparent rounded-full animate-spin"></div></div>;
+    return <div className="flex h-[100dvh] items-center justify-center surface-page"><div className="w-8 h-8 border-4 border-teal-500 border-t-transparent rounded-full animate-spin"></div></div>;
   }
 
   if (!user) {
     return (
-      <Suspense fallback={<div className="flex h-[100dvh] items-center justify-center bg-white dark:bg-slate-950"><div className="w-8 h-8 border-4 border-teal-500 border-t-transparent rounded-full animate-spin"></div></div>}>
+      <Suspense fallback={<div className="flex h-[100dvh] items-center justify-center surface-page"><div className="w-8 h-8 border-4 border-teal-500 border-t-transparent rounded-full animate-spin"></div></div>}>
         <AuthModal isOpen={true} onClose={() => {}} currentSession={null as any} onLogin={(u) => setUser(u)} onLogout={() => {}} />
       </Suspense>
     );
@@ -267,15 +270,15 @@ export default function App() {
 
   if (user.role === 'konselor') {
     return (
-      <div className="flex min-h-[100dvh] w-full bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans">
+      <div className="flex min-h-[100dvh] w-full surface-page text-primary font-sans">
         {isSettingsOpen && (
           <div className="fixed inset-0 bg-slate-50 dark:bg-slate-900 z-50 flex flex-col overflow-hidden">
-            <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center bg-white dark:bg-slate-900 shadow-sm">
-              <button onClick={() => setIsSettingsOpen(false)} className="mr-4 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200" aria-label="Kembali">&larr; Kembali</button>
-              <h2 className="font-bold text-slate-900 dark:text-slate-100">Pengaturan & Profil</h2>
+            <div className="p-4 border-b border-default flex items-center surface-card shadow-sm">
+              <button onClick={() => setIsSettingsOpen(false)} className="mr-4 text-secondary hover:text-slate-800 dark:hover:text-slate-200" aria-label="Kembali">&larr; Kembali</button>
+              <h2 className="font-bold text-primary">Pengaturan & Profil</h2>
             </div>
             <div className="flex-1 overflow-y-auto">
-               <Suspense fallback={<div className="p-4 text-center text-slate-500 dark:text-slate-400">Memuat pengaturan...</div>}>
+               <Suspense fallback={<div className="p-4 text-center text-secondary">Memuat pengaturan...</div>}>
                  <SettingsPage 
                    userSession={user} 
                    setUserSession={(u) => setUser(u)} 
@@ -293,7 +296,7 @@ export default function App() {
             </div>
           </div>
         )}
-        <Suspense fallback={<div className="flex h-[100dvh] items-center justify-center bg-white dark:bg-slate-950"><div className="w-8 h-8 border-4 border-teal-500 border-t-transparent rounded-full animate-spin"></div></div>}>
+        <Suspense fallback={<div className="flex h-[100dvh] items-center justify-center surface-page"><div className="w-8 h-8 border-4 border-teal-500 border-t-transparent rounded-full animate-spin"></div></div>}>
           <CounselorDashboard />
         </Suspense>
       </div>
@@ -301,7 +304,7 @@ export default function App() {
   }
 
   return (
-    <div className="flex w-full h-[100dvh] bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans relative overflow-hidden">
+    <div className="flex w-full h-[100dvh] surface-page text-primary font-sans relative overflow-hidden">
       <Sidebar 
         isOpen={isSidebarOpen} 
         setIsOpen={setIsSidebarOpen} 
@@ -331,12 +334,12 @@ export default function App() {
         )}
         {isSettingsOpen ? (
           <div className="absolute inset-0 bg-slate-50 dark:bg-slate-900 z-20 flex flex-col overflow-hidden">
-            <div className="p-3 sm:p-3.5 border-b border-slate-200 dark:border-slate-800 flex items-center bg-white dark:bg-slate-900 shadow-xs shrink-0">
-              <button onClick={() => setIsSettingsOpen(false)} className="mr-3 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 text-xs sm:text-sm font-medium" aria-label="Kembali">&larr; Kembali</button>
-              <h2 className="font-semibold text-xs sm:text-sm text-slate-900 dark:text-slate-100">Pengaturan & Profil</h2>
+            <div className="p-3 sm:p-3.5 border-b border-default flex items-center surface-card shadow-xs shrink-0">
+              <button onClick={() => setIsSettingsOpen(false)} className="mr-3 text-secondary hover:text-slate-800 dark:hover:text-slate-200 text-xs sm:text-sm font-medium" aria-label="Kembali">&larr; Kembali</button>
+              <h2 className="font-semibold text-xs sm:text-sm text-primary">Pengaturan & Profil</h2>
             </div>
             <div className="flex-1 overflow-y-auto min-w-0">
-               <Suspense fallback={<div className="p-4 text-center text-slate-500 dark:text-slate-400">Memuat pengaturan...</div>}>
+               <Suspense fallback={<div className="p-4 text-center text-secondary">Memuat pengaturan...</div>}>
                  <SettingsPage 
                    userSession={user} 
                    setUserSession={(u) => setUser(u)} 
@@ -355,7 +358,7 @@ export default function App() {
             </div>
           </div>
         ) : (
-          <Suspense fallback={<div className="flex h-full items-center justify-center bg-white dark:bg-slate-950"><div className="w-8 h-8 border-4 border-teal-500 border-t-transparent rounded-full animate-spin"></div></div>}>
+          <Suspense fallback={<div className="flex h-full items-center justify-center surface-page"><div className="w-8 h-8 border-4 border-teal-500 border-t-transparent rounded-full animate-spin"></div></div>}>
             <Routes>
               <Route path="/" element={<MainChat user={user} setChats={setChats} onOpenSidebar={() => setIsSidebarOpen(true)} onOpenSettings={() => setIsSettingsOpen(true)} onOpenChangelog={() => setIsChangelogOpen(true)} />} />
               <Route path="/c/:chatId" element={<MainChat user={user} setChats={setChats} onOpenSidebar={() => setIsSidebarOpen(true)} onOpenSettings={() => setIsSettingsOpen(true)} onOpenChangelog={() => setIsChangelogOpen(true)} />} />

@@ -28,13 +28,13 @@ export const WorkspaceLayout: React.FC<WorkspaceLayoutProps> = ({
   return (
     <div className="flex-1 flex flex-col h-full min-h-0 surface-page relative min-w-0 overflow-y-auto">
       {/* Top Navbar */}
-      <header className="h-12 md:h-13 surface-card px-3 sm:px-4 flex items-center justify-between shrink-0 sticky top-0 z-20 border-b-0 border-b">
+      <header className="h-12 md:h-13 surface-card px-3 sm:px-4 flex items-center justify-between shrink-0 sticky top-0 z-20 border-b border-default">
         <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
           {onOpenSidebar && (
             <button
               onClick={onOpenSidebar}
               className="lg:hidden p-1.5 -ml-1 text-secondary hover:text-primary hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer min-w-[44px] min-h-[44px] flex items-center justify-center"
-              aria-label="Buka Menu"
+              aria-label="Buka Menu Sidebar"
             >
               <Menu className="w-5 h-5" />
             </button>
