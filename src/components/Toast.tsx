@@ -40,7 +40,7 @@ export const ToastProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       <div
         aria-live="polite"
         aria-atomic="true"
-        className="fixed bottom-5 right-5 z-50 flex flex-col gap-2 max-w-sm w-full px-4 pointer-events-none"
+        className="fixed bottom-[max(1.25rem,env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 sm:left-auto sm:right-5 sm:translate-x-0 z-50 flex flex-col gap-2 max-w-sm w-[calc(100%-1.5rem)] sm:w-full px-1 pointer-events-none"
       >
         {toasts.map((toast) => (
           <div

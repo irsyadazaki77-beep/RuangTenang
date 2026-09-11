@@ -270,7 +270,7 @@ export default function App() {
 
   if (user.role === 'konselor') {
     return (
-      <div className="flex min-h-[100dvh] w-full surface-page text-primary font-sans">
+      <div className="flex min-h-[100dvh] w-full surface-page text-primary font-sans relative overflow-hidden">
         {isSettingsOpen && (
           <div className="fixed inset-0 bg-slate-50 dark:bg-slate-900 z-50 flex flex-col overflow-hidden">
             <div className="p-4 border-b border-default flex items-center surface-card shadow-sm">
@@ -283,6 +283,7 @@ export default function App() {
                    userSession={user} 
                    setUserSession={(u) => setUser(u)} 
                    onOpenAuth={() => setIsAuthModalOpen(true)} 
+                   onOpenChangelog={() => setIsChangelogOpen(true)}
                    onOpenScreening={() => {
                      setIsSettingsOpen(false);
                      navigate('/screening');
@@ -298,6 +299,52 @@ export default function App() {
         )}
         <Suspense fallback={<div className="flex h-[100dvh] items-center justify-center surface-page"><div className="w-8 h-8 border-4 border-teal-500 border-t-transparent rounded-full animate-spin"></div></div>}>
           <CounselorDashboard />
+        </Suspense>
+
+        {isAuthModalOpen && (
+          <Suspense fallback={null}>
+            <AuthModal 
+              isOpen={isAuthModalOpen} 
+              onClose={() => setIsAuthModalOpen(false)} 
+              currentSession={user} 
+              onLogin={(u) => {
+                setUser(u);
+                setIsAuthModalOpen(false);
+              }} 
+              onLogout={() => {
+                handleLogout();
+                setIsAuthModalOpen(false);
+              }} 
+            />
+          </Suspense>
+        )}
+
+        {isLegalDocsOpen && (
+          <Suspense fallback={null}>
+            <LegalDocsModal isOpen={isLegalDocsOpen} onClose={() => setIsLegalDocsOpen(false)} />
+          </Suspense>
+        )}
+
+        {isChangelogOpen && (
+          <Suspense fallback={null}>
+            <ChangelogModal isOpen={isChangelogOpen} onClose={() => setIsChangelogOpen(false)} />
+          </Suspense>
+        )}
+
+        {showOnboarding && user?.id && (
+          <Suspense fallback={null}>
+            <OnboardingFlow userId={user.id} onComplete={() => setShowOnboarding(false)} />
+          </Suspense>
+        )}
+
+        {isNotificationOpen && (
+          <Suspense fallback={null}>
+            <NotificationCenter isOpen={isNotificationOpen} onClose={() => setIsNotificationOpen(false)} />
+          </Suspense>
+        )}
+
+        <Suspense fallback={null}>
+          <NewUpdateToast onOpenChangelog={() => setIsChangelogOpen(true)} />
         </Suspense>
       </div>
     );

@@ -27,8 +27,8 @@ export default tseslint.config(
       'jsx-a11y/role-has-required-aria-props': 'error',
       // Downgraded to 'off' temporarily as bulk of core domains have been typed. Remaining 'any' are mostly in UI callbacks where typing is complex.
       '@typescript-eslint/no-explicit-any': 'off',
-      // Downgraded to 'off' for unused vars to prevent CI failure on stubbed out hooks.
-      '@typescript-eslint/no-unused-vars': 'off',
+      // Re-enabled as warning
+      '@typescript-eslint/no-unused-vars': ['warn', { 'argsIgnorePattern': '^_', 'varsIgnorePattern': '^_', 'caughtErrorsIgnorePattern': '^_' }],
       '@typescript-eslint/no-empty-object-type': 'off',
       '@typescript-eslint/no-unused-expressions': 'warn',
       '@typescript-eslint/no-require-imports': 'warn',
@@ -43,8 +43,8 @@ export default tseslint.config(
       'prefer-const': 'warn',
       'no-console': ['warn', { allow: ['info', 'warn', 'error'] }],
       'preserve-caught-error': 'off',
-      'react-hooks/rules-of-hooks': 'warn',
-      'react-hooks/exhaustive-deps': 'off'
+      'react-hooks/rules-of-hooks': 'error',
+      'react-hooks/exhaustive-deps': 'warn'
     },
     settings: {
       react: {

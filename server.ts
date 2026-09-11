@@ -85,7 +85,7 @@ async function startServer() {
 
   const app = express();
   
-  const PORT = 3000;
+  const PORT = parsePort(process.env.PORT, 3000);
 
   // Trust proxy setup for Cloud Run / reverse proxies
   const trustProxySetting = process.env.TRUST_PROXY || '1';
@@ -271,15 +271,6 @@ async function startServer() {
     res.status(200).json({ status: 'healthy' });
   });
 
-  app.get(['/api/v1/readyz', '/readyz'], async (_req, res) => {
-    try {
-      await serverDb.getAppointments(undefined, 1, 0); // Minimal DB ping
-      res.status(200).json({ status: 'ready', database: 'connected' });
-    } catch (error) {
-      res.status(503).json({ status: 'not_ready', database: 'disconnected' });
-    }
-  });
-
   // Redesigned secure asynchronous client telemetry endpoint (Zod validated, PII redacted, no synchronous disk append)
   app.post(['/api/v1/client-debug', '/api/client-debug'], clientTelemetryLimiter, optionalAuth, async (req, res) => {
     const parsed = clientDebugSchema.safeParse(req.body);
@@ -322,7 +313,7 @@ async function startServer() {
     });
   });
 
-  app.get(['/api/v1/readiness', '/api/readiness', '/readyz'], async (req, res) => {
+  app.get(['/api/v1/readiness', '/api/v1/readyz', '/api/readiness', '/api/readyz', '/readiness', '/readyz'], async (req, res) => {
     let isHealthy = true;
 
     try {
@@ -456,6 +447,15 @@ async function startServer() {
 
   app.use('/api/v1', counselorsRouter);
   app.use('/api', counselorsRouter);
+
+  // Dedicated 404 handler for unhandled /api/* routes before SPA fallback
+  app.all('/api/*', (_req, res) => {
+    res.status(404).json({
+      success: false,
+      code: 'NOT_FOUND',
+      error: 'Endpoint API tidak ditemukan'
+    });
+  });
 
   // 6. Centralized Error Handling
   app.use(centralizedErrorHandler);

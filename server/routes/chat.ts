@@ -3,7 +3,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { requireAuth, optionalAuth } from '../middleware/auth.js';
 import { aiAbuseLimiter } from '../middleware/aiAbuseLimiter.js';
-import { sanitizeInput, detectPromptInjection } from '../security.js';
+import { sanitizeInput } from '../security.js';
 import { scanAndSanitizePII } from '../services/piiService.js';
 import { checkUserAiUsageLimit, recordUserAiUsage } from '../services/aiUsageLimiter.js';
 import { serverDb } from '../database.js';
@@ -191,16 +191,6 @@ router.post('/chat/stream', optionalAuth, aiAbuseLimiter, async (req: Request, r
     const maxLength = isAnonymous ? 500 : 2000;
     let cleanMessage = sanitizeInput(message || '', maxLength);
     cleanMessage = scanAndSanitizePII(cleanMessage).sanitizedText;
-    
-    if (detectPromptInjection(cleanMessage)) {
-      res.setHeader('Content-Type', 'text/event-stream');
-      res.setHeader('Cache-Control', 'no-cache');
-      res.setHeader('Connection', 'keep-alive');
-      res.write('data: ' + JSON.stringify({ text: 'Maaf, respons dibatasi oleh sistem keamanan kami karena terdeteksi adanya percobaan manipulasi prompt. Mari kita kembali fokus membahas perasaan dan apa yang sedang kamu alami dengan aman.' }) + '\n\n');
-      res.write('data: [DONE]\n\n');
-      res.end();
-      return;
-    }
 
     const userId = req.user?.userId;
     const clientIp = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1';
@@ -230,9 +220,6 @@ router.post('/chat/stream', optionalAuth, aiAbuseLimiter, async (req: Request, r
       return;
     }
 
-    // Increment usage counter for allowed request
-    await recordUserAiUsage(userId, clientIp);
-
     let activeIsTemporary = isTemporary || !userId;
     let currentChatId = chatId;
     let isNewChat = false;
@@ -247,7 +234,7 @@ router.post('/chat/stream', optionalAuth, aiAbuseLimiter, async (req: Request, r
           }
         } else {
           isNewChat = true;
-          const newTitle = message ? (message.substring(0, 30) + (message.length > 30 ? '...' : '')) : 'Percakapan Baru';
+          const newTitle = cleanMessage ? (cleanMessage.substring(0, 30) + (cleanMessage.length > 30 ? '...' : '')) : 'Percakapan Baru';
           const newChat = await prisma.chats.create({
             data: {
               id: `chat_${Date.now()}`,
@@ -257,6 +244,9 @@ router.post('/chat/stream', optionalAuth, aiAbuseLimiter, async (req: Request, r
           });
           currentChatId = newChat.id;
         }
+
+        // Increment usage counter only after validation & ownership check succeed
+        await recordUserAiUsage(userId, clientIp);
         
         if (!pluginResult) {
           await prisma.chatMessages.create({
@@ -264,7 +254,7 @@ router.post('/chat/stream', optionalAuth, aiAbuseLimiter, async (req: Request, r
               id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
               chatId: currentChatId,
               role: 'user',
-              content: encryptionService.encryptSensitive(message) || message
+              content: encryptionService.encryptSensitive(cleanMessage) || cleanMessage
             }
           });
           await prisma.chats.update({
@@ -286,6 +276,10 @@ router.post('/chat/stream', optionalAuth, aiAbuseLimiter, async (req: Request, r
         console.warn(`[CHAT_DB_WARNING] Database write failed, falling back to temporary mode: ${dbErr.message}`);
         activeIsTemporary = true;
       }
+    }
+
+    if (activeIsTemporary) {
+      await recordUserAiUsage(userId, clientIp);
     }
 
     const messagesToSend = [];
@@ -310,14 +304,14 @@ router.post('/chat/stream', optionalAuth, aiAbuseLimiter, async (req: Request, r
         }
       } catch (e) {
         if (!pluginResult) {
-          messagesToSend.push({ role: 'user', parts: [{ text: message }] });
+          messagesToSend.push({ role: 'user', parts: [{ text: cleanMessage }] });
         } else {
           messagesToSend.push({ role: 'user', parts: [{ text: `[PLUGIN_RESULT]\n${pluginResult}` }] });
         }
       }
     } else {
       if (!pluginResult) {
-        messagesToSend.push({ role: 'user', parts: [{ text: message }] });
+        messagesToSend.push({ role: 'user', parts: [{ text: cleanMessage }] });
       } else {
         messagesToSend.push({ role: 'user', parts: [{ text: `[PLUGIN_RESULT]\n${pluginResult}` }] });
       }
@@ -330,7 +324,7 @@ router.post('/chat/stream', optionalAuth, aiAbuseLimiter, async (req: Request, r
 
     const runLocalFallback = async () => {
       console.warn('Executing Local Fallback AI stream response');
-      const fallbackResponse = getLocalFallbackResponse(message || pluginResult || '', chatMode, responseStyle);
+      const fallbackResponse = getLocalFallbackResponse(cleanMessage || pluginResult || '', chatMode, responseStyle);
       
       if (fallbackResponse.tool_call) {
         res.write(`data: ${JSON.stringify({ tool_call: fallbackResponse.tool_call, parameters: { reason: fallbackResponse.text } })}\n\n`);
@@ -374,7 +368,7 @@ router.post('/chat/stream', optionalAuth, aiAbuseLimiter, async (req: Request, r
 
       if (isNewChat && !activeIsTemporary && userId) {
         try {
-          const title = (message || 'Percakapan').substring(0, 30) + ((message && message.length > 30) ? '...' : '');
+          const title = (cleanMessage || 'Percakapan').substring(0, 30) + ((cleanMessage && cleanMessage.length > 30) ? '...' : '');
           res.write(`data: ${JSON.stringify({ newTitle: title })}\n\n`);
         } catch(e) {}
       }
@@ -391,7 +385,7 @@ router.post('/chat/stream', optionalAuth, aiAbuseLimiter, async (req: Request, r
       // Call the canonical Unified Safety Pipeline
       pipelineRes = await aiSafetyService.runUnifiedPipeline({
         userId,
-        input: message,
+        input: cleanMessage,
         chatId: currentChatId,
         chatMode,
         responseStyle,

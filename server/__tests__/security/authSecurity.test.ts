@@ -42,6 +42,7 @@ describe('Authentication & Security Hardening Tests', () => {
           passwordHash: 'hash', 
           role: 'mahasiswa', 
           tier: 'Free',
+          emailVerified: true,
           activeSessions: JSON.stringify([{ sessionId: 'sess-active', ipAddress: '127.0.0.1', userAgent: 'test', createdAt: new Date().toISOString() }])
         },
         { 
@@ -51,6 +52,7 @@ describe('Authentication & Security Hardening Tests', () => {
           passwordHash: 'hash', 
           role: 'admin', 
           tier: 'Developer',
+          emailVerified: true,
           activeSessions: JSON.stringify([{ sessionId: 'sess-admin', ipAddress: '127.0.0.1', userAgent: 'test', createdAt: new Date().toISOString() }])
         },
         { 
@@ -60,10 +62,14 @@ describe('Authentication & Security Hardening Tests', () => {
           passwordHash: 'hash', 
           role: 'mahasiswa', 
           tier: 'Free',
+          emailVerified: true,
           activeSessions: '[]' // Explicitly empty/revoked
         }
       ]
     });
+
+    await serverDb.addActiveSession('sec-user-1', { sessionId: 'sess-active', device: 'Desktop', ip: '127.0.0.1', userAgent: 'test', createdAt: new Date().toISOString(), lastActive: new Date().toISOString() });
+    await serverDb.addActiveSession('sec-admin-1', { sessionId: 'sess-admin', device: 'Desktop', ip: '127.0.0.1', userAgent: 'test', createdAt: new Date().toISOString(), lastActive: new Date().toISOString() });
 
     userToken = generateToken({ userId: 'sec-user-1', role: 'mahasiswa', sessionId: 'sess-active' });
     adminToken = generateToken({ userId: 'sec-admin-1', role: 'admin', sessionId: 'sess-admin' });
@@ -143,6 +149,11 @@ describe('Password Change Session Revocation Tests', () => {
         password: 'OldPassword123!',
         role: 'mahasiswa'
       });
+
+    await prisma.users.updateMany({
+      where: { email: TEST_EMAIL },
+      data: { emailVerified: true }
+    });
 
     // 2. Login session A
     const loginA = await request(app)

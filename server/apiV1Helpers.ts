@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import { z } from 'zod';
 import { prisma } from './database.js';
 import { validateEnvironment } from './config/envValidation.js';
+import { parsePort } from './config/port.js';
 import { logger } from './utils/logger.js';
 import { metricsService } from './services/metricsService.js';
 
@@ -57,7 +58,7 @@ export function validateStartupEnvironment(): {
 
   const warnings: string[] = [];
   const env = process.env.NODE_ENV || 'development';
-  const port = '3000';
+  const port = parsePort(process.env.PORT, 3000).toString();
   const jwtSecret = process.env.JWT_SECRET;
   const geminiKey = process.env.GEMINI_API_KEY;
 

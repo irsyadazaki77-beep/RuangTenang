@@ -43,7 +43,7 @@ jobs:
       - name: Setup Database
         run: npm run db:push:sqlite
       - name: Setup PostgreSQL Database & Migration Rehearsal
-        run: npx prisma generate --schema prisma/schema.postgres.prisma && npx prisma migrate deploy --schema prisma/schema.postgres.prisma
+        run: DATABASE_URL=$POSTGRES_URL npx prisma generate --schema prisma/schema.postgres.prisma && DATABASE_URL=$POSTGRES_URL npx prisma migrate deploy --schema prisma/schema.postgres.prisma
       - name: Type Checking
         run: npm run typecheck
       - name: Linter
@@ -55,7 +55,7 @@ jobs:
       - name: Security Tests
         run: npm run test:security
       - name: PostgreSQL Tests
-        run: DATABASE_URL=$POSTGRES_URL npm run test:integration || echo "PostgreSQL tests passed"
+        run: DATABASE_URL=$POSTGRES_URL npm run test:integration
       - name: Build Application
         run: npm run build:production
       - name: Performance Budget Check

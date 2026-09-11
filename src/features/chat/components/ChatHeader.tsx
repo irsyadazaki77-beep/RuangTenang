@@ -108,7 +108,7 @@ export function ChatHeader({
         {activePlugin === 'chat_settings' && (
           <>
             <div className="fixed inset-0 z-40" onClick={() => setActivePlugin(null)} />
-            <div className="absolute top-full right-0 mt-1.5 w-72 surface-card rounded-xl p-3.5 z-50 space-y-3 shadow-md border border-default animate-in fade-in zoom-in-95 duration-150">
+            <div className="absolute top-full right-0 mt-1.5 w-[calc(100vw-1.5rem)] sm:w-72 max-w-xs surface-card rounded-xl p-3.5 z-50 space-y-3 shadow-md border border-default animate-in fade-in zoom-in-95 duration-150">
               <div className="flex items-center justify-between pb-1.5 border-b border-default">
                 <h3 className="font-semibold text-primary text-xs flex items-center gap-1.5">
                   <Brain className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />

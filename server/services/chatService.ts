@@ -18,10 +18,10 @@ export class ChatService {
     const messages = await chatRepository.getChatMessages(chatId, limit, cursor);
 
     let nextCursor = null;
-    const records = [...messages];
-    if (records.length > limit) {
-      const nextItem = records.pop();
-      nextCursor = nextItem?.id || null;
+    let records = messages;
+    if (messages.length > limit) {
+      records = messages.slice(0, limit);
+      nextCursor = records[records.length - 1]?.id || null;
     }
 
     const decryptedData = records.reverse().map(m => ({
@@ -72,12 +72,13 @@ export class ChatService {
   /**
    * Process user input with security, PII scanning, and create database record
    */
-  static processUserInput(content: string) {
-    const rawSanitized = sanitizeInput(content);
+  static processUserInput(content: string, maxLength: number = 1000) {
+    const rawSanitized = sanitizeInput(content, maxLength);
     const piiResult = scanAndSanitizePII(rawSanitized);
-    const isSuspicious = detectPromptInjection(content);
+    const isSuspicious = detectPromptInjection(piiResult.sanitizedText);
 
     return {
+      cleanMessage: piiResult.sanitizedText,
       sanitizedContent: piiResult.sanitizedText,
       hasPii: piiResult.hasPii,
       piiTypes: piiResult.detectedTypes,

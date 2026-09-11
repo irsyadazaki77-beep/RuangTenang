@@ -150,7 +150,38 @@ export async function fetchWithTimeoutAndRetry<T = unknown>(
       return { success: false, error: errorMsg, message: errorMsg, code, status: res.status, data: errorDetails as Extract<T, unknown> };
     }
 
-    const data = await res.json();
+    if (res.status === 204) {
+      return { success: true, data: undefined as unknown as T, status: 204 };
+    }
+
+    let data: unknown;
+    const contentType = (res.headers && typeof res.headers.get === 'function')
+      ? (res.headers.get('content-type') || '')
+      : 'application/json';
+
+    if (!contentType || contentType.includes('application/json')) {
+      try {
+        data = await res.json();
+      } catch (e) {
+        data = undefined;
+      }
+    } else {
+      try {
+        const text = await res.text();
+        if (!text || text.trim().length === 0) {
+          data = undefined;
+        } else {
+          try {
+            data = JSON.parse(text);
+          } catch (e) {
+            data = text;
+          }
+        }
+      } catch (e) {
+        data = undefined;
+      }
+    }
+
     if (data && typeof data === 'object' && (data as Record<string, unknown>).success === false) {
       const fallbackMsg = `Server error (${res.status})`;
       const errorMsg = extractErrorMessage(data, fallbackMsg);

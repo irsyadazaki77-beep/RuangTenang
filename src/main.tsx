@@ -11,17 +11,12 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 // Swallow benign Vite HMR WebSocket connection warnings caused by sandbox environment constraints
 if (typeof window !== 'undefined') {
   const isViteWSWarning = (msg: string): boolean => {
+    if (!msg || typeof msg !== 'string') return false;
+    const lower = msg.toLowerCase();
     return (
-      msg.includes('WebSocket') ||
-      msg.includes('websocket') ||
-      msg.includes('vite') ||
-      msg.includes('Vite') ||
-      msg.includes('HMR')
-    ) && (
-      msg.includes('closed') ||
-      msg.includes('connect') ||
-      msg.includes('fail') ||
-      msg.includes('open')
+      lower.includes('[vite] failed to connect to websocket') ||
+      (lower.includes('websocket') && (lower.includes('ws://') || lower.includes('wss://') || lower.includes('hmr'))) ||
+      (lower.includes('vite') && lower.includes('websocket'))
     );
   };
 

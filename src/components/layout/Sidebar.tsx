@@ -232,7 +232,7 @@ export default function Sidebar({ isOpen, setIsOpen, onNewChat, chats, currentCh
           onClick={() => setIsOpen(false)} 
         />
       )}
-      <aside className={`fixed lg:sticky lg:top-0 lg:h-[100dvh] inset-y-0 left-0 z-50 w-[min(82vw,260px)] lg:w-60 shrink-0 bg-stone-50 dark:bg-slate-900 border-r border-slate-200/70 dark:border-slate-800 flex flex-col transform transition-transform duration-200 ease-out ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
+      <aside className={`fixed lg:sticky lg:top-0 lg:h-[100dvh] inset-y-0 left-0 z-50 w-[min(82vw,260px)] lg:w-60 shrink-0 bg-stone-50 dark:bg-slate-900 border-r border-slate-200/70 dark:border-slate-800 flex flex-col pt-safe pb-safe transform transition-transform duration-200 ease-out ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
         
         {/* Top Header */}
         <div className="px-3.5 flex items-center justify-between border-b border-slate-200/70 dark:border-slate-800 h-[48px] shrink-0">

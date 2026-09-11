@@ -15,6 +15,7 @@ export function useChatHistory(chatId: string | undefined) {
     activeFetchChatIdRef.current = chatId;
     if (chatId !== loadedChatIdRef.current) {
       setMessages([]);
+      setNextCursor(null);
       setFetchMessagesError(null);
     }
   }, [chatId]);
@@ -22,6 +23,7 @@ export function useChatHistory(chatId: string | undefined) {
   const fetchMessages = useCallback(async (cursor?: string) => {
     if (!chatId) {
       setMessages([]);
+      setNextCursor(null);
       loadedChatIdRef.current = null;
       return;
     }
@@ -46,6 +48,7 @@ export function useChatHistory(chatId: string | undefined) {
       }
 
       if (!res.success) {
+        setNextCursor(null);
         throw new Error(res.error || 'Failed to fetch messages');
       }
 
@@ -68,11 +71,13 @@ export function useChatHistory(chatId: string | undefined) {
         loadedChatIdRef.current = targetChatId;
       } else {
         setMessages(Array.isArray(data) ? data : []);
+        setNextCursor(null);
         loadedChatIdRef.current = targetChatId;
       }
     } catch (err: any) {
       if (activeFetchChatIdRef.current !== targetChatId) return;
       console.error('Fetch messages error:', err);
+      setNextCursor(null);
       if (!cursor) {
         setFetchMessagesError(err.message || 'Gagal memuat pesan. Silakan coba lagi.');
       }

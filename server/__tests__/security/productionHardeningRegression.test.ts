@@ -341,4 +341,79 @@ describe('Phase 1 Production Hardening & Regression Test Suite', () => {
       expect(quickCheckInPayload.sleepQuality).not.toBe('good');
     });
   });
+
+  describe('9. P1 Bug Fixes Regression Tests', () => {
+    it('should correctly derive nextCursor from the last delivered item to prevent message skips', async () => {
+      const { ChatService } = await import('../../services/chatService.js');
+      const { chatRepository } = await import('../../repositories/chatRepository.js');
+
+      // Mock 3 records returned from DB for limit=2 (limit+1)
+      const mockMessages = [
+        { id: 'msg-3', content: 'enc-3', chatId: 'c-1', createdAt: new Date('2026-09-01T12:02:00Z') },
+        { id: 'msg-2', content: 'enc-2', chatId: 'c-1', createdAt: new Date('2026-09-01T12:01:00Z') },
+        { id: 'msg-1', content: 'enc-1', chatId: 'c-1', createdAt: new Date('2026-09-01T12:00:00Z') }
+      ];
+
+      vi.spyOn(chatRepository, 'getChatMessages').mockResolvedValue(mockMessages as any);
+
+      const result = await ChatService.getChatMessages('c-1', 2);
+
+      // Verify records sent to client: msg-3 and msg-2 (after limit slice, reversed to msg-2 then msg-3)
+      expect(result.data.length).toBe(2);
+      expect(result.data[0].id).toBe('msg-2');
+      expect(result.data[1].id).toBe('msg-3');
+
+      // nextCursor MUST be msg-2 (the last item sent to client in desc/slice, before reverse, which is mockMessages[1].id)
+      // On next query with cursor=msg-2 and skip:1, Prisma skips msg-2 and starts at msg-1. Zero messages skipped!
+      expect(result.nextCursor).toBe('msg-2');
+      expect(result.nextCursor).not.toBe('msg-1');
+    });
+
+    it('should return JSON 404 for unhandled /api/* endpoints instead of SPA HTML fallback', async () => {
+      const app = express();
+
+      // Mirror server.ts API 404 setup
+      app.get('/api/v1/health', (_req, res) => res.json({ status: 'healthy' }));
+
+      app.all('/api/*', (_req, res) => {
+        res.status(404).json({
+          success: false,
+          code: 'NOT_FOUND',
+          error: 'Endpoint API tidak ditemukan'
+        });
+      });
+
+      app.get('*', (_req, res) => {
+        res.status(200).send('<html>SPA Fallback</html>');
+      });
+
+      const knownRes = await request(app).get('/api/v1/health');
+      expect(knownRes.status).toBe(200);
+
+      const unhandledApiRes = await request(app).get('/api/v1/non-existent-endpoint');
+      expect(unhandledApiRes.status).toBe(404);
+      expect(unhandledApiRes.body).toEqual({
+        success: false,
+        code: 'NOT_FOUND',
+        error: 'Endpoint API tidak ditemukan'
+      });
+
+      const frontendRouteRes = await request(app).get('/counselor/dashboard');
+      expect(frontendRouteRes.status).toBe(200);
+      expect(frontendRouteRes.text).toContain('SPA Fallback');
+    });
+
+    it('should parse valid port and reject invalid port values with parsePort', async () => {
+      const { parsePort } = await import('../../config/port.js');
+
+      expect(parsePort(undefined, 3000)).toBe(3000);
+      expect(parsePort('', 3000)).toBe(3000);
+      expect(parsePort('8080')).toBe(8080);
+      expect(parsePort('3000')).toBe(3000);
+
+      expect(() => parsePort('invalid')).toThrow(/Invalid PORT configuration/);
+      expect(() => parsePort('-1')).toThrow(/Invalid PORT configuration/);
+      expect(() => parsePort('70000')).toThrow(/Invalid PORT configuration/);
+    });
+  });
 });

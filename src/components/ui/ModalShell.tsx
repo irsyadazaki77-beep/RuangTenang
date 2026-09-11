@@ -66,7 +66,7 @@ export function ModalShell({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-slate-950/60 backdrop-blur-xs animate-fade-in"
+      className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-slate-950/60 backdrop-blur-xs animate-fade-in pt-safe pb-safe"
       onClick={(e) => {
         if (e.target === e.currentTarget) {
           onClose();
@@ -78,7 +78,7 @@ export function ModalShell({
     >
       <div
         ref={modalRef}
-        className={`w-full ${MAX_WIDTH_MAP[maxWidth]} surface-card border border-slate-200/90 dark:border-slate-800 rounded-2xl sm:rounded-3xl shadow-2xl flex flex-col h-[90vh] sm:h-[88vh] max-h-[820px] overflow-hidden animate-slide-up focus:outline-none`}
+        className={`w-full ${MAX_WIDTH_MAP[maxWidth]} surface-card border border-slate-200/90 dark:border-slate-800 rounded-2xl sm:rounded-3xl shadow-2xl flex flex-col h-[90dvh] sm:h-[88dvh] max-h-[820px] overflow-hidden animate-slide-up focus:outline-none`}
         tabIndex={-1}
       >
         {/* Header */}
