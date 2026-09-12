@@ -47,6 +47,7 @@ model Users {
   sessions                  UserSession[]
   loginEvents               LoginEvent[]
   notifications             SecurityNotification[]
+  messageBookmarks          MessageBookmarks[]
 }
 
 model Appointments {
@@ -228,21 +229,27 @@ model DataErasureRequests {
 }
 
 model Chats {
-  id        String   @id
-  userId    String
-  title     String
-  isArchived Boolean @default(false)
-  isPinned  Boolean  @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  messages  ChatMessages[]
+  id                    String   @id
+  userId                String
+  title                 String
+  isArchived            Boolean  @default(false)
+  isPinned              Boolean  @default(false)
+  parentChatId          String?
+  branchedFromMessageId String?
+  summary               String?
+  useMemory             Boolean  @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  messages              ChatMessages[]
+  bookmarks             MessageBookmarks[]
 
   // Relations
-  user      Users    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user                  Users    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([userId, isPinned, updatedAt])
   @@index([userId, isArchived, updatedAt])
+  @@index([parentChatId])
 }
 
 model ChatMessages {
@@ -253,9 +260,28 @@ model ChatMessages {
   plugin    String?
   createdAt DateTime @default(now())
   chat      Chats    @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  bookmarks MessageBookmarks[]
+  attachments Attachments[]
 
   @@index([chatId])
   @@index([chatId, createdAt])
+}
+
+model MessageBookmarks {
+  id        String       @id
+  userId    String
+  chatId    String
+  messageId String
+  createdAt DateTime     @default(now())
+
+  // Relations
+  user      Users        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chat      Chats        @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  message   ChatMessages @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, messageId])
+  @@index([userId, createdAt])
+  @@index([chatId])
 }
 
 model UserMemories {
@@ -438,4 +464,23 @@ model SelfCareTasks {
 
   @@unique([userId, taskId, date])
   @@index([userId, date])
+}
+
+
+model Attachments {
+  id        String   @id
+  messageId String?
+  chatId    String?
+  userId    String
+  filename  String
+  mimeType  String
+  size      Int
+  data      String   // base64 content for small files or extracted text
+  createdAt DateTime @default(now())
+
+  message   ChatMessages? @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
+  @@index([chatId])
+  @@index([userId])
 }

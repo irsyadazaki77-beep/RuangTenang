@@ -12,24 +12,30 @@ export interface AiRequestOptions {
   requestedModelId: string;
   prompt: string;
   history?: Array<{ role: 'user' | 'model'; parts: { text: string }[] }>;
+  attachments?: any[];
   systemInstruction?: string;
+  abortSignal?: AbortSignal;
 }
 
 export const aiRequestService = {
   async generateChatResponse(options: AiRequestOptions): Promise<{ text: string; modelUsed: string; isFallback: boolean }> {
-    const { userId, userTier = 'Free', requestedModelId, prompt, history = [], systemInstruction } = options;
+    const { userId, userTier = 'Free', requestedModelId, prompt, history = [], systemInstruction, abortSignal, attachments = [] } = options;
 
     if (aiSafetyService.detectPromptInjection(prompt)) {
       throw new Error('PROMPT_INJECTION_DETECTED');
     }
 
     const sanitizedPrompt = scanAndSanitizePII(prompt).sanitizedText;
-    const sanitizedHistory = history.map(h => ({
+    const sanitizedHistory = history.slice(-10).map(h => ({
       ...h,
-      parts: h.parts.map(p => ({
-        ...p,
-        text: scanAndSanitizePII(p.text).sanitizedText
-      }))
+      parts: (h.parts || []).map(p => {
+        let text = (p.text || '').substring(0, 1000);
+        text = scanAndSanitizePII(text).sanitizedText;
+        if (aiSafetyService.detectPromptInjection(text)) {
+          text = '[REDACTED_UNTRUSTED_HISTORY_INJECTION]';
+        }
+        return { text };
+      })
     }));
 
     const crisisCheck = aiSafetyService.detectCrisis(sanitizedPrompt);
@@ -41,18 +47,43 @@ export const aiRequestService = {
       };
     }
 
+    
+    const userParts: any[] = [{ text: sanitizedPrompt }];
+    if (attachments && attachments.length > 0) {
+      attachments.forEach(att => {
+        if (att.base64) {
+          const base64Data = att.base64.includes(',') ? att.base64.split(',')[1] : att.base64;
+          userParts.push({
+            inlineData: {
+              data: base64Data,
+              mimeType: att.mimeType
+            }
+          });
+        }
+      });
+    }
+
+
+    
     const isAnonymous = !userId || userId === 'guest';
     const outputTokens = isAnonymous ? 300 : 800;
     
     const abortController = new AbortController();
+    if (abortSignal) {
+      if (abortSignal.aborted) {
+        abortController.abort();
+      } else {
+        abortSignal.addEventListener('abort', () => abortController.abort(), { once: true });
+      }
+    }
     const timeoutId = setTimeout(() => abortController.abort(), 15000);
 
     let fullSystemInstruction = systemInstruction || 'Kamu adalah Teman RuangTenang AI, asisten pendamping reflektif mahasiswa yang sangat hangat, ramah, merangkul, dan empati. Berikan tanggapan yang menenangkan dengan bahasa yang hangat serta gunakan emoji (seperti 🌿, 🤍, 🤗, ✨, ☕, 🫂, 🔐) secara alami. Tegaskan bahwa privasi dan keamanan ceritanya dijaga sesuai kebijakan privasi kami, dan kamu mendengarkan tanpa menghakimi. Kamu BUKAN profesional medis, JANGAN melakukan diagnosis medis atau merekomendasikan resep.';
 
-    if (userId && !isAnonymous) {
-       const userContext = await aiContextBuilder.buildContext({ userId });
-       if (userContext) {
-         fullSystemInstruction += `\n\n${userContext}`;
+    if (userId && !isAnonymous && !fullSystemInstruction.includes('[CONTEXT_BOUNDARIES]')) {
+       const userContext = await aiContextBuilder.buildContext({ userId, abortSignal });
+       if (userContext.systemContext) {
+         fullSystemInstruction += `\n\n${userContext.systemContext}`;
        }
     }
 
@@ -70,12 +101,12 @@ export const aiRequestService = {
       const { response, modelUsed } = await aiModelRouter.executeWithFallback(requestedModelId, userTier, async (modelName) => {
         return await aiClient.models.generateContent({
            model: modelName,
-           contents: [...sanitizedHistory, { role: 'user', parts: [{ text: sanitizedPrompt }] }],
+           contents: [...sanitizedHistory, { role: 'user', parts: userParts }],
            config: {
              systemInstruction: fullSystemInstruction,
              temperature: 0.6,
              maxOutputTokens: outputTokens,
-             // @ts-expect-error - The SDK might not explicitly type signal in this version, but native fetch underneath might support it
+             // @ts-expect-error - The SDK might not explicitly type signal in this version
              signal: abortController.signal
            }
         });
@@ -107,7 +138,7 @@ export const aiRequestService = {
   },
 
   async generateStreamResponse(options: AiRequestOptions): Promise<{ stream: AsyncGenerator<any, any, unknown>, modelUsed: string }> {
-    const { userId, userTier = 'Free', requestedModelId, prompt, history = [], systemInstruction } = options;
+    const { userId, userTier = 'Free', requestedModelId, prompt, history = [], systemInstruction, abortSignal, attachments = [] } = options;
 
     if (aiSafetyService.detectPromptInjection(prompt)) {
       throw new Error('PROMPT_INJECTION_DETECTED');
@@ -115,12 +146,16 @@ export const aiRequestService = {
 
     const sanitizedPrompt = scanAndSanitizePII(prompt).sanitizedText;
     
-    const sanitizedHistory = history.map(h => ({
+    const sanitizedHistory = history.slice(-10).map(h => ({
       ...h,
-      parts: h.parts.map(p => ({
-        ...p,
-        text: scanAndSanitizePII(p.text).sanitizedText
-      }))
+      parts: (h.parts || []).map(p => {
+        let text = (p.text || '').substring(0, 1000);
+        text = scanAndSanitizePII(text).sanitizedText;
+        if (aiSafetyService.detectPromptInjection(text)) {
+          text = '[REDACTED_UNTRUSTED_HISTORY_INJECTION]';
+        }
+        return { text };
+      })
     }));
 
     const crisisCheck = aiSafetyService.detectCrisis(sanitizedPrompt);
@@ -132,14 +167,21 @@ export const aiRequestService = {
     const outputTokens = isAnonymous ? 400 : 1000;
     
     const abortController = new AbortController();
+    if (abortSignal) {
+      if (abortSignal.aborted) {
+        abortController.abort();
+      } else {
+        abortSignal.addEventListener('abort', () => abortController.abort(), { once: true });
+      }
+    }
     const timeoutId = setTimeout(() => abortController.abort(), 60000);
 
     let fullSystemInstruction = systemInstruction || 'Kamu adalah Teman RuangTenang AI, asisten pendamping reflektif mahasiswa yang sangat hangat, ramah, merangkul, dan empati. Berikan tanggapan yang menenangkan dengan bahasa yang hangat serta gunakan emoji (seperti 🌿, 🤍, 🤗, ✨, ☕, 🫂, 🔐) secara alami. Tegaskan bahwa privasi dan keamanan ceritanya dijaga sesuai kebijakan privasi kami, dan kamu mendengarkan tanpa menghakimi. Kamu BUKAN profesional medis, JANGAN melakukan diagnosis medis atau merekomendasikan resep.';
 
-    if (userId && !isAnonymous) {
-       const userContext = await aiContextBuilder.buildContext({ userId });
-       if (userContext) {
-         fullSystemInstruction += `\n\n${userContext}`;
+    if (userId && !isAnonymous && !fullSystemInstruction.includes('[CONTEXT_BOUNDARIES]')) {
+       const userContext = await aiContextBuilder.buildContext({ userId, abortSignal });
+       if (userContext.systemContext) {
+         fullSystemInstruction += `\n\n${userContext.systemContext}`;
        }
     }
 
@@ -159,7 +201,7 @@ export const aiRequestService = {
     try {
        const stream = await aiClient.models.generateContentStream({
            model: actualPrimary,
-           contents: [...sanitizedHistory, { role: 'user', parts: [{ text: sanitizedPrompt }] }],
+           contents: [...sanitizedHistory, { role: 'user', parts: userParts }],
            config: {
              systemInstruction: fullSystemInstruction,
              temperature: 0.6,
@@ -174,8 +216,8 @@ export const aiRequestService = {
       const fallbackModel = 'gemini-3.1-flash-lite';
       try {
          const stream = await aiClient.models.generateContentStream({
-             model: fallbackModel,
-             contents: [...sanitizedHistory, { role: 'user', parts: [{ text: sanitizedPrompt }] }],
+             model: getActualGeminiModel(fallbackModel),
+             contents: [...sanitizedHistory, { role: 'user', parts: userParts }],
              config: {
                systemInstruction: fullSystemInstruction,
                temperature: 0.6,

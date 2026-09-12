@@ -1,7 +1,7 @@
 import React from 'react';
 import { AlertCircle, Phone } from 'lucide-react';
 
-export default function EmergencyCard({ onAction }: { onAction?: () => void }) {
+export default function EmergencyCard() {
   return (
     <div className="my-3 border border-red-300 dark:border-red-900/50 rounded-2xl p-4 bg-red-50 dark:bg-red-950/20 shadow-sm flex items-start gap-4">
       <div className="p-3 bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 rounded-xl shrink-0">

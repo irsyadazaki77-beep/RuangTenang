@@ -3,23 +3,42 @@
  * Automatically redacts PII and sensitive fields.
  */
 
+import { scanAndSanitizePII } from '../services/piiService.js';
+
 const REDACT_KEYS = new Set([
   'password',
   'token',
   'authorization',
   'notes',
   'content',
-  'screeningScore',
+  'message',
+  'messages',
+  'input',
+  'prompt',
+  'pluginresult',
+  'history',
+  'chathistory',
+  'screeningscore',
   'secret',
   'key',
   'cookie',
   'email',
   'nim',
-  'studentNIM'
+  'studentnim',
+  'nik',
+  'phone',
+  'address',
+  'rekening',
+  'accountnumber'
 ]);
 
 function sanitize(obj: any): any {
-  if (!obj || typeof obj !== 'object') return obj;
+  if (!obj || typeof obj !== 'object') {
+    if (typeof obj === 'string') {
+      return scanAndSanitizePII(obj).sanitizedText;
+    }
+    return obj;
+  }
   if (Array.isArray(obj)) return obj.map(sanitize);
 
   const clean: Record<string, any> = {};
@@ -28,6 +47,8 @@ function sanitize(obj: any): any {
       clean[key] = '[REDACTED]';
     } else if (typeof val === 'object' && val !== null) {
       clean[key] = sanitize(val);
+    } else if (typeof val === 'string') {
+      clean[key] = scanAndSanitizePII(val).sanitizedText;
     } else {
       clean[key] = val;
     }

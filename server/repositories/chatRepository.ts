@@ -16,7 +16,17 @@ export const chatRepository = {
       ],
       take,
       skip: offset,
-      select: { id: true, title: true, isPinned: true, isArchived: true, updatedAt: true }
+      select: { 
+        id: true, 
+        title: true, 
+        isPinned: true, 
+        isArchived: true, 
+        parentChatId: true,
+        branchedFromMessageId: true,
+        summary: true,
+        useMemory: true,
+        updatedAt: true 
+      }
     });
   },
 
@@ -65,6 +75,81 @@ export const chatRepository = {
     return await prisma.chats.delete({
       where: { id: chatId }
     });
+  },
+
+  async getChatSummary(chatId: string) {
+    const chat = await prisma.chats.findUnique({
+      where: { id: chatId },
+      select: { summary: true }
+    });
+    return chat?.summary || null;
+  },
+
+  async saveChatSummary(chatId: string, summary: string) {
+    return await prisma.chats.update({
+      where: { id: chatId },
+      data: { summary }
+    });
+  },
+
+  async updateChatMemoryPreference(chatId: string, useMemory: boolean) {
+    return await prisma.chats.update({
+      where: { id: chatId },
+      data: { useMemory }
+    });
+  },
+
+  async getUserBookmarks(userId: string) {
+    return await prisma.messageBookmarks.findMany({
+      where: { userId },
+      orderBy: { createdAt: "desc" },
+      include: {
+        chat: {
+          select: { id: true, title: true }
+        },
+        message: {
+          select: { id: true, role: true, content: true, createdAt: true }
+        }
+      }
+    });
+  },
+
+  async addBookmark(userId: string, chatId: string, messageId: string) {
+    return await prisma.messageBookmarks.upsert({
+      where: {
+        userId_messageId: {
+          userId,
+          messageId
+        }
+      },
+      update: {},
+      create: {
+        id: `bm_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        userId,
+        chatId,
+        messageId
+      }
+    });
+  },
+
+  async removeBookmark(userId: string, messageId: string) {
+    return await prisma.messageBookmarks.deleteMany({
+      where: {
+        userId,
+        messageId
+      }
+    });
+  },
+
+  async getUserBookmarkedMessageIds(userId: string, chatId?: string) {
+    const bookmarks = await prisma.messageBookmarks.findMany({
+      where: { 
+        userId,
+        ...(chatId ? { chatId } : {})
+      },
+      select: { messageId: true }
+    });
+    return bookmarks.map(b => b.messageId);
   },
 
   async getChatsForSearch(userId: string) {

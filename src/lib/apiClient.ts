@@ -143,7 +143,7 @@ export async function fetchWithTimeoutAndRetry<T = unknown>(
         errorMsg = extractErrorMessage(body, fallbackMsg);
         code = extractErrorCode(body, code);
         errorDetails = body.details;
-      } catch (e) {
+      } catch {
         // ignore json parse error on non-ok
       }
 
@@ -162,7 +162,7 @@ export async function fetchWithTimeoutAndRetry<T = unknown>(
     if (!contentType || contentType.includes('application/json')) {
       try {
         data = await res.json();
-      } catch (e) {
+      } catch {
         data = undefined;
       }
     } else {
@@ -173,11 +173,11 @@ export async function fetchWithTimeoutAndRetry<T = unknown>(
         } else {
           try {
             data = JSON.parse(text);
-          } catch (e) {
+          } catch {
             data = text;
           }
         }
-      } catch (e) {
+      } catch {
         data = undefined;
       }
     }

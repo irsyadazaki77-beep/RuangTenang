@@ -136,7 +136,7 @@ router.get(['/user/usage-stats', '/api/user/usage-stats'], optionalAuth, async (
     const dailyLimit = getUserDailyLimit(userTier, userRole);
     const weeklyLimit = dailyLimit >= 999999 ? 999999 : dailyLimit * 7;
     
-    const clientIp = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1';
+    const clientIp = req.ip || req.socket.remoteAddress || '127.0.0.1';
     const today = new Date().toISOString().split('T')[0];
     const ipUsage = await serverDb.getDailyUsage(`ip_${clientIp}`, today);
     const userUsage = userId !== 'guest' ? await serverDb.getDailyUsage(`user_${userId}`, today) : ipUsage;

@@ -10,7 +10,7 @@ const CounselorDirectory = lazyWithRetry(() => import('../../../features/counsel
 const UserProgressTracker = lazyWithRetry(() => import('../../../features/mood/UserProgressTracker').then(m => ({ default: m.UserProgressTracker })));
 const EmergencyCenter = lazyWithRetry(() => import('../../../components/EmergencyCenter').then(m => ({ default: m.EmergencyCenter })));
 const MentalHealthArticles = lazyWithRetry(() => import('../../../components/MentalHealthArticles').then(m => ({ default: m.MentalHealthArticles })));
-import { RefreshCw, ChevronDown, AlertTriangle } from 'lucide-react';
+import { RefreshCw, ChevronDown,  } from 'lucide-react';
 import { useToast } from '../../../components/Toast';
 import { DEFAULT_AI_MODEL_ID } from '../../../lib/aiModels';
 import { safeLocalStorage } from '../../../lib/storage';
@@ -19,22 +19,34 @@ import { useChatHistory } from '../hooks/useChatHistory';
 import { useChatStreaming } from '../hooks/useChatStreaming';
 import { ChatHeader } from './ChatHeader';
 import { EmptyChatState } from './EmptyChatState';
+import { ChatSkeleton } from '../../../components/common/Skeleton';
+import { ErrorState } from '../../../components/common/ErrorState';
 import { apiClient } from '../../../lib/apiClient';
 import { ModalShell } from '../../../components/ui/ModalShell';
+import { ChatSearchBar } from './ChatSearchBar';
+import { SessionSummaryModal } from './SessionSummaryModal';
+import { BookmarksModal } from './BookmarksModal';
+import { BranchChatModal } from './BranchChatModal';
+import { ChatMemoryModal } from './ChatMemoryModal';
 
 interface MainChatProps {
   user: UserSession | null;
   setChats: React.Dispatch<React.SetStateAction<Chat[]>>;
+  chats?: Chat[];
   onOpenSidebar?: () => void;
   onOpenSettings?: () => void;
   onOpenChangelog?: () => void;
 }
 
-export default function MainChat({ user, setChats, onOpenSidebar, onOpenSettings, onOpenChangelog }: MainChatProps) {
+export default function MainChat({ user, setChats, chats = [], onOpenSidebar, onOpenSettings, onOpenChangelog }: MainChatProps) {
   const { chatId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
   const { showToast } = useToast();
+
+  const currentChat = chats.find(c => c.id === chatId);
+  const isBranch = Boolean(currentChat?.parentChatId);
+  const parentChat = isBranch ? chats.find(c => c.id === currentChat?.parentChatId) : undefined;
 
   const [chatMode, setChatMode] = useState<ChatMode>(() => safeLocalStorage.getItem('chatMode') as ChatMode || 'Teman Cerita');
   const [responseStyle, setResponseStyle] = useState<ResponseStyle>(() => safeLocalStorage.getItem('responseStyle') as ResponseStyle || 'Seimbang');
@@ -48,6 +60,26 @@ export default function MainChat({ user, setChats, onOpenSidebar, onOpenSettings
   const [followUps, setFollowUps] = useState<string[]>([]);
   const [activePlugin, setActivePlugin] = useState<string | null>(null);
   const [streamingMessage, setStreamingMessage] = useState<Message | null>(null);
+
+  // --- Feature 1: Smart Session Summary State ---
+  const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false);
+
+  // --- Feature 2: Bookmarks State ---
+  const [isBookmarksModalOpen, setIsBookmarksModalOpen] = useState(false);
+  const [bookmarkedMessageIds, setBookmarkedMessageIds] = useState<Set<string>>(new Set());
+
+  // --- Feature 3: Branch Conversation State ---
+  const [isBranchModalOpen, setIsBranchModalOpen] = useState(false);
+  const [branchTarget, setBranchTarget] = useState<{ messageId: string; contentSnippet: string } | null>(null);
+
+  // --- Feature 4: Memory / Context Control State ---
+  const [isMemoryModalOpen, setIsMemoryModalOpen] = useState(false);
+  const [useMemoryForChat, setUseMemoryForChat] = useState(true);
+
+  // --- Feature 5: In-Chat Search State ---
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [currentSearchIndex, setCurrentSearchIndex] = useState(0);
 
   const handleOpenPlugin = (plugin: string) => setActivePlugin(plugin);
   const handleClosePlugin = () => setActivePlugin(null);
@@ -154,25 +186,126 @@ export default function MainChat({ user, setChats, onOpenSidebar, onOpenSettings
 
   useEffect(() => {
     scrollToBottom();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages, isTyping]);
 
   useEffect(() => {
     const handleGlobalKeydown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (activePlugin) handleClosePlugin();
+        if (isSearchOpen) setIsSearchOpen(false);
+        else if (activePlugin) handleClosePlugin();
         else if (isTyping) abortStream();
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
+        if (messages.length > 0) {
+          e.preventDefault();
+          setIsSearchOpen(prev => !prev);
+        }
       }
     };
     window.addEventListener('keydown', handleGlobalKeydown);
     return () => window.removeEventListener('keydown', handleGlobalKeydown);
-  }, [activePlugin, isTyping, abortStream]);
+  }, [activePlugin, isTyping, abortStream, isSearchOpen, messages.length]);
 
-  const handleSend = async (content: string, pluginResult?: string) => {
-    if (!content.trim() && !pluginResult) return;
+  // Fetch bookmarks on mount / user change / chatId change
+  useEffect(() => {
+    if (!user || user.role === 'guest') return;
+    apiClient.get<{ success: boolean; bookmarks: Array<{ messageId: string }> }>('/api/chat/bookmarks')
+      .then(res => {
+        if (res.success && Array.isArray(res.data?.bookmarks)) {
+          setBookmarkedMessageIds(new Set(res.data.bookmarks.map(b => b.messageId)));
+        }
+      })
+      .catch(() => {});
+  }, [user, chatId]);
+
+  // Bookmark toggle handler
+  const handleToggleBookmark = async (messageId: string, currentStatus: boolean) => {
+    if (!user || user.role === 'guest') {
+      showToast('Silakan masuk untuk menyimpan pesan.', 'info');
+      return;
+    }
+    if (currentStatus) {
+      try {
+        const res = await apiClient.delete<{ success: boolean }>(`/api/chat/bookmarks/${messageId}`);
+        if (res.success) {
+          setBookmarkedMessageIds(prev => {
+            const next = new Set(prev);
+            next.delete(messageId);
+            return next;
+          });
+          showToast('Pesan dihapus dari simpanan', 'info');
+        }
+      } catch {
+        showToast('Gagal menghapus simpanan', 'error');
+      }
+    } else {
+      try {
+        const targetChatId = chatId || 'temp';
+        const res = await apiClient.post<{ success: boolean }>(`/api/chat/${targetChatId}/bookmarks`, { messageId });
+        if (res.success) {
+          setBookmarkedMessageIds(prev => new Set(prev).add(messageId));
+          showToast('Pesan berhasil disimpan', 'success');
+        }
+      } catch {
+        showToast('Gagal menyimpan pesan', 'error');
+      }
+    }
+  };
+
+  // Search matches memo
+  const searchMatches = React.useMemo(() => {
+    if (!searchQuery.trim()) return [];
+    const q = searchQuery.toLowerCase();
+    return messages.filter(m => m.content && m.content.toLowerCase().includes(q)).map(m => m.id);
+  }, [messages, searchQuery]);
+
+  useEffect(() => {
+    setCurrentSearchIndex(0);
+    if (searchMatches.length > 0) {
+      const targetId = searchMatches[0];
+      document.getElementById(`msg-${targetId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [searchMatches]);
+
+  const handleSearchNext = () => {
+    if (searchMatches.length === 0) return;
+    const nextIdx = (currentSearchIndex + 1) % searchMatches.length;
+    setCurrentSearchIndex(nextIdx);
+    const targetId = searchMatches[nextIdx];
+    document.getElementById(`msg-${targetId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+
+  const handleSearchPrev = () => {
+    if (searchMatches.length === 0) return;
+    const prevIdx = (currentSearchIndex - 1 + searchMatches.length) % searchMatches.length;
+    setCurrentSearchIndex(prevIdx);
+    const targetId = searchMatches[prevIdx];
+    document.getElementById(`msg-${targetId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+
+  useEffect(() => {
+    if (currentChat) {
+      setUseMemoryForChat(currentChat.useMemory !== false);
+    }
+  }, [currentChat]);
+
+  // Branch conversation trigger
+  const handleOpenBranch = (messageId: string, contentSnippet: string) => {
+    setBranchTarget({ messageId, contentSnippet });
+    setIsBranchModalOpen(true);
+  };
+
+  const handleChatBranched = (newChat: Chat) => {
+    setChats(prev => [newChat, ...prev]);
+    navigate(`/c/${newChat.id}`);
+  };
+
+  const handleSend = async (content: string, pluginResult?: string, attachments?: any[]) => {
+    if (!content.trim() && !pluginResult && (!attachments || attachments.length === 0)) return;
     
     const tempId = `msg_${Date.now()}`;
     if (!pluginResult) {
-      setMessages(prev => [...prev, { id: tempId, role: 'user', content }]);
+      setMessages(prev => [...prev, { id: tempId, role: 'user', content, attachments: attachments ? attachments.map(a => ({ id: a.id, filename: a.file.name, mimeType: a.file.type, size: a.file.size, data: a.base64 })) : undefined }]);
     }
     
     setFollowUps([]);
@@ -187,7 +320,8 @@ export default function MainChat({ user, setChats, onOpenSidebar, onOpenSettings
         pluginResult,
         chatMode,
         responseStyle,
-        aiModel
+        aiModel,
+        attachments: attachments ? attachments.map(a => ({ filename: a.file.name, mimeType: a.file.type, size: a.file.size, base64: a.base64 })) : undefined
       },
       {
         onMessageStart: (msgId) => {
@@ -345,7 +479,7 @@ export default function MainChat({ user, setChats, onOpenSidebar, onOpenSettings
         showToast('Tidak ada percakapan untuk diringkas', 'info');
         return;
       }
-      setIsSummarizing(true);
+      
       try {
         if (chatId) {
           const res = await apiClient.post<{summary?: string}>(`/api/v1/chat/summary`, { chatId });
@@ -360,7 +494,7 @@ export default function MainChat({ user, setChats, onOpenSidebar, onOpenSettings
       } catch {
         handleSend('Tolong buatkan ringkasan singkat dari poin-poin utama percakapan kita sejauh ini.');
       } finally {
-        setIsSummarizing(false);
+        
       }
       return;
     }
@@ -368,7 +502,7 @@ export default function MainChat({ user, setChats, onOpenSidebar, onOpenSettings
     // Default fallback
     handleSend(command);
   };
-  const [isSummarizing, setIsSummarizing] = useState(false);
+  
 
   const renderPluginWrapper = (title: string, component: React.ReactNode, subtitle?: string) => (
     <ModalShell
@@ -428,9 +562,62 @@ export default function MainChat({ user, setChats, onOpenSidebar, onOpenSettings
         'Layanan krisis 24 jam & nomor darurat langsung'
       )}
 
+      {/* Feature 1: Smart Session Summary Modal */}
+      <SessionSummaryModal
+        isOpen={isSummaryModalOpen}
+        onClose={() => setIsSummaryModalOpen(false)}
+        chatId={chatId}
+      />
+
+      {/* Feature 2: Bookmarks Modal */}
+      <BookmarksModal
+        isOpen={isBookmarksModalOpen}
+        onClose={() => setIsBookmarksModalOpen(false)}
+        currentChatId={chatId}
+        onSelectChat={(targetChatId) => navigate(`/c/${targetChatId}`)}
+        onBookmarkRemoved={(msgId) => {
+          setBookmarkedMessageIds(prev => {
+            const next = new Set(prev);
+            next.delete(msgId);
+            return next;
+          });
+        }}
+      />
+
+      {/* Feature 3: Branch Chat Modal */}
+      <BranchChatModal
+        isOpen={isBranchModalOpen}
+        onClose={() => {
+          setIsBranchModalOpen(false);
+          setBranchTarget(null);
+        }}
+        parentChatId={chatId}
+        parentChatTitle={currentChat?.title || 'Percakapan Asli'}
+        messageId={branchTarget?.messageId}
+        messageSnippet={branchTarget?.contentSnippet}
+        onChatBranched={handleChatBranched}
+      />
+
+      {/* Feature 4: AI Memory Control Modal */}
+      <ChatMemoryModal
+        isOpen={isMemoryModalOpen}
+        onClose={() => setIsMemoryModalOpen(false)}
+        chatId={chatId}
+        useMemoryForChat={useMemoryForChat}
+        onToggleChatMemory={(val) => {
+          setUseMemoryForChat(val);
+          if (chatId) {
+            setChats(prev => prev.map(c => c.id === chatId ? { ...c, useMemory: val } : c));
+          }
+        }}
+      />
+
     <div className="flex-1 flex flex-col h-full min-h-0 surface-page relative min-w-0 overflow-hidden">
       <ChatHeader 
         user={user}
+        chatId={chatId}
+        isBranch={isBranch}
+        parentChatTitle={parentChat?.title}
         onOpenSidebar={onOpenSidebar}
         onOpenSettings={onOpenSettings}
         onOpenChangelog={onOpenChangelog}
@@ -444,34 +631,47 @@ export default function MainChat({ user, setChats, onOpenSidebar, onOpenSettings
         setIsTemporary={setIsTemporary}
         activePlugin={activePlugin}
         setActivePlugin={setActivePlugin}
+        onToggleSearch={() => setIsSearchOpen(prev => !prev)}
+        isSearchOpen={isSearchOpen}
+        onOpenSummary={() => setIsSummaryModalOpen(true)}
+        onOpenBookmarks={() => setIsBookmarksModalOpen(true)}
+        onOpenMemory={() => setIsMemoryModalOpen(true)}
+        hasMessages={messages.length > 0}
+      />
+
+      {/* Feature 5: In-Chat Search Bar */}
+      <ChatSearchBar
+        isOpen={isSearchOpen}
+        onClose={() => {
+          setIsSearchOpen(false);
+          setSearchQuery('');
+        }}
+        query={searchQuery}
+        onQueryChange={setSearchQuery}
+        totalMatches={searchMatches.length}
+        currentIndex={currentSearchIndex}
+        onNext={handleSearchNext}
+        onPrev={handleSearchPrev}
       />
 
       <div className="flex-1 overflow-y-auto w-full min-w-0 flex flex-col px-3 sm:px-4 py-3 sm:py-4" ref={scrollContainerRef}>
         {isLoadingMessages ? (
-          <div className="flex-1 flex items-center justify-center">
-            <div className="flex flex-col items-center gap-3">
-              <RefreshCw className="w-6 h-6 text-teal-600 dark:text-teal-400 animate-spin" />
-              <p className="text-xs sm:text-sm text-secondary font-medium animate-pulse">Memuat percakapan...</p>
-            </div>
+          <div className="flex-1 flex items-start justify-center pt-4">
+            <ChatSkeleton />
           </div>
         ) : fetchMessagesError ? (
-          <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
-            <div className="w-12 h-12 rounded-full bg-rose-50 dark:bg-rose-950/60 text-rose-500 flex items-center justify-center mb-3">
-              <AlertTriangle className="w-5 h-5" />
-            </div>
-            <h3 className="text-base font-bold text-primary mb-1">Gagal Memuat Pesan</h3>
-            <p className="text-secondary text-xs mb-4">{fetchMessagesError}</p>
-            <button
-              onClick={() => fetchMessages()}
-              className="px-3.5 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-semibold transition-colors cursor-pointer"
-            >
-              Coba Lagi
-            </button>
+          <div className="flex-1 flex flex-col items-center justify-center p-6 text-center h-full">
+            <ErrorState
+              type="network"
+              title="Gagal Memuat Pesan"
+              description={fetchMessagesError}
+              onRetry={() => fetchMessages()}
+            />
           </div>
         ) : messages.length === 0 ? (
           <EmptyChatState userName={user?.name?.split(' ')[0]} onSelectPrompt={(prompt) => handleSend(prompt)} />
         ) : (
-          <div className="max-w-3xl mx-auto space-y-4 sm:space-y-5 pb-6 w-full">
+          <div key={chatId || 'empty'} className="max-w-3xl mx-auto space-y-4 sm:space-y-5 pb-6 w-full animate-fade-in">
             {nextCursor && (
               <div className="flex justify-center mb-4">
                 <button 
@@ -497,6 +697,11 @@ export default function MainChat({ user, setChats, onOpenSidebar, onOpenSettings
                 onSendPluginResult={(res) => handleSend('', res)}
                 onOpenPlugin={handleOpenPlugin}
                 onEditMessage={handleEditMessage}
+                isBookmarked={bookmarkedMessageIds.has(msg.id)}
+                onBookmarkToggle={(msgId, status) => handleToggleBookmark(msgId, status)}
+                onBranch={(msgId, snippet) => handleOpenBranch(msgId, snippet)}
+                searchHighlightQuery={isSearchOpen ? searchQuery : undefined}
+                isSearchTarget={isSearchOpen && searchMatches[currentSearchIndex] === msg.id}
               />
             ))}
             
@@ -513,26 +718,23 @@ export default function MainChat({ user, setChats, onOpenSidebar, onOpenSettings
             )}
             
             {isTyping && !streamingMessage && messages[messages.length - 1]?.role !== 'assistant' && (
-              <div className="flex gap-2.5 sm:gap-3">
-                <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-xl bg-teal-50 dark:bg-teal-950/80 border border-teal-200/80 dark:border-teal-900 flex items-center justify-center shrink-0 mt-0.5 shadow-3xs p-1">
-                  <img src="/favicon.svg" alt="RuangTenang" className="w-full h-full object-contain" />
+              <div className="flex items-center gap-2 text-slate-400 py-1 pl-9 animate-fade-in">
+                <div className="flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse [animation-delay:0ms]"></span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse [animation-delay:200ms]"></span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse [animation-delay:400ms]"></span>
                 </div>
-                <div className="pt-1 flex items-center gap-1.5 text-teal-600 dark:text-teal-400">
-                  <span className="text-xs font-medium animate-pulse">RuangTenang sedang merespons</span>
-                  <div className="w-1.5 h-1.5 bg-current rounded-full animate-bounce [animation-delay:-0.3s]"></div>
-                  <div className="w-1.5 h-1.5 bg-current rounded-full animate-bounce [animation-delay:-0.15s]"></div>
-                  <div className="w-1.5 h-1.5 bg-current rounded-full animate-bounce"></div>
-                </div>
+                <span className="text-xs text-slate-400">RuangTenang sedang merespons...</span>
               </div>
             )}
             
             {!isTyping && followUps.length > 0 && (
-              <div className="flex flex-wrap gap-2 mt-3 justify-end">
+              <div className="flex flex-wrap gap-1.5 mt-3 justify-end">
                 {followUps.map((q, idx) => (
                   <button 
                     key={idx} 
                     onClick={() => handleSend(q)} 
-                    className="px-3 py-1.5 bg-slate-50 dark:bg-slate-900 border border-default rounded-full text-xs text-secondary hover:border-teal-500/60 dark:hover:border-teal-500/60 hover:text-teal-700 dark:hover:text-teal-400 transition-colors shadow-3xs animate-fade-in text-left cursor-pointer"
+                    className="px-3 py-1.5 bg-slate-100/80 hover:bg-slate-200/80 dark:bg-slate-800/80 dark:hover:bg-slate-700/80 rounded-full text-xs text-slate-600 dark:text-slate-300 transition-colors text-left cursor-pointer"
                   >
                     {q}
                   </button>
@@ -547,10 +749,11 @@ export default function MainChat({ user, setChats, onOpenSidebar, onOpenSettings
       {showScrollBottom && (
         <button 
           onClick={() => scrollToBottom(true)} 
-          className="absolute bottom-20 right-4 sm:right-6 px-3 py-1.5 bg-teal-600 text-white hover:bg-teal-700 active:bg-teal-800 shadow-md rounded-full text-xs font-semibold flex items-center gap-1.5 transition-all z-20 border border-teal-500 animate-bounce cursor-pointer"
+          className="absolute bottom-24 right-4 sm:right-6 w-9 h-9 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:text-slate-900 border border-slate-200/80 dark:border-slate-700 shadow-md rounded-full flex items-center justify-center transition-all z-20 cursor-pointer"
+          title="Pesan Terbaru"
+          aria-label="Gulir ke Pesan Terbaru"
         >
-          <span>Pesan Terbaru</span>
-          <ChevronDown className="w-3.5 h-3.5" />
+          <ChevronDown className="w-4 h-4" />
         </button>
       )}
       

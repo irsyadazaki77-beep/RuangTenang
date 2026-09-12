@@ -1,5 +1,5 @@
 import { useEscapeKey } from "../../hooks/useEscapeKey";
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import {
   Search,
   Users,
@@ -8,7 +8,6 @@ import {
   ShieldCheck,
   X,
   Calendar,
-  MessageSquare,
   Filter,
   Briefcase,
   Award,
@@ -18,13 +17,14 @@ import {
 } from "lucide-react";
 import { Counselor } from "../../types";
 import { CounselorSpecialtyId, mapSpecialtiesToIds } from "./counselorUtils";
+import { CounselorDirectorySkeleton } from "../../components/common/Skeleton";
+import { EmptyState } from "../../components/common/EmptyState";
+import { ErrorState } from "../../components/common/ErrorState";
+import { useCounselors } from '../../hooks/useCounselors';
 
-
-interface CounselorDirectoryProps {
+export interface CounselorDirectoryProps {
   onSelectCounselorForBooking: (counselor: Counselor) => void;
 }
-
-import { useCounselors } from '../../hooks/useCounselors';
 
 export const CounselorDirectory: React.FC<CounselorDirectoryProps> = ({
   onSelectCounselorForBooking,
@@ -34,8 +34,8 @@ export const CounselorDirectory: React.FC<CounselorDirectoryProps> = ({
   const [methodFilter, setMethodFilter] = useState<string>("Semua");
   const [costFilter, setCostFilter] = useState<string>("Semua");
   const [campusFilter, setCampusFilter] = useState<string>("Semua");
-    const [availabilityFilter, setAvailabilityFilter] = useState<string>("Semua");
-  const { counselors } = useCounselors();
+  const [availabilityFilter, setAvailabilityFilter] = useState<string>("Semua");
+  const { counselors, loading, error, refetch } = useCounselors();
 
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [selectedCounselorModal, setSelectedCounselorModal] =
@@ -173,35 +173,34 @@ export const CounselorDirectory: React.FC<CounselorDirectoryProps> = ({
       </div>
 
       {/* Directory Grid */}
-      {filteredCounselors.length === 0 ? (
-        <div className="surface-card rounded-xl border border-default p-8 text-center space-y-3 shadow-3xs">
-          <div className="w-12 h-12 surface-page rounded-full flex items-center justify-center mx-auto">
-             <Users className="w-6 h-6 text-secondary" />
-          </div>
-          <div>
-            <h3 className="font-semibold text-primary text-sm sm:text-base">
-              Tidak Ada Konselor Ditemukan
-            </h3>
-            <p className="text-secondary text-xs sm:text-sm mt-0.5 max-w-sm mx-auto">
-              Coba ubah kata kunci pencarian atau sesuaikan filter kriteria.
-            </p>
-          </div>
-          <button
-            onClick={() => {
-              setSearchQuery("");
-              setSelectedConcern("Semua");
-              setMethodFilter("Semua");
-              setCostFilter("Semua");
-              setCampusFilter("Semua");
-              setAvailabilityFilter("Semua");
-            }}
-            className="px-4 py-2 surface-muted text-primary font-medium text-xs sm:text-sm rounded-lg transition-all cursor-pointer min-h-[38px] sm:min-h-[36px]"
-          >
-            Reset Filter
-          </button>
-        </div>
+      {loading ? (
+        <CounselorDirectorySkeleton />
+      ) : error ? (
+        <ErrorState
+          type="network"
+          title="Gagal Memuat Daftar Konselor"
+          description={error}
+          onRetry={refetch}
+          className="my-8"
+        />
+      ) : filteredCounselors.length === 0 ? (
+        <EmptyState
+          icon="users"
+          title="Tidak Ada Konselor Ditemukan"
+          description="Coba ubah kata kunci pencarian atau sesuaikan filter kriteria."
+          actionLabel="Reset Filter"
+          onAction={() => {
+            setSearchQuery("");
+            setSelectedConcern("Semua");
+            setMethodFilter("Semua");
+            setCostFilter("Semua");
+            setCampusFilter("Semua");
+            setAvailabilityFilter("Semua");
+          }}
+          className="my-8"
+        />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4 animate-fade-in">
           {filteredCounselors.map((counselor) => (
             <div
               key={counselor.id}

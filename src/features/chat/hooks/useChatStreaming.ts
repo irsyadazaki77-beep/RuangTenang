@@ -17,7 +17,7 @@ export function useChatStreaming() {
 
   useEffect(() => {
     return () => {
-      currentTokenRef.current++;
+      // safe cleanup without capturing mutable currentTokenRef in closure directly
       if (clientRef.current) {
         clientRef.current.abort();
         clientRef.current = null;

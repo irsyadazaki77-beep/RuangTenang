@@ -35,7 +35,20 @@ const verifyAndLoadSession = async (token: string, res: Response) => {
       throw new Error('SESSION_REVOKED');
     }
     
-    return decoded;
+    // ZERO TRUST: Always derive role, tier, name, and email directly from server database
+    const user = await serverDb.getUserById(userId);
+    if (!user) {
+      throw new Error('INVALID_SESSION');
+    }
+
+    return {
+      userId: user.id,
+      email: user.email,
+      role: user.role,
+      tier: user.tier,
+      name: user.name,
+      sessionId: decoded.sessionId,
+    };
   } catch (err: any) {
     res.clearCookie('ruangtenang_session', { path: '/' });
     res.clearCookie('token', { path: '/' });

@@ -5,7 +5,6 @@ import {
   Users, 
   AlertCircle, 
   PlusCircle, 
-  FileText, 
   Trash2, 
   Download, 
   Sparkles,

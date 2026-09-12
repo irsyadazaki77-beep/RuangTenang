@@ -2,17 +2,12 @@ import { useEscapeKey } from "../../hooks/useEscapeKey";
 import React, { useState, useEffect } from "react";
 import {
   XCircle,
-  Clock,
   CheckCircle2,
   ChevronRight,
   ChevronLeft,
   Lock,
-  Calendar,
-  User,
-  BookOpen,
-  HeartHandshake,
 } from "lucide-react";
-import { Counselor, UserSession, Appointment, TIER_LIMITS } from "../../types";
+import { UserSession, Appointment, TIER_LIMITS } from "../../types";
 import { useCounselors } from "../../hooks/useCounselors";
 import { apiClient } from "../../lib/apiClient";
 import { addNotification } from "../../lib/notificationStore";
@@ -20,10 +15,10 @@ import { addNotification } from "../../lib/notificationStore";
 interface BookingFormProps {
   isOpen: boolean;
   onClose: () => void;
-  selectedCounselorFromDir: Counselor | null;
+  selectedanyFromDir: any | null;
   userSession: UserSession;
-  setUserSession: React.Dispatch<React.SetStateAction<UserSession>>;
-  appointments: Appointment[];
+  setUserSession?: React.Dispatch<React.SetStateAction<any>>;
+  appointments?: any[];
   onAddAppointment: (newApt: Appointment) => void;
   showToast: (
     message: string,
@@ -63,10 +58,8 @@ const KEBUTUHAN_OPTIONS = [
 export const BookingForm: React.FC<BookingFormProps> = ({
   isOpen,
   onClose,
-  selectedCounselorFromDir,
+  selectedanyFromDir,
   userSession,
-  setUserSession,
-  appointments,
   onAddAppointment,
   showToast,
   onShowLimitModal,
@@ -79,8 +72,8 @@ export const BookingForm: React.FC<BookingFormProps> = ({
   const [selectedConcern, setSelectedConcern] = useState<string>(
     "Kendala Akademik & Skripsi",
   );
-  const [selectedCounselorId, setSelectedCounselorId] = useState<string>(
-    selectedCounselorFromDir?.id || ""
+  const [selectedanyId, setSelectedanyId] = useState<string>(
+    selectedanyFromDir?.id || ""
   );
   const [studentName, setStudentName] = useState(userSession.name || "");
   const [studentNIM, setStudentNIM] = useState("");
@@ -112,25 +105,25 @@ export const BookingForm: React.FC<BookingFormProps> = ({
 
   const [availableSlots, setAvailableSlots] = useState<string[]>([]);
   const [isFullyBooked, setIsFullyBooked] = useState(false);
-  const [isLoadingSlots, setIsLoadingSlots] = useState(false);
+  
 
   useEffect(() => {
-    if (selectedCounselorFromDir) {
-      setSelectedCounselorId(selectedCounselorFromDir.id);
+    if (selectedanyFromDir) {
+      setSelectedanyId(selectedanyFromDir.id);
       setCurrentStep(1);
     }
-  }, [selectedCounselorFromDir]);
+  }, [selectedanyFromDir]);
 
   useEffect(() => {
-    if (!selectedCounselorId || !date) return;
+    if (!selectedanyId || !date) return;
     let isMounted = true;
-    setIsLoadingSlots(true);
+    
     apiClient.get<{ availableSlots: string[]; fullyBooked?: boolean }>(
-      `/api/v1/appointments/availability?counselorId=${selectedCounselorId}&date=${date}`,
+      `/api/v1//availability?counselorId=${selectedanyId}&date=${date}`,
     )
       .then((res) => {
         if (!isMounted) return;
-        setIsLoadingSlots(false);
+        
         const data = res.data;
         if (data && Array.isArray(data.availableSlots)) {
           setAvailableSlots(data.availableSlots);
@@ -148,7 +141,7 @@ export const BookingForm: React.FC<BookingFormProps> = ({
       })
       .catch((err) => {
         if (!isMounted) return;
-        setIsLoadingSlots(false);
+        
         setAvailableSlots([]);
         console.warn("Failed to check server availability:", err);
       });
@@ -156,12 +149,12 @@ export const BookingForm: React.FC<BookingFormProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [selectedCounselorId, date]);
+  }, [selectedanyId, date]);
 
   const handleNextStep = () => {
     setFormError(null);
     if (currentStep === 1) {
-      if (!selectedCounselorId) return setFormError("Pilih konselor terlebih dahulu untuk melanjutkan.");
+      if (!selectedanyId) return setFormError("Pilih konselor terlebih dahulu untuk melanjutkan.");
     } else if (currentStep === 2) {
       if (!date || !timeSlot) return setFormError("Pilih tanggal dan waktu sesi.");
     } else if (currentStep === 3) {
@@ -182,7 +175,7 @@ export const BookingForm: React.FC<BookingFormProps> = ({
     setFormError(null);
 
     const currentLimit = TIER_LIMITS[userSession.tier].appointments;
-    if (userSession.usageStats.appointmentsBooked >= currentLimit) {
+    if (userSession.usageStats.Booked >= currentLimit) {
       onClose();
       onShowLimitModal();
       return;
@@ -208,7 +201,7 @@ export const BookingForm: React.FC<BookingFormProps> = ({
       return;
     }
 
-    const counselorObj = counselors.find((c) => c.id === selectedCounselorId);
+    const counselorObj = counselors.find((c) => c.id === selectedanyId);
     if (!counselorObj) {
       setFormError("Pilih konselor yang valid.");
       return;
@@ -218,7 +211,7 @@ export const BookingForm: React.FC<BookingFormProps> = ({
     const fullTimeSlot = `${timeSlot} ${timezone}`;
 
     try {
-      const res = await apiClient.post<any>("/api/v1/appointments", {
+      const res = await apiClient.post<any>("/api/v1/", {
         counselorId: counselorObj.id,
         counselorName: counselorObj.name,
         date,
@@ -296,7 +289,7 @@ export const BookingForm: React.FC<BookingFormProps> = ({
 
   if (!isOpen) return null;
 
-  const currentCounselor = counselors.find((c) => c.id === selectedCounselorId);
+  const currentany = counselors.find((c) => c.id === selectedanyId);
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center max-sm:items-end p-3 sm:p-4 max-sm:p-0 font-sans animate-fade-in">
@@ -414,12 +407,12 @@ export const BookingForm: React.FC<BookingFormProps> = ({
                   <div className="text-center text-secondary py-8 text-xs">Memuat daftar konselor...</div>
                 ) : (
                   counselors.map((c) => {
-                    const isSelected = selectedCounselorId === c.id;
+                    const isSelected = selectedanyId === c.id;
                     return (
                       <button
                         key={c.id}
                         type="button"
-                        onClick={() => setSelectedCounselorId(c.id)}
+                        onClick={() => setSelectedanyId(c.id)}
                         className={`w-full text-left p-3 sm:p-3.5 rounded-xl border transition-all cursor-pointer flex items-center gap-3 ${
                           isSelected
                             ? "surface-muted border-teal-600/50 ring-1 ring-teal-600/50"
@@ -461,16 +454,16 @@ export const BookingForm: React.FC<BookingFormProps> = ({
           {/* STEP 2: PILIH JADWAL & METODE */}
           {currentStep === 2 && (
             <div className="space-y-4 animate-in fade-in duration-200">
-              {currentCounselor ? (
+              {currentany ? (
                 <div className="p-3.5 surface-muted border border-default rounded-xl flex items-center gap-3">
                   <img
-                    src={currentCounselor.avatar}
-                    alt={currentCounselor.name}
+                    src={currentany.avatar}
+                    alt={currentany.name}
                     className="w-10 h-10 rounded-xl object-cover shrink-0 border border-default"
                   />
                   <div>
                     <p className="text-xs sm:text-sm font-semibold text-primary">
-                      Sesi dengan {currentCounselor.name}
+                      Sesi dengan {currentany.name}
                     </p>
                     <p className="text-[11px] text-secondary mt-0.5">
                       {selectedConcern}
@@ -590,7 +583,7 @@ export const BookingForm: React.FC<BookingFormProps> = ({
               <div className="surface-muted border border-default rounded-xl p-4 space-y-3">
                 <div className="space-y-0.5">
                   <p className="text-[11px] font-semibold text-secondary">Konselor</p>
-                  <p className="text-xs sm:text-sm font-bold text-primary">{counselors.find(c => c.id === selectedCounselorId)?.name || "-"}</p>
+                  <p className="text-xs sm:text-sm font-bold text-primary">{counselors.find(c => c.id === selectedanyId)?.name || "-"}</p>
                 </div>
                 <div className="space-y-0.5">
                   <p className="text-[11px] font-semibold text-secondary">Jadwal Sesi</p>

@@ -107,16 +107,16 @@ export const DEFAULT_AI_MODEL_ID = 'gemini-3.1-flash-lite';
 
 export function getActualGeminiModel(modelId: string): string {
   const map: Record<string, string> = {
-    'gemini-3.8-flash': 'gemini-3.8-flash',
-    'gemini-3.1-flash-lite': 'gemini-3.1-flash-lite',
-    'gemini-3.7-flash': 'gemini-3.7-flash',
-    'gemini-3.1-pro-preview': 'gemini-3.1-pro-preview',
-    'gemini-flash-latest': 'gemini-flash-latest',
+    'gemini-3.8-flash': 'gemini-2.5-flash',
+    'gemini-3.1-flash-lite': 'gemini-2.5-flash',
+    'gemini-3.7-flash': 'gemini-2.5-flash',
+    'gemini-3.1-pro-preview': 'gemini-2.5-pro',
+    'gemini-flash-latest': 'gemini-2.5-flash',
     'gemini-2.5-flash': 'gemini-2.5-flash',
     'gemini-2.5-pro': 'gemini-2.5-pro',
-    'gemini-2.5-flash-lite': 'gemini-2.5-flash-lite',
+    'gemini-2.5-flash-lite': 'gemini-2.5-flash',
   };
-  return map[modelId] || modelId;
+  return map[modelId] || 'gemini-2.5-flash';
 }
 
 export function getModelInfo(modelId: string): AiModelOption {

@@ -6,6 +6,7 @@ export interface UsageLimitCheckResult {
   dailyLimit: number;
   userTier: string;
   message?: string;
+  reserved?: boolean;
 }
 
 /**
@@ -27,7 +28,8 @@ export function getUserDailyLimit(userTier?: string, userRole?: string): number 
 }
 
 /**
- * Check whether user or IP has exceeded daily limit
+ * Atomically check and reserve AI usage limit in a single database transaction.
+ * Prevents parallel race condition bypasses across concurrent incoming requests.
  */
 export async function checkUserAiUsageLimit(
   userId?: string,
@@ -37,50 +39,66 @@ export async function checkUserAiUsageLimit(
 ): Promise<UsageLimitCheckResult> {
   const dailyLimit = getUserDailyLimit(userTier, userRole);
   if (dailyLimit >= 999999) {
-    return { allowed: true, dailyUsage: 0, dailyLimit, userTier: userTier || 'Developer' };
+    return { allowed: true, dailyUsage: 0, dailyLimit, userTier: userTier || 'Developer', reserved: false };
   }
 
   const today = new Date().toISOString().split('T')[0];
-  const ipKey = `ip_${clientIp || '127.0.0.1'}`;
+  const safeIp = clientIp || '127.0.0.1';
+  const ipKey = `ip_${safeIp}`;
   const userKey = userId && userId !== 'guest' ? `user_${userId}` : null;
 
-  const ipUsage = await serverDb.getDailyUsage(ipKey, today);
-  const userUsage = userKey ? await serverDb.getDailyUsage(userKey, today) : 0;
-  const currentUsage = Math.max(ipUsage, userUsage);
+  return await serverDb.consumeQuotaTransaction(ipKey, userKey, today, dailyLimit, userTier);
+}
 
-  if (currentUsage >= dailyLimit) {
-    return {
-      allowed: false,
-      dailyUsage: currentUsage,
-      dailyLimit,
-      userTier: userTier || 'Free',
-      message: `Batas penggunaan AI harian Anda telah tercapai (${currentUsage}/${dailyLimit} pesan hari ini) demi menjaga ketersediaan kuota API. Kuota Anda akan tereset otomatis besok pada tengah malam. Silakan manfaatkan layanan Konseling Kampus jika Anda membutuhkan teman bicara.`
-    };
-  }
+/**
+ * Helper to get current daily usage without incrementing
+ */
+export async function getDailyUsageStats(
+  userId?: string,
+  clientIp?: string
+): Promise<{ ipUsage: number; userUsage: number; maxUsage: number }> {
+  const today = new Date().toISOString().split('T')[0];
+  const safeIp = clientIp || '127.0.0.1';
+  const ipKey = `ip_${safeIp}`;
+  const userKey = userId && userId !== 'guest' ? `user_${userId}` : null;
+
+  const ipRecord = await serverDb.getDailyUsage(ipKey, today);
+  const userRecord = userKey ? await serverDb.getDailyUsage(userKey, today) : { count: 0 };
+  
+  const ipUsage = typeof ipRecord === 'number' ? ipRecord : ipRecord.count;
+  const userUsage = typeof userRecord === 'number' ? userRecord : userRecord.count;
 
   return {
-    allowed: true,
-    dailyUsage: currentUsage,
-    dailyLimit,
-    userTier: userTier || 'Free'
+    ipUsage,
+    userUsage,
+    maxUsage: Math.max(ipUsage, userUsage)
   };
 }
 
 /**
- * Increment user's daily usage count
+ * Secondary helper retained for API compatibility.
+ * Since checkUserAiUsageLimit now performs atomic reservation,
+ * recordUserAiUsage returns the current usage without double-incrementing.
  */
 export async function recordUserAiUsage(
   userId?: string,
   clientIp?: string
 ): Promise<number> {
+  const stats = await getDailyUsageStats(userId, clientIp);
+  return stats.maxUsage;
+}
+
+/**
+ * Rollback a reserved quota slot if the request failed before entering AI processing.
+ */
+export async function rollbackUserAiQuota(
+  userId?: string,
+  clientIp?: string
+): Promise<void> {
   const today = new Date().toISOString().split('T')[0];
-  const ipKey = `ip_${clientIp || '127.0.0.1'}`;
-  await serverDb.incrementDailyUsage(ipKey, today);
+  const safeIp = clientIp || '127.0.0.1';
+  const ipKey = `ip_${safeIp}`;
+  const userKey = userId && userId !== 'guest' ? `user_${userId}` : null;
 
-  if (userId && userId !== 'guest') {
-    const userKey = `user_${userId}`;
-    return await serverDb.incrementDailyUsage(userKey, today);
-  }
-
-  return 0;
+  await serverDb.rollbackQuotaTransaction(ipKey, userKey, today);
 }

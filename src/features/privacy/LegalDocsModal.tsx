@@ -12,7 +12,6 @@ import {
   X,
   CheckCircle2,
   ChevronRight,
-  ShieldAlert,
 } from "lucide-react";
 
 interface LegalDocsModalProps {

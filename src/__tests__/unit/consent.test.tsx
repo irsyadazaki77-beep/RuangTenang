@@ -27,7 +27,7 @@ describe('Privacy & Consent Center Modal Tests', () => {
         onClose={onClose}
         userSession={dummyUser}
         setUserSession={setUserSession}
-        onOpenAuth={onOpenAuth}
+        
       />
     );
 

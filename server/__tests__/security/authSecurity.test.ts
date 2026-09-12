@@ -218,3 +218,121 @@ describe('Password Change Session Revocation Tests', () => {
     expect(newLogin.status).toBe(200);
   });
 });
+
+describe('Session Management & Zero-Trust Tier Tests', () => {
+  const SESSION_USER_EMAIL = 'session_test@test.com';
+
+  beforeAll(async () => {
+    await prisma.users.deleteMany({ where: { email: SESSION_USER_EMAIL } });
+  });
+
+  afterAll(async () => {
+    await prisma.users.deleteMany({ where: { email: SESSION_USER_EMAIL } });
+  });
+
+  it('correctly detects current session with isCurrent: true in /api/auth/sessions', async () => {
+    await request(app).post('/api/auth/register').send({
+      name: 'Session Detection User',
+      email: SESSION_USER_EMAIL,
+      password: 'Password123!',
+      role: 'mahasiswa'
+    });
+    await prisma.users.updateMany({
+      where: { email: SESSION_USER_EMAIL },
+      data: { emailVerified: true }
+    });
+
+    const loginRes = await request(app)
+      .post('/api/auth/login')
+      .send({ email: SESSION_USER_EMAIL, password: 'Password123!' });
+    
+    const cookie = loginRes.headers['set-cookie']?.[0];
+
+    const sessionsRes = await request(app)
+      .get('/api/auth/sessions')
+      .set('Cookie', cookie);
+
+    expect(sessionsRes.status).toBe(200);
+    expect(sessionsRes.body.sessions).toBeDefined();
+    expect(sessionsRes.body.sessions.length).toBeGreaterThan(0);
+
+    const currentSession = sessionsRes.body.sessions.find((s: any) => s.isCurrent === true);
+    expect(currentSession).toBeDefined();
+    expect(currentSession.isCurrent).toBe(true);
+  });
+
+  it('rejects tier spoofing when client uses JWT with fake tier claim but database is Free', async () => {
+    const dbUser = await prisma.users.findUnique({ where: { email: SESSION_USER_EMAIL } });
+    expect(dbUser).toBeDefined();
+
+    const forgedToken = generateToken({
+      userId: dbUser!.id,
+      email: dbUser!.email,
+      role: 'mahasiswa',
+      tier: 'Developer',
+      sessionId: 'sess-active'
+    });
+
+    const statsRes = await request(app)
+      .get('/api/user/usage-stats')
+      .set('Authorization', `Bearer ${forgedToken}`);
+
+    expect(statsRes.status).toBe(200);
+    expect(statsRes.body.userTier).toBe('Free');
+    expect(statsRes.body.isDeveloper).toBe(false);
+  });
+
+  it('revokes a single session when /api/auth/sessions/revoke is called', async () => {
+    const loginRes = await request(app)
+      .post('/api/auth/login')
+      .send({ email: SESSION_USER_EMAIL, password: 'Password123!' });
+    
+    const cookie = loginRes.headers['set-cookie']?.[0];
+
+    const sessionsRes = await request(app)
+      .get('/api/auth/sessions')
+      .set('Cookie', cookie);
+    
+    const currentSession = sessionsRes.body.sessions.find((s: any) => s.isCurrent === true);
+    expect(currentSession).toBeDefined();
+
+    const revokeRes = await request(app)
+      .post('/api/auth/sessions/revoke')
+      .set('Cookie', cookie)
+      .send({ sessionId: currentSession.sessionId });
+
+    expect(revokeRes.status).toBe(200);
+    expect(revokeRes.body.success).toBe(true);
+
+    const nextReq = await request(app)
+      .get('/api/auth/sessions')
+      .set('Cookie', cookie);
+
+    expect(nextReq.status).toBe(401);
+    expect(nextReq.body.code).toBe('SESSION_REVOKED');
+  });
+
+  it('revokes all sessions when /api/auth/logout-all is called', async () => {
+    const loginA = await request(app)
+      .post('/api/auth/login')
+      .send({ email: SESSION_USER_EMAIL, password: 'Password123!' });
+    const cookieA = loginA.headers['set-cookie']?.[0];
+
+    const loginB = await request(app)
+      .post('/api/auth/login')
+      .send({ email: SESSION_USER_EMAIL, password: 'Password123!' });
+    const cookieB = loginB.headers['set-cookie']?.[0];
+
+    const logoutAllRes = await request(app)
+      .post('/api/auth/logout-all')
+      .set('Cookie', cookieA);
+
+    expect(logoutAllRes.status).toBe(200);
+
+    const checkA = await request(app).get('/api/auth/sessions').set('Cookie', cookieA);
+    expect(checkA.status).toBe(401);
+
+    const checkB = await request(app).get('/api/auth/sessions').set('Cookie', cookieB);
+    expect(checkB.status).toBe(401);
+  });
+});

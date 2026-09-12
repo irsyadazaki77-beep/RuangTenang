@@ -6,19 +6,15 @@ import {
   Calendar, 
   Check, 
   Copy, 
-  Share2, 
   Layers, 
   Zap, 
   ShieldCheck, 
   Wrench, 
   Brain, 
   ChevronDown, 
-  ChevronUp, 
-  RefreshCw,
+  ChevronUp,
   Info,
-  CheckCircle2,
-  Tag
-} from 'lucide-react';
+  CheckCircle2} from 'lucide-react';
 import { 
   APP_CHANGELOG, 
   CURRENT_APP_VERSION, 

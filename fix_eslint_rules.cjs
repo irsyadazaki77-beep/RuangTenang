@@ -30,5 +30,5 @@ const replacement = `    rules: {
       'react-hooks/rules-of-hooks': 'warn',
       'react-hooks/exhaustive-deps': 'off'
     }`;
-content = content.replace(/    rules: \{[\s\S]*?exhaustive-deps': 'warn'\n    \}/, replacement);
+content = content.replace(/ {4}rules: \{[\s\S]*?exhaustive-deps': 'warn'\n {4}\}/, replacement);
 fs.writeFileSync('eslint.config.js', content);

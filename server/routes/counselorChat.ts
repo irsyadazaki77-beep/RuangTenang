@@ -83,8 +83,6 @@ router.post(['/counselor-chat', '/api/counselor-chat'], optionalAuth, async (req
       });
     }
 
-    await recordUserAiUsage(userId, clientIp);
-
     try {
       const result = await aiGateway.counselorSimulationChat({
         userId,

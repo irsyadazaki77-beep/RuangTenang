@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Counselor } from '../types';
 import { apiClient } from '../lib/apiClient';
 
@@ -7,19 +7,24 @@ export function useCounselors() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    apiClient.get<Counselor[]>('/api/v1/counselors')
-      .then(res => {
-        if (!res.success) throw new Error(res.error || 'Gagal memuat data konselor');
-        setCounselors(res.data || []);
-        setLoading(false);
-      })
-      .catch(err => {
-        setError(err.message);
-        setLoading(false);
-      });
+  const fetchCounselors = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await apiClient.get<Counselor[]>('/api/v1/counselors');
+      if (!res.success) throw new Error(res.error || 'Gagal memuat data konselor');
+      setCounselors(res.data || []);
+    } catch (err: any) {
+      setError(err.message || 'Terjadi kesalahan saat memuat data konselor');
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  return { counselors, loading, error };
+  useEffect(() => {
+    fetchCounselors();
+  }, [fetchCounselors]);
+
+  return { counselors, loading, error, refetch: fetchCounselors };
 }
 

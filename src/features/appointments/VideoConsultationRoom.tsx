@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect} from 'react';
 import { useEscapeKey } from '../../hooks/useEscapeKey';
-import { Video, VideoOff, Mic, MicOff, PhoneOff, AlertCircle, Lock, Users, Network, Maximize } from 'lucide-react';
+import { Video, VideoOff, Mic, MicOff, PhoneOff, AlertCircle, Lock, Users, Network } from 'lucide-react';
 import { Appointment } from '../../types';
 
 interface VideoConsultationRoomProps {

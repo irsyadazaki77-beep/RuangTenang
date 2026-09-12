@@ -27,12 +27,25 @@ const NEGATION_PATTERNS = [
   'tidak akan'
 ];
 
-// Direct acute crisis indicators (including slang and informal phrasing)
+// Benign metaphor patterns that should not trigger acute crisis (e.g. "mati gaya", "tugas ini membunuhku")
+const BENIGN_METAPHOR_PATTERNS = [
+  'mati gaya',
+  'mati rasa',
+  'mati penasaran',
+  'membunuhku',
+  'membunuh waktu',
+  'bikin mati penasaran',
+  'terbunuh rasa',
+  'stuck to death'
+];
+
+// Direct acute crisis indicators (including slang, implicit phrasing, and English)
 const ACUTE_CRISIS_KEYWORDS = [
   'bunuh diri',
   'ingin mati',
   'mau mati',
   'pengen mati',
+  'pen mati',
   'pengen hilang',
   'pengen tidur selamanya',
   'pengen udahan dari dunia',
@@ -50,13 +63,25 @@ const ACUTE_CRISIS_KEYWORDS = [
   'gantung diri',
   'lompat dari',
   'lebih baik mati',
+  'lebih baik aku tidak ada lagi di dunia ini',
+  'lebih baik aku gak ada lagi',
+  'apa rasanya kalau aku hilang aja',
+  'sudah siapin tali',
+  'ngapain hidup kalau cuma jadi beban',
   'dunia tanpa saya',
   'dunia lebih baik tanpa aku',
   'putus asa total',
   'tidur panjang dan tidak pernah bangun',
   'tidur selamanya',
   'memukul dan mengancam',
-  'kekerasan fisik'
+  'kekerasan fisik',
+  'want to kill myself',
+  'want to end my life',
+  'i want to die',
+  'ended it all',
+  'end my life',
+  'end my suffering',
+  'suicide'
 ];
 
 // High distress keywords (anxiety, depression, academic overload)
@@ -196,6 +221,9 @@ export function analyzeMessageSentiment(text: string): CrisisAnalysisResult {
   // Check for third-party indicators
   const hasThirdParty = THIRD_PARTY_INDICATORS.some(tp => lower.includes(tp));
 
+  // Check for benign metaphors in text
+  const hasBenignMetaphor = BENIGN_METAPHOR_PATTERNS.some(meta => lower.includes(meta));
+
   for (const kw of ACUTE_CRISIS_KEYWORDS) {
     if (lower.includes(kw)) {
       detectedCrisisTriggers.push(kw);
@@ -206,6 +234,20 @@ export function analyzeMessageSentiment(text: string): CrisisAnalysisResult {
     if (lower.includes(kw)) {
       detectedDistressTriggers.push(kw);
     }
+  }
+
+  // Case 0: Benign Metaphors without explicit intent to self-harm (e.g. "Mati gaya nih", "Tugas ini membunuhku")
+  if (hasBenignMetaphor && !lower.includes('bunuh diri') && !lower.includes('ingin mati') && !lower.includes('self harm') && !lower.includes('gantung diri')) {
+    return {
+      severity: 'normal',
+      detectedTriggers: [],
+      isNegated: false,
+      requiresDirectSafetyQuestion: false,
+      escalationPath: 'none',
+      confidenceScore: 0.99,
+      reasoning: 'Metafora umum atau hiperbola emosional non-krisis terdeteksi (misal: "mati gaya", "tugas membunuhku").',
+      recommendedAction: 'Lanjutkan obrolan suportif reguler.'
+    };
   }
 
   // Case 1: Third-party crisis concern (e.g., "Teman saya bilang ingin mati")

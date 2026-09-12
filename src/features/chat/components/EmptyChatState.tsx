@@ -1,247 +1,142 @@
 import React, { useState } from 'react';
-import { NotebookPen, HeartPulse, Sparkles, Wind, Check, MessageSquare, ArrowRight, Save } from 'lucide-react';
 import { apiClient } from '../../../lib/apiClient';
-import { motion, AnimatePresence } from 'motion/react';
-import { safeLocalStorage } from '../../../lib/storage';
-import { useAuth } from '../../../contexts/AuthContext';
+import { Check } from 'lucide-react';
 
 interface EmptyChatStateProps {
   userName?: string;
   onSelectPrompt: (prompt: string) => void;
 }
 
-const ALL_ACTIONS = [
+const QUICK_PROMPTS = [
   {
-    id: 'academic',
     title: 'Tekanan tugas & skripsi',
-    desc: 'Urai beban akademik menjadi target terukur',
-    icon: NotebookPen,
-    iconColor: 'text-amber-600 dark:text-amber-400',
-    iconBg: 'bg-amber-50 dark:bg-amber-950/60 border border-amber-200/60 dark:border-amber-900/60',
-    query: 'Saya merasa kewalahan dengan beban tugas dan skripsi, bantu saya menyusun langkah teratur...'
+    desc: 'Urai beban akademik menjadi langkah terukur',
+    query: 'Saya merasa kewalahan dengan beban tugas dan skripsi, tolong bantu saya menyusun langkah teratur...'
   },
   {
-    id: 'anxiety',
     title: 'Meredakan kecemasan',
-    desc: 'Kurangi ketegangan fisik dan pikiran',
-    icon: HeartPulse,
-    iconColor: 'text-rose-600 dark:text-rose-400',
-    iconBg: 'bg-rose-50 dark:bg-rose-950/60 border border-rose-200/60 dark:border-rose-900/60',
-    query: 'Saya sedang merasa cemas dan tegang, tolong bantu saya merasa lebih tenang...'
+    desc: 'Teknik meredakan pikiran dan ketegangan tubuh',
+    query: 'Saya sedang merasa cemas dan gelisah, tolong bantu saya merasa lebih tenang...'
   },
   {
-    id: 'mindfulness',
-    title: 'Latihan pernapasan',
-    desc: 'Teknik relaksasi napas terpandu',
-    icon: Wind,
-    iconColor: 'text-sky-600 dark:text-sky-400',
-    iconBg: 'bg-sky-50 dark:bg-sky-950/60 border border-sky-200/60 dark:border-sky-900/60',
-    query: 'Tolong pandu saya latihan pernapasan santai untuk meredakan ketegangan...'
+    title: 'Latihan napas terpandu',
+    desc: 'Relaksasi napas 4-4-4 untuk rileks',
+    query: 'Tolong pandu saya melakukan latihan pernapasan santai untuk meredakan ketegangan...'
   },
   {
-    id: 'relations',
-    title: 'Relasi & interaksi kampus',
-    desc: 'Diskusi dinamika sosial dan komunikasi',
-    icon: Sparkles,
-    iconColor: 'text-indigo-600 dark:text-indigo-400',
-    iconBg: 'bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200/60 dark:border-indigo-900/60',
-    query: 'Saya sedang memikirkan dinamika relasi dan komunikasi di kampus, mari berdiskusi...'
-  },
-  {
-    id: 'general',
-    title: 'Menceritakan hari saya',
-    desc: 'Bagi pengalaman atau hal yang membebani pikiran',
-    icon: NotebookPen,
-    iconColor: 'text-teal-600 dark:text-teal-400',
-    iconBg: 'bg-teal-50 dark:bg-teal-950/60 border border-teal-200/60 dark:border-teal-900/60',
+    title: 'Ceritakan hari ini',
+    desc: 'Refleksi hal yang terjadi atau membebani pikiran',
     query: 'Saya ingin menceritakan apa yang saya alami dan rasakan hari ini...'
   }
 ];
 
-const MOOD_CHOICES = [
-  { value: 1, label: 'Sangat Buruk', emoji: '😢', bg: 'hover:bg-rose-50 dark:hover:bg-rose-950/30 text-rose-500', prompt: 'Saya sedang merasa sangat buruk hari ini 😢, bolehkah kita berdiskusi?' },
-  { value: 2, label: 'Buruk', emoji: '🙁', bg: 'hover:bg-amber-50 dark:hover:bg-amber-950/30 text-amber-500', prompt: 'Saya sedang merasa kurang baik hari ini 🙁, butuh teman mengobrol.' },
-  { value: 3, label: 'Biasa', emoji: '😐', bg: 'hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-500', prompt: 'Perasaan saya biasa saja hari ini 😐, bantu saya merefleksikan hari ini.' },
-  { value: 4, label: 'Baik', emoji: '🙂', bg: 'hover:bg-teal-50 dark:hover:bg-teal-950/30 text-teal-500', prompt: 'Perasaan saya cukup baik hari ini 🙂, ingin bercerita sedikit.' },
-  { value: 5, label: 'Sangat Baik', emoji: '😊', bg: 'hover:bg-emerald-50 dark:hover:bg-emerald-950/30 text-emerald-500', prompt: 'Hari ini menyenangkan! Saya merasa sangat baik 😊, mari berdiskusi.' },
+const MOOD_OPTIONS = [
+  { value: 1, label: 'Sangat Buruk', emoji: '😢', prompt: 'Saya sedang merasa sangat sedih dan tertekan hari ini 😢, bolehkah kita berdiskusi?' },
+  { value: 2, label: 'Kurang Baik', emoji: '🙁', prompt: 'Saya sedang merasa kurang baik hari ini 🙁, butuh teman mengobrol yang mendengarkan.' },
+  { value: 3, label: 'Biasa Saja', emoji: '😐', prompt: 'Perasaan saya biasa saja hari ini 😐, bantu saya merefleksikan kegiatan dan perasaan saya.' },
+  { value: 4, label: 'Cukup Baik', emoji: '🙂', prompt: 'Perasaan saya cukup baik hari ini 🙂, ingin berbagi cerita positif.' },
+  { value: 5, label: 'Sangat Baik', emoji: '😊', prompt: 'Hari ini menyenangkan! Saya merasa bersyukur dan sangat baik 😊.' },
 ];
 
 export function EmptyChatState({ userName, onSelectPrompt }: EmptyChatStateProps) {
-  const { user } = useAuth();
-  const [selectedMood, setSelectedMood] = useState<typeof MOOD_CHOICES[0] | null>(null);
-  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [selectedMood, setSelectedMood] = useState<typeof MOOD_OPTIONS[0] | null>(null);
+  const [isSaved, setIsSaved] = useState(false);
 
-  const userGoals = React.useMemo<string[]>(() => {
+  const handleMoodSelect = async (mood: typeof MOOD_OPTIONS[0]) => {
+    setSelectedMood(mood);
+    setIsSaved(false);
+    
+    // Auto-log quietly in background if user is logged in
     try {
-      const userId = user?.id || 'guest';
-      const stored = safeLocalStorage.getItem(`rt_user_goals_${userId}`);
-      if (stored) return JSON.parse(stored);
-    } catch {
-      // fallback
-    }
-    return [];
-  }, [user]);
-
-  const displayedActions = React.useMemo(() => {
-    if (userGoals.length === 0) {
-      return ALL_ACTIONS.slice(0, 4);
-    }
-    const prioritized = ALL_ACTIONS.filter(a => userGoals.includes(a.id));
-    const remaining = ALL_ACTIONS.filter(a => !userGoals.includes(a.id));
-    return [...prioritized, ...remaining].slice(0, 4);
-  }, [userGoals]);
-
-  const handleSaveToProgress = async () => {
-    if (!selectedMood) return;
-    setSaveStatus('saving');
-    try {
-      const res = await apiClient.post('/api/v1/mood', {
-        mood: selectedMood.value,
-        notes: `Log mood harian via pintasan check-in cepat. Mood: ${selectedMood.label}.`,
+      await apiClient.post('/api/v1/mood', {
+        mood: mood.value,
+        notes: `Mood check-in cepat: ${mood.label}`,
         sleepHours: null,
         sleepQuality: null,
         factors: [],
-        emotions: [selectedMood.label]
+        emotions: [mood.label]
       });
-
-      if (res.success) {
-        setSaveStatus('saved');
-        setTimeout(() => {
-          setSaveStatus('idle');
-          setSelectedMood(null);
-        }, 2000);
-      } else {
-        setSaveStatus('error');
-      }
-    } catch (err) {
-      setSaveStatus('error');
+      setIsSaved(true);
+      setTimeout(() => setIsSaved(false), 3000);
+    } catch {
+      // safe fallback
     }
   };
 
-  const handleDiscussInChat = () => {
-    if (!selectedMood) return;
-    onSelectPrompt(selectedMood.prompt);
-    setSelectedMood(null);
-  };
-
   return (
-    <div className="w-full max-w-[620px] mx-auto flex flex-col items-center text-center px-2.5 sm:px-3 pt-2 sm:pt-5 pb-2 my-auto space-y-2.5 sm:space-y-4">
-      {/* Compact Logo */}
-      <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl surface-card flex items-center justify-center p-1.5 shrink-0 border border-default shadow-3xs">
-        <img src="/favicon.svg" alt="RuangTenang" className="w-full h-full object-contain" />
-      </div>
-      
-      {/* Greeting */}
-      <div className="space-y-0.5">
-        <h2 className="text-base sm:text-xl font-bold text-primary tracking-tight">
-          Halo, {userName || "Tamu"}.
-        </h2>
-        <p className="text-[11px] sm:text-xs text-secondary max-w-sm sm:max-w-md leading-relaxed mx-auto">
-          Percakapan dikelola sesuai privasi Anda. Ceritakan apa yang dirasakan atau pilih panduan di bawah.
+    <div className="w-full max-w-[680px] mx-auto flex flex-col items-center text-center px-4 pt-6 sm:pt-12 pb-4 my-auto space-y-6">
+      {/* Brand icon & Greeting */}
+      <div className="space-y-3">
+        <div className="w-10 h-10 mx-auto rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/70 dark:border-slate-800 shadow-[0_2px_8px_rgba(0,0,0,0.03)] flex items-center justify-center p-2">
+          <img src="/favicon.svg" alt="RuangTenang" className="w-full h-full object-contain" />
+        </div>
+        <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-slate-900 dark:text-slate-100">
+          Bagaimana kabarmu, {userName || "teman"}?
+        </h1>
+        <p className="text-[13.5px] text-slate-500 dark:text-slate-400 max-w-md mx-auto leading-relaxed">
+          Ruang aman untuk bercerita, meredakan ketegangan, atau mencari sudut pandang baru.
         </p>
       </div>
 
-      {/* Daily Check-in Widget */}
-      <div className="w-full bg-slate-50/70 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800 rounded-xl p-2.5 sm:p-3.5 text-left space-y-2">
-        <div className="flex items-center justify-between">
-          <span className="text-[10px] sm:text-[11px] font-bold text-secondary uppercase tracking-wider">
-            Cek Mood Hari Ini
-          </span>
-          <span className="text-[9px] sm:text-[9.5px] text-slate-400">Pilih perasaan</span>
-        </div>
-
-        <div className="grid grid-cols-5 gap-1 sm:gap-1.5">
-          {MOOD_CHOICES.map(choice => (
-            <button
-              key={choice.value}
-              onClick={() => {
-                setSelectedMood(choice);
-                setSaveStatus('idle');
-              }}
-              aria-label={`Mood: ${choice.label}`}
-              className={`flex flex-col items-center justify-center p-1.5 sm:p-2 rounded-lg border transition-all cursor-pointer min-h-[44px] ${
-                selectedMood?.value === choice.value
-                  ? 'bg-white dark:bg-slate-800 border-teal-500 shadow-xs scale-105'
-                  : 'bg-transparent border-transparent ' + choice.bg
-              }`}
-            >
-              <span className="text-xl sm:text-2xl filter drop-shadow-3xs leading-none">{choice.emoji}</span>
-              <span className="text-[9px] text-slate-400 mt-0.5 hidden sm:inline truncate w-full text-center">
-                {choice.label}
-              </span>
-            </button>
-          ))}
-        </div>
-
-        <AnimatePresence mode="wait">
-          {selectedMood && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.2 }}
-              className="pt-2 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2 overflow-hidden"
-            >
-              <div className="text-[11px] text-secondary">
-                Anda memilih <span className="font-bold text-teal-600">{selectedMood.label} {selectedMood.emoji}</span>.
-              </div>
-              <div className="flex items-center gap-1.5">
-                <button
-                  onClick={handleSaveToProgress}
-                  disabled={saveStatus === 'saving' || saveStatus === 'saved'}
-                  className="flex-1 sm:flex-initial px-2.5 py-1 rounded-lg border border-default text-[11px] sm:text-[10.5px] font-semibold text-slate-600 hover:text-slate-800 bg-white dark:bg-slate-800 flex items-center justify-center gap-1 transition-all cursor-pointer min-h-[36px] sm:min-h-[30px] disabled:opacity-50"
-                >
-                  {saveStatus === 'saving' ? (
-                    'Menyimpan...'
-                  ) : saveStatus === 'saved' ? (
-                    <>
-                      <Check className="w-3 h-3 text-emerald-500" /> Tersimpan!
-                    </>
-                  ) : saveStatus === 'error' ? (
-                    'Gagal'
-                  ) : (
-                    <>
-                      <Save className="w-3 h-3 text-slate-400" /> Simpan
-                    </>
-                  )}
-                </button>
-                <button
-                  onClick={handleDiscussInChat}
-                  className="flex-1 sm:flex-initial px-2.5 py-1 rounded-lg bg-teal-600 hover:bg-teal-700 text-white text-[11px] sm:text-[10.5px] font-bold flex items-center justify-center gap-1 transition-all cursor-pointer min-h-[36px] sm:min-h-[30px]"
-                >
-                  <MessageSquare className="w-3 h-3" /> Diskusikan
-                </button>
-              </div>
-            </motion.div>
+      {/* Subtle Mood Check-in Strip */}
+      <div className="flex flex-col items-center space-y-2 py-1">
+        <div className="flex items-center gap-2 text-[11.5px] text-slate-400 dark:text-slate-500">
+          <span>Bagaimana perasaanmu saat ini?</span>
+          {isSaved && (
+            <span className="text-teal-600 dark:text-teal-400 flex items-center gap-1 font-medium transition-opacity">
+              <Check className="w-3 h-3" /> Tercatat
+            </span>
           )}
-        </AnimatePresence>
-      </div>
-      
-      {/* Quick Action Cards Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 sm:gap-2.5 w-full text-left">
-        {displayedActions.map(action => {
-          const Icon = action.icon;
-          return (
+        </div>
+        <div className="flex items-center justify-center gap-1 sm:gap-1.5">
+          {MOOD_OPTIONS.map(choice => {
+            const isSelected = selectedMood?.value === choice.value;
+            return (
+              <button
+                key={choice.value}
+                onClick={() => handleMoodSelect(choice)}
+                aria-label={`Mood: ${choice.label}`}
+                title={choice.label}
+                className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center text-lg sm:text-xl transition-all cursor-pointer ${
+                  isSelected
+                    ? 'bg-slate-200/80 dark:bg-slate-800 scale-110 shadow-xs ring-1 ring-teal-500/50'
+                    : 'hover:bg-slate-100 dark:hover:bg-slate-800/60 opacity-80 hover:opacity-100'
+                }`}
+              >
+                {choice.emoji}
+              </button>
+            );
+          })}
+        </div>
+
+        {selectedMood && (
+          <div className="pt-1 flex items-center gap-2">
             <button
-              key={action.title}
-              onClick={() => onSelectPrompt(action.query)}
-              aria-label={`${action.title}: ${action.desc}`}
-              className="group relative flex items-center gap-2.5 p-2 sm:py-3 sm:px-3.5 rounded-xl surface-card hover:bg-slate-50 dark:hover:bg-slate-800/80 hover:border-teal-500/40 dark:hover:border-teal-500/40 hover:shadow-xs active:scale-[0.99] transition-all cursor-pointer min-h-[46px] sm:min-h-[52px]"
+              onClick={() => onSelectPrompt(selectedMood.prompt)}
+              className="text-[12px] text-teal-600 dark:text-teal-400 hover:underline font-medium cursor-pointer"
             >
-              <div className={`w-7 h-7 sm:w-8.5 sm:h-8.5 rounded-lg flex items-center justify-center shrink-0 transition-transform group-hover:scale-105 ${action.iconBg}`}>
-                <Icon className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${action.iconColor}`} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-[12.5px] sm:text-[13px] font-semibold text-primary group-hover:text-teal-700 dark:group-hover:text-teal-400 truncate transition-colors">
-                  {action.title}
-                </div>
-                <div className="text-[11px] sm:text-[11.5px] text-secondary line-clamp-1 mt-0.2 leading-snug">
-                  {action.desc}
-                </div>
-              </div>
+              Lanjutkan bercerita tentang perasaan ini &rarr;
             </button>
-          );
-        })}
+          </div>
+        )}
+      </div>
+
+      {/* Minimal Suggestion Chips Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full pt-2 text-left">
+        {QUICK_PROMPTS.map(item => (
+          <button
+            key={item.title}
+            onClick={() => onSelectPrompt(item.query)}
+            className="group px-3.5 py-3 rounded-xl border border-slate-200/60 dark:border-slate-800/70 bg-white/60 dark:bg-slate-900/50 hover:bg-white dark:hover:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-700 transition-all cursor-pointer shadow-[0_1px_2px_rgba(0,0,0,0.02)] active:scale-[0.99]"
+          >
+            <div className="text-[13px] font-medium text-slate-800 dark:text-slate-200 group-hover:text-teal-600 dark:group-hover:text-teal-400 transition-colors">
+              {item.title}
+            </div>
+            <div className="text-[12px] text-slate-400 dark:text-slate-500 truncate mt-0.5">
+              {item.desc}
+            </div>
+          </button>
+        ))}
       </div>
     </div>
   );

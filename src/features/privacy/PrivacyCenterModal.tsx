@@ -11,16 +11,13 @@ import {
   KeyRound,
   CheckCircle2,
   AlertTriangle,
-  RotateCcw,
-  Sparkles,
-  BookOpen,
-  UserCheck,
-  Server,
-  Lock,
-  FileSpreadsheet, ChevronLeft, ChevronRight
+  ChevronLeft, 
+  ChevronRight
 } from 'lucide-react';
 import { UserSession } from '../../types';
 import { apiClient } from '../../lib/apiClient';
+import { ErrorState } from '../../components/common/ErrorState';
+import { EmptyState } from '../../components/common/EmptyState';
 import { ConsentTab } from './components/ConsentTab';
 import { ErasureTab } from './components/ErasureTab';
 
@@ -29,15 +26,13 @@ interface PrivacyCenterModalProps {
   onClose: () => void;
   userSession: UserSession;
   setUserSession: (session: UserSession) => void;
-  onOpenAuth: () => void;
 }
 
 export const PrivacyCenterModal: React.FC<PrivacyCenterModalProps> = ({
   isOpen,
   onClose,
   userSession,
-  setUserSession,
-  onOpenAuth
+  setUserSession
 }) => {
   useEscapeKey(onClose, true);
 
@@ -117,13 +112,16 @@ export const PrivacyCenterModal: React.FC<PrivacyCenterModalProps> = ({
 
   // Status & UI State
   const [loading, setLoading] = useState(false);
+  const [initLoading, setInitLoading] = useState(true);
+  const [initError, setInitError] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [deleteConfirmInput, setDeleteConfirmInput] = useState('');
 
   // Fetch current consent & privacy info
   const fetchPrivacyData = async () => {
     if (!isOpen || userSession.id === 'guest') return;
-    setLoading(true);
+    setInitLoading(true);
+    setInitError(null);
     try {
       // 1. Consent
       const resConsent = await apiClient.get<any>('/api/v1/privacy/consent');
@@ -145,6 +143,8 @@ export const PrivacyCenterModal: React.FC<PrivacyCenterModalProps> = ({
           setPolicyVersion(data.consent.policyVersion || 'v2.0-PDP-2026');
           setConsentTimestamp(data.consent.consentTimestamp || data.consent.updatedAt || null);
         }
+      } else {
+         throw new Error(resConsent.error || 'Gagal memuat persetujuan AI.');
       }
 
       // 2. Active Sessions
@@ -164,15 +164,16 @@ export const PrivacyCenterModal: React.FC<PrivacyCenterModalProps> = ({
       if (resErasure.success && resErasure.data) {
         setErasureStatus(resErasure.data.erasureRecord || null);
       }
-    } catch (err) {
+    } catch {
       console.error('Gagal memuat data privasi:', err);
+      setInitError(err.message || 'Terjadi kesalahan jaringan.');
     } finally {
-      setLoading(false);
+      setInitLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchPrivacyData();
+    fetchPrivacyData(); // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, userSession.id]);
 
   if (!isOpen) return null;
@@ -203,7 +204,7 @@ export const PrivacyCenterModal: React.FC<PrivacyCenterModalProps> = ({
       } else {
         setMsg({ type: 'error', text: res.error || 'Gagal menyimpan consent.' });
       }
-    } catch (err) {
+    } catch {
       setMsg({ type: 'error', text: 'Koneksi gagal. Periksa koneksi internet Anda.' });
     } finally {
       setLoading(false);
@@ -228,11 +229,11 @@ export const PrivacyCenterModal: React.FC<PrivacyCenterModalProps> = ({
       const res = await apiClient.post<any>('/api/v1/privacy/consent/revoke', {});
       if (res.success) {
         setMsg({ type: 'success', text: 'Seluruh izin persetujuan telah dicabut dan memori AI dibersihkan.' });
-        fetchPrivacyData();
+        fetchPrivacyData();  
       } else {
         setMsg({ type: 'error', text: res.error || 'Gagal mencabut consent.' });
       }
-    } catch (err) {
+    } catch {
       setMsg({ type: 'error', text: 'Gagal mencabut consent.' });
     } finally {
       setLoading(false);
@@ -251,7 +252,7 @@ export const PrivacyCenterModal: React.FC<PrivacyCenterModalProps> = ({
       } else {
         setMsg({ type: 'error', text: res.error || 'Gagal membersihkan data aktivitas.' });
       }
-    } catch (err) {
+    } catch {
       setMsg({ type: 'error', text: 'Gagal menghubungi server.' });
     } finally {
       setLoading(false);
@@ -263,7 +264,7 @@ export const PrivacyCenterModal: React.FC<PrivacyCenterModalProps> = ({
     try {
       window.open('/api/v1/privacy/download-data', '_blank');
       setMsg({ type: 'success', text: 'Mengunduh berkas ekspor data lengkap Anda (.json)...' });
-    } catch (err) {
+    } catch {
       setMsg({ type: 'error', text: 'Gagal mengunduh berkas data.' });
     }
   };
@@ -292,7 +293,7 @@ export const PrivacyCenterModal: React.FC<PrivacyCenterModalProps> = ({
       } else {
         setMsg({ type: 'error', text: res.error || 'Gagal memperbarui data.' });
       }
-    } catch (err) {
+    } catch {
       setMsg({ type: 'error', text: 'Koneksi ke server gagal.' });
     } finally {
       setLoading(false);
@@ -311,7 +312,7 @@ export const PrivacyCenterModal: React.FC<PrivacyCenterModalProps> = ({
       } else {
         setMsg({ type: 'error', text: res.error || 'Gagal mengubah periode penyimpanan.' });
       }
-    } catch (err) {
+    } catch {
       setMsg({ type: 'error', text: 'Gagal menghubungi server.' });
     } finally {
       setLoading(false);
@@ -324,9 +325,9 @@ export const PrivacyCenterModal: React.FC<PrivacyCenterModalProps> = ({
       const res = await apiClient.post<any>('/api/v1/auth/sessions/revoke', { sessionId });
       if (res.success) {
         setMsg({ type: 'success', text: 'Sesi perangkat telah berhasil dicabut.' });
-        fetchPrivacyData();
+        fetchPrivacyData();  
       }
-    } catch (err) {
+    } catch {
       setMsg({ type: 'error', text: 'Gagal mencabut sesi.' });
     }
   };
@@ -353,7 +354,7 @@ export const PrivacyCenterModal: React.FC<PrivacyCenterModalProps> = ({
       } else {
         setMsg({ type: 'error', text: res.error || 'Gagal memproses penghapusan data.' });
       }
-    } catch (err) {
+    } catch {
       setMsg({ type: 'error', text: 'Gagal memproses eksekusi penghapusan.' });
     } finally {
       setLoading(false);
@@ -461,10 +462,26 @@ export const PrivacyCenterModal: React.FC<PrivacyCenterModalProps> = ({
               </button>
             )}
 
-            {activeTab === 'consent' && (
-              <ConsentTab
-                loading={loading}
-                consentVersion={consentVersion}
+            {initLoading ? (
+              <div className="animate-pulse space-y-4">
+                <div className="h-8 bg-slate-100 rounded-lg w-1/3"></div>
+                <div className="h-32 bg-slate-100 rounded-lg w-full"></div>
+                <div className="h-32 bg-slate-100 rounded-lg w-full"></div>
+              </div>
+            ) : initError ? (
+              <ErrorState
+                type="network"
+                title="Gagal Memuat Data Privasi"
+                description={initError}
+                onRetry={fetchPrivacyData}
+                className="py-12"
+              />
+            ) : (
+              <>
+                {activeTab === 'consent' && (
+                  <ConsentTab
+                    loading={loading}
+                    consentVersion={consentVersion}
                 consentTimestamp={consentTimestamp}
                 consentForAI={consentForAI}
                 setConsentForAI={setConsentForAI}
@@ -633,7 +650,7 @@ export const PrivacyCenterModal: React.FC<PrivacyCenterModalProps> = ({
 
                 <div className="space-y-2">
                   {sessions.length === 0 ? (
-                    <p className="text-xs text-secondary italic">Belum ada data sesi aktif.</p>
+                    <EmptyState icon="info" title="Tidak Ada Sesi" description="Tidak ada sesi aktif perangkat tercatat." className="py-6 border border-slate-100 bg-slate-50" />
                   ) : (
                     sessions.map((s) => (
                       <div key={s.sessionId} className="p-3 border border-default rounded-xl flex items-center justify-between surface-muted">
@@ -678,9 +695,7 @@ export const PrivacyCenterModal: React.FC<PrivacyCenterModalProps> = ({
 
                 <div className="space-y-2 max-h-72 overflow-y-auto">
                   {staffAccessLogs.length === 0 ? (
-                    <div className="p-4 surface-muted border border-default rounded-xl text-center text-xs text-secondary">
-                      Belum ada catatan akses dari petugas kampus terhadap data Anda.
-                    </div>
+                    <EmptyState icon="info" title="Tidak Ada Catatan Akses" description="Belum ada catatan akses dari petugas kampus terhadap data Anda." className="py-6 border border-slate-100 bg-slate-50" />
                   ) : (
                     staffAccessLogs.map((log) => (
                       <div key={log.id} className="p-3 border border-default rounded-xl surface-muted text-xs flex justify-between items-center">
@@ -709,6 +724,8 @@ export const PrivacyCenterModal: React.FC<PrivacyCenterModalProps> = ({
                 handleClearActivityData={handleClearActivityData}
                 handleExecuteErasure={handleExecuteErasure}
               />
+            )}
+              </>
             )}
 
           </div>

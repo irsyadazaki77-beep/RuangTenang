@@ -39,7 +39,7 @@ router.post('/mfa/verify', mfaLimiter, async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Kode MFA 2FA tidak valid atau telah kadaluwarsa.' });
     }
 
-    const clientIp = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1';
+    const clientIp = req.ip || req.socket.remoteAddress || '127.0.0.1';
     const userAgent = req.headers['user-agent'] || 'Browser';
     const sessionId = crypto.randomUUID();
 
@@ -154,9 +154,10 @@ router.post('/reset-password', passwordResetLimiter, async (req: Request, res: R
 router.get('/sessions', requireAuth, async (req: Request, res: Response) => {
   try {
     const sessions = await serverDb.getActiveSessions(req.user.userId);
+    const currentSessionHash = crypto.createHash('sha256').update(req.user.sessionId).digest('hex');
     const enriched = sessions.map(s => ({
       ...s,
-      isCurrent: s.sessionId === req.user.sessionId
+      isCurrent: s.sessionId === req.user.sessionId || s.sessionId === currentSessionHash
     }));
     res.json({ sessions: enriched });
   } catch (err: any) {
@@ -174,6 +175,12 @@ router.post('/sessions/revoke', requireAuth, async (req: Request, res: Response)
     }
 
     await serverDb.removeActiveSession(req.user.userId, sessionId);
+
+    const currentSessionHash = crypto.createHash('sha256').update(req.user.sessionId).digest('hex');
+    if (sessionId === req.user.sessionId || sessionId === currentSessionHash) {
+      authService.clearSessionCookie(res);
+    }
+
     res.json({ success: true, message: 'Sesi perangkat berhasil dicabut.' });
   } catch (err: any) {
     console.error('Revoke session error:', err);
@@ -238,17 +245,25 @@ router.post('/change-password', requireAuth, async (req: Request, res: Response)
 });
 
 // Update Tier (Admin Only Workflow)
-router.post('/update-tier', requireAuth, requireRole(['admin']), async (req: Request, res: Response) => {
+router.post('/update-tier', requireAuth, async (req: Request, res: Response) => {
   try {
-    const { targetUserId, tier } = req.body;
-    if (!targetUserId) {
-      return res.status(400).json({ error: 'targetUserId diperlukan.' });
+    // ZERO TRUST: Privilege is derived strictly from server identity
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        code: 'FORBIDDEN',
+        error: 'Perubahan paket langganan hanya dapat dilakukan oleh Admin atau melalui billing resmi.'
+      });
     }
+
+    const { targetUserId, tier } = req.body;
+    const userIdToUpdate = targetUserId || req.user.userId;
+
     if (tier !== 'Free' && tier !== 'Pro' && tier !== 'Developer') {
       return res.status(400).json({ error: 'Tier tidak valid. Harus "Free", "Pro", atau "Developer".' });
     }
 
-    const updatedUser = await serverDb.updateUserTier(targetUserId, tier);
+    const updatedUser = await serverDb.updateUserTier(userIdToUpdate, tier);
     if (!updatedUser) {
       return res.status(404).json({ error: 'User tidak ditemukan.' });
     }

@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { X, Bell, Check, Trash2, Shield, Calendar, Award, MessageSquare } from 'lucide-react';
+import { X, Bell, Trash2, Shield, Calendar, Award, MessageSquare } from 'lucide-react';
 import { getNotifications, saveNotifications, AppNotification, AppNotification as NotificationType } from '../../lib/notificationStore';
 import { useEscapeKey } from '../../hooks/useEscapeKey';
+
+import { EmptyState } from '../common/EmptyState';
 
 interface NotificationCenterProps {
   isOpen: boolean;
@@ -164,18 +166,13 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ isOpen, 
         {/* Notifications Scroll Area */}
         <div className="flex-1 overflow-y-auto p-3 sm:p-3.5 space-y-2 custom-scrollbar surface-card">
           {filtered.length === 0 ? (
-            <div className="h-64 flex flex-col items-center justify-center text-center space-y-2.5">
-              <div className="p-3 surface-muted rounded-full border border-default text-secondary">
-                <Bell className="w-6 h-6" />
-              </div>
-              <div>
-                <p className="text-primary font-semibold text-xs sm:text-sm">
-                  {activeTab === 'unread' ? 'Tidak ada pesan belum dibaca.' : 'Kotak masuk kosong.'}
-                </p>
-                <p className="text-[11px] text-secondary mt-0.5 max-w-[220px]">
-                  Notifikasi mengenai konsultasi dan info penting akan masuk ke sini.
-                </p>
-              </div>
+            <div className="py-12">
+              <EmptyState 
+                icon="info" 
+                title={activeTab === 'unread' ? 'Tidak ada pesan belum dibaca.' : 'Kotak masuk kosong.'} 
+                description="Notifikasi mengenai konsultasi dan info penting akan masuk ke sini."
+                className="border-none shadow-none"
+              />
             </div>
           ) : (
             filtered.map((n) => {

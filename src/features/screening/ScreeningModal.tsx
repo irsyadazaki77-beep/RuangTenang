@@ -105,6 +105,8 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
   const [finalResult, setFinalResult] = useState<ScreeningResult | null>(null);
 
   const [historyList, setHistoryList] = useState<ScreeningResult[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [errorHistory, setErrorHistory] = useState<string | null>(null);
 
   // Safety check state for PHQ-9 Question #9
   const [showSafetyCheckModal, setShowSafetyCheckModal] = useState<boolean>(false);
@@ -118,9 +120,11 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
     wantsTrustedContact: null,
   });
 
-  useEffect(() => {
+  const fetchHistory = () => {
     if (!isOpen && !isPageMode) return;
     
+    setLoadingHistory(true);
+    setErrorHistory(null);
     apiClient.get<any[]>('/api/v1/screenings')
       .then(res => {
         if (res.success && Array.isArray(res.data)) {
@@ -140,11 +144,22 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
             riskIndicators: s.riskIndicators || null
           }));
           setHistoryList(mapped);
+        } else {
+          setErrorHistory(res.error || 'Gagal memuat riwayat skrining.');
         }
       })
       .catch(e => {
         console.warn('Failed to fetch screenings from server:', e);
+        setErrorHistory(e.message || 'Gagal memuat riwayat skrining.');
+      })
+      .finally(() => {
+        setLoadingHistory(false);
       });
+  };
+
+  useEffect(() => {
+    fetchHistory();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, isPageMode]);
 
   if (!isOpen && !isPageMode) return null;
@@ -350,14 +365,24 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
               </ul>
             </div>
 
-            {historyList.length > 0 && (
-              <div className="surface-card p-3.5 rounded-lg space-y-2.5 border border-default">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-primary flex items-center gap-1.5">
-                    <History className="w-3.5 h-3.5 text-secondary" /> Riwayat Tes Terakhir ({historyList.length})
-                  </span>
-                  <span className="text-[10px] text-secondary font-medium uppercase tracking-wider">Riwayat Pribadi</span>
+            <div className="surface-card p-3.5 rounded-lg space-y-2.5 border border-default min-h-[80px]">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-primary flex items-center gap-1.5">
+                  <History className="w-3.5 h-3.5 text-secondary" /> Riwayat Tes Terakhir
+                </span>
+                <span className="text-[10px] text-secondary font-medium uppercase tracking-wider">Riwayat Pribadi</span>
+              </div>
+              
+              {loadingHistory ? (
+                <div className="flex items-center justify-center p-4">
+                  <div className="w-5 h-5 border-2 border-teal-500 border-t-transparent rounded-full animate-spin"></div>
                 </div>
+              ) : errorHistory ? (
+                <div className="p-3 text-center">
+                  <p className="text-xs text-rose-600 dark:text-rose-400 mb-2">{errorHistory}</p>
+                  <button onClick={fetchHistory} className="text-[10px] font-medium text-teal-600 dark:text-teal-400 hover:underline">Coba Lagi</button>
+                </div>
+              ) : historyList.length > 0 ? (
                 <div className="space-y-2 max-h-36 overflow-y-auto pr-1">
                   {historyList.slice(0, 3).map((item, idx) => (
                     <div key={idx} className="flex items-center justify-between surface-muted p-2.5 rounded-lg border border-default text-xs">
@@ -372,8 +397,12 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
                     </div>
                   ))}
                 </div>
-              </div>
-            )}
+              ) : (
+                <div className="p-3 text-center">
+                  <p className="text-xs text-secondary">Belum ada riwayat skrining sebelumnya.</p>
+                </div>
+              )}
+            </div>
 
             <div className="flex justify-end pt-3 border-t border-default">
               <button

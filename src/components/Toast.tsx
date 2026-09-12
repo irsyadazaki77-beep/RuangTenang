@@ -1,6 +1,8 @@
 import { useEscapeKey } from '../hooks/useEscapeKey';
 import React, { createContext, useContext, useState, ReactNode } from 'react';
 import { CheckCircle2, AlertCircle, Info, X } from 'lucide-react';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
+import { toastItemVariants, reducedMotionVariants } from '../lib/motionTokens';
 
 export type ToastType = 'success' | 'error' | 'info' | 'warning';
 
@@ -19,6 +21,7 @@ const ToastContext = createContext<ToastContextType | undefined>(undefined);
 
 export const ToastProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
+  const shouldReduceMotion = useReducedMotion();
 
   const showToast = (message: string, type: ToastType = 'info', title?: string) => {
     const id = 'toast-' + Date.now() + '-' + Math.random().toString(36).slice(2, 5);
@@ -42,39 +45,46 @@ export const ToastProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         aria-atomic="true"
         className="fixed bottom-[max(1.25rem,env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 sm:left-auto sm:right-5 sm:translate-x-0 z-50 flex flex-col gap-2 max-w-sm w-[calc(100%-1.5rem)] sm:w-full px-1 pointer-events-none"
       >
-        {toasts.map((toast) => (
-          <div
-            key={toast.id}
-            role="alert"
-            className={`pointer-events-auto p-3.5 rounded-2xl border shadow-lg flex items-start gap-3 transition-all animate-slide-up text-xs font-medium ${
-              toast.type === 'success'
-                ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
-                : toast.type === 'error'
-                ? 'bg-rose-50 border-rose-200 text-rose-900'
-                : toast.type === 'warning'
-                ? 'bg-amber-50 border-amber-200 text-amber-900'
-                : 'bg-teal-50 border-teal-200 text-teal-900'
-            }`}
-          >
-            {toast.type === 'success' && <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />}
-            {toast.type === 'error' && <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />}
-            {toast.type === 'warning' && <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />}
-            {toast.type === 'info' && <Info className="w-5 h-5 text-teal-600 shrink-0 mt-0.5" />}
-
-            <div className="flex-1 space-y-0.5">
-              {toast.title && <strong className="font-bold block text-slate-900">{toast.title}</strong>}
-              <p className="leading-normal">{toast.message}</p>
-            </div>
-
-            <button
-              onClick={() => removeToast(toast.id)}
-              aria-label="Tutup notifikasi"
-              className="p-1.5 min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-600 hover:text-slate-900 bg-black/5 hover:bg-black/10 rounded-lg shrink-0 transition-colors active:scale-95"
+        <AnimatePresence>
+          {toasts.map((toast) => (
+            <motion.div
+              key={toast.id}
+              role="alert"
+              layout
+              initial="hidden"
+              animate="visible"
+              exit="exit"
+              variants={shouldReduceMotion ? reducedMotionVariants : toastItemVariants}
+              className={`pointer-events-auto p-3.5 rounded-2xl border shadow-lg flex items-start gap-3 text-xs font-medium ${
+                toast.type === 'success'
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                  : toast.type === 'error'
+                  ? 'bg-rose-50 border-rose-200 text-rose-900'
+                  : toast.type === 'warning'
+                  ? 'bg-amber-50 border-amber-200 text-amber-900'
+                  : 'bg-teal-50 border-teal-200 text-teal-900'
+              }`}
             >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        ))}
+              {toast.type === 'success' && <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />}
+              {toast.type === 'error' && <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />}
+              {toast.type === 'warning' && <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />}
+              {toast.type === 'info' && <Info className="w-5 h-5 text-teal-600 shrink-0 mt-0.5" />}
+
+              <div className="flex-1 space-y-0.5 min-w-0">
+                {toast.title && <strong className="font-bold block text-slate-900">{toast.title}</strong>}
+                <p className="leading-normal break-words">{toast.message}</p>
+              </div>
+
+              <button
+                onClick={() => removeToast(toast.id)}
+                aria-label="Tutup notifikasi"
+                className="p-1.5 min-h-[40px] min-w-[40px] flex items-center justify-center text-slate-600 hover:text-slate-900 bg-black/5 hover:bg-black/10 rounded-lg shrink-0 transition-all btn-press-compact"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </motion.div>
+          ))}
+        </AnimatePresence>
       </div>
     </ToastContext.Provider>
   );

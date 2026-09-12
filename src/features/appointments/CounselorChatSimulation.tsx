@@ -33,7 +33,7 @@ export const CounselorChatSimulation: React.FC<CounselorChatSimulationProps> = (
       if (savedChat) {
         try {
           setChatMessages(JSON.parse(savedChat));
-        } catch (e) {
+        } catch {
           initializeNewChat(appointment);
         }
       } else {
@@ -149,7 +149,7 @@ export const CounselorChatSimulation: React.FC<CounselorChatSimulationProps> = (
         });
         const data = res.data;
         summaryTextResult = data?.reply || '';
-      } catch (e) {
+      } catch {
         summaryTextResult = `RINGKASAN SESI KONSELING SIMULASI\n` +
           `Konselor: ${counselor.name}\n` +
           `Mahasiswa: ${appointment.studentName} (${appointment.studentNIM || 'N/A'})\n` +
@@ -267,9 +267,9 @@ export const CounselorChatSimulation: React.FC<CounselorChatSimulationProps> = (
               <div className="flex flex-col">
                 <span className="text-[10px] font-medium text-slate-600 mb-1">{appointment.counselorName}</span>
                 <div className="surface-card rounded-2xl rounded-tl-none px-4 py-3 text-sm text-slate-600 flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-slate-500 animate-bounce [animation-delay:-0.3s]"></span>
-                  <span className="w-1.5 h-1.5 rounded-full bg-slate-500 animate-bounce [animation-delay:-0.15s]"></span>
-                  <span className="w-1.5 h-1.5 rounded-full bg-slate-500 animate-bounce"></span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-slate-500 animate-calm-pulse [animation-delay:0ms]"></span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-slate-500 animate-calm-pulse [animation-delay:200ms]"></span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-slate-500 animate-calm-pulse [animation-delay:400ms]"></span>
                   <span className="font-medium text-xs text-slate-600 ml-1">Sedang mengetik tanggapan...</span>
                 </div>
               </div>

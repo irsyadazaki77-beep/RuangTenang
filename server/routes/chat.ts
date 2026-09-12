@@ -5,7 +5,7 @@ import { requireAuth, optionalAuth } from '../middleware/auth.js';
 import { aiAbuseLimiter } from '../middleware/aiAbuseLimiter.js';
 import { sanitizeInput } from '../security.js';
 import { scanAndSanitizePII } from '../services/piiService.js';
-import { checkUserAiUsageLimit, recordUserAiUsage } from '../services/aiUsageLimiter.js';
+import { checkUserAiUsageLimit, recordUserAiUsage, rollbackUserAiQuota } from '../services/aiUsageLimiter.js';
 import { serverDb } from '../database.js';
 import { consentService } from '../services/consentService.js';
 import { encryptionService } from '../services/encryptionService.js';
@@ -18,8 +18,15 @@ import { aiGateway } from '../services/ai/aiGateway.js';
 import { validateAndSanitizeToolCall } from '../services/ai/aiToolSchemas.js';
 import { ChatController } from '../controllers/chatController.js';
 import { DEFAULT_AI_MODEL } from '../config/aiConfig.js';
+import { aiMetricsService } from '../services/ai/aiMetricsService.js';
 
 const router = Router();
+
+// Endpoint for inspecting non-sensitive AI performance metrics
+router.get('/ai/metrics', optionalAuth, (req: Request, res: Response) => {
+  const summary = aiMetricsService.getMetricsSummary();
+  res.json({ success: true, metrics: summary });
+});
 
 // Error wrapper helper
 const sendError = (res: Response, code: string, message: string, status = 500) => {
@@ -51,11 +58,95 @@ const checkChatOwnership = async (req: Request, res: Response, next: NextFunctio
 router.get('/chat/models', ChatController.getModels);
 router.get('/chat/history', requireAuth, ChatController.getHistory);
 router.get('/chat/search', requireAuth, ChatController.search);
+
+// 1. Bookmark endpoints (registered before :id to prevent route capture)
+router.get('/chat/bookmarks', requireAuth, ChatController.getBookmarks);
+router.get('/chat/bookmarks/ids', requireAuth, ChatController.getBookmarkedIds);
+router.post('/chat/bookmarks', requireAuth, ChatController.addBookmark);
+router.delete('/chat/bookmarks/:messageId', requireAuth, ChatController.removeBookmark);
+
+// Chat scoped bookmark route
+router.post('/chat/:id/bookmarks', requireAuth, checkChatOwnership, (req: Request, res: Response) => {
+  req.body.chatId = req.params.id;
+  return ChatController.addBookmark(req, res);
+});
+
+// 2. Chat scoped endpoints
 router.get('/chat/:id/messages', requireAuth, checkChatOwnership, ChatController.getMessages);
 router.put('/chat/:id/title', requireAuth, checkChatOwnership, ChatController.updateTitle);
 router.put('/chat/:id/pin', requireAuth, checkChatOwnership, ChatController.togglePin);
 router.put('/chat/:id/archive', requireAuth, checkChatOwnership, ChatController.toggleArchive);
 router.delete('/chat/:id', requireAuth, checkChatOwnership, ChatController.deleteChat);
+
+// 3. Search inside conversation
+router.get('/chat/:id/search', requireAuth, checkChatOwnership, ChatController.searchInChat);
+
+// 4. Branch conversation
+router.post('/chat/:id/branch', requireAuth, checkChatOwnership, ChatController.branchChat);
+
+// 5. Smart Session Summary
+router.get('/chat/:id/summary', requireAuth, checkChatOwnership, ChatController.getSummary);
+router.post('/chat/:id/summary', requireAuth, checkChatOwnership, aiAbuseLimiter, ChatController.generateSummary);
+
+// 6. Memory preference per conversation
+router.put('/chat/:id/memory', requireAuth, checkChatOwnership, ChatController.updateMemoryPreference);
+
+// 7. User Memories management (CRUD)
+router.get('/chat/user-memories', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const memories = await prisma.userMemories.findMany({
+      where: { userId, isActive: true },
+      orderBy: { createdAt: 'desc' }
+    });
+    const decrypted = memories.map(m => ({
+      ...m,
+      content: encryptionService.decryptSensitive(m.content) || m.content
+    }));
+    res.json({ success: true, memories: decrypted });
+  } catch {
+    sendError(res, 'FETCH_MEMORIES_FAILED', 'Gagal mengambil data memori');
+  }
+});
+
+router.post('/chat/user-memories', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const rawContent = req.body.content || (req.body.key && req.body.value ? `${req.body.key}: ${req.body.value}` : '');
+    if (!rawContent || typeof rawContent !== 'string' || rawContent.trim().length === 0) {
+      return sendError(res, 'INVALID_INPUT', 'Konten memori tidak valid', 400);
+    }
+    const cleanContent = sanitizeInput(rawContent.trim(), 200);
+    const encrypted = encryptionService.encryptSensitive(cleanContent) || cleanContent;
+    const newMemory = await prisma.userMemories.create({
+      data: {
+        id: `mem_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        userId,
+        content: encrypted,
+        isActive: true
+      }
+    });
+    const memoryObj = { ...newMemory, content: cleanContent };
+    res.status(201).json({ success: true, memory: memoryObj, item: memoryObj });
+  } catch {
+    sendError(res, 'CREATE_MEMORY_FAILED', 'Gagal menyimpan memori baru');
+  }
+});
+
+router.delete('/chat/user-memories/:id', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const { id } = req.params;
+    const existing = await prisma.userMemories.findFirst({ where: { id, userId } });
+    if (!existing) {
+      return sendError(res, 'NOT_FOUND', 'Memori tidak ditemukan', 404);
+    }
+    await prisma.userMemories.delete({ where: { id } });
+    res.json({ success: true, message: 'Memori berhasil dihapus' });
+  } catch {
+    sendError(res, 'DELETE_MEMORY_FAILED', 'Gagal menghapus memori');
+  }
+});
 router.delete('/chat/:id/messages', requireAuth, checkChatOwnership, async (req: Request, res: Response) => {
   try {
     const chatId = req.params.id;
@@ -184,7 +275,8 @@ router.post('/chat/stream', optionalAuth, aiAbuseLimiter, async (req: Request, r
       pluginResult, 
       chatMode, 
       responseStyle, 
-      aiModel = DEFAULT_AI_MODEL
+      aiModel = DEFAULT_AI_MODEL,
+      attachments
     } = req.body;
     
     const isAnonymous = !req.user || req.user.userId === 'guest';
@@ -193,7 +285,7 @@ router.post('/chat/stream', optionalAuth, aiAbuseLimiter, async (req: Request, r
     cleanMessage = scanAndSanitizePII(cleanMessage).sanitizedText;
 
     const userId = req.user?.userId;
-    const clientIp = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1';
+    const clientIp = req.ip || req.socket.remoteAddress || '127.0.0.1';
 
     let userTier = (req.user as { tier?: string })?.tier;
     let userRole = req.user?.role;
@@ -205,7 +297,7 @@ router.post('/chat/stream', optionalAuth, aiAbuseLimiter, async (req: Request, r
       }
     }
 
-    // Enforce daily usage limit check to prevent API key exhaustion
+    // Enforce atomic daily usage limit check to prevent API key exhaustion and parallel race conditions
     const usageCheck = await checkUserAiUsageLimit(userId, clientIp, userTier, userRole);
     if (!usageCheck.allowed) {
       res.setHeader('Content-Type', 'text/event-stream');
@@ -230,6 +322,7 @@ router.post('/chat/stream', optionalAuth, aiAbuseLimiter, async (req: Request, r
           // Ownership check
           const existingChat = await prisma.chats.findFirst({ where: { id: currentChatId, userId } });
           if (!existingChat) {
+            await rollbackUserAiQuota(userId, clientIp);
             return sendError(res, 'NOT_FOUND', 'Percakapan tidak ditemukan atau bukan milik Anda', 404);
           }
         } else {
@@ -245,11 +338,9 @@ router.post('/chat/stream', optionalAuth, aiAbuseLimiter, async (req: Request, r
           currentChatId = newChat.id;
         }
 
-        // Increment usage counter only after validation & ownership check succeed
-        await recordUserAiUsage(userId, clientIp);
-        
         if (!pluginResult) {
-          await prisma.chatMessages.create({
+          const msgResult = await prisma.chatMessages.create({
+
             data: {
               id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
               chatId: currentChatId,
@@ -257,6 +348,27 @@ router.post('/chat/stream', optionalAuth, aiAbuseLimiter, async (req: Request, r
               content: encryptionService.encryptSensitive(cleanMessage) || cleanMessage
             }
           });
+          
+          
+          if (attachments && Array.isArray(attachments) && attachments.length > 0) {
+            for (const att of attachments) {
+              try {
+                await prisma.attachments.create({
+                  data: {
+                    id: `att_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+                    messageId: msgResult.id,
+                    chatId: currentChatId,
+                    userId: userId,
+                    filename: att.filename.substring(0, 255),
+                    mimeType: att.mimeType.substring(0, 100),
+                    size: att.size || 0,
+                    data: att.base64 || ''
+                  }
+                });
+              } catch (e) { console.error('Failed to save attachment', e); }
+            }
+          }
+          
           await prisma.chats.update({
             where: { id: currentChatId },
             data: { updatedAt: new Date() }
@@ -278,10 +390,6 @@ router.post('/chat/stream', optionalAuth, aiAbuseLimiter, async (req: Request, r
       }
     }
 
-    if (activeIsTemporary) {
-      await recordUserAiUsage(userId, clientIp);
-    }
-
     const messagesToSend = [];
     
     if (!activeIsTemporary && userId && currentChatId) {
@@ -289,32 +397,70 @@ router.post('/chat/stream', optionalAuth, aiAbuseLimiter, async (req: Request, r
         const history = await prisma.chatMessages.findMany({
           where: { chatId: currentChatId },
           orderBy: { createdAt: 'desc' },
-          take: 20
+          take: 20,
+          include: { attachments: true }
         });
         history.reverse();
         for (const msg of history) {
+           // Skip duplicating the current prompt
           const decryptedContent = encryptionService.decryptSensitive(msg.content) || msg.content;
           if (msg.plugin === 'system_plugin_result') {
             messagesToSend.push({ role: 'user', parts: [{ text: `[PLUGIN_RESULT]\n${decryptedContent}` }] });
           } else if (msg.plugin) {
              messagesToSend.push({ role: 'model', parts: [{ text: `{"tool_call": "${msg.plugin}"}` }] });
           } else {
-            messagesToSend.push({ role: msg.role === 'assistant' ? 'model' : 'user', parts: [{ text: decryptedContent }] });
+            
+            const parts: any[] = [{ text: decryptedContent }];
+            if (msg.attachments && msg.attachments.length > 0) {
+              msg.attachments.forEach(att => {
+                if (att.data) {
+                  const base64Data = att.data.includes(',') ? att.data.split(',')[1] : att.data;
+                  parts.push({
+                    inlineData: {
+                      data: base64Data,
+                      mimeType: att.mimeType
+                    }
+                  });
+                }
+              });
+            }
+            messagesToSend.push({ role: msg.role === 'assistant' ? 'model' : 'user', parts });
+
           }
         }
       } catch (e) {
-        if (!pluginResult) {
-          messagesToSend.push({ role: 'user', parts: [{ text: cleanMessage }] });
-        } else {
-          messagesToSend.push({ role: 'user', parts: [{ text: `[PLUGIN_RESULT]\n${pluginResult}` }] });
+        const parts: any[] = [{ text: pluginResult ? `[PLUGIN_RESULT]\n${pluginResult}` : cleanMessage }];
+        if (attachments && Array.isArray(attachments) && attachments.length > 0) {
+          attachments.forEach(att => {
+            if (att.base64) {
+              const base64Data = att.base64.includes(',') ? att.base64.split(',')[1] : att.base64;
+              parts.push({
+                inlineData: {
+                  data: base64Data,
+                  mimeType: att.mimeType
+                }
+              });
+            }
+          });
         }
+        messagesToSend.push({ role: 'user', parts });
       }
     } else {
-      if (!pluginResult) {
-        messagesToSend.push({ role: 'user', parts: [{ text: cleanMessage }] });
-      } else {
-        messagesToSend.push({ role: 'user', parts: [{ text: `[PLUGIN_RESULT]\n${pluginResult}` }] });
+      const parts: any[] = [{ text: pluginResult ? `[PLUGIN_RESULT]\n${pluginResult}` : cleanMessage }];
+      if (attachments && Array.isArray(attachments) && attachments.length > 0) {
+        attachments.forEach(att => {
+          if (att.base64) {
+            const base64Data = att.base64.includes(',') ? att.base64.split(',')[1] : att.base64;
+            parts.push({
+              inlineData: {
+                data: base64Data,
+                mimeType: att.mimeType
+              }
+            });
+          }
+        });
       }
+      messagesToSend.push({ role: 'user', parts });
     }
 
     res.setHeader('Content-Type', 'text/event-stream');
@@ -378,6 +524,21 @@ router.post('/chat/stream', optionalAuth, aiAbuseLimiter, async (req: Request, r
       res.end();
     };
 
+    const reqAbortController = new AbortController();
+    let clientDisconnected = false;
+
+    req.on('close', () => {
+      clientDisconnected = true;
+      reqAbortController.abort();
+    });
+    req.on('aborted', () => {
+      clientDisconnected = true;
+      reqAbortController.abort();
+    });
+
+    const requestStartTime = Date.now();
+    let firstTokenTime = 0;
+
     let responseStream: any = null;
     let pipelineRes: any = null;
     
@@ -394,7 +555,8 @@ router.post('/chat/stream', optionalAuth, aiAbuseLimiter, async (req: Request, r
         userRole,
         history: messagesToSend,
         pluginResult,
-        isStreaming: true
+        isStreaming: true,
+        abortSignal: reqAbortController.signal
       });
     } catch (err: any) {
       console.warn('[CHAT_STREAM] Unified safety pipeline threw error, switching to fallback:', err?.message || err);
@@ -411,10 +573,12 @@ router.post('/chat/stream', optionalAuth, aiAbuseLimiter, async (req: Request, r
     }
 
     if (pipelineRes.isPromptInjectionOverride) {
-      res.write('data: ' + JSON.stringify({ text: pipelineRes.text }) + '\n\n');
-      res.write(`data: ${JSON.stringify({ done: true, chatId: currentChatId })}\n\n`);
-      res.write('data: [DONE]\n\n');
-      res.end();
+      if (!res.writableEnded) {
+        res.write('data: ' + JSON.stringify({ text: pipelineRes.text }) + '\n\n');
+        res.write(`data: ${JSON.stringify({ done: true, chatId: currentChatId })}\n\n`);
+        res.write('data: [DONE]\n\n');
+        res.end();
+      }
       return;
     }
 
@@ -423,12 +587,15 @@ router.post('/chat/stream', optionalAuth, aiAbuseLimiter, async (req: Request, r
       const words = crisisResponse.split(' ');
       let currentFullText = '';
       for (const word of words) {
+         if (clientDisconnected || reqAbortController.signal.aborted) break;
          const chunk = word + ' ';
          currentFullText += chunk;
-         res.write(`data: ${JSON.stringify({ text: chunk })}\n\n`);
+         if (!res.writableEnded) {
+           res.write(`data: ${JSON.stringify({ text: chunk })}\n\n`);
+         }
          await new Promise(resolve => setTimeout(resolve, 30));
       }
-      if (!isTemporary && userId && currentChatId) {
+      if (!isTemporary && userId && currentChatId && !clientDisconnected) {
         try {
           await prisma.chatMessages.create({
              data: {
@@ -440,9 +607,11 @@ router.post('/chat/stream', optionalAuth, aiAbuseLimiter, async (req: Request, r
           });
         } catch (e) {}
       }
-      res.write(`data: ${JSON.stringify({ done: true, chatId: currentChatId })}\n\n`);
-      res.write('data: [DONE]\n\n');
-      res.end();
+      if (!res.writableEnded) {
+        res.write(`data: ${JSON.stringify({ done: true, chatId: currentChatId })}\n\n`);
+        res.write('data: [DONE]\n\n');
+        res.end();
+      }
       return;
     }
 
@@ -454,12 +623,6 @@ router.post('/chat/stream', optionalAuth, aiAbuseLimiter, async (req: Request, r
       return;
     }
 
-    // Add client disconnect handler
-    let clientDisconnected = false;
-    req.on('close', () => {
-      clientDisconnected = true;
-    });
-
     try {
       let fullResponseText = '';
       let isToolCall = false;
@@ -467,23 +630,52 @@ router.post('/chat/stream', optionalAuth, aiAbuseLimiter, async (req: Request, r
       let hasStreamedAnyText = false;
 
       for await (const chunk of responseStream) {
-        if (clientDisconnected) {
-          console.log('[SSE] Client disconnected, aborting AI stream');
+        if (clientDisconnected || reqAbortController.signal.aborted || res.writableEnded) {
+          console.log('[SSE] Client disconnected or request aborted, stopping stream');
           break;
         }
 
         const text = chunk.text;
         if (text) {
+          if (!firstTokenTime) {
+            firstTokenTime = Date.now();
+          }
           fullResponseText += text;
           if (fullResponseText.trim().startsWith('{')) {
              isToolCall = true;
           }
 
-          if (!isToolCall) {
+          if (!isToolCall && !res.writableEnded) {
             hasStreamedAnyText = true;
             res.write(`data: ${JSON.stringify({ text })}\n\n`);
           }
         }
+      }
+
+      // Record performance & usage metrics
+      const requestEndTime = Date.now();
+      const ttfb = firstTokenTime ? (firstTokenTime - requestStartTime) : (requestEndTime - requestStartTime);
+      
+      aiMetricsService.recordRequestMetric({
+        requestId: `req_${Date.now()}`,
+        ttfbMs: ttfb,
+        totalLatencyMs: requestEndTime - requestStartTime,
+        inputChars: (cleanMessage || pluginResult || '').length,
+        estimatedInputTokens: aiMetricsService.estimateTokens(cleanMessage || pluginResult || ''),
+        outputChars: fullResponseText.length,
+        estimatedOutputTokens: aiMetricsService.estimateTokens(fullResponseText),
+        contextSavedTokens: 0,
+        modelUsed: pipelineRes.modelUsed || aiModel,
+        isFallback: false,
+        aborted: clientDisconnected || reqAbortController.signal.aborted
+      });
+
+      if (clientDisconnected || reqAbortController.signal.aborted) {
+        console.log('[SSE] Request was aborted mid-stream by client. Avoiding duplicate response writes.');
+        if (!res.writableEnded) {
+          res.end();
+        }
+        return;
       }
 
       if (isToolCall) {
@@ -493,7 +685,9 @@ router.post('/chat/stream', optionalAuth, aiAbuseLimiter, async (req: Request, r
           
           if (validation.isValid && validation.toolCall) {
             validToolCallParsed = { tool_call: validation.toolCall, parameters: validation.parameters || {} };
-            res.write(`data: ${JSON.stringify({ tool_call: validToolCallParsed.tool_call, parameters: validToolCallParsed.parameters || {} })}\n\n`);
+            if (!res.writableEnded) {
+              res.write(`data: ${JSON.stringify({ tool_call: validToolCallParsed.tool_call, parameters: validToolCallParsed.parameters || {} })}\n\n`);
+            }
             
             if (!activeIsTemporary && userId && currentChatId) {
                try {
@@ -512,7 +706,9 @@ router.post('/chat/stream', optionalAuth, aiAbuseLimiter, async (req: Request, r
             // Invalid JSON tool call format, just send as text if safe
             const validationText = aiSafetyService.validateOutput(fullResponseText);
             const safeText = validationText.isValid ? fullResponseText : 'Maaf, tanggapan tidak dapat ditampilkan demi kepatuhan klinis.';
-            res.write(`data: ${JSON.stringify({ text: safeText })}\n\n`);
+            if (!res.writableEnded) {
+              res.write(`data: ${JSON.stringify({ text: safeText })}\n\n`);
+            }
             if (!activeIsTemporary && userId && currentChatId) {
                try {
                  await prisma.chatMessages.create({
@@ -530,7 +726,9 @@ router.post('/chat/stream', optionalAuth, aiAbuseLimiter, async (req: Request, r
           // JSON Parse failed
           const validationText = aiSafetyService.validateOutput(fullResponseText);
           const safeText = validationText.isValid ? fullResponseText : 'Maaf, tanggapan tidak dapat ditampilkan demi kepatuhan klinis.';
-          res.write(`data: ${JSON.stringify({ text: safeText })}\n\n`);
+          if (!res.writableEnded) {
+            res.write(`data: ${JSON.stringify({ text: safeText })}\n\n`);
+          }
           if (!activeIsTemporary && userId && currentChatId) {
              try {
                await prisma.chatMessages.create({
@@ -565,16 +763,18 @@ router.post('/chat/stream', optionalAuth, aiAbuseLimiter, async (req: Request, r
         }
       }
 
-      if (isNewChat && !activeIsTemporary && userId) {
+      if (isNewChat && !activeIsTemporary && userId && !res.writableEnded) {
          try {
             const title = (message || 'Percakapan').substring(0, 30) + ((message && message.length > 30) ? '...' : '');
             res.write(`data: ${JSON.stringify({ newTitle: title })}\n\n`);
          } catch(e) {}
       }
 
-      res.write(`data: ${JSON.stringify({ done: true, chatId: currentChatId })}\n\n`);
-      res.write('data: [DONE]\n\n');
-      res.end();
+      if (!res.writableEnded) {
+        res.write(`data: ${JSON.stringify({ done: true, chatId: currentChatId })}\n\n`);
+        res.write('data: [DONE]\n\n');
+        res.end();
+      }
     } catch (e: any) {
       console.warn('Gemini stream execution error:', e);
       if (!res.writableEnded) {

@@ -19,7 +19,7 @@ function walkDir(dir, callback) {
 
 walkDir(__dirname + '/..', (filePath) => {
   let content = fs.readFileSync(filePath, 'utf8');
-  let original = content;
+  const original = content;
   content = content.replace(/catch \((err|e|error|innerErr|fallbackErr): unknown\)/g, 'catch ($1: any)');
   if (content !== original) {
     fs.writeFileSync(filePath, content, 'utf8');

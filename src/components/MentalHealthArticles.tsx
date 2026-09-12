@@ -9,11 +9,8 @@ import {
   Clock, 
   CheckCircle2, 
   X, 
-  BookmarkCheck, 
   Share2, 
-  ThumbsUp, 
-  Check, 
-  BookMarked,
+  Check,
   Sparkles
 } from 'lucide-react';
 

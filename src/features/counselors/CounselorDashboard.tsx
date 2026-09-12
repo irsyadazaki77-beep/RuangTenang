@@ -1,30 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import {
-  BarChart3,
-  TrendingUp,
-  AlertTriangle,
-  Users,
-  HeartPulse,
-  CheckCircle2,
-  Clock,
-  ShieldAlert,
-  Search,
-  Filter,
-  PieChart,
-  ArrowUpRight,
-  FileText,
-  Download,
-  ShieldCheck,
-  RefreshCw,
-  Activity,
-  Globe,
-  Award,
-  Terminal,
-  Lock
-} from 'lucide-react';
+import { BarChart3, TrendingUp, AlertTriangle, Users, HeartPulse, Clock, ShieldAlert, Search, Download, RefreshCw } from 'lucide-react';
 import { useCounselorAnalytics } from '../../hooks/useCounselorAnalytics';
 import { RiskAlert } from '../../types';
 import { apiClient } from '../../lib/apiClient';
+import { DashboardSkeleton } from '../../components/common/Skeleton';
+import { EmptyState } from '../../components/common/EmptyState';
+import { ErrorState } from '../../components/common/ErrorState';
 
 interface AuditLogEntry {
   id: string;
@@ -39,41 +20,51 @@ export const CounselorDashboard: React.FC = () => {
   const [searchRisk, setSearchRisk] = useState('');
   const [levelFilter, setLevelFilter] = useState<string>('Semua');
   const [statusFilter, setStatusFilter] = useState<string>('Semua');
+  const [loadingRisk, setLoadingRisk] = useState<boolean>(true);
+  const [errorRisk, setErrorRisk] = useState<string | null>(null);
 
   const { analytics, loading: analyticsLoading } = useCounselorAnalytics();
 
-  useEffect(() => {
-    const fetchRiskAlerts = async () => {
-      try {
-        const res = await apiClient.get<any>('/api/v1/screenings?limit=100');
-        if (res.success) {
-          const data = res.data;
-          const items = Array.isArray(data) ? data : (data?.data || []);
-          
-          // Filter high risk (hasSelfHarmRisk or riskLevel tinggi/krisis)
-          const risky = items.filter((s: any) => s.hasSelfHarmRisk || s.riskLevel?.toLowerCase() === 'krisis' || s.riskLevel?.toLowerCase() === 'tinggi');
-          
-          const alerts: RiskAlert[] = risky.map((s: any, idx: number) => {
-             const indicators = s.riskIndicators ? (typeof s.riskIndicators === 'string' ? JSON.parse(s.riskIndicators) : s.riskIndicators) : [];
-             return {
-               id: s.id,
-               sessionId: `sess-${s.id.slice(0,4)}`,
-               studentAlias: `Mahasiswa Anonim ${s.userId ? s.userId.slice(0, 4) : idx}`,
-               university: 'Universitas Indonesia',
-               riskLevel: s.riskLevel || 'Tinggi',
-               triggers: indicators.length > 0 ? indicators : ['Indikasi krisis sistem'],
-               detectedAt: new Date(s.timestamp).toLocaleString('id-ID'),
-               status: s.status || 'Menunggu Penanganan',
-               phq9Score: s.phq9Score,
-               gad7Score: s.gad7Score
-             };
-          });
-          setRiskAlerts(alerts);
-        }
-      } catch (err) {
-        console.error('Failed to fetch screenings for risk alerts', err);
+  const fetchRiskAlerts = async () => {
+    setLoadingRisk(true);
+    setErrorRisk(null);
+    try {
+      const res = await apiClient.get<any>('/api/v1/screenings?limit=100');
+      if (res.success) {
+        const data = res.data;
+        const items = Array.isArray(data) ? data : (data?.data || []);
+        
+        // Filter high risk (hasSelfHarmRisk or riskLevel tinggi/krisis)
+        const risky = items.filter((s: any) => s.hasSelfHarmRisk || s.riskLevel?.toLowerCase() === 'krisis' || s.riskLevel?.toLowerCase() === 'tinggi');
+        
+        const alerts: RiskAlert[] = risky.map((s: any, idx: number) => {
+           const indicators = s.riskIndicators ? (typeof s.riskIndicators === 'string' ? JSON.parse(s.riskIndicators) : s.riskIndicators) : [];
+           return {
+             id: s.id,
+             sessionId: `sess-${s.id.slice(0,4)}`,
+             studentAlias: `Mahasiswa Anonim ${s.userId ? s.userId.slice(0, 4) : idx}`,
+             university: 'Universitas Indonesia',
+             riskLevel: s.riskLevel || 'Tinggi',
+             triggers: indicators.length > 0 ? indicators : ['Indikasi krisis sistem'],
+             detectedAt: new Date(s.timestamp).toLocaleString('id-ID'),
+             status: s.status || 'Menunggu Penanganan',
+             phq9Score: s.phq9Score,
+             gad7Score: s.gad7Score
+           };
+        });
+        setRiskAlerts(alerts);
+      } else {
+        throw new Error(res.error || 'Gagal memuat data krisis');
       }
-    };
+    } catch (err: any) {
+      console.error('Failed to fetch screenings for risk alerts', err);
+      setErrorRisk(err.message || 'Gagal memuat daftar antrean krisis');
+    } finally {
+      setLoadingRisk(false);
+    }
+  };
+
+  useEffect(() => {
     fetchRiskAlerts();
   }, []);
 
@@ -138,9 +129,11 @@ export const CounselorDashboard: React.FC = () => {
   const [apptTotalPages, setApptTotalPages] = useState<number>(1);
   const [apptTotal, setApptTotal] = useState<number>(0);
   const [isLoadingAppts, setIsLoadingAppts] = useState<boolean>(false);
+  const [apptsError, setApptsError] = useState<string | null>(null);
 
   const fetchCounselorAppointments = async () => {
     setIsLoadingAppts(true);
+    setApptsError(null);
     try {
       const url = `/api/v1/appointments?status=${apptStatusFilter}&page=${apptPage}&limit=5&format=object`;
       const res = await apiClient.get<any>(url);
@@ -149,23 +142,26 @@ export const CounselorDashboard: React.FC = () => {
         setCounselorAppts(json.data || []);
         setApptTotalPages(json.totalPages || 1);
         setApptTotal(json.total || 0);
+      } else {
+        throw new Error(res.error || 'Gagal memuat jadwal konseling');
       }
-    } catch (e) {
+    } catch (e: any) {
       console.warn('Failed to fetch counselor appointments:', e);
+      setApptsError(e.message || 'Terjadi kesalahan jaringan.');
     } finally {
       setIsLoadingAppts(false);
     }
   };
 
   useEffect(() => {
-    fetchCounselorAppointments();
+    fetchCounselorAppointments(); // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apptStatusFilter, apptPage]);
 
   const handleApproveAppointment = async (id: string) => {
     try {
       const res = await apiClient.put(`/api/v1/appointments/${id}`, { status: 'CONFIRMED', approvalStatus: 'APPROVED' });
       if (res.success) {
-        fetchCounselorAppointments();
+        fetchCounselorAppointments();  
       }
     } catch (e) {
       console.warn('Approve appointment failed:', e);
@@ -176,14 +172,14 @@ export const CounselorDashboard: React.FC = () => {
     try {
       const res = await apiClient.put(`/api/v1/appointments/${id}`, { status: 'REJECTED', approvalStatus: 'REJECTED' });
       if (res.success) {
-        fetchCounselorAppointments();
+        fetchCounselorAppointments();  
       }
     } catch (e) {
       console.warn('Reject appointment failed:', e);
     }
   };
 
-  if (!analytics) return <div className="p-8 text-center text-slate-500">Memuat dashboard...</div>;
+  if (!analytics || analyticsLoading) return <DashboardSkeleton />;
 
   return (
     <div className="max-w-6xl mx-auto px-2 sm:px-4 py-4 space-y-4">
@@ -396,7 +392,35 @@ export const CounselorDashboard: React.FC = () => {
         </div>
 
         <div className="space-y-2.5">
-          {filteredAlerts.map((alertItem) => (
+          {loadingRisk ? (
+            <div className="animate-pulse space-y-3">
+              {[1, 2, 3].map(i => (
+                <div key={i} className="h-24 bg-slate-100 rounded-lg w-full"></div>
+              ))}
+            </div>
+          ) : errorRisk ? (
+            <ErrorState 
+              type="network" 
+              title="Gagal Memuat Antrean Krisis" 
+              description={errorRisk} 
+              onRetry={fetchRiskAlerts} 
+              className="py-4"
+            />
+          ) : filteredAlerts.length === 0 ? (
+            <EmptyState 
+              icon="info" 
+              title="Tidak Ada Antrean Krisis" 
+              description="Saat ini tidak ada mahasiswa yang membutuhkan penanganan krisis berdasarkan filter pencarian Anda." 
+              actionLabel={searchRisk || levelFilter !== 'Semua' || statusFilter !== 'Semua' ? 'Reset Filter' : undefined}
+              onAction={() => {
+                setSearchRisk('');
+                setLevelFilter('Semua');
+                setStatusFilter('Semua');
+              }}
+              className="py-6 border border-slate-100 bg-slate-50"
+            />
+          ) : (
+            filteredAlerts.map((alertItem) => (
             <div
               key={alertItem.id}
               className={`p-3 rounded-lg border space-y-2 transition-all text-xs ${
@@ -463,7 +487,7 @@ export const CounselorDashboard: React.FC = () => {
                 </div>
               </div>
             </div>
-          ))}
+          )))}
         </div>
       </div>
 
@@ -552,10 +576,23 @@ export const CounselorDashboard: React.FC = () => {
               </div>
             ))}
           </div>
+        ) : apptsError ? (
+          <ErrorState 
+            type="network" 
+            title="Gagal Memuat Jadwal" 
+            description={apptsError} 
+            onRetry={fetchCounselorAppointments}
+            className="py-6"
+          />
         ) : counselorAppts.length === 0 ? (
-          <div className="p-8 text-center bg-slate-50 rounded-xl text-slate-500 text-xs">
-            Tidak ada jadwal konseling yang sesuai dengan filter.
-          </div>
+          <EmptyState 
+            icon="calendar" 
+            title="Tidak Ada Jadwal Konseling" 
+            description="Tidak ada jadwal konseling yang sesuai dengan filter saat ini." 
+            actionLabel={apptStatusFilter !== 'Semua' ? 'Lihat Semua Status' : undefined}
+            onAction={() => setApptStatusFilter('Semua')}
+            className="py-8 border border-slate-100 bg-slate-50"
+          />
         ) : (
           <>
             {/* Mobile Stacked Cards (sm:hidden) */}

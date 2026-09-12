@@ -407,8 +407,8 @@ export default function App() {
         ) : (
           <Suspense fallback={<div className="flex h-full items-center justify-center surface-page"><div className="w-8 h-8 border-4 border-teal-500 border-t-transparent rounded-full animate-spin"></div></div>}>
             <Routes>
-              <Route path="/" element={<MainChat user={user} setChats={setChats} onOpenSidebar={() => setIsSidebarOpen(true)} onOpenSettings={() => setIsSettingsOpen(true)} onOpenChangelog={() => setIsChangelogOpen(true)} />} />
-              <Route path="/c/:chatId" element={<MainChat user={user} setChats={setChats} onOpenSidebar={() => setIsSidebarOpen(true)} onOpenSettings={() => setIsSettingsOpen(true)} onOpenChangelog={() => setIsChangelogOpen(true)} />} />
+              <Route path="/" element={<MainChat user={user} chats={chats} setChats={setChats} onOpenSidebar={() => setIsSidebarOpen(true)} onOpenSettings={() => setIsSettingsOpen(true)} onOpenChangelog={() => setIsChangelogOpen(true)} />} />
+              <Route path="/c/:chatId" element={<MainChat user={user} chats={chats} setChats={setChats} onOpenSidebar={() => setIsSidebarOpen(true)} onOpenSettings={() => setIsSettingsOpen(true)} onOpenChangelog={() => setIsChangelogOpen(true)} />} />
               <Route
                 path="/mood"
                 element={

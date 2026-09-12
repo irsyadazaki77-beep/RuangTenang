@@ -24,6 +24,27 @@ export function pseudonymizeIdentifier(identifier: string | null | undefined): s
   return crypto.createHash('sha256').update(identifier).digest('hex').slice(0, 16);
 }
 
+const quotaLocks = new Map<string, Promise<void>>();
+
+async function withQuotaLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const prev = quotaLocks.get(key) || Promise.resolve();
+  let release: () => void;
+  const next = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  quotaLocks.set(key, prev.then(() => next, () => next));
+
+  try {
+    await prev;
+    return await fn();
+  } finally {
+    release!();
+    if (quotaLocks.get(key) === next) {
+      quotaLocks.delete(key);
+    }
+  }
+}
+
 export const auditRepository = {
   async logAudit(
     action: string,
@@ -232,6 +253,105 @@ export const auditRepository = {
     });
 
     return record;
+  },
+
+  async consumeQuotaTransaction(
+    ipKey: string,
+    userKey: string | null,
+    date: string,
+    dailyLimit: number,
+    userTier?: string
+  ): Promise<{
+    allowed: boolean;
+    dailyUsage: number;
+    dailyLimit: number;
+    userTier: string;
+    reserved: boolean;
+    message?: string;
+  }> {
+    const lockKey = `${ipKey}_${userKey || 'guest'}`;
+    return await withQuotaLock(lockKey, async () => {
+      return await prisma.$transaction(async (tx) => {
+        const ipRecord = await tx.dailyUsages.findUnique({
+          where: { identifier_date: { identifier: ipKey, date } },
+        });
+        const userRecord = userKey
+          ? await tx.dailyUsages.findUnique({
+              where: { identifier_date: { identifier: userKey, date } },
+            })
+          : null;
+
+        const ipUsage = ipRecord ? ipRecord.count : 0;
+        const userUsage = userRecord ? userRecord.count : 0;
+        const currentUsage = Math.max(ipUsage, userUsage);
+
+        if (currentUsage >= dailyLimit) {
+          return {
+            allowed: false,
+            dailyUsage: currentUsage,
+            dailyLimit,
+            userTier: userTier || 'Free',
+            reserved: false,
+            message: `Batas penggunaan AI harian Anda telah tercapai (${currentUsage}/${dailyLimit} pesan hari ini) demi menjaga ketersediaan kuota API. Kuota Anda akan tereset otomatis besok pada tengah malam. Silakan manfaatkan layanan Konseling Kampus jika Anda membutuhkan teman bicara.`
+          };
+        }
+
+        await tx.dailyUsages.upsert({
+          where: { identifier_date: { identifier: ipKey, date } },
+          update: { count: { increment: 1 } },
+          create: { identifier: ipKey, date, count: 1 },
+        });
+
+        if (userKey) {
+          await tx.dailyUsages.upsert({
+            where: { identifier_date: { identifier: userKey, date } },
+            update: { count: { increment: 1 } },
+            create: { identifier: userKey, date, count: 1 },
+          });
+        }
+
+        return {
+          allowed: true,
+          dailyUsage: currentUsage + 1,
+          dailyLimit,
+          userTier: userTier || 'Free',
+          reserved: true,
+        };
+      });
+    });
+  },
+
+  async rollbackQuotaTransaction(
+    ipKey: string,
+    userKey: string | null,
+    date: string
+  ): Promise<void> {
+    const lockKey = `${ipKey}_${userKey || 'guest'}`;
+    await withQuotaLock(lockKey, async () => {
+      await prisma.$transaction(async (tx) => {
+        const ipRecord = await tx.dailyUsages.findUnique({
+          where: { identifier_date: { identifier: ipKey, date } },
+        });
+        if (ipRecord && ipRecord.count > 0) {
+          await tx.dailyUsages.update({
+            where: { identifier_date: { identifier: ipKey, date } },
+            data: { count: { decrement: 1 } },
+          });
+        }
+
+        if (userKey) {
+          const userRecord = await tx.dailyUsages.findUnique({
+            where: { identifier_date: { identifier: userKey, date } },
+          });
+          if (userRecord && userRecord.count > 0) {
+            await tx.dailyUsages.update({
+              where: { identifier_date: { identifier: userKey, date } },
+              data: { count: { decrement: 1 } },
+            });
+          }
+        }
+      });
+    });
   },
 
   async getWeeklyUsage(identifier: string): Promise<DailyUsageRecord[]> {

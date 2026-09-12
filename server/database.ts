@@ -471,6 +471,8 @@ export const serverDb = {
   countGovernanceTests: auditRepository.countGovernanceTests.bind(auditRepository),
   getDailyUsage: auditRepository.getDailyUsage.bind(auditRepository),
   incrementDailyUsage: auditRepository.incrementDailyUsage.bind(auditRepository),
+  consumeQuotaTransaction: auditRepository.consumeQuotaTransaction.bind(auditRepository),
+  rollbackQuotaTransaction: auditRepository.rollbackQuotaTransaction.bind(auditRepository),
   getWeeklyUsage: auditRepository.getWeeklyUsage.bind(auditRepository),
   saveProgramProgress: auditRepository.saveProgramProgress.bind(auditRepository),
   getProgramProgress: auditRepository.getProgramProgress.bind(auditRepository),

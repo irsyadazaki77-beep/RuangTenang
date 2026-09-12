@@ -1,6 +1,6 @@
 import { analyzeMessageSentiment } from '../lib/crisisDetector';
 import { calculatePhq9Severity, calculateGad7Severity, computeScreeningSummary } from './scoring';
-import { appointmentBookingSchema, chatInputSchema } from '../lib/validationSchemas';
+import { appointmentBookingSchema, } from '../lib/validationSchemas';
 
 export interface TestResult {
   name: string;

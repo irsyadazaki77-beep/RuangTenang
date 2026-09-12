@@ -1,6 +1,6 @@
 import { useEscapeKey } from '../../hooks/useEscapeKey';
 import React, { useState, useEffect, useRef } from 'react';
-import { HeartHandshake, User, AlertCircle, CheckCircle, UserPlus, LogIn, KeyRound, ShieldCheck, MailCheck, Lock, X, ShieldAlert } from 'lucide-react';
+import { User, AlertCircle, CheckCircle, UserPlus, LogIn, KeyRound, ShieldCheck, MailCheck, Lock, X } from 'lucide-react';
 import { UserRole, UserSession } from '../../types';
 import { apiClient } from '../../lib/apiClient';
 import { useAuth } from '../../contexts/AuthContext';

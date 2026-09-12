@@ -19,6 +19,7 @@ export interface StreamPayload {
   chatMode?: string;
   responseStyle?: string;
   aiModel?: string;
+  attachments?: any[];
 }
 
 export class ChatStreamingClient {
@@ -44,7 +45,7 @@ export class ChatStreamingClient {
     if (this.abortController) {
       try {
         this.abortController.abort();
-      } catch (e) {}
+      } catch {}
     }
 
     const abortController = new AbortController();
@@ -77,7 +78,7 @@ export class ChatStreamingClient {
         try {
           const errData = await response.json();
           errorMsg = errData.message || errData.error || errorMsg;
-        } catch (e) {}
+        } catch {}
         throw new Error(errorMsg);
       }
 
@@ -94,7 +95,7 @@ export class ChatStreamingClient {
       const readLoop = async () => {
         while (!done) {
           if (token !== this.activeToken) {
-            try { reader.cancel(); } catch (e) {}
+            try { reader.cancel(); } catch {}
             return;
           }
 
@@ -112,7 +113,7 @@ export class ChatStreamingClient {
             if (timerId) clearTimeout(timerId);
 
             if (token !== this.activeToken) {
-              try { reader.cancel(); } catch (e) {}
+              try { reader.cancel(); } catch {}
               return;
             }
 
@@ -191,7 +192,7 @@ export class ChatStreamingClient {
                     callbacks.onChunk(content);
                   }
                 }
-              } catch (e) {}
+              } catch {}
             }
           }
         }
@@ -215,7 +216,7 @@ export class ChatStreamingClient {
       }
 
       if (err.name === 'AbortError' || (err.message && err.message.toLowerCase().includes('abort'))) {
-        console.log('Stream aborted by client');
+        console.info('Stream aborted by client');
         this.changeState(token, 'aborted', callbacks.onStateChange);
         // Only trigger completion with existing text if there was content streamed
         if (callbacks.onMessageComplete && currentText.trim()) {
@@ -240,7 +241,7 @@ export class ChatStreamingClient {
     if (this.abortController) {
       try {
         this.abortController.abort();
-      } catch (e) {}
+      } catch {}
       this.abortController = null;
     }
     this.state = 'aborted';

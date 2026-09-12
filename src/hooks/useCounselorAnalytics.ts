@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { AnalyticsMetric, RiskAlert } from '../types';
+import { AnalyticsMetric} from '../types';
 import { apiClient } from '../lib/apiClient';
 
 export function useCounselorAnalytics() {

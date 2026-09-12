@@ -3,7 +3,6 @@ import React, { useState, useEffect } from 'react';
 import {
   CalendarCheck,
   Calendar as CalendarIcon,
-  Clock,
   Video,
   Bell,
   BellRing,
@@ -14,13 +13,15 @@ import {
   FileText,
   MessageSquare,
   User,
-  CheckCircle2,
   AlertTriangle
 } from 'lucide-react';
 import { Appointment, Counselor, UserSession } from '../../types';
 import { useCounselors } from '../../hooks/useCounselors';
 import { useToast } from '../../components/Toast';
 import { apiClient } from '../../lib/apiClient';
+import { AppointmentSchedulerSkeleton } from '../../components/common/Skeleton';
+import { EmptyState } from '../../components/common/EmptyState';
+import { ErrorState } from '../../components/common/ErrorState';
 
 // Sub-components
 import { BookingForm } from './BookingForm';
@@ -44,7 +45,7 @@ interface AppointmentSchedulerProps {
   setUserSession: React.Dispatch<React.SetStateAction<UserSession>>;
 }
 
-const APPOINTMENTS_STORAGE_KEY = 'ruangtenang_appointments';
+
 
 export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
   selectedCounselorFromDir,
@@ -52,8 +53,10 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
   setUserSession
 }) => {
   const { showToast } = useToast();
-  const { counselors, loading: counselorsLoading } = useCounselors();
+  const { counselors, loading: counselorsLoading, error: counselorsError} = useCounselors();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [loadingAppointments, setLoadingAppointments] = useState(true);
+  const [errorAppointments, setErrorAppointments] = useState<string | null>(null);
   const [isBookingOpen, setIsBookingOpen] = useState(false);
   const [showLimitModal, setShowLimitModal] = useState(false);
   useEscapeKey(() => setShowLimitModal(false), showLimitModal);
@@ -188,14 +191,12 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
     'default'
   );
 
-  useEffect(() => {
-    if ('Notification' in window) {
-      setNotificationPermission(Notification.permission);
-    }
-
-    // Load appointments from persistent backend API
+  const fetchAppointments = () => {
+    setLoadingAppointments(true);
+    setErrorAppointments(null);
     apiClient.get<any[]>('/api/v1/appointments?limit=all')
       .then(res => {
+        if (!res.success) throw new Error(res.error || 'Gagal memuat jadwal dari server.');
         const data = res.data;
         if (Array.isArray(data) && data.length > 0 && counselors.length > 0) {
           const formatted: Appointment[] = data.map((item: any) => {
@@ -228,12 +229,28 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
         } else {
           setAppointments([]);
         }
+        setLoadingAppointments(false);
       })
       .catch(err => {
         console.warn('Backend API appointments fetch error:', err);
+        setErrorAppointments(err.message || 'Terjadi kesalahan saat memuat jadwal.');
         setAppointments([]);
+        setLoadingAppointments(false);
       });
-  }, [counselors]);
+  };
+
+  useEffect(() => {
+    if ('Notification' in window) {
+      setNotificationPermission(Notification.permission);
+    }
+
+    if (!counselorsLoading && counselors.length > 0) {
+      fetchAppointments();
+    } else if (!counselorsLoading && counselorsError) {
+      setErrorAppointments(counselorsError);
+      setLoadingAppointments(false);
+    }
+  }, [counselors, counselorsLoading, counselorsError]);
 
   useEffect(() => {
     if (selectedCounselorFromDir) {
@@ -447,19 +464,27 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
           <span>Daftar Pertemuan Terjadwal ({appointments.length})</span>
         </h2>
 
-        {appointments.length === 0 ? (
-          <div className="surface-card rounded-xl p-6 sm:p-10 text-center space-y-3 shadow-3xs border border-default">
-            <CalendarIcon className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto" />
-            <p className="text-secondary text-xs sm:text-sm">Belum ada sesi konseling yang dijadwalkan.</p>
-            <button
-              onClick={() => setIsBookingOpen(true)}
-              className="mt-1 px-5 py-2.5 min-h-[44px] bg-teal-600 hover:bg-teal-700 text-white font-semibold text-xs sm:text-sm rounded-xl shadow-3xs cursor-pointer active:scale-[0.98]"
-            >
-              Jadwalkan Sesi Pertama
-            </button>
-          </div>
+        {loadingAppointments || counselorsLoading ? (
+          <AppointmentSchedulerSkeleton />
+        ) : errorAppointments ? (
+          <ErrorState
+            type="network"
+            title="Gagal Memuat Jadwal"
+            description={errorAppointments}
+            onRetry={fetchAppointments}
+            className="my-4"
+          />
+        ) : appointments.length === 0 ? (
+          <EmptyState
+            icon="calendar"
+            title="Belum Ada Jadwal Pertemuan"
+            description="Mulai langkah pertamamu dengan menjadwalkan sesi konseling bersama ahli kami."
+            actionLabel="Jadwalkan Sesi Pertama"
+            onAction={() => setIsBookingOpen(true)}
+            className="my-4"
+          />
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 sm:gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 sm:gap-4 animate-fade-in">
             {appointments.map((apt) => (
               <div
                 key={apt.id}

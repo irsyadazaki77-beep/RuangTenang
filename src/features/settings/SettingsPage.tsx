@@ -1,4 +1,3 @@
-import { useEscapeKey } from '../../hooks/useEscapeKey';
 import React, { useState, useEffect, useCallback } from 'react';
 import { User,
   ShieldCheck,
@@ -9,10 +8,6 @@ import { User,
   RotateCcw,
   ShieldAlert,
   UserCheck,
-  Terminal,
-  KeyRound,
-  Lock,
-  X,
   ChevronRight,
   ChevronLeft
 } from 'lucide-react';
@@ -23,6 +18,8 @@ import { safeLocalStorage } from '../../lib/storage';
 import { AiQuotaBadge } from '../../components/AiQuotaBadge';
 import { apiClient } from '../../lib/apiClient';
 import { CURRENT_APP_VERSION, LAST_UPDATED_DATE, APP_CHANGELOG, CATEGORY_METADATA } from '../../data/changelogData';
+import { ErrorState } from '../../components/common/ErrorState';
+import { EmptyState } from '../../components/common/EmptyState';
 
 interface SettingsPageProps {
   userSession: UserSession | null;
@@ -56,10 +53,6 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   const [loading, setLoading] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [showDevModal, setShowDevModal] = useState(false);
-  useEscapeKey(() => setShowDevModal(false), showDevModal);
-  const [devPassword, setDevPassword] = useState('');
-  const [devError, setDevError] = useState<string | null>(null);
 
   const [aiModel, setAiModel] = useState(() => safeLocalStorage.getItem('aiModel') || DEFAULT_AI_MODEL_ID);
   const [responseStyle, setResponseStyle] = useState(() => safeLocalStorage.getItem('responseStyle') || 'Seimbang');
@@ -101,23 +94,34 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [secMsg, setSecMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [loadingSec, setLoadingSec] = useState<boolean>(true);
+  const [errorSec, setErrorSec] = useState<string | null>(null);
 
   const fetchSecurityData = useCallback(async () => {
     if (safeUser.id === 'guest') return;
+    setLoadingSec(true);
+    setErrorSec(null);
     try {
       // Active Sessions
       const resSess = await apiClient.get<any>('/api/v1/auth/sessions');
       if (resSess.success && resSess.data) {
         setSessions(resSess.data.sessions || []);
+      } else {
+         throw new Error(resSess.error || 'Gagal memuat daftar sesi.');
       }
 
       // Login History
       const resHist = await apiClient.get<any>('/api/v1/auth/login-history');
       if (resHist.success && resHist.data) {
         setLoginHistory(resHist.data.history || []);
+      } else {
+         throw new Error(resHist.error || 'Gagal memuat riwayat login.');
       }
-    } catch (err) {
-      console.error('Error loading security info:', err);
+    } catch {
+      console.warn('Error loading security info:', err);
+      setErrorSec(err.message || 'Terjadi kesalahan jaringan.');
+    } finally {
+      setLoadingSec(false);
     }
   }, [safeUser.id]);
 
@@ -135,7 +139,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
       } else {
         setSecMsg({ type: 'error', text: res.error || 'Gagal mencabut sesi.' });
       }
-    } catch (err) {
+    } catch {
       setSecMsg({ type: 'error', text: 'Koneksi gagal.' });
     }
   };
@@ -150,7 +154,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
       } else {
         setSecMsg({ type: 'error', text: res.error || 'Gagal mencabut seluruh sesi.' });
       }
-    } catch (err) {
+    } catch {
       setSecMsg({ type: 'error', text: 'Koneksi gagal.' });
     }
   };
@@ -180,7 +184,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
       } else {
         setSecMsg({ type: 'error', text: res.error || 'Gagal mengubah kata sandi.' });
       }
-    } catch (err) {
+    } catch {
+      // ignore
       setSecMsg({ type: 'error', text: 'Koneksi gagal.' });
     }
   };
@@ -196,8 +201,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
           userTier: data.userTier || safeUser.tier
         });
       }
-    } catch (err) {
-      console.error('Error fetching usage stats in settings:', err);
+    } catch {
+      console.warn('Error fetching usage stats in settings:', err);
     }
   }, [safeUser.id, safeUser.tier]);
 
@@ -205,26 +210,23 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
     fetchUsage();
   }, [fetchUsage]);
 
-  const handleSelectTier = async (selectedTier: SubscriptionTier, password?: string) => {
-    if (selectedTier === 'Developer' && !password) {
-      setDevPassword('');
-      setDevError(null);
-      setShowDevModal(true);
-      return;
-    }
+  const handleSelectTier = async (selectedTier: SubscriptionTier) => {
+    if (safeUser.tier === selectedTier) return;
 
     setLoading(true);
     setErrorMsg(null);
     setSuccessMsg(null);
-    setDevError(null);
 
     try {
-      const response = await apiClient.post<any>('/api/v1/auth/update-tier', { tier: selectedTier, password });
+      const response = await apiClient.post<any>('/api/v1/auth/update-tier', {
+        targetUserId: safeUser.id,
+        tier: selectedTier
+      });
 
       if (response.success) {
         setUserSession({
           ...safeUser,
-          tier: selectedTier
+          tier: response.user?.tier || selectedTier
         });
         setSuccessMsg(
           selectedTier === 'Developer'
@@ -233,18 +235,12 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
             ? 'Selamat! Paket Anda beralih ke Pendamping Pro (100 pesan/hari).'
             : 'Paket beralih ke Standard (25 pesan/hari).'
         );
-        setShowDevModal(false);
-        setDevPassword('');
         fetchUsage();
       } else {
-        if (selectedTier === 'Developer') {
-          setDevError(response.error || 'Password Developer salah!');
-        } else {
-          setErrorMsg(response.error || 'Gagal mengubah paket.');
-        }
+        setErrorMsg(response.error || 'Gagal mengubah paket.');
       }
-    } catch (err) {
-      setErrorMsg('Koneksi ke server gagal.');
+    } catch {
+      setErrorMsg(err.response?.data?.error || err.message || 'Koneksi ke server gagal.');
     } finally {
       setLoading(false);
       setTimeout(() => setSuccessMsg(null), 5000);
@@ -281,14 +277,14 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                   setActiveTab(tab.id);
                   setShowMobileDetail(true);
                 }}
-                className={`flex items-center justify-between md:justify-start gap-3 px-4 py-3 sm:py-3.5 md:py-2.5 rounded-xl text-sm font-medium transition-colors border border-transparent cursor-pointer ${
+                className={`flex items-center justify-between md:justify-start gap-3 px-4 py-3 sm:py-3.5 md:py-2.5 rounded-xl text-sm font-medium transition-all duration-150 btn-press-compact border border-transparent cursor-pointer ${
                   activeTab === tab.id 
                     ? 'bg-teal-50 text-teal-700 md:bg-teal-50 md:text-teal-700' 
                     : 'text-secondary hover:surface-muted surface-muted/50 md:bg-transparent'
                 }`}
               >
                 <div className="flex items-center gap-3 min-w-0">
-                  <Icon className={`w-5 h-5 shrink-0 ${activeTab === tab.id ? 'text-teal-600' : 'text-muted'}`} />
+                  <div className={`w-5 h-5 shrink-0 ${activeTab === tab.id ? 'text-teal-600' : 'text-muted'}`} />
                   <span className="truncate">{tab.label}</span>
                 </div>
                 <ChevronRight className="w-4 h-4 text-muted md:hidden shrink-0" />
@@ -621,44 +617,74 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                   )}
                 </div>
 
-                <div className="space-y-2">
-                  {sessions.length === 0 ? (
-                    <p className="text-xs text-muted italic">Tidak ada data sesi aktif.</p>
-                  ) : (
-                    sessions.map((s) => (
-                      <div key={s.sessionId} className="p-3 border border-default rounded-lg flex items-center justify-between surface-muted/50">
-                        <div className="space-y-0.5">
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs font-bold text-primary">{s.device || 'Perangkat Web'}</span>
-                            {s.isCurrent && (
-                              <span className="px-1.5 py-0.5 bg-teal-100 text-teal-800 rounded text-[9px] font-bold">
-                                Sesi Ini
-                              </span>
-                            )}
+                {loadingSec ? (
+                  <div className="animate-pulse space-y-2">
+                     {[1, 2].map((i) => (
+                       <div key={i} className="h-16 bg-slate-100 rounded-lg w-full"></div>
+                     ))}
+                  </div>
+                ) : errorSec ? (
+                  <ErrorState
+                    type="network"
+                    title="Gagal Memuat Sesi"
+                    description={errorSec}
+                    onRetry={fetchSecurityData}
+                    className="py-4"
+                  />
+                ) : (
+                  <div className="space-y-2">
+                    {sessions.length === 0 ? (
+                      <EmptyState icon="info" title="Tidak Ada Sesi" description="Tidak ada sesi aktif lain." className="py-6 border border-slate-100 bg-slate-50" />
+                    ) : (
+                      sessions.map((s) => (
+                        <div key={s.sessionId} className="p-3 border border-default rounded-lg flex items-center justify-between surface-muted/50">
+                          <div className="space-y-0.5">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-bold text-primary">{s.device || 'Perangkat Web'}</span>
+                              {s.isCurrent && (
+                                <span className="px-1.5 py-0.5 bg-teal-100 text-teal-800 rounded text-[9px] font-bold">
+                                  Sesi Ini
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[10px] text-muted">IP: {s.ip} • Terakhir aktif: {new Date(s.lastActive).toLocaleString('id-ID')}</p>
                           </div>
-                          <p className="text-[10px] text-muted">IP: {s.ip} • Terakhir aktif: {new Date(s.lastActive).toLocaleString('id-ID')}</p>
+                          {!s.isCurrent && (
+                            <button
+                              type="button"
+                              onClick={() => handleRevokeSession(s.sessionId)}
+                              className="px-2 py-1 bg-slate-200 hover:bg-rose-100 hover:text-rose-700 text-secondary rounded text-[11px] font-medium transition"
+                            >
+                              Cabut Sesi
+                            </button>
+                          )}
                         </div>
-                        {!s.isCurrent && (
-                          <button
-                            type="button"
-                            onClick={() => handleRevokeSession(s.sessionId)}
-                            className="px-2 py-1 bg-slate-200 hover:bg-rose-100 hover:text-rose-700 text-secondary rounded text-[11px] font-medium transition"
-                          >
-                            Cabut Sesi
-                          </button>
-                        )}
-                      </div>
-                    ))
-                  )}
-                </div>
+                      ))
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
             {/* TAB 2: Riwayat Login */}
             {secTab === 'history' && (
               <div className="space-y-2 max-h-60 overflow-y-auto">
-                {loginHistory.length === 0 ? (
-                  <p className="text-xs text-muted italic">Belum ada catatan riwayat login.</p>
+                {loadingSec ? (
+                  <div className="animate-pulse space-y-2">
+                     {[1, 2, 3].map((i) => (
+                       <div key={i} className="h-12 bg-slate-100 rounded-lg w-full"></div>
+                     ))}
+                  </div>
+                ) : errorSec ? (
+                  <ErrorState
+                    type="network"
+                    title="Gagal Memuat Riwayat"
+                    description={errorSec}
+                    onRetry={fetchSecurityData}
+                    className="py-4"
+                  />
+                ) : loginHistory.length === 0 ? (
+                  <EmptyState icon="info" title="Tidak Ada Riwayat" description="Belum ada riwayat login tercatat." className="py-6 border border-slate-100 bg-slate-50" />
                 ) : (
                   loginHistory.map((h, i) => (
                     <div key={h.id || i} className="p-2.5 border border-slate-150 rounded-lg flex items-center justify-between text-xs">
@@ -1163,80 +1189,6 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
       
       </div>
 
-      {/* Developer Password Modal */}
-      {showDevModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
-          <div className="surface-card rounded-2xl shadow-xl border border-default w-full max-w-sm overflow-hidden p-5 space-y-4 font-sans relative">
-            <button 
-              onClick={() => setShowDevModal(false)}
-              className="absolute top-3 right-3 text-muted hover:text-secondary p-1.5 rounded-lg transition min-h-[44px] min-w-[44px] flex items-center justify-center cursor-pointer"
-              aria-label="Tutup Dialog Verifikasi"
-            >
-              <X className="w-5 h-5" />
-            </button>
-
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 bg-indigo-100 text-indigo-700 rounded-xl border border-indigo-200 shrink-0">
-                <KeyRound className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-primary">Verifikasi Versi Developer</h3>
-                <p className="text-[11px] text-secondary">Masukkan password khusus untuk mendapatkan akses tanpa limit.</p>
-              </div>
-            </div>
-
-            {devError && (
-              <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-lg text-rose-800 text-xs flex items-center gap-2">
-                <ShieldAlert className="w-4 h-4 shrink-0 text-rose-600" />
-                <span>{devError}</span>
-              </div>
-            )}
-
-            <form 
-              onSubmit={(e) => {
-                e.preventDefault();
-                handleSelectTier('Developer', devPassword);
-              }}
-              className="space-y-3 pt-1"
-            >
-              <div>
-                <label className="block text-xs font-semibold text-secondary mb-1">
-                  Password Developer
-                </label>
-                <div className="relative">
-                  <Lock className="w-4 h-4 text-muted absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="password"
-                    value={devPassword}
-                    onChange={(e) => setDevPassword(e.target.value)}
-                    placeholder="Masukkan password..."
-                    autoFocus
-                    required
-                    className="w-full pl-9 pr-3 py-2 text-base sm:text-xs border border-default rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 min-h-[44px] sm:min-h-[38px]"
-                  />
-                </div>
-              </div>
-
-              <div className="flex gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowDevModal(false)}
-                  className="flex-1 py-2 min-h-[44px] sm:min-h-[38px] bg-slate-100 text-secondary hover:bg-slate-200 rounded-lg text-xs font-medium transition cursor-pointer flex items-center justify-center"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  disabled={loading || !devPassword}
-                  className="flex-1 py-2 min-h-[44px] sm:min-h-[38px] bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold shadow-sm transition disabled:opacity-50 cursor-pointer flex items-center justify-center"
-                >
-                  {loading ? 'Memverifikasi...' : 'Verifikasi & Aktifkan'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

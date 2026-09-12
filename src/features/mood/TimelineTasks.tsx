@@ -20,8 +20,7 @@ export const TimelineTasks: React.FC<TimelineTasksProps> = ({
   onNavigateToSchedule
 }) => {
   const [appointments, setAppointments] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-
+  
   useEffect(() => {
     apiClient.get<any[]>('/api/v1/appointments?limit=all')
       .then(res => {
@@ -31,39 +30,40 @@ export const TimelineTasks: React.FC<TimelineTasksProps> = ({
           setAppointments([]);
         }
       })
-      .catch(() => setAppointments([]))
-      .finally(() => setLoading(false));
+      .catch(() => setAppointments([]));
   }, []);
 
   const completedSessions = appointments.filter(a => a.status === 'COMPLETED' || a.status === 'Selesai');
   const upcomingSessions = appointments.filter(a => a.status === 'CONFIRMED' || a.status === 'PENDING' || a.status === 'Menunggu Konfirmasi' || a.status === 'Konfirmasi');
 
   return (
-    <div className="space-y-6">
-      <div className="p-4 bg-slate-50 rounded-xl text-xs sm:text-sm text-slate-600 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-        <span className="font-medium text-slate-800 flex items-center gap-1.5">
-          <Clock className="w-4 h-4 text-slate-600" />
-          Integrasi Pengingat & Tindak Lanjut Pemulihan Mandiri
+    <div className="space-y-5">
+      <div className="p-3.5 surface-muted rounded-xl text-xs sm:text-sm text-secondary flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border border-default">
+        <span className="font-semibold text-primary flex items-center gap-1.5">
+          <Clock className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+          Pengingat Sesi & Tindak Lanjut Pemulihan
         </span>
-        <span className="font-semibold text-slate-900 bg-white px-2.5 py-1 rounded-md border border-slate-200">
-          {completedSessions.length} Sesi Selesai, {upcomingSessions.length} Mendatang
+        <span className="font-semibold text-primary surface-card px-2.5 py-1 rounded-md border border-default text-xs">
+          {completedSessions.length} Selesai, {upcomingSessions.length} Mendatang
         </span>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-start">
-        {/* Timeline Cards */}
-        <div className="md:col-span-7 relative border-l border-slate-200 ml-3 pl-6 space-y-6 pt-2 pb-2">
+        {/* Timeline Sessions List */}
+        <div className="md:col-span-7 relative border-l border-default ml-2 pl-4 sm:pl-6 space-y-4 pt-1 pb-1">
           {appointments.length === 0 ? (
-            <div className="p-6 bg-slate-50 rounded-xl border border-slate-200 text-center space-y-3">
-              <Calendar className="w-8 h-8 text-slate-400 mx-auto" />
+            <div className="p-5 surface-muted rounded-xl border border-default text-center space-y-3">
+              <Calendar className="w-7 h-7 text-secondary mx-auto" />
               <div>
-                <h4 className="text-sm font-semibold text-slate-800">Belum Ada Sesi Konseling</h4>
-                <p className="text-xs text-slate-500 mt-1">Jadwalkan sesi konsultasi 1-on-1 dengan psikolog kampus untuk pendampingan mental terarah.</p>
+                <h4 className="text-sm font-semibold text-primary">Belum Ada Sesi Konseling</h4>
+                <p className="text-xs text-secondary mt-0.5 max-w-sm mx-auto">
+                  Jadwalkan sesi konsultasi 1-on-1 dengan psikolog kampus untuk pendampingan mental terarah.
+                </p>
               </div>
               {onNavigateToSchedule && (
                 <button
                   onClick={onNavigateToSchedule}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold rounded-lg shadow-2xs transition-all"
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 btn-primary text-xs font-semibold rounded-xl shadow-xs transition-all"
                 >
                   <span>Jadwalkan Sekarang</span>
                   <ArrowRight className="w-3.5 h-3.5" />
@@ -75,30 +75,30 @@ export const TimelineTasks: React.FC<TimelineTasksProps> = ({
               const isUpcoming = apt.status === 'CONFIRMED' || apt.status === 'PENDING' || apt.status === 'Menunggu Konfirmasi' || apt.status === 'Konfirmasi';
               return (
                 <div key={apt.id || idx} className="relative">
-                  <span className={`absolute -left-[30px] top-1.5 w-4.5 h-4.5 rounded-full border-[3px] border-white ${isUpcoming ? 'bg-slate-900 ring-2 ring-slate-200' : 'bg-slate-300'}`}></span>
-                  <div className={`p-4 rounded-xl space-y-2 border ${isUpcoming ? 'bg-slate-50 border-slate-200 shadow-2xs' : 'bg-white border-slate-200'}`}>
+                  <span className={`absolute -left-[23px] sm:-left-[31px] top-2 w-3.5 h-3.5 rounded-full border-2 border-white dark:border-slate-900 ${isUpcoming ? 'bg-teal-600 ring-2 ring-teal-200 dark:ring-teal-900' : 'bg-slate-400'}`}></span>
+                  <div className={`p-4 rounded-xl space-y-2 border ${isUpcoming ? 'surface-card border-teal-200 dark:border-teal-900 shadow-3xs' : 'surface-card border-default'}`}>
                     <div className="flex items-center justify-between">
-                      <span className="text-[11px] sm:text-xs font-semibold text-slate-900 flex items-center gap-1.5">
-                        <Clock className="w-3.5 h-3.5 text-slate-600" /> {apt.date} • {apt.time || apt.timeSlot}
+                      <span className="text-[11px] sm:text-xs font-semibold text-primary flex items-center gap-1.5">
+                        <Clock className="w-3.5 h-3.5 text-secondary" /> {apt.date} • {apt.time || apt.timeSlot}
                       </span>
-                      <span className={`px-2 py-0.5 text-[9px] font-bold rounded uppercase tracking-wider ${isUpcoming ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-600 border border-slate-200'}`}>
+                      <span className={`px-2 py-0.5 text-[10px] font-bold rounded uppercase tracking-wider ${isUpcoming ? 'bg-teal-600 text-white' : 'surface-muted text-secondary border border-default'}`}>
                         {isUpcoming ? 'Terjadwal' : 'Selesai'}
                       </span>
                     </div>
-                    <h4 className="text-xs sm:text-sm font-semibold text-slate-900">
+                    <h4 className="text-xs sm:text-sm font-semibold text-primary">
                       Konseling - {apt.counselorName || 'Psikolog Kampus'}
                     </h4>
-                    {apt.notes && <p className="text-xs text-slate-600 leading-normal">{apt.notes}</p>}
+                    {apt.notes && <p className="text-xs text-secondary leading-normal">{apt.notes}</p>}
                     {apt.meetingLink && isUpcoming && (
-                      <div className="text-[10px] sm:text-xs text-slate-600 font-mono bg-white p-2 rounded-lg border border-slate-200 flex items-center justify-between gap-2 overflow-hidden">
+                      <div className="text-xs text-secondary surface-muted p-2 rounded-lg border border-default flex items-center justify-between gap-2 overflow-hidden">
                         <span className="truncate flex items-center gap-1">
-                          <Video className="w-3 h-3 text-teal-600" /> Link Sesi
+                          <Video className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" /> Link Sesi
                         </span>
                         <a 
                           href={apt.meetingLink} 
                           target="_blank" 
                           rel="noreferrer" 
-                          className="text-[10px] bg-teal-50 hover:bg-teal-100 text-teal-700 px-2 py-0.5 rounded font-sans font-semibold"
+                          className="text-xs bg-teal-50 dark:bg-teal-950/60 hover:bg-teal-100 dark:hover:bg-teal-900 text-teal-700 dark:text-teal-300 px-2.5 py-1 rounded-md font-semibold shrink-0"
                         >
                           Buka Ruang Sesi
                         </a>
@@ -112,40 +112,40 @@ export const TimelineTasks: React.FC<TimelineTasksProps> = ({
         </div>
 
         {/* Self-Care Checklist Panel */}
-        <div className="md:col-span-5 bg-slate-50 rounded-xl p-4 sm:p-5 space-y-4">
-          <div className="flex items-center gap-1.5 border-b border-slate-200 pb-2">
+        <div className="md:col-span-5 surface-muted rounded-xl p-4 sm:p-5 space-y-3.5 border border-default">
+          <div className="flex items-center gap-1.5 border-b border-default pb-2">
             <Sparkles className="w-4 h-4 text-amber-500 shrink-0" />
-            <span className="text-xs sm:text-sm font-semibold text-slate-900">Program Latihan Mandiri (Rekomendasi Psikolog)</span>
+            <span className="text-xs sm:text-sm font-bold text-primary">Latihan Mandiri Harian</span>
           </div>
-          <p className="text-[11px] text-slate-600 leading-normal">
-            Selesaikan tugas perawatan diri harian untuk mempercepat pemulihan kognitif Anda dan menyeimbangkan regulasi emosi.
+          <p className="text-[11px] text-secondary leading-normal">
+            Selesaikan kebiasaan mikro harian untuk mendukung stabilitas emosi dan fokus studi.
           </p>
 
-          <div className="space-y-2.5">
+          <div className="space-y-2">
             {selfCareChecklist.map((item) => (
               <div 
                 key={item.id} 
                 onClick={() => onToggleSelfCare(item.id)}
-                className={`p-2.5 rounded-lg border transition-all cursor-pointer flex items-start gap-2.5 ${
+                className={`p-2.5 rounded-xl border transition-all cursor-pointer flex items-start gap-2.5 ${
                   item.done 
-                    ? 'bg-teal-50/55 border-teal-200 text-slate-600 line-through' 
-                    : 'bg-white border-slate-200 text-slate-800 hover:border-slate-300'
+                    ? 'bg-teal-50/50 dark:bg-teal-950/30 border-teal-200 dark:border-teal-800 text-secondary line-through' 
+                    : 'surface-card border-default text-primary hover:border-slate-300 dark:hover:border-slate-700'
                 }`}
               >
-                <div className={`w-4.5 h-4.5 rounded-md border flex items-center justify-center shrink-0 mt-0.5 transition-colors ${item.done ? 'bg-teal-600 border-teal-600 text-white' : 'border-slate-300 bg-white'}`}>
-                  {item.done && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                <div className={`w-4.5 h-4.5 rounded-md border flex items-center justify-center shrink-0 mt-0.5 transition-colors ${item.done ? 'bg-teal-600 border-teal-600 text-white' : 'border-slate-300 dark:border-slate-600 surface-card'}`}>
+                  {item.done && <Check className="w-3 h-3 stroke-[3]" />}
                 </div>
-                <span className="text-xs font-semibold leading-snug">{item.task}</span>
+                <span className="text-xs font-medium leading-snug">{item.task}</span>
               </div>
             ))}
           </div>
 
-          <div className="bg-white rounded-lg border border-slate-200 p-3 flex items-center justify-between text-xs gap-3">
+          <div className="surface-card rounded-xl border border-default p-3 flex items-center justify-between text-xs gap-3">
             <div className="space-y-0.5">
-              <span className="text-slate-600 font-semibold block uppercase text-[9px] tracking-wider">Tingkat Penyelesaian</span>
-              <span className="text-slate-800 font-bold">{selfCareChecklist.filter(t => t.done).length} dari {selfCareChecklist.length} selesai</span>
+              <span className="text-secondary font-semibold block uppercase text-[9px] tracking-wider">Tingkat Penyelesaian</span>
+              <span className="text-primary font-bold">{selfCareChecklist.filter(t => t.done).length} dari {selfCareChecklist.length} selesai</span>
             </div>
-            <div className="w-16 bg-slate-100 rounded-full h-2 overflow-hidden">
+            <div className="w-16 surface-muted rounded-full h-2 overflow-hidden border border-default">
               <div 
                 className="bg-teal-500 h-full transition-all duration-300" 
                 style={{ width: `${(selfCareChecklist.filter(t => t.done).length / selfCareChecklist.length) * 100}%` }}
