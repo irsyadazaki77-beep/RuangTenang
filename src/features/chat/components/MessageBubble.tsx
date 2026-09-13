@@ -6,7 +6,7 @@ import EmergencyCard from '../../plugins/EmergencyCard';
 import MoodCard from '../../plugins/MoodCard';
 import ScreeningCard from '../../plugins/ScreeningCard';
 import ArticlesCard from '../../plugins/ArticlesCard';
-import { Copy, RefreshCw, ThumbsUp, ThumbsDown, Edit2, Check, Bookmark, GitBranch } from 'lucide-react';
+import { Copy, RefreshCw, ThumbsUp, ThumbsDown, Edit2, Check, Bookmark, GitBranch, FileText } from 'lucide-react';
 import { useToast } from '../../../components/Toast';
 import { motion, useReducedMotion } from 'motion/react';
 import { messageBubbleVariants, reducedMotionVariants } from '../../../lib/motionTokens';
@@ -137,6 +137,23 @@ export const MessageBubble = memo(function MessageBubble({
               </div>
             ) : (
               <div className="group/user relative inline-block">
+                {msg.attachments && msg.attachments.length > 0 && (
+                  <div className="flex flex-wrap justify-end gap-1.5 mb-1.5">
+                    {msg.attachments.map(att => (
+                      <a
+                        key={att.id}
+                        href={att.url || `/api/v1/chat/attachments/${att.id}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-200/80 dark:bg-slate-700/80 hover:bg-slate-300 dark:hover:bg-slate-600 rounded-xl text-xs text-slate-800 dark:text-slate-200 transition-colors"
+                      >
+                        <FileText className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+                        <span className="truncate max-w-[140px] font-medium">{att.filename}</span>
+                        {att.size > 0 && <span className="text-[10px] opacity-60">({(att.size / 1024).toFixed(0)}KB)</span>}
+                      </a>
+                    ))}
+                  </div>
+                )}
                 <div className="bg-slate-100 dark:bg-slate-800/90 text-slate-900 dark:text-slate-100 px-4 py-2.5 rounded-3xl rounded-br-lg text-[14.5px] sm:text-[15px] leading-relaxed break-words">
                   {renderHighlightedContent(msg.content.replace('[PLUGIN_RESULT]\n', 'Hasil Fitur: '), searchHighlightQuery)}
                 </div>
@@ -203,11 +220,11 @@ export const MessageBubble = memo(function MessageBubble({
             )}
             
             {/* Plugins / Cards */}
-            {msg.plugin === 'screening' && <div className="mt-3"><ScreeningCard  /></div>}
-            {msg.plugin === 'mood' && <div className="mt-3"><MoodCard  /></div>}
-            {msg.plugin === 'counselors' && <div className="mt-3"><CounselorCard  /></div>}
-            {msg.plugin === 'emergency' && <div className="mt-3"><EmergencyCard  /></div>}
-            {msg.plugin === 'articles' && <div className="mt-3"><ArticlesCard  /></div>}
+            {msg.plugin === 'screening' && <div className="mt-3"><ScreeningCard onAction={() => onOpenPlugin?.('screening')} /></div>}
+            {msg.plugin === 'mood' && <div className="mt-3"><MoodCard /></div>}
+            {msg.plugin === 'counselors' && <div className="mt-3"><CounselorCard onAction={() => onOpenPlugin?.('counselors')} /></div>}
+            {msg.plugin === 'emergency' && <div className="mt-3"><EmergencyCard /></div>}
+            {msg.plugin === 'articles' && <div className="mt-3"><ArticlesCard onAction={() => onOpenPlugin?.('articles')} /></div>}
 
             {/* Subtle Action Toolbar */}
             {!isTyping && msg.content && !msg.error && (

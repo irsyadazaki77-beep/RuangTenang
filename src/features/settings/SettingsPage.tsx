@@ -12,7 +12,7 @@ import { User,
   ChevronLeft
 } from 'lucide-react';
 import { UserSession, SubscriptionTier } from '../../types';
-import { Brain, MessageSquare, Gauge, Cpu, CheckCircle2, History, Calendar, Bell } from 'lucide-react';
+import { Brain, MessageSquare, Gauge, Cpu, CheckCircle2, History, Calendar, Bell, Terminal } from 'lucide-react';
 import { DEFAULT_AI_MODEL_ID, AVAILABLE_AI_MODELS } from '../../lib/aiModels';
 import { safeLocalStorage } from '../../lib/storage';
 import { AiQuotaBadge } from '../../components/AiQuotaBadge';
@@ -117,7 +117,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
       } else {
          throw new Error(resHist.error || 'Gagal memuat riwayat login.');
       }
-    } catch {
+    } catch (err: any) {
       console.warn('Error loading security info:', err);
       setErrorSec(err.message || 'Terjadi kesalahan jaringan.');
     } finally {
@@ -201,7 +201,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
           userTier: data.userTier || safeUser.tier
         });
       }
-    } catch {
+    } catch (err: any) {
       console.warn('Error fetching usage stats in settings:', err);
     }
   }, [safeUser.id, safeUser.tier]);
@@ -226,7 +226,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
       if (response.success) {
         setUserSession({
           ...safeUser,
-          tier: response.user?.tier || selectedTier
+          tier: (response.data as any)?.user?.tier || (response as any).user?.tier || selectedTier
         });
         setSuccessMsg(
           selectedTier === 'Developer'
@@ -239,7 +239,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
       } else {
         setErrorMsg(response.error || 'Gagal mengubah paket.');
       }
-    } catch {
+    } catch (err: any) {
       setErrorMsg(err.response?.data?.error || err.message || 'Koneksi ke server gagal.');
     } finally {
       setLoading(false);

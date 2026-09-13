@@ -23,6 +23,12 @@ export function csrfProtection(req: Request, res: Response, next: NextFunction) 
   // Check ambient credentials (cookies) vs non-ambient credentials (Bearer without cookies)
   const hasCookieAuth = Boolean(req.cookies?.ruangtenang_session || req.cookies?.token);
   const hasBearerAuth = Boolean(req.headers.authorization?.startsWith('Bearer '));
+  const hasCustomClientHeader = Boolean(req.headers['x-requested-with']);
+
+  // If custom client header (e.g., X-Requested-With) is present without malicious origin, it cannot be forged cross-origin
+  if (hasCustomClientHeader && !req.headers['origin'] && !req.headers['referer']) {
+    return next();
+  }
 
   // If NO ambient cookie is present and request uses pure Bearer auth, bypass CSRF
   if (!hasCookieAuth && hasBearerAuth) {

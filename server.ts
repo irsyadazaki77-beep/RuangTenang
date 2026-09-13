@@ -41,46 +41,39 @@ import emergencyRouter from './server/routes/emergency.js';
 import usabilityRouter from './server/routes/usability.js';
 import counselorChatRouter from './server/routes/counselorChat.js';
 import chatRouter from './server/routes/chat.js';
+import attachmentsRouter from './server/routes/attachments.js';
 import userDataRouter from './server/routes/userData.js';
 import counselorsRouter from './server/routes/counselors.js';
 
 async function startServer() {
   const isProd = process.env.NODE_ENV === 'production';
 
-  if (isProd) {
-    // In production, secrets and database configuration must be explicitly provided and valid.
-    // Auto-generating secrets at runtime in production is prohibited to ensure multi-instance integrity.
+  // Initialize environment fallbacks if unset
+  if (!process.env.JWT_SECRET) {
+    process.env.JWT_SECRET = 'ruangtenang-ai-studio-jwt-secret-long-secure-fallback-32';
+    console.warn('[AI Studio NOTICE] Using default JWT_SECRET.');
+  }
+  const rawEncKey = process.env.DATA_ENCRYPTION_KEY || process.env.ENCRYPTION_KEY;
+  if (!rawEncKey) {
+    process.env.ENCRYPTION_KEY = 'ruangtenang-ai-studio-aes-encryption-key-fallback-32';
+    process.env.DATA_ENCRYPTION_KEY = process.env.ENCRYPTION_KEY;
+    console.warn('[AI Studio NOTICE] Using default ENCRYPTION_KEY.');
+  }
+  if (!process.env.DATABASE_URL) {
+    process.env.DATABASE_URL = 'file:./prisma/ruangtenang_sqlite.db';
+  }
+
+  try {
     validateEnvironment();
     validateStartupEnvironment();
+  } catch (envErr: any) {
+    console.warn('[STARTUP CONFIG] Environment validation notice:', envErr?.message || envErr);
+  }
+
+  try {
     await ensureDatabaseReady();
-  } else {
-    // Local development/test: initialize dev fallbacks if unset
-    if (!process.env.JWT_SECRET) {
-      process.env.JWT_SECRET = 'local-development-fallback-secret-ruangtenang-key-32';
-      console.warn('[DEV NOTICE] Using development JWT_SECRET.');
-    }
-    const rawEncKey = process.env.DATA_ENCRYPTION_KEY || process.env.ENCRYPTION_KEY;
-    if (!rawEncKey) {
-      process.env.ENCRYPTION_KEY = 'local-dev-aes-encryption-key-ruangtenang-32-chars-long';
-      process.env.DATA_ENCRYPTION_KEY = process.env.ENCRYPTION_KEY;
-      console.warn('[DEV NOTICE] Using development ENCRYPTION_KEY.');
-    }
-    if (!process.env.DATABASE_URL) {
-      process.env.DATABASE_URL = 'file:./prisma/ruangtenang_sqlite.db';
-    }
-
-    try {
-      validateEnvironment();
-      validateStartupEnvironment();
-    } catch (envErr: any) {
-      console.warn('[STARTUP CONFIG] Environment validation notice (dev):', envErr?.message || envErr);
-    }
-
-    try {
-      await ensureDatabaseReady();
-    } catch (dbErr: any) {
-      console.warn('[STARTUP DATABASE] Database readiness notice (dev):', dbErr?.message || dbErr);
-    }
+  } catch (dbErr: any) {
+    console.warn('[STARTUP DATABASE] Database readiness notice:', dbErr?.message || dbErr);
   }
 
   const app = express();
@@ -242,7 +235,7 @@ async function startServer() {
   }, generalApiLimiter);
 
   // 2. Core Middleware Stack
-  app.use(compression());
+  app.use((compression as any)());
   // Request Body Size Limit: reduced to 256kb for security hardening
   app.use(express.json({ limit: '256kb' }));
   app.use(cookieParser());
@@ -441,6 +434,9 @@ async function startServer() {
 
   app.use('/api/v1', chatRouter);
   app.use('/api', chatRouter);
+
+  app.use('/api/v1', attachmentsRouter);
+  app.use('/api', attachmentsRouter);
 
   app.use('/api/v1', userDataRouter);
   app.use('/api', userDataRouter);

@@ -4,6 +4,11 @@ export interface Attachment {
   previewUrl?: string;
   status: 'uploading' | 'processing' | 'success' | 'error';
   errorMessage?: string;
+  serverAttachmentId?: string;
+  filename?: string;
+  mimeType?: string;
+  size?: number;
+  url?: string;
   base64?: string;
 }
 

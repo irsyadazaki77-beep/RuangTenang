@@ -66,10 +66,10 @@ export class ConsentService {
    */
   async canUseAI(userId: string): Promise<boolean> {
     if (!userId || userId === 'guest') {
-      return true; // Allow guest/empty sessions to use Gemini AI
+      return false;
     }
     const c = await this.getUserConsents(userId);
-    return c.consentForAI !== false;
+    return Boolean(c.consentForAI);
   }
 
   /**
@@ -274,16 +274,16 @@ export class ConsentService {
   private getDefaultConsents(userId: string): UserConsentDTO {
     return {
       userId,
-      consentForAI: true,
-      consentForAIMood: true,
-      consentForAIScreening: true,
-      consentForAIMemory: true,
-      consentForAIJournal: true,
-      consentForEmergencySOS: true,
+      consentForAI: false,
+      consentForAIMood: false,
+      consentForAIScreening: false,
+      consentForAIMemory: false,
+      consentForAIJournal: false,
+      consentForEmergencySOS: false,
       consentForCounselorSummary: false,
       consentForCounselorSharing: false,
-      consentForTelemetry: true,
-      consentForAnalytics: true,
+      consentForTelemetry: false,
+      consentForAnalytics: false,
       consentVersion: 'v1.3-2026',
       policyVersion: 'v2.0-PDP-2026',
       retentionDays: 90,

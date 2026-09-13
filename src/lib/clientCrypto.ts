@@ -34,7 +34,7 @@ function openKeyDB(): Promise<IDBDatabase> {
       };
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
-    } catch {
+    } catch (e) {
       reject(e);
     }
   });
@@ -153,7 +153,7 @@ async function getEncryptionKey(): Promise<CryptoKey | null> {
 
     cachedCryptoKey = derivedKey;
     return derivedKey;
-  } catch (_err: any) {
+  } catch (err: any) {
     console.warn('SubtleCrypto deriveKey failed:', err);
     return null;
   }

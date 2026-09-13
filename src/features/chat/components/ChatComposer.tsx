@@ -108,16 +108,42 @@ export function ChatComposer({ onSend, isTyping, onStop, chatId, onCommand, onOp
         previewUrl: isImage ? URL.createObjectURL(file) : undefined
       };
 
-      // Read as base64
-      const reader = new FileReader();
-      reader.onload = () => {
-        const base64 = reader.result as string;
-        setAttachments(prev => prev.map(a => a.id === id ? { ...a, status: 'success', base64 } : a));
-      };
-      reader.onerror = () => {
-        setAttachments(prev => prev.map(a => a.id === id ? { ...a, status: 'error', errorMessage: 'Gagal membaca file' } : a));
-      };
-      reader.readAsDataURL(file);
+      // Upload via FormData multipart endpoint
+      const formData = new FormData();
+      formData.append('files', file);
+
+      const headers: Record<string, string> = {};
+      const token = localStorage.getItem('token');
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      fetch('/api/v1/chat/attachments/upload', {
+        method: 'POST',
+        headers,
+        body: formData
+      })
+      .then(async res => {
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          const errMsg = data.message || data.error?.message || 'Gagal mengunggah file';
+          setAttachments(prev => prev.map(a => a.id === id ? { ...a, status: 'error', errorMessage: errMsg } : a));
+          return;
+        }
+        const uploadedAtt = data.attachment || (data.attachments && data.attachments[0]);
+        setAttachments(prev => prev.map(a => a.id === id ? {
+          ...a,
+          status: 'success',
+          serverAttachmentId: uploadedAtt.id,
+          filename: uploadedAtt.filename,
+          mimeType: uploadedAtt.mimeType,
+          size: uploadedAtt.size,
+          url: uploadedAtt.url
+        } : a));
+      })
+      .catch(() => {
+        setAttachments(prev => prev.map(a => a.id === id ? { ...a, status: 'error', errorMessage: 'Gagal terhubung ke server' } : a));
+      });
 
       return newAttachment;
     });
@@ -162,7 +188,12 @@ export function ChatComposer({ onSend, isTyping, onStop, chatId, onCommand, onOp
       return;
     }
     
-    onSend(input, undefined, attachments.filter(a => a.status === 'success'));
+    const validAttachments = attachments.filter(a => a.status === 'success');
+    if (validAttachments.length > 0) {
+      onSend(input, undefined, validAttachments);
+    } else {
+      onSend(input);
+    }
     setAttachments([]);
     setInput('');
     safeLocalStorage.removeItem(`draft_${chatId || 'new'}`);

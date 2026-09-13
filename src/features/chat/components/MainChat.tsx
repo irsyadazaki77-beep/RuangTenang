@@ -305,7 +305,18 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
     
     const tempId = `msg_${Date.now()}`;
     if (!pluginResult) {
-      setMessages(prev => [...prev, { id: tempId, role: 'user', content, attachments: attachments ? attachments.map(a => ({ id: a.id, filename: a.file.name, mimeType: a.file.type, size: a.file.size, data: a.base64 })) : undefined }]);
+      setMessages(prev => [...prev, {
+        id: tempId,
+        role: 'user',
+        content,
+        attachments: attachments ? attachments.map(a => ({
+          id: a.serverAttachmentId || a.id,
+          filename: a.filename || a.file?.name || 'attachment.bin',
+          mimeType: a.mimeType || a.file?.type || 'application/octet-stream',
+          size: a.size || a.file?.size || 0,
+          url: a.url || `/api/v1/chat/attachments/${a.serverAttachmentId || a.id}`
+        })) : undefined
+      }]);
     }
     
     setFollowUps([]);
@@ -321,7 +332,13 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
         chatMode,
         responseStyle,
         aiModel,
-        attachments: attachments ? attachments.map(a => ({ filename: a.file.name, mimeType: a.file.type, size: a.file.size, base64: a.base64 })) : undefined
+        attachments: attachments ? attachments.map(a => ({
+          id: a.serverAttachmentId || a.id,
+          filename: a.filename || a.file?.name || 'attachment.bin',
+          mimeType: a.mimeType || a.file?.type || 'application/octet-stream',
+          size: a.size || a.file?.size || 0,
+          url: a.url || `/api/v1/chat/attachments/${a.serverAttachmentId || a.id}`
+        })) : undefined
       },
       {
         onMessageStart: (msgId) => {

@@ -1,7 +1,7 @@
 import React from 'react';
 import { BookOpen } from 'lucide-react';
 
-export default function ArticlesCard({ onAction }: { onAction: () => void }) {
+export default function ArticlesCard({ onAction }: { onAction?: () => void }) {
   return (
     <div className="surface-card rounded-xl p-4 shadow-sm">
       <div className="flex items-start gap-3">

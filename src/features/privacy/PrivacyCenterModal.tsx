@@ -164,7 +164,7 @@ export const PrivacyCenterModal: React.FC<PrivacyCenterModalProps> = ({
       if (resErasure.success && resErasure.data) {
         setErasureStatus(resErasure.data.erasureRecord || null);
       }
-    } catch {
+    } catch (err: any) {
       console.error('Gagal memuat data privasi:', err);
       setInitError(err.message || 'Terjadi kesalahan jaringan.');
     } finally {

@@ -5,6 +5,32 @@ interface CacheEntry {
   expiresAt: number | null;
 }
 
+function isValidRedisUrl(url: string | undefined): boolean {
+  if (!url || typeof url !== 'string') return false;
+  const trimmed = url.trim().toLowerCase();
+  return trimmed.startsWith('redis://') || trimmed.startsWith('rediss://');
+}
+
+function isValidRedisHost(host: string | undefined): boolean {
+  if (!host || typeof host !== 'string') return false;
+  const trimmed = host.trim().toLowerCase();
+  if (
+    trimmed.length < 3 ||
+    trimmed === 'admin123' ||
+    trimmed === 'none' ||
+    trimmed === 'null' ||
+    trimmed === 'undefined' ||
+    trimmed === 'false' ||
+    trimmed === 'true' ||
+    trimmed.includes(' ') ||
+    trimmed.includes(':') ||
+    trimmed.includes('/')
+  ) {
+    return false;
+  }
+  return true;
+}
+
 export class RedisService {
   private client: Redis | null = null;
   private isConnected: boolean = false;
@@ -16,11 +42,14 @@ export class RedisService {
   }
 
   private initRedis() {
-    const redisUrl = process.env.REDIS_URL;
-    const redisHost = process.env.REDIS_HOST;
+    const rawUrl = process.env.REDIS_URL;
+    const rawHost = process.env.REDIS_HOST;
 
-    if (!redisUrl && !redisHost && process.env.NODE_ENV === 'test') {
-      // In test mode without explicit Redis env, default to in-memory fallback
+    const redisUrl = isValidRedisUrl(rawUrl) ? rawUrl!.trim() : undefined;
+    const redisHost = !redisUrl && isValidRedisHost(rawHost) ? rawHost!.trim() : undefined;
+
+    if (!redisUrl && !redisHost && (process.env.NODE_ENV === 'test' || !process.env.USE_REDIS)) {
+      // In-memory fallback mode (standard container/test setup)
       return;
     }
 
@@ -29,9 +58,10 @@ export class RedisService {
         maxRetriesPerRequest: 1,
         enableOfflineQueue: false,
         connectTimeout: 2000,
+        lazyConnect: true,
         retryStrategy: (times: number) => {
-          if (times > 3) return null; // Stop retrying after 3 attempts
-          return Math.min(times * 200, 1000);
+          if (times > 1) return null; // Stop retrying after 1 failed attempt
+          return null;
         },
       };
 
@@ -57,25 +87,45 @@ export class RedisService {
           this.isConnected = true;
         });
 
-        this.client.on('error', (err) => {
+        this.client.on('error', (err: any) => {
           this.isConnected = false;
-          this.logWarnOnce(`[REDIS] Client connection error: ${err.message}`);
+          // Gracefully disconnect client on host/resolution failure to prevent recurring DNS queries
+          if (this.client) {
+            try {
+              this.client.disconnect(false);
+            } catch (_) {}
+            this.client = null;
+          }
+          this.logWarnOnce(`[REDIS] External Redis host not reachable (${err?.message || 'unknown'}). Operating with in-memory fallback.`);
         });
 
         this.client.on('close', () => {
           this.isConnected = false;
         });
+
+        // Trigger connection check asynchronously
+        this.client.connect().catch((err: any) => {
+          this.isConnected = false;
+          if (this.client) {
+            try {
+              this.client.disconnect(false);
+            } catch (_) {}
+            this.client = null;
+          }
+          this.logWarnOnce(`[REDIS] Initial connection attempt: ${err?.message || 'failed'}. Using in-memory fallback.`);
+        });
       }
     } catch (err: any) {
       this.isConnected = false;
-      this.logWarnOnce(`[REDIS] Failed to initialize Redis client: ${err.message}`);
+      this.client = null;
+      this.logWarnOnce(`[REDIS] Notice initializing Redis: ${err?.message || err}. Using in-memory fallback.`);
     }
   }
 
   private logWarnOnce(msg: string) {
     const now = Date.now();
     if (now - this.lastWarnTimestamp > 30000) {
-      console.warn(msg);
+      console.info(msg);
       this.lastWarnTimestamp = now;
     }
   }

@@ -19,6 +19,7 @@ import { validateAndSanitizeToolCall } from '../services/ai/aiToolSchemas.js';
 import { ChatController } from '../controllers/chatController.js';
 import { DEFAULT_AI_MODEL } from '../config/aiConfig.js';
 import { aiMetricsService } from '../services/ai/aiMetricsService.js';
+import { attachmentStorageService } from '../services/attachmentStorageService.js';
 
 const router = Router();
 
@@ -351,21 +352,54 @@ router.post('/chat/stream', optionalAuth, aiAbuseLimiter, async (req: Request, r
           
           
           if (attachments && Array.isArray(attachments) && attachments.length > 0) {
+            if (attachments.length > 3) {
+              await rollbackUserAiQuota(userId, clientIp);
+              return sendError(res, 'TOO_MANY_FILES', 'Maksimal 3 lampiran diperbolehkan per pesan', 400);
+            }
+
             for (const att of attachments) {
               try {
-                await prisma.attachments.create({
-                  data: {
-                    id: `att_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-                    messageId: msgResult.id,
-                    chatId: currentChatId,
-                    userId: userId,
-                    filename: att.filename.substring(0, 255),
-                    mimeType: att.mimeType.substring(0, 100),
-                    size: att.size || 0,
-                    data: att.base64 || ''
+                const attId = typeof att === 'string' ? att : att?.id;
+                if (attId) {
+                  // Verify IDOR ownership and link messageId and chatId
+                  const result = await attachmentStorageService.getAttachmentForUser(attId, userId || 'guest');
+                  if (result) {
+                    await prisma.attachments.update({
+                      where: { id: attId },
+                      data: {
+                        messageId: msgResult.id,
+                        chatId: currentChatId
+                      }
+                    });
                   }
-                });
-              } catch (e) { console.error('Failed to save attachment', e); }
+                } else if (att.base64) {
+                  // Backward compatibility for direct base64 uploads (validates mime, magic bytes, size & saves to disk)
+                  const base64Clean = att.base64.includes(',') ? att.base64.split(',')[1] : att.base64;
+                  const buffer = Buffer.from(base64Clean, 'base64');
+                  await attachmentStorageService.saveAttachment({
+                    userId: userId || 'guest',
+                    buffer,
+                    originalFilename: att.filename || 'attachment.bin',
+                    clientMime: att.mimeType || 'application/octet-stream',
+                    chatId: currentChatId,
+                    messageId: msgResult.id
+                  });
+                }
+              } catch (e: any) {
+                console.error('[ATTACHMENT_PROCESS_ERROR]', e.message);
+                if (e.message.includes('UNAUTHORIZED_ACCESS')) {
+                  await rollbackUserAiQuota(userId, clientIp);
+                  return sendError(res, 'UNAUTHORIZED_ACCESS', 'Anda tidak memiliki akses ke berkas lampiran ini', 403);
+                }
+                if (e.message.includes('PROMPT_INJECTION')) {
+                  await rollbackUserAiQuota(userId, clientIp);
+                  return sendError(res, 'PROMPT_INJECTION_IN_ATTACHMENT', 'Terdeteksi upaya prompt injection dalam lampiran', 400);
+                }
+                if (e.message.includes('FILE_TOO_LARGE') || e.message.includes('INVALID_FILE') || e.message.includes('EXTENSION_MIMETYPE_MISMATCH')) {
+                  await rollbackUserAiQuota(userId, clientIp);
+                  return sendError(res, 'INVALID_ATTACHMENT', e.message, 400);
+                }
+              }
             }
           }
           
@@ -384,7 +418,7 @@ router.post('/chat/stream', optionalAuth, aiAbuseLimiter, async (req: Request, r
             }
           });
         }
-      } catch (dbErr) {
+      } catch (dbErr: any) {
         console.warn(`[CHAT_DB_WARNING] Database write failed, falling back to temporary mode: ${dbErr.message}`);
         activeIsTemporary = true;
       }
@@ -412,17 +446,26 @@ router.post('/chat/stream', optionalAuth, aiAbuseLimiter, async (req: Request, r
             
             const parts: any[] = [{ text: decryptedContent }];
             if (msg.attachments && msg.attachments.length > 0) {
-              msg.attachments.forEach(att => {
-                if (att.data) {
-                  const base64Data = att.data.includes(',') ? att.data.split(',')[1] : att.data;
-                  parts.push({
-                    inlineData: {
-                      data: base64Data,
-                      mimeType: att.mimeType
+              for (const att of msg.attachments) {
+                try {
+                  const res = await attachmentStorageService.getAttachmentForUser(att.id, userId || 'guest');
+                  if (res) {
+                    if (att.mimeType === 'text/plain' || att.mimeType === 'text/markdown') {
+                      const text = res.buffer.toString('utf8');
+                      parts.push({ text: `[LAMPIRAN TEKS: ${att.filename}]\n${text}` });
+                    } else {
+                      parts.push({
+                        inlineData: {
+                          data: res.base64,
+                          mimeType: att.mimeType
+                        }
+                      });
                     }
-                  });
+                  }
+                } catch (err: any) {
+                  console.warn(`[ATTACHMENT_READ_WARN] Could not read attachment ${att.id}:`, err.message);
                 }
-              });
+              }
             }
             messagesToSend.push({ role: msg.role === 'assistant' ? 'model' : 'user', parts });
 
@@ -431,8 +474,50 @@ router.post('/chat/stream', optionalAuth, aiAbuseLimiter, async (req: Request, r
       } catch (e) {
         const parts: any[] = [{ text: pluginResult ? `[PLUGIN_RESULT]\n${pluginResult}` : cleanMessage }];
         if (attachments && Array.isArray(attachments) && attachments.length > 0) {
-          attachments.forEach(att => {
-            if (att.base64) {
+          for (const att of attachments) {
+            try {
+              const attId = typeof att === 'string' ? att : att?.id;
+              if (attId) {
+                const res = await attachmentStorageService.getAttachmentForUser(attId, userId || 'guest');
+                if (res) {
+                  parts.push({
+                    inlineData: {
+                      data: res.base64,
+                      mimeType: res.attachment.mimeType
+                    }
+                  });
+                }
+              } else if (att.base64) {
+                const base64Data = att.base64.includes(',') ? att.base64.split(',')[1] : att.base64;
+                parts.push({
+                  inlineData: {
+                    data: base64Data,
+                    mimeType: att.mimeType
+                  }
+                });
+              }
+            } catch (err) {}
+          }
+        }
+        messagesToSend.push({ role: 'user', parts });
+      }
+    } else {
+      const parts: any[] = [{ text: pluginResult ? `[PLUGIN_RESULT]\n${pluginResult}` : cleanMessage }];
+      if (attachments && Array.isArray(attachments) && attachments.length > 0) {
+        for (const att of attachments) {
+          try {
+            const attId = typeof att === 'string' ? att : att?.id;
+            if (attId) {
+              const res = await attachmentStorageService.getAttachmentForUser(attId, userId || 'guest');
+              if (res) {
+                parts.push({
+                  inlineData: {
+                    data: res.base64,
+                    mimeType: res.attachment.mimeType
+                  }
+                });
+              }
+            } else if (att.base64) {
               const base64Data = att.base64.includes(',') ? att.base64.split(',')[1] : att.base64;
               parts.push({
                 inlineData: {
@@ -441,24 +526,8 @@ router.post('/chat/stream', optionalAuth, aiAbuseLimiter, async (req: Request, r
                 }
               });
             }
-          });
+          } catch (err) {}
         }
-        messagesToSend.push({ role: 'user', parts });
-      }
-    } else {
-      const parts: any[] = [{ text: pluginResult ? `[PLUGIN_RESULT]\n${pluginResult}` : cleanMessage }];
-      if (attachments && Array.isArray(attachments) && attachments.length > 0) {
-        attachments.forEach(att => {
-          if (att.base64) {
-            const base64Data = att.base64.includes(',') ? att.base64.split(',')[1] : att.base64;
-            parts.push({
-              inlineData: {
-                data: base64Data,
-                mimeType: att.mimeType
-              }
-            });
-          }
-        });
       }
       messagesToSend.push({ role: 'user', parts });
     }

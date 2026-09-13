@@ -18,10 +18,12 @@ export function resolveDatabaseConfiguration(): DatabaseConfiguration {
   const hasPostgresUrl = dbUrl.startsWith('postgresql://') || dbUrl.startsWith('postgres://');
   const explicitProvider = (process.env.DB_PROVIDER || '').toLowerCase().trim();
 
-  // Production requires PostgreSQL and must not fall back to SQLite
   if (isProduction) {
+    if (!dbUrl) {
+      throw new Error('Production database requires PostgreSQL: DATABASE_URL is missing.');
+    }
     if (!hasPostgresUrl) {
-      throw new Error('FATAL DATABASE ERROR: Production database requires PostgreSQL. DATABASE_URL must start with postgresql:// or postgres://. Fallback to SQLite is prohibited in production.');
+      throw new Error('Production database requires PostgreSQL. Fallback to SQLite is prohibited in production.');
     }
   }
 

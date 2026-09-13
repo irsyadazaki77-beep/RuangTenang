@@ -146,6 +146,21 @@ export const aiRequestService = {
 
     const sanitizedPrompt = scanAndSanitizePII(prompt).sanitizedText;
     
+    const userParts: any[] = [{ text: sanitizedPrompt }];
+    if (attachments && attachments.length > 0) {
+      attachments.forEach(att => {
+        if (att.base64) {
+          const base64Data = att.base64.includes(',') ? att.base64.split(',')[1] : att.base64;
+          userParts.push({
+            inlineData: {
+              data: base64Data,
+              mimeType: att.mimeType
+            }
+          });
+        }
+      });
+    }
+    
     const sanitizedHistory = history.slice(-10).map(h => ({
       ...h,
       parts: (h.parts || []).map(p => {
