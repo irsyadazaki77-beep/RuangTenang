@@ -45,6 +45,18 @@ export const aiMetricsService = {
     if (metricsBuffer.length > MAX_BUFFER_SIZE) {
       metricsBuffer.shift();
     }
+    console.info(JSON.stringify({
+      level: "info",
+      event: "AI_REQUEST_METRIC",
+      timestamp: fullMetric.timestamp,
+      ttfbMs: fullMetric.ttfbMs,
+      totalLatencyMs: fullMetric.totalLatencyMs,
+      modelUsed: fullMetric.modelUsed,
+      aborted: fullMetric.aborted,
+      isFallback: fullMetric.isFallback,
+      inputTokens: fullMetric.estimatedInputTokens,
+      outputTokens: fullMetric.estimatedOutputTokens
+    }));
   },
 
   getMetricsSummary(): MetricsSummary {

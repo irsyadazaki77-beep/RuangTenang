@@ -56,7 +56,7 @@ export function scanAndSanitizePII(input: string): PiiScanResult {
   applyRedaction(NIM_REGEX, 'nim', '[NIM_TERSEMBUNYI]');
 
   // 6. Detailed Address Redaction
-  const ADDRESS_REGEX = /\b(?:Jl\.|Jalan|Gg\.|Gang|Komplek|RT\s*\d+|RW\s*\d+|Kec\.|Kab\.|Kel\.|Desa|Kota|Provinsi)\s+[A-Za-z0-9\s.-]+?\b(?=,|$|\s+password|\s+credential|\s+NIM|\s+NIK)/gi;
+  const ADDRESS_REGEX = /\b(?:Jl\.|Jalan|Gg\.|Gang|Komplek|RT\s*\d+|RW\s*\d+|Kec\.|Kab\.|Kel\.|Desa|Kota|Provinsi)\s+[A-Za-z0-9\s.-]+?\b(?=,|$|\.|\s+password|\s+credential|\s+NIM|\s+NIK)/gi;
   applyRedaction(ADDRESS_REGEX, 'address', '[ALAMAT_TERSEMBUNYI]');
 
   // 7. Social Media Handles Redaction

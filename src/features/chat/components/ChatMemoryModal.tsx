@@ -27,6 +27,8 @@ export function ChatMemoryModal({
 }: ChatMemoryModalProps) {
   const { showToast } = useToast();
   const [memories, setMemories] = useState<MemoryItem[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [loading, setLoading] = useState(false);
   const [newContent, setNewContent] = useState('');
   const [isAdding, setIsAdding] = useState(false);
@@ -38,17 +40,40 @@ export function ChatMemoryModal({
     }
   }, [isOpen]);
 
-  const fetchMemories = async () => {
-    setLoading(true);
+  const fetchMemories = async (cursor?: string) => {
+    if (!cursor) {
+      setLoading(true);
+    } else {
+      setLoadingMore(true);
+    }
     try {
-      const res = await apiClient.get<{ success: boolean; memories: MemoryItem[] }>('/api/chat/user-memories');
+      let url = '/api/chat/user-memories?limit=20';
+      if (cursor) url += `&offset=${cursor}`;
+      const res = await apiClient.get<{ success: boolean; memories: MemoryItem[]; nextCursor?: string }>(url);
       if (res.success && res.data?.memories) {
-        setMemories(res.data.memories);
+        if (cursor) {
+          setMemories(prev => {
+             const combined = [...prev, ...(res.data?.memories || [])];
+             const seen = new Set();
+             return combined.filter(b => {
+                if (seen.has(b.id)) return false;
+                seen.add(b.id);
+                return true;
+             });
+          });
+        } else {
+          setMemories(res.data.memories);
+        }
+        setNextCursor(res.data.nextCursor || null);
       }
     } catch {
       showToast('Gagal memuat daftar memori', 'error');
     } finally {
-      setLoading(false);
+      if (!cursor) {
+        setLoading(false);
+      } else {
+        setLoadingMore(false);
+      }
     }
   };
 
@@ -198,7 +223,7 @@ export function ChatMemoryModal({
           <div className="flex items-center justify-between text-xs font-semibold text-slate-800 dark:text-slate-200">
             <span>Memori yang Tersimpan ({memories.length})</span>
             <button
-              onClick={fetchMemories}
+              onClick={() => fetchMemories()}
               disabled={loading}
               className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer p-0.5"
             >
@@ -234,6 +259,17 @@ export function ChatMemoryModal({
                   </button>
                 </div>
               ))}
+              {nextCursor && (
+                <div className="pt-4 flex justify-center pb-2">
+                  <button
+                    onClick={() => fetchMemories(nextCursor)}
+                    disabled={loadingMore}
+                    className="text-xs text-teal-600 hover:text-teal-700 disabled:opacity-50 cursor-pointer"
+                  >
+                    {loadingMore ? "Memuat..." : "Tampilkan Lebih Banyak"}
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>

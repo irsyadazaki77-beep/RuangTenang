@@ -42,6 +42,13 @@ const BENIGN_METAPHOR_PATTERNS = [
 // Direct acute crisis indicators (including slang, implicit phrasing, and English)
 const ACUTE_CRISIS_KEYWORDS = [
   'bunuh diri',
+  'bundir',
+  'unlife',
+  'gantung diri',
+  'lompat dari gedung',
+  'potong nadi',
+  'sayat tangan',
+  'minum racun',
   'ingin mati',
   'mau mati',
   'pengen mati',
@@ -54,14 +61,10 @@ const ACUTE_CRISIS_KEYWORDS = [
   'ga sanggup lg hidup',
   'tak sanggup hidup',
   'menyakiti diri',
-  'potong nadi',
   'self harm',
   'self-harm',
   'akhiri hidup',
   'mengakhiri hidup',
-  'minum racun',
-  'gantung diri',
-  'lompat dari',
   'lebih baik mati',
   'lebih baik aku tidak ada lagi di dunia ini',
   'lebih baik aku gak ada lagi',
@@ -84,20 +87,28 @@ const ACUTE_CRISIS_KEYWORDS = [
   'suicide'
 ];
 
-// High distress keywords (anxiety, depression, academic overload)
+// High distress keywords (anxiety, depression, academic overload, Indonesian slang)
 const HIGH_DISTRESS_KEYWORDS = [
   'depresi berat',
+  'depresot',
   'anxiety parah',
+  'anxiety bgt',
   'serangan panik',
   'panic attack',
   'menangis terus',
+  'nangis terus',
+  'nangis kejer',
   'tidak bisa tidur',
   'insomnia parah',
   'trauma',
   'sangat kesepian',
+  'kesepian bgt',
+  'hampa bgt',
   'dibully',
   'diancam',
   'skripsi gagal',
+  'skripsi macet',
+  'dosen killer',
   'dikeluarkan kampus',
   'drop out',
   'gak kuat lagi',
@@ -330,6 +341,104 @@ export function analyzeMessageSentiment(text: string): CrisisAnalysisResult {
     reasoning: 'Pesan tidak mengandung kata kunci krisis atau stres tinggi yang terdeteksi.',
     recommendedAction: 'Lanjutkan obrolan suportif reguler dengan empati hangat.'
   };
+}
+
+/**
+ * Advanced multi-turn sentiment analysis
+ */
+export function analyzeMultiTurnSentiment(
+  text: string,
+  history?: Array<{ role: 'user' | 'model' | 'assistant'; parts: { text: string }[] }>
+): CrisisAnalysisResult {
+  const currentResult = analyzeMessageSentiment(text);
+
+  if (!history || history.length === 0) {
+    return currentResult;
+  }
+
+  // Extract previous user messages (up to last 3 user messages)
+  const previousUserMessages: string[] = [];
+  for (let i = history.length - 1; i >= 0; i--) {
+    const h = history[i];
+    const isUser = h.role === 'user';
+    if (isUser && h.parts && h.parts[0]?.text) {
+      previousUserMessages.unshift(h.parts[0].text);
+      if (previousUserMessages.length >= 3) {
+        break;
+      }
+    }
+  }
+
+  if (previousUserMessages.length === 0) {
+    return currentResult;
+  }
+
+  // Count how many previous user messages contain distress and crisis
+  let previousDistressCount = 0;
+  let previousCrisisCount = 0;
+
+  for (const prevText of previousUserMessages) {
+    const prevResult = analyzeMessageSentiment(prevText);
+    if (prevResult.severity === 'crisis' && !prevResult.isNegated) {
+      previousCrisisCount++;
+    } else if (prevResult.severity === 'distress') {
+      previousDistressCount++;
+    }
+  }
+
+  // Sub-acute/implicit crisis indicators that indicate emergency when preceded by distress
+  const SUB_ACUTE_TRIGGERS = [
+    'pengen tidur selamanya',
+    'pengen tidur aja dan ga usah bangun lagi',
+    'pengen hilang',
+    'pengen udahan dari dunia',
+    'capek hidup',
+    'tidak ada harapan lagi',
+    'dunia lebih baik tanpa aku',
+    'dunia tanpa saya',
+    'lebih baik aku tidak ada lagi',
+    'lebih baik aku gak ada lagi',
+    'apa rasanya kalau aku hilang aja',
+    'ngapain hidup kalau cuma jadi beban',
+    'tidur panjang dan tidak pernah bangun',
+    'tidur selamanya',
+    'gak kuat lagi',
+    'tidak kuat lagi',
+    'menyerah saja'
+  ];
+
+  const lowerText = text.toLowerCase();
+  const hasSubAcuteTrigger = SUB_ACUTE_TRIGGERS.some(trigger => lowerText.includes(trigger));
+
+  // If the current message has a sub-acute trigger AND there is a history of distress/crisis in previous turns:
+  if (hasSubAcuteTrigger && (previousDistressCount >= 1 || previousCrisisCount >= 1)) {
+    return {
+      severity: 'crisis',
+      detectedTriggers: [...currentResult.detectedTriggers, 'multi-turn-escalation'],
+      isNegated: false,
+      requiresDirectSafetyQuestion: true,
+      escalationPath: 'human_escalation',
+      confidenceScore: 0.95,
+      reasoning: 'Eskalasi krisis terdeteksi melalui kueri multi-turn. Pengguna menunjukkan tanda distres persisten diikuti keinginan sub-akut untuk mengakhiri situasi/hidup.',
+      recommendedAction: 'Aktifkan Protokol Penanganan Krisis Darurat 24 Jam segera. Tampilkan hotline darurat terverifikasi.'
+    };
+  }
+
+  // If there are 3 consecutive turns of high distress with no recovery sign, escalate to crisis direct check
+  if (currentResult.severity === 'distress' && previousDistressCount >= 2) {
+    return {
+      severity: 'crisis',
+      detectedTriggers: [...currentResult.detectedTriggers, 'persistent-high-distress'],
+      isNegated: false,
+      requiresDirectSafetyQuestion: true,
+      escalationPath: 'direct_safety_check',
+      confidenceScore: 0.90,
+      reasoning: 'Distres emosional tinggi yang persisten selama 3 turn berturut-turut tanpa tanda-tanda resolusi positif.',
+      recommendedAction: 'Lakukan pemeriksaan keselamatan dengan lembut dan tawarkan sumber daya bantuan profesional secara proaktif.'
+    };
+  }
+
+  return currentResult;
 }
 
 /**

@@ -13,7 +13,9 @@ export class ChatController {
   static async getHistory(req: Request, res: Response) {
     try {
       const userId = req.user!.userId;
-      const chats = await ChatService.getUserChats(userId);
+      const limit = parseInt(req.query.limit as string) || 100;
+      const offset = parseInt(req.query.offset as string) || 0;
+      const chats = await ChatService.getUserChats(userId, limit, offset);
       return res.json(chats);
     } catch (e) {
       return res.status(500).json({ success: false, code: 'FETCH_HISTORY_FAILED', message: 'Gagal mengambil riwayat percakapan' });
@@ -128,7 +130,9 @@ export class ChatController {
   static async getBookmarks(req: Request, res: Response) {
     try {
       const userId = req.user!.userId;
-      const bookmarks = await ChatService.getUserBookmarks(userId);
+      const limit = parseInt(req.query.limit as string) || 50;
+      const cursor = req.query.cursor as string | undefined;
+      const bookmarks = await ChatService.getUserBookmarks(userId, limit, cursor);
       return res.json({ success: true, bookmarks });
     } catch (e) {
       return res.status(500).json({ success: false, code: 'FETCH_BOOKMARKS_FAILED', message: 'Gagal mengambil pesan tersimpan' });

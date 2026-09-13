@@ -4,6 +4,7 @@ import { encryptionService } from '../encryptionService.js';
 import { scanAndSanitizePII } from '../piiService.js';
 import { chatSummarizer, ChatMessageItem } from './chatSummarizer.js';
 import { aiMetricsService } from './aiMetricsService.js';
+import { detectPromptInjection } from '../../security.js';
 
 export interface AiContextParams {
   userId: string;
@@ -13,6 +14,7 @@ export interface AiContextParams {
   pluginResult?: string;
   abortSignal?: AbortSignal;
   useMemory?: boolean;
+  isTemporary?: boolean;
 }
 
 export interface BuiltContextResult {
@@ -28,7 +30,7 @@ export const aiContextBuilder = {
    * Builds an optimized, deduplicated, and privacy-sanitized AI context within budget constraints.
    */
   async buildContext(params: AiContextParams): Promise<BuiltContextResult> {
-    const { userId, chatId, fullHistory = [], currentMessage = '', pluginResult = '', abortSignal } = params;
+    const { userId, chatId, fullHistory = [], currentMessage = '', pluginResult = '', abortSignal, isTemporary } = params;
     
     let tokensSavedTotal = 0;
     const consents = await consentService.getUserConsents(userId);
@@ -43,6 +45,11 @@ export const aiContextBuilder = {
         totalContextTokens: 0
       };
     }
+
+    const isTemp = isTemporary === true;
+    const moodConsent = isTemp ? false : consents.consentForAIMood;
+    const screeningConsent = isTemp ? false : consents.consentForAIScreening;
+    const memoryConsent = isTemp ? false : consents.consentForAIMemory;
 
     // 1. Process Chat Summarization for Long History (>8 messages)
     let conversationSummary = '';
@@ -85,7 +92,7 @@ ${conversationSummary}
     }
 
     // 3. Mood Context (Strictly restricted data minimums & volume, with deduplication)
-    if (consents.consentForAIMood) {
+    if (moodConsent) {
       const recentMoods = await prisma.moodLogs.findMany({
         where: { userId },
         orderBy: { timestamp: 'desc' },
@@ -123,7 +130,7 @@ ${moodDesc}
     }
 
     // 4. Screening Context (Strictly restricted data minimums & volume)
-    if (consents.consentForAIScreening) {
+    if (screeningConsent) {
       const recentScreenings = await prisma.screenings.findMany({
         where: { userId },
         orderBy: { timestamp: 'desc' },
@@ -150,7 +157,7 @@ Skor skrining psikologis awal (PHQ-9: ${s.phq9Score}, GAD-7: ${s.gad7Score})
       }
     }
 
-    if (consents.consentForAIMemory && memoryAllowed) {
+    if (memoryConsent && memoryAllowed) {
       // Relevance Scoring for Memory
       const allMemories = await prisma.userMemories.findMany({
         where: { userId, isActive: true },
@@ -189,7 +196,7 @@ Skor skrining psikologis awal (PHQ-9: ${s.phq9Score}, GAD-7: ${s.gad7Score})
           }
 
           safeContent = safeContent.replace(/[\[\]<>]/g, '');
-          if (/ignore|bypass|override|system|instruction/i.test(safeContent)) {
+          if (/ignore|bypass|override|system|instruction/i.test(safeContent) || detectPromptInjection(safeContent)) {
             safeContent = '[Catatan refleksi terlindungi]';
           }
           memoryLines.push('- ' + scanAndSanitizePII(safeContent).sanitizedText);
@@ -210,7 +217,7 @@ ${memoryLines.join('\n')}
       text = scanAndSanitizePII(text).sanitizedText;
       text = text.replace(/[\[\]<>]/g, '');
 
-      if (/ignore|bypass|override|system|instruction/i.test(text)) {
+      if (/ignore|bypass|override|system|instruction/i.test(text) || detectPromptInjection(text)) {
         text = '[REDACTED_UNTRUSTED_HISTORY_INJECTION]';
       }
 

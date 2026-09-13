@@ -1,6 +1,6 @@
 import { getVerifiedEmergencyContacts } from '../../config/emergencyRegistry.js';
 import { scanAndSanitizePII } from '../piiService.js';
-import { analyzeMessageSentiment, CrisisAnalysisResult } from '../../../src/lib/crisisDetector.js';
+import { analyzeMessageSentiment, analyzeMultiTurnSentiment, CrisisAnalysisResult } from '../../../src/lib/crisisDetector.js';
 import { consentService } from '../consentService.js';
 import { aiContextBuilder } from './aiContextBuilder.js';
 
@@ -28,6 +28,7 @@ export interface UnifiedPipelineInput {
   isStreaming: boolean;
   onStreamToken?: (token: string) => void;
   abortSignal?: AbortSignal;
+  isTemporary?: boolean;
 }
 
 export interface UnifiedPipelineOutput {
@@ -76,12 +77,12 @@ export const aiSafetyService = {
     return false;
   },
 
-  detectCrisis(input: string): CrisisDetectionResult {
+  detectCrisis(input: string, history?: any[]): CrisisDetectionResult {
     if (!input) {
       return { isCrisis: false, riskLevel: 'LOW', reasoning: 'Empty input', recommendedAction: 'None' };
     }
 
-    const localResult = analyzeMessageSentiment(input);
+    const localResult = analyzeMultiTurnSentiment(input, history);
     let riskLevel: CrisisRiskLevel = 'LOW';
     
     if (localResult.severity === 'crisis') {
@@ -107,6 +108,7 @@ export const aiSafetyService = {
     // If a metaphor is matched, but there is no acute crisis trigger, demote risk
     if (metaphors.some(m => lowerInput.includes(m)) && 
         !lowerInput.includes('bunuh diri') && 
+        !lowerInput.includes('bundir') && 
         !lowerInput.includes('akhiri hidup') && 
         !lowerInput.includes('gantung diri') && 
         !lowerInput.includes('potong nadi')) {
@@ -144,7 +146,7 @@ Jika kamu merasa aman untuk sementara waktu, kamu dapat menggunakan tombol **SOS
     if (!output) return { isValid: true };
     const lowerOutput = output.toLowerCase();
 
-    // 1. Diagnosis definitif
+    // 1. Diagnosis definitif (Expanded Indonesian and English terms)
     const diagnosisKeywords = [
       'kamu mengalami depresi berat',
       'kamu memiliki gangguan kecemasan',
@@ -157,7 +159,18 @@ Jika kamu merasa aman untuk sementara waktu, kamu dapat menggunakan tombol **SOS
       'kamu menderita depresi',
       'kamu menderita kecemasan',
       'kamu menderita bipolar',
-      'kamu mengidap skizofrenia'
+      'kamu mengidap skizofrenia',
+      'menderita ptsd',
+      'mengidap ptsd',
+      'mengalami ptsd',
+      'menderita gangguan',
+      'mengidap gangguan',
+      'kamu depresi',
+      'kamu ocd',
+      'gangguan kepribadian',
+      'mengalami depresi',
+      'klinis kamu',
+      'kamu didiagnosa'
     ];
     if (diagnosisKeywords.some(kw => lowerOutput.includes(kw))) {
       return { isValid: false, reason: 'DIAGNOSIS_ATTEMPT_DETECTED' };
@@ -173,13 +186,17 @@ Jika kamu merasa aman untuk sementara waktu, kamu dapat menggunakan tombol **SOS
       'sebagai psikolog',
       'sebagai psikiater',
       'saya konselor klinis',
-      'saya psikolog klinis'
+      'saya psikolog klinis',
+      'saya adalah dokter',
+      'saya adalah psikiater',
+      'saya adalah psikoterapis',
+      'saya psikoterapis'
     ];
     if (therapistKeywords.some(kw => lowerOutput.includes(kw))) {
       return { isValid: false, reason: 'CLINICAL_CLAIM_DETECTED' };
     }
 
-    // 3. Rekomendasi menghentikan obat & resep
+    // 3. Rekomendasi menghentikan obat & resep (Expanded clinical compounds)
     const medicationKeywords = [
       'hentikan obatmu',
       'berhenti minum obat',
@@ -193,7 +210,28 @@ Jika kamu merasa aman untuk sementara waktu, kamu dapat menggunakan tombol **SOS
       'resepkan parasetamol',
       'dosis obat',
       'berhenti mengonsumsi obat',
-      'hentikan konsumsi obat'
+      'hentikan konsumsi obat',
+      'xanax',
+      'alprazolam',
+      'sertraline',
+      'fluoxetine',
+      'lexapro',
+      'prozac',
+      'zoloft',
+      'diazepam',
+      'valium',
+      'clonazepam',
+      'rivotril',
+      'resepkan',
+      'resep obat',
+      'resep medis',
+      'obat anti-depresan',
+      'obat antidepresan',
+      'obat penenang',
+      'resepkan parasetamol',
+      'resepkan ibuprofen',
+      'parasetamol',
+      'ibuprofen'
     ];
     if (medicationKeywords.some(kw => lowerOutput.includes(kw))) {
       return { isValid: false, reason: 'MEDICATION_ADVICE_DETECTED' };
@@ -363,6 +401,7 @@ Sesuaikan gaya, nada, dan panjang responsmu berdasarkan Mode Percakapan dan Gaya
         fullHistory: rawHistoryItems,
         currentMessage: redactedInput,
         pluginResult: sanitizedPluginResult,
+        isTemporary: input.isTemporary,
         abortSignal: input.abortSignal
       });
 

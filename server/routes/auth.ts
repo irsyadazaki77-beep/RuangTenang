@@ -257,7 +257,12 @@ router.post('/update-tier', requireAuth, async (req: Request, res: Response) => 
     }
 
     const { targetUserId, tier } = req.body;
-    const userIdToUpdate = targetUserId || req.user.userId;
+    
+    if (!targetUserId) {
+      return res.status(400).json({ error: 'targetUserId wajib diisi.' });
+    }
+
+    const userIdToUpdate = targetUserId;
 
     if (tier !== 'Free' && tier !== 'Pro' && tier !== 'Developer') {
       return res.status(400).json({ error: 'Tier tidak valid. Harus "Free", "Pro", atau "Developer".' });

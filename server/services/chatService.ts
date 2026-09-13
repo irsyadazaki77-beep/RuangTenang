@@ -6,8 +6,8 @@ import { prisma } from '../database.js';
 import { sessionSummaryService, StructuredSessionSummary } from './sessionSummaryService.js';
 
 export class ChatService {
-  static async getUserChats(userId: string) {
-    const chats = await chatRepository.getUserChats(userId);
+  static async getUserChats(userId: string, limit = 100, offset = 0) {
+    const chats = await chatRepository.getUserChats(userId, limit, offset);
     
     // Decrypt titles
     return chats.map(c => ({
@@ -187,8 +187,8 @@ export class ChatService {
   /**
    * Bookmarks management with strict ownership validation
    */
-  static async getUserBookmarks(userId: string) {
-    const rawBookmarks = await chatRepository.getUserBookmarks(userId);
+  static async getUserBookmarks(userId: string, limit = 50, cursor?: string) {
+    const rawBookmarks = await chatRepository.getUserBookmarks(userId, limit, cursor);
     return rawBookmarks.map(b => ({
       id: b.id,
       userId: b.userId,

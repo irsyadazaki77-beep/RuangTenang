@@ -371,6 +371,7 @@ export const authRepository = {
         passwordHash: newPasswordHash,
         passwordResetToken: null,
         passwordResetExpires: null,
+        activeSessions: "[]",
       },
     });
 

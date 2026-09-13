@@ -182,88 +182,8 @@ router.post('/chat/:id/truncate', requireAuth, checkChatOwnership, async (req: R
   }
 });
 
-router.post('/chat/summary', requireAuth, checkChatOwnership, aiAbuseLimiter, async (req: Request, res: Response) => {
-  try {
-    const { chatId, aiModel = DEFAULT_AI_MODEL } = req.body;
-    let history = await prisma.chatMessages.findMany({
-      where: { chatId },
-      orderBy: { createdAt: 'asc' }
-    });
-    history = history.map(m => ({ ...m, content: encryptionService.decryptSensitive(m.content) || m.content }));
-    
-    // Enforce explicit AI consent check before external processing
-    const hasAiConsent = await consentService.canUseAI(req.user!.userId);
-    if (!hasAiConsent) {
-      const localSummary = getLocalFallbackSummary(history);
-      return res.json({ summary: localSummary });
-    }
-
-    try {
-      const chatText = history.map(m => `${m.role}: ${m.content}`).join('\n');
-      const response = await aiRequestService.generateChatResponse({
-        userId: req.user!.userId,
-        prompt: `Buat ringkasan percakapan berikut:\n- Inti pembahasan\n- Perasaan utama pengguna\n- Hal yang sudah dibahas\n- Langkah kecil berikutnya\n\nPercakapan:\n${chatText}`,
-        systemInstruction: 'Anda adalah AI asisten summarization.',
-        requestedModelId: 'gemini-3.1-flash-lite', userTier: 'Free'});
-      if (response.text && !response.isFallback) {
-        return res.json({ summary: response.text });
-      }
-    } catch (err) {
-      console.warn('Gemini summary failed, falling back to local summary:', err);
-    }
-    
-    const localSummary = getLocalFallbackSummary(history);
-    res.json({ summary: localSummary });
-  } catch (e: any) {
-    sendError(res, 'SUMMARY_FAILED', 'Gagal membuat ringkasan percakapan');
-  }
-});
-
-router.post('/chat/followup', requireAuth, checkChatOwnership, aiAbuseLimiter, async (req: Request, res: Response) => {
-  try {
-    const { chatId, aiModel = DEFAULT_AI_MODEL } = req.body;
-    let history = await prisma.chatMessages.findMany({
-      where: { chatId },
-      orderBy: { createdAt: 'asc' },
-      take: -5
-    });
-    history = history.map(m => ({ ...m, content: encryptionService.decryptSensitive(m.content) || m.content }));
-    const lastMessageText = history[history.length - 1]?.content || '';
-    
-    // Enforce explicit AI consent check before external processing
-    const hasAiConsent = await consentService.canUseAI(req.user!.userId);
-    if (!hasAiConsent) {
-      return res.json({ recommendations: getLocalFallbackFollowups(lastMessageText) });
-    }
-
-    try {
-      const chatText = history.map(m => `${m.role}: ${m.content}`).join('\n');
-      const response = await aiRequestService.generateChatResponse({
-        userId: req.user!.userId,
-        prompt: `Berdasarkan 5 pesan terakhir percakapan ini, berikan maksimal 3 rekomendasi pertanyaan lanjutan (follow-up) singkat yang bisa ditanyakan pengguna kepada AI. Balas HANYA dengan JSON array of strings, tanpa markdown. Contoh: ["Bagaimana cara mengatasinya?", "Apa yang harus saya lakukan?"]\n\nPercakapan:\n${chatText}`,
-        systemInstruction: 'Anda adalah AI asisten summarization.',
-        requestedModelId: 'gemini-3.1-flash-lite', userTier: 'Free'});
-      if (response.text && !response.isFallback) {
-        const recommendations = JSON.parse(response.text.replace(/```json\n?|```/g, '').trim() || '[]');
-        if (Array.isArray(recommendations) && recommendations.length > 0) {
-          return res.json({ recommendations: recommendations.slice(0, 3) });
-        }
-      }
-    } catch (err) {
-      console.warn('Gemini followup recommendations failed, falling back to local followups:', err);
-    }
-    
-    const localFollowups = getLocalFallbackFollowups(lastMessageText);
-    res.json({ recommendations: localFollowups });
-  } catch (e: any) {
-    try {
-      const history = await prisma.chatMessages.findMany({ where: { chatId: req.body.chatId }, orderBy: { createdAt: 'asc' }, take: -1 });
-      const lastMessageText = history[0]?.content || '';
-      res.json({ recommendations: getLocalFallbackFollowups(lastMessageText) });
-    } catch (innerErr) {
-      res.json({ recommendations: ['Boleh tolong temani aku mengobrol sejenak?', 'Bagaimana cara meredakan rasa cemas?', 'Apa latihan mindfulness sederhana?'] });
-    }
-  }
+router.post('/chat/summary', requireAuth, checkChatOwnership, aiAbuseLimiter, (req: Request, res: Response) => {
+  return ChatController.generateSummary(req, res);
 });
 
 // Main Streaming Chat Route
@@ -431,7 +351,7 @@ router.post('/chat/stream', optionalAuth, aiAbuseLimiter, async (req: Request, r
         const history = await prisma.chatMessages.findMany({
           where: { chatId: currentChatId },
           orderBy: { createdAt: 'desc' },
-          take: 20,
+          take: 100,
           include: { attachments: true }
         });
         history.reverse();
@@ -451,7 +371,11 @@ router.post('/chat/stream', optionalAuth, aiAbuseLimiter, async (req: Request, r
                   const res = await attachmentStorageService.getAttachmentForUser(att.id, userId || 'guest');
                   if (res) {
                     if (att.mimeType === 'text/plain' || att.mimeType === 'text/markdown') {
-                      const text = res.buffer.toString('utf8');
+                      let text = res.buffer.toString('utf8');
+                      text = scanAndSanitizePII(text).sanitizedText;
+                      if (aiSafetyService.detectPromptInjection(text)) {
+                        text = '[REDACTED_UNTRUSTED_ATTACHMENT_INJECTION]';
+                      }
                       parts.push({ text: `[LAMPIRAN TEKS: ${att.filename}]\n${text}` });
                     } else {
                       parts.push({
@@ -480,21 +404,40 @@ router.post('/chat/stream', optionalAuth, aiAbuseLimiter, async (req: Request, r
               if (attId) {
                 const res = await attachmentStorageService.getAttachmentForUser(attId, userId || 'guest');
                 if (res) {
+                  if (res.attachment.mimeType === 'text/plain' || res.attachment.mimeType === 'text/markdown') {
+                    let text = res.buffer.toString('utf8');
+                    text = scanAndSanitizePII(text).sanitizedText;
+                    if (aiSafetyService.detectPromptInjection(text)) {
+                      text = '[REDACTED_UNTRUSTED_ATTACHMENT_INJECTION]';
+                    }
+                    parts.push({ text: `[LAMPIRAN TEKS: ${res.attachment.filename}]\n${text}` });
+                  } else {
+                    parts.push({
+                      inlineData: {
+                        data: res.base64,
+                        mimeType: res.attachment.mimeType
+                      }
+                    });
+                  }
+                }
+              } else if (att.base64) {
+                if (att.mimeType === 'text/plain' || att.mimeType === 'text/markdown') {
+                  const base64Data = att.base64.includes(',') ? att.base64.split(',')[1] : att.base64;
+                  let text = Buffer.from(base64Data, 'base64').toString('utf8');
+                  text = scanAndSanitizePII(text).sanitizedText;
+                  if (aiSafetyService.detectPromptInjection(text)) {
+                    text = '[REDACTED_UNTRUSTED_ATTACHMENT_INJECTION]';
+                  }
+                  parts.push({ text: `[LAMPIRAN TEKS: ${att.filename || 'attachment.txt'}]\n${text}` });
+                } else {
+                  const base64Data = att.base64.includes(',') ? att.base64.split(',')[1] : att.base64;
                   parts.push({
                     inlineData: {
-                      data: res.base64,
-                      mimeType: res.attachment.mimeType
+                      data: base64Data,
+                      mimeType: att.mimeType
                     }
                   });
                 }
-              } else if (att.base64) {
-                const base64Data = att.base64.includes(',') ? att.base64.split(',')[1] : att.base64;
-                parts.push({
-                  inlineData: {
-                    data: base64Data,
-                    mimeType: att.mimeType
-                  }
-                });
               }
             } catch (err) {}
           }
@@ -510,21 +453,40 @@ router.post('/chat/stream', optionalAuth, aiAbuseLimiter, async (req: Request, r
             if (attId) {
               const res = await attachmentStorageService.getAttachmentForUser(attId, userId || 'guest');
               if (res) {
+                if (res.attachment.mimeType === 'text/plain' || res.attachment.mimeType === 'text/markdown') {
+                  let text = res.buffer.toString('utf8');
+                  text = scanAndSanitizePII(text).sanitizedText;
+                  if (aiSafetyService.detectPromptInjection(text)) {
+                    text = '[REDACTED_UNTRUSTED_ATTACHMENT_INJECTION]';
+                  }
+                  parts.push({ text: `[LAMPIRAN TEKS: ${res.attachment.filename}]\n${text}` });
+                } else {
+                  parts.push({
+                    inlineData: {
+                      data: res.base64,
+                      mimeType: res.attachment.mimeType
+                    }
+                  });
+                }
+              }
+            } else if (att.base64) {
+              if (att.mimeType === 'text/plain' || att.mimeType === 'text/markdown') {
+                const base64Data = att.base64.includes(',') ? att.base64.split(',')[1] : att.base64;
+                let text = Buffer.from(base64Data, 'base64').toString('utf8');
+                text = scanAndSanitizePII(text).sanitizedText;
+                if (aiSafetyService.detectPromptInjection(text)) {
+                  text = '[REDACTED_UNTRUSTED_ATTACHMENT_INJECTION]';
+                }
+                parts.push({ text: `[LAMPIRAN TEKS: ${att.filename || 'attachment.txt'}]\n${text}` });
+              } else {
+                const base64Data = att.base64.includes(',') ? att.base64.split(',')[1] : att.base64;
                 parts.push({
                   inlineData: {
-                    data: res.base64,
-                    mimeType: res.attachment.mimeType
+                    data: base64Data,
+                    mimeType: att.mimeType
                   }
                 });
               }
-            } else if (att.base64) {
-              const base64Data = att.base64.includes(',') ? att.base64.split(',')[1] : att.base64;
-              parts.push({
-                inlineData: {
-                  data: base64Data,
-                  mimeType: att.mimeType
-                }
-              });
             }
           } catch (err) {}
         }
@@ -625,6 +587,7 @@ router.post('/chat/stream', optionalAuth, aiAbuseLimiter, async (req: Request, r
         history: messagesToSend,
         pluginResult,
         isStreaming: true,
+        isTemporary: activeIsTemporary,
         abortSignal: reqAbortController.signal
       });
     } catch (err: any) {

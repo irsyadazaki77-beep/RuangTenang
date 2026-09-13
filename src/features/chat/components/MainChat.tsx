@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { MessageBubble } from './MessageBubble';
 import { ChatComposer } from './ChatComposer';
@@ -252,27 +252,72 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
     }
   };
 
-  // Search matches memo
+  // Backend search integration across all messages in conversation
+  const [backendMatchedIds, setBackendMatchedIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!searchQuery.trim() || !chatId) {
+      setBackendMatchedIds([]);
+      return;
+    }
+
+    let isSubscribed = true;
+    const q = searchQuery.trim();
+
+    apiClient.get<any>(`/api/chat/${chatId}/search?q=${encodeURIComponent(q)}`)
+      .then(res => {
+        if (!isSubscribed) return;
+        const results = res.data?.results || (res as any).results || res.data;
+        if (Array.isArray(results)) {
+          setBackendMatchedIds(results.map((r: any) => r.id));
+        } else {
+          setBackendMatchedIds([]);
+        }
+      })
+      .catch(() => {
+        if (isSubscribed) setBackendMatchedIds([]);
+      });
+
+    return () => {
+      isSubscribed = false;
+    };
+  }, [chatId, searchQuery]);
+
+  // Combined search matches (backend + local)
   const searchMatches = React.useMemo(() => {
     if (!searchQuery.trim()) return [];
     const q = searchQuery.toLowerCase();
-    return messages.filter(m => m.content && m.content.toLowerCase().includes(q)).map(m => m.id);
-  }, [messages, searchQuery]);
+    const localMatches = messages.filter(m => m.content && m.content.toLowerCase().includes(q)).map(m => m.id);
+    if (!chatId) return localMatches;
+
+    const combinedSet = new Set([...backendMatchedIds, ...localMatches]);
+    return Array.from(combinedSet);
+  }, [messages, searchQuery, chatId, backendMatchedIds]);
+
+  const scrollToMatchedMessage = useCallback((targetId: string) => {
+    const el = document.getElementById(`msg-${targetId}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } else if (nextCursor && !isLoadingMore) {
+      // If message is in older un-rendered page, load more messages
+      fetchMessages(nextCursor);
+    }
+  }, [nextCursor, isLoadingMore, fetchMessages]);
 
   useEffect(() => {
     setCurrentSearchIndex(0);
     if (searchMatches.length > 0) {
       const targetId = searchMatches[0];
-      document.getElementById(`msg-${targetId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      scrollToMatchedMessage(targetId);
     }
-  }, [searchMatches]);
+  }, [searchMatches, scrollToMatchedMessage]);
 
   const handleSearchNext = () => {
     if (searchMatches.length === 0) return;
     const nextIdx = (currentSearchIndex + 1) % searchMatches.length;
     setCurrentSearchIndex(nextIdx);
     const targetId = searchMatches[nextIdx];
-    document.getElementById(`msg-${targetId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    scrollToMatchedMessage(targetId);
   };
 
   const handleSearchPrev = () => {
@@ -280,7 +325,7 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
     const prevIdx = (currentSearchIndex - 1 + searchMatches.length) % searchMatches.length;
     setCurrentSearchIndex(prevIdx);
     const targetId = searchMatches[prevIdx];
-    document.getElementById(`msg-${targetId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    scrollToMatchedMessage(targetId);
   };
 
   useEffect(() => {

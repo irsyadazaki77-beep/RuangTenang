@@ -22,6 +22,8 @@ export function BookmarksModal({
 }: BookmarksModalProps) {
   const { showToast } = useToast();
   const [bookmarks, setBookmarks] = useState<BookmarkItem[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [loading, setLoading] = useState(false);
   const [filterCurrentOnly, setFilterCurrentOnly] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -32,17 +34,40 @@ export function BookmarksModal({
     }
   }, [isOpen]);
 
-  const fetchBookmarks = async () => {
-    setLoading(true);
+  const fetchBookmarks = async (cursor?: string) => {
+    if (!cursor) {
+      setLoading(true);
+    } else {
+      setLoadingMore(true);
+    }
     try {
-      const res = await apiClient.get<{ success: boolean; bookmarks: BookmarkItem[] }>('/api/chat/bookmarks');
+      let url = '/api/chat/bookmarks?limit=20';
+      if (cursor) url += `&cursor=${cursor}`;
+      const res = await apiClient.get<{ success: boolean; bookmarks: BookmarkItem[]; nextCursor?: string }>(url);
       if (res.success && res.data?.bookmarks) {
-        setBookmarks(res.data.bookmarks);
+        if (cursor) {
+          setBookmarks(prev => {
+             const combined = [...prev, ...(res.data?.bookmarks || [])];
+             const seen = new Set();
+             return combined.filter(b => {
+                if (seen.has(b.messageId)) return false;
+                seen.add(b.messageId);
+                return true;
+             });
+          });
+        } else {
+          setBookmarks(res.data.bookmarks);
+        }
+        setNextCursor(res.data.nextCursor || null);
       }
     } catch {
       showToast('Gagal memuat pesan tersimpan', 'error');
     } finally {
-      setLoading(false);
+      if (!cursor) {
+        setLoading(false);
+      } else {
+        setLoadingMore(false);
+      }
     }
   };
 
@@ -113,7 +138,7 @@ export function BookmarksModal({
             )}
           </div>
           <button
-            onClick={fetchBookmarks}
+            onClick={() => fetchBookmarks()}
             disabled={loading}
             className="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors cursor-pointer"
             title="Segarkan daftar"
@@ -203,6 +228,17 @@ export function BookmarksModal({
                 </div>
               </div>
             ))
+          )}
+          {nextCursor && (
+            <div className="pt-4 flex justify-center pb-2">
+              <button
+                onClick={() => fetchBookmarks(nextCursor)}
+                disabled={loadingMore}
+                className="text-xs text-teal-600 hover:text-teal-700 disabled:opacity-50 cursor-pointer font-medium"
+              >
+                {loadingMore ? "Memuat..." : "Tampilkan Lebih Banyak"}
+              </button>
+            </div>
           )}
         </div>
       </div>

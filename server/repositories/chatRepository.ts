@@ -99,9 +99,11 @@ export const chatRepository = {
     });
   },
 
-  async getUserBookmarks(userId: string) {
+  async getUserBookmarks(userId: string, limit = 50, cursor?: string) {
     return await prisma.messageBookmarks.findMany({
       where: { userId },
+      take: limit,
+      ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
       orderBy: { createdAt: "desc" },
       include: {
         chat: {

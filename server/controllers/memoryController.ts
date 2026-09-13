@@ -16,7 +16,9 @@ export class MemoryController {
   static async getMemories(req: Request, res: Response) {
     try {
       const userId = req.user!.userId;
-      const memories = await prisma.userMemories.findMany({ where: { userId } });
+      const limit = parseInt(req.query.limit as string) || 50;
+      const offset = parseInt(req.query.offset as string) || 0;
+      const memories = await prisma.userMemories.findMany({ where: { userId }, take: limit, skip: offset, orderBy: { createdAt: "desc" } });
       const decryptedMemories = memories.map(m => ({
         ...m,
         content: encryptionService.decryptSensitive(m.content) || m.content

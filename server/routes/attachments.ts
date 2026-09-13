@@ -33,7 +33,7 @@ router.post(
   (req: Request, res: Response, next) => {
     // Multer upload middleware handler with limit error catching
     const uploadHandler = upload.array('files', MAX_ATTACHMENTS_PER_MESSAGE);
-    uploadHandler(req, res, (err: any) => {
+    uploadHandler(req as any, res as any, (err: any) => {
       if (err) {
         if (err instanceof multer.MulterError) {
           if (err.code === 'LIMIT_FILE_SIZE') {
