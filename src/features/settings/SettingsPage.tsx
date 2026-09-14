@@ -9,7 +9,8 @@ import { User,
   ShieldAlert,
   UserCheck,
   ChevronRight,
-  ChevronLeft
+  ChevronLeft,
+  Lock
 } from 'lucide-react';
 import { UserSession, SubscriptionTier } from '../../types';
 import { Brain, MessageSquare, Gauge, Cpu, CheckCircle2, History, Calendar, Bell, Terminal } from 'lucide-react';

@@ -3,7 +3,32 @@ import { isModelAllowedForTier, getActualGeminiModel } from './aiModelRegistry.j
 
 export type ModelTier = 'PRIMARY' | 'FALLBACK' | 'COMPLEX' | 'FAST';
 
+// Circuit Breaker State
+let circuitFailures = 0;
+const MAX_FAILURES_BEFORE_OPEN = 5;
+let circuitOpenUntil = 0;
+
 export const aiModelRouter = {
+  getCircuitState() {
+    if (Date.now() < circuitOpenUntil) return 'OPEN';
+    if (circuitFailures >= MAX_FAILURES_BEFORE_OPEN) return 'HALF-OPEN';
+    return 'CLOSED';
+  },
+  
+  recordSuccess() {
+    circuitFailures = 0;
+    circuitOpenUntil = 0;
+  },
+  
+  recordFailure() {
+    circuitFailures++;
+    if (circuitFailures >= MAX_FAILURES_BEFORE_OPEN) {
+      // Open circuit for 30 seconds
+      circuitOpenUntil = Date.now() + 30000;
+      console.warn(`[CIRCUIT_BREAKER] AI service circuit OPENED. Rejecting requests for 30s.`);
+    }
+  },
+
   async executeWithTimeoutAndRetry(
     modelName: string, 
     generateFn: (model: string) => Promise<any>,
@@ -14,12 +39,17 @@ export const aiModelRouter = {
     let attempt = 0;
     let lastError: Error | null = null;
 
+    if (this.getCircuitState() === 'OPEN') {
+      throw new Error('AI_CIRCUIT_OPEN');
+    }
+
     while (attempt <= maxRetries) {
       try {
         const result = await Promise.race([
           generateFn(modelName),
           new Promise((_, reject) => setTimeout(() => reject(new Error('AI_TIMEOUT')), timeoutMs))
         ]);
+        this.recordSuccess();
         return result;
       } catch (err: any) {
         lastError = err;
@@ -42,7 +72,12 @@ export const aiModelRouter = {
 
         if (isNonTransient) {
           console.warn(`[AI_MODEL_ROUTER] Non-transient failure detected (${err.message || err}). Aborting retry loop immediately.`);
-          break;
+          break; // Don't trip circuit breaker for user/auth errors
+        }
+        
+        // Trip circuit breaker for repeated systemic failures (if max retries exhausted for this request)
+        if (attempt > maxRetries) {
+          this.recordFailure();
         }
         
         if (attempt <= maxRetries) {

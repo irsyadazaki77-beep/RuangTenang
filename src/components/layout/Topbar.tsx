@@ -18,7 +18,7 @@ export function Topbar({ onOpenSidebar, title = 'RuangTenang', showBackButton, u
   const navigate = useNavigate();
 
   return (
-    <div className="h-14 border-b border-default flex items-center justify-between px-3 sm:px-4 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md sticky top-0 z-10 w-full min-w-0 shrink-0">
+    <div className="h-14 border-b border-default flex items-center justify-between px-3 sm:px-4 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md sticky top-0 z-10 w-full min-w-0 shrink-0 pt-safe">
       <div className="flex items-center gap-2 min-w-0 flex-1">
         {onOpenSidebar && (
           <button 

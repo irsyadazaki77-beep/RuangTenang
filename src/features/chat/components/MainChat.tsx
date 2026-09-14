@@ -138,11 +138,13 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
   const [showScrollBottom, setShowScrollBottom] = useState(false);
 
   useEffect(() => {
-    abortStream();
-    if (chatId && chatId !== loadedChatIdRef.current) {
-      fetchMessages();
-    } else if (!chatId) {
-      setMessages([]);
+    if (chatId !== loadedChatIdRef.current) {
+      abortStream();
+      if (chatId) {
+        fetchMessages();
+      } else {
+        setMessages([]);
+      }
     }
   }, [chatId, fetchMessages, setMessages, abortStream]);
 
@@ -186,8 +188,7 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
 
   useEffect(() => {
     scrollToBottom();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [messages, isTyping]);
+  }, [messages, isTyping, streamingMessage?.content]);
 
   useEffect(() => {
     const handleGlobalKeydown = (e: KeyboardEvent) => {
@@ -264,7 +265,8 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
     let isSubscribed = true;
     const q = searchQuery.trim();
 
-    apiClient.get<any>(`/api/chat/${chatId}/search?q=${encodeURIComponent(q)}`)
+    const timer = setTimeout(() => {
+      apiClient.get<any>(`/api/chat/${chatId}/search?q=${encodeURIComponent(q)}`)
       .then(res => {
         if (!isSubscribed) return;
         const results = res.data?.results || (res as any).results || res.data;
@@ -277,8 +279,10 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
       .catch(() => {
         if (isSubscribed) setBackendMatchedIds([]);
       });
+    }, 400);
 
     return () => {
+      clearTimeout(timer);
       isSubscribed = false;
     };
   }, [chatId, searchQuery]);
@@ -716,7 +720,7 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
         onPrev={handleSearchPrev}
       />
 
-      <div className="flex-1 overflow-y-auto w-full min-w-0 flex flex-col px-3 sm:px-4 py-3 sm:py-4" ref={scrollContainerRef}>
+      <div className="flex-1 overflow-y-auto w-full min-w-0 flex flex-col px-3 sm:px-4 py-3 sm:py-4 pb-safe" ref={scrollContainerRef}>
         {isLoadingMessages ? (
           <div className="flex-1 flex items-start justify-center pt-4">
             <ChatSkeleton />

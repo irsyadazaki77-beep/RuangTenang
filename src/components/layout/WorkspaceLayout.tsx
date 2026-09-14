@@ -26,7 +26,7 @@ export const WorkspaceLayout: React.FC<WorkspaceLayoutProps> = ({
   const shouldReduceMotion = useReducedMotion();
 
   return (
-    <div className="flex-1 flex flex-col h-full min-h-0 surface-page relative min-w-0 overflow-y-auto">
+    <div className="flex-1 flex flex-col h-[100dvh] min-h-0 surface-page relative min-w-0 overflow-y-auto">
       {/* Top Navbar */}
       <header className="h-12 md:h-13 surface-card px-3 sm:px-4 flex items-center justify-between shrink-0 sticky top-0 z-20 border-b border-default">
         <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
@@ -42,7 +42,7 @@ export const WorkspaceLayout: React.FC<WorkspaceLayoutProps> = ({
 
           <button
             onClick={() => navigate('/')}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-secondary hover:text-primary bg-slate-100/90 dark:bg-slate-800 hover:bg-slate-200/90 dark:hover:bg-slate-700 rounded-lg transition-all group shrink-0 cursor-pointer min-h-[36px] md:min-h-[32px]"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-secondary hover:text-primary bg-slate-100/90 dark:bg-slate-800 hover:bg-slate-200/90 dark:hover:bg-slate-700 rounded-lg transition-all group shrink-0 cursor-pointer min-h-[44px] md:min-h-[32px]"
             title="Kembali ke Chat"
           >
             <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
@@ -72,7 +72,7 @@ export const WorkspaceLayout: React.FC<WorkspaceLayoutProps> = ({
           {headerActions}
           <button
             onClick={() => navigate('/')}
-            className="p-1.5 text-secondary hover:text-teal-600 dark:hover:text-teal-400 hover:bg-teal-50 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer min-w-[36px] min-h-[36px] flex items-center justify-center"
+            className="p-1.5 text-secondary hover:text-teal-600 dark:hover:text-teal-400 hover:bg-teal-50 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer min-w-[44px] min-h-[44px] flex items-center justify-center"
             title="Buka Chat Baru"
             aria-label="Chat Baru"
           >
@@ -87,7 +87,7 @@ export const WorkspaceLayout: React.FC<WorkspaceLayoutProps> = ({
         animate={{ opacity: 1, y: 0 }}
         exit={shouldReduceMotion ? undefined : { opacity: 0, y: -8 }}
         transition={{ duration: 0.2 }}
-        className="flex-1 min-w-0 w-full"
+        className="flex-1 min-w-0 w-full pb-safe"
       >
         {children}
       </motion.main>

@@ -87,7 +87,7 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
               if (a.id === data.id) {
                 return {
                   ...a,
-                  status: data.status === 'PENDING' ? 'Menunggu Konfirmasi' : data.status === 'CONFIRMED' ? 'Konfirmasi' : data.status === 'CANCELLED' ? 'Dibatalkan' : data.status === 'REJECTED' ? 'Ditolak' : 'Selesai',
+                  status: data.status,
                   approvalStatus: data.approvalStatus,
                   attendanceStatus: data.attendanceStatus,
                   notes: data.notes || a.notes,
@@ -128,7 +128,7 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
     const checkScheduledReminders = () => {
       const now = Date.now();
       appointments.forEach(apt => {
-        if (apt.status === 'Dibatalkan' || apt.status === 'Ditolak') return;
+        if (apt.status === 'CANCELLED' || apt.status === 'REJECTED') return;
 
         const prefs = getAppointmentReminderPrefs(apt.id);
         const timeData = parseAppointmentDateTime(apt.date, apt.timeSlot, apt.timezone);
@@ -216,7 +216,7 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
               timezone: item.timezone || 'WIB',
               mode: item.mode || 'video_call',
               primaryConcern: item.notes || 'Konseling Mental',
-              status: item.status === 'PENDING' ? 'Menunggu Konfirmasi' : item.status === 'CONFIRMED' ? 'Konfirmasi' : item.status === 'CANCELLED' ? 'Dibatalkan' : item.status === 'REJECTED' ? 'Ditolak' : 'Selesai',
+              status: item.status,
               approvalStatus: item.approvalStatus || 'PENDING_APPROVAL',
               attendanceStatus: item.attendanceStatus || 'SCHEDULED',
               meetingLink: item.meetingLink || `https://meet.jit.si/ruangtenang-session-${item.id}`,
@@ -298,7 +298,7 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
 
       setAppointments(prev => prev.map(a => {
         if (a.id === id) {
-          return { ...a, status: 'Dibatalkan' as const, attendanceStatus: 'CANCELLED' as const };
+          return { ...a, status: 'CANCELLED' as const, attendanceStatus: 'CANCELLED' as const };
         }
         return a;
       }));
@@ -347,7 +347,7 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
             date: rec?.date || newDate,
             timeSlot: `${rec?.time || newTime} ${rec?.timezone || newTimezone}`,
             timezone: (rec?.timezone || newTimezone) as 'WIB' | 'WITA' | 'WIT',
-            status: 'Menunggu Konfirmasi' as const,
+            status: 'PENDING' as const,
             approvalStatus: 'PENDING_APPROVAL' as const,
             attendanceStatus: 'RESCHEDULED' as const
           };
@@ -366,7 +366,7 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
   const handleCompleteSession = async (appointmentId: string, summaryNotes: string) => {
     try {
       const res = await apiClient.put(`/api/v1/appointments/${appointmentId}`, {
-        status: 'Selesai',
+        status: 'COMPLETED',
         attendanceStatus: 'ATTENDED',
         notes: summaryNotes
       });
@@ -380,7 +380,7 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
         if (a.id === appointmentId) {
           return {
             ...a,
-            status: 'Selesai' as const,
+            status: 'COMPLETED' as const,
             attendanceStatus: 'ATTENDED' as const,
             notes: summaryNotes
           };
@@ -508,17 +508,17 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
                   </div>
                   <div className="flex flex-col items-end gap-1.5 shrink-0">
                     <span className={`px-2.5 py-1 text-xs font-medium rounded-lg border ${
-                      apt.status === 'Dibatalkan'
+                      apt.status === 'CANCELLED'
                         ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-900/50'
-                        : apt.status === 'Ditolak'
+                        : apt.status === 'REJECTED'
                         ? 'bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-400 border-red-200 dark:border-red-900/50'
-                        : apt.status === 'Menunggu Konfirmasi'
+                        : apt.status === 'PENDING'
                         ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-900/50'
-                        : apt.status === 'Selesai'
+                        : apt.status === 'COMPLETED'
                         ? 'bg-slate-100 dark:bg-slate-800 text-secondary border-strong'
                         : 'bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400 border-teal-200 dark:border-teal-900/50'
                     }`}>
-                      {apt.status === 'Menunggu Konfirmasi' ? '⏳ Menunggu Konfirmasi' : apt.status}
+                      {apt.status === 'PENDING' ? '⏳ Menunggu Konfirmasi' : apt.status === 'CONFIRMED' ? '✅ Terkonfirmasi' : apt.status === 'COMPLETED' ? '✅ Selesai' : apt.status === 'CANCELLED' ? '🚫 Dibatalkan' : '❌ Ditolak'}
                     </span>
                     {apt.attendanceStatus && (
                       <span className="text-[11px] font-mono font-medium text-secondary">
@@ -543,7 +543,7 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
                   </div>
                   
                   {/* Virtual Meeting Link */}
-                  {apt.mode === 'video_call' && apt.status !== 'Selesai' && (
+                  {apt.mode === 'video_call' && apt.status !== 'COMPLETED' && (
                     <div className="flex items-center justify-between pt-2.5 border-t border-slate-200 dark:border-slate-700">
                       <span className="text-secondary font-medium">Link Pertemuan:</span>
                       {apt.meetingLink ? (
@@ -574,7 +574,7 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
 
                 {/* Calendar Export & Action Buttons */}
                 <div className="flex flex-wrap items-center gap-2.5 pt-2">
-                  {apt.status !== 'Selesai' && (
+                  {apt.status !== 'COMPLETED' && (
                     <>
                       <button
                         onClick={() => setSelectedCalendarApt(apt)}
@@ -629,7 +629,7 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
                 {/* Chat Simulation Actions */}
                 {apt.status !== 'Dibatalkan' && (
                   <div className="pt-2.5 border-t border-slate-100 w-full flex flex-col gap-2">
-                    {apt.status === 'Selesai' ? (
+                    {apt.status === 'COMPLETED' ? (
                       <button
                         onClick={() => setActiveSummaryApt(apt)}
                         className="w-full py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-all shadow-sm cursor-pointer"

@@ -237,10 +237,10 @@ describe('Core Feature Integrity Integration Tests (FASE 8)', () => {
       const resComplete = await request(app)
         .put(`/api/appointments/${createdApptId}`)
         .set('Authorization', `Bearer ${counselor1Token}`)
-        .send({ status: 'Selesai' });
+        .send({ status: 'COMPLETED' });
 
       expect(resComplete.status).toBe(200);
-      expect(resComplete.body.record.status).toBe('Selesai');
+      expect(resComplete.body.record.status).toBe('COMPLETED');
     });
   });
 

@@ -1,5 +1,6 @@
 import { prisma } from '../../database.js';
 import { consentService } from '../consentService.js';
+import { MemoryService } from '../memoryService.js';
 import { encryptionService } from '../encryptionService.js';
 import { scanAndSanitizePII } from '../piiService.js';
 import { chatSummarizer, ChatMessageItem } from './chatSummarizer.js';
@@ -68,8 +69,6 @@ export const aiContextBuilder = {
 
     // Prepare recent history strings for deduplication matching
     const recentHistoryCombinedText = recentHistoryItems.map(m => m.content).join(' ').toLowerCase();
-    const currentTextLower = currentMessage.toLowerCase();
-    const pluginTextLower = pluginResult.toLowerCase();
     const summaryTextLower = conversationSummary.toLowerCase();
 
     const isDuplicate = (candidate: string): boolean => {
@@ -158,30 +157,8 @@ Skor skrining psikologis awal (PHQ-9: ${s.phq9Score}, GAD-7: ${s.gad7Score})
     }
 
     if (memoryConsent && memoryAllowed) {
-      // Relevance Scoring for Memory
-      const allMemories = await prisma.userMemories.findMany({
-        where: { userId, isActive: true },
-        take: 20
-      });
-      
-      let memories = allMemories;
-      if (allMemories.length > 2 && currentMessage) {
-        const queryTerms = currentMessage.toLowerCase().split(/\s+/).filter(t => t.length > 3);
-        const scoredMemories = allMemories.map(m => {
-          const contentStr = (encryptionService.decryptSensitive(m.content) || m.content).toLowerCase();
-          let score = 0;
-          for (const term of queryTerms) {
-            if (contentStr.includes(term)) score += 2;
-          }
-          return { memory: m, score };
-        });
-        
-        // Sort by score desc, then by date desc (default)
-        scoredMemories.sort((a, b) => b.score - a.score || b.memory.createdAt.getTime() - a.memory.createdAt.getTime());
-        memories = scoredMemories.slice(0, 3).map(s => s.memory);
-      } else {
-        memories = allMemories.slice(0, 3);
-      }
+      // Enhanced Relevance Scoring for Memory
+      let memories = await MemoryService.getRelevantMemories(userId, currentMessage, 3);
 
       if (memories.length > 0) {
         const memoryLines: string[] = [];

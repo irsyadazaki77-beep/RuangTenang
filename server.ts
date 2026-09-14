@@ -48,21 +48,6 @@ import counselorsRouter from './server/routes/counselors.js';
 async function startServer() {
   const isProd = process.env.NODE_ENV === 'production';
 
-  // Initialize environment fallbacks if unset
-  if (!process.env.JWT_SECRET) {
-    process.env.JWT_SECRET = 'ruangtenang-ai-studio-jwt-secret-long-secure-fallback-32';
-    console.warn('[AI Studio NOTICE] Using default JWT_SECRET.');
-  }
-  const rawEncKey = process.env.DATA_ENCRYPTION_KEY || process.env.ENCRYPTION_KEY;
-  if (!rawEncKey) {
-    process.env.ENCRYPTION_KEY = 'ruangtenang-ai-studio-aes-encryption-key-fallback-32';
-    process.env.DATA_ENCRYPTION_KEY = process.env.ENCRYPTION_KEY;
-    console.warn('[AI Studio NOTICE] Using default ENCRYPTION_KEY.');
-  }
-  if (!process.env.DATABASE_URL) {
-    process.env.DATABASE_URL = 'file:./prisma/ruangtenang_sqlite.db';
-  }
-
   try {
     validateEnvironment();
     validateStartupEnvironment();
@@ -106,6 +91,9 @@ async function startServer() {
     allowedOrigins.add('http://127.0.0.1:5173');
   }
 
+  // Preview environment detection
+  const isPreviewMode = !isProd || process.env.IS_AI_STUDIO_PREVIEW === 'true' || process.env.PREVIEW_MODE === 'true';
+
   app.use(cors({
     origin: (origin, callback) => {
       // Allow requests without Origin header (e.g. health checks, server-to-server, reverse proxy, static files)
@@ -115,8 +103,8 @@ async function startServer() {
       
       const lowerOrigin = origin.toLowerCase();
 
-      // Strict allowlist checking in production
-      if (isProd) {
+      // Strict allowlist checking in production, with preview exception
+      if (isProd && !isPreviewMode) {
         if (allowedOrigins.has(lowerOrigin)) {
           return callback(null, true);
         }
@@ -146,9 +134,6 @@ async function startServer() {
     ...(process.env.APP_ORIGIN ? process.env.APP_ORIGIN.split(',').map(o => o.trim()).filter(Boolean) : []),
     ...(process.env.CORS_ALLOWED_ORIGINS ? process.env.CORS_ALLOWED_ORIGINS.split(',').map(o => o.trim()).filter(Boolean) : []),
   ];
-
-  // Preview environment detection
-  const isPreviewMode = !isProd || process.env.IS_AI_STUDIO_PREVIEW === 'true' || process.env.PREVIEW_MODE === 'true';
 
   // Frame ancestors (Clickjacking Protection & AI Studio Iframe Preview Support)
   const frameAncestorsList = isPreviewMode

@@ -1,3 +1,4 @@
+import { Brain } from 'lucide-react';
 import React, { useState, memo } from 'react';
 import { LazyMarkdown } from '../../../components/common/LazyMarkdown';
 import { Message } from '../types';
@@ -225,13 +226,19 @@ export const MessageBubble = memo(function MessageBubble({
             {msg.plugin === 'counselors' && <div className="mt-3"><CounselorCard onAction={() => onOpenPlugin?.('counselors')} /></div>}
             {msg.plugin === 'emergency' && <div className="mt-3"><EmergencyCard /></div>}
             {msg.plugin === 'articles' && <div className="mt-3"><ArticlesCard onAction={() => onOpenPlugin?.('articles')} /></div>}
+            {msg.plugin === 'ai_memory' && (
+              <div className="mt-3 p-3 bg-teal-50/50 dark:bg-teal-900/20 border border-teal-100 dark:border-teal-800 rounded-xl text-xs text-teal-800 dark:text-teal-300 flex items-center gap-2">
+                <Brain className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+                <span>Konteks personalisasi disimpan ke memori jangka panjang untuk sesi mendatang.</span>
+              </div>
+            )}
 
             {/* Subtle Action Toolbar */}
             {!isTyping && msg.content && !msg.error && (
               <div className="flex items-center gap-0.5 pt-1 opacity-70 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-150">
                 <button 
                   onClick={handleCopy} 
-                  className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-md transition-colors cursor-pointer" 
+                  className="p-2 min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-md transition-colors cursor-pointer" 
                   title="Salin Pesan" 
                   aria-label="Salin Pesan"
                 >
@@ -265,7 +272,7 @@ export const MessageBubble = memo(function MessageBubble({
                 {onRegenerate && (
                   <button 
                     onClick={onRegenerate} 
-                    className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-md transition-colors cursor-pointer" 
+                    className="p-2 min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-md transition-colors cursor-pointer" 
                     title="Buat Ulang Tanggapan" 
                     aria-label="Buat Ulang Tanggapan"
                   >
@@ -301,6 +308,18 @@ export const MessageBubble = memo(function MessageBubble({
         )}
       </div>
     </motion.div>
+  );
+}, (prevProps, nextProps) => {
+  return (
+    prevProps.msg.id === nextProps.msg.id &&
+    prevProps.msg.content === nextProps.msg.content &&
+    prevProps.msg.error === nextProps.msg.error &&
+    prevProps.msg.plugin === nextProps.msg.plugin &&
+    prevProps.isTyping === nextProps.isTyping &&
+    prevProps.isBookmarked === nextProps.isBookmarked &&
+    prevProps.isSearchTarget === nextProps.isSearchTarget &&
+    prevProps.searchHighlightQuery === nextProps.searchHighlightQuery &&
+    JSON.stringify(prevProps.msg.attachments) === JSON.stringify(nextProps.msg.attachments)
   );
 });
 

@@ -214,7 +214,7 @@ export function ChatComposer({ onSend, isTyping, onStop, chatId, onCommand, onOp
   return (
     <div 
       ref={composerRef}
-      className="w-full px-3 sm:px-4 pb-3 sm:pb-4 pt-1 sticky bottom-0 z-20 shrink-0 bg-gradient-to-t from-stone-50 via-stone-50/95 to-transparent dark:from-[#0c1117] dark:via-[#0c1117]/95"
+      className="w-full px-3 sm:px-4 pb-3 sm:pb-4 pt-1 sticky bottom-0 z-20 shrink-0 bg-gradient-to-t from-stone-50 via-stone-50/95 to-transparent dark:from-[#0c1117] dark:via-[#0c1117]/95 pb-safe"
     >
       <div className="max-w-3xl mx-auto w-full relative">
         <AnimatePresence>
@@ -360,7 +360,7 @@ export function ChatComposer({ onSend, isTyping, onStop, chatId, onCommand, onOp
         )}
 
         {/* Input Bar: Clean Floating Capsule */}
-        <div className="relative flex items-end gap-1.5 sm:gap-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl sm:rounded-3xl px-2 py-1.5 sm:p-2 shadow-[0_2px_12px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.25)] focus-within:border-slate-300 dark:focus-within:border-slate-700 transition-all">
+        <div className="relative flex items-end gap-1.5 sm:gap-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl sm:rounded-3xl p-1.5 sm:p-2 shadow-[0_2px_12px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.25)] focus-within:border-slate-300 dark:focus-within:border-slate-700 transition-all">
           {/* Plus Button */}
           <button
             type="button"
@@ -436,7 +436,7 @@ export function ChatComposer({ onSend, isTyping, onStop, chatId, onCommand, onOp
             <button
               type="button"
               onClick={onStop}
-              className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 flex items-center justify-center shrink-0 transition-transform active:scale-95 cursor-pointer"
+              className="w-11 h-11 sm:w-10 sm:h-10 rounded-full bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 flex items-center justify-center shrink-0 transition-transform active:scale-95 cursor-pointer"
               aria-label="Hentikan Jawaban"
               title="Hentikan respons AI"
             >

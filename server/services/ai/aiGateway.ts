@@ -6,6 +6,7 @@ import { getGenAIClient } from '../../config/aiConfig.js';
 import { aiModelRouter } from './aiModelRouter.js';
 import { getVerifiedEmergencyContacts } from '../../config/emergencyRegistry.js';
 import { validateAndSanitizeToolCall } from './aiToolSchemas.js';
+import { analyzeMessageSentiment } from '../../../src/lib/crisisDetector.js';
 import { z } from 'zod';
 
 export interface ChatStreamGatewayParams {

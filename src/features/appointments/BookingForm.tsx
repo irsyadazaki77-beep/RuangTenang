@@ -258,7 +258,7 @@ export const BookingForm: React.FC<BookingFormProps> = ({
         mode: record.mode || mode,
         primaryConcern: record.notes || selectedConcern,
         status:
-          record.status === "PENDING" ? "Menunggu Konfirmasi" : "Konfirmasi",
+          record.status || "PENDING",
         approvalStatus: record.approvalStatus || "PENDING_APPROVAL",
         attendanceStatus: record.attendanceStatus || "SCHEDULED",
         meetingLink: record.meetingLink || undefined,

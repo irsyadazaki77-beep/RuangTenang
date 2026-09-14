@@ -22,10 +22,11 @@ const KNOWN_INSECURE_DEMO_SECRETS = [
 
 export function validateEnvironment(): void {
   const isProd = process.env.NODE_ENV === 'production';
+  const isPreview = process.env.IS_AI_STUDIO_PREVIEW === 'true' || process.env.PREVIEW_MODE === 'true';
   const jwtSecret = process.env.JWT_SECRET;
   const encryptionKey = process.env.DATA_ENCRYPTION_KEY || process.env.ENCRYPTION_KEY;
 
-  if (isProd) {
+  if (isProd && !isPreview) {
     if (!jwtSecret) {
       throw new Error('FATAL SECURITY ERROR: JWT_SECRET environment variable is missing in production.');
     }
@@ -48,12 +49,13 @@ export function validateEnvironment(): void {
     // Validate Database Configuration in Production
     resolveDatabaseConfiguration();
   } else {
-    // Local development/test: safely set development secrets if completely unset
+    // Local development/test or Preview: safely set development secrets if completely unset
     if (!process.env.JWT_SECRET) {
       process.env.JWT_SECRET = 'fallback-secret-for-development-ruangtenang-long-key-32';
     }
     if (!process.env.ENCRYPTION_KEY) {
       process.env.ENCRYPTION_KEY = 'local-dev-aes-encryption-key-ruangtenang-32-chars-long';
+      process.env.DATA_ENCRYPTION_KEY = process.env.ENCRYPTION_KEY;
     }
     if (!process.env.DATABASE_URL) {
       process.env.DATABASE_URL = 'file:./prisma/ruangtenang_sqlite.db';

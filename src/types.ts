@@ -105,12 +105,11 @@ export interface Appointment {
   mode: "video_call" | "tele_counseling";
   primaryConcern: string;
   status:
-    | "Menunggu Konfirmasi"
-    | "Konfirmasi"
-    | "Berjalan"
-    | "Selesai"
-    | "Dibatalkan"
-    | "Ditolak";
+    | "PENDING"
+    | "CONFIRMED"
+    | "COMPLETED"
+    | "CANCELLED"
+    | "REJECTED";
   approvalStatus?: "PENDING_APPROVAL" | "APPROVED" | "REJECTED";
   attendanceStatus?:
     "SCHEDULED" | "ATTENDED" | "NO_SHOW" | "CANCELLED" | "RESCHEDULED";

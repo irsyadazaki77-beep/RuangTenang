@@ -717,6 +717,22 @@ router.post('/chat/stream', optionalAuth, aiAbuseLimiter, async (req: Request, r
           
           if (validation.isValid && validation.toolCall) {
             validToolCallParsed = { tool_call: validation.toolCall, parameters: validation.parameters || {} };
+            
+            if (validToolCallParsed.tool_call === 'ai_memory' && validToolCallParsed.parameters.action === 'save') {
+               const memContent = validToolCallParsed.parameters.content;
+               if (memContent && userId && !activeIsTemporary) {
+                  try {
+                    await prisma.userMemories.create({
+                      data: {
+                        id: `mem_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+                        userId: userId,
+                        content: encryptionService.encryptSensitive(memContent) || memContent
+                      }
+                    });
+                  } catch(e) {}
+               }
+            }
+
             if (!res.writableEnded) {
               res.write(`data: ${JSON.stringify({ tool_call: validToolCallParsed.tool_call, parameters: validToolCallParsed.parameters || {} })}\n\n`);
             }

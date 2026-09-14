@@ -150,24 +150,35 @@ export const CounselorDashboard: React.FC = () => {
   }, [apptStatusFilter, apptPage]);
 
   const handleApproveAppointment = async (id: string) => {
+    // Optimistic update
+    setCounselorAppts(prev => prev.map(a => a.id === id ? { ...a, status: 'CONFIRMED', approvalStatus: 'APPROVED' } : a));
     try {
       const res = await apiClient.put(`/api/v1/appointments/${id}`, { status: 'CONFIRMED', approvalStatus: 'APPROVED' });
       if (res.success) {
         fetchCounselorAppointments();  
+      } else {
+        // Revert on failure
+        fetchCounselorAppointments();
       }
     } catch (e) {
       console.warn('Approve appointment failed:', e);
+      fetchCounselorAppointments(); // Revert
     }
   };
 
   const handleRejectAppointment = async (id: string) => {
+    // Optimistic update
+    setCounselorAppts(prev => prev.map(a => a.id === id ? { ...a, status: 'REJECTED', approvalStatus: 'REJECTED' } : a));
     try {
       const res = await apiClient.put(`/api/v1/appointments/${id}`, { status: 'REJECTED', approvalStatus: 'REJECTED' });
       if (res.success) {
         fetchCounselorAppointments();  
+      } else {
+        fetchCounselorAppointments();
       }
     } catch (e) {
       console.warn('Reject appointment failed:', e);
+      fetchCounselorAppointments();
     }
   };
 
@@ -606,7 +617,7 @@ export const CounselorDashboard: React.FC = () => {
                           ? 'bg-rose-50 text-rose-700 border-rose-200'
                           : 'bg-slate-100 text-slate-600 border-slate-200'
                       }`}>
-                        {appt.status === 'PENDING' ? '⏳ Menunggu Konfirmasi' : appt.status === 'CONFIRMED' ? '✅ Terkonfirmasi' : appt.status === 'REJECTED' ? '❌ Ditolak' : 'Dibatalkan'}
+                        {appt.status === 'PENDING' ? '⏳ Menunggu Konfirmasi' : appt.status === 'CONFIRMED' ? '✅ Terkonfirmasi' : appt.status === 'COMPLETED' ? '✅ Selesai' : appt.status === 'REJECTED' ? '❌ Ditolak' : '🚫 Dibatalkan'}
                     </span>
                   </div>
                   
@@ -689,7 +700,7 @@ export const CounselorDashboard: React.FC = () => {
                             ? 'bg-rose-50 text-rose-700 border-rose-200'
                             : 'bg-slate-100 text-slate-600 border-slate-200'
                         }`}>
-                          {appt.status === 'PENDING' ? '⏳ Menunggu Konfirmasi' : appt.status === 'CONFIRMED' ? '✅ Terkonfirmasi' : appt.status === 'REJECTED' ? '❌ Ditolak' : 'Dibatalkan'}
+                          {appt.status === 'PENDING' ? '⏳ Menunggu Konfirmasi' : appt.status === 'CONFIRMED' ? '✅ Terkonfirmasi' : appt.status === 'COMPLETED' ? '✅ Selesai' : appt.status === 'REJECTED' ? '❌ Ditolak' : '🚫 Dibatalkan'}
                         </span>
                       </td>
                       <td className="p-3 text-right">

@@ -43,7 +43,8 @@ export const articlesToolSchema = z.object({
 
 export const aiMemoryToolSchema = z.object({
   reason: z.string().max(200).optional(),
-  action: z.enum(['retrieve', 'summarize']).optional()
+  action: z.enum(['retrieve', 'summarize', 'save']).optional(),
+  content: z.string().max(200).optional()
 }).strict();
 
 export const toolSchemasMap = {

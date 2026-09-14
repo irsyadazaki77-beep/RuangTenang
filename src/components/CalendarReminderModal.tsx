@@ -80,7 +80,7 @@ export const CalendarReminderModal: React.FC<CalendarReminderModalProps> = ({
     timezone: 'WIB',
     mode: 'video_call',
     primaryConcern: 'Manajemen Stres Akademik & Kecemasan',
-    status: 'Konfirmasi',
+    status: 'CONFIRMED',
     approvalStatus: 'APPROVED',
     attendanceStatus: 'SCHEDULED',
     meetingLink: 'https://meet.jit.si/ruangtenang-session-demo',

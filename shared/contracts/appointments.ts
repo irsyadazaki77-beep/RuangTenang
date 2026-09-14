@@ -24,7 +24,7 @@ export const UpdateAppointmentSchema = z.object({
   timezone: z.enum(['WIB', 'WITA', 'WIT']).optional(),
   mode: z.enum(['video_call', 'in_person', 'tele_counseling']).optional(),
   notes: z.string().max(500).optional(),
-  status: z.enum(['PENDING', 'CONFIRMED', 'CANCELLED', 'REJECTED', 'Selesai', 'requested', 'confirmed', 'completed', 'cancelled']).optional(),
+  status: z.enum(['PENDING', 'CONFIRMED', 'CANCELLED', 'REJECTED', 'COMPLETED']).optional(),
   approvalStatus: z.enum(['PENDING_APPROVAL', 'APPROVED', 'REJECTED']).optional(),
   attendanceStatus: z.enum(['SCHEDULED', 'ATTENDED', 'NO_SHOW', 'CANCELLED', 'RESCHEDULED']).optional(),
   meetingLink: z.string().max(255).optional(),

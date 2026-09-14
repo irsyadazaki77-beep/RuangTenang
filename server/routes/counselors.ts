@@ -167,7 +167,7 @@ const INITIAL_RISK_ALERTS = [
     riskLevel: 'Sedang',
     triggers: ['serangan panik', 'menangis terus'],
     detectedAt: 'Kemarin, 21:45 WIB',
-    status: 'Selesai',
+    status: 'COMPLETED',
     phq9Score: 12,
     gad7Score: 11
   }

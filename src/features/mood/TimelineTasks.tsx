@@ -33,8 +33,8 @@ export const TimelineTasks: React.FC<TimelineTasksProps> = ({
       .catch(() => setAppointments([]));
   }, []);
 
-  const completedSessions = appointments.filter(a => a.status === 'COMPLETED' || a.status === 'Selesai');
-  const upcomingSessions = appointments.filter(a => a.status === 'CONFIRMED' || a.status === 'PENDING' || a.status === 'Menunggu Konfirmasi' || a.status === 'Konfirmasi');
+  const completedSessions = appointments.filter(a => a.status === 'COMPLETED');
+  const upcomingSessions = appointments.filter(a => a.status === 'CONFIRMED' || a.status === 'PENDING');
 
   return (
     <div className="space-y-5">
@@ -72,7 +72,7 @@ export const TimelineTasks: React.FC<TimelineTasksProps> = ({
             </div>
           ) : (
             appointments.map((apt, idx) => {
-              const isUpcoming = apt.status === 'CONFIRMED' || apt.status === 'PENDING' || apt.status === 'Menunggu Konfirmasi' || apt.status === 'Konfirmasi';
+              const isUpcoming = apt.status === 'CONFIRMED' || apt.status === 'PENDING';
               return (
                 <div key={apt.id || idx} className="relative">
                   <span className={`absolute -left-[23px] sm:-left-[31px] top-2 w-3.5 h-3.5 rounded-full border-2 border-white dark:border-slate-900 ${isUpcoming ? 'bg-teal-600 ring-2 ring-teal-200 dark:ring-teal-900' : 'bg-slate-400'}`}></span>

@@ -53,7 +53,7 @@ export interface AppointmentResponseDTO {
   time: string;
   timezone: 'WIB' | 'WITA' | 'WIT';
   notes?: string;
-  status: 'PENDING' | 'CONFIRMED' | 'CANCELLED' | 'Selesai';
+  status: 'PENDING' | 'CONFIRMED' | 'CANCELLED' | 'REJECTED' | 'COMPLETED';
   approvalStatus: 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED';
   attendanceStatus: 'SCHEDULED' | 'ATTENDED' | 'NO_SHOW' | 'CANCELLED' | 'RESCHEDULED';
   meetingLink?: string;
@@ -460,7 +460,7 @@ router.post(['/:id/reschedule', '/db/appointments/:id/reschedule'], requireAuth,
           error: 'Akses ditolak. Anda hanya diperbolehkan menjadwal ulang janji temu milik Anda sendiri.'
         });
       }
-      if (['CANCELLED', 'REJECTED', 'Selesai'].includes(appt.status)) {
+      if (['CANCELLED', 'REJECTED', 'COMPLETED'].includes(appt.status)) {
         return res.status(400).json({
           success: false,
           error: 'Jadwal yang sudah dibatalkan atau selesai tidak dapat dijadwalkan ulang.'
