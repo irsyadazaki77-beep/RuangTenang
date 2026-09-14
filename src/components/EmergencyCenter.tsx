@@ -130,7 +130,7 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
       } else {
         showToast("Sinyal SOS gagal terkirim. Segera hubungi hotline darurat 119.", "error");
       }
-    } catch (e: any) {
+    } catch (_e: any) {
       setSosStatus({
         success: false,
         dispatchId: "SOS-LOCAL-" + Date.now().toString().slice(-4),
@@ -157,7 +157,7 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
       } else {
         showToast(res.error || "Gagal menyimpan kontak.", "error");
       }
-    } catch (err) {
+    } catch (_err) {
       showToast("Gagal menyimpan kontak (koneksi bermasalah).", "error");
     }
   };

@@ -14,7 +14,7 @@ function hasSubtleCrypto(): boolean {
 function hasIndexedDB(): boolean {
   try {
     return typeof window !== 'undefined' && typeof window.indexedDB !== 'undefined';
-  } catch(e) {
+  } catch(_e) {
     return false;
   }
 }

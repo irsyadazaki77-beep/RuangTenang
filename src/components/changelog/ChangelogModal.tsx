@@ -35,7 +35,7 @@ interface ChangelogModalProps {
 export const ChangelogModal: React.FC<ChangelogModalProps> = ({
   isOpen,
   onClose,
-  initialSelectedVersion,
+  initialSelectedVersion: _initialSelectedVersion,
   onUpdateSeen
 }) => {
   const [searchQuery, setSearchQuery] = useState('');

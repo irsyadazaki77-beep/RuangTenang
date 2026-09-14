@@ -92,7 +92,7 @@ export const encryptionService = {
       plaintext += decipher.final('utf8');
       
       return plaintext;
-    } catch (error) {
+    } catch (_error) {
       console.error(`Decryption failed for sensitive field using key version ${version}.`);
       throw new Error('Failed to decrypt sensitive data');
     }

@@ -4,9 +4,8 @@ import { scanAndSanitizePII } from '../piiService.js';
 import { sanitizeInput } from '../../security.js';
 import { getGenAIClient } from '../../config/aiConfig.js';
 import { aiModelRouter } from './aiModelRouter.js';
-import { formatEmergencyContactsForAiPrompt, getVerifiedEmergencyContacts } from '../../config/emergencyRegistry.js';
-import { analyzeMessageSentiment } from '../../../src/lib/crisisDetector.js';
-import { validateAndSanitizeToolCall, ValidToolName } from './aiToolSchemas.js';
+import { getVerifiedEmergencyContacts } from '../../config/emergencyRegistry.js';
+import { validateAndSanitizeToolCall } from './aiToolSchemas.js';
 import { z } from 'zod';
 
 export interface ChatStreamGatewayParams {

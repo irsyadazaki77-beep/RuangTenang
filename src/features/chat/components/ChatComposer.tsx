@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Plus, Square, Sparkles, Paperclip, X, FileText, Image as ImageIcon } from 'lucide-react';
+import { Send, Plus, Square, Sparkles, Paperclip, X, FileText } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { safeLocalStorage } from '../../../lib/storage';
 import { CHAT_COMMANDS, CHAT_PLUGINS } from '../constants/commands';

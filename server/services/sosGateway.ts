@@ -10,7 +10,7 @@ try {
   if (accountSid && authToken && twilioPhoneNumber) {
     client = twilio(accountSid, authToken);
   }
-} catch (error) {
+} catch (_error) {
   // Silent catch without dumping credentials
 }
 
@@ -52,7 +52,7 @@ export async function sendEmergencySOS(payload: SOSPayload): Promise<{ status: S
         from: twilioPhoneNumber,
         to: payload.emergencyContact
       });
-      console.log(`[SOS GATEWAY] Emergency alert dispatched to ${maskedRecipient}`);
+      console.info(`[SOS GATEWAY] Emergency alert dispatched to ${maskedRecipient}`);
       return { status: 'delivered', message: 'Sinyal darurat berhasil dikirim via SMS/WhatsApp.' };
     }
 
@@ -60,7 +60,7 @@ export async function sendEmergencySOS(payload: SOSPayload): Promise<{ status: S
       return { status: 'not_configured', message: 'Layanan darurat belum dikonfigurasi oleh admin.' };
     }
 
-    console.log(`[SOS GATEWAY] Local simulation mode to ${maskedRecipient}`);
+    console.info(`[SOS GATEWAY] Local simulation mode to ${maskedRecipient}`);
     return { status: 'mock_mode', message: 'Simulasi pesan darurat dicatat di sistem lokal.' };
 
   } catch (error: any) {

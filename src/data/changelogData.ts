@@ -23,7 +23,6 @@ export interface ReleaseNote {
 }
 
 export { CURRENT_APP_VERSION, LAST_UPDATED_DATE, isNewUpdateAvailable, markUpdateAsSeen } from './appVersion';
-import { CURRENT_APP_VERSION } from './appVersion';
 
 export const APP_CHANGELOG: ReleaseNote[] = [
   {

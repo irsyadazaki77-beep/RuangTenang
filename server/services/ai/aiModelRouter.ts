@@ -1,5 +1,5 @@
 import { getGenAIClient, isAiAvailable } from '../../config/aiConfig.js';
-import { isModelAllowedForTier, getModelInfo, getActualGeminiModel } from './aiModelRegistry.js';
+import { isModelAllowedForTier, getActualGeminiModel } from './aiModelRegistry.js';
 
 export type ModelTier = 'PRIMARY' | 'FALLBACK' | 'COMPLEX' | 'FAST';
 
@@ -41,7 +41,7 @@ export const aiModelRouter = {
           (err.status && [400, 401, 403, 422].includes(Number(err.status)));
 
         if (isNonTransient) {
-          console.log(`[AI_MODEL_ROUTER] Non-transient failure detected (${err.message || err}). Aborting retry loop immediately.`);
+          console.warn(`[AI_MODEL_ROUTER] Non-transient failure detected (${err.message || err}). Aborting retry loop immediately.`);
           break;
         }
         

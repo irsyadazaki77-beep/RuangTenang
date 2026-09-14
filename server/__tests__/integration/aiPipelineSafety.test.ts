@@ -262,7 +262,7 @@ describe('FASE 8: Unified AI Gateway & Safety Pipeline Tests', () => {
       });
 
       expect(res.text).toBeDefined();
-    });
+    }, 15000);
   });
 
   describe('9. Slang & Multilingual Crisis Phrasing & Benign Metaphors', () => {

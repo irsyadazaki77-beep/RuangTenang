@@ -284,7 +284,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                 }`}
               >
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className={`w-5 h-5 shrink-0 ${activeTab === tab.id ? 'text-teal-600' : 'text-muted'}`} />
+                  <Icon className={`w-5 h-5 shrink-0 ${activeTab === tab.id ? 'text-teal-600' : 'text-muted'}`} />
                   <span className="truncate">{tab.label}</span>
                 </div>
                 <ChevronRight className="w-4 h-4 text-muted md:hidden shrink-0" />

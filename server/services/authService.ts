@@ -1,8 +1,6 @@
 import jwt from 'jsonwebtoken';
 import { Response } from 'express';
-import { serverDb, UserRecord } from '../database';
-import { emailService } from './emailService';
-import { safeLog } from '../security';
+import { UserRecord } from '../database';
 import crypto from 'crypto';
 import { getJwtSecret } from '../middleware/auth';
 

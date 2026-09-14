@@ -1,10 +1,9 @@
 import { useEscapeKey } from '../../hooks/useEscapeKey';
 import React, { useState, useEffect, useRef } from 'react';
 import { User, AlertCircle, CheckCircle, UserPlus, LogIn, KeyRound, ShieldCheck, MailCheck, Lock, X } from 'lucide-react';
-import { UserRole, UserSession } from '../../types';
+import { UserSession } from '../../types';
 import { apiClient } from '../../lib/apiClient';
 import { useAuth } from '../../contexts/AuthContext';
-import { LoginForm } from './components/LoginForm';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -71,7 +70,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   }, [onClose]);
 
   const [activeTab, setActiveTab] = useState<AuthTab>('login');
-  const [selectedRole, setSelectedRole] = useState<UserRole>('mahasiswa');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');

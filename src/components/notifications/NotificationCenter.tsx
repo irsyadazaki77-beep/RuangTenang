@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Bell, Trash2, Shield, Calendar, Award, MessageSquare } from 'lucide-react';
-import { getNotifications, saveNotifications, AppNotification, AppNotification as NotificationType } from '../../lib/notificationStore';
+import { getNotifications, saveNotifications, AppNotification } from '../../lib/notificationStore';
 import { useEscapeKey } from '../../hooks/useEscapeKey';
 
 import { EmptyState } from '../common/EmptyState';

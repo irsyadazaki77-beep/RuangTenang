@@ -5,11 +5,9 @@ import {
   Download,
   Bell,
   ExternalLink,
-  CheckCircle2,
   Clock,
   X,
   Volume2,
-  AlertCircle,
   ShieldCheck
 } from 'lucide-react';
 import { Appointment } from '../types';

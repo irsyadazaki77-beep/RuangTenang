@@ -1,6 +1,6 @@
 import { apiClient } from "../lib/apiClient";
 import React, { useState, useEffect, useCallback } from 'react';
-import { Sparkles, Zap, ShieldAlert, RefreshCw, ChevronRight, Info, Clock, AlertTriangle } from 'lucide-react';
+import { Sparkles, RefreshCw, ChevronRight, Clock, AlertTriangle } from 'lucide-react';
 import { ErrorState } from "./common/ErrorState";
 
 export interface UsageStatsData {
@@ -66,8 +66,8 @@ async function getCachedUsageStats(force = false): Promise<UsageStatsData | null
 }
 
 export const AiQuotaBadge: React.FC<AiQuotaBadgeProps> = ({
-  userId = 'guest',
-  userTier = 'Free',
+  userId: _userId = 'guest',
+  userTier: _userTier = 'Free',
   variant = 'compact',
   onOpenSettings,
   className = ''

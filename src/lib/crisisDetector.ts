@@ -1,4 +1,3 @@
-import { VerifiedHelpline } from '../types';
 import { VERIFIED_HELPLINES } from './emergencyResources';
 export { VERIFIED_HELPLINES };
 

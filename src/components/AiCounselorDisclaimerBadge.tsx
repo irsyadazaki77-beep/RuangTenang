@@ -1,5 +1,5 @@
 import React from 'react';
-import { Bot, UserCheck, ShieldAlert, Sparkles } from 'lucide-react';
+import { Bot, UserCheck, Sparkles } from 'lucide-react';
 
 interface DisclaimerProps {
   type: 'ai_simulation' | 'human_professional';

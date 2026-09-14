@@ -7,14 +7,6 @@ import { DashboardSkeleton } from '../../components/common/Skeleton';
 import { EmptyState } from '../../components/common/EmptyState';
 import { ErrorState } from '../../components/common/ErrorState';
 
-interface AuditLogEntry {
-  id: string;
-  action: string;
-  details: string;
-  timestamp: string;
-  userRole?: string;
-}
-
 export const CounselorDashboard: React.FC = () => {
   const [riskAlerts, setRiskAlerts] = useState<RiskAlert[]>([]);
   const [searchRisk, setSearchRisk] = useState('');
