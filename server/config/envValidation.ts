@@ -25,6 +25,7 @@ export function validateEnvironment(): void {
   const isPreview = process.env.IS_AI_STUDIO_PREVIEW === 'true' || process.env.PREVIEW_MODE === 'true';
   const jwtSecret = process.env.JWT_SECRET;
   const encryptionKey = process.env.DATA_ENCRYPTION_KEY || process.env.ENCRYPTION_KEY;
+  const blindIndexSecret = process.env.BLIND_INDEX_SECRET;
 
   if (isProd && !isPreview) {
     if (!jwtSecret) {
@@ -45,6 +46,15 @@ export function validateEnvironment(): void {
     if (isKnownInsecureDemoSecret(encryptionKey)) {
       throw new Error('FATAL SECURITY ERROR: Insecure demo ENCRYPTION_KEY detected in production.');
     }
+    if (!blindIndexSecret) {
+      throw new Error('FATAL SECURITY ERROR: BLIND_INDEX_SECRET environment variable is missing in production.');
+    }
+    if (blindIndexSecret.length < 32) {
+      throw new Error('FATAL SECURITY ERROR: BLIND_INDEX_SECRET must be at least 32 characters long in production.');
+    }
+    if (isKnownInsecureDemoSecret(blindIndexSecret)) {
+      throw new Error('FATAL SECURITY ERROR: Insecure demo BLIND_INDEX_SECRET detected in production.');
+    }
 
     // Validate Database Configuration in Production
     resolveDatabaseConfiguration();
@@ -56,6 +66,9 @@ export function validateEnvironment(): void {
     if (!process.env.ENCRYPTION_KEY) {
       process.env.ENCRYPTION_KEY = 'local-dev-aes-encryption-key-ruangtenang-32-chars-long';
       process.env.DATA_ENCRYPTION_KEY = process.env.ENCRYPTION_KEY;
+    }
+    if (!process.env.BLIND_INDEX_SECRET) {
+      process.env.BLIND_INDEX_SECRET = 'local-dev-blind-index-hmac-secret-ruangtenang-32-chars';
     }
     if (!process.env.DATABASE_URL) {
       process.env.DATABASE_URL = 'file:./prisma/ruangtenang_sqlite.db';

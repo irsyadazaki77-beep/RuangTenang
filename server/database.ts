@@ -164,6 +164,8 @@ export interface AppointmentRecord {
   studentName?: string;
   studentNIM?: string;
   studentEmail?: string;
+  studentNimHash?: string;
+  studentEmailHash?: string;
 }
 
 export interface ScreeningRecord {
@@ -432,6 +434,8 @@ export const serverDb = {
   cleanOldAppointments: appointmentRepository.cleanOldAppointments.bind(appointmentRepository),
   getAppointments: appointmentRepository.getAppointments.bind(appointmentRepository),
   findAppointmentById: appointmentRepository.findAppointmentById.bind(appointmentRepository),
+  findAppointmentsByNIM: appointmentRepository.findAppointmentsByNIM.bind(appointmentRepository),
+  findAppointmentsByEmail: appointmentRepository.findAppointmentsByEmail.bind(appointmentRepository),
   getAppointmentAvailability: appointmentRepository.getAppointmentAvailability.bind(appointmentRepository),
   addAppointment: appointmentRepository.addAppointment.bind(appointmentRepository),
   updateAppointment: appointmentRepository.updateAppointment.bind(appointmentRepository),

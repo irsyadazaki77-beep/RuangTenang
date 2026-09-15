@@ -1,5 +1,15 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Plus, Square, Sparkles, Paperclip, X, FileText } from 'lucide-react';
+import { 
+  Send, 
+  Plus, 
+  Square, 
+  Paperclip, 
+  X, 
+  FileText, 
+  ShieldCheck, 
+  Command,
+  LucideIcon
+} from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { safeLocalStorage } from '../../../lib/storage';
 import { CHAT_COMMANDS, CHAT_PLUGINS } from '../constants/commands';
@@ -14,20 +24,29 @@ interface Props {
   onOpenPlugin?: (pluginId: string) => void;
 }
 
-export function ChatComposer({ onSend, isTyping, onStop, chatId, onCommand, onOpenPlugin }: Props) {
+export function ChatComposer({ 
+  onSend, 
+  isTyping, 
+  onStop, 
+  chatId, 
+  onCommand, 
+  onOpenPlugin 
+}: Props) {
   const [input, setInput] = useState('');
   const [attachments, setAttachments] = useState<Attachment[]>([]);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [showPlugins, setShowPlugins] = useState(false);
+  const [showActionMenu, setShowActionMenu] = useState(false);
   const [showCommands, setShowCommands] = useState(false);
   const [selectedCmdIndex, setSelectedCmdIndex] = useState(0);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const composerRef = useRef<HTMLDivElement>(null);
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const composerContainerRef = useRef<HTMLDivElement>(null);
+
+  // Load and persist draft per chat session
   useEffect(() => {
     const draft = safeLocalStorage.getItem(`draft_${chatId || 'new'}`);
     if (draft) setInput(draft);
-    setAttachments([]); // Clear attachments when switching chat
+    setAttachments([]);
   }, [chatId]);
 
   useEffect(() => {
@@ -37,24 +56,24 @@ export function ChatComposer({ onSend, isTyping, onStop, chatId, onCommand, onOp
       safeLocalStorage.removeItem(`draft_${chatId || 'new'}`);
     }
 
+    // Auto-grow textarea smoothly up to 160px max height
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
       const newHeight = Math.min(textareaRef.current.scrollHeight, 160);
       textareaRef.current.style.height = `${newHeight}px`;
     }
 
+    // Detect slash commands
     const isSlash = input.startsWith('/');
     setShowCommands(isSlash);
-    if (isSlash) {
-      setSelectedCmdIndex(0);
-    }
+    if (isSlash) setSelectedCmdIndex(0);
   }, [input, chatId]);
 
-  // Click outside to close menus
+  // Click outside to dismiss open menus
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (composerRef.current && !composerRef.current.contains(e.target as Node)) {
-        setShowPlugins(false);
+      if (composerContainerRef.current && !composerContainerRef.current.contains(e.target as Node)) {
+        setShowActionMenu(false);
         setShowCommands(false);
       }
     };
@@ -67,16 +86,24 @@ export function ChatComposer({ onSend, isTyping, onStop, chatId, onCommand, onOp
     c.label.toLowerCase().includes(input.slice(1).toLowerCase())
   );
 
-  
   const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
-  const ALLOWED_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'text/plain', 'text/markdown', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+  const ALLOWED_TYPES = [
+    'application/pdf', 
+    'image/jpeg', 
+    'image/png', 
+    'image/webp', 
+    'text/plain', 
+    'text/markdown', 
+    'application/msword', 
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+  ];
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
-    
+
     if (attachments.length + files.length > 3) {
-      alert('Maksimal 3 lampiran diperbolehkan.');
+      alert('Maksimal 3 lampiran diperbolehkan dalam satu pesan.');
       return;
     }
 
@@ -86,21 +113,21 @@ export function ChatComposer({ onSend, isTyping, onStop, chatId, onCommand, onOp
           id: Math.random().toString(36).substring(7),
           file,
           status: 'error' as const,
-          errorMessage: 'Ukuran file terlalu besar (Max 5MB)'
+          errorMessage: 'Ukuran file terlalu besar (Maks 5MB)'
         };
       }
       if (!ALLOWED_TYPES.includes(file.type)) {
-         return {
+        return {
           id: Math.random().toString(36).substring(7),
           file,
           status: 'error' as const,
-          errorMessage: 'Tipe file tidak diizinkan'
+          errorMessage: 'Format file tidak didukung'
         };
       }
 
       const id = Math.random().toString(36).substring(7);
       const isImage = file.type.startsWith('image/');
-      
+
       const newAttachment: Attachment = {
         id,
         file,
@@ -108,7 +135,7 @@ export function ChatComposer({ onSend, isTyping, onStop, chatId, onCommand, onOp
         previewUrl: isImage ? URL.createObjectURL(file) : undefined
       };
 
-      // Upload via FormData multipart endpoint
+      // Upload via backend endpoint
       const formData = new FormData();
       formData.append('files', file);
 
@@ -126,7 +153,7 @@ export function ChatComposer({ onSend, isTyping, onStop, chatId, onCommand, onOp
       .then(async res => {
         const data = await res.json();
         if (!res.ok || !data.success) {
-          const errMsg = data.message || data.error?.message || 'Gagal mengunggah file';
+          const errMsg = data.message || data.error?.message || 'Gagal mengunggah berkas';
           setAttachments(prev => prev.map(a => a.id === id ? { ...a, status: 'error', errorMessage: errMsg } : a));
           return;
         }
@@ -150,7 +177,7 @@ export function ChatComposer({ onSend, isTyping, onStop, chatId, onCommand, onOp
 
     setAttachments(prev => [...prev, ...newAttachments]);
     if (fileInputRef.current) fileInputRef.current.value = '';
-    setShowPlugins(false);
+    setShowActionMenu(false);
   };
 
   const removeAttachment = (id: string) => {
@@ -164,7 +191,7 @@ export function ChatComposer({ onSend, isTyping, onStop, chatId, onCommand, onOp
     setInput('');
     safeLocalStorage.removeItem(`draft_${chatId || 'new'}`);
     setShowCommands(false);
-    setShowPlugins(false);
+    setShowActionMenu(false);
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
@@ -181,64 +208,98 @@ export function ChatComposer({ onSend, isTyping, onStop, chatId, onCommand, onOp
   };
 
   const handleSend = () => {
+    if (isTyping) {
+      onStop();
+      return;
+    }
     if ((!input.trim() && attachments.length === 0) || isTyping) return;
-    
+
     if (input.startsWith('/')) {
       handleExecuteCommand(input.trim());
       return;
     }
-    
+
     const validAttachments = attachments.filter(a => a.status === 'success');
     if (validAttachments.length > 0) {
-      onSend(input, undefined, validAttachments);
+      onSend(input.trim(), undefined, validAttachments);
     } else {
-      onSend(input);
+      onSend(input.trim());
     }
-    setAttachments([]);
+
     setInput('');
+    setAttachments([]);
     safeLocalStorage.removeItem(`draft_${chatId || 'new'}`);
+    setShowActionMenu(false);
     setShowCommands(false);
-    setShowPlugins(false);
+
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
   };
 
-  const handlePluginClick = (pluginId: string) => {
-    setShowPlugins(false);
-    if (onOpenPlugin) {
-      onOpenPlugin(pluginId);
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (showCommands && filteredCommands.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSelectedCmdIndex(prev => (prev + 1) % filteredCommands.length);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSelectedCmdIndex(prev => (prev - 1 + filteredCommands.length) % filteredCommands.length);
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        const selected = filteredCommands[selectedCmdIndex];
+        if (selected) {
+          handleExecuteCommand(selected.cmd);
+        }
+        return;
+      }
+      if (e.key === 'Escape') {
+        setShowCommands(false);
+        return;
+      }
+    }
+
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
     }
   };
 
+  const hasContent = Boolean(input.trim() || attachments.length > 0);
+
   return (
     <div 
-      ref={composerRef}
-      className="w-full px-3 sm:px-4 pt-1.5 pb-[max(0.75rem,env(safe-area-inset-bottom))] sticky bottom-0 z-20 shrink-0 bg-gradient-to-t from-stone-50 via-stone-50/95 to-transparent dark:from-[#0c1117] dark:via-[#0c1117]/95"
+      ref={composerContainerRef}
+      className="w-full px-3 sm:px-5 pt-1.5 pb-[max(0.75rem,env(safe-area-inset-bottom))] sticky bottom-0 z-20 shrink-0 bg-gradient-to-t from-stone-50 via-stone-50/95 to-transparent dark:from-[#0c1117] dark:via-[#0c1117]/95"
     >
       <div className="max-w-3xl mx-auto w-full relative">
+        
+        {/* 1. Quick Slash Commands Dropdown */}
         <AnimatePresence>
-          {/* Quick Command Suggestions Popup */}
           {showCommands && filteredCommands.length > 0 && (
             <motion.div
-              initial={{ opacity: 0, y: 6, scale: 0.98 }}
+              initial={{ opacity: 0, y: 8, scale: 0.98 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 4, scale: 0.98 }}
-              transition={{ duration: 0.12 }}
-              className="absolute bottom-full left-0 mb-2 w-full max-w-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl rounded-xl p-1 z-30 overflow-hidden"
+              exit={{ opacity: 0, y: 8, scale: 0.98 }}
+              transition={{ duration: 0.15 }}
+              className="absolute bottom-full left-0 mb-2 w-full max-w-sm rounded-2xl border border-stone-200/90 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md p-1.5 shadow-xl z-30 overflow-hidden"
               role="listbox"
-              aria-label="Daftar Perintah Cepat"
+              aria-label="Pintas Perintah Cepat"
             >
-              <div className="text-[10.5px] font-medium text-slate-400 dark:text-slate-500 px-2 py-0.5 flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-0.5 mb-0.5">
+              <div className="text-[11px] font-semibold text-stone-500 dark:text-slate-400 px-2.5 py-1 flex items-center justify-between border-b border-stone-100 dark:border-slate-800 pb-1 mb-1">
                 <div className="flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
-                  Perintah Cepat
+                  <Command className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+                  <span>Pintas Perintah</span>
                 </div>
-                <span className="text-[10px]">Enter / Tab</span>
+                <span className="text-[10px] font-mono text-stone-400">Tekan Enter / Tab</span>
               </div>
-              <div className="max-h-44 overflow-y-auto space-y-0.5 custom-scrollbar">
+              <div className="max-h-48 overflow-y-auto space-y-0.5 custom-scrollbar">
                 {filteredCommands.map((c, index) => {
-                  const Icon = c.icon;
+                  const IconComponent = c.icon as LucideIcon;
                   const isSelected = index === selectedCmdIndex;
                   return (
                     <button
@@ -246,23 +307,23 @@ export function ChatComposer({ onSend, isTyping, onStop, chatId, onCommand, onOp
                       type="button"
                       onClick={() => handleExecuteCommand(c.cmd)}
                       onMouseEnter={() => setSelectedCmdIndex(index)}
-                      className={`w-full text-left px-2.5 py-1.5 rounded-lg transition-colors flex items-center gap-2 cursor-pointer text-xs min-h-[36px] ${
+                      className={`w-full text-left px-2.5 py-1.5 rounded-xl transition-all flex items-center gap-2.5 cursor-pointer text-xs min-h-[38px] ${
                         isSelected 
-                          ? 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100' 
-                          : 'hover:bg-slate-50 dark:hover:bg-slate-800/60 text-slate-700 dark:text-slate-300'
+                          ? 'bg-teal-50 dark:bg-teal-950/60 text-teal-950 dark:text-teal-100 font-medium' 
+                          : 'text-stone-700 dark:text-slate-300 hover:bg-stone-100/80 dark:hover:bg-slate-800/60'
                       }`}
                       role="option"
                       aria-selected={isSelected}
                     >
-                      <div className="w-6 h-6 rounded-md bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0">
-                        <Icon className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+                      <div className="w-7 h-7 rounded-lg bg-stone-100 dark:bg-slate-800 flex items-center justify-center shrink-0">
+                        <IconComponent className="w-4 h-4 text-teal-600 dark:text-teal-400" />
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between">
-                          <span className="font-mono font-semibold text-teal-600 dark:text-teal-400">{c.cmd}</span>
-                          <span className="text-[10.5px] text-slate-400 truncate ml-2">{c.label}</span>
+                          <span className="font-mono font-semibold text-teal-700 dark:text-teal-400">{c.cmd}</span>
+                          <span className="text-[11px] text-stone-500 dark:text-slate-400 truncate ml-2">{c.label}</span>
                         </div>
-                        <p className="text-[10.5px] text-slate-400 truncate">{c.desc}</p>
+                        <p className="text-[11px] text-stone-500 dark:text-slate-400 truncate">{c.desc}</p>
                       </div>
                     </button>
                   );
@@ -270,85 +331,120 @@ export function ChatComposer({ onSend, isTyping, onStop, chatId, onCommand, onOp
               </div>
             </motion.div>
           )}
+        </AnimatePresence>
 
-          {/* Plus / Quick Tools Popup */}
-          {showPlugins && !showCommands && (
+        {/* 2. Zen Action Sheet '+' (Expandable Menu) */}
+        <AnimatePresence>
+          {showActionMenu && (
             <motion.div
-              initial={{ opacity: 0, y: 6, scale: 0.98 }}
+              initial={{ opacity: 0, y: 8, scale: 0.96 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 4, scale: 0.98 }}
-              transition={{ duration: 0.12 }}
-              className="absolute bottom-full left-0 mb-2 w-full max-w-[260px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl rounded-xl p-1 z-30 space-y-0.5"
+              exit={{ opacity: 0, y: 8, scale: 0.96 }}
+              transition={{ duration: 0.16, ease: 'easeOut' }}
+              className="absolute bottom-full left-0 mb-3 w-72 rounded-2xl border border-stone-200/90 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md p-2 shadow-2xl z-30"
               role="menu"
-              aria-label="Layanan & Fitur"
+              aria-label="Aksi Cepat & Layanan Kampus"
             >
-              <div className="text-[10.5px] font-semibold text-slate-400 dark:text-slate-500 px-2 py-0.5">
-                Lampiran
+              <div className="px-2 pb-1.5 mb-1 border-b border-stone-100 dark:border-slate-800 flex items-center justify-between">
+                <span className="text-xs font-semibold text-stone-700 dark:text-stone-300">Layanan & Fitur</span>
+                <span className="text-[10px] font-medium text-teal-700 dark:text-teal-300 bg-teal-50 dark:bg-teal-950/80 px-2 py-0.5 rounded-full border border-teal-200/60 dark:border-teal-800/60">
+                  Rahasia & Aman
+                </span>
               </div>
+
+              {/* Upload Document / Image */}
               <button
                 type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="w-full flex items-center gap-2 p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-left transition-colors cursor-pointer mb-0.5 min-h-[38px]"
+                onClick={() => {
+                  fileInputRef.current?.click();
+                  setShowActionMenu(false);
+                }}
+                className="w-full flex items-center gap-2.5 p-2 rounded-xl text-left hover:bg-stone-100 dark:hover:bg-slate-800/80 transition-colors text-xs text-stone-700 dark:text-stone-300 cursor-pointer min-h-[38px]"
                 role="menuitem"
               >
-                <div className="w-7 h-7 rounded-md bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0">
+                <div className="w-7 h-7 rounded-lg bg-teal-50 dark:bg-teal-950/60 flex items-center justify-center shrink-0">
                   <Paperclip className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="font-medium text-xs text-slate-800 dark:text-slate-200">Unggah File</div>
-                  <div className="text-[10.5px] text-slate-400 truncate">PDF, Gambar, Teks (Max 5MB)</div>
+                  <div className="font-medium text-stone-800 dark:text-stone-200">Unggah File / Jurnal</div>
+                  <div className="text-[10.5px] text-stone-500 dark:text-slate-400 truncate">PDF, Gambar, Teks (Maks 5MB)</div>
                 </div>
               </button>
 
-              <div className="text-[10.5px] font-semibold text-slate-400 dark:text-slate-500 px-2 py-0.5">
-                Layanan & Fitur
+              {/* Quick Plugins List */}
+              <div className="pt-1 space-y-0.5 border-t border-stone-100 dark:border-slate-800 mt-1">
+                {CHAT_PLUGINS.map(p => {
+                  const Icon = p.icon;
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => {
+                        setShowActionMenu(false);
+                        onOpenPlugin?.(p.id);
+                      }}
+                      className="w-full flex items-center gap-2.5 p-2 rounded-xl text-left hover:bg-stone-100 dark:hover:bg-slate-800/80 transition-colors text-xs text-stone-700 dark:text-stone-300 cursor-pointer min-h-[38px]"
+                      role="menuitem"
+                    >
+                      <div className="w-7 h-7 rounded-lg bg-stone-100 dark:bg-slate-800 flex items-center justify-center shrink-0">
+                        <Icon className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-stone-800 dark:text-stone-200">{p.label}</div>
+                        <div className="text-[10.5px] text-stone-500 dark:text-slate-400 truncate">{p.desc}</div>
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
-              {CHAT_PLUGINS.map(p => {
-                const Icon = p.icon;
-                return (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => handlePluginClick(p.id)}
-                    className="w-full flex items-center gap-2 p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-left transition-colors cursor-pointer min-h-[38px]"
-                    role="menuitem"
-                  >
-                    <div className="w-7 h-7 rounded-md bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0">
-                      <Icon className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium text-xs text-slate-800 dark:text-slate-200">{p.label}</div>
-                      <div className="text-[10.5px] text-slate-400 truncate">{p.desc}</div>
-                    </div>
-                  </button>
-                );
-              })}
+
+              {/* Privacy Footer Reassurance */}
+              <div className="mt-1.5 pt-1.5 border-t border-stone-100 dark:border-slate-800/80 flex items-center gap-1.5 px-2 text-[10.5px] text-stone-500 dark:text-slate-400">
+                <ShieldCheck className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 shrink-0" />
+                <span>Enkripsi End-to-End aktif.</span>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
 
+        {/* Hidden File Input */}
+        <input 
+          type="file" 
+          ref={fileInputRef} 
+          className="hidden" 
+          multiple 
+          accept=".pdf,image/*,.txt,.md,.doc,.docx" 
+          onChange={handleFileSelect} 
+        />
+
+        {/* 3. Attachments Preview Bar */}
         {attachments.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mb-1.5 px-1">
+          <div className="flex flex-wrap gap-1.5 mb-2 px-1">
             {attachments.map(att => (
-              <div key={att.id} className="relative flex items-center gap-1.5 p-1 pr-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-xs text-xs">
+              <div 
+                key={att.id} 
+                className="relative flex items-center gap-2 p-1.5 pr-2 bg-white dark:bg-slate-900 border border-stone-200/90 dark:border-slate-800 rounded-xl shadow-xs text-xs"
+              >
                 {att.previewUrl ? (
-                  <div className="w-8 h-8 rounded-md shrink-0 overflow-hidden bg-slate-100">
+                  <div className="w-7 h-7 rounded-lg shrink-0 overflow-hidden bg-stone-100 dark:bg-slate-800">
                     <img src={att.previewUrl} alt="Preview" className="w-full h-full object-cover" />
                   </div>
                 ) : (
-                  <div className="w-8 h-8 rounded-md shrink-0 flex items-center justify-center bg-slate-100 dark:bg-slate-700">
-                    <FileText className="w-3.5 h-3.5 text-slate-500" />
+                  <div className="w-7 h-7 rounded-lg shrink-0 flex items-center justify-center bg-stone-100 dark:bg-slate-800 text-teal-600 dark:text-teal-400">
+                    <FileText className="w-3.5 h-3.5" />
                   </div>
                 )}
-                <div className="flex-1 min-w-0 max-w-[120px]">
-                  <div className="font-medium text-[11.5px] text-slate-700 dark:text-slate-300 truncate">{att.file.name}</div>
-                  {att.status === 'uploading' && <div className="text-[9.5px] text-teal-600">Memuat...</div>}
-                  {att.status === 'error' && <div className="text-[9.5px] text-red-500 truncate">{att.errorMessage}</div>}
+                <div className="flex-1 min-w-0 max-w-[140px]">
+                  <div className="font-medium text-[11.5px] text-stone-800 dark:text-stone-200 truncate">{att.file.name}</div>
+                  {att.status === 'uploading' && <div className="text-[10px] text-teal-600 dark:text-teal-400">Mengunggah...</div>}
+                  {att.status === 'error' && <div className="text-[10px] text-red-500 truncate">{att.errorMessage}</div>}
+                  {att.status === 'success' && <div className="text-[10px] text-emerald-600">Siap dikirim</div>}
                 </div>
                 <button
                   type="button"
                   onClick={() => removeAttachment(att.id)}
-                  className="min-w-[28px] min-h-[28px] rounded-md flex items-center justify-center hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+                  className="w-6 h-6 rounded-md flex items-center justify-center text-stone-400 hover:text-red-500 hover:bg-stone-100 dark:hover:bg-slate-800 transition-colors"
+                  aria-label="Hapus lampiran"
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
@@ -357,118 +453,89 @@ export function ChatComposer({ onSend, isTyping, onStop, chatId, onCommand, onOp
           </div>
         )}
 
-        {/* Input Bar: Clean Floating Capsule with balanced density */}
-        <div className="relative flex items-end gap-1 sm:gap-1.5 bg-white dark:bg-slate-900 border border-stone-200/90 dark:border-slate-800 rounded-xl sm:rounded-2xl p-1 sm:p-1.5 shadow-[0_2px_12px_rgba(0,0,0,0.03)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.25)] focus-within:border-teal-500/60 dark:focus-within:border-teal-500/60 transition-all">
-          {/* Plus Button */}
-          <button
+        {/* 4. Zen Main Input Shell (Warm Stone & Soothing Teal Accent) */}
+        <div className="relative flex items-end gap-1.5 sm:gap-2 bg-white dark:bg-slate-900 border border-stone-200/90 dark:border-slate-800 rounded-2xl sm:rounded-3xl p-1.5 sm:p-2 shadow-[0_2px_14px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_20px_rgba(0,0,0,0.25)] focus-within:border-teal-600/60 dark:focus-within:border-teal-500/60 focus-within:ring-4 focus-within:ring-teal-600/5 transition-all">
+          
+          {/* Plus Action Button */}
+          <motion.button
             type="button"
+            whileTap={{ scale: 0.92 }}
             onClick={() => {
-              setShowPlugins(!showPlugins);
+              setShowActionMenu(!showActionMenu);
               setShowCommands(false);
             }}
-            className={`w-9 h-9 sm:w-8.5 sm:h-8.5 min-w-[36px] min-h-[36px] rounded-full flex items-center justify-center transition-colors shrink-0 cursor-pointer ${
-              showPlugins
-                ? 'bg-stone-200 dark:bg-slate-800 text-stone-900 dark:text-stone-100'
-                : 'text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-slate-800'
+            className={`w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] rounded-xl sm:rounded-2xl flex items-center justify-center transition-colors shrink-0 cursor-pointer ${
+              showActionMenu
+                ? 'bg-stone-200 dark:bg-slate-800 text-stone-900 dark:text-stone-100 rotate-45'
+                : 'text-stone-500 hover:text-stone-800 dark:text-stone-400 dark:hover:text-stone-200 hover:bg-stone-100/80 dark:hover:bg-slate-800/80'
             }`}
-            aria-label="Aksi tambahan"
-            title="Layanan & Fitur"
-            aria-expanded={showPlugins}
+            aria-label="Buka Menu Bantuan & Fitur"
+            title="Layanan & Bantuan (+)"
+            aria-expanded={showActionMenu}
           >
-            <Plus className={`w-4 h-4 sm:w-4.5 sm:h-4.5 transition-transform duration-150 ${showPlugins ? 'rotate-45' : ''}`} />
-          </button>
+            <Plus className="w-4.5 h-4.5 transition-transform duration-200" />
+          </motion.button>
           
-          {/* Textarea: 16px text on mobile prevents auto-zoom on iOS */}
-          <input type="file" ref={fileInputRef} className="hidden" multiple accept=".pdf,image/*,.txt,.md,.doc,.docx" onChange={handleFileSelect} />
+          {/* Textarea Input (Auto-grow, Clean font) */}
           <textarea
             ref={textareaRef}
             value={input}
             onFocus={() => {
               setTimeout(() => {
-                composerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+                composerContainerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
               }, 120);
             }}
             onChange={e => setInput(e.target.value)}
-            onKeyDown={e => {
-              if (showCommands && filteredCommands.length > 0) {
-                if (e.key === 'ArrowDown') {
-                  e.preventDefault();
-                  setSelectedCmdIndex(prev => (prev + 1) % filteredCommands.length);
-                  return;
-                }
-                if (e.key === 'ArrowUp') {
-                  e.preventDefault();
-                  setSelectedCmdIndex(prev => (prev - 1 + filteredCommands.length) % filteredCommands.length);
-                  return;
-                }
-                if (e.key === 'Tab') {
-                  e.preventDefault();
-                  const selected = filteredCommands[selectedCmdIndex];
-                  if (selected) {
-                    setInput(selected.cmd);
-                  }
-                  return;
-                }
-                if (e.key === 'Escape') {
-                  setShowCommands(false);
-                  return;
-                }
-              }
-
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                if (showCommands && filteredCommands.length > 0) {
-                  const selected = filteredCommands[selectedCmdIndex];
-                  if (selected) {
-                    handleExecuteCommand(selected.cmd);
-                    return;
-                  }
-                }
-                handleSend();
-              }
-            }}
-            placeholder="Tulis pesan atau ketik '/' untuk fitur..."
-            className="flex-1 max-h-32 sm:max-h-36 bg-transparent border-none focus:ring-0 resize-none py-1.5 px-1 text-[15px] sm:text-[14.5px] text-stone-800 dark:text-stone-200 placeholder-stone-400 dark:placeholder-slate-500 leading-relaxed outline-none min-w-0"
+            onKeyDown={handleKeyDown}
+            placeholder="Ketik apa yang sedang kamu rasakan... (Ketik '/' untuk menu cepat)"
+            className="flex-1 max-h-36 bg-transparent border-none focus:ring-0 resize-none py-2 px-1 text-[15px] sm:text-[14.5px] text-stone-800 dark:text-stone-100 placeholder-stone-400 dark:placeholder-stone-500 leading-relaxed outline-none min-w-0"
             rows={1}
             disabled={isTyping}
-            aria-label="Tulis pesan konsultasi atau perintah"
+            aria-label="Ketik pesan konsultasi"
           />
           
-          {/* Send / Stop Button */}
+          {/* Smart Send / Stop Button */}
           {isTyping ? (
-            <button
+            <motion.button
               type="button"
+              whileTap={{ scale: 0.9 }}
               onClick={onStop}
-              className="w-9 h-9 sm:w-8.5 sm:h-8.5 min-w-[36px] min-h-[36px] rounded-full bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 flex items-center justify-center shrink-0 transition-transform active:scale-95 cursor-pointer"
-              aria-label="Hentikan Jawaban"
+              className="w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] rounded-xl sm:rounded-2xl bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center shrink-0 transition shadow-xs cursor-pointer"
+              aria-label="Hentikan Jawaban AI"
               title="Hentikan respons AI"
             >
-              <Square className="w-3 h-3 fill-current" />
-            </button>
+              <Square className="w-3.5 h-3.5 fill-current" />
+            </motion.button>
           ) : (
-            <button
+            <motion.button
               type="button"
+              whileTap={hasContent ? { scale: 0.92 } : undefined}
               onClick={handleSend}
-              disabled={!input.trim() && attachments.length === 0}
-              className={`w-9 h-9 sm:w-8.5 sm:h-8.5 min-w-[36px] min-h-[36px] rounded-full flex items-center justify-center shrink-0 transition-all ${
-                (input.trim() || attachments.length > 0)
-                  ? 'bg-teal-600 hover:bg-teal-700 text-white shadow-xs active:scale-95 cursor-pointer'
+              disabled={!hasContent}
+              className={`w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] rounded-xl sm:rounded-2xl flex items-center justify-center shrink-0 transition-all duration-200 ${
+                hasContent
+                  ? 'bg-teal-700 hover:bg-teal-800 text-white shadow-md shadow-teal-700/20 active:scale-95 cursor-pointer'
                   : 'bg-stone-100 dark:bg-slate-800 text-stone-300 dark:text-slate-600 cursor-not-allowed'
               }`}
               aria-label="Kirim Pesan"
               title="Kirim pesan (Enter)"
             >
-              <Send className="w-3.5 h-3.5 ml-0.5" />
-            </button>
+              <Send className={`w-4 h-4 ml-0.5 transition-transform ${hasContent ? 'translate-x-0.5 -translate-y-0.5' : ''}`} />
+            </motion.button>
           )}
         </div>
         
-        {/* Minimal Disclaimer */}
-        <p className="text-center text-[11px] text-stone-400 dark:text-slate-500 mt-1.5 select-none tracking-tight">
-          RuangTenang dapat membuat kekeliruan. Selalu pertimbangkan informasi medis secara profesional.
-        </p>
+        {/* 5. Soothing Calm Indicator & Reassurance */}
+        <div className="flex items-center justify-center gap-2 mt-2 select-none">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-teal-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-teal-600"></span>
+          </span>
+          <p className="text-[11px] text-stone-500 dark:text-slate-400 tracking-tight text-center">
+            Ruang aman tanpa penghakiman. Tarik napas perlahan dan mulailah saat kamu siap.
+          </p>
+        </div>
       </div>
     </div>
   );
 }
-

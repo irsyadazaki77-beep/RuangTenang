@@ -68,6 +68,8 @@ model Appointments {
   studentName      String?
   studentNIM       String?
   studentEmail     String?
+  studentNimHash   String?
+  studentEmailHash String?
 
   // Relations
   user             Users?       @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -80,6 +82,8 @@ model Appointments {
   @@index([counselorId, date, time])
   @@index([date, status])
   @@index([createdAt])
+  @@index([studentNimHash])
+  @@index([studentEmailHash])
 }
 
 model Screenings {

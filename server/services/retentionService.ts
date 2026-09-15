@@ -159,7 +159,14 @@ export class RetentionService {
       const userEmail = user?.email || 'anonymized';
       let count = 0;
 
-      // 1. Chat Messages and Chats
+      // 1. Message Bookmarks and Attachments (Must delete before Chat Messages to prevent foreign key issues)
+      const delBookmarks = await tx.messageBookmarks.deleteMany({ where: { userId } });
+      count += delBookmarks.count;
+
+      const delAttachments = await tx.attachments.deleteMany({ where: { userId } });
+      count += delAttachments.count;
+
+      // 1b. Chat Messages and Chats
       const userChats = await tx.chats.findMany({
         where: { userId },
         select: { id: true }
@@ -178,9 +185,12 @@ export class RetentionService {
       const delMemories = await tx.userMemories.deleteMany({ where: { userId } });
       count += delMemories.count;
 
-      // 3. Mood Logs
+      // 3. Mood Logs & Self Care Tasks
       const delMoods = await tx.moodLogs.deleteMany({ where: { userId } });
       count += delMoods.count;
+
+      const delSelfCare = await tx.selfCareTasks.deleteMany({ where: { userId } });
+      count += delSelfCare.count;
 
       // 4. Screenings
       const delScreenings = await tx.screenings.deleteMany({ where: { userId } });
@@ -271,6 +281,13 @@ export class RetentionService {
     return await prisma.$transaction(async (tx) => {
       let count = 0;
 
+      // Clean bookmarks and attachments first
+      const delBookmarks = await tx.messageBookmarks.deleteMany({ where: { userId } });
+      count += delBookmarks.count;
+
+      const delAttachments = await tx.attachments.deleteMany({ where: { userId } });
+      count += delAttachments.count;
+
       const userChats = await tx.chats.findMany({
         where: { userId },
         select: { id: true }
@@ -290,6 +307,9 @@ export class RetentionService {
 
       const delMoods = await tx.moodLogs.deleteMany({ where: { userId } });
       count += delMoods.count;
+
+      const delSelfCare = await tx.selfCareTasks.deleteMany({ where: { userId } });
+      count += delSelfCare.count;
 
       const delScreenings = await tx.screenings.deleteMany({ where: { userId } });
       count += delScreenings.count;
