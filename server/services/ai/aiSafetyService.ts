@@ -427,7 +427,7 @@ Sesuaikan gaya, nada, dan panjang responsmu berdasarkan Mode Percakapan dan Gaya
         const modelRes = await aiRequestService.generateChatResponse({
           userId,
           userTier: input.userTier || 'Free',
-          requestedModelId: input.aiModel || 'gemini-3.1-flash-lite',
+          requestedModelId: input.aiModel || 'gemini-2.5-flash',
           prompt: formattedPrompt,
           history: activeHistory,
           systemInstruction,
@@ -476,7 +476,7 @@ Sesuaikan gaya, nada, dan panjang responsmu berdasarkan Mode Percakapan dan Gaya
         const modelRes = await aiRequestService.generateStreamResponse({
           userId,
           userTier: input.userTier || 'Free',
-          requestedModelId: input.aiModel || 'gemini-3.1-flash-lite',
+          requestedModelId: input.aiModel || 'gemini-2.5-flash',
           prompt: formattedPrompt,
           history: activeHistory,
           systemInstruction,

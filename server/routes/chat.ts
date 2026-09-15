@@ -3,6 +3,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { requireAuth, optionalAuth } from '../middleware/auth.js';
 import { aiAbuseLimiter } from '../middleware/aiAbuseLimiter.js';
+import { aiChatLimiter, aiSummaryLimiter } from '../middleware/rateLimiters.js';
 import { sanitizeInput } from '../security.js';
 import { scanAndSanitizePII } from '../services/piiService.js';
 import { checkUserAiUsageLimit, recordUserAiUsage, rollbackUserAiQuota } from '../services/aiUsageLimiter.js';
@@ -87,7 +88,7 @@ router.post('/chat/:id/branch', requireAuth, checkChatOwnership, ChatController.
 
 // 5. Smart Session Summary
 router.get('/chat/:id/summary', requireAuth, checkChatOwnership, ChatController.getSummary);
-router.post('/chat/:id/summary', requireAuth, checkChatOwnership, aiAbuseLimiter, ChatController.generateSummary);
+router.post('/chat/:id/summary', requireAuth, checkChatOwnership, aiSummaryLimiter, aiAbuseLimiter, ChatController.generateSummary);
 
 // 6. Memory preference per conversation
 router.put('/chat/:id/memory', requireAuth, checkChatOwnership, ChatController.updateMemoryPreference);
@@ -182,12 +183,12 @@ router.post('/chat/:id/truncate', requireAuth, checkChatOwnership, async (req: R
   }
 });
 
-router.post('/chat/summary', requireAuth, checkChatOwnership, aiAbuseLimiter, (req: Request, res: Response) => {
+router.post('/chat/summary', requireAuth, checkChatOwnership, aiSummaryLimiter, aiAbuseLimiter, (req: Request, res: Response) => {
   return ChatController.generateSummary(req, res);
 });
 
 // Main Streaming Chat Route
-router.post('/chat/stream', optionalAuth, aiAbuseLimiter, async (req: Request, res: Response) => {
+router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (req: Request, res: Response) => {
   try {
     const { 
       message, 

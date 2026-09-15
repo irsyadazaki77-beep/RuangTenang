@@ -4,21 +4,24 @@ import { GoogleGenAI } from '@google/genai';
  * RuangTenang Centralized AI Configuration & Model Registry
  */
 
-export const DEFAULT_AI_MODEL = 'gemini-3.1-flash-lite';
+export const DEFAULT_AI_MODEL = 'gemini-2.5-flash';
+export const RESILIENT_FALLBACK_AI_MODEL = 'gemini-3.5-flash-lite';
+
+export const CALMING_FALLBACK_MESSAGE = 'Maaf ya, aku lagi agak kesulitan merespons saat ini 🌿. Kamu boleh coba lagi beberapa saat lagi, atau langsung hubungi konselor kampus yaa 🤍.';
 
 export const AI_MODELS = {
-  DEFAULT_FAST: 'gemini-3.1-flash-lite',
+  DEFAULT_FAST: 'gemini-2.5-flash',
   LATEST_FLASH_38: 'gemini-3.8-flash',
   LATEST_FLASH: 'gemini-3.7-flash',
   DYNAMIC_FLASH: 'gemini-flash-latest',
   PRO_REASONING: 'gemini-3.1-pro-preview',
   BALANCED: 'gemini-2.5-flash',
-  PRO_LEGACY: 'gemini-2.5-pro',
-  LITE_FAST: 'gemini-3.1-flash-lite',
-  LITE_LEGACY: 'gemini-2.5-flash-lite',
-  FALLBACK: 'gemini-3.1-flash-lite',
-  CRISIS_CLASSIFIER: 'gemini-3.1-flash-lite',
-  COUNSELOR_SIMULATION: 'gemini-3.1-flash-lite',
+  PRO_LEGACY: 'gemini-2.5-flash',
+  LITE_FAST: 'gemini-3.5-flash-lite',
+  LITE_LEGACY: 'gemini-3.5-flash-lite',
+  FALLBACK: 'gemini-3.5-flash-lite',
+  CRISIS_CLASSIFIER: 'gemini-2.5-flash',
+  COUNSELOR_SIMULATION: 'gemini-2.5-flash',
 } as const;
 
 export interface AiModelInfo {

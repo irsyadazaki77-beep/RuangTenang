@@ -21,6 +21,7 @@ import { apiClient } from '../../lib/apiClient';
 import { CURRENT_APP_VERSION, LAST_UPDATED_DATE, APP_CHANGELOG, CATEGORY_METADATA } from '../../data/changelogData';
 import { ErrorState } from '../../components/common/ErrorState';
 import { EmptyState } from '../../components/common/EmptyState';
+import { BrandLogo } from '../../components/ui/BrandLogo';
 
 interface SettingsPageProps {
   userSession: UserSession | null;
@@ -267,7 +268,10 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
       
       {/* Sidebar Tabs for Desktop & Menu List for Mobile */}
       <div className={`w-full md:w-64 shrink-0 flex flex-col gap-2 ${showMobileDetail ? 'hidden md:flex' : 'flex'}`}>
-        <h2 className="text-lg font-bold text-primary mb-2 px-2 hidden md:block">Pengaturan</h2>
+        <div className="hidden md:flex items-center gap-2 mb-2 px-2">
+          <BrandLogo size="xs" iconOnly />
+          <h2 className="text-lg font-bold text-primary">Pengaturan</h2>
+        </div>
         <div className="flex flex-col gap-1.5 md:gap-1">
           {TABS.map(tab => {
             const Icon = tab.icon;

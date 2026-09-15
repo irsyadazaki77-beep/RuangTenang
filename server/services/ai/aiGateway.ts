@@ -68,7 +68,7 @@ export const aiGateway = {
       pluginResult: params.pluginResult,
       chatMode: params.chatMode,
       responseStyle: params.responseStyle,
-      aiModel: params.aiModel || 'gemini-3.1-flash-lite',
+      aiModel: params.aiModel || 'gemini-2.5-flash',
       history: params.history || [],
       isStreaming: true
     };
@@ -89,7 +89,7 @@ export const aiGateway = {
       pluginResult: params.pluginResult,
       chatMode: params.chatMode,
       responseStyle: params.responseStyle,
-      aiModel: params.aiModel || 'gemini-3.1-flash-lite',
+      aiModel: params.aiModel || 'gemini-2.5-flash',
       history: params.history || [],
       isStreaming: false
     };

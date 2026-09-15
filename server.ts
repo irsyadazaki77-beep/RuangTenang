@@ -183,6 +183,7 @@ async function startServer() {
         defaultSrc: ["'self'"],
         objectSrc: ["'none'"],
         baseUri: ["'self'"],
+        formAction: ["'self'"],
         scriptSrc: scriptSrcDirectives,
         scriptSrcAttr: ["'none'"],
         styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
@@ -195,11 +196,22 @@ async function startServer() {
     },
     // Frameguard disabled in favor of granular frameAncestors CSP to permit controlled preview iframe embedding
     frameguard: false,
+    xContentTypeOptions: true,
+    referrerPolicy: { policy: "strict-origin-when-cross-origin" },
+    dnsPrefetchControl: { allow: false },
+    permittedCrossDomainPolicies: { permittedPolicies: "none" },
     crossOriginEmbedderPolicy: isPreviewMode ? false : { policy: "credentialless" },
     crossOriginOpenerPolicy: isPreviewMode ? false : { policy: "same-origin" },
     crossOriginResourcePolicy: isPreviewMode ? false : { policy: "same-origin" },
     hsts: isProd ? { maxAge: 31536000, includeSubDomains: true, preload: true } : false,
   }));
+
+  // Permissions-Policy & Privacy Headers Middleware
+  app.use((_req, res, next) => {
+    // Restrict unnecessary browser hardware capabilities in a sensitive mental health context
+    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(), usb=(), display-capture=()');
+    next();
+  });
 
   // Dedicated client telemetry rate limiter (max 30 requests per 15 min window)
   const clientTelemetryLimiter = rateLimit({
@@ -210,12 +222,13 @@ async function startServer() {
     message: { success: false, error: 'Terlalu banyak laporan telemetry. Silakan tunggu.', code: 'RATE_LIMIT_EXCEEDED' }
   });
 
-  // Apply general API limiter and privacy cache headers
+  // Apply general API limiter, privacy cache headers, and noindex robots protection
   app.use('/api/', (req, res, next) => {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');
     res.setHeader('Surrogate-Control', 'no-store');
+    res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
     next();
   }, generalApiLimiter);
 

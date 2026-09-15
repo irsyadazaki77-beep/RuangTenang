@@ -214,7 +214,7 @@ export function ChatComposer({ onSend, isTyping, onStop, chatId, onCommand, onOp
   return (
     <div 
       ref={composerRef}
-      className="w-full px-3 sm:px-4 pb-3 sm:pb-4 pt-1 sticky bottom-0 z-20 shrink-0 bg-gradient-to-t from-stone-50 via-stone-50/95 to-transparent dark:from-[#0c1117] dark:via-[#0c1117]/95 pb-safe"
+      className="w-full px-3 sm:px-4 pt-1.5 pb-[max(0.75rem,env(safe-area-inset-bottom))] sticky bottom-0 z-20 shrink-0 bg-gradient-to-t from-stone-50 via-stone-50/95 to-transparent dark:from-[#0c1117] dark:via-[#0c1117]/95"
     >
       <div className="max-w-3xl mx-auto w-full relative">
         <AnimatePresence>
@@ -225,18 +225,18 @@ export function ChatComposer({ onSend, isTyping, onStop, chatId, onCommand, onOp
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 4, scale: 0.98 }}
               transition={{ duration: 0.12 }}
-              className="absolute bottom-full left-0 mb-2 w-full max-w-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl rounded-2xl p-1.5 z-30 overflow-hidden"
+              className="absolute bottom-full left-0 mb-2 w-full max-w-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl rounded-xl p-1 z-30 overflow-hidden"
               role="listbox"
               aria-label="Daftar Perintah Cepat"
             >
-              <div className="text-[11px] font-medium text-slate-400 dark:text-slate-500 px-2.5 py-1 flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-1 mb-1">
+              <div className="text-[10.5px] font-medium text-slate-400 dark:text-slate-500 px-2 py-0.5 flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-0.5 mb-0.5">
                 <div className="flex items-center gap-1.5">
-                  <Sparkles className="w-3 h-3 text-teal-600 dark:text-teal-400" />
+                  <Sparkles className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
                   Perintah Cepat
                 </div>
                 <span className="text-[10px]">Enter / Tab</span>
               </div>
-              <div className="max-h-48 overflow-y-auto space-y-0.5 custom-scrollbar">
+              <div className="max-h-44 overflow-y-auto space-y-0.5 custom-scrollbar">
                 {filteredCommands.map((c, index) => {
                   const Icon = c.icon;
                   const isSelected = index === selectedCmdIndex;
@@ -246,7 +246,7 @@ export function ChatComposer({ onSend, isTyping, onStop, chatId, onCommand, onOp
                       type="button"
                       onClick={() => handleExecuteCommand(c.cmd)}
                       onMouseEnter={() => setSelectedCmdIndex(index)}
-                      className={`w-full text-left px-2.5 py-1.5 rounded-xl transition-colors flex items-center gap-2.5 cursor-pointer text-xs ${
+                      className={`w-full text-left px-2.5 py-1.5 rounded-lg transition-colors flex items-center gap-2 cursor-pointer text-xs min-h-[36px] ${
                         isSelected 
                           ? 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100' 
                           : 'hover:bg-slate-50 dark:hover:bg-slate-800/60 text-slate-700 dark:text-slate-300'
@@ -254,13 +254,13 @@ export function ChatComposer({ onSend, isTyping, onStop, chatId, onCommand, onOp
                       role="option"
                       aria-selected={isSelected}
                     >
-                      <div className="w-6 h-6 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0">
+                      <div className="w-6 h-6 rounded-md bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0">
                         <Icon className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between">
-                          <span className="font-mono font-medium text-teal-600 dark:text-teal-400">{c.cmd}</span>
-                          <span className="text-[11px] text-slate-400 truncate ml-2">{c.label}</span>
+                          <span className="font-mono font-semibold text-teal-600 dark:text-teal-400">{c.cmd}</span>
+                          <span className="text-[10.5px] text-slate-400 truncate ml-2">{c.label}</span>
                         </div>
                         <p className="text-[10.5px] text-slate-400 truncate">{c.desc}</p>
                       </div>
@@ -278,30 +278,29 @@ export function ChatComposer({ onSend, isTyping, onStop, chatId, onCommand, onOp
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 4, scale: 0.98 }}
               transition={{ duration: 0.12 }}
-              className="absolute bottom-full left-0 mb-2 w-full max-w-[280px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl rounded-2xl p-1.5 z-30 space-y-0.5"
+              className="absolute bottom-full left-0 mb-2 w-full max-w-[260px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl rounded-xl p-1 z-30 space-y-0.5"
               role="menu"
               aria-label="Layanan & Fitur"
             >
-              
-              <div className="text-[11px] font-medium text-slate-400 dark:text-slate-500 px-2.5 py-1">
+              <div className="text-[10.5px] font-semibold text-slate-400 dark:text-slate-500 px-2 py-0.5">
                 Lampiran
               </div>
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="w-full flex items-center gap-2.5 p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl text-left transition-colors cursor-pointer mb-1"
+                className="w-full flex items-center gap-2 p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-left transition-colors cursor-pointer mb-0.5 min-h-[38px]"
                 role="menuitem"
               >
-                <div className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0">
+                <div className="w-7 h-7 rounded-md bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0">
                   <Paperclip className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="font-medium text-[12.5px] text-slate-800 dark:text-slate-200">Unggah File</div>
-                  <div className="text-[11px] text-slate-400 truncate">PDF, Gambar, Teks (Max 5MB)</div>
+                  <div className="font-medium text-xs text-slate-800 dark:text-slate-200">Unggah File</div>
+                  <div className="text-[10.5px] text-slate-400 truncate">PDF, Gambar, Teks (Max 5MB)</div>
                 </div>
               </button>
 
-              <div className="text-[11px] font-medium text-slate-400 dark:text-slate-500 px-2.5 py-1">
+              <div className="text-[10.5px] font-semibold text-slate-400 dark:text-slate-500 px-2 py-0.5">
                 Layanan & Fitur
               </div>
               {CHAT_PLUGINS.map(p => {
@@ -311,15 +310,15 @@ export function ChatComposer({ onSend, isTyping, onStop, chatId, onCommand, onOp
                     key={p.id}
                     type="button"
                     onClick={() => handlePluginClick(p.id)}
-                    className="w-full flex items-center gap-2.5 p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl text-left transition-colors cursor-pointer"
+                    className="w-full flex items-center gap-2 p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-left transition-colors cursor-pointer min-h-[38px]"
                     role="menuitem"
                   >
-                    <div className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0">
+                    <div className="w-7 h-7 rounded-md bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0">
                       <Icon className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="font-medium text-[12.5px] text-slate-800 dark:text-slate-200">{p.label}</div>
-                      <div className="text-[11px] text-slate-400 truncate">{p.desc}</div>
+                      <div className="font-medium text-xs text-slate-800 dark:text-slate-200">{p.label}</div>
+                      <div className="text-[10.5px] text-slate-400 truncate">{p.desc}</div>
                     </div>
                   </button>
                 );
@@ -328,29 +327,28 @@ export function ChatComposer({ onSend, isTyping, onStop, chatId, onCommand, onOp
           )}
         </AnimatePresence>
 
-        
         {attachments.length > 0 && (
-          <div className="flex flex-wrap gap-2 mb-2 px-2">
+          <div className="flex flex-wrap gap-1.5 mb-1.5 px-1">
             {attachments.map(att => (
-              <div key={att.id} className="relative flex items-center gap-2 p-1.5 pr-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm text-xs">
+              <div key={att.id} className="relative flex items-center gap-1.5 p-1 pr-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-xs text-xs">
                 {att.previewUrl ? (
-                  <div className="w-8 h-8 rounded shrink-0 overflow-hidden bg-slate-100">
+                  <div className="w-8 h-8 rounded-md shrink-0 overflow-hidden bg-slate-100">
                     <img src={att.previewUrl} alt="Preview" className="w-full h-full object-cover" />
                   </div>
                 ) : (
-                  <div className="w-8 h-8 rounded shrink-0 flex items-center justify-center bg-slate-100 dark:bg-slate-700">
-                    <FileText className="w-4 h-4 text-slate-500" />
+                  <div className="w-8 h-8 rounded-md shrink-0 flex items-center justify-center bg-slate-100 dark:bg-slate-700">
+                    <FileText className="w-3.5 h-3.5 text-slate-500" />
                   </div>
                 )}
                 <div className="flex-1 min-w-0 max-w-[120px]">
-                  <div className="font-medium text-slate-700 dark:text-slate-300 truncate">{att.file.name}</div>
-                  {att.status === 'uploading' && <div className="text-[10px] text-teal-600">Memuat...</div>}
-                  {att.status === 'error' && <div className="text-[10px] text-red-500 truncate">{att.errorMessage}</div>}
+                  <div className="font-medium text-[11.5px] text-slate-700 dark:text-slate-300 truncate">{att.file.name}</div>
+                  {att.status === 'uploading' && <div className="text-[9.5px] text-teal-600">Memuat...</div>}
+                  {att.status === 'error' && <div className="text-[9.5px] text-red-500 truncate">{att.errorMessage}</div>}
                 </div>
                 <button
                   type="button"
                   onClick={() => removeAttachment(att.id)}
-                  className="p-1 rounded-full hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+                  className="min-w-[28px] min-h-[28px] rounded-md flex items-center justify-center hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
@@ -359,8 +357,8 @@ export function ChatComposer({ onSend, isTyping, onStop, chatId, onCommand, onOp
           </div>
         )}
 
-        {/* Input Bar: Clean Floating Capsule */}
-        <div className="relative flex items-end gap-1.5 sm:gap-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl sm:rounded-3xl p-1.5 sm:p-2 shadow-[0_2px_12px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.25)] focus-within:border-slate-300 dark:focus-within:border-slate-700 transition-all">
+        {/* Input Bar: Clean Floating Capsule with balanced density */}
+        <div className="relative flex items-end gap-1 sm:gap-1.5 bg-white dark:bg-slate-900 border border-stone-200/90 dark:border-slate-800 rounded-xl sm:rounded-2xl p-1 sm:p-1.5 shadow-[0_2px_12px_rgba(0,0,0,0.03)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.25)] focus-within:border-teal-500/60 dark:focus-within:border-teal-500/60 transition-all">
           {/* Plus Button */}
           <button
             type="button"
@@ -368,23 +366,28 @@ export function ChatComposer({ onSend, isTyping, onStop, chatId, onCommand, onOp
               setShowPlugins(!showPlugins);
               setShowCommands(false);
             }}
-            className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center transition-colors shrink-0 cursor-pointer ${
+            className={`w-9 h-9 sm:w-8.5 sm:h-8.5 min-w-[36px] min-h-[36px] rounded-full flex items-center justify-center transition-colors shrink-0 cursor-pointer ${
               showPlugins
-                ? 'bg-slate-200 dark:bg-slate-800 text-slate-900 dark:text-slate-100'
-                : 'text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'
+                ? 'bg-stone-200 dark:bg-slate-800 text-stone-900 dark:text-stone-100'
+                : 'text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-slate-800'
             }`}
             aria-label="Aksi tambahan"
             title="Layanan & Fitur"
             aria-expanded={showPlugins}
           >
-            <Plus className={`w-4 h-4 transition-transform duration-150 ${showPlugins ? 'rotate-45' : ''}`} />
+            <Plus className={`w-4 h-4 sm:w-4.5 sm:h-4.5 transition-transform duration-150 ${showPlugins ? 'rotate-45' : ''}`} />
           </button>
           
-          {/* Textarea */}
+          {/* Textarea: 16px text on mobile prevents auto-zoom on iOS */}
           <input type="file" ref={fileInputRef} className="hidden" multiple accept=".pdf,image/*,.txt,.md,.doc,.docx" onChange={handleFileSelect} />
           <textarea
             ref={textareaRef}
             value={input}
+            onFocus={() => {
+              setTimeout(() => {
+                composerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+              }, 120);
+            }}
             onChange={e => setInput(e.target.value)}
             onKeyDown={e => {
               if (showCommands && filteredCommands.length > 0) {
@@ -425,7 +428,7 @@ export function ChatComposer({ onSend, isTyping, onStop, chatId, onCommand, onOp
               }
             }}
             placeholder="Tulis pesan atau ketik '/' untuk fitur..."
-            className="flex-1 max-h-40 bg-transparent border-none focus:ring-0 resize-none py-1.5 px-1 text-[14.5px] sm:text-[15px] text-slate-800 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500 leading-relaxed outline-none min-w-0"
+            className="flex-1 max-h-32 sm:max-h-36 bg-transparent border-none focus:ring-0 resize-none py-1.5 px-1 text-[15px] sm:text-[14.5px] text-stone-800 dark:text-stone-200 placeholder-stone-400 dark:placeholder-slate-500 leading-relaxed outline-none min-w-0"
             rows={1}
             disabled={isTyping}
             aria-label="Tulis pesan konsultasi atau perintah"
@@ -436,7 +439,7 @@ export function ChatComposer({ onSend, isTyping, onStop, chatId, onCommand, onOp
             <button
               type="button"
               onClick={onStop}
-              className="w-11 h-11 sm:w-10 sm:h-10 rounded-full bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 flex items-center justify-center shrink-0 transition-transform active:scale-95 cursor-pointer"
+              className="w-9 h-9 sm:w-8.5 sm:h-8.5 min-w-[36px] min-h-[36px] rounded-full bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 flex items-center justify-center shrink-0 transition-transform active:scale-95 cursor-pointer"
               aria-label="Hentikan Jawaban"
               title="Hentikan respons AI"
             >
@@ -447,10 +450,10 @@ export function ChatComposer({ onSend, isTyping, onStop, chatId, onCommand, onOp
               type="button"
               onClick={handleSend}
               disabled={!input.trim() && attachments.length === 0}
-              className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center shrink-0 transition-all ${
+              className={`w-9 h-9 sm:w-8.5 sm:h-8.5 min-w-[36px] min-h-[36px] rounded-full flex items-center justify-center shrink-0 transition-all ${
                 (input.trim() || attachments.length > 0)
                   ? 'bg-teal-600 hover:bg-teal-700 text-white shadow-xs active:scale-95 cursor-pointer'
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-300 dark:text-slate-600 cursor-not-allowed'
+                  : 'bg-stone-100 dark:bg-slate-800 text-stone-300 dark:text-slate-600 cursor-not-allowed'
               }`}
               aria-label="Kirim Pesan"
               title="Kirim pesan (Enter)"
@@ -461,7 +464,7 @@ export function ChatComposer({ onSend, isTyping, onStop, chatId, onCommand, onOp
         </div>
         
         {/* Minimal Disclaimer */}
-        <p className="text-center text-[11px] text-slate-400 dark:text-slate-500 mt-1.5 select-none tracking-tight">
+        <p className="text-center text-[11px] text-stone-400 dark:text-slate-500 mt-1.5 select-none tracking-tight">
           RuangTenang dapat membuat kekeliruan. Selalu pertimbangkan informasi medis secara profesional.
         </p>
       </div>

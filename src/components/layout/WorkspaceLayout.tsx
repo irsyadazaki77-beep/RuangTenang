@@ -2,6 +2,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Menu, MessageSquare } from 'lucide-react';
 import { motion, useReducedMotion } from 'motion/react';
+import { BrandLogo } from '../ui/BrandLogo';
 
 interface WorkspaceLayoutProps {
   title?: string;
@@ -43,10 +44,11 @@ export const WorkspaceLayout: React.FC<WorkspaceLayoutProps> = ({
           <button
             onClick={() => navigate('/')}
             className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-secondary hover:text-primary bg-slate-100/90 dark:bg-slate-800 hover:bg-slate-200/90 dark:hover:bg-slate-700 rounded-lg transition-all group shrink-0 cursor-pointer min-h-[44px] md:min-h-[32px]"
-            title="Kembali ke Chat"
+            title="Kembali ke Chat RuangTenang"
           >
-            <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
-            <span className="hidden xs:inline">Kembali ke Chat</span>
+            <BrandLogo size="xs" iconOnly />
+            <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-0.5 transition-transform" />
+            <span className="hidden xs:inline">Chat</span>
           </button>
 
           {title && (

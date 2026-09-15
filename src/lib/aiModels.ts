@@ -12,7 +12,7 @@ export interface AiModelOption {
   allowedTiers: string[];
 }
 
-export const DEFAULT_AI_MODEL_ID = 'gemini-3.1-flash-lite';
+export const DEFAULT_AI_MODEL_ID = 'gemini-3.8-flash';
 
 export const AVAILABLE_AI_MODELS: AiModelOption[] = [
   {
@@ -21,6 +21,7 @@ export const AVAILABLE_AI_MODELS: AiModelOption[] = [
     category: 'Gemini 3.x Series',
     tag: 'Terbaru • Cepat & Cerdas',
     description: 'Model teks dan multimodal generasi 3.8 terbaru dari Google AI. Keseimbangan terbaik antara pemahaman emosional mendalam, penalaran adaptif, dan respon instan.',
+    isDefault: true,
     speed: 'Sangat Cepat',
     reasoning: 'Tinggi',
     recommendedFor: 'Percakapan konseling utama, active listening, refleksi emosi, dan panduan harian',
@@ -30,9 +31,8 @@ export const AVAILABLE_AI_MODELS: AiModelOption[] = [
     id: 'gemini-3.1-flash-lite',
     name: 'Gemini 3.1 Flash Lite',
     category: 'Gemini 3.x Series',
-    tag: 'Default • Ultra Cepat & Ringan',
+    tag: 'Ringan • Ultra Cepat',
     description: 'Model generasi 3.1 paling ringan dan responsif dengan latensi sangat rendah, ideal untuk percakapan pendampingan harian dan koneksi hemat kuota.',
-    isDefault: true,
     speed: 'Sangat Cepat',
     reasoning: 'Standar',
     recommendedFor: 'Percakapan sehari-hari, curhat santai, dan respon instan minim kuota',

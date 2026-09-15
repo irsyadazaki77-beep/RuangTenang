@@ -1,4 +1,4 @@
-import { getGenAIClient } from '../../config/aiConfig.js';
+import { getGenAIClient, DEFAULT_AI_MODEL, RESILIENT_FALLBACK_AI_MODEL, CALMING_FALLBACK_MESSAGE } from '../../config/aiConfig.js';
 import { aiContextBuilder } from './aiContextBuilder.js';
 import { aiSafetyService } from './aiSafetyService.js';
 import { aiModelRouter } from './aiModelRouter.js';
@@ -15,6 +15,21 @@ export interface AiRequestOptions {
   attachments?: any[];
   systemInstruction?: string;
   abortSignal?: AbortSignal;
+}
+
+/**
+ * Creates an empathetic, smooth-streaming async generator when all AI models fail or are rate-limited.
+ */
+async function* createCalmingFallbackStream(fallbackText: string) {
+  const words = fallbackText.split(' ');
+  for (let i = 0; i < words.length; i++) {
+    const chunk = (i === 0 ? '' : ' ') + words[i];
+    yield {
+      text: chunk,
+      candidates: [{ content: { parts: [{ text: chunk }] } }]
+    };
+    await new Promise(resolve => setTimeout(resolve, 25));
+  }
 }
 
 export const aiRequestService = {
@@ -47,7 +62,6 @@ export const aiRequestService = {
       };
     }
 
-    
     const userParts: any[] = [{ text: sanitizedPrompt }];
     if (attachments && attachments.length > 0) {
       attachments.forEach(att => {
@@ -63,8 +77,6 @@ export const aiRequestService = {
       });
     }
 
-
-    
     const isAnonymous = !userId || userId === 'guest';
     const outputTokens = isAnonymous ? 300 : 800;
     
@@ -90,27 +102,32 @@ export const aiRequestService = {
     const aiClient = getGenAIClient();
     if (!aiClient) {
       clearTimeout(timeoutId);
+      console.warn('[AI_RESILIENCE] Gemini client unavailable (missing GEMINI_API_KEY). Using empathetic fallback.');
+      const localFallback = getLocalFallbackResponse(prompt);
       return {
-        text: getLocalFallbackResponse(prompt).text,
-        modelUsed: 'local-fallback',
+        text: localFallback.text || CALMING_FALLBACK_MESSAGE,
+        modelUsed: 'local-empathetic-fallback',
         isFallback: true
       };
     }
 
     try {
-      const { response, modelUsed } = await aiModelRouter.executeWithFallback(requestedModelId, userTier, async (modelName) => {
-        return await aiClient.models.generateContent({
-           model: modelName,
-           contents: [...sanitizedHistory, { role: 'user', parts: userParts }],
-           config: {
-             systemInstruction: fullSystemInstruction,
-             temperature: 0.6,
-             maxOutputTokens: outputTokens,
-             // @ts-expect-error - The SDK might not explicitly type signal in this version
-             signal: abortController.signal
-           }
-        });
-      }, { allowFallback: true });
+      const { response, modelUsed, isFallback } = await aiModelRouter.executeWithFallback(
+        requestedModelId || DEFAULT_AI_MODEL, 
+        userTier, 
+        async (modelName) => {
+          return await aiClient.models.generateContent({
+             model: modelName,
+             contents: [...sanitizedHistory, { role: 'user', parts: userParts }],
+             config: {
+               systemInstruction: fullSystemInstruction,
+               temperature: 0.6,
+               maxOutputTokens: outputTokens,
+             }
+          });
+        }, 
+        { allowFallback: true, timeoutMs: 15000 }
+      );
       clearTimeout(timeoutId);
 
       const outputText = response.text || '';
@@ -125,13 +142,14 @@ export const aiRequestService = {
         };
       }
 
-      return { text: outputText, modelUsed, isFallback: false };
+      return { text: outputText, modelUsed, isFallback };
     } catch (err: any) {
       clearTimeout(timeoutId);
-      console.error(`[AI_REQUEST_SERVICE] Final failure: ${err.message}`);
+      console.warn(`[AI_RESILIENCE] Both AI models failed for chat response (${err?.message}). Returning empathetic fallback.`);
+      const localFallback = getLocalFallbackResponse(prompt);
       return {
-        text: getLocalFallbackResponse(prompt).text,
-        modelUsed: 'local-fallback-after-error',
+        text: localFallback.text || CALMING_FALLBACK_MESSAGE,
+        modelUsed: 'local-empathetic-fallback',
         isFallback: true
       };
     }
@@ -203,50 +221,89 @@ export const aiRequestService = {
     const aiClient = getGenAIClient();
     if (!aiClient) {
       clearTimeout(timeoutId);
-      throw new Error('AI_UNAVAILABLE');
+      console.warn('[AI_RESILIENCE] Gemini client unavailable for streaming. Activating calming text stream.');
+      const localFallback = getLocalFallbackResponse(prompt);
+      const fallbackText = localFallback.text || CALMING_FALLBACK_MESSAGE;
+      return {
+        stream: createCalmingFallbackStream(fallbackText),
+        modelUsed: 'local-empathetic-fallback'
+      };
     }
 
-    let primaryModel = requestedModelId;
+    let primaryModel = requestedModelId || DEFAULT_AI_MODEL;
     if (!isModelAllowedForTier(requestedModelId, userTier)) {
-      primaryModel = 'gemini-3.1-flash-lite';
+      primaryModel = DEFAULT_AI_MODEL;
     }
 
     const actualPrimary = getActualGeminiModel(primaryModel);
 
-    try {
-       const stream = await aiClient.models.generateContentStream({
-           model: actualPrimary,
-           contents: [...sanitizedHistory, { role: 'user', parts: userParts }],
-           config: {
-             systemInstruction: fullSystemInstruction,
-             temperature: 0.6,
-             maxOutputTokens: outputTokens,
-             // @ts-expect-error - The SDK might not explicitly type signal in this version
-             signal: abortController.signal
-           }
-       });
-       return { stream, modelUsed: primaryModel };
-    } catch (err: any) {
-      console.warn(`[AI_REQUEST_SERVICE] Stream primary (${actualPrimary}) failed:`, err?.message || err);
-      const fallbackModel = 'gemini-3.1-flash-lite';
+    // 1. Attempt Primary Model Stream with Retry
+    let primaryError: any = null;
+    const maxRetries = 2;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
-         const stream = await aiClient.models.generateContentStream({
-             model: getActualGeminiModel(fallbackModel),
-             contents: [...sanitizedHistory, { role: 'user', parts: userParts }],
-             config: {
-               systemInstruction: fullSystemInstruction,
-               temperature: 0.6,
-               maxOutputTokens: outputTokens,
-               // @ts-expect-error - The SDK might not explicitly type signal in this version
-               signal: abortController.signal
-             }
-         });
-         return { stream, modelUsed: fallbackModel };
-      } catch (fallbackErr: any) {
-         console.error(`[AI_REQUEST_SERVICE] Stream fallback failed:`, fallbackErr?.message || fallbackErr);
-         clearTimeout(timeoutId);
-         throw new Error('AI_STREAM_FAILED');
+        console.info(`[AI_RESILIENCE] Streaming with primary model "${primaryModel}" (${actualPrimary}) - Attempt ${attempt + 1}/${maxRetries + 1}...`);
+        const primaryStream = await aiClient.models.generateContentStream({
+          model: actualPrimary,
+          contents: [...sanitizedHistory, { role: 'user', parts: userParts }],
+          config: {
+            systemInstruction: fullSystemInstruction,
+            temperature: 0.6,
+            maxOutputTokens: outputTokens,
+          }
+        });
+        clearTimeout(timeoutId);
+        aiModelRouter.recordSuccess();
+        return { stream: primaryStream, modelUsed: primaryModel };
+      } catch (err: any) {
+        primaryError = err;
+        console.warn(`[AI_RESILIENCE] Primary stream attempt ${attempt + 1} failed: ${err?.message || err}`);
+        if (attempt < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, (attempt + 1) * 400));
+        }
       }
     }
+
+    // 2. Switch to Internal Fallback Model Stream (lighter / faster)
+    const fallbackModel = RESILIENT_FALLBACK_AI_MODEL;
+    const actualFallback = getActualGeminiModel(fallbackModel);
+    console.warn(`[AI_RESILIENCE] Primary stream model exhausted (${primaryError?.message}). Switching to internal fallback stream model "${fallbackModel}" (${actualFallback})...`);
+
+    for (let fallbackAttempt = 0; fallbackAttempt <= 1; fallbackAttempt++) {
+      try {
+        console.info(`[AI_RESILIENCE] Streaming with fallback model "${fallbackModel}" - Attempt ${fallbackAttempt + 1}/2...`);
+        const fallbackStream = await aiClient.models.generateContentStream({
+          model: actualFallback,
+          contents: [...sanitizedHistory, { role: 'user', parts: userParts }],
+          config: {
+            systemInstruction: fullSystemInstruction,
+            temperature: 0.6,
+            maxOutputTokens: Math.min(outputTokens, 600),
+          }
+        });
+        clearTimeout(timeoutId);
+        aiModelRouter.recordSuccess();
+        return { stream: fallbackStream, modelUsed: fallbackModel };
+      } catch (fallbackErr: any) {
+        console.warn(`[AI_RESILIENCE] Fallback stream attempt ${fallbackAttempt + 1} failed: ${fallbackErr?.message || fallbackErr}`);
+        if (fallbackAttempt === 0) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+      }
+    }
+
+    // 3. Empathetic Fallback Text Stream (If both models fail, gracefully stream reassuring message)
+    clearTimeout(timeoutId);
+    aiModelRouter.recordFailure();
+    console.error('[AI_RESILIENCE] Both primary and fallback Gemini models failed or timed out. Activating calming empathetic stream.');
+
+    const localFallback = getLocalFallbackResponse(prompt);
+    const fallbackText = localFallback.text || CALMING_FALLBACK_MESSAGE;
+
+    return {
+      stream: createCalmingFallbackStream(fallbackText),
+      modelUsed: 'local-empathetic-fallback'
+    };
   }
 };

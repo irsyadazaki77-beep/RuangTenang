@@ -101,13 +101,11 @@ export const chatSummarizer = {
           : `Buat ringkasan percakapan berikut secara sangat ringkas (maksimal 3 poin singkat dalam Bahasa Indonesia):\n${sanitizedInput}`;
 
         const response = await aiClient.models.generateContent({
-          model: getActualGeminiModel('gemini-3.1-flash-lite'),
+          model: getActualGeminiModel('gemini-2.5-flash-lite'),
           contents: [{ role: 'user', parts: [{ text: prompt }] }],
           config: {
             temperature: 0.3,
-            maxOutputTokens: 250,
-            // @ts-expect-error - AbortSignal handling in SDK options
-            signal: options?.abortSignal
+            maxOutputTokens: 250
           }
         });
 

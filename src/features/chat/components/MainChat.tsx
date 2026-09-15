@@ -136,6 +136,32 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
   const bottomRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [showScrollBottom, setShowScrollBottom] = useState(false);
+  const [viewportHeight, setViewportHeight] = useState<number | null>(null);
+
+  // Dynamic visualViewport management for mobile virtual keyboards (iOS / Android)
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.visualViewport) return;
+
+    const updateViewportHeight = () => {
+      if (window.visualViewport) {
+        if (window.innerWidth < 768) {
+          setViewportHeight(window.visualViewport.height);
+        } else {
+          setViewportHeight(null);
+        }
+      }
+    };
+
+    updateViewportHeight();
+    const vv = window.visualViewport;
+    vv.addEventListener('resize', updateViewportHeight);
+    vv.addEventListener('scroll', updateViewportHeight);
+
+    return () => {
+      vv.removeEventListener('resize', updateViewportHeight);
+      vv.removeEventListener('scroll', updateViewportHeight);
+    };
+  }, []);
 
   useEffect(() => {
     if (chatId !== loadedChatIdRef.current) {
@@ -165,13 +191,13 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
 
   useEffect(() => {
     const el = scrollContainerRef.current;
-    if (el) el.addEventListener('scroll', handleScroll);
+    if (el) el.addEventListener('scroll', handleScroll, { passive: true });
     return () => {
       if (el) el.removeEventListener('scroll', handleScroll);
     };
   }, []);
 
-  const scrollToBottom = (force = false) => {
+  const scrollToBottom = useCallback((force = false) => {
     if (force || !showScrollBottom) {
       if (scrollContainerRef.current) {
         if (typeof scrollContainerRef.current.scrollTo === 'function') {
@@ -184,11 +210,11 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
         }
       }
     }
-  };
+  }, [showScrollBottom]);
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages, isTyping, streamingMessage?.content]);
+  }, [messages, isTyping, streamingMessage?.content, scrollToBottom]);
 
   useEffect(() => {
     const handleGlobalKeydown = (e: KeyboardEvent) => {
@@ -678,7 +704,10 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
         }}
       />
 
-    <div className="flex-1 flex flex-col h-full min-h-0 surface-page relative min-w-0 overflow-hidden">
+    <div 
+      className="flex-1 flex flex-col h-full h-[100dvh] min-h-0 surface-page relative min-w-0 overflow-hidden"
+      style={viewportHeight ? { height: `${viewportHeight}px`, maxHeight: `${viewportHeight}px` } : undefined}
+    >
       <ChatHeader 
         user={user}
         chatId={chatId}

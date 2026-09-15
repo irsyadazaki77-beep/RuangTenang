@@ -7,7 +7,10 @@ import { scanAndSanitizePII } from '../services/piiService.js';
 
 const REDACT_KEYS = new Set([
   'password',
+  'passwordhash',
   'token',
+  'refreshtoken',
+  'sessiontoken',
   'authorization',
   'notes',
   'content',
@@ -20,16 +23,32 @@ const REDACT_KEYS = new Set([
   'chathistory',
   'screeningscore',
   'secret',
+  'jwtsecret',
   'key',
+  'apikey',
   'cookie',
+  'ruangtenang_session',
   'email',
   'nim',
   'studentnim',
   'nik',
+  'noktp',
   'phone',
+  'nohp',
+  'telepon',
   'address',
+  'alamat',
   'rekening',
-  'accountnumber'
+  'accountnumber',
+  'keluhan',
+  'diagnosa',
+  'catatan',
+  'catatankonselor',
+  'mfa',
+  'mfacode',
+  'mfatoken',
+  'otp',
+  'pin'
 ]);
 
 function sanitize(obj: any): any {

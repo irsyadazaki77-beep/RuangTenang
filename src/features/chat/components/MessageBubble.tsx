@@ -93,44 +93,44 @@ export const MessageBubble = memo(function MessageBubble({
       initial="hidden"
       animate="visible"
       variants={shouldReduceMotion ? reducedMotionVariants : messageBubbleVariants}
-      className={`flex gap-3 group w-full transition-all duration-300 ${
-        isSearchTarget ? 'ring-2 ring-amber-500/80 dark:ring-amber-400/80 rounded-2xl p-1.5 bg-amber-50/30 dark:bg-amber-950/30 shadow-xs' : ''
+      className={`flex gap-3 sm:gap-3.5 group w-full transition-all duration-200 ${
+        isSearchTarget ? 'ring-2 ring-amber-500/80 dark:ring-amber-400/80 rounded-2xl p-1.5 bg-amber-50/40 dark:bg-amber-950/30 shadow-xs' : ''
       } ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
     >
       {msg.role === 'assistant' && (
-        <div className="w-6 h-6 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0 mt-1 p-0.5 border border-slate-200/60 dark:border-slate-700/60">
+        <div className="w-7 h-7 rounded-xl bg-teal-50 dark:bg-teal-950/60 flex items-center justify-center shrink-0 mt-0.5 p-1 border border-teal-100/80 dark:border-teal-900/60 shadow-xs">
           <img src="/favicon.svg" alt="RuangTenang" className="w-4 h-4 object-contain" />
         </div>
       )}
       
       <div className={`relative ${
         msg.role === 'user' 
-          ? 'max-w-[85%] sm:max-w-[75%]' 
+          ? 'max-w-[88%] sm:max-w-[80%]' 
           : 'flex-1 min-w-0 max-w-full'
       }`}>
         {msg.role === 'user' ? (
           <>
             {isEditing ? (
-              <div className="flex flex-col gap-2 min-w-[240px] sm:min-w-[340px] bg-slate-100 dark:bg-slate-800 p-3 rounded-2xl border border-slate-300 dark:border-slate-700">
+              <div className="flex flex-col gap-2.5 min-w-[260px] sm:min-w-[340px] bg-white dark:bg-slate-800 p-3.5 rounded-2xl border border-stone-200 dark:border-slate-700 shadow-md">
                 <textarea 
-                  className="w-full bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-[14px] leading-relaxed focus:ring-1 focus:ring-teal-500 outline-none resize-none"
+                  className="w-full bg-stone-50 dark:bg-slate-900 text-stone-800 dark:text-stone-100 border border-stone-200 dark:border-slate-700 rounded-xl p-2.5 text-[14px] sm:text-[14.5px] leading-relaxed focus:ring-2 focus:ring-teal-500/40 outline-none resize-none"
                   value={editContent}
                   onChange={e => setEditContent(e.target.value)}
-                  rows={2}
+                  rows={3}
                   autoFocus
                 />
                 <div className="flex justify-end gap-1.5">
                   <button 
                     aria-label="Batal Edit" 
                     onClick={() => setIsEditing(false)} 
-                    className="px-2.5 py-1 text-xs text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg cursor-pointer transition-colors"
+                    className="min-h-[38px] px-3 py-1.5 text-xs sm:text-sm text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-slate-700 rounded-lg cursor-pointer transition-colors"
                   >
                     Batal
                   </button>
                   <button 
                     aria-label="Simpan Edit" 
                     onClick={handleSaveEdit} 
-                    className="px-3 py-1 text-xs bg-teal-600 hover:bg-teal-700 text-white rounded-lg cursor-pointer transition-colors font-medium"
+                    className="min-h-[38px] px-3.5 py-1.5 text-xs sm:text-sm bg-teal-600 hover:bg-teal-700 text-white rounded-lg cursor-pointer transition-colors font-medium shadow-xs"
                   >
                     Kirim Perubahan
                   </button>
@@ -146,7 +146,7 @@ export const MessageBubble = memo(function MessageBubble({
                         href={att.url || `/api/v1/chat/attachments/${att.id}`}
                         target="_blank"
                         rel="noreferrer"
-                        className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-200/80 dark:bg-slate-700/80 hover:bg-slate-300 dark:hover:bg-slate-600 rounded-xl text-xs text-slate-800 dark:text-slate-200 transition-colors"
+                        className="flex items-center gap-1.5 px-2.5 py-1 bg-stone-100/90 dark:bg-slate-800 hover:bg-stone-200/90 dark:hover:bg-slate-700 rounded-xl text-[11px] text-stone-800 dark:text-stone-200 transition-colors border border-stone-200/50 dark:border-slate-700"
                       >
                         <FileText className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
                         <span className="truncate max-w-[140px] font-medium">{att.filename}</span>
@@ -155,16 +155,16 @@ export const MessageBubble = memo(function MessageBubble({
                     ))}
                   </div>
                 )}
-                <div className="bg-slate-100 dark:bg-slate-800/90 text-slate-900 dark:text-slate-100 px-4 py-2.5 rounded-3xl rounded-br-lg text-[14.5px] sm:text-[15px] leading-relaxed break-words">
+                <div className="bg-teal-50/90 dark:bg-teal-950/40 text-stone-900 dark:text-stone-100 border border-teal-100/70 dark:border-teal-900/40 px-4 py-2.5 sm:px-4.5 sm:py-3 rounded-2xl rounded-br-sm text-[14px] sm:text-[14.5px] leading-relaxed break-words shadow-2xs">
                   {renderHighlightedContent(msg.content.replace('[PLUGIN_RESULT]\n', 'Hasil Fitur: '), searchHighlightQuery)}
                 </div>
                 
                 {/* User Message Floating Actions */}
-                <div className="absolute -left-20 top-1/2 -translate-y-1/2 flex items-center gap-0.5 opacity-70 sm:opacity-0 sm:group-hover/user:opacity-100 transition-opacity">
+                <div className="absolute -left-22 top-1/2 -translate-y-1/2 flex items-center gap-0.5 opacity-80 sm:opacity-0 sm:group-hover/user:opacity-100 transition-opacity">
                   {onBookmarkToggle && (
                     <button
                       onClick={handleBookmark}
-                      className={`p-1 text-slate-400 hover:text-teal-600 dark:hover:text-teal-400 transition-colors cursor-pointer ${isBookmarked ? 'text-teal-600 dark:text-teal-400' : ''}`}
+                      className={`min-h-[38px] min-w-[38px] flex items-center justify-center text-stone-400 hover:text-teal-600 dark:hover:text-teal-400 transition-colors cursor-pointer rounded-lg hover:bg-stone-100 dark:hover:bg-slate-800 ${isBookmarked ? 'text-teal-600 dark:text-teal-400' : ''}`}
                       title={isBookmarked ? 'Hapus Simpanan' : 'Simpan Pesan'}
                       aria-label="Simpan Pesan"
                     >
@@ -174,7 +174,7 @@ export const MessageBubble = memo(function MessageBubble({
                   {onBranch && (
                     <button
                       onClick={handleBranch}
-                      className="p-1 text-slate-400 hover:text-teal-600 dark:hover:text-teal-400 transition-colors cursor-pointer"
+                      className="min-h-[38px] min-w-[38px] flex items-center justify-center text-stone-400 hover:text-teal-600 dark:hover:text-teal-400 rounded-lg hover:bg-stone-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                       title="Buat Cabang Obrolan dari Pesan Ini"
                       aria-label="Buat Cabang Obrolan"
                     >
@@ -183,7 +183,7 @@ export const MessageBubble = memo(function MessageBubble({
                   )}
                   <button 
                     onClick={() => setIsEditing(true)} 
-                    className="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-opacity cursor-pointer"
+                    className="min-h-[38px] min-w-[38px] flex items-center justify-center text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 rounded-lg hover:bg-stone-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                     title="Edit Pesan"
                     aria-label="Edit Pesan"
                   >
@@ -194,22 +194,23 @@ export const MessageBubble = memo(function MessageBubble({
             )}
           </>
         ) : (
-          <div className="w-full min-w-0 space-y-2">
+          <div className="w-full min-w-0 space-y-2.5">
             {msg.error ? (
-              <div className="p-3 rounded-xl bg-rose-50/80 dark:bg-rose-950/40 border border-rose-200/80 dark:border-rose-900/60 text-xs">
-                <p className="text-rose-800 dark:text-rose-300 mb-2 font-medium">{msg.content}</p>
-                <button aria-label="Coba Lagi" onClick={onRegenerate} className="px-2.5 py-1 bg-rose-100 dark:bg-rose-900 text-rose-800 dark:text-rose-200 rounded-lg font-medium hover:bg-rose-200 transition-colors cursor-pointer text-xs">
+              <div className="p-3.5 rounded-xl bg-rose-50/90 dark:bg-rose-950/40 border border-rose-200/80 dark:border-rose-900/60 text-[13.5px]">
+                <p className="text-rose-800 dark:text-rose-300 mb-2 font-medium leading-relaxed">{msg.content}</p>
+                <button aria-label="Coba Lagi" onClick={onRegenerate} className="min-h-[38px] px-3.5 py-1.5 bg-rose-100 dark:bg-rose-900 text-rose-800 dark:text-rose-200 rounded-lg font-medium hover:bg-rose-200 transition-colors cursor-pointer text-xs sm:text-sm">
                   Coba lagi
                 </button>
               </div>
             ) : isTyping && !msg.content ? (
-              <div className="flex items-center gap-1.5 py-2 text-slate-400 dark:text-slate-500 text-xs">
-                <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-pulse"></span>
-                <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-pulse [animation-delay:200ms]"></span>
-                <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-pulse [animation-delay:400ms]"></span>
+              <div className="flex items-center gap-1.5 py-2 text-stone-400 dark:text-stone-500 text-xs sm:text-sm">
+                <span className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse"></span>
+                <span className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse [animation-delay:200ms]"></span>
+                <span className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse [animation-delay:400ms]"></span>
+                <span className="text-stone-400 text-xs ml-1">Menuliskan pesan yang tenang...</span>
               </div>
             ) : (
-              <div className="prose prose-slate dark:prose-invert max-w-none break-words text-[14.5px] sm:text-[15.5px] leading-[1.7] text-slate-800 dark:text-slate-200 space-y-2.5">
+              <div className="prose prose-stone dark:prose-invert max-w-none break-words text-[14.5px] sm:text-[15px] leading-[1.65] text-stone-800 dark:text-stone-200 space-y-2.5 font-normal">
                 <LazyMarkdown content={msg.content} />
                 {isTyping && (
                   <span
@@ -227,18 +228,18 @@ export const MessageBubble = memo(function MessageBubble({
             {msg.plugin === 'emergency' && <div className="mt-3"><EmergencyCard /></div>}
             {msg.plugin === 'articles' && <div className="mt-3"><ArticlesCard onAction={() => onOpenPlugin?.('articles')} /></div>}
             {msg.plugin === 'ai_memory' && (
-              <div className="mt-3 p-3 bg-teal-50/50 dark:bg-teal-900/20 border border-teal-100 dark:border-teal-800 rounded-xl text-xs text-teal-800 dark:text-teal-300 flex items-center gap-2">
-                <Brain className="w-4 h-4 text-teal-600 dark:text-teal-400" />
-                <span>Konteks personalisasi disimpan ke memori jangka panjang untuk sesi mendatang.</span>
+              <div className="mt-3 p-3 bg-teal-50/60 dark:bg-teal-950/30 border border-teal-100 dark:border-teal-900/60 rounded-xl text-xs sm:text-[13px] text-teal-800 dark:text-teal-300 flex items-center gap-2">
+                <Brain className="w-4 h-4 text-teal-600 dark:text-teal-400 shrink-0" />
+                <span className="leading-relaxed">Konteks personalisasi disimpan ke memori jangka panjang untuk sesi mendatang.</span>
               </div>
             )}
 
             {/* Subtle Action Toolbar */}
             {!isTyping && msg.content && !msg.error && (
-              <div className="flex items-center gap-0.5 pt-1 opacity-70 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-150">
+              <div className="flex items-center gap-0.5 pt-0.5 opacity-80 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-150">
                 <button 
                   onClick={handleCopy} 
-                  className="p-2 min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-md transition-colors cursor-pointer" 
+                  className="min-h-[36px] min-w-[36px] flex items-center justify-center text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer" 
                   title="Salin Pesan" 
                   aria-label="Salin Pesan"
                 >
@@ -248,8 +249,8 @@ export const MessageBubble = memo(function MessageBubble({
                 {onBookmarkToggle && (
                   <button
                     onClick={handleBookmark}
-                    className={`p-1.5 rounded-md transition-colors cursor-pointer ${
-                      isBookmarked ? 'text-teal-600 dark:text-teal-400' : 'text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+                    className={`min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg hover:bg-stone-100 dark:hover:bg-slate-800 transition-colors cursor-pointer ${
+                      isBookmarked ? 'text-teal-600 dark:text-teal-400' : 'text-stone-400 hover:text-stone-700 dark:hover:text-stone-200'
                     }`}
                     title={isBookmarked ? 'Hapus Simpanan' : 'Simpan Pesan'}
                     aria-label="Simpan Pesan"
@@ -261,7 +262,7 @@ export const MessageBubble = memo(function MessageBubble({
                 {onBranch && (
                   <button
                     onClick={handleBranch}
-                    className="p-1.5 text-slate-400 hover:text-teal-600 dark:hover:text-teal-400 rounded-md transition-colors cursor-pointer"
+                    className="min-h-[36px] min-w-[36px] flex items-center justify-center text-stone-400 hover:text-teal-600 dark:hover:text-teal-400 hover:bg-stone-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
                     title="Buat Cabang Obrolan dari Sini"
                     aria-label="Buat Cabang Obrolan"
                   >
@@ -272,7 +273,7 @@ export const MessageBubble = memo(function MessageBubble({
                 {onRegenerate && (
                   <button 
                     onClick={onRegenerate} 
-                    className="p-2 min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-md transition-colors cursor-pointer" 
+                    className="min-h-[36px] min-w-[36px] flex items-center justify-center text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer" 
                     title="Buat Ulang Tanggapan" 
                     aria-label="Buat Ulang Tanggapan"
                   >
@@ -285,7 +286,7 @@ export const MessageBubble = memo(function MessageBubble({
                     setFeedback('up');
                     showToast('Terima kasih atas masukannya', 'success');
                   }} 
-                  className={`p-1.5 rounded-md transition-colors cursor-pointer ${feedback === 'up' ? 'text-teal-600 dark:text-teal-400' : 'text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`} 
+                  className={`min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg hover:bg-stone-100 dark:hover:bg-slate-800 transition-colors cursor-pointer ${feedback === 'up' ? 'text-teal-600 dark:text-teal-400' : 'text-stone-400 hover:text-stone-700 dark:hover:text-stone-200'}`} 
                   title="Membantu" 
                   aria-label="Membantu"
                 >
@@ -296,7 +297,7 @@ export const MessageBubble = memo(function MessageBubble({
                     setFeedback('down');
                     showToast('Terima kasih atas masukannya', 'info');
                   }} 
-                  className={`p-1.5 rounded-md transition-colors cursor-pointer ${feedback === 'down' ? 'text-rose-600 dark:text-rose-400' : 'text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`} 
+                  className={`min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg hover:bg-stone-100 dark:hover:bg-slate-800 transition-colors cursor-pointer ${feedback === 'down' ? 'text-rose-600 dark:text-rose-400' : 'text-stone-400 hover:text-stone-700 dark:hover:text-stone-200'}`} 
                   title="Kurang Membantu" 
                   aria-label="Kurang Membantu"
                 >

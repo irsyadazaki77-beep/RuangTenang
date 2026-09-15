@@ -4,6 +4,7 @@ import { ChatMode, ResponseStyle } from '../types';
 import { UserSession } from '../../../types';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { AVAILABLE_AI_MODELS } from '../../../lib/aiModels';
+import { BrandLogo } from '../../../components/ui/BrandLogo';
 
 interface ChatHeaderProps {
   user: UserSession | null;
@@ -47,30 +48,31 @@ export function ChatHeader({
   const isSettingsOpen = activePlugin === 'chat_settings';
 
   return (
-    <header className="h-11 sm:h-12 sticky top-0 z-20 w-full shrink-0 flex items-center justify-between px-3 sm:px-4 bg-stone-50/80 dark:bg-[#0c1117]/80 backdrop-blur-md border-b border-slate-200/50 dark:border-slate-800/50 transition-colors">
+    <header className="h-12 sm:h-12 sticky top-0 z-20 w-full shrink-0 flex items-center justify-between px-3 sm:px-4 bg-stone-50/85 dark:bg-[#0c1117]/85 backdrop-blur-md border-b border-stone-200/60 dark:border-slate-800/60 transition-colors">
       {/* Left side: Mobile menu button & Minimalist Model Trigger */}
       <div className="flex items-center gap-1 sm:gap-2 min-w-0">
         {onOpenSidebar && (
           <button
             onClick={onOpenSidebar}
-            className="lg:hidden p-1.5 text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-200/50 dark:hover:bg-slate-800/60 rounded-lg shrink-0 transition-colors cursor-pointer"
+            className="lg:hidden w-10 h-10 min-w-[40px] min-h-[40px] flex items-center justify-center text-stone-500 hover:text-stone-900 dark:hover:text-stone-100 hover:bg-stone-200/50 dark:hover:bg-slate-800/60 rounded-xl shrink-0 transition-colors cursor-pointer"
             aria-label="Buka Menu"
           >
-            <Menu className="w-4 h-4" />
+            <Menu className="w-5 h-5" />
           </button>
         )}
 
         <div className="relative">
           <button
             onClick={() => setActivePlugin(isSettingsOpen ? null : 'chat_settings')}
-            className="flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-slate-200/50 dark:hover:bg-slate-800/60 transition-colors cursor-pointer text-left group"
+            className="flex items-center gap-1.5 px-2 py-1.5 min-h-[40px] rounded-xl hover:bg-stone-200/50 dark:hover:bg-slate-800/60 transition-colors cursor-pointer text-left group"
             title="Pilih Model dan Preferensi"
           >
-            <span className="font-semibold text-[13.5px] text-slate-900 dark:text-slate-100 tracking-tight">RuangTenang</span>
-            <span className="text-[12px] text-slate-400 dark:text-slate-500 font-normal">
+            <BrandLogo size="xs" iconOnly />
+            <span className="font-semibold text-[14px] text-stone-900 dark:text-stone-100 tracking-tight">RuangTenang</span>
+            <span className="text-[12px] text-stone-400 dark:text-slate-500 font-normal truncate max-w-[80px] sm:max-w-none">
               · {currentModel?.tag || 'Gemini'}
             </span>
-            <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-150 ${isSettingsOpen ? 'rotate-180 text-teal-600 dark:text-teal-400' : 'group-hover:text-slate-600 dark:group-hover:text-slate-300'}`} />
+            <ChevronDown className={`w-3.5 h-3.5 text-stone-400 transition-transform duration-150 shrink-0 ${isSettingsOpen ? 'rotate-180 text-teal-600 dark:text-teal-400' : 'group-hover:text-stone-600 dark:group-hover:text-slate-300'}`} />
           </button>
 
           {/* Preferences Popover */}
@@ -195,10 +197,10 @@ export function ChatHeader({
         {onToggleSearch && hasMessages && (
           <button
             onClick={onToggleSearch}
-            className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+            className={`w-10 h-10 min-w-[40px] min-h-[40px] flex items-center justify-center rounded-xl transition-colors cursor-pointer ${
               isSearchOpen
                 ? 'text-teal-600 dark:text-teal-400 bg-teal-50 dark:bg-teal-950/60'
-                : 'text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-800/60'
+                : 'text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-200/50 dark:hover:bg-slate-800/60'
             }`}
             title="Cari dalam Percakapan (Ctrl+F)"
             aria-label="Cari dalam Percakapan"
@@ -211,7 +213,7 @@ export function ChatHeader({
         <div className="relative">
           <button
             onClick={() => setIsMenuOpen(!isMenuOpen)}
-            className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-800/60 rounded-lg transition-colors cursor-pointer"
+            className="w-10 h-10 min-w-[40px] min-h-[40px] flex items-center justify-center text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-200/50 dark:hover:bg-slate-800/60 rounded-xl transition-colors cursor-pointer"
             title="Menu Percakapan"
             aria-label="Menu Percakapan"
           >
@@ -221,19 +223,19 @@ export function ChatHeader({
           {isMenuOpen && (
             <>
               <div className="fixed inset-0 z-40" onClick={() => setIsMenuOpen(false)} />
-              <div className="absolute top-full right-0 mt-1 w-56 bg-white dark:bg-slate-900 rounded-xl p-1.5 z-50 shadow-lg border border-slate-200/80 dark:border-slate-800 animate-in fade-in zoom-in-95 duration-120 text-xs">
+              <div className="absolute top-full right-0 mt-1 w-56 bg-white dark:bg-slate-900 rounded-2xl p-1.5 z-50 shadow-xl border border-stone-200/80 dark:border-slate-800 animate-in fade-in zoom-in-95 duration-120 text-xs">
                 {chatId && hasMessages && (
                   <button
                     onClick={() => {
                       setIsMenuOpen(false);
                       onOpenSummary?.();
                     }}
-                    className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-left transition-colors cursor-pointer"
+                    className="w-full flex items-center gap-2.5 px-3 py-2.5 min-h-[40px] rounded-xl text-stone-700 dark:text-slate-300 hover:bg-stone-100 dark:hover:bg-slate-800 text-left transition-colors cursor-pointer"
                   >
                     <Sparkles className="w-4 h-4 text-teal-600 dark:text-teal-400 shrink-0" />
                     <div className="min-w-0 flex-1">
                       <div className="font-medium">Ringkas Sesi</div>
-                      <div className="text-[10px] text-slate-400">Refleksi terstruktur sesi ini</div>
+                      <div className="text-[10.5px] text-stone-400">Refleksi terstruktur sesi ini</div>
                     </div>
                   </button>
                 )}
@@ -243,12 +245,12 @@ export function ChatHeader({
                     setIsMenuOpen(false);
                     onOpenBookmarks?.();
                   }}
-                  className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-left transition-colors cursor-pointer"
+                  className="w-full flex items-center gap-2.5 px-3 py-2.5 min-h-[40px] rounded-xl text-stone-700 dark:text-slate-300 hover:bg-stone-100 dark:hover:bg-slate-800 text-left transition-colors cursor-pointer"
                 >
                   <Bookmark className="w-4 h-4 text-amber-500 shrink-0" />
                   <div className="min-w-0 flex-1">
                     <div className="font-medium">Pesan Tersimpan</div>
-                    <div className="text-[10px] text-slate-400">Daftar kutipan penting kamu</div>
+                    <div className="text-[10.5px] text-stone-400">Daftar kutipan penting kamu</div>
                   </div>
                 </button>
 
@@ -257,12 +259,12 @@ export function ChatHeader({
                     setIsMenuOpen(false);
                     onOpenMemory?.();
                   }}
-                  className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-left transition-colors cursor-pointer"
+                  className="w-full flex items-center gap-2.5 px-3 py-2.5 min-h-[40px] rounded-xl text-stone-700 dark:text-slate-300 hover:bg-stone-100 dark:hover:bg-slate-800 text-left transition-colors cursor-pointer"
                 >
                   <Brain className="w-4 h-4 text-teal-600 dark:text-teal-400 shrink-0" />
                   <div className="min-w-0 flex-1">
                     <div className="font-medium">Kontrol Memori AI</div>
-                    <div className="text-[10px] text-slate-400">Atur konteks personal refleksi</div>
+                    <div className="text-[10.5px] text-stone-400">Atur konteks personal refleksi</div>
                   </div>
                 </button>
               </div>
@@ -272,7 +274,7 @@ export function ChatHeader({
 
         <button 
           onClick={toggleTheme} 
-          className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-800/60 rounded-lg transition-colors cursor-pointer" 
+          className="w-10 h-10 min-w-[40px] min-h-[40px] flex items-center justify-center text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-200/50 dark:hover:bg-slate-800/60 rounded-xl transition-colors cursor-pointer" 
           aria-label="Ganti Tema"
           title={actualTheme === 'dark' ? 'Mode Terang' : 'Mode Gelap'}
         >

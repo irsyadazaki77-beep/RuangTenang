@@ -131,17 +131,17 @@ export default function Sidebar({ isOpen, setIsOpen, onNewChat, chats, currentCh
     return (
       <div 
         key={c.id} 
-        className={`group relative flex items-center gap-1.5 w-full px-2.5 py-1.5 rounded-lg text-[13px] transition-colors duration-150 text-left ${
+        className={`group relative flex items-center gap-1.5 w-full px-2.5 py-1.5 rounded-lg text-[13px] transition-colors duration-150 text-left min-h-[38px] ${
           isActive 
-            ? 'bg-slate-200/70 dark:bg-slate-800/80 text-slate-900 dark:text-slate-100 font-medium' 
-            : 'hover:bg-slate-100/90 dark:hover:bg-slate-800/50 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+            ? 'bg-stone-200/80 dark:bg-slate-800 text-stone-900 dark:text-stone-100 font-medium shadow-2xs' 
+            : 'hover:bg-stone-100/90 dark:hover:bg-slate-800/50 text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-200'
         }`}
       >
         {c.isPinned && (
-          <Pin className="w-3 h-3 shrink-0 text-slate-400 dark:text-slate-500" />
+          <Pin className="w-3.5 h-3.5 shrink-0 text-stone-400 dark:text-stone-500" />
         )}
         {c.parentChatId && (
-          <GitBranch className="w-3 h-3 shrink-0 text-teal-600 dark:text-teal-400"  />
+          <GitBranch className="w-3.5 h-3.5 shrink-0 text-teal-600 dark:text-teal-400"  />
         )}
         
         {editingId === c.id ? (
@@ -151,12 +151,12 @@ export default function Sidebar({ isOpen, setIsOpen, onNewChat, chats, currentCh
             onChange={e => setEditTitle(e.target.value)}
             onBlur={() => handleEditSubmit(c.id)}
             onKeyDown={e => e.key === 'Enter' && handleEditSubmit(c.id)}
-            className="flex-1 bg-white dark:bg-slate-800 border border-teal-500/70 rounded-md px-2 py-0.5 text-[12.5px] text-slate-900 dark:text-slate-100 outline-none ring-1 ring-teal-500/30"
+            className="flex-1 bg-white dark:bg-slate-800 border border-teal-500/70 rounded-md px-2 py-0.5 text-[12.5px] text-stone-900 dark:text-stone-100 outline-none ring-2 ring-teal-500/20"
           />
         ) : (
           <button 
             onClick={() => { onSelectChat(c.id); setIsOpen(false); }} 
-            className="flex-1 truncate text-left min-h-[32px] flex items-center pr-1 cursor-pointer"
+            className="flex-1 truncate text-left min-h-[34px] flex items-center pr-1 cursor-pointer"
           >
             {c.title}
           </button>
@@ -166,8 +166,8 @@ export default function Sidebar({ isOpen, setIsOpen, onNewChat, chats, currentCh
           <button 
             aria-label="Menu Percakapan" 
             onClick={(e) => { e.stopPropagation(); setMenuOpenId(menuOpenId === c.id ? null : c.id); }} 
-            className={`p-1 rounded-md text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200/70 dark:hover:bg-slate-750 transition-all cursor-pointer ${
-              menuOpenId === c.id ? 'opacity-100 bg-slate-200/70 dark:bg-slate-700' : 'opacity-80 sm:opacity-0 group-hover:opacity-100 focus:opacity-100'
+            className={`min-h-[32px] min-w-[32px] flex items-center justify-center rounded-md text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-200/70 dark:hover:bg-slate-700 transition-all cursor-pointer ${
+              menuOpenId === c.id ? 'opacity-100 bg-stone-200/70 dark:bg-slate-700' : 'opacity-80 sm:opacity-0 group-hover:opacity-100 focus:opacity-100'
             }`}
           >
             <MoreHorizontal className="w-3.5 h-3.5" />
@@ -178,20 +178,20 @@ export default function Sidebar({ isOpen, setIsOpen, onNewChat, chats, currentCh
               <motion.div 
                 initial={{ opacity: 0, scale: 0.96, y: -4 }} 
                 animate={{ opacity: 1, scale: 1, y: 0 }} 
-                exit={{ opacity: 0, scale: 0.96, y: -4 }}
+                exit={{ opacity: 0, scale: 0.96, y: -4 }} 
                 transition={{ duration: 0.12 }}
-                className="absolute right-0 top-full mt-1 w-36 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-md rounded-xl py-1 z-50 text-[12.5px] text-slate-700 dark:text-slate-200"
+                className="absolute right-0 top-full mt-1 w-38 bg-white dark:bg-slate-900 border border-stone-200/80 dark:border-slate-800 shadow-lg rounded-xl py-1 z-50 text-xs text-stone-700 dark:text-stone-200"
               >
-                <button onClick={(e) => { e.stopPropagation(); setEditingId(c.id); setEditTitle(c.title); setMenuOpenId(null); }} className="w-full text-left px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-2 cursor-pointer transition-colors">
-                  <Edit2 className="w-3.5 h-3.5 text-slate-400" /> Ubah Nama
+                <button onClick={(e) => { e.stopPropagation(); setEditingId(c.id); setEditTitle(c.title); setMenuOpenId(null); }} className="w-full text-left px-3 py-1.5 hover:bg-stone-50 dark:hover:bg-slate-800 flex items-center gap-2 cursor-pointer transition-colors min-h-[34px]">
+                  <Edit2 className="w-3.5 h-3.5 text-stone-400" /> Ubah Nama
                 </button>
-                <button onClick={(e) => { e.stopPropagation(); onTogglePin(c.id); setMenuOpenId(null); }} className="w-full text-left px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-2 cursor-pointer transition-colors">
-                  <Pin className="w-3.5 h-3.5 text-slate-400" /> {c.isPinned ? 'Lepas Pin' : 'Sematkan Pin'}
+                <button onClick={(e) => { e.stopPropagation(); onTogglePin(c.id); setMenuOpenId(null); }} className="w-full text-left px-3 py-1.5 hover:bg-stone-50 dark:hover:bg-slate-800 flex items-center gap-2 cursor-pointer transition-colors min-h-[34px]">
+                  <Pin className="w-3.5 h-3.5 text-stone-400" /> {c.isPinned ? 'Lepas Pin' : 'Sematkan Pin'}
                 </button>
-                <button onClick={(e) => { e.stopPropagation(); onToggleArchive(c.id); setMenuOpenId(null); }} className="w-full text-left px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-2 cursor-pointer transition-colors">
-                  <Archive className="w-3.5 h-3.5 text-slate-400" /> {c.isArchived ? 'Buka Arsip' : 'Arsipkan'}
+                <button onClick={(e) => { e.stopPropagation(); onToggleArchive(c.id); setMenuOpenId(null); }} className="w-full text-left px-3 py-1.5 hover:bg-stone-50 dark:hover:bg-slate-800 flex items-center gap-2 cursor-pointer transition-colors min-h-[34px]">
+                  <Archive className="w-3.5 h-3.5 text-stone-400" /> {c.isArchived ? 'Buka Arsip' : 'Arsipkan'}
                 </button>
-                <button onClick={(e) => { e.stopPropagation(); onDeleteChat(c.id); setMenuOpenId(null); }} className="w-full text-left px-3 py-1.5 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-rose-600 dark:text-rose-400 flex items-center gap-2 cursor-pointer transition-colors">
+                <button onClick={(e) => { e.stopPropagation(); onDeleteChat(c.id); setMenuOpenId(null); }} className="w-full text-left px-3 py-1.5 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-rose-600 dark:text-rose-400 flex items-center gap-2 cursor-pointer transition-colors min-h-[34px]">
                   <Trash2 className="w-3.5 h-3.5" /> Hapus
                 </button>
               </motion.div>
@@ -338,61 +338,60 @@ export default function Sidebar({ isOpen, setIsOpen, onNewChat, chats, currentCh
         </div>
 
         {/* Secondary Tools Navigation */}
-        <div className="px-2 py-1.5 space-y-0.5 border-t border-slate-200/60 dark:border-slate-800/70">
-          <div className="px-2 pt-1 pb-0.5 text-[10px] font-medium text-slate-400 dark:text-slate-500 uppercase tracking-wider">Layanan</div>
+        <div className="px-2 py-1.5 space-y-0.5 border-t border-stone-200/60 dark:border-slate-800/70">
+          <div className="px-2 pt-0.5 pb-0.5 text-[10.5px] font-semibold text-stone-400 dark:text-stone-500 uppercase tracking-wider">Layanan Kampus</div>
           <button 
             onClick={() => { navigate('/mood'); setIsOpen(false); }} 
-            className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg hover:bg-slate-100/90 dark:hover:bg-slate-800/60 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 font-medium transition-colors cursor-pointer text-[12.5px]"
+            className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg hover:bg-stone-100/90 dark:hover:bg-slate-800/60 text-stone-700 dark:text-stone-300 hover:text-stone-900 dark:hover:text-stone-100 font-medium transition-colors cursor-pointer text-[13px] min-h-[38px]"
           >
-            <Heart className="w-4 h-4 text-slate-400 shrink-0" /> Mood & Progress
+            <Heart className="w-3.5 h-3.5 text-rose-500/80 shrink-0" /> Mood & Catatan
           </button>
           <button 
             onClick={() => { navigate('/screening'); setIsOpen(false); }} 
-            className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg hover:bg-slate-100/90 dark:hover:bg-slate-800/60 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 font-medium transition-colors cursor-pointer text-[12.5px]"
+            className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg hover:bg-stone-100/90 dark:hover:bg-slate-800/60 text-stone-700 dark:text-stone-300 hover:text-stone-900 dark:hover:text-stone-100 font-medium transition-colors cursor-pointer text-[13px] min-h-[38px]"
           >
-            <Stethoscope className="w-4 h-4 text-slate-400 shrink-0" /> Skrining
+            <Stethoscope className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 shrink-0" /> Skrining Mandiri
           </button>
           <button 
             onClick={() => { navigate('/counselors'); setIsOpen(false); }} 
-            className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg hover:bg-slate-100/90 dark:hover:bg-slate-800/60 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 font-medium transition-colors cursor-pointer text-[12.5px]"
+            className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg hover:bg-stone-100/90 dark:hover:bg-slate-800/60 text-stone-700 dark:text-stone-300 hover:text-stone-900 dark:hover:text-stone-100 font-medium transition-colors cursor-pointer text-[13px] min-h-[38px]"
           >
-            <Users className="w-4 h-4 text-slate-400 shrink-0" /> Konselor
+            <Users className="w-3.5 h-3.5 text-blue-500/80 shrink-0" /> Direktori Konselor
           </button>
           <button 
             onClick={() => { onOpenNotifications?.(); setIsOpen(false); }} 
-            className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg hover:bg-slate-100/90 dark:hover:bg-slate-800/60 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 font-medium transition-colors cursor-pointer text-[12.5px]"
+            className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg hover:bg-stone-100/90 dark:hover:bg-slate-800/60 text-stone-700 dark:text-stone-300 hover:text-stone-900 dark:hover:text-stone-100 font-medium transition-colors cursor-pointer text-[13px] min-h-[38px]"
           >
             <div className="flex items-center gap-2.5">
-              <Bell className="w-4 h-4 text-slate-400 shrink-0" /> Notifikasi
+              <Bell className="w-3.5 h-3.5 text-amber-500/80 shrink-0" /> Notifikasi
             </div>
             {unreadNotificationsCount > 0 && (
-              <span className="bg-rose-500 text-white font-bold text-[9px] h-3.5 px-1.5 rounded-full flex items-center justify-center">
+              <span className="bg-rose-500 text-white font-bold text-[9.5px] h-3.5 px-1 rounded-full flex items-center justify-center">
                 {unreadNotificationsCount}
               </span>
             )}
           </button>
           <button 
             onClick={() => { navigate('/emergency'); setIsOpen(false); }} 
-            className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/30 text-rose-600 dark:text-rose-400 font-medium transition-colors cursor-pointer text-[12.5px]"
+            className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 text-rose-600 dark:text-rose-400 font-medium transition-colors cursor-pointer text-[13px] min-h-[38px]"
           >
-            <AlertCircle className="w-4 h-4 shrink-0" /> Bantuan Darurat
+            <AlertCircle className="w-3.5 h-3.5 shrink-0" /> Bantuan Darurat
           </button>
         </div>
 
         {/* Bottom Profile & Settings & Theme */}
-        <div className="px-2 pb-2 pt-1 border-t border-slate-200/60 dark:border-slate-800/70 space-y-0.5">
-          <div className="flex items-center justify-between px-2 py-1 text-slate-600 dark:text-slate-400 text-[12.5px]">
+        <div className="px-2 pb-2.5 pt-1 border-t border-stone-200/60 dark:border-slate-800/70 space-y-0.5">
+          <div className="flex items-center justify-between px-1.5 py-0.5 text-stone-600 dark:text-stone-400 text-[13px]">
             <button 
               onClick={() => { onOpenSettings?.(); setIsOpen(false); }} 
-              className="flex items-center gap-2 hover:text-slate-900 dark:hover:text-slate-100 cursor-pointer"
+              className="flex items-center gap-2 hover:text-stone-900 dark:hover:text-stone-100 cursor-pointer min-h-[36px]"
             >
-              <Settings className="w-4 h-4 text-slate-400 shrink-0" />
+              <Settings className="w-3.5 h-3.5 text-stone-400 shrink-0" />
               <span>Pengaturan</span>
             </button>
             <button 
               onClick={toggleTheme} 
-              className="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded cursor-pointer transition-colors"
-              
+              className="min-h-[34px] min-w-[34px] flex items-center justify-center text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 rounded-lg hover:bg-stone-100 dark:hover:bg-slate-800 cursor-pointer transition-colors"
               aria-label="Ganti Tema"
             >
               {actualTheme === 'dark' ? <Moon className="w-3.5 h-3.5 text-amber-400" /> : <Sun className="w-3.5 h-3.5 text-amber-600" />}
@@ -402,22 +401,22 @@ export default function Sidebar({ isOpen, setIsOpen, onNewChat, chats, currentCh
           {user?.role === 'guest' ? (
             <button 
               onClick={() => { onOpenAuth?.(); setIsOpen(false); }} 
-              className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg hover:bg-slate-100/90 dark:hover:bg-slate-800/60 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 font-medium transition-colors cursor-pointer text-[12.5px]"
+              className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg hover:bg-stone-100/90 dark:hover:bg-slate-800/60 text-stone-700 dark:text-stone-300 hover:text-stone-900 dark:hover:text-stone-100 font-medium transition-colors cursor-pointer text-[13px] min-h-[38px]"
             >
-              <LogIn className="w-4 h-4 text-slate-400 shrink-0" /> Masuk Akun
+              <LogIn className="w-3.5 h-3.5 text-stone-400 shrink-0" /> Masuk Akun
             </button>
           ) : (
-            <div className="flex items-center justify-between px-1 py-0.5 mt-0.5">
+            <div className="flex items-center justify-between px-1 py-0.5">
               <button
                 onClick={() => { onOpenSettings?.(); setIsOpen(false); }}
-                className="flex flex-1 items-center gap-2 min-w-0 hover:bg-slate-100/90 dark:hover:bg-slate-800/60 p-1 rounded-lg transition-colors text-left cursor-pointer"
+                className="flex flex-1 items-center gap-2 min-w-0 hover:bg-stone-100/90 dark:hover:bg-slate-800/60 p-1 rounded-lg transition-colors text-left cursor-pointer min-h-[38px]"
               >
-                <div className="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center justify-center shrink-0 font-medium text-[11px]">
+                <div className="w-6 h-6 rounded-full bg-teal-100 dark:bg-teal-900 text-teal-800 dark:text-teal-200 flex items-center justify-center shrink-0 font-semibold text-[11px]">
                   {user?.name?.charAt(0)?.toUpperCase() || 'U'}
                 </div>
                 <div className="flex flex-col min-w-0">
-                  <span className="text-[12px] font-medium text-slate-900 dark:text-slate-100 truncate leading-tight">{user?.name || 'User'}</span>
-                  <span className="text-[10px] text-slate-400 dark:text-slate-500 truncate leading-tight">
+                  <span className="text-xs font-medium text-stone-900 dark:text-stone-100 truncate leading-tight">{user?.name || 'User'}</span>
+                  <span className="text-[10.5px] text-stone-400 dark:text-stone-500 truncate leading-tight">
                     {user?.email || (user?.role === 'counselor' ? 'Konselor' : 'Mahasiswa')}
                   </span>
                 </div>
@@ -425,8 +424,9 @@ export default function Sidebar({ isOpen, setIsOpen, onNewChat, chats, currentCh
               {onLogout && (
                 <button 
                   onClick={onLogout}
-                  
-                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg transition-colors shrink-0 flex items-center justify-center cursor-pointer"
+                  className="min-h-[34px] min-w-[34px] text-stone-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg transition-colors shrink-0 flex items-center justify-center cursor-pointer"
+                  title="Keluar"
+                  aria-label="Keluar"
                 >
                   <LogOut className="w-3.5 h-3.5" />
                 </button>

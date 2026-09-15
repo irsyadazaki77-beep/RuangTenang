@@ -1,10 +1,11 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
-import { optionalAuth } from '../middleware/auth';
+import { optionalAuth } from '../middleware/auth.js';
+import { counselorAiLimiter } from '../middleware/rateLimiters.js';
 import { checkRateLimit, sanitizeInput } from '../security.js';
 import { scanAndSanitizePII } from '../services/piiService.js';
 import { checkUserAiUsageLimit, recordUserAiUsage } from '../services/aiUsageLimiter.js';
-import { getLocalCounselorResponse } from './fallbackAi';
+import { getLocalCounselorResponse } from './fallbackAi.js';
 import { consentService } from '../services/consentService.js';
 import { aiGateway } from '../services/ai/aiGateway.js';
 
@@ -24,7 +25,7 @@ export const counselorChatSchema = z.object({
 }).strict();
 
 // Counselor Simulation Chat Endpoint
-router.post(['/counselor-chat', '/api/counselor-chat'], optionalAuth, async (req: Request, res: Response) => {
+router.post(['/counselor-chat', '/api/counselor-chat'], counselorAiLimiter, optionalAuth, async (req: Request, res: Response) => {
   try {
     const clientIp = req.ip || req.socket.remoteAddress || 'unknown-ip';
 

@@ -91,22 +91,22 @@ export function ModalShell({
             animate="visible"
             exit="exit"
             variants={shouldReduceMotion ? reducedMotionVariants : modalPanelVariants}
-            className={`w-full ${MAX_WIDTH_MAP[maxWidth]} surface-card border border-slate-200/90 dark:border-slate-800 rounded-2xl sm:rounded-3xl shadow-2xl flex flex-col h-[90dvh] sm:h-[88dvh] max-h-[820px] overflow-hidden focus:outline-none will-change-transform`}
+            className={`w-full ${MAX_WIDTH_MAP[maxWidth]} surface-card border border-slate-200/90 dark:border-slate-800 rounded-2xl shadow-2xl flex flex-col h-[90dvh] sm:h-[86dvh] max-h-[780px] overflow-hidden focus:outline-none will-change-transform`}
             tabIndex={-1}
           >
             {/* Header */}
-            <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-100 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xs shrink-0">
+            <div className="flex items-center justify-between px-4 sm:px-5 py-3 sm:py-3.5 border-b border-slate-100 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xs shrink-0">
               <div className="min-w-0 pr-3">
-                <h2 id="modal-title" className="font-bold text-primary text-sm sm:text-base tracking-tight truncate">
+                <h2 id="modal-title" className="font-semibold text-primary text-sm sm:text-base tracking-tight truncate">
                   {title}
                 </h2>
                 {subtitle && (
-                  <p className="text-xs text-secondary truncate mt-0.5">
+                  <p className="text-[12px] text-secondary truncate mt-0.5">
                     {subtitle}
                   </p>
                 )}
               </div>
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-1.5 shrink-0">
                 {headerRight}
                 <button
                   type="button"
@@ -120,13 +120,13 @@ export function ModalShell({
             </div>
 
             {/* Body Content */}
-            <div className="flex-1 overflow-y-auto p-4 sm:p-6 custom-scrollbar min-h-0">
+            <div className="flex-1 overflow-y-auto p-3.5 sm:p-5 custom-scrollbar min-h-0">
               {children}
             </div>
 
             {/* Optional Footer */}
             {footer && (
-              <div className="px-4 sm:px-6 py-3 border-t border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950/60 shrink-0">
+              <div className="px-4 sm:px-5 py-2.5 sm:py-3 border-t border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950/60 shrink-0">
                 {footer}
               </div>
             )}

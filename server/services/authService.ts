@@ -1,8 +1,8 @@
 import jwt from 'jsonwebtoken';
 import { Response } from 'express';
-import { UserRecord } from '../database';
+import { UserRecord } from '../database.js';
 import crypto from 'crypto';
-import { getJwtSecret } from '../middleware/auth';
+import { getJwtSecret } from '../middleware/auth.js';
 
 const COOKIE_NAME = 'ruangtenang_session';
 
@@ -17,11 +17,12 @@ export interface TokenPayload {
 
 export const authService = {
   /**
-   * Generates JWT token for active user session.
+   * Generates JWT token for active user session with reasonable expiration (24 hours).
+   * For mental health applications, 24h expiration balances user convenience and privacy.
    */
   generateSessionToken(payload: TokenPayload): string {
     return jwt.sign(payload, getJwtSecret(), {
-      expiresIn: '7d',
+      expiresIn: '24h', // Reduced from 7d to 24h for enhanced health privacy
       issuer: 'ruangtenang',
       audience: 'ruangtenang-web',
       algorithm: 'HS256',
@@ -31,20 +32,20 @@ export const authService = {
   },
 
   /**
-   * Sets HTTP-only secure cookie on response.
+   * Sets HTTP-only, SameSite secure cookie on response.
    */
   setSessionCookie(res: Response, token: string): void {
     const isProduction = process.env.NODE_ENV === 'production';
     const cookieOptions = {
-      httpOnly: true,
-      secure: isProduction,
-      sameSite: 'lax' as const,
+      httpOnly: true, // Prevents JavaScript XSS token theft
+      secure: isProduction, // Enforces HTTPS transmission in production
+      sameSite: 'lax' as const, // Prevents cross-site request forgery while preserving UX
       path: '/',
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      maxAge: 24 * 60 * 60 * 1000, // 24 hours (aligned with JWT expiration)
     };
 
     res.cookie(COOKIE_NAME, token, cookieOptions);
-    // Deprecated legacy 'token' cookie: stop issuing new ones, clear legacy if present
+    // Deprecated legacy 'token' cookie: clear legacy if present
     res.clearCookie('token', { httpOnly: true, secure: isProduction, sameSite: 'lax' as const, path: '/' });
   },
 
