@@ -1,6 +1,6 @@
 import React, { useState, useEffect} from 'react';
 import { useEscapeKey } from '../../hooks/useEscapeKey';
-import { Video, VideoOff, Mic, MicOff, PhoneOff, AlertCircle, Lock, Users, Network } from 'lucide-react';
+import { Video, VideoOff, Mic, MicOff, PhoneOff, AlertCircle, Lock, Users, Network, Info } from 'lucide-react';
 import { Appointment } from '../../types';
 
 interface VideoConsultationRoomProps {
@@ -20,6 +20,7 @@ export const VideoConsultationRoom: React.FC<VideoConsultationRoomProps> = ({
   const [isVideoOff, setIsVideoOff] = useState(false);
   const [counselorNotes, setCounselorNotes] = useState('');
   const [networkQuality, setNetworkQuality] = useState<'good' | 'poor'>('good');
+  const [showSimNotice, setShowSimNotice] = useState(true);
   
   // Real-time network fluctuation simulation
   useEffect(() => {
@@ -49,27 +50,52 @@ export const VideoConsultationRoom: React.FC<VideoConsultationRoomProps> = ({
       <div className={`flex-1 flex flex-col relative transition-all duration-300 ${userRole === 'konselor' ? 'lg:mr-[320px]' : ''}`}>
         
         {/* Top Overlay Bar */}
-        <div className="absolute top-0 left-0 w-full p-4 flex items-center justify-between z-10 bg-gradient-to-b from-slate-900/80 to-transparent pointer-events-none">
-          <div className="flex flex-col">
-            <span className="text-white font-semibold flex items-center gap-2 pointer-events-auto">
-              <Lock className="w-4 h-4 text-emerald-400" />
-              Sesi Konsultasi Terenkripsi & Privat
-            </span>
-            <span className="text-slate-300 text-xs">ID: {appointment.id}</span>
-          </div>
-          <div className="flex items-center gap-3 pointer-events-auto">
-            <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-slate-800/80 backdrop-blur border ${networkQuality === 'good' ? 'border-emerald-500/50 text-emerald-400' : 'border-amber-500/50 text-amber-400'}`}>
-              <Network className="w-3.5 h-3.5" />
-              {networkQuality === 'good' ? 'Sinyal Stabil' : 'Sinyal Lemah'}
+        <div className="absolute top-0 left-0 w-full p-4 flex flex-col gap-2 z-10 bg-gradient-to-b from-slate-900/90 via-slate-900/60 to-transparent pointer-events-none">
+          <div className="flex items-center justify-between">
+            <div className="flex flex-col">
+              <span className="text-white font-semibold flex items-center gap-2 pointer-events-auto">
+                <Lock className="w-4 h-4 text-emerald-400" />
+                Sesi Konsultasi Terenkripsi & Privat
+              </span>
+              <span className="text-slate-300 text-xs">ID: {appointment.id}</span>
             </div>
-            <div className="px-2.5 py-1 rounded-full bg-slate-800/80 backdrop-blur border border-slate-700 text-slate-300 text-xs font-medium flex items-center gap-1.5">
-              <Users className="w-3.5 h-3.5" /> 2 Partisipan
+            <div className="flex items-center gap-2 sm:gap-3 pointer-events-auto">
+              <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-amber-500/10 text-amber-300 border border-amber-500/30 flex items-center gap-1.5">
+                <Info className="w-3.5 h-3.5" />
+                Mode Simulasi
+              </span>
+              <div className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-slate-800/80 backdrop-blur border ${networkQuality === 'good' ? 'border-emerald-500/50 text-emerald-400' : 'border-amber-500/50 text-amber-400'}`}>
+                <Network className="w-3.5 h-3.5" />
+                {networkQuality === 'good' ? 'Sinyal Stabil' : 'Sinyal Lemah'}
+              </div>
+              <div className="px-2.5 py-1 rounded-full bg-slate-800/80 backdrop-blur border border-slate-700 text-slate-300 text-xs font-medium flex items-center gap-1.5">
+                <Users className="w-3.5 h-3.5" /> 2 Partisipan
+              </div>
             </div>
           </div>
+
+          {/* Simulation Transparency Banner */}
+          {showSimNotice && (
+            <div className="pointer-events-auto flex items-center justify-between gap-3 px-3.5 py-2 rounded-xl bg-slate-900/90 border border-emerald-500/30 backdrop-blur-md shadow-lg text-xs text-slate-200 animate-in fade-in slide-in-from-top-2 duration-300">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                <p className="leading-relaxed">
+                  <strong className="text-emerald-400 font-semibold">Mode Simulasi Konsultasi:</strong> Sesi video call ini beroperasi dalam mode simulasi interaktif end-to-end terenkripsi untuk pengujian antarmuka konseling sebelum terhubung ke server WebRTC produksi.
+                </p>
+              </div>
+              <button 
+                onClick={() => setShowSimNotice(false)} 
+                className="shrink-0 text-slate-400 hover:text-white px-2 py-0.5 rounded transition-colors text-[11px]"
+                aria-label="Tutup pemberitahuan simulasi"
+              >
+                Tutup
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Video Grid */}
-        <div className="flex-1 p-2 sm:p-4 grid grid-cols-1 md:grid-cols-2 gap-2 sm:gap-4 mt-16 mb-20 relative">
+        <div className="flex-1 p-2 sm:p-4 grid grid-cols-1 md:grid-cols-2 gap-2 sm:gap-4 mt-24 mb-20 relative">
           
           {/* Remote Video (Mock) */}
           <div className="relative bg-slate-900 rounded-2xl overflow-hidden border border-slate-800 shadow-2xl flex items-center justify-center group">

@@ -26,7 +26,7 @@ const NEGATION_PATTERNS = [
   'tidak akan'
 ];
 
-// Benign metaphor patterns that should not trigger acute crisis (e.g. "mati gaya", "tugas ini membunuhku")
+// Benign metaphor patterns that should not trigger acute crisis (e.g. "mati gaya", "tugas ini membunuhku", "pengen tidur seharian")
 const BENIGN_METAPHOR_PATTERNS = [
   'mati gaya',
   'mati rasa',
@@ -35,10 +35,15 @@ const BENIGN_METAPHOR_PATTERNS = [
   'membunuh waktu',
   'bikin mati penasaran',
   'terbunuh rasa',
-  'stuck to death'
+  'stuck to death',
+  'pengen tidur seharian',
+  'tidur seharian',
+  'capek kuliah',
+  'tugas bikin gila',
+  'burnout parah'
 ];
 
-// Direct acute crisis indicators (including slang, implicit phrasing, and English)
+// Direct acute crisis indicators (including slang, implicit phrasing, Indonesian local idioms, and English)
 const ACUTE_CRISIS_KEYWORDS = [
   'bunuh diri',
   'bundir',
@@ -47,16 +52,36 @@ const ACUTE_CRISIS_KEYWORDS = [
   'lompat dari gedung',
   'potong nadi',
   'sayat tangan',
+  'sayat pergelangan',
+  'sayat urat',
   'minum racun',
+  'tenggak racun',
+  'overdosis obat',
+  'telen obat banyak',
+  'minum obat banyak sekaligus',
   'ingin mati',
   'mau mati',
   'pengen mati',
   'pen mati',
+  'mati aja',
+  'mati saja',
   'pengen hilang',
+  'pingin ilang',
+  'pengen lenyap',
+  'pengen pergi selamanya',
   'pengen tidur selamanya',
+  'pengen tidur dan gak bangun',
+  'turu selawase',
+  'turu selamanya',
+  'pengen udahan',
   'pengen udahan dari dunia',
-  'capek hidup',
   'capek bgt pengen udahan',
+  'capek hidup',
+  'ga guna hidup',
+  'tak berguna hidup',
+  'nyusahin doang mending mati',
+  'pengen nyusul',
+  'nyusul yang udah meninggal',
   'ga sanggup lg hidup',
   'tak sanggup hidup',
   'menyakiti diri',
@@ -113,7 +138,11 @@ const HIGH_DISTRESS_KEYWORDS = [
   'gak kuat lagi',
   'tidak kuat lagi',
   'sudah tidak ada harapan',
-  'menyerah saja'
+  'menyerah saja',
+  'nyusahin doang',
+  'beban keluarga',
+  'merasa gagal',
+  'hancur lebur'
 ];
 
 export interface CrisisAnalysisResult {

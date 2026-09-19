@@ -55,12 +55,13 @@ blob-report/
 .nyc_output/
 .vitest/
 
-# Bundle Analysis & Crash Logs
-stats.html
-bundle-stats.json
-*crash_logs*.txt
-*.cpuprofile
-*.heapprofile
+# Temporary Patch Scripts & Linter Reports
+eslint_*.json
+fix_*.cjs
+rewrite_*.cjs
+patch_*.cjs
+run_all_*.cjs
+
 
 .DS_Store
 Thumbs.db

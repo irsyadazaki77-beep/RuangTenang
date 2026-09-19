@@ -95,24 +95,33 @@ export const aiSafetyService = {
       riskLevel = 'ELEVATED';
     }
 
-    // Handle benign metaphorical expressions (e.g., "Tugas ini membunuhku" or "Mati gaya")
+    // Handle benign metaphorical expressions (e.g., "Tugas ini membunuhku", "Mati gaya", "Pengen tidur seharian")
     const lowerInput = input.toLowerCase();
     const metaphors = [
       'mati gaya',
       'mati rasa',
+      'mati penasaran',
       'bikin mati',
       'tugas ini membunuhku',
-      'pekerjaan ini membunuhku'
+      'pekerjaan ini membunuhku',
+      'pengen tidur seharian',
+      'tidur seharian',
+      'capek kuliah',
+      'tugas bikin gila',
+      'burnout parah'
     ];
     
-    // If a metaphor is matched, but there is no acute crisis trigger, demote risk
+    // If a metaphor is matched, but there is no acute crisis trigger, demote risk to ELEVATED or LOW
     if (metaphors.some(m => lowerInput.includes(m)) && 
         !lowerInput.includes('bunuh diri') && 
         !lowerInput.includes('bundir') && 
         !lowerInput.includes('akhiri hidup') && 
         !lowerInput.includes('gantung diri') && 
-        !lowerInput.includes('potong nadi')) {
-      riskLevel = riskLevel === 'IMMEDIATE' || riskLevel === 'HIGH' ? 'ELEVATED' : 'LOW';
+        !lowerInput.includes('potong nadi') &&
+        !lowerInput.includes('sayat') &&
+        !lowerInput.includes('racun') &&
+        !lowerInput.includes('turu selawase')) {
+      riskLevel = 'ELEVATED';
     }
 
     // Handle negations and past ideation gracefully based on clinical detector

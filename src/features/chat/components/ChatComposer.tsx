@@ -56,11 +56,15 @@ export function ChatComposer({
       safeLocalStorage.removeItem(`draft_${chatId || 'new'}`);
     }
 
-    // Auto-grow textarea smoothly up to 160px max height
+    // Auto-grow textarea smoothly up to 96px (max-h-24)
     if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      const newHeight = Math.min(textareaRef.current.scrollHeight, 160);
-      textareaRef.current.style.height = `${newHeight}px`;
+      if (!input.trim()) {
+        textareaRef.current.style.height = '38px';
+      } else {
+        textareaRef.current.style.height = 'auto';
+        const newHeight = Math.min(Math.max(textareaRef.current.scrollHeight, 38), 96);
+        textareaRef.current.style.height = `${newHeight}px`;
+      }
     }
 
     // Detect slash commands
@@ -274,9 +278,9 @@ export function ChatComposer({
   return (
     <div 
       ref={composerContainerRef}
-      className="w-full px-3 sm:px-5 pt-1.5 pb-[max(0.75rem,env(safe-area-inset-bottom))] sticky bottom-0 z-20 shrink-0 bg-gradient-to-t from-stone-50 via-stone-50/95 to-transparent dark:from-[#0c1117] dark:via-[#0c1117]/95"
+      className="w-full sticky bottom-0 z-20 shrink-0 bg-gradient-to-t from-slate-50/95 via-slate-50/80 to-transparent dark:from-[#0c1117]/95 dark:via-[#0c1117]/80"
     >
-      <div className="max-w-3xl mx-auto w-full relative">
+      <div className="pt-1 pb-[max(0.5rem,env(safe-area-inset-bottom))] px-3 max-w-2xl mx-auto w-full relative">
         
         {/* 1. Quick Slash Commands Dropdown */}
         <AnimatePresence>
@@ -286,7 +290,7 @@ export function ChatComposer({
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 8, scale: 0.98 }}
               transition={{ duration: 0.15 }}
-              className="absolute bottom-full left-0 mb-2 w-full max-w-sm rounded-2xl border border-stone-200/90 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md p-1.5 shadow-xl z-30 overflow-hidden"
+              className="absolute bottom-full mb-2 left-0 right-0 sm:right-auto sm:w-80 bg-white dark:bg-slate-850 rounded-2xl border border-slate-200 dark:border-slate-750 shadow-xl overflow-hidden z-30 p-1.5"
               role="listbox"
               aria-label="Pintas Perintah Cepat"
             >
@@ -295,9 +299,9 @@ export function ChatComposer({
                   <Command className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
                   <span>Pintas Perintah</span>
                 </div>
-                <span className="text-[10px] font-mono text-stone-400">Tekan Enter / Tab</span>
+                <span className="text-[10px] font-mono text-stone-400">↑↓ Navigasi • Enter</span>
               </div>
-              <div className="max-h-48 overflow-y-auto space-y-0.5 custom-scrollbar">
+              <div className="max-h-56 overflow-y-auto space-y-0.5 custom-scrollbar">
                 {filteredCommands.map((c, index) => {
                   const IconComponent = c.icon as LucideIcon;
                   const isSelected = index === selectedCmdIndex;
@@ -307,23 +311,33 @@ export function ChatComposer({
                       type="button"
                       onClick={() => handleExecuteCommand(c.cmd)}
                       onMouseEnter={() => setSelectedCmdIndex(index)}
-                      className={`w-full text-left px-2.5 py-1.5 rounded-xl transition-all flex items-center gap-2.5 cursor-pointer text-xs min-h-[38px] ${
+                      className={`w-full text-left px-2.5 py-2 rounded-xl transition-all flex items-center gap-2.5 cursor-pointer text-xs min-h-[44px] ${
                         isSelected 
-                          ? 'bg-teal-50 dark:bg-teal-950/60 text-teal-950 dark:text-teal-100 font-medium' 
+                          ? 'bg-teal-50 dark:bg-teal-950/50 text-teal-700 dark:text-teal-300 font-medium shadow-2xs' 
                           : 'text-stone-700 dark:text-slate-300 hover:bg-stone-100/80 dark:hover:bg-slate-800/60'
                       }`}
                       role="option"
                       aria-selected={isSelected}
                     >
-                      <div className="w-7 h-7 rounded-lg bg-stone-100 dark:bg-slate-800 flex items-center justify-center shrink-0">
-                        <IconComponent className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                        isSelected
+                          ? 'bg-teal-100/80 dark:bg-teal-900/60 text-teal-700 dark:text-teal-300'
+                          : 'bg-stone-100 dark:bg-slate-800 text-stone-500 dark:text-slate-400'
+                      }`}>
+                        <IconComponent className="w-4 h-4" />
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between">
-                          <span className="font-mono font-semibold text-teal-700 dark:text-teal-400">{c.cmd}</span>
-                          <span className="text-[11px] text-stone-500 dark:text-slate-400 truncate ml-2">{c.label}</span>
+                          <span className={`font-mono font-semibold ${isSelected ? 'text-teal-700 dark:text-teal-300' : 'text-teal-600 dark:text-teal-400'}`}>
+                            {c.cmd}
+                          </span>
+                          <span className="text-[11px] text-stone-500 dark:text-slate-400 truncate ml-2 font-medium">
+                            {c.label}
+                          </span>
                         </div>
-                        <p className="text-[11px] text-stone-500 dark:text-slate-400 truncate">{c.desc}</p>
+                        <p className="text-[11px] text-stone-500 dark:text-slate-400 truncate mt-0.5">
+                          {c.desc}
+                        </p>
                       </div>
                     </button>
                   );
@@ -453,8 +467,8 @@ export function ChatComposer({
           </div>
         )}
 
-        {/* 4. Zen Main Input Shell (Warm Stone & Soothing Teal Accent) */}
-        <div className="relative flex items-end gap-1.5 sm:gap-2 bg-white dark:bg-slate-900 border border-stone-200/90 dark:border-slate-800 rounded-2xl sm:rounded-3xl p-1.5 sm:p-2 shadow-[0_2px_14px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_20px_rgba(0,0,0,0.25)] focus-within:border-teal-600/60 dark:focus-within:border-teal-500/60 focus-within:ring-4 focus-within:ring-teal-600/5 transition-all">
+        {/* 4. Ultra-Compact Sleek Input Bar */}
+        <div className="relative flex items-center gap-2 bg-white dark:bg-slate-800 rounded-full border border-slate-200 dark:border-slate-700 shadow-xs px-3 py-1 focus-within:border-teal-500 transition-all">
           
           {/* Plus Action Button */}
           <motion.button
@@ -464,19 +478,17 @@ export function ChatComposer({
               setShowActionMenu(!showActionMenu);
               setShowCommands(false);
             }}
-            className={`w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] rounded-xl sm:rounded-2xl flex items-center justify-center transition-colors shrink-0 cursor-pointer ${
-              showActionMenu
-                ? 'bg-stone-200 dark:bg-slate-800 text-stone-900 dark:text-stone-100 rotate-45'
-                : 'text-stone-500 hover:text-stone-800 dark:text-stone-400 dark:hover:text-stone-200 hover:bg-stone-100/80 dark:hover:bg-slate-800/80'
+            className={`w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 shrink-0 transition-colors cursor-pointer ${
+              showActionMenu ? 'rotate-45 text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-700' : ''
             }`}
             aria-label="Buka Menu Bantuan & Fitur"
             title="Layanan & Bantuan (+)"
             aria-expanded={showActionMenu}
           >
-            <Plus className="w-4.5 h-4.5 transition-transform duration-200" />
+            <Plus className="w-4 h-4 transition-transform duration-200" />
           </motion.button>
           
-          {/* Textarea Input (Auto-grow, Clean font) */}
+          {/* Textarea Input */}
           <textarea
             ref={textareaRef}
             value={input}
@@ -485,10 +497,12 @@ export function ChatComposer({
                 composerContainerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
               }, 120);
             }}
-            onChange={e => setInput(e.target.value)}
+            onChange={e => {
+              setInput(e.target.value);
+            }}
             onKeyDown={handleKeyDown}
-            placeholder="Ketik apa yang sedang kamu rasakan... (Ketik '/' untuk menu cepat)"
-            className="flex-1 max-h-36 bg-transparent border-none focus:ring-0 resize-none py-2 px-1 text-[15px] sm:text-[14.5px] text-stone-800 dark:text-stone-100 placeholder-stone-400 dark:placeholder-stone-500 leading-relaxed outline-none min-w-0"
+            placeholder="Ketik apa yang kamu rasakan..."
+            className="w-full bg-transparent text-sm text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none resize-none h-[38px] py-2 px-1 leading-normal overflow-hidden"
             rows={1}
             disabled={isTyping}
             aria-label="Ketik pesan konsultasi"
@@ -500,7 +514,7 @@ export function ChatComposer({
               type="button"
               whileTap={{ scale: 0.9 }}
               onClick={onStop}
-              className="w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] rounded-xl sm:rounded-2xl bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center shrink-0 transition shadow-xs cursor-pointer"
+              className="w-8 h-8 rounded-full bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center shrink-0 transition-transform active:scale-95 cursor-pointer shadow-xs"
               aria-label="Hentikan Jawaban AI"
               title="Hentikan respons AI"
             >
@@ -512,29 +526,17 @@ export function ChatComposer({
               whileTap={hasContent ? { scale: 0.92 } : undefined}
               onClick={handleSend}
               disabled={!hasContent}
-              className={`w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] rounded-xl sm:rounded-2xl flex items-center justify-center shrink-0 transition-all duration-200 ${
-                hasContent
-                  ? 'bg-teal-700 hover:bg-teal-800 text-white shadow-md shadow-teal-700/20 active:scale-95 cursor-pointer'
-                  : 'bg-stone-100 dark:bg-slate-800 text-stone-300 dark:text-slate-600 cursor-not-allowed'
-              }`}
+              className="w-8 h-8 rounded-full bg-teal-600 hover:bg-teal-700 text-white flex items-center justify-center shrink-0 transition-transform active:scale-95 disabled:opacity-40 disabled:bg-slate-300 dark:disabled:bg-slate-700 cursor-pointer disabled:cursor-not-allowed shadow-xs"
               aria-label="Kirim Pesan"
               title="Kirim pesan (Enter)"
             >
-              <Send className={`w-4 h-4 ml-0.5 transition-transform ${hasContent ? 'translate-x-0.5 -translate-y-0.5' : ''}`} />
+              <Send className="w-3.5 h-3.5 ml-0.5" />
             </motion.button>
           )}
         </div>
         
-        {/* 5. Soothing Calm Indicator & Reassurance */}
-        <div className="flex items-center justify-center gap-2 mt-2 select-none">
-          <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-teal-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-teal-600"></span>
-          </span>
-          <p className="text-[11px] text-stone-500 dark:text-slate-400 tracking-tight text-center">
-            Ruang aman tanpa penghakiman. Tarik napas perlahan dan mulailah saat kamu siap.
-          </p>
-        </div>
+        {/* Reassurance Disclaimer */}
+        <p className="text-[10px] text-slate-400 text-center mt-1">Ruang aman tanpa penghakiman • Rahasia</p>
       </div>
     </div>
   );

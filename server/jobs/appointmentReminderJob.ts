@@ -29,11 +29,10 @@ export function startAppointmentReminderJob() {
 async function processReminders() {
   const now = new Date();
   
-  // Need to find appointments that are CONFIRMED
+  // Find appointments that are CONFIRMED
   const upcomingAppointments = await prisma.appointments.findMany({
     where: {
       status: 'CONFIRMED',
-      // Assuming date is YYYY-MM-DD and time is HH:MM
     },
     include: {
       user: true,
@@ -42,26 +41,27 @@ async function processReminders() {
   });
 
   for (const appt of upcomingAppointments) {
-    // Parse date and time in WIB (assuming server time or parsing accurately)
-    // WIB is UTC+7. But for simplicity, we parse as local time and compute diff.
-    const apptDateStr = `${appt.date}T${appt.time}:00`;
-    const apptDate = new Date(apptDateStr);
-    
-    // Since input is like '2026-08-26' and '14:00', parsing it directly as local timezone
-    // Let's get diff in minutes
-    const diffMinutes = Math.floor((apptDate.getTime() - now.getTime()) / (1000 * 60));
+    try {
+      const apptDateStr = `${appt.date}T${appt.time}:00`;
+      const apptDate = new Date(apptDateStr);
+      if (isNaN(apptDate.getTime())) {
+        continue;
+      }
+      
+      const diffMinutes = Math.floor((apptDate.getTime() - now.getTime()) / (1000 * 60));
 
-    // We use DistributedState to ensure we only send once per milestone
-    
-    if (diffMinutes > 0 && diffMinutes <= 15) {
-      // H-15 Minutes
-      await sendReminder(appt, 'H-15M', 'Urgent: Sesi konseling Anda akan dimulai dalam 15 menit!');
-    } else if (diffMinutes > 15 && diffMinutes <= 60) {
-      // H-1 Hour
-      await sendReminder(appt, 'H-1H', 'Sesi konseling Anda akan dimulai dalam 1 jam.');
-    } else if (diffMinutes > 60 && diffMinutes <= 24 * 60) {
-      // H-24 Hours
-      await sendReminder(appt, 'H-24H', 'Sesi konseling Anda dijadwalkan besok. Harap persiapkan diri Anda.');
+      if (diffMinutes > 0 && diffMinutes <= 15) {
+        // H-15 Minutes
+        await sendReminder(appt, 'H-15M', 'Urgent: Sesi konseling Anda akan dimulai dalam 15 menit!');
+      } else if (diffMinutes > 15 && diffMinutes <= 60) {
+        // H-1 Hour
+        await sendReminder(appt, 'H-1H', 'Sesi konseling Anda akan dimulai dalam 1 jam.');
+      } else if (diffMinutes > 60 && diffMinutes <= 24 * 60) {
+        // H-24 Hours
+        await sendReminder(appt, 'H-24H', 'Sesi konseling Anda dijadwalkan besok. Harap persiapkan diri Anda.');
+      }
+    } catch (apptErr) {
+      console.error(`[ReminderJob] Error processing appointment ${appt.id}:`, apptErr);
     }
   }
 }
@@ -69,30 +69,19 @@ async function processReminders() {
 async function sendReminder(appt: any, milestone: string, message: string) {
   const reminderKey = `reminder:${appt.id}:${milestone}`;
   
-  // Check if already sent
-  const existing = await prisma.distributedState.findUnique({ where: { key: reminderKey } });
-  if (existing) return; // Already sent
-
-  console.log(`[ReminderJob] Sending ${milestone} reminder to ${appt.studentName} for appointment ${appt.id}`);
-  
-  // Simulate Webhook/Gateway for SMS/WA
   try {
-    // Mock webhook call
-    /*
-    await fetch('https://api.mock-gateway.com/send', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        to: appt.studentEmail, // or phone
-        message,
-        channel: milestone === 'H-24H' ? 'email' : 'whatsapp'
-      })
-    });
-    */
+    // Check if already sent
+    const existing = await prisma.distributedState.findUnique({ where: { key: reminderKey } });
+    if (existing) return; // Already sent
+
+    const studentDisplayName = appt.studentName || appt.user?.name || 'Mahasiswa';
+    console.log(`[ReminderJob] Sending ${milestone} reminder (${message}) to ${studentDisplayName} for appointment ${appt.id}`);
     
-    // Mark as sent
-    await prisma.distributedState.create({
-      data: {
+    // Mark as sent atomically using upsert to avoid duplicate key errors
+    await prisma.distributedState.upsert({
+      where: { key: reminderKey },
+      update: {},
+      create: {
         key: reminderKey,
         category: 'REMINDER_LOG',
         value: 'SENT',
@@ -100,6 +89,6 @@ async function sendReminder(appt: any, milestone: string, message: string) {
       }
     });
   } catch (err) {
-    console.error(`[ReminderJob] Failed to send ${milestone} reminder:`, err);
+    console.error(`[ReminderJob] Failed to send ${milestone} reminder for appointment ${appt.id}:`, err);
   }
 }

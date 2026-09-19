@@ -57,7 +57,18 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loadingAppointments, setLoadingAppointments] = useState(true);
   const [errorAppointments, setErrorAppointments] = useState<string | null>(null);
-  const [isBookingOpen, setIsBookingOpen] = useState(false);
+  const [isBookingOpen, setIsBookingOpen] = useState(() => {
+    try {
+      const autoOpen = typeof window !== 'undefined' ? sessionStorage.getItem('rt_auto_open_booking') : null;
+      if (autoOpen === 'true') {
+        sessionStorage.removeItem('rt_auto_open_booking');
+        return true;
+      }
+    } catch {
+      // ignore
+    }
+    return Boolean(selectedCounselorFromDir);
+  });
   const [showLimitModal, setShowLimitModal] = useState(false);
   useEscapeKey(() => setShowLimitModal(false), showLimitModal);
 

@@ -19,6 +19,7 @@ import { useChatHistory } from '../hooks/useChatHistory';
 import { useChatStreaming } from '../hooks/useChatStreaming';
 import { ChatHeader } from './ChatHeader';
 import { EmptyChatState } from './EmptyChatState';
+import { BreathingModal } from './BreathingModal';
 import { ChatSkeleton } from '../../../components/common/Skeleton';
 import { ErrorState } from '../../../components/common/ErrorState';
 import { apiClient } from '../../../lib/apiClient';
@@ -81,7 +82,16 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
   const [searchQuery, setSearchQuery] = useState('');
   const [currentSearchIndex, setCurrentSearchIndex] = useState(0);
 
-  const handleOpenPlugin = (plugin: string) => setActivePlugin(plugin);
+  // --- Feature 6: Guided Breathing Modal State ---
+  const [isBreathingOpen, setIsBreathingOpen] = useState(false);
+
+  const handleOpenPlugin = (plugin: string) => {
+    if (plugin === 'breathing') {
+      setIsBreathingOpen(true);
+      return;
+    }
+    setActivePlugin(plugin);
+  };
   const handleClosePlugin = () => setActivePlugin(null);
 
   useEffect(() => {
@@ -520,17 +530,22 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
       return;
     }
 
+    if (cleanCmd === '/jeda' || cleanCmd === '/breath' || cleanCmd === '/breathing') {
+      setIsBreathingOpen(true);
+      return;
+    }
+
     if (cleanCmd === '/articles') {
       handleOpenPlugin('articles');
       return;
     }
 
-    if (cleanCmd === '/screening') {
+    if (cleanCmd === '/screening' || cleanCmd === '/skrining') {
       handleOpenPlugin('screening');
       return;
     }
 
-    if (cleanCmd === '/counselor' || cleanCmd === '/counselors') {
+    if (cleanCmd === '/counselor' || cleanCmd === '/counselors' || cleanCmd === '/konselor') {
       handleOpenPlugin('counselors');
       return;
     }
@@ -704,6 +719,12 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
         }}
       />
 
+      {/* Feature 6: Guided Breathing 1-Minute Modal */}
+      <BreathingModal
+        isOpen={isBreathingOpen}
+        onClose={() => setIsBreathingOpen(false)}
+      />
+
     <div 
       className="flex-1 flex flex-col h-full h-[100dvh] min-h-0 surface-page relative min-w-0 overflow-hidden"
       style={viewportHeight ? { height: `${viewportHeight}px`, maxHeight: `${viewportHeight}px` } : undefined}
@@ -749,7 +770,7 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
         onPrev={handleSearchPrev}
       />
 
-      <div className="flex-1 overflow-y-auto w-full min-w-0 flex flex-col px-3 sm:px-4 py-3 sm:py-4 pb-safe" ref={scrollContainerRef}>
+      <div className="flex-1 overflow-y-auto w-full min-w-0 flex flex-col px-3 sm:px-4 pt-3 sm:pt-4 pb-36 sm:pb-32" ref={scrollContainerRef}>
         {isLoadingMessages ? (
           <div className="flex-1 flex items-start justify-center pt-4">
             <ChatSkeleton />
@@ -764,7 +785,13 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
             />
           </div>
         ) : messages.length === 0 ? (
-          <EmptyChatState userName={user?.name?.split(' ')[0]} onSelectPrompt={(prompt) => handleSend(prompt)} />
+          <div className="min-h-full flex flex-col justify-between my-auto w-full">
+            <EmptyChatState 
+              userName={user?.name?.split(' ')[0]} 
+              onSelectPrompt={(prompt) => handleSend(prompt)} 
+              onOpenBreathing={() => setIsBreathingOpen(true)}
+            />
+          </div>
         ) : (
           <div key={chatId || 'empty'} className="max-w-3xl mx-auto space-y-4 sm:space-y-5 pb-6 w-full animate-fade-in">
             {nextCursor && (
@@ -844,7 +871,7 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
       {showScrollBottom && (
         <button 
           onClick={() => scrollToBottom(true)} 
-          className="absolute bottom-24 right-4 sm:right-6 w-9 h-9 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:text-slate-900 border border-slate-200/80 dark:border-slate-700 shadow-md rounded-full flex items-center justify-center transition-all z-20 cursor-pointer"
+          className="absolute bottom-28 sm:bottom-24 right-4 z-20 w-9 h-9 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:text-slate-900 border border-slate-200/80 dark:border-slate-700 shadow-md hover:shadow-lg rounded-full flex items-center justify-center transition-all cursor-pointer"
           title="Pesan Terbaru"
           aria-label="Gulir ke Pesan Terbaru"
         >

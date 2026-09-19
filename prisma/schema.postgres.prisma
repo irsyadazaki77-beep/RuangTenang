@@ -300,6 +300,7 @@ model UserMemories {
   user      Users    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([userId, createdAt])
 }
 
 model Counselors {

@@ -69,9 +69,18 @@ export const BookingForm: React.FC<BookingFormProps> = ({
   const { counselors, loading } = useCounselors();
 
   const [currentStep, setCurrentStep] = useState<number>(1);
-  const [selectedConcern, setSelectedConcern] = useState<string>(
-    "Kendala Akademik & Skripsi",
-  );
+  const [selectedConcern, setSelectedConcern] = useState<string>(() => {
+    try {
+      const savedNote = typeof window !== 'undefined' ? sessionStorage.getItem('rt_screening_referral_notes') : null;
+      if (savedNote) {
+        sessionStorage.removeItem('rt_screening_referral_notes');
+        return savedNote;
+      }
+    } catch {
+      // ignore
+    }
+    return "Kendala Akademik & Skripsi";
+  });
   const [selectedCounselorId, setSelectedCounselorId] = useState<string>(
     selectedCounselorFromDir?.id || ""
   );

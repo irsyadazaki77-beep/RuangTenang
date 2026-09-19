@@ -1,6 +1,27 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Settings, Search, MoreHorizontal, Edit2, Trash2, Pin, Archive, X, Heart, Stethoscope, Users, AlertCircle, LogOut, LogIn, Sun, Moon, Bell, GitBranch } from 'lucide-react';
+import { 
+  Plus, 
+  Settings, 
+  Search, 
+  MoreHorizontal, 
+  Edit2, 
+  Trash2, 
+  Pin, 
+  Archive, 
+  X, 
+  Heart, 
+  Stethoscope, 
+  Users, 
+  AlertCircle, 
+  LogOut, 
+  LogIn, 
+  Sun, 
+  Moon, 
+  Bell, 
+  GitBranch,
+  Menu
+} from 'lucide-react';
 import { isToday, isYesterday } from 'date-fns';
 import { Chat } from '../../features/chat/types';
 import { motion, AnimatePresence } from 'motion/react';
@@ -28,7 +49,24 @@ interface SidebarProps {
   isLoading?: boolean;
 }
 
-export default function Sidebar({ isOpen, setIsOpen, onNewChat, chats, currentChatId, onSelectChat, onDeleteChat, onUpdateTitle, onTogglePin, onToggleArchive, onLogout, onOpenSettings, onOpenAuth, onOpenNotifications, user, isLoading }: SidebarProps) {
+export default function Sidebar({
+  isOpen,
+  setIsOpen,
+  onNewChat,
+  chats,
+  currentChatId,
+  onSelectChat,
+  onDeleteChat,
+  onUpdateTitle,
+  onTogglePin,
+  onToggleArchive,
+  onLogout,
+  onOpenSettings,
+  onOpenAuth,
+  onOpenNotifications,
+  user,
+  isLoading
+}: SidebarProps) {
   const navigate = useNavigate();
   const { actualTheme, toggleTheme } = useTheme();
   const [search, setSearch] = useState('');
@@ -38,7 +76,10 @@ export default function Sidebar({ isOpen, setIsOpen, onNewChat, chats, currentCh
   const [showArchived, setShowArchived] = useState(false);
   const [searchResults, setSearchResults] = useState<Chat[]>([]);
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const menuContainerRef = useRef<HTMLDivElement>(null);
 
+  // Sync unread notifications count
   useEffect(() => {
     const updateUnread = () => {
       try {
@@ -53,6 +94,7 @@ export default function Sidebar({ isOpen, setIsOpen, onNewChat, chats, currentCh
     return () => window.removeEventListener('ruangtenang_notifications_updated', updateUnread);
   }, []);
 
+  // Real-time server search with debouncing
   useEffect(() => {
     if (!search.trim()) {
       setSearchResults([]);
@@ -83,6 +125,56 @@ export default function Sidebar({ isOpen, setIsOpen, onNewChat, chats, currentCh
       clearTimeout(delay);
     };
   }, [search]);
+
+  // Keyboard shortcut listener: Cmd+K / Ctrl+K, Cmd+N / Ctrl+N, and Escape
+  useEffect(() => {
+    const handleKeydown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setIsOpen(true);
+        searchInputRef.current?.focus();
+      } else if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'n') {
+        const targetTag = (e.target as HTMLElement)?.tagName?.toLowerCase();
+        if (targetTag !== 'input' && targetTag !== 'textarea') {
+          e.preventDefault();
+          onNewChat();
+          setIsOpen(false);
+        }
+      } else if (e.key === 'Escape') {
+        if (menuOpenId) {
+          setMenuOpenId(null);
+        } else if (editingId) {
+          setEditingId(null);
+        } else if (isOpen) {
+          setIsOpen(false);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeydown);
+    return () => window.removeEventListener('keydown', handleKeydown);
+  }, [isOpen, setIsOpen, onNewChat, menuOpenId, editingId]);
+
+  // Close context menu on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuOpenId && menuContainerRef.current && !menuContainerRef.current.contains(e.target as Node)) {
+        setMenuOpenId(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [menuOpenId]);
+
+  // Lock body scroll on mobile when sidebar drawer is open
+  useEffect(() => {
+    if (isOpen) {
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = originalOverflow;
+      };
+    }
+  }, [isOpen]);
 
   const displayChats = search.trim() ? searchResults : chats;
   const filteredChats = displayChats.filter(c => (showArchived ? c.isArchived : !c.isArchived) && !c.isTemporary);
@@ -128,70 +220,103 @@ export default function Sidebar({ isOpen, setIsOpen, onNewChat, chats, currentCh
 
   const renderChatItem = (c: Chat) => {
     const isActive = currentChatId === c.id;
+    const isMenuOpen = menuOpenId === c.id;
+
     return (
       <div 
         key={c.id} 
-        className={`group relative flex items-center gap-1.5 w-full px-2.5 py-1.5 rounded-lg text-[13px] transition-colors duration-150 text-left min-h-[38px] ${
+        className={`group relative flex items-center justify-between w-full px-3 py-2 text-xs sm:text-sm rounded-full transition-colors duration-150 text-left min-h-[38px] ${
           isActive 
-            ? 'bg-stone-200/80 dark:bg-slate-800 text-stone-900 dark:text-stone-100 font-medium shadow-2xs' 
-            : 'hover:bg-stone-100/90 dark:hover:bg-slate-800/50 text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-200'
+            ? 'bg-slate-200/80 dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-medium' 
+            : 'text-slate-700 dark:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-800/80'
         }`}
       >
-        {c.isPinned && (
-          <Pin className="w-3.5 h-3.5 shrink-0 text-stone-400 dark:text-stone-500" />
-        )}
-        {c.parentChatId && (
-          <GitBranch className="w-3.5 h-3.5 shrink-0 text-teal-600 dark:text-teal-400"  />
-        )}
-        
-        {editingId === c.id ? (
-          <input 
-            autoFocus
-            value={editTitle}
-            onChange={e => setEditTitle(e.target.value)}
-            onBlur={() => handleEditSubmit(c.id)}
-            onKeyDown={e => e.key === 'Enter' && handleEditSubmit(c.id)}
-            className="flex-1 bg-white dark:bg-slate-800 border border-teal-500/70 rounded-md px-2 py-0.5 text-[12.5px] text-stone-900 dark:text-stone-100 outline-none ring-2 ring-teal-500/20"
-          />
-        ) : (
-          <button 
-            onClick={() => { onSelectChat(c.id); setIsOpen(false); }} 
-            className="flex-1 truncate text-left min-h-[34px] flex items-center pr-1 cursor-pointer"
-          >
-            {c.title}
-          </button>
-        )}
+        <div className="flex items-center gap-2 flex-1 min-w-0 pr-1">
+          {c.isPinned && (
+            <Pin className="w-3.5 h-3.5 shrink-0 text-slate-400 dark:text-slate-500" />
+          )}
+          {c.parentChatId && (
+            <GitBranch className="w-3.5 h-3.5 shrink-0 text-teal-600 dark:text-teal-400" />
+          )}
+          
+          {editingId === c.id ? (
+            <input 
+              autoFocus
+              value={editTitle}
+              onChange={e => setEditTitle(e.target.value)}
+              onBlur={() => handleEditSubmit(c.id)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') handleEditSubmit(c.id);
+                if (e.key === 'Escape') setEditingId(null);
+              }}
+              className="flex-1 bg-white dark:bg-slate-900 border border-teal-500/70 rounded-full px-2.5 py-0.5 text-xs text-slate-900 dark:text-slate-100 outline-none ring-2 ring-teal-500/20"
+            />
+          ) : (
+            <button 
+              type="button"
+              onClick={() => { onSelectChat(c.id); setIsOpen(false); }} 
+              className="flex-1 truncate max-w-[170px] text-left cursor-pointer focus:outline-none"
+              title={c.title}
+            >
+              {c.title}
+            </button>
+          )}
+        </div>
 
-        <div className="relative shrink-0">
+        {/* Hover / Active Kebab Menu (Titik Tiga Gemini Style) */}
+        <div className="relative shrink-0" ref={isMenuOpen ? menuContainerRef : undefined}>
           <button 
+            type="button"
             aria-label="Menu Percakapan" 
-            onClick={(e) => { e.stopPropagation(); setMenuOpenId(menuOpenId === c.id ? null : c.id); }} 
-            className={`min-h-[32px] min-w-[32px] flex items-center justify-center rounded-md text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-200/70 dark:hover:bg-slate-700 transition-all cursor-pointer ${
-              menuOpenId === c.id ? 'opacity-100 bg-stone-200/70 dark:bg-slate-700' : 'opacity-80 sm:opacity-0 group-hover:opacity-100 focus:opacity-100'
+            onClick={(e) => { 
+              e.stopPropagation(); 
+              setMenuOpenId(isMenuOpen ? null : c.id); 
+            }} 
+            className={`p-1 hover:bg-slate-300/60 dark:hover:bg-slate-700 rounded-full transition-all cursor-pointer ${
+              isMenuOpen 
+                ? 'opacity-100 text-slate-700 dark:text-slate-200 bg-slate-300/60 dark:bg-slate-700' 
+                : 'opacity-0 group-hover:opacity-100 focus:opacity-100 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
             }`}
           >
             <MoreHorizontal className="w-3.5 h-3.5" />
           </button>
           
           <AnimatePresence>
-            {menuOpenId === c.id && (
+            {isMenuOpen && (
               <motion.div 
-                initial={{ opacity: 0, scale: 0.96, y: -4 }} 
+                initial={{ opacity: 0, scale: 0.95, y: -4 }} 
                 animate={{ opacity: 1, scale: 1, y: 0 }} 
-                exit={{ opacity: 0, scale: 0.96, y: -4 }} 
+                exit={{ opacity: 0, scale: 0.95, y: -4 }} 
                 transition={{ duration: 0.12 }}
-                className="absolute right-0 top-full mt-1 w-38 bg-white dark:bg-slate-900 border border-stone-200/80 dark:border-slate-800 shadow-lg rounded-xl py-1 z-50 text-xs text-stone-700 dark:text-stone-200"
+                className="absolute right-0 top-full mt-1 w-40 bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-xl rounded-2xl py-1.5 z-50 text-xs text-slate-700 dark:text-slate-200 backdrop-blur-md"
               >
-                <button onClick={(e) => { e.stopPropagation(); setEditingId(c.id); setEditTitle(c.title); setMenuOpenId(null); }} className="w-full text-left px-3 py-1.5 hover:bg-stone-50 dark:hover:bg-slate-800 flex items-center gap-2 cursor-pointer transition-colors min-h-[34px]">
-                  <Edit2 className="w-3.5 h-3.5 text-stone-400" /> Ubah Nama
+                <button 
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); setEditingId(c.id); setEditTitle(c.title); setMenuOpenId(null); }} 
+                  className="w-full text-left px-3 py-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2.5 cursor-pointer transition-colors"
+                >
+                  <Edit2 className="w-3.5 h-3.5 text-slate-400" /> Ubah Nama
                 </button>
-                <button onClick={(e) => { e.stopPropagation(); onTogglePin(c.id); setMenuOpenId(null); }} className="w-full text-left px-3 py-1.5 hover:bg-stone-50 dark:hover:bg-slate-800 flex items-center gap-2 cursor-pointer transition-colors min-h-[34px]">
-                  <Pin className="w-3.5 h-3.5 text-stone-400" /> {c.isPinned ? 'Lepas Pin' : 'Sematkan Pin'}
+                <button 
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); onTogglePin(c.id); setMenuOpenId(null); }} 
+                  className="w-full text-left px-3 py-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2.5 cursor-pointer transition-colors"
+                >
+                  <Pin className="w-3.5 h-3.5 text-slate-400" /> {c.isPinned ? 'Lepas Pin' : 'Sematkan Pin'}
                 </button>
-                <button onClick={(e) => { e.stopPropagation(); onToggleArchive(c.id); setMenuOpenId(null); }} className="w-full text-left px-3 py-1.5 hover:bg-stone-50 dark:hover:bg-slate-800 flex items-center gap-2 cursor-pointer transition-colors min-h-[34px]">
-                  <Archive className="w-3.5 h-3.5 text-stone-400" /> {c.isArchived ? 'Buka Arsip' : 'Arsipkan'}
+                <button 
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); onToggleArchive(c.id); setMenuOpenId(null); }} 
+                  className="w-full text-left px-3 py-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2.5 cursor-pointer transition-colors"
+                >
+                  <Archive className="w-3.5 h-3.5 text-slate-400" /> {c.isArchived ? 'Buka Arsip' : 'Arsipkan'}
                 </button>
-                <button onClick={(e) => { e.stopPropagation(); onDeleteChat(c.id); setMenuOpenId(null); }} className="w-full text-left px-3 py-1.5 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-rose-600 dark:text-rose-400 flex items-center gap-2 cursor-pointer transition-colors min-h-[34px]">
+                <div className="h-px bg-slate-100 dark:bg-slate-800 my-1" />
+                <button 
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); onDeleteChat(c.id); setMenuOpenId(null); }} 
+                  className="w-full text-left px-3 py-1.5 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-rose-600 dark:text-rose-400 flex items-center gap-2.5 cursor-pointer transition-colors"
+                >
                   <Trash2 className="w-3.5 h-3.5" /> Hapus
                 </button>
               </motion.div>
@@ -202,134 +327,151 @@ export default function Sidebar({ isOpen, setIsOpen, onNewChat, chats, currentCh
     );
   };
 
-  const searchInputRef = React.useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    const handleKeydown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
-        e.preventDefault();
-        setIsOpen(true);
-        searchInputRef.current?.focus();
-      } else if (e.key === 'Escape' && isOpen) {
-        setIsOpen(false);
-      }
-    };
-    window.addEventListener('keydown', handleKeydown);
-    return () => window.removeEventListener('keydown', handleKeydown);
-  }, [isOpen, setIsOpen]);
-
-  // Lock body scroll on mobile when sidebar drawer is open
-  useEffect(() => {
-    if (isOpen && window.innerWidth < 1024) {
-      const originalOverflow = document.body.style.overflow;
-      document.body.style.overflow = 'hidden';
-      return () => {
-        document.body.style.overflow = originalOverflow;
-      };
-    }
-  }, [isOpen]);
-
   return (
     <>
+      {/* Mobile Backdrop Overlay */}
       {isOpen && (
         <div 
-          className="fixed inset-0 bg-slate-900/30 z-40 lg:hidden backdrop-blur-xs transition-opacity duration-200" 
+          className="fixed inset-0 bg-black/40 backdrop-blur-xs z-40 lg:hidden transition-opacity duration-200" 
           onClick={() => setIsOpen(false)} 
         />
       )}
-      <aside className={`fixed lg:sticky lg:top-0 lg:h-[100dvh] inset-y-0 left-0 z-50 w-[260px] shrink-0 bg-stone-50/95 dark:bg-[#0f141c] border-r border-slate-200/60 dark:border-slate-800/70 flex flex-col pt-safe pb-safe transform transition-transform duration-200 ease-out will-change-transform ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
-        
-        {/* Top Header */}
-        <div className="px-3.5 flex items-center justify-between h-12 shrink-0">
-          <div className="flex items-center gap-2 min-w-0">
-            <div className="w-6 h-6 rounded-md bg-white dark:bg-slate-800 border border-slate-200/70 dark:border-slate-700 shadow-2xs flex items-center justify-center shrink-0 p-0.5">
-              <img src="/favicon.svg" alt="RuangTenang" className="w-full h-full object-contain" />
-            </div>
-            <span className="font-semibold text-sm tracking-tight text-slate-900 dark:text-slate-100 leading-none truncate">RuangTenang</span>
-          </div>
-          <button 
-            onClick={() => setIsOpen(false)} 
-            className="lg:hidden p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-lg cursor-pointer min-h-[44px] min-w-[44px] flex items-center justify-center" 
-            aria-label="Tutup Sidebar"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
 
-        {/* New Chat Action Button */}
-        <div className="px-3 pt-1 pb-1.5">
+      {/* Main Sidebar Container (Google Gemini Style) */}
+      <aside 
+        className={`fixed lg:sticky lg:top-0 lg:h-[100dvh] inset-y-0 left-0 z-50 w-[270px] shrink-0 bg-[#f8fafc] dark:bg-[#131314] border-r border-slate-200/70 dark:border-slate-800/60 flex flex-col pt-safe pb-safe transform transition-transform duration-200 ease-out will-change-transform select-none ${
+          isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+        }`}
+      >
+        {/* ========================================================================= */}
+        {/* 1. HEADER & TOMBOL "CHAT BARU" (TOP AREA) */}
+        {/* ========================================================================= */}
+        <div className="p-3 pb-2 space-y-2 shrink-0">
+          {/* Top Panel Toggle / Header Brand */}
+          <div className="flex items-center justify-between px-1">
+            <div className="flex items-center gap-2 min-w-0">
+              <button
+                type="button"
+                onClick={() => setIsOpen(!isOpen)}
+                className="p-2 rounded-full hover:bg-slate-200/60 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors cursor-pointer"
+                aria-label="Toggle Sidebar"
+                title="Sembunyikan / Tampilkan Sidebar"
+              >
+                <Menu className="w-4 h-4" />
+              </button>
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="w-6 h-6 rounded-md bg-white dark:bg-slate-800 border border-slate-200/70 dark:border-slate-700 shadow-2xs flex items-center justify-center shrink-0 p-0.5">
+                  <img src="/favicon.svg" alt="RuangTenang" className="w-full h-full object-contain" />
+                </div>
+                <span className="font-semibold text-sm tracking-tight text-slate-900 dark:text-slate-100 truncate">
+                  RuangTenang
+                </span>
+              </div>
+            </div>
+
+            {/* Mobile Close X Button */}
+            <button 
+              type="button"
+              onClick={() => setIsOpen(false)} 
+              className="lg:hidden p-2 rounded-full hover:bg-slate-200/60 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer" 
+              aria-label="Tutup Sidebar"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* 1. "+ Obrolan Baru" Slim Ultra-Modern Pill */}
           <button 
+            type="button"
             onClick={() => { onNewChat(); setIsOpen(false); }} 
-            className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-[13px] font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-800/70 border border-slate-200/70 dark:border-slate-800/80 transition-all cursor-pointer group active:scale-[0.99]" 
-            
+            className="h-10 px-3.5 w-full rounded-full flex items-center justify-between text-xs sm:text-sm font-medium transition-all bg-slate-100 hover:bg-slate-200/80 dark:bg-slate-800/70 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-100 border border-slate-200/60 dark:border-slate-750 cursor-pointer group active:scale-[0.99]" 
             aria-label="Chat Baru (Obrolan Baru)"
           >
-            <div className="flex items-center gap-2">
-              <Plus className="w-4 h-4 text-slate-500 group-hover:text-teal-600 dark:group-hover:text-teal-400 transition-colors" />
+            <div className="flex items-center gap-2.5">
+              <Plus className="w-4 h-4 text-slate-600 dark:text-slate-300 group-hover:text-teal-600 dark:group-hover:text-teal-400 transition-colors shrink-0" />
               <span>Obrolan baru</span>
             </div>
-            <span className="hidden sm:inline text-[10px] text-slate-400 font-sans">⌘N</span>
+            <span className="text-[10px] text-slate-400 px-1.5 py-0.5 rounded border border-slate-300/40 dark:border-slate-700 font-mono select-none">
+              ⌘N
+            </span>
           </button>
-        </div>
 
-        {/* Subtle Search */}
-        <div className="px-3 pb-2">
-          <div className="relative flex items-center">
-            <Search className="w-3.5 h-3.5 absolute left-2.5 text-slate-400 pointer-events-none" />
+          {/* 2. Seamless Bilah Pencarian Capsule */}
+          <div 
+            className="h-8 px-3 rounded-full flex items-center gap-2 text-xs text-slate-400 bg-transparent hover:bg-slate-100/70 dark:hover:bg-slate-800/50 transition-colors cursor-pointer my-1 border border-transparent focus-within:border-slate-200/80 dark:focus-within:border-slate-700/80 focus-within:bg-white dark:focus-within:bg-slate-850"
+            onClick={() => searchInputRef.current?.focus()}
+          >
+            <Search className="w-3.5 h-3.5 text-slate-400 shrink-0 pointer-events-none" />
             <input 
               ref={searchInputRef}
-              value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="Cari riwayat percakapan..." 
-              className="w-full bg-slate-100/70 dark:bg-slate-800/40 border border-transparent focus:border-slate-300 dark:focus:border-slate-700 focus:bg-white dark:focus:bg-slate-800 rounded-lg pl-8 pr-7 py-1.5 text-[12.5px] text-slate-800 dark:text-slate-100 placeholder:text-slate-400 outline-none transition-all"
+              value={search} 
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Cari..." 
+              className="flex-1 w-full bg-transparent text-xs text-slate-700 dark:text-slate-200 placeholder:text-slate-400 outline-none leading-none min-w-0"
             />
             {search ? (
-              <button onClick={() => setSearch('')} className="absolute right-2 text-slate-400 hover:text-slate-600 p-0.5">
+              <button 
+                type="button"
+                onClick={(e) => { e.stopPropagation(); setSearch(''); }} 
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-0.5 cursor-pointer shrink-0"
+                aria-label="Bersihkan pencarian"
+              >
                 <X className="w-3 h-3" />
               </button>
             ) : (
-              <span className="absolute right-2 hidden lg:inline text-[9px] text-slate-400 select-none">⌘K</span>
+              <span className="hidden lg:inline text-[9.5px] text-slate-400 select-none font-mono shrink-0">
+                ⌘K
+              </span>
             )}
           </div>
         </div>
 
-        {/* Archive Toggle Row */}
-        <div className="px-3.5 py-1 flex items-center justify-between text-[11px] text-slate-400 dark:text-slate-500">
-          <span className="font-semibold uppercase tracking-wider text-[10px]">{showArchived ? 'Arsip' : 'Riwayat'}</span>
-          <button 
-            onClick={() => setShowArchived(!showArchived)} 
-            className="hover:text-teal-600 dark:hover:text-teal-400 font-medium cursor-pointer py-0.5 transition-colors"
-          >
-            {showArchived ? 'Lihat Aktif' : 'Lihat Arsip'}
-          </button>
-        </div>
+        {/* ========================================================================= */}
+        {/* 2. RIWAYAT PERCAKAPAN (RECENT CHATS - GEMINI STYLE) */}
+        {/* ========================================================================= */}
+        <div className="flex-1 overflow-y-auto px-2 space-y-1 py-1 custom-scrollbar" onClick={() => setMenuOpenId(null)}>
+          <div className="px-3 flex items-center justify-between my-1">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+              {showArchived ? 'Arsip Obrolan' : 'Terbaru'}
+            </span>
+            <button 
+              type="button"
+              onClick={() => setShowArchived(!showArchived)} 
+              className="text-[10.5px] text-slate-400 hover:text-teal-600 dark:hover:text-teal-400 transition-colors cursor-pointer"
+            >
+              {showArchived ? 'Aktif' : 'Arsip'}
+            </button>
+          </div>
 
-        {/* History List */}
-        <div className="flex-1 overflow-y-auto px-2 space-y-0.5 py-0.5 custom-scrollbar" onClick={() => setMenuOpenId(null)}>
           {isLoading ? (
-            <div className="space-y-2 px-2 pt-2">
+            <div className="space-y-2 px-3 pt-2">
               {[1, 2, 3].map(i => (
                 <div key={i} className="animate-pulse space-y-1">
                   <div className="h-2 w-12 bg-slate-200 dark:bg-slate-800 rounded"></div>
-                  <div className="h-7 bg-slate-200/60 dark:bg-slate-800/60 rounded-lg"></div>
+                  <div className="h-8 bg-slate-200/60 dark:bg-slate-800/60 rounded-full"></div>
                 </div>
               ))}
             </div>
           ) : pinnedChats.length === 0 && Object.values(groups).every(g => g.length === 0) ? (
-            <div className="text-center text-slate-400 dark:text-slate-500 mt-6 text-[12px] px-3 font-normal">
-              {search ? 'Tidak ada hasil pencarian.' : (showArchived ? 'Belum ada arsip.' : 'Belum ada obrolan.')}
+            <div className="text-center text-slate-400 dark:text-slate-500 py-8 text-xs font-normal">
+              {search ? 'Tidak ada obrolan ditemukan' : 'Mulai obrolan pertamamu'}
             </div>
           ) : (
             <>
               {pinnedChats.length > 0 && (
-                <div className="pb-1">
-                  <div className="px-2 pt-2 pb-1 text-[10.5px] font-medium text-slate-400 dark:text-slate-500 uppercase tracking-wider">Disematkan</div>
+                <div className="mb-2">
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 px-3 my-2">
+                    Disematkan
+                  </div>
                   <div className="space-y-0.5">{pinnedChats.map(renderChatItem)}</div>
                 </div>
               )}
 
               {Object.entries(groups).map(([label, groupChats]) => groupChats.length > 0 && (
-                <div key={label} className="pb-1">
-                  <div className="px-2 pt-2.5 pb-1 text-[10.5px] font-medium text-slate-400 dark:text-slate-500 uppercase tracking-wider">{label}</div>
+                <div key={label} className="mb-2">
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 px-3 my-2">
+                    {label}
+                  </div>
                   <div className="space-y-0.5">{groupChats.map(renderChatItem)}</div>
                 </div>
               ))}
@@ -337,107 +479,150 @@ export default function Sidebar({ isOpen, setIsOpen, onNewChat, chats, currentCh
           )}
         </div>
 
-        {/* Secondary Tools Navigation */}
-        <div className="px-2 py-1.5 space-y-0.5 border-t border-stone-200/60 dark:border-slate-800/70">
-          <div className="px-2 pt-0.5 pb-0.5 text-[10.5px] font-semibold text-stone-400 dark:text-stone-500 uppercase tracking-wider">Layanan Kampus</div>
+        {/* ========================================================================= */}
+        {/* 3. MENU LAYANAN KAMPUS & BANTUAN DARURAT (MONOKROM MINIMALIS) */}
+        {/* ========================================================================= */}
+        <div className="px-2 py-2 border-t border-slate-200/60 dark:border-slate-800/80 my-2 mx-2 space-y-0.5">
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 px-3 mb-1.5">
+            Layanan Kampus
+          </div>
+          
           <button 
+            type="button"
             onClick={() => { navigate('/mood'); setIsOpen(false); }} 
-            className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg hover:bg-stone-100/90 dark:hover:bg-slate-800/60 text-stone-700 dark:text-stone-300 hover:text-stone-900 dark:hover:text-stone-100 font-medium transition-colors cursor-pointer text-[13px] min-h-[38px]"
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors group cursor-pointer"
           >
-            <Heart className="w-3.5 h-3.5 text-rose-500/80 shrink-0" /> Mood & Catatan
+            <Heart className="w-4 h-4 text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-200 transition-colors shrink-0" />
+            <span>Mood & Jurnal</span>
           </button>
+
           <button 
+            type="button"
             onClick={() => { navigate('/screening'); setIsOpen(false); }} 
-            className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg hover:bg-stone-100/90 dark:hover:bg-slate-800/60 text-stone-700 dark:text-stone-300 hover:text-stone-900 dark:hover:text-stone-100 font-medium transition-colors cursor-pointer text-[13px] min-h-[38px]"
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors group cursor-pointer"
           >
-            <Stethoscope className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 shrink-0" /> Skrining Mandiri
+            <Stethoscope className="w-4 h-4 text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-200 transition-colors shrink-0" />
+            <span>Skrining Mandiri</span>
           </button>
+
           <button 
+            type="button"
             onClick={() => { navigate('/counselors'); setIsOpen(false); }} 
-            className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg hover:bg-stone-100/90 dark:hover:bg-slate-800/60 text-stone-700 dark:text-stone-300 hover:text-stone-900 dark:hover:text-stone-100 font-medium transition-colors cursor-pointer text-[13px] min-h-[38px]"
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors group cursor-pointer"
           >
-            <Users className="w-3.5 h-3.5 text-blue-500/80 shrink-0" /> Direktori Konselor
+            <Users className="w-4 h-4 text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-200 transition-colors shrink-0" />
+            <span>Direktori Konselor</span>
           </button>
+
           <button 
+            type="button"
             onClick={() => { onOpenNotifications?.(); setIsOpen(false); }} 
-            className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg hover:bg-stone-100/90 dark:hover:bg-slate-800/60 text-stone-700 dark:text-stone-300 hover:text-stone-900 dark:hover:text-stone-100 font-medium transition-colors cursor-pointer text-[13px] min-h-[38px]"
+            className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors group cursor-pointer"
           >
-            <div className="flex items-center gap-2.5">
-              <Bell className="w-3.5 h-3.5 text-amber-500/80 shrink-0" /> Notifikasi
+            <div className="flex items-center gap-3">
+              <Bell className="w-4 h-4 text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-200 transition-colors shrink-0" />
+              <span>Notifikasi</span>
             </div>
             {unreadNotificationsCount > 0 && (
-              <span className="bg-rose-500 text-white font-bold text-[9.5px] h-3.5 px-1 rounded-full flex items-center justify-center">
+              <span className="bg-rose-500 text-white font-semibold text-[9.5px] h-4 min-w-4 px-1 rounded-full flex items-center justify-center">
                 {unreadNotificationsCount}
               </span>
             )}
           </button>
+
+          {/* Bantuan Darurat - Soft Red Accent with Tiny Red Dot */}
           <button 
+            type="button"
             onClick={() => { navigate('/emergency'); setIsOpen(false); }} 
-            className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 text-rose-600 dark:text-rose-400 font-medium transition-colors cursor-pointer text-[13px] min-h-[38px]"
+            className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors cursor-pointer group"
           >
-            <AlertCircle className="w-3.5 h-3.5 shrink-0" /> Bantuan Darurat
+            <div className="flex items-center gap-3">
+              <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />
+              <span>Bantuan Darurat</span>
+            </div>
+            <span className="h-1.5 w-1.5 rounded-full bg-rose-500 shrink-0" />
           </button>
         </div>
 
-        {/* Bottom Profile & Settings & Theme */}
-        <div className="px-2 pb-2.5 pt-1 border-t border-stone-200/60 dark:border-slate-800/70 space-y-0.5">
-          <div className="flex items-center justify-between px-1.5 py-0.5 text-stone-600 dark:text-stone-400 text-[13px]">
+        {/* ========================================================================= */}
+        {/* 4. FOOTER / USER PROFILE (SATU BARIS PROFIL ELEGAN) */}
+        {/* ========================================================================= */}
+        <div className="mt-auto border-t border-slate-200/50 dark:border-slate-800/60 pt-2.5 pb-3 px-3 shrink-0 flex items-center justify-between gap-2">
+          {/* Sisi Kiri: Avatar Inisial & Nama / Sesi Tamu */}
+          {user?.role === 'guest' || !user ? (
             <button 
-              onClick={() => { onOpenSettings?.(); setIsOpen(false); }} 
-              className="flex items-center gap-2 hover:text-stone-900 dark:hover:text-stone-100 cursor-pointer min-h-[36px]"
-            >
-              <Settings className="w-3.5 h-3.5 text-stone-400 shrink-0" />
-              <span>Pengaturan</span>
-            </button>
-            <button 
-              onClick={toggleTheme} 
-              className="min-h-[34px] min-w-[34px] flex items-center justify-center text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 rounded-lg hover:bg-stone-100 dark:hover:bg-slate-800 cursor-pointer transition-colors"
-              aria-label="Ganti Tema"
-            >
-              {actualTheme === 'dark' ? <Moon className="w-3.5 h-3.5 text-amber-400" /> : <Sun className="w-3.5 h-3.5 text-amber-600" />}
-            </button>
-          </div>
-
-          {user?.role === 'guest' ? (
-            <button 
+              type="button"
               onClick={() => { onOpenAuth?.(); setIsOpen(false); }} 
-              className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg hover:bg-stone-100/90 dark:hover:bg-slate-800/60 text-stone-700 dark:text-stone-300 hover:text-stone-900 dark:hover:text-stone-100 font-medium transition-colors cursor-pointer text-[13px] min-h-[38px]"
+              className="flex items-center gap-2 p-1 -ml-1 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800/70 transition-colors cursor-pointer min-w-0 flex-1 text-left group"
+              title="Masuk Akun"
             >
-              <LogIn className="w-3.5 h-3.5 text-stone-400 shrink-0" /> Masuk Akun
+              <div className="w-7 h-7 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-[11px] font-semibold text-slate-600 dark:text-slate-300 shrink-0 group-hover:bg-slate-300 dark:group-hover:bg-slate-600 transition-colors">
+                <LogIn className="w-3.5 h-3.5" />
+              </div>
+              <span className="text-xs font-medium text-slate-700 dark:text-slate-200 truncate">
+                Masuk Akun
+              </span>
             </button>
           ) : (
-            <div className="flex items-center justify-between px-1 py-0.5">
-              <button
-                onClick={() => { onOpenSettings?.(); setIsOpen(false); }}
-                className="flex flex-1 items-center gap-2 min-w-0 hover:bg-stone-100/90 dark:hover:bg-slate-800/60 p-1 rounded-lg transition-colors text-left cursor-pointer min-h-[38px]"
-              >
-                <div className="w-6 h-6 rounded-full bg-teal-100 dark:bg-teal-900 text-teal-800 dark:text-teal-200 flex items-center justify-center shrink-0 font-semibold text-[11px]">
-                  {user?.name?.charAt(0)?.toUpperCase() || 'U'}
-                </div>
-                <div className="flex flex-col min-w-0">
-                  <span className="text-xs font-medium text-stone-900 dark:text-stone-100 truncate leading-tight">{user?.name || 'User'}</span>
-                  <span className="text-[10.5px] text-stone-400 dark:text-stone-500 truncate leading-tight">
-                    {user?.email || (user?.role === 'counselor' ? 'Konselor' : 'Mahasiswa')}
-                  </span>
-                </div>
-              </button>
-              {onLogout && (
-                <button 
-                  onClick={onLogout}
-                  className="min-h-[34px] min-w-[34px] text-stone-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg transition-colors shrink-0 flex items-center justify-center cursor-pointer"
-                  title="Keluar"
-                  aria-label="Keluar"
-                >
-                  <LogOut className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </div>
+            <button
+              type="button"
+              onClick={() => { onOpenSettings?.(); setIsOpen(false); }}
+              className="flex items-center gap-2 p-1 -ml-1 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800/70 transition-colors cursor-pointer min-w-0 flex-1 text-left group"
+              title={user?.name || 'Profil Pengguna'}
+            >
+              <div className="w-7 h-7 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-[11px] font-semibold text-slate-600 dark:text-slate-300 shrink-0 group-hover:bg-teal-600 group-hover:text-white transition-colors">
+                {user?.name?.charAt(0)?.toUpperCase() || 'U'}
+              </div>
+              <span className="text-xs font-medium text-slate-700 dark:text-slate-200 truncate">
+                {user?.name || 'User'}
+              </span>
+            </button>
           )}
+
+          {/* Sisi Kanan: Pengaturan & Tema Toggle */}
+          <div className="flex items-center gap-0.5 shrink-0">
+            <button 
+              type="button"
+              onClick={() => { onOpenSettings?.(); setIsOpen(false); }} 
+              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              aria-label="Pengaturan"
+              title="Pengaturan"
+            >
+              <Settings className="w-4 h-4" />
+            </button>
+
+            <button 
+              type="button"
+              onClick={toggleTheme} 
+              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              aria-label="Ganti Tema"
+              title={actualTheme === 'dark' ? 'Beralih ke Mode Terang' : 'Beralih ke Mode Gelap'}
+            >
+              {actualTheme === 'dark' ? (
+                <Moon className="w-4 h-4 text-amber-400" />
+              ) : (
+                <Sun className="w-4 h-4 text-amber-600" />
+              )}
+            </button>
+
+            {user?.role !== 'guest' && user && onLogout && (
+              <button 
+                type="button"
+                onClick={onLogout}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors cursor-pointer"
+                aria-label="Keluar"
+                title="Keluar"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            )}
+          </div>
         </div>
       </aside>
     </>
   );
 }
+
 
 
 

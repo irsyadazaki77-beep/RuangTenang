@@ -1,5 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { BlindIndexService, getBlindIndexService, resetBlindIndexServiceInstance } from '../../src/services/crypto/BlindIndexService';
+import { 
+  BlindIndexService, 
+  getBlindIndexService, 
+  resetBlindIndexServiceInstance,
+  normalizeBlindIndexString,
+  computeWebCryptoBlindIndex 
+} from '../../src/services/crypto/BlindIndexService';
 import { appointmentRepository } from '../../src/repositories/appointmentRepository';
 import { encryptionService } from '../../server/services/encryptionService';
 
@@ -36,9 +42,10 @@ describe('BlindIndexService Unit & Cryptographic Tests', () => {
     expect(typeof hash1).toBe('string');
     expect(hash1?.length).toBe(64); // 256 bits in hex format = 64 characters
     expect(hash1).toBe(hash2);
+    expect(hash1).toBe(hash1?.toLowerCase());
   });
 
-  it('normalizes inputs (trimming and lowercasing) before generating hashes', () => {
+  it('normalizes inputs (trimming, lowercasing, and NFKC) before generating hashes', () => {
     const rawNim = '  13520999  ';
     const cleanNim = '13520999';
 
@@ -51,6 +58,31 @@ describe('BlindIndexService Unit & Cryptographic Tests', () => {
     const emailLower = 'mahasiswa@ui.ac.id';
 
     expect(service.generateHash(emailUpper)).toBe(service.generateHash(emailLower));
+
+    // NFKC compatibility test (e.g. full-width characters normalize to standard ASCII)
+    const fullWidthNim = '１３５２０９９９'; // Fullwidth digits
+    expect(normalizeBlindIndexString(fullWidthNim)).toBe('13520999');
+    expect(service.generateHash(fullWidthNim)).toBe(service.generateHash('13520999'));
+  });
+
+  it('ensures 100% cryptographic parity between Node crypto and Web Crypto API implementations', async () => {
+    const sampleInputs = [
+      '13520999',
+      'mahasiswa@ui.ac.id',
+      '  Budi.Santoso@KAMPUS.AC.ID  ',
+      'Konselor Klinis 2026',
+      '１３５２０８８８' // Full-width unicode
+    ];
+
+    for (const input of sampleInputs) {
+      const serverHash = service.generateHash(input);
+      const clientWebCryptoHash = await computeWebCryptoBlindIndex(input, TEST_SECRET);
+
+      expect(serverHash).toBeDefined();
+      expect(clientWebCryptoHash).toBeDefined();
+      expect(serverHash).toBe(clientWebCryptoHash);
+      expect(serverHash).toMatch(/^[0-9a-f]{64}$/);
+    }
   });
 
   it('returns null for empty, undefined, or null inputs in generateHash', () => {

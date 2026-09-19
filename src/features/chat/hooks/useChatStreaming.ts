@@ -3,11 +3,17 @@ import { ChatStreamingClient, StreamPayload } from '../services/chatStreamingCli
 
 export function useChatStreaming() {
   const [isTyping, setIsTyping] = useState(false);
+  const [streamingError, setStreamingError] = useState<string | null>(null);
   const clientRef = useRef<ChatStreamingClient | null>(null);
   const currentTokenRef = useRef(0);
+  const timeoutRef = useRef<any>(null);
 
   const abortStream = useCallback(() => {
     currentTokenRef.current++;
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
     if (clientRef.current) {
       clientRef.current.abort();
       clientRef.current = null;
@@ -17,7 +23,9 @@ export function useChatStreaming() {
 
   useEffect(() => {
     return () => {
-      // safe cleanup without capturing mutable currentTokenRef in closure directly
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
       if (clientRef.current) {
         clientRef.current.abort();
         clientRef.current = null;
@@ -38,6 +46,13 @@ export function useChatStreaming() {
     }
   ) => {
     const token = ++currentTokenRef.current;
+    setStreamingError(null);
+
+    // Clear previous timeout if any
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
 
     // Ensure previous active stream is aborted
     if (clientRef.current) {
@@ -46,6 +61,23 @@ export function useChatStreaming() {
     const client = new ChatStreamingClient();
     clientRef.current = client;
     setIsTyping(true);
+
+    let hasReceivedFirstChunk = false;
+
+    // 12-second initial connection / hang timeout guard
+    timeoutRef.current = setTimeout(() => {
+      if (token === currentTokenRef.current && !hasReceivedFirstChunk) {
+        console.warn('[STREAM_TIMEOUT] Connection hung for 12s without response. Aborting...');
+        if (clientRef.current) {
+          clientRef.current.abort();
+          clientRef.current = null;
+        }
+        setIsTyping(false);
+        const timeoutMsg = 'Waktu respon melebihi 12 detik. Silakan coba kirim ulang pesanmu.';
+        setStreamingError(timeoutMsg);
+        callbacks.onError(timeoutMsg);
+      }
+    }, 12000);
 
     try {
       await client.stream(payload, {
@@ -56,20 +88,40 @@ export function useChatStreaming() {
         },
         onChunk: (text) => {
           if (token !== currentTokenRef.current) return;
+          hasReceivedFirstChunk = true;
+          if (timeoutRef.current) {
+            clearTimeout(timeoutRef.current);
+            timeoutRef.current = null;
+          }
           callbacks.onChunk(text);
         },
         onPluginSwitch: (pluginName) => {
           if (token !== currentTokenRef.current) return;
+          hasReceivedFirstChunk = true;
+          if (timeoutRef.current) {
+            clearTimeout(timeoutRef.current);
+            timeoutRef.current = null;
+          }
           callbacks.onPluginSwitch(pluginName);
         },
         onMessageComplete: (text) => {
           if (token !== currentTokenRef.current) return;
+          if (timeoutRef.current) {
+            clearTimeout(timeoutRef.current);
+            timeoutRef.current = null;
+          }
           setIsTyping(false);
+          setStreamingError(null);
           callbacks.onMessageComplete(text);
         },
         onError: (err) => {
           if (token !== currentTokenRef.current) return;
+          if (timeoutRef.current) {
+            clearTimeout(timeoutRef.current);
+            timeoutRef.current = null;
+          }
           setIsTyping(false);
+          setStreamingError(err);
           callbacks.onError(err);
         },
         onFollowUps: (followUps) => {
@@ -82,12 +134,16 @@ export function useChatStreaming() {
         }
       });
     } finally {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
       if (token === currentTokenRef.current) {
         setIsTyping(false);
       }
     }
   }, []);
 
-  return { isTyping, streamMessage, abortStream };
+  return { isTyping, streamingError, streamMessage, abortStream };
 }
 

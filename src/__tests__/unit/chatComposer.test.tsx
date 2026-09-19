@@ -13,7 +13,7 @@ describe('ChatComposer Component Tests', () => {
       />
     );
 
-    const textarea = screen.getByPlaceholderText(/Tulis pesan/i);
+    const textarea = screen.getByPlaceholderText(/Ketik apa yang kamu rasakan/i);
     expect(textarea).toBeInTheDocument();
   });
 
@@ -27,7 +27,7 @@ describe('ChatComposer Component Tests', () => {
       />
     );
 
-    const textarea = screen.getByPlaceholderText(/Tulis pesan/i);
+    const textarea = screen.getByPlaceholderText(/Ketik apa yang kamu rasakan/i);
     fireEvent.change(textarea, { target: { value: 'Halo RuangTenang' } });
 
     const sendButton = screen.getByRole('button', { name: /Kirim Pesan/i });

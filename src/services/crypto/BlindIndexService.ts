@@ -1,6 +1,55 @@
 import crypto from 'crypto';
 
 /**
+ * Normalizes input string for blind indexing across client (Web Crypto) and server (Node crypto).
+ * Strictly standardizes formatting using lowercasing, whitespace trimming, and Unicode NFKC normalization.
+ */
+export function normalizeBlindIndexString(text: string | null | undefined): string {
+  if (!text || typeof text !== 'string') {
+    return '';
+  }
+  return text.toLowerCase().trim().normalize('NFKC');
+}
+
+/**
+ * Web Crypto API implementation for computing HMAC-SHA256 blind index hash.
+ * Produces 100% identical lowercase hex digest to server Node.js crypto.
+ */
+export async function computeWebCryptoBlindIndex(
+  plaintext: string,
+  secretKey: string
+): Promise<string> {
+  const normalized = normalizeBlindIndexString(plaintext);
+  if (!normalized) return '';
+
+  const encoder = new TextEncoder();
+  const subtle = (globalThis.crypto && globalThis.crypto.subtle) ? globalThis.crypto.subtle : (crypto as any).webcrypto?.subtle;
+  
+  if (!subtle) {
+    // Fallback to Node crypto HMAC if subtle crypto is not directly accessible
+    return crypto.createHmac('sha256', secretKey).update(normalized, 'utf8').digest('hex').toLowerCase();
+  }
+
+  const keyData = encoder.encode(secretKey);
+  const cryptoKey = await subtle.importKey(
+    'raw',
+    keyData,
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+
+  const signature = await subtle.sign(
+    'HMAC',
+    cryptoKey,
+    encoder.encode(normalized)
+  );
+
+  const hashArray = Array.from(new Uint8Array(signature));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('').toLowerCase();
+}
+
+/**
  * ============================================================================
  * RUANGTENANG KAMPUS - BLIND INDEXING CRYPTOGRAPHIC SERVICE
  * ============================================================================
@@ -30,8 +79,8 @@ import crypto from 'crypto';
  * SECURITY CONSTANTS:
  * - HMAC Key Source: process.env.BLIND_INDEX_SECRET (Must be at least 32 characters)
  * - Hash Algorithm: SHA-256
- * - Input Normalization: White-space trimming & lowercasing for consistent query semantics
- * - Digest Output: Hexadecimal string (64 characters)
+ * - Input Normalization: White-space trimming, lowercasing, and Unicode NFKC normalization
+ * - Digest Output: Hexadecimal string (64 lowercase characters)
  * - Attack Mitigations: Prevents frequency analysis dictionary attacks via HMAC secret keying.
  */
 
@@ -64,10 +113,17 @@ export class BlindIndexService {
   }
 
   /**
+   * Normalizes a plaintext string prior to hashing using NFKC normalization.
+   */
+  public normalizeInput(plaintext: string | null | undefined): string {
+    return normalizeBlindIndexString(plaintext);
+  }
+
+  /**
    * Computes a deterministic HMAC-SHA256 blind index hash for a given plaintext string.
    * 
    * @param plaintext - The raw sensitive string to index (e.g., student NIM or email).
-   * @returns The 64-character hexadecimal HMAC string, or `null` if the input is null, undefined, or empty.
+   * @returns The 64-character lowercase hexadecimal HMAC string, or `null` if the input is null, undefined, or empty.
    * @throws {Error} Throws if a fatal low-level Node.js crypto exception occurs.
    * 
    * @example
@@ -86,7 +142,7 @@ export class BlindIndexService {
       return null;
     }
 
-    const normalized = plaintext.trim().toLowerCase();
+    const normalized = this.normalizeInput(plaintext);
     if (normalized.length === 0) {
       return null;
     }
@@ -95,7 +151,8 @@ export class BlindIndexService {
       return crypto
         .createHmac('sha256', this.secretKey)
         .update(normalized, 'utf8')
-        .digest('hex');
+        .digest('hex')
+        .toLowerCase();
     } catch (error: any) {
       console.error('[BLIND_INDEX_CRYPTO_ERROR] Failed to compute HMAC-SHA256 hash:', error?.message || error);
       throw new Error('BLIND_INDEX_GENERATION_FAILED: Cryptographic HMAC calculation encountered a critical error.');
@@ -125,7 +182,7 @@ export class BlindIndexService {
 
   /**
    * Convenience method to generate a blind index specifically for a Student NIM.
-   * Normalizes the NIM string (trims whitespace) before hashing.
+   * Normalizes the NIM string (trims whitespace and NFKC normalization) before hashing.
    * 
    * @param nim - Student NIM string (e.g., "13520999").
    * @returns Hexadecimal HMAC hash string, or `null` if empty.
@@ -136,7 +193,7 @@ export class BlindIndexService {
 
   /**
    * Convenience method to generate a blind index specifically for a Student Email.
-   * Normalizes the email string (trims whitespace and lowercases) before hashing.
+   * Normalizes the email string (trims whitespace, lowercases, and NFKC normalization) before hashing.
    * 
    * @param email - Student email address string (e.g., "mahasiswa@ui.ac.id").
    * @returns Hexadecimal HMAC hash string, or `null` if empty.
@@ -163,8 +220,8 @@ export class BlindIndexService {
       return false;
     }
 
-    const computedBuffer = Buffer.from(computedHash, 'utf8');
-    const expectedBuffer = Buffer.from(expectedHash, 'utf8');
+    const computedBuffer = Buffer.from(computedHash.toLowerCase(), 'utf8');
+    const expectedBuffer = Buffer.from(expectedHash.toLowerCase(), 'utf8');
 
     if (computedBuffer.length !== expectedBuffer.length) {
       return false;

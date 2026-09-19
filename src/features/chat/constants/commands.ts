@@ -8,6 +8,7 @@ import {
   Trash2, 
   Download, 
   Sparkles,
+  Wind,
   LucideIcon
 } from 'lucide-react';
 
@@ -17,11 +18,11 @@ export interface ChatCommand {
   desc: string;
   icon: LucideIcon;
   actionType: 'plugin' | 'system';
-  pluginId?: 'mood' | 'articles' | 'screening' | 'counselors' | 'emergency';
+  pluginId?: 'mood' | 'articles' | 'screening' | 'counselors' | 'emergency' | 'breathing';
 }
 
 export interface ChatPluginOption {
-  id: 'mood' | 'articles' | 'screening' | 'counselors' | 'emergency';
+  id: 'mood' | 'articles' | 'screening' | 'counselors' | 'emergency' | 'breathing';
   icon: LucideIcon;
   label: string;
   desc: string;
@@ -29,15 +30,17 @@ export interface ChatPluginOption {
 }
 
 export const CHAT_COMMANDS: ChatCommand[] = [
-  { cmd: '/new', label: 'Chat Baru', desc: 'Mulai percakapan segar', icon: PlusCircle, actionType: 'system' },
-  { cmd: '/mood', label: 'Mood Tracker', desc: 'Catat & pantau kondisi emosi', icon: Heart, actionType: 'plugin', pluginId: 'mood' },
-  { cmd: '/articles', label: 'Artikel Edukasi', desc: 'Baca panduan & tips psikologis', icon: BookOpen, actionType: 'plugin', pluginId: 'articles' },
-  { cmd: '/screening', label: 'Skrining Mandiri', desc: 'Tes psikometri PHQ-9 & GAD-7', icon: Stethoscope, actionType: 'plugin', pluginId: 'screening' },
-  { cmd: '/counselor', label: 'Cari Konselor', desc: 'Jadwalkan pendampingan kampus', icon: Users, actionType: 'plugin', pluginId: 'counselors' },
+  { cmd: '/mood', label: 'Catat Suasana Hati', desc: 'Buka modal mood tracker & grafik emosi', icon: Heart, actionType: 'plugin', pluginId: 'mood' },
+  { cmd: '/jeda', label: 'Jeda Hening 1-Menit', desc: 'Latihan relaksasi pernapasan terpandu', icon: Wind, actionType: 'plugin', pluginId: 'breathing' },
+  { cmd: '/skrining', label: 'Skrining Mandiri', desc: 'Tes psikometri klinis PHQ-9 & GAD-7', icon: Stethoscope, actionType: 'plugin', pluginId: 'screening' },
+  { cmd: '/konselor', label: 'Cari Konselor Kampus', desc: 'Buka direktori & jadwalkan konseling', icon: Users, actionType: 'plugin', pluginId: 'counselors' },
+  { cmd: '/clear', label: 'Bersihkan Percakapan', desc: 'Reset & bersihkan riwayat obrolan sesi saat ini', icon: Trash2, actionType: 'system' },
+  { cmd: '/new', label: 'Chat Baru', desc: 'Mulai sesi percakapan segar', icon: PlusCircle, actionType: 'system' },
+  { cmd: '/counselor', label: 'Direktori Konselor', desc: 'Jadwalkan pendampingan konselor', icon: Users, actionType: 'plugin', pluginId: 'counselors' },
   { cmd: '/emergency', label: 'Bantuan Darurat SOS', desc: 'Hotline krisis & kontak darurat 24 jam', icon: AlertCircle, actionType: 'plugin', pluginId: 'emergency' },
   { cmd: '/summary', label: 'Ringkas Percakapan', desc: 'Rangkum obrolan sesi saat ini', icon: Sparkles, actionType: 'system' },
   { cmd: '/export', label: 'Ekspor Chat', desc: 'Unduh riwayat percakapan (.md)', icon: Download, actionType: 'system' },
-  { cmd: '/clear', label: 'Bersihkan Chat', desc: 'Hapus pesan sesi saat ini', icon: Trash2, actionType: 'system' },
+  { cmd: '/articles', label: 'Artikel Edukasi', desc: 'Baca panduan & tips psikologis', icon: BookOpen, actionType: 'plugin', pluginId: 'articles' },
 ];
 
 export const CHAT_PLUGINS: ChatPluginOption[] = [

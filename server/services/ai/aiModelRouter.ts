@@ -111,10 +111,10 @@ export const aiModelRouter = {
 
     const actualPrimary = getActualGeminiModel(primaryModel);
 
-    // 1. Try Primary Model with up to 2 retries
+    // 1. Try Primary Model with up to 2 retries (Reduced timeout to 8s for instant responsiveness)
     try {
       const response = await this.executeWithTimeoutAndRetry(actualPrimary, generateFn, { 
-        timeoutMs: options.timeoutMs || 15000,
+        timeoutMs: options.timeoutMs || 8000,
         retries: 2
       });
       return { response, modelUsed: primaryModel, isFallback: false };
@@ -131,7 +131,7 @@ export const aiModelRouter = {
 
       try {
         const response = await this.executeWithTimeoutAndRetry(actualFallback, generateFn, { 
-          timeoutMs: 12000, 
+          timeoutMs: 8000, 
           retries: 1 
         });
         console.info(`[AI_RESILIENCE] Fallback model "${fallbackModel}" succeeded!`);

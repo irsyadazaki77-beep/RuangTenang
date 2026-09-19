@@ -50,7 +50,7 @@ export function ChatHeader({
   return (
     <header className="h-12 sm:h-12 sticky top-0 z-20 w-full shrink-0 flex items-center justify-between px-3 sm:px-4 bg-stone-50/85 dark:bg-[#0c1117]/85 backdrop-blur-md border-b border-stone-200/60 dark:border-slate-800/60 transition-colors">
       {/* Left side: Mobile menu button & Minimalist Model Trigger */}
-      <div className="flex items-center gap-1 sm:gap-2 min-w-0">
+      <div className="flex items-center gap-1 sm:gap-2 min-w-0 flex-1">
         {onOpenSidebar && (
           <button
             onClick={onOpenSidebar}
@@ -61,15 +61,15 @@ export function ChatHeader({
           </button>
         )}
 
-        <div className="relative">
+        <div className="relative min-w-0">
           <button
             onClick={() => setActivePlugin(isSettingsOpen ? null : 'chat_settings')}
-            className="flex items-center gap-1.5 px-2 py-1.5 min-h-[40px] rounded-xl hover:bg-stone-200/50 dark:hover:bg-slate-800/60 transition-colors cursor-pointer text-left group"
+            className="flex items-center gap-1.5 px-2 py-1.5 min-h-[40px] rounded-xl hover:bg-stone-200/50 dark:hover:bg-slate-800/60 transition-colors cursor-pointer text-left group min-w-0"
             title="Pilih Model dan Preferensi"
           >
             <BrandLogo size="xs" iconOnly />
-            <span className="font-semibold text-[14px] text-stone-900 dark:text-stone-100 tracking-tight">RuangTenang</span>
-            <span className="text-[12px] text-stone-400 dark:text-slate-500 font-normal truncate max-w-[80px] sm:max-w-none">
+            <span className="font-semibold text-[14px] text-stone-900 dark:text-stone-100 tracking-tight whitespace-nowrap">RuangTenang</span>
+            <span className="hidden sm:inline-flex text-[12px] text-stone-400 dark:text-slate-500 font-normal truncate">
               · {currentModel?.tag || 'Gemini'}
             </span>
             <ChevronDown className={`w-3.5 h-3.5 text-stone-400 transition-transform duration-150 shrink-0 ${isSettingsOpen ? 'rotate-180 text-teal-600 dark:text-teal-400' : 'group-hover:text-stone-600 dark:group-hover:text-slate-300'}`} />
@@ -178,13 +178,13 @@ export function ChatHeader({
 
         {/* Temporary / Guest badge if active */}
         {user?.role === 'guest' ? (
-          <span className="hidden sm:inline-flex items-center gap-1 text-[11px] text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-full border border-amber-200/60 dark:border-amber-900/60">
+          <span className="hidden sm:inline-flex items-center gap-1 text-[11px] px-2 py-0.5 whitespace-nowrap rounded-full border border-amber-200/60 dark:border-amber-900/60 text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 shrink-0">
             <Ghost className="w-3 h-3" /> Sesi Tamu
           </span>
         ) : isTemporary ? (
           <button
             onClick={() => setIsTemporary(false)}
-            className="hidden sm:inline-flex items-center gap-1 text-[11px] text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-full border border-amber-200/60 dark:border-amber-900/60 hover:bg-amber-100 dark:hover:bg-amber-900/40 cursor-pointer"
+            className="hidden sm:inline-flex items-center gap-1 text-[11px] px-2 py-0.5 whitespace-nowrap rounded-full border border-amber-200/60 dark:border-amber-900/60 text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/40 cursor-pointer shrink-0"
             title="Klik untuk menonaktifkan mode sementara"
           >
             <Ghost className="w-3 h-3" /> Sementara

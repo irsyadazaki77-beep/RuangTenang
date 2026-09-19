@@ -41,3 +41,19 @@ export const RescheduleAppointmentSchema = z.object({
   reason: z.string().max(500).optional()
 }).strict();
 export type RescheduleAppointmentInput = z.infer<typeof RescheduleAppointmentSchema>;
+
+export interface IWebRTCConnectionConfig {
+  roomId: string;
+  sessionToken?: string;
+  iceServers: Array<{
+    urls: string | string[];
+    username?: string;
+    credential?: string;
+  }>;
+  signalingEndpoint?: string;
+  audioEnabled: boolean;
+  videoEnabled: boolean;
+  isSimulatedMode: boolean;
+  connectionState: 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'failed' | 'closed';
+}
+
