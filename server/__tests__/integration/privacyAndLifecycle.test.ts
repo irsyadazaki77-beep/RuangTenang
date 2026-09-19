@@ -135,7 +135,7 @@ describe('FASE 7: Data Privacy, Sensitive Data Lifecycle & Security Tests', () =
 
       expect(encrypted).not.toBeNull();
       expect(encrypted).not.toEqual(text);
-      expect(encrypted?.startsWith('v1:')).toBe(true);
+      expect(encrypted?.startsWith('k1:')).toBe(true);
 
       const decrypted = encryptionService.decryptSensitive(encrypted);
       expect(decrypted).toEqual(text);
@@ -171,8 +171,8 @@ describe('FASE 7: Data Privacy, Sensitive Data Lifecycle & Security Tests', () =
       expect(reEncrypted?.startsWith('v2:')).toBe(true);
       expect(encryptionService.decryptSensitive(reEncrypted)).toBe('Data lama versi 1');
 
-      // Restore active version to v1
-      encryptionService.setActiveKeyVersion('v1');
+      // Restore active version to default active version (k1)
+      encryptionService.setActiveKeyVersion('k1');
     });
   });
 
@@ -255,11 +255,11 @@ describe('FASE 7: Data Privacy, Sensitive Data Lifecycle & Security Tests', () =
 
       // Check raw Prisma Database record is ciphertext with version tag
       const rawDb = await prisma.appointments.findUnique({ where: { id: appt.id } });
-      expect(rawDb?.notes?.startsWith('v1:')).toBe(true);
+      expect(rawDb?.notes?.startsWith('k1:')).toBe(true);
       expect(rawDb?.notes).not.toEqual(rawNotes);
-      expect(rawDb?.studentNIM?.startsWith('v1:')).toBe(true);
+      expect(rawDb?.studentNIM?.startsWith('k1:')).toBe(true);
       expect(rawDb?.studentNIM).not.toEqual(rawNIM);
-      expect(rawDb?.studentEmail?.startsWith('v1:')).toBe(true);
+      expect(rawDb?.studentEmail?.startsWith('k1:')).toBe(true);
       expect(rawDb?.studentEmail).not.toEqual(rawEmail);
     });
   });
@@ -297,7 +297,7 @@ describe('FASE 7: Data Privacy, Sensitive Data Lifecycle & Security Tests', () =
 
       // Raw DB check
       const rawDb = await prisma.screenings.findUnique({ where: { id: screening.id } });
-      expect(rawDb?.riskIndicators?.startsWith('v1:')).toBe(true);
+      expect(rawDb?.riskIndicators?.startsWith('k1:')).toBe(true);
       expect(rawDb?.riskIndicators).not.toContain('sulit tidur');
     });
   });

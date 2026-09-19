@@ -411,8 +411,10 @@ async function startServer() {
 
   // 5. Mount Modular API Routers
   app.use('/api/v1/auth', authRouter);
+  app.use('/api/auth', authRouter);
 
   app.use('/api/v1/appointments', appointmentsRouter);
+  app.use('/api/appointments', appointmentsRouter);
 
   app.use('/api/v1/screenings', screeningRouter);
 

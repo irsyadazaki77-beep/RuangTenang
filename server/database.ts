@@ -431,15 +431,15 @@ export const serverDb = {
   updateUserEmail: authRepository.updateUserEmail.bind(authRepository),
 
   // Appointments (Jadwal) & Concurrency Slots
-  cleanOldAppointments: appointmentRepository.cleanOldAppointments.bind(appointmentRepository),
-  getAppointments: appointmentRepository.getAppointments.bind(appointmentRepository),
-  findAppointmentById: appointmentRepository.findAppointmentById.bind(appointmentRepository),
-  findAppointmentsByNIM: appointmentRepository.findAppointmentsByNIM.bind(appointmentRepository),
-  findAppointmentsByEmail: appointmentRepository.findAppointmentsByEmail.bind(appointmentRepository),
-  getAppointmentAvailability: appointmentRepository.getAppointmentAvailability.bind(appointmentRepository),
-  addAppointment: appointmentRepository.addAppointment.bind(appointmentRepository),
-  updateAppointment: appointmentRepository.updateAppointment.bind(appointmentRepository),
-  deleteAppointment: appointmentRepository.deleteAppointment.bind(appointmentRepository),
+  cleanOldAppointments: (...args: any[]) => (appointmentRepository.cleanOldAppointments as any)(...args),
+  getAppointments: (...args: any[]) => (appointmentRepository.getAppointments as any)(...args),
+  findAppointmentById: (...args: any[]) => (appointmentRepository.findAppointmentById as any)(...args),
+  findAppointmentsByNIM: (...args: any[]) => (appointmentRepository.findAppointmentsByNIM as any)(...args),
+  findAppointmentsByEmail: (...args: any[]) => (appointmentRepository.findAppointmentsByEmail as any)(...args),
+  getAppointmentAvailability: (...args: any[]) => (appointmentRepository.getAppointmentAvailability as any)(...args),
+  addAppointment: (...args: any[]) => (appointmentRepository.addAppointment as any)(...args),
+  updateAppointment: (...args: any[]) => (appointmentRepository.updateAppointment as any)(...args),
+  deleteAppointment: (...args: any[]) => (appointmentRepository.deleteAppointment as any)(...args),
 
   // Screenings (Krisis) & Triage
   getScreenings: screeningRepository.getScreenings.bind(screeningRepository),

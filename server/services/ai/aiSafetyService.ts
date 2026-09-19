@@ -1,6 +1,6 @@
 import { getVerifiedEmergencyContacts } from '../../config/emergencyRegistry.js';
 import { scanAndSanitizePII } from '../piiService.js';
-import { analyzeMessageSentiment, analyzeMultiTurnSentiment, CrisisAnalysisResult } from '../../../src/lib/crisisDetector.js';
+import { analyzeMultiTurnSentiment, CrisisAnalysisResult } from '../../../src/lib/crisisDetector.js';
 import { consentService } from '../consentService.js';
 import { aiContextBuilder } from './aiContextBuilder.js';
 
@@ -9,6 +9,8 @@ export type CrisisRiskLevel = 'LOW' | 'ELEVATED' | 'HIGH' | 'IMMEDIATE';
 export interface CrisisDetectionResult {
   isCrisis: boolean;
   riskLevel: CrisisRiskLevel;
+  score?: number;
+  matchedPatterns?: string[];
   reasoning: string;
   recommendedAction: string;
   analysisDetails?: CrisisAnalysisResult;
@@ -111,7 +113,7 @@ export const aiSafetyService = {
       'burnout parah'
     ];
     
-    // If a metaphor is matched, but there is no acute crisis trigger, demote risk to ELEVATED or LOW
+    // If a metaphor is matched, but there is no acute crisis trigger, demote risk to LOW
     if (metaphors.some(m => lowerInput.includes(m)) && 
         !lowerInput.includes('bunuh diri') && 
         !lowerInput.includes('bundir') && 
@@ -121,7 +123,7 @@ export const aiSafetyService = {
         !lowerInput.includes('sayat') &&
         !lowerInput.includes('racun') &&
         !lowerInput.includes('turu selawase')) {
-      riskLevel = 'ELEVATED';
+      riskLevel = 'LOW';
     }
 
     // Handle negations and past ideation gracefully based on clinical detector
@@ -132,6 +134,8 @@ export const aiSafetyService = {
     return {
       isCrisis: riskLevel === 'HIGH' || riskLevel === 'IMMEDIATE',
       riskLevel,
+      score: localResult.score ?? (riskLevel === 'IMMEDIATE' ? 0.98 : riskLevel === 'HIGH' ? 0.90 : riskLevel === 'ELEVATED' ? 0.6 : 0.0),
+      matchedPatterns: localResult.matchedPatterns || localResult.detectedTriggers || [],
       reasoning: localResult.reasoning || 'Based on clinical keyword baseline',
       recommendedAction: localResult.recommendedAction || 'None',
       analysisDetails: localResult

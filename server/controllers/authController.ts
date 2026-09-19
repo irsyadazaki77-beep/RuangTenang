@@ -42,11 +42,36 @@ export class AuthController {
       await serverDb.setEmailVerificationCode(newUser.id, verificationCode);
       await emailService.sendVerificationCode(newUser.email, verificationCode, newUser.name);
 
+      const clientIp = req.ip || req.socket.remoteAddress || '127.0.0.1';
+      const userAgent = req.headers['user-agent'] || 'Browser';
+      const sessionId = crypto.randomUUID();
+
+      const token = authService.generateSessionToken({
+        userId: newUser.id,
+        email: newUser.email,
+        role: newUser.role,
+        tier: newUser.tier,
+        sessionId,
+        name: newUser.name,
+      });
+
+      await serverDb.addActiveSession(newUser.id, {
+        sessionId,
+        device: userAgent.includes('Mobile') ? 'Smartphone' : 'Desktop / Browser',
+        ip: clientIp,
+        userAgent,
+        createdAt: new Date().toISOString(),
+        lastActive: new Date().toISOString()
+      });
+
+      authService.setSessionCookie(res, token);
+
       const isDev = process.env.NODE_ENV !== 'production';
       
       return res.status(201).json({
         success: true,
         userId: newUser.id,
+        token,
         message: isDev ? `Registrasi berhasil. [DEV MODE] Kode verifikasi Anda: ${verificationCode}` : 'Registrasi berhasil. Kode verifikasi email telah dikirim.'
       });
     } catch (err: any) {
@@ -142,6 +167,7 @@ export class AuthController {
 
       return res.json({
         success: true,
+        token,
         user: authService.sanitizeUser(user)
       });
     } catch (err: any) {

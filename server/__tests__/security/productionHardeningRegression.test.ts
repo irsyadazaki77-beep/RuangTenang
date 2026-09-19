@@ -104,6 +104,7 @@ describe('Phase 1 Production Hardening & Regression Test Suite', () => {
       process.env.NODE_ENV = 'production';
       process.env.JWT_SECRET = generateValidKey();
       process.env.ENCRYPTION_KEY = generateValidKey();
+      process.env.BLIND_INDEX_SECRET = generateValidKey();
       delete process.env.DATA_ENCRYPTION_KEY;
       process.env.DATABASE_URL = 'postgresql://postgres:securepass@cloudsql.internal:5432/ruangtenang';
 

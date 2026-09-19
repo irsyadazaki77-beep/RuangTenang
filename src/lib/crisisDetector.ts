@@ -43,6 +43,54 @@ const BENIGN_METAPHOR_PATTERNS = [
   'burnout parah'
 ];
 
+/**
+ * Normalizes input text by removing leetspeak/obfuscations, normalizing numbers to characters,
+ * and collapsing repeated characters to support high-accuracy slang and informal detection.
+ */
+export function normalizeTextForCrisisDetection(text: string): { normalized: string; collapsed: string } {
+  if (!text) return { normalized: '', collapsed: '' };
+
+  let str = text.toLowerCase().trim();
+
+  // Leet map for numbers and special characters
+  const leetMap: Record<string, string> = {
+    '0': 'o',
+    '1': 'i',
+    '!': 'i',
+    '|': 'i',
+    '3': 'e',
+    '4': 'a',
+    '@': 'a',
+    '5': 's',
+    '$': 's',
+    '7': 't',
+    '+': 't',
+    '8': 'b',
+    '9': 'g'
+  };
+
+  // Specific common leet/slang substitutions (e.g. bund1r, bvd1r -> bundir)
+  str = str.replace(/\bbvd1r\b/g, 'bundir')
+           .replace(/\bbvnd1r\b/g, 'bundir')
+           .replace(/\bbund1r\b/g, 'bundir')
+           .replace(/\bbndr\b/g, 'bundir')
+           .replace(/\bb00ndir\b/g, 'bundir')
+           .replace(/\bb0ndir\b/g, 'bundir')
+           .replace(/\bpgn\b/g, 'pengen')
+           .replace(/\bbgt\b/g, 'banget');
+
+  // Replace leet chars
+  str = str.replace(/[01!|34@5$7+89]/g, char => leetMap[char] || char);
+
+  // Clean out non-alphanumeric punctuation except spaces
+  const cleaned = str.replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+
+  // Collapse repeated consecutive characters (e.g., "capeeeeeeek" -> "capek", "matiiiii" -> "mati", "bundiiirrrr" -> "bundir")
+  const collapsed = cleaned.replace(/(.)\1+/g, '$1');
+
+  return { normalized: cleaned, collapsed };
+}
+
 // Direct acute crisis indicators (including slang, implicit phrasing, Indonesian local idioms, and English)
 const ACUTE_CRISIS_KEYWORDS = [
   'bunuh diri',
@@ -50,45 +98,117 @@ const ACUTE_CRISIS_KEYWORDS = [
   'unlife',
   'gantung diri',
   'lompat dari gedung',
+  'lompat dari',
+  'loncat dari gedung',
+  'loncat dari',
+  'mau loncat',
+  'mau lompat',
+  'loncat gedung',
+  'lompat gedung',
   'potong nadi',
+  'potong urat nadi',
+  'motong urat nadi',
   'sayat tangan',
   'sayat pergelangan',
+  'sayat nadi',
   'sayat urat',
+  'sayat diri',
+  'nyayat nadi',
+  'nyayat tangan',
+  'sayat',
+  'cut myself',
   'minum racun',
   'tenggak racun',
+  'teguk racun',
   'overdosis obat',
+  'overdosis',
   'telen obat banyak',
   'minum obat banyak sekaligus',
+  'minum obat banyak',
   'ingin mati',
   'mau mati',
+  'mo mati',
+  'nak mati',
   'pengen mati',
   'pen mati',
   'mati aja',
   'mati saja',
+  'mending mati aja',
+  'mending mati',
+  'mending gak usah hidup',
+  'mending ga usah hidup',
   'pengen hilang',
   'pingin ilang',
+  'nak ngilang',
+  'pengen ngilang aja',
+  'gapernah dihargai pengen ngilang aja',
+  'gak kuat lagi pengen ngilang',
+  'ga kuat lagi pengen ngilang',
+  'gak sanggup lagi',
+  'ga sanggup lagi',
   'pengen lenyap',
+  'pengen ngilang selamanya',
+  'ingin ngilang selamanya',
+  'pengen ngilang',
+  'ngilang selamanya',
+  'hilang selamanya',
   'pengen pergi selamanya',
+  'ingin menghilang selamanya',
+  'pengen hilang selamanya',
   'pengen tidur selamanya',
+  'pengen tidur dan ga bangun lagi',
+  'pengen tidur dan gak bangun lagi',
+  'pengen tidur dan tidak bangun lagi',
+  'pengen tidur dan ga bangun',
   'pengen tidur dan gak bangun',
+  'pengen tidur dan ga usah bangun lagi',
+  'tidak ingin bangun lagi',
+  'gak pengen bangun lagi',
+  'ga pengen bangun lagi',
   'turu selawase',
   'turu selamanya',
+  'pengen nyerah aja',
+  'pengen nyerah aja rasanya',
+  'pengen nyerah',
+  'nyerah aja',
   'pengen udahan',
+  'pengen udahan hidup',
   'pengen udahan dari dunia',
   'capek bgt pengen udahan',
   'capek hidup',
   'ga guna hidup',
+  'gak guna hidup',
   'tak berguna hidup',
+  'tidak berguna hidup',
+  'ga ada gunanya aku ada',
+  'gak ada gunanya aku ada',
+  'tidak ada gunanya aku ada',
+  'ga ada gunanya aku hidup',
+  'gak ada gunanya aku hidup',
+  'tidak ada gunanya aku hidup',
+  'ga ada gunanya hidup',
+  'gak ada gunanya hidup',
+  'tidak ada gunanya hidup',
   'nyusahin doang mending mati',
   'pengen nyusul',
+  'pgn nyusul',
+  'nyusul dia',
+  'pgn nyusul dia',
+  'mau nyusul',
   'nyusul yang udah meninggal',
+  'ga kuat lagi mau nyusul',
+  'gak kuat lagi mau nyusul',
+  'tidak kuat lagi mau nyusul',
   'ga sanggup lg hidup',
+  'gak sanggup hidup',
   'tak sanggup hidup',
+  'benci hidupku',
   'menyakiti diri',
   'self harm',
   'self-harm',
   'akhiri hidup',
   'mengakhiri hidup',
+  'selesaikan semuanya',
   'lebih baik mati',
   'lebih baik aku tidak ada lagi di dunia ini',
   'lebih baik aku gak ada lagi',
@@ -147,6 +267,10 @@ const HIGH_DISTRESS_KEYWORDS = [
 
 export interface CrisisAnalysisResult {
   severity: 'normal' | 'distress' | 'crisis';
+  isCrisis: boolean;
+  score: number;
+  matchedPatterns: string[];
+  riskLevel: 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
   detectedTriggers: string[];
   recommendedAction: string;
   isNegated: boolean;
@@ -250,28 +374,35 @@ export const CLINICAL_RESPONSE_PROTOCOLS = {
  */
 export function analyzeMessageSentiment(text: string): CrisisAnalysisResult {
   const lower = text.toLowerCase().trim();
+  const { normalized, collapsed } = normalizeTextForCrisisDetection(text);
   const detectedCrisisTriggers: string[] = [];
   const detectedDistressTriggers: string[] = [];
 
   // Check for negations in text
-  const hasNegation = NEGATION_PATTERNS.some(neg => lower.includes(neg));
+  const hasNegation = NEGATION_PATTERNS.some(neg => lower.includes(neg) || normalized.includes(neg) || collapsed.includes(neg));
   // Check for past-tense indicators, but make sure it's not "tidak pernah" or "nggak pernah"
-  const hasPastTense = PAST_TENSE_INDICATORS.some(past => lower.includes(past)) && !lower.includes('tidak pernah') && !lower.includes('ga pernah') && !lower.includes('nggak pernah');
+  const hasPastTense = PAST_TENSE_INDICATORS.some(past => lower.includes(past) || normalized.includes(past) || collapsed.includes(past)) && 
+    !lower.includes('tidak pernah') && !lower.includes('ga pernah') && !lower.includes('nggak pernah') &&
+    !normalized.includes('tidak pernah') && !normalized.includes('ga pernah') && !normalized.includes('nggak pernah');
   // Check for third-party indicators
-  const hasThirdParty = THIRD_PARTY_INDICATORS.some(tp => lower.includes(tp));
+  const hasThirdParty = THIRD_PARTY_INDICATORS.some(tp => lower.includes(tp) || normalized.includes(tp) || collapsed.includes(tp));
 
   // Check for benign metaphors in text
-  const hasBenignMetaphor = BENIGN_METAPHOR_PATTERNS.some(meta => lower.includes(meta));
+  const hasBenignMetaphor = BENIGN_METAPHOR_PATTERNS.some(meta => lower.includes(meta) || normalized.includes(meta) || collapsed.includes(meta));
 
   for (const kw of ACUTE_CRISIS_KEYWORDS) {
-    if (lower.includes(kw)) {
-      detectedCrisisTriggers.push(kw);
+    if (lower.includes(kw) || normalized.includes(kw) || collapsed.includes(kw)) {
+      if (!detectedCrisisTriggers.includes(kw)) {
+        detectedCrisisTriggers.push(kw);
+      }
     }
   }
 
   for (const kw of HIGH_DISTRESS_KEYWORDS) {
-    if (lower.includes(kw)) {
-      detectedDistressTriggers.push(kw);
+    if (lower.includes(kw) || normalized.includes(kw) || collapsed.includes(kw)) {
+      if (!detectedDistressTriggers.includes(kw)) {
+        detectedDistressTriggers.push(kw);
+      }
     }
   }
 
@@ -279,6 +410,10 @@ export function analyzeMessageSentiment(text: string): CrisisAnalysisResult {
   if (hasBenignMetaphor && !lower.includes('bunuh diri') && !lower.includes('ingin mati') && !lower.includes('self harm') && !lower.includes('gantung diri')) {
     return {
       severity: 'normal',
+      isCrisis: false,
+      score: 0.05,
+      matchedPatterns: [],
+      riskLevel: 'LOW',
       detectedTriggers: [],
       isNegated: false,
       requiresDirectSafetyQuestion: false,
@@ -293,6 +428,10 @@ export function analyzeMessageSentiment(text: string): CrisisAnalysisResult {
   if (detectedCrisisTriggers.length > 0 && hasThirdParty) {
     return {
       severity: 'crisis',
+      isCrisis: false, // Third party concern is not user active crisis
+      score: 0.6,
+      matchedPatterns: detectedCrisisTriggers,
+      riskLevel: 'MEDIUM',
       detectedTriggers: detectedCrisisTriggers,
       isNegated: false,
       requiresDirectSafetyQuestion: false,
@@ -307,6 +446,10 @@ export function analyzeMessageSentiment(text: string): CrisisAnalysisResult {
   if (detectedCrisisTriggers.length > 0 && hasPastTense) {
     return {
       severity: 'distress',
+      isCrisis: false,
+      score: 0.5,
+      matchedPatterns: detectedCrisisTriggers,
+      riskLevel: 'MEDIUM',
       detectedTriggers: detectedCrisisTriggers,
       isNegated: false,
       requiresDirectSafetyQuestion: false,
@@ -321,6 +464,10 @@ export function analyzeMessageSentiment(text: string): CrisisAnalysisResult {
   if (detectedCrisisTriggers.length > 0 && hasNegation) {
     return {
       severity: 'distress',
+      isCrisis: false,
+      score: 0.4,
+      matchedPatterns: detectedCrisisTriggers,
+      riskLevel: 'LOW',
       detectedTriggers: detectedCrisisTriggers,
       isNegated: true,
       requiresDirectSafetyQuestion: true,
@@ -335,6 +482,10 @@ export function analyzeMessageSentiment(text: string): CrisisAnalysisResult {
   if (detectedCrisisTriggers.length > 0) {
     return {
       severity: 'crisis',
+      isCrisis: true,
+      score: 0.98,
+      matchedPatterns: detectedCrisisTriggers,
+      riskLevel: 'CRITICAL',
       detectedTriggers: detectedCrisisTriggers,
       isNegated: false,
       requiresDirectSafetyQuestion: true,
@@ -349,6 +500,10 @@ export function analyzeMessageSentiment(text: string): CrisisAnalysisResult {
   if (detectedDistressTriggers.length > 0) {
     return {
       severity: 'distress',
+      isCrisis: false,
+      score: 0.7,
+      matchedPatterns: detectedDistressTriggers,
+      riskLevel: 'HIGH',
       detectedTriggers: detectedDistressTriggers,
       isNegated: false,
       requiresDirectSafetyQuestion: false,
@@ -361,6 +516,10 @@ export function analyzeMessageSentiment(text: string): CrisisAnalysisResult {
 
   return {
     severity: 'normal',
+    isCrisis: false,
+    score: 0.0,
+    matchedPatterns: [],
+    riskLevel: 'NONE',
     detectedTriggers: [],
     isNegated: false,
     requiresDirectSafetyQuestion: false,
@@ -442,6 +601,10 @@ export function analyzeMultiTurnSentiment(
   if (hasSubAcuteTrigger && (previousDistressCount >= 1 || previousCrisisCount >= 1)) {
     return {
       severity: 'crisis',
+      isCrisis: true,
+      score: 0.95,
+      matchedPatterns: [...currentResult.matchedPatterns, 'multi-turn-escalation'],
+      riskLevel: 'CRITICAL',
       detectedTriggers: [...currentResult.detectedTriggers, 'multi-turn-escalation'],
       isNegated: false,
       requiresDirectSafetyQuestion: true,
@@ -456,6 +619,10 @@ export function analyzeMultiTurnSentiment(
   if (currentResult.severity === 'distress' && previousDistressCount >= 2) {
     return {
       severity: 'crisis',
+      isCrisis: true,
+      score: 0.90,
+      matchedPatterns: [...currentResult.matchedPatterns, 'persistent-high-distress'],
+      riskLevel: 'HIGH',
       detectedTriggers: [...currentResult.detectedTriggers, 'persistent-high-distress'],
       isNegated: false,
       requiresDirectSafetyQuestion: true,
@@ -470,6 +637,16 @@ export function analyzeMultiTurnSentiment(
 }
 
 /**
+ * Preflight crisis evaluation function
+ */
+export function evaluateCrisisPreflight(
+  text: string,
+  history?: Array<{ role: 'user' | 'model' | 'assistant'; parts: { text: string }[] }>
+): CrisisAnalysisResult {
+  return analyzeMultiTurnSentiment(text, history);
+}
+
+/**
  * Direct safety check questions generator
  */
 export function getDirectSafetyQuestionPrompt(): string {
@@ -481,6 +658,10 @@ export function getDirectSafetyQuestionPrompt(): string {
  * Verified Official Helplines Database with full metadata
  */
 
+
+export function isAcuteCrisis(text: string): boolean {
+  return analyzeMessageSentiment(text).isCrisis;
+}
 
 export const EMERGENCY_HELPLINES = VERIFIED_HELPLINES;
 

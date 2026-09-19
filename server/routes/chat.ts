@@ -21,6 +21,7 @@ import { ChatController } from '../controllers/chatController.js';
 import { DEFAULT_AI_MODEL } from '../config/aiConfig.js';
 import { aiMetricsService } from '../services/ai/aiMetricsService.js';
 import { attachmentStorageService } from '../services/attachmentStorageService.js';
+import { getVerifiedEmergencyContacts } from '../config/emergencyRegistry.js';
 
 const router = Router();
 
@@ -185,6 +186,66 @@ router.post('/chat/:id/truncate', requireAuth, checkChatOwnership, async (req: R
 
 router.post('/chat/summary', requireAuth, checkChatOwnership, aiSummaryLimiter, aiAbuseLimiter, (req: Request, res: Response) => {
   return ChatController.generateSummary(req, res);
+});
+
+// Canonical Chat Endpoint (Non-streaming JSON & Pre-flight Safe Interceptor)
+router.post(['/chat', '/api/chat'], optionalAuth, aiChatLimiter, aiAbuseLimiter, async (req: Request, res: Response) => {
+  try {
+    const { 
+      message, 
+      chatId, 
+      isTemporary, 
+      chatMode, 
+      responseStyle, 
+      aiModel = DEFAULT_AI_MODEL 
+    } = req.body;
+
+    const isAnonymous = !req.user || req.user.userId === 'guest';
+    const maxLength = isAnonymous ? 500 : 2000;
+    let cleanMessage = sanitizeInput(message || '', maxLength);
+    cleanMessage = scanAndSanitizePII(cleanMessage).sanitizedText;
+
+    // PRE-FLIGHT SAFE INTERCEPTOR: Intercept acute crisis BEFORE invoking external LLM
+    const crisisCheck = aiSafetyService.detectCrisis(cleanMessage);
+    if (crisisCheck.isCrisis) {
+      const emergencyResponse = aiSafetyService.getCrisisSafeResponse();
+      const verifiedContacts = getVerifiedEmergencyContacts();
+      return res.status(200).json({
+        success: true,
+        isCrisis: true,
+        crisisDetected: true,
+        message: emergencyResponse,
+        response: emergencyResponse,
+        hotlines: ['119 ext 8', '0811-3855-472'],
+        contacts: verifiedContacts
+      });
+    }
+
+    const pipelineRes = await aiSafetyService.runUnifiedPipeline({
+      userId: req.user?.userId,
+      input: cleanMessage,
+      chatId,
+      chatMode,
+      responseStyle,
+      aiModel,
+      userTier: (req.user as any)?.tier,
+      userRole: req.user?.role,
+      history: [],
+      isStreaming: false,
+      isTemporary
+    });
+
+    return res.status(200).json({
+      success: true,
+      text: pipelineRes.text,
+      message: pipelineRes.text,
+      isCrisis: pipelineRes.isCrisisOverride,
+      modelUsed: pipelineRes.modelUsed
+    });
+  } catch (err: any) {
+    console.error('Chat endpoint error:', err);
+    return res.status(500).json({ success: false, error: 'Gagal memproses pesan chat.' });
+  }
 });
 
 // Main Streaming Chat Route
@@ -616,6 +677,9 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
     }
 
     if (pipelineRes.isCrisisOverride) {
+      if (!res.writableEnded) {
+        res.write(`data: ${JSON.stringify({ isCrisis: true, crisisDetected: true, tool_call: 'emergency', parameters: { reason: 'CRISIS_HOTLINE_TRIGGER' } })}\n\n`);
+      }
       const crisisResponse = pipelineRes.text;
       const words = crisisResponse.split(' ');
       let currentFullText = '';

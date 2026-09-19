@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+import { MotionConfig } from 'motion/react';
 import { ScreeningModal } from '../../features/screening/ScreeningModal';
 import { apiClient } from '../../lib/apiClient';
 import * as AuthContextModule from '../../contexts/AuthContext';
@@ -19,29 +20,33 @@ describe('Screening Modal Unit & Integration Tests', () => {
   });
 
   const renderWithRouter = (ui: React.ReactElement) => {
-    return render(<MemoryRouter>{ui}</MemoryRouter>);
+    return render(
+      <MotionConfig reducedMotion="always">
+        <MemoryRouter>{ui}</MemoryRouter>
+      </MotionConfig>
+    );
   };
 
-  const completeAllQuestions = () => {
-    // Click "Mulai Cek Kondisi" from intro
-    const startBtn = screen.getByRole('button', { name: /Mulai Cek Kondisi/i });
+  const completeAllQuestions = async () => {
+    // Click "Mulai Cek Kondisi" or "Mulai Skrining Mandiri" from intro
+    const startBtn = screen.getByRole('button', { name: /Mulai (Cek Kondisi|Skrining Mandiri)/i });
     fireEvent.click(startBtn);
 
-    // PHQ-9 (9 questions): click first option (Tidak sama sekali = 0) for each
-    const phqButtons = screen.getAllByRole('button', { name: /Tidak sama sekali/i });
-    phqButtons.forEach(btn => fireEvent.click(btn));
+    // Answer each of the 16 questions in the card swiper (0 = "Tidak sama sekali")
+    for (let i = 0; i < 16; i++) {
+      await screen.findByText(new RegExp(`Pertanyaan ${i + 1} dari 16`, 'i'));
+      
+      const options = await screen.findAllByRole('button', { name: /Tidak sama sekali/i });
+      fireEvent.click(options[options.length - 1]);
 
-    // Next to GAD-7
-    const nextBtn = screen.getByRole('button', { name: /Lanjut ke GAD-7/i });
-    fireEvent.click(nextBtn);
+      await waitFor(() => {
+        const nextBtns = screen.getAllByRole('button', { name: /(Berikutnya|Lihat Hasil)/i });
+        expect(nextBtns[nextBtns.length - 1]).not.toBeDisabled();
+      });
 
-    // GAD-7 (7 questions): click first option (Tidak sama sekali = 0) for each
-    const gadButtons = screen.getAllByRole('button', { name: /Tidak sama sekali/i });
-    gadButtons.forEach(btn => fireEvent.click(btn));
-
-    // Click "Lihat Hasil"
-    const submitBtn = screen.getByRole('button', { name: /Lihat Hasil/i });
-    fireEvent.click(submitBtn);
+      const nextBtns = screen.getAllByRole('button', { name: /(Berikutnya|Lihat Hasil)/i });
+      fireEvent.click(nextBtns[nextBtns.length - 1]);
+    }
   };
 
   it('renders PHQ-9 & GAD-7 screening title and non-medical diagnosis disclaimer', () => {
@@ -80,7 +85,7 @@ describe('Screening Modal Unit & Integration Tests', () => {
 
     renderWithRouter(<ScreeningModal isOpen={true} onClose={vi.fn()} onComplete={onComplete} onPersisted={onPersisted} />);
 
-    completeAllQuestions();
+    await completeAllQuestions();
 
     // Verify local completion called immediately
     expect(onComplete).toHaveBeenCalledTimes(1);
@@ -100,7 +105,7 @@ describe('Screening Modal Unit & Integration Tests', () => {
     // Verify persistence callback called once save succeeds
     await waitFor(() => {
       expect(onPersisted).toHaveBeenCalledTimes(1);
-      expect(screen.getByText(/Hasil berhasil disimpan ke akun Anda/i)).toBeInTheDocument();
+      expect(screen.getByText(/Hasil (berhasil disimpan|skrining tersimpan aman) ke (profil )?akun Anda/i)).toBeInTheDocument();
     });
   });
 
@@ -121,15 +126,17 @@ describe('Screening Modal Unit & Integration Tests', () => {
 
     renderWithRouter(<ScreeningModal isOpen={true} onClose={vi.fn()} onComplete={onComplete} onPersisted={onPersisted} />);
 
-    completeAllQuestions();
+    await completeAllQuestions();
 
     // Local completion still works
-    expect(onComplete).toHaveBeenCalledTimes(1);
+    await waitFor(() => {
+      expect(onComplete).toHaveBeenCalledTimes(1);
+    });
 
     // Persistence callback must NOT be called on error
     await waitFor(() => {
       expect(onPersisted).not.toHaveBeenCalled();
-      expect(screen.getByText(/Koneksi database bermasalah|Hasil screening selesai, tetapi penyimpanan ke server gagal/i)).toBeInTheDocument();
+      expect(screen.getByText(/Koneksi database bermasalah|Pengecekan selesai, tetapi penyimpanan ke server gagal|Hasil screening selesai/i)).toBeInTheDocument();
       expect(screen.queryByText(/Hasil berhasil disimpan ke akun Anda/i)).not.toBeInTheDocument();
     });
   });
@@ -149,17 +156,19 @@ describe('Screening Modal Unit & Integration Tests', () => {
 
     renderWithRouter(<ScreeningModal isOpen={true} onClose={vi.fn()} onComplete={onComplete} onPersisted={onPersisted} />);
 
-    completeAllQuestions();
+    await completeAllQuestions();
 
     // Local completion works
-    expect(onComplete).toHaveBeenCalledTimes(1);
+    await waitFor(() => {
+      expect(onComplete).toHaveBeenCalledTimes(1);
+    });
 
     // Should NOT post to /api/v1/screenings for guest persistence
     expect(apiClient.post).not.toHaveBeenCalled();
     expect(onPersisted).not.toHaveBeenCalled();
 
     // Displays clear guest message
-    expect(screen.getByText(/Mode Tamu: Hasil tidak disimpan ke akun/i)).toBeInTheDocument();
+    expect(screen.getByText(/Mode Tamu: Hasil tidak disimpan/i)).toBeInTheDocument();
     expect(screen.queryByText(/Hasil berhasil disimpan ke akun Anda/i)).not.toBeInTheDocument();
   });
 

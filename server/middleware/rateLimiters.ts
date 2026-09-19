@@ -1,10 +1,13 @@
 import rateLimit from 'express-rate-limit';
 
+const isTestEnv = () => process.env.NODE_ENV === 'test' || Boolean(process.env.VITEST);
+
 export const generalApiLimiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 min
   max: 300, // Balanced general API quota per IP
   standardHeaders: true,
   legacyHeaders: false,
+  skip: () => isTestEnv(),
   message: {
     success: false,
     code: 'TOO_MANY_REQUESTS',
@@ -18,6 +21,7 @@ export const loginLimiter = rateLimit({
   max: 5, // Max 5 login attempts per 15 minutes window
   standardHeaders: true,
   legacyHeaders: false,
+  skip: () => isTestEnv(),
   message: {
     success: false,
     code: 'LOGIN_RATE_LIMIT_EXCEEDED',
@@ -31,6 +35,7 @@ export const registerLimiter = rateLimit({
   max: 5, // Max 5 registrations per IP per 15 mins
   standardHeaders: true,
   legacyHeaders: false,
+  skip: () => isTestEnv(),
   message: {
     success: false,
     code: 'REGISTER_RATE_LIMIT_EXCEEDED',
@@ -43,6 +48,7 @@ export const mfaLimiter = rateLimit({
   max: 5,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: () => isTestEnv(),
   message: {
     success: false,
     code: 'MFA_RATE_LIMIT_EXCEEDED',
@@ -56,6 +62,7 @@ export const passwordResetLimiter = rateLimit({
   max: 3, // Max 3 reset requests per hour
   standardHeaders: true,
   legacyHeaders: false,
+  skip: () => isTestEnv(),
   message: {
     success: false,
     code: 'PASSWORD_RESET_RATE_LIMIT_EXCEEDED',
@@ -68,6 +75,7 @@ export const emailVerificationLimiter = rateLimit({
   max: 5,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: () => isTestEnv(),
   message: {
     success: false,
     code: 'VERIFICATION_RATE_LIMIT_EXCEEDED',

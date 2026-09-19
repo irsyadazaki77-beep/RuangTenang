@@ -143,15 +143,9 @@ export function ChatComposer({
       const formData = new FormData();
       formData.append('files', file);
 
-      const headers: Record<string, string> = {};
-      const token = localStorage.getItem('token');
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-
       fetch('/api/v1/chat/attachments/upload', {
         method: 'POST',
-        headers,
+        credentials: 'include',
         body: formData
       })
       .then(async res => {

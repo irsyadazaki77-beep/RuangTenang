@@ -12,6 +12,7 @@ const app = express();
 app.use(express.json());
 app.use(cookieParser());
 app.use('/api/v1/appointments', appointmentsRouter);
+app.use('/api/appointments', appointmentsRouter);
 
 const generateToken = (user: any) => jwt.sign({ ...user, sessionId: "test-session" }, JWT_SECRET, { issuer: 'ruangtenang', audience: 'ruangtenang-web', algorithm: 'HS256' });
 
@@ -26,9 +27,9 @@ describe('Appointment Security & IDOR Prevention Tests', () => {
     vi.spyOn(serverDb, 'isSessionActive').mockResolvedValue(true);
 
     // Clean up
-    await prisma.appointments.deleteMany({ where: { id: { in: ['apt-sec-1', 'apt-sec-2'] } } });
-    await prisma.counselors.deleteMany({ where: { id: { in: ['cns-prof-1', 'cns-prof-2'] } } });
-    await prisma.users.deleteMany({ where: { id: { in: ['std-idor-1', 'std-idor-2', 'cns-user-1', 'cns-user-2', 'adm-user-1'] } } });
+    await prisma.appointments.deleteMany({ where: { id: { in: ['apt-sec-1', 'apt-sec-2', 'apt-room-video-1', 'apt-room-cancelled-1'] } } });
+    await prisma.counselors.deleteMany({ where: { id: { in: ['cns-prof-1', 'cns-prof-2', 'cns-room-prof'] } } });
+    await prisma.users.deleteMany({ where: { id: { in: ['std-idor-1', 'std-idor-2', 'cns-user-1', 'cns-user-2', 'adm-user-1', 'user-room-1', 'cns-room-2', 'user-attacker-3'] } } });
 
     // Seed users
     await prisma.users.createMany({
@@ -38,6 +39,9 @@ describe('Appointment Security & IDOR Prevention Tests', () => {
         { id: 'cns-user-1', name: 'Counselor Alpha', email: 'c1@test.com', passwordHash: 'hash', role: 'konselor' },
         { id: 'cns-user-2', name: 'Counselor Beta', email: 'c2@test.com', passwordHash: 'hash', role: 'konselor' },
         { id: 'adm-user-1', name: 'Admin Root', email: 'admin@test.com', passwordHash: 'hash', role: 'admin' },
+        { id: 'user-room-1', name: 'User Room 1', email: 'room1@test.com', passwordHash: 'hash', role: 'mahasiswa' },
+        { id: 'cns-room-2', name: 'Counselor Room 2', email: 'room2@test.com', passwordHash: 'hash', role: 'konselor' },
+        { id: 'user-attacker-3', name: 'Attacker Room 3', email: 'room3@test.com', passwordHash: 'hash', role: 'mahasiswa' },
       ]
     });
 
@@ -65,6 +69,17 @@ describe('Appointment Security & IDOR Prevention Tests', () => {
           imageUrl: '/images/counselor2.jpg',
           availability: JSON.stringify(['Rabu', 'Kamis']),
           contactWhatsapp: '082222'
+        },
+        {
+          id: 'cns-room-prof',
+          userId: 'cns-room-2',
+          name: 'Counselor Room 2',
+          role: 'konselor',
+          university: 'UGM',
+          specialties: JSON.stringify(['Stress']),
+          imageUrl: '/images/counselor3.jpg',
+          availability: JSON.stringify(['Senin', 'Minggu']),
+          contactWhatsapp: '083333'
         },
       ]
     });
@@ -97,6 +112,34 @@ describe('Appointment Security & IDOR Prevention Tests', () => {
           approvalStatus: 'APPROVED',
           attendanceStatus: 'SCHEDULED',
           notes: 'Notes for appt 2'
+        },
+        {
+          id: 'apt-room-video-1',
+          counselorId: 'cns-room-prof',
+          counselorName: 'Counselor Room 2',
+          userId: 'user-room-1',
+          studentName: 'User Room 1',
+          date: '2026-09-20',
+          time: '10:00 - 11:00',
+          timezone: 'WIB',
+          status: 'CONFIRMED',
+          approvalStatus: 'APPROVED',
+          attendanceStatus: 'SCHEDULED',
+          notes: 'Video Room Consultation Test'
+        },
+        {
+          id: 'apt-room-cancelled-1',
+          counselorId: 'cns-room-prof',
+          counselorName: 'Counselor Room 2',
+          userId: 'user-room-1',
+          studentName: 'User Room 1',
+          date: '2026-09-20',
+          time: '10:00 - 11:00',
+          timezone: 'WIB',
+          status: 'CANCELLED',
+          approvalStatus: 'REJECTED',
+          attendanceStatus: 'CANCELLED',
+          notes: 'Cancelled Video Room Test'
         }
       ]
     });
@@ -104,9 +147,9 @@ describe('Appointment Security & IDOR Prevention Tests', () => {
 
   afterAll(async () => {
     vi.restoreAllMocks();
-    await prisma.appointments.deleteMany({ where: { id: { in: ['apt-sec-1', 'apt-sec-2'] } } });
-    await prisma.counselors.deleteMany({ where: { id: { in: ['cns-prof-1', 'cns-prof-2'] } } });
-    await prisma.users.deleteMany({ where: { id: { in: ['std-idor-1', 'std-idor-2', 'cns-user-1', 'cns-user-2', 'adm-user-1'] } } });
+    await prisma.appointments.deleteMany({ where: { id: { in: ['apt-sec-1', 'apt-sec-2', 'apt-room-video-1', 'apt-room-cancelled-1'] } } });
+    await prisma.counselors.deleteMany({ where: { id: { in: ['cns-prof-1', 'cns-prof-2', 'cns-room-prof'] } } });
+    await prisma.users.deleteMany({ where: { id: { in: ['std-idor-1', 'std-idor-2', 'cns-user-1', 'cns-user-2', 'adm-user-1', 'user-room-1', 'cns-room-2', 'user-attacker-3'] } } });
   });
 
   it('Mahasiswa can only fetch their own appointments', async () => {
@@ -185,6 +228,68 @@ describe('Appointment Security & IDOR Prevention Tests', () => {
       .set('Authorization', `Bearer ${adminToken}`);
 
     expect(res.status).toBe(200);
-    expect(res.body.length).toBe(2);
+    expect(res.body.length).toBeGreaterThanOrEqual(2);
+  });
+
+  describe('Video Consultation Room Access Authorization & Time Window Tests', () => {
+    const user1ClientToken = generateToken({ userId: 'user-room-1', name: 'User Room 1', role: 'mahasiswa', email: 'room1@test.com' });
+    const user2CounselorToken = generateToken({ userId: 'cns-room-2', name: 'Counselor Room 2', role: 'konselor', email: 'room2@test.com' });
+    const user3AttackerToken = generateToken({ userId: 'user-attacker-3', name: 'Attacker Room 3', role: 'mahasiswa', email: 'room3@test.com' });
+
+    it('Scenario 1: User 3 (unauthorized user / attacker) accessing room-access MUST return HTTP 403 Forbidden', async () => {
+      const res = await request(app)
+        .get('/api/appointments/apt-room-video-1/room-access')
+        .set('Cookie', [`rt_auth_token=${user3AttackerToken}`]);
+
+      expect(res.status).toBe(403);
+      expect(res.body.error).toBe('ACCESS_DENIED');
+    });
+
+    it('Scenario 2: User 1 accesses room at 09:40 WIB (20 mins before 10:00 schedule) MUST return HTTP 403 (too early, 15m tolerance)', async () => {
+      const res = await request(app)
+        .get('/api/appointments/apt-room-video-1/room-access')
+        .set('Cookie', [`rt_auth_token=${user1ClientToken}`])
+        .set('x-simulated-time', '2026-09-20T09:40:00+07:00');
+
+      expect([400, 403]).toContain(res.status);
+      expect(res.body.success).toBe(false);
+      expect(res.body.allowed).toBe(false);
+      expect(res.body.error).toBe('ROOM_ACCESS_TOO_EARLY');
+    });
+
+    it('Scenario 3: User 1 or User 2 accesses room at 09:50 WIB (10 mins before 10:00 schedule) MUST return HTTP 200 OK', async () => {
+      // User 1 (Client owner)
+      const resUser1 = await request(app)
+        .get('/api/appointments/apt-room-video-1/room-access')
+        .set('Cookie', [`rt_auth_token=${user1ClientToken}`])
+        .set('x-simulated-time', '2026-09-20T09:50:00+07:00');
+
+      expect(resUser1.status).toBe(200);
+      expect(resUser1.body.success).toBe(true);
+      expect(resUser1.body.allowed).toBe(true);
+      expect(resUser1.body.appointment).toBeDefined();
+
+      // User 2 (Assigned Counselor)
+      const resUser2 = await request(app)
+        .get('/api/appointments/apt-room-video-1/room-access')
+        .set('Cookie', [`rt_auth_token=${user2CounselorToken}`])
+        .set('x-simulated-time', '2026-09-20T09:50:00+07:00');
+
+      expect(resUser2.status).toBe(200);
+      expect(resUser2.body.success).toBe(true);
+      expect(resUser2.body.allowed).toBe(true);
+    });
+
+    it('Scenario 4: User 1 accessing CANCELLED appointment room MUST return HTTP 400 or 403', async () => {
+      const res = await request(app)
+        .get('/api/appointments/apt-room-cancelled-1/room-access')
+        .set('Cookie', [`rt_auth_token=${user1ClientToken}`])
+        .set('x-simulated-time', '2026-09-20T09:50:00+07:00');
+
+      expect([400, 403]).toContain(res.status);
+      expect(res.body.success).toBe(false);
+      expect(res.body.allowed).toBe(false);
+      expect(res.body.error).toBe('ROOM_ACCESS_NOT_PERMITTED');
+    });
   });
 });

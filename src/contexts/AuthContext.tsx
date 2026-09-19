@@ -61,13 +61,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const refreshSession = async () => {
     const currentVersion = ++authVersionRef.current;
     try {
-      const res = await apiClient.get<any>('/api/v1/auth/me');
+      const res = await apiClient.get<any>('/api/auth/me');
       if (authVersionRef.current !== currentVersion) {
         return;
       }
-      if (res.success && res.data?.user) {
-        setUser(res.data.user);
-        safeLocalStorage.setItem('rt_active_user_id', res.data.user.id);
+      const userData = res.data?.user || (res as any).user;
+      if (res.success && userData) {
+        setUser(userData);
+        safeLocalStorage.setItem('rt_active_user_id', userData.id);
       } else {
         setUser(DEFAULT_GUEST_USER);
         safeLocalStorage.setItem('rt_active_user_id', 'guest');
@@ -91,7 +92,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const logout = async () => {
     const currentVersion = ++authVersionRef.current;
-    const res = await apiClient.post<any>('/api/v1/auth/logout');
+    const res = await apiClient.post<any>('/api/auth/logout');
     if (!res.success) {
       throw new Error(res.error || res.message || 'Logout gagal');
     }

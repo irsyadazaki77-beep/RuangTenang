@@ -4,7 +4,7 @@ import { UserRecord } from '../database.js';
 import crypto from 'crypto';
 import { getJwtSecret } from '../middleware/auth.js';
 
-const COOKIE_NAME = 'ruangtenang_session';
+const COOKIE_NAME = 'rt_auth_token';
 
 export interface TokenPayload {
   userId: string;
@@ -17,12 +17,11 @@ export interface TokenPayload {
 
 export const authService = {
   /**
-   * Generates JWT token for active user session with reasonable expiration (24 hours).
-   * For mental health applications, 24h expiration balances user convenience and privacy.
+   * Generates JWT token for active user session.
    */
   generateSessionToken(payload: TokenPayload): string {
     return jwt.sign(payload, getJwtSecret(), {
-      expiresIn: '24h', // Reduced from 7d to 24h for enhanced health privacy
+      expiresIn: '7d',
       issuer: 'ruangtenang',
       audience: 'ruangtenang-web',
       algorithm: 'HS256',
@@ -41,11 +40,12 @@ export const authService = {
       secure: isProduction, // Enforces HTTPS transmission in production
       sameSite: 'lax' as const, // Prevents cross-site request forgery while preserving UX
       path: '/',
-      maxAge: 24 * 60 * 60 * 1000, // 24 hours (aligned with JWT expiration)
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     };
 
     res.cookie(COOKIE_NAME, token, cookieOptions);
-    // Deprecated legacy 'token' cookie: clear legacy if present
+    res.cookie('ruangtenang_session', token, cookieOptions);
+    // Deprecated legacy cookies: clear legacy if present
     res.clearCookie('token', { httpOnly: true, secure: isProduction, sameSite: 'lax' as const, path: '/' });
   },
 
@@ -61,6 +61,7 @@ export const authService = {
       path: '/',
     };
     res.clearCookie(COOKIE_NAME, clearOptions);
+    res.clearCookie('ruangtenang_session', clearOptions);
     res.clearCookie('token', clearOptions);
   },
 

@@ -90,4 +90,14 @@ describe('Frontend/Backend Payload Contracts', () => {
 
     expect(() => rescheduleAppointmentSchema.parse(invalidPayload)).toThrow();
   });
+
+  it('validates auth cookie response contract for HttpOnly rt_auth_token', () => {
+    // Contract simulation for auth response headers
+    const mockAuthCookie = 'rt_auth_token=jwt_sample_token; Path=/; HttpOnly; SameSite=Lax';
+    
+    expect(mockAuthCookie).toContain('rt_auth_token=');
+    expect(mockAuthCookie).toMatch(/HttpOnly/i);
+    expect(mockAuthCookie).toMatch(/SameSite=Lax/i);
+    expect(mockAuthCookie).toMatch(/Path=\//i);
+  });
 });

@@ -78,7 +78,7 @@ describe('Privacy, Consent, & Data Governance Tests', () => {
     
     expect(ciphertext).not.toBeNull();
     expect(ciphertext).not.toEqual(plaintext);
-    expect(ciphertext?.startsWith('v1:')).toBe(true); // check version prefix
+    expect(ciphertext?.startsWith('k1:')).toBe(true); // check version prefix
 
     const decrypted = encryptionService.decryptSensitive(ciphertext);
     expect(decrypted).toEqual(plaintext);

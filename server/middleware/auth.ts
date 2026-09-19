@@ -8,7 +8,7 @@ export const getJwtSecret = () => {
 };
 
 export const getTokenFromReq = (req: Request) => {
-  let token = req.cookies?.ruangtenang_session || req.cookies?.token;
+  let token = req.cookies?.rt_auth_token || req.cookies?.ruangtenang_session || req.cookies?.token;
   if (!token && req.headers.authorization?.startsWith('Bearer ')) {
     token = req.headers.authorization.split(' ')[1];
   }
@@ -50,6 +50,7 @@ const verifyAndLoadSession = async (token: string, res: Response) => {
       sessionId: decoded.sessionId,
     };
   } catch (err: any) {
+    res.clearCookie('rt_auth_token', { path: '/' });
     res.clearCookie('ruangtenang_session', { path: '/' });
     res.clearCookie('token', { path: '/' });
     if (err.message === 'SESSION_REVOKED') {

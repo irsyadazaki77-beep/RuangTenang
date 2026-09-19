@@ -72,7 +72,8 @@ describe('P2 Comprehensive E2E & Route Fallback Coverage', () => {
     renderTestApp('/');
 
     await waitFor(() => {
-      expect(screen.getByText(/Riwayat/i)).toBeInTheDocument();
+      expect(screen.getAllByText(/RuangTenang/i).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/Obrolan baru/i).length).toBeGreaterThan(0);
     });
   });
 
@@ -80,7 +81,8 @@ describe('P2 Comprehensive E2E & Route Fallback Coverage', () => {
     renderTestApp('/unknown-route-typo-123');
 
     await waitFor(() => {
-      expect(screen.getByText(/Riwayat/i)).toBeInTheDocument();
+      expect(screen.getAllByText(/RuangTenang/i).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/Obrolan baru/i).length).toBeGreaterThan(0);
     });
   });
 

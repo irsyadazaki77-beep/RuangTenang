@@ -71,6 +71,7 @@ router.post('/mfa/verify', mfaLimiter, async (req: Request, res: Response) => {
 
     res.json({
       success: true,
+      token,
       user: authService.sanitizeUser(user)
     });
   } catch (err: any) {

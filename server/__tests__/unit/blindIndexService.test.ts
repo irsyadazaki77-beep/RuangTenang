@@ -5,9 +5,10 @@ import {
   resetBlindIndexServiceInstance,
   normalizeBlindIndexString,
   computeWebCryptoBlindIndex 
-} from '../../src/services/crypto/BlindIndexService';
-import { appointmentRepository } from '../../src/repositories/appointmentRepository';
-import { encryptionService } from '../../server/services/encryptionService';
+} from '../../services/crypto/BlindIndexService.js';
+import { appointmentRepository } from '../../../src/repositories/appointmentRepository.js';
+import { encryptionService } from '../../services/encryptionService.js';
+import { prisma } from '../../database.js';
 
 describe('BlindIndexService Unit & Cryptographic Tests', () => {
   const TEST_SECRET = 'test-secret-key-for-blind-indexing-32-chars-minimum-length';
@@ -108,8 +109,27 @@ describe('BlindIndexService Unit & Cryptographic Tests', () => {
 });
 
 describe('AppointmentRepository Blind Indexing Integration Tests', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     process.env.BLIND_INDEX_SECRET = 'integration-test-blind-index-secret-32-chars';
+    await prisma.counselors.upsert({
+      where: { id: 'c-test-1' },
+      update: {},
+      create: {
+        id: 'c-test-1',
+        name: 'Dr. Test Counselor',
+        role: 'Psikolog Klinis',
+        specialties: JSON.stringify(['Akademik', 'Kecemasan']),
+        imageUrl: 'https://images.unsplash.com/photo-test',
+        availability: JSON.stringify(['09:00', '10:00']),
+      }
+    });
+  });
+
+  afterEach(async () => {
+    try {
+      await prisma.appointments.deleteMany({ where: { counselorId: 'c-test-1' } });
+      await prisma.counselors.deleteMany({ where: { id: 'c-test-1' } });
+    } catch {}
   });
 
   it('addAppointment encrypts PII and generates blind index hashes', async () => {

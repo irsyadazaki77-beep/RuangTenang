@@ -16,7 +16,7 @@ describe('Encryption Service', () => {
     const ciphertext = encryptionService.encryptSensitive(plaintext);
     
     expect(ciphertext).not.toBe(plaintext);
-    expect(ciphertext).toContain('v1:');
+    expect(ciphertext).toMatch(/^(k1|v1):[0-9a-fA-F]+:[0-9a-fA-F]+:[0-9a-fA-F]+/);
 
     const decrypted = encryptionService.decryptSensitive(ciphertext);
     expect(decrypted).toBe(plaintext);

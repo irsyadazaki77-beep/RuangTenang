@@ -237,6 +237,9 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
   const [gad7Answers, setGad7Answers] = useState<number[]>(Array(7).fill(-1));
   const [finalResult, setFinalResult] = useState<ScreeningResult | null>(null);
 
+  const phq9AnswersRef = useRef<number[]>(Array(9).fill(-1));
+  const gad7AnswersRef = useRef<number[]>(Array(7).fill(-1));
+
   const [historyList, setHistoryList] = useState<ScreeningResult[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [errorHistory, setErrorHistory] = useState<string | null>(null);
@@ -252,6 +255,16 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
     planOrIntent: null,
     wantsTrustedContact: null,
   });
+
+  const autoAdvanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (autoAdvanceTimerRef.current) {
+        clearTimeout(autoAdvanceTimerRef.current);
+      }
+    };
+  }, []);
 
   const fetchHistory = () => {
     if (!isOpen && !isPageMode) return;
@@ -301,38 +314,23 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
   const handleSelectOption = (value: number) => {
     const currentQ = ALL_QUESTIONS[currentQuestionIndex];
 
+    const newPhq = [...phq9AnswersRef.current];
+    const newGad = [...gad7AnswersRef.current];
+
     if (currentQ.section === 'phq9') {
-      const updated = [...phq9Answers];
-      updated[currentQ.questionIndexInSection] = value;
-      setPhq9Answers(updated);
+      newPhq[currentQ.questionIndexInSection] = value;
+      phq9AnswersRef.current = newPhq;
+      setPhq9Answers(newPhq);
 
       // Trigger safety check modal if PHQ-9 Item 9 (index 8) > 0
       if (currentQ.questionIndexInSection === 8 && value > 0) {
         setShowSafetyCheckModal(true);
       }
     } else {
-      const updated = [...gad7Answers];
-      updated[currentQ.questionIndexInSection] = value;
-      setGad7Answers(updated);
+      newGad[currentQ.questionIndexInSection] = value;
+      gad7AnswersRef.current = newGad;
+      setGad7Answers(newGad);
     }
-
-    // Auto-advance after selecting option
-    setTimeout(() => {
-      if (currentQuestionIndex < TOTAL_QUESTIONS - 1) {
-        setSlideDirection('next');
-        setCurrentQuestionIndex(prev => prev + 1);
-      } else {
-        // Last question reached
-        calculateResultsWithAnswers(
-          currentQ.section === 'phq9' 
-            ? phq9Answers.map((v, i) => i === currentQ.questionIndexInSection ? value : v)
-            : phq9Answers,
-          currentQ.section === 'gad7'
-            ? gad7Answers.map((v, i) => i === currentQ.questionIndexInSection ? value : v)
-            : gad7Answers
-        );
-      }
-    }, 160);
   };
 
   const handlePrevQuestion = () => {
@@ -345,11 +343,20 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
   };
 
   const handleNextQuestion = () => {
+    const currentQ = ALL_QUESTIONS[currentQuestionIndex];
+    const ansVal = currentQ?.section === 'phq9' 
+      ? phq9AnswersRef.current[currentQ.questionIndexInSection] 
+      : gad7AnswersRef.current[currentQ.questionIndexInSection];
+
+    if (ansVal === -1) {
+      return;
+    }
+
     if (currentQuestionIndex < TOTAL_QUESTIONS - 1) {
       setSlideDirection('next');
       setCurrentQuestionIndex(prev => prev + 1);
     } else {
-      calculateResultsWithAnswers(phq9Answers, gad7Answers);
+      calculateResultsWithAnswers(phq9AnswersRef.current, gad7AnswersRef.current);
     }
   };
 
@@ -514,9 +521,11 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
   const currentQ = ALL_QUESTIONS[currentQuestionIndex];
   const currentAnswerValue = currentQ
     ? (currentQ.section === 'phq9' 
-        ? phq9Answers[currentQ.questionIndexInSection] 
-        : gad7Answers[currentQ.questionIndexInSection])
+        ? (phq9Answers[currentQ.questionIndexInSection] !== -1 ? phq9Answers[currentQ.questionIndexInSection] : phq9AnswersRef.current[currentQ.questionIndexInSection])
+        : (gad7Answers[currentQ.questionIndexInSection] !== -1 ? gad7Answers[currentQ.questionIndexInSection] : gad7AnswersRef.current[currentQ.questionIndexInSection]))
     : -1;
+
+  const hasCurrentAnswer = currentAnswerValue !== -1;
 
   const progressPercentage = Math.round(((currentQuestionIndex + 1) / TOTAL_QUESTIONS) * 100);
 
@@ -586,7 +595,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
                 <li><strong className="text-primary font-medium">Pengalaman Card Swiper:</strong> Tampil 1 pertanyaan per layar agar kamu dapat menjawab tanpa beban berlebih.</li>
                 <li><strong className="text-primary font-medium">Estimasi Waktu:</strong> Cukup 2 menit (16 pertanyaan pilihan ganda).</li>
                 <li><strong className="text-primary font-medium">Kerahasiaan & Privasi:</strong> {user && user.role !== 'guest' ? 'Hasil akan tersimpan aman di akun Anda untuk pemantauan berkala.' : 'Mode Tamu: Hasil tidak disimpan permanen, hanya tersedia pada sesi ini.'}</li>
-                <li><strong className="text-primary font-medium">Bukan Diagnosis Medis:</strong> Alat ini adalah evaluasi mandiri awal untuk membantu merekomendasikan langkah terbaik.</li>
+                <li><strong className="text-primary font-medium">Bukan Diagnosis Medis:</strong> Alat ini adalah evaluasi mandiri awal untuk membantu merekomendasikan langkah terbaik (bukan pengganti diagnosis medis).</li>
               </ul>
             </div>
 
@@ -637,6 +646,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
                   setCurrentQuestionIndex(0);
                   setSlideDirection('next');
                 }}
+                aria-label="Mulai Cek Kondisi Mental"
                 className="btn-primary flex items-center justify-center gap-2 px-5 py-2.5 min-h-[44px] rounded-xl text-xs sm:text-sm cursor-pointer shadow-md hover:shadow-lg transition-all"
               >
                 <span>Mulai Skrining Mandiri</span>
@@ -677,7 +687,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
 
             {/* CARD SWIPER CONTAINER */}
             <div className="relative min-h-[290px] sm:min-h-[280px] overflow-hidden flex flex-col justify-center">
-              <AnimatePresence mode="wait" custom={slideDirection}>
+              <AnimatePresence mode="popLayout" custom={slideDirection}>
                 <motion.div
                   key={currentQ.id}
                   custom={slideDirection}
@@ -745,9 +755,9 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
               <div className="flex items-center gap-2">
                 <button
                   onClick={handleNextQuestion}
-                  disabled={currentAnswerValue === -1}
+                  disabled={!hasCurrentAnswer}
                   className={`flex items-center justify-center gap-1.5 px-5 py-2 min-h-[44px] sm:min-h-[36px] rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 cursor-pointer ${
-                    currentAnswerValue !== -1
+                    hasCurrentAnswer
                       ? 'bg-teal-600 text-white hover:bg-teal-700 shadow-3xs'
                       : 'bg-slate-100 dark:bg-slate-800 text-muted border border-default cursor-not-allowed opacity-60'
                   }`}

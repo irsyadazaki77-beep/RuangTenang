@@ -2,7 +2,7 @@ import crypto from 'crypto';
 import { getValidatedEncryptionKey } from '../config/envValidation.js';
 
 const ALGORITHM = 'aes-256-gcm';
-let activeKeyVersion = process.env.ACTIVE_ENCRYPTION_KEY_VERSION || 'v1';
+let activeKeyVersion = process.env.ACTIVE_ENCRYPTION_KEY_VERSION || 'k1';
 
 export const encryptionService = {
   getCurrentKeyVersion(): string {
@@ -29,8 +29,9 @@ export const encryptionService = {
   },
 
   /**
-   * Encrypts plaintext using AES-256-GCM with the active key version.
-   * Output Format: [VERSION]:[IV(base64)]:[AUTHTAG(base64)]:[CIPHERTEXT(base64)]
+   * Encrypts plaintext using AES-256-GCM with key versioning.
+   * Canonical Format: [VERSION]:[IV(hex)]:[AUTHTAG(hex)]:[CIPHERTEXT(hex)]
+   * Example: k1:<iv_hex>:<authTag_hex>:<encryptedData_hex>
    */
   encryptSensitive(plaintext: string | null | undefined, targetVersion?: string): string | null {
     if (plaintext === null || plaintext === undefined || plaintext === '') {
@@ -44,12 +45,12 @@ export const encryptionService = {
       const iv = crypto.randomBytes(12);
       const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
       
-      let ciphertext = cipher.update(plaintext, 'utf8', 'base64');
-      ciphertext += cipher.final('base64');
-      const authTag = cipher.getAuthTag().toString('base64');
-      const ivBase64 = iv.toString('base64');
+      let ciphertext = cipher.update(plaintext, 'utf8', 'hex');
+      ciphertext += cipher.final('hex');
+      const authTag = cipher.getAuthTag().toString('hex');
+      const ivHex = iv.toString('hex');
 
-      return `${versionToUse}:${ivBase64}:${authTag}:${ciphertext}`;
+      return `${versionToUse}:${ivHex}:${authTag}:${ciphertext}`;
     } catch (error) {
       console.error('Encryption failed:', error);
       throw new Error('Failed to encrypt sensitive data');
@@ -57,53 +58,99 @@ export const encryptionService = {
   },
 
   /**
-   * Decrypts ciphertext using AES-256-GCM by parsing the embedded key version.
+   * Decrypts ciphertext using AES-256-GCM.
+   * Supports:
+   * 1. 4-part versioned hex or base64 format: `k1:<iv>:<authTag>:<ciphertext>`
+   * 2. 3-part legacy format: `<iv>:<authTag>:<ciphertext>` (defaults to current key `k1`)
+   * 3. Legacy JSON format: `{"iv":"...","authTag":"...","data":"..."}`
+   * Gracefully falls back to original text or safe fallback on decryption error without crashing.
    */
   decryptSensitive(encryptedText: string | null | undefined): string | null {
     if (encryptedText === null || encryptedText === undefined || encryptedText === '') {
       return encryptedText || null;
     }
 
-    // Parse version prefix dynamically for Key Versioning support (e.g., v1, v2)
-    const versionMatch = encryptedText.match(/^(v\d+):/);
-    if (!versionMatch) {
-      // Return plaintext if legacy unencrypted format is encountered
-      return encryptedText;
-    }
-
-    const version = versionMatch[1];
+    const trimmed = encryptedText.trim();
 
     try {
-      const key = getValidatedEncryptionKey(version);
-      const parts = encryptedText.split(':');
-      if (parts.length !== 4) {
-        throw new Error('Invalid encrypted data format');
+      // 1. JSON format backward compatibility
+      if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+        try {
+          const parsed = JSON.parse(trimmed);
+          const ivStr = parsed.iv;
+          const tagStr = parsed.authTag || parsed.tag;
+          const dataStr = parsed.data || parsed.encrypted || parsed.ciphertext;
+          const version = parsed.version || activeKeyVersion;
+          if (ivStr && tagStr && dataStr) {
+            const key = getValidatedEncryptionKey(version);
+            const isHex = /^[0-9a-fA-F]+$/.test(ivStr) && /^[0-9a-fA-F]+$/.test(tagStr);
+            const iv = Buffer.from(ivStr, isHex ? 'hex' : 'base64');
+            const authTag = Buffer.from(tagStr, isHex ? 'hex' : 'base64');
+            const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
+            decipher.setAuthTag(authTag);
+            let plaintext = decipher.update(dataStr, isHex ? 'hex' : 'base64', 'utf8');
+            plaintext += decipher.final('utf8');
+            return plaintext;
+          }
+        } catch {}
       }
 
-      const [, ivBase64, authTagBase64, ciphertext] = parts;
-      
-      const iv = Buffer.from(ivBase64, 'base64');
-      const authTag = Buffer.from(authTagBase64, 'base64');
-      
-      const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
-      decipher.setAuthTag(authTag);
-      
-      let plaintext = decipher.update(ciphertext, 'base64', 'utf8');
-      plaintext += decipher.final('utf8');
-      
-      return plaintext;
-    } catch (_error) {
-      console.error(`Decryption failed for sensitive field using key version ${version}.`);
-      throw new Error('Failed to decrypt sensitive data');
+      // 2. Colon-separated format
+      const parts = trimmed.split(':');
+      if (parts.length === 4) {
+        // [VERSION]:[IV]:[AUTHTAG]:[CIPHERTEXT]
+        const [version, ivStr, tagStr, dataStr] = parts;
+        const key = getValidatedEncryptionKey(version);
+        const isHex = /^[0-9a-fA-F]+$/.test(ivStr) && /^[0-9a-fA-F]+$/.test(tagStr);
+        const iv = Buffer.from(ivStr, isHex ? 'hex' : 'base64');
+        const authTag = Buffer.from(tagStr, isHex ? 'hex' : 'base64');
+        const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
+        decipher.setAuthTag(authTag);
+        let plaintext = decipher.update(dataStr, isHex ? 'hex' : 'base64', 'utf8');
+        plaintext += decipher.final('utf8');
+        return plaintext;
+      } else if (parts.length === 3) {
+        // Legacy 3-part format: [IV]:[AUTHTAG]:[CIPHERTEXT] -> default to k1 / activeKeyVersion
+        const [ivStr, tagStr, dataStr] = parts;
+        const key = getValidatedEncryptionKey(activeKeyVersion);
+        const isHex = /^[0-9a-fA-F]+$/.test(ivStr) && /^[0-9a-fA-F]+$/.test(tagStr);
+        const iv = Buffer.from(ivStr, isHex ? 'hex' : 'base64');
+        const authTag = Buffer.from(tagStr, isHex ? 'hex' : 'base64');
+        const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
+        decipher.setAuthTag(authTag);
+        let plaintext = decipher.update(dataStr, isHex ? 'hex' : 'base64', 'utf8');
+        plaintext += decipher.final('utf8');
+        return plaintext;
+      }
+
+      // Return plaintext if not in encrypted format
+      return encryptedText;
+    } catch (err: any) {
+      if (this.isEncrypted(encryptedText)) {
+        throw new Error(`Failed to decrypt sensitive data: ${err?.message || 'Authentication tag verification failed'}`);
+      }
+      console.warn(`[ENCRYPTION_WARNING] Decryption failed for payload (${err?.message || 'unknown error'}). Falling back to original string.`);
+      return encryptedText;
     }
   },
 
   /**
-   * Checks if string is already encrypted in canonical versioned format.
+   * Checks if string is already encrypted in canonical versioned or legacy format.
    */
   isEncrypted(text: string | null | undefined): boolean {
     if (!text || typeof text !== 'string') return false;
-    return /^v\d+:[A-Za-z0-9+/=]+:[A-Za-z0-9+/=]+:[A-Za-z0-9+/=]+$/.test(text);
+    const trimmed = text.trim();
+    if (trimmed.startsWith('{') && trimmed.includes('"iv"') && (trimmed.includes('"authTag"') || trimmed.includes('"tag"'))) {
+      return true;
+    }
+    const parts = trimmed.split(':');
+    if (parts.length === 4) {
+      return /^[a-zA-Z0-9_-]+$/.test(parts[0]) && parts[1].length > 0 && parts[2].length > 0 && parts[3].length > 0;
+    }
+    if (parts.length === 3) {
+      return parts[0].length >= 16 && parts[1].length >= 16 && parts[2].length > 0;
+    }
+    return false;
   },
 
   /**
@@ -117,5 +164,9 @@ export const encryptionService = {
 
   generateRandomKeyBase64(): string {
     return crypto.randomBytes(32).toString('base64');
+  },
+
+  generateRandomKeyHex(): string {
+    return crypto.randomBytes(32).toString('hex');
   }
 };

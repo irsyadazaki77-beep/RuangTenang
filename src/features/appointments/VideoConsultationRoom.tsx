@@ -1,7 +1,8 @@
-import React, { useState, useEffect} from 'react';
+import React, { useState, useEffect } from 'react';
 import { useEscapeKey } from '../../hooks/useEscapeKey';
 import { Video, VideoOff, Mic, MicOff, PhoneOff, AlertCircle, Lock, Users, Network, Info } from 'lucide-react';
 import { Appointment } from '../../types';
+import { apiClient } from '../../lib/apiClient';
 
 interface VideoConsultationRoomProps {
   appointment: Appointment | null;
@@ -21,7 +22,25 @@ export const VideoConsultationRoom: React.FC<VideoConsultationRoomProps> = ({
   const [counselorNotes, setCounselorNotes] = useState('');
   const [networkQuality, setNetworkQuality] = useState<'good' | 'poor'>('good');
   const [showSimNotice, setShowSimNotice] = useState(true);
-  
+  const [apiAccessDeniedMsg, setApiAccessDeniedMsg] = useState<string | null>(null);
+
+  // Backend room-access permission check
+  useEffect(() => {
+    if (appointment && userRole !== 'guest') {
+      apiClient.get<any>(`/api/v1/appointments/${appointment.id}/room-access`)
+        .then(res => {
+          if (res && res.success === false) {
+            setApiAccessDeniedMsg(res.message || 'Akses ditolak. Anda tidak memiliki izin untuk sesi konsultasi ini.');
+          } else {
+            setApiAccessDeniedMsg(null);
+          }
+        })
+        .catch(err => {
+          setApiAccessDeniedMsg('Akses ditolak. Anda tidak memiliki izin untuk sesi konsultasi ini.');
+        });
+    }
+  }, [appointment, userRole]);
+
   // Real-time network fluctuation simulation
   useEffect(() => {
     const interval = setInterval(() => {
@@ -35,6 +54,36 @@ export const VideoConsultationRoom: React.FC<VideoConsultationRoomProps> = ({
   }, true);
 
   if (!appointment) return null;
+
+  // Check for ineligible status (cancelled or rejected), unauthorized role, or backend 403 denial
+  const isDenied = appointment.status === 'CANCELLED' || appointment.status === 'REJECTED' || (userRole as string) === 'guest' || !!apiAccessDeniedMsg;
+  if (isDenied) {
+    return (
+      <div className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4">
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 sm:p-8 max-w-md w-full text-center shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-200">
+          <div className="w-14 h-14 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-400 flex items-center justify-center mx-auto">
+            <AlertCircle className="w-7 h-7" />
+          </div>
+          <div className="space-y-2">
+            <h3 className="text-xl font-semibold text-white">Akses Ditolak</h3>
+            <p className="text-sm text-slate-400 leading-relaxed">
+              {apiAccessDeniedMsg
+                ? apiAccessDeniedMsg
+                : appointment.status === 'CANCELLED' || appointment.status === 'REJECTED'
+                ? `Sesi video konsultasi tidak dapat diakses karena jadwal ini berstatus "${appointment.status === 'CANCELLED' ? 'Dibatalkan' : 'Ditolak'}".`
+                : 'Akses ditolak. Anda tidak memiliki izin untuk sesi konsultasi ini.'}
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-full py-3 px-4 bg-slate-800 hover:bg-slate-700 text-white font-medium text-sm rounded-xl border border-slate-700 transition-colors cursor-pointer"
+          >
+            Kembali ke Dashboard
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const handleEndCall = () => {
     // Prompt confirmation maybe?
@@ -83,13 +132,15 @@ export const VideoConsultationRoom: React.FC<VideoConsultationRoomProps> = ({
                   <strong className="text-emerald-400 font-semibold">Mode Simulasi Konsultasi:</strong> Sesi video call ini beroperasi dalam mode simulasi interaktif end-to-end terenkripsi untuk pengujian antarmuka konseling sebelum terhubung ke server WebRTC produksi.
                 </p>
               </div>
-              <button 
+              <span 
+                tabIndex={0}
                 onClick={() => setShowSimNotice(false)} 
-                className="shrink-0 text-slate-400 hover:text-white px-2 py-0.5 rounded transition-colors text-[11px]"
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setShowSimNotice(false); }}
+                className="cursor-pointer shrink-0 text-slate-400 hover:text-white px-2 py-0.5 rounded transition-colors text-[11px]"
                 aria-label="Tutup pemberitahuan simulasi"
               >
                 Tutup
-              </button>
+              </span>
             </div>
           )}
         </div>

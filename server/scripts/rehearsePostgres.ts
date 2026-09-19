@@ -26,41 +26,74 @@ async function main() {
   const sqliteSchema = fs.readFileSync(sqliteSchemaPath, 'utf8');
   const postgresSchema = fs.readFileSync(postgresSchemaPath, 'utf8');
 
-  // Parse models
-  const parseModels = (schemaContent: string): Set<string> => {
-    const models = new Set<string>();
-    const matches = schemaContent.matchAll(/model\s+(\w+)\s*\{/g);
-    for (const match of matches) {
-      models.add(match[1]);
+  // Parse models and their fields
+  const parseModelsAndFields = (schemaContent: string): Map<string, Set<string>> => {
+    const modelsMap = new Map<string, Set<string>>();
+    const modelBlocks = schemaContent.split(/model\s+/);
+    
+    for (const block of modelBlocks) {
+      if (!block.trim()) continue;
+      const match = block.match(/^(\w+)\s*\{([\s\S]*?)\}/);
+      if (match) {
+        const modelName = match[1];
+        const body = match[2];
+        const fieldNames = new Set<string>();
+        const lines = body.split('\n');
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || trimmed.startsWith('//') || trimmed.startsWith('@@')) continue;
+          const fieldMatch = trimmed.match(/^(\w+)\s+/);
+          if (fieldMatch) {
+            fieldNames.add(fieldMatch[1]);
+          }
+        }
+        modelsMap.set(modelName, fieldNames);
+      }
     }
-    return models;
+    return modelsMap;
   };
 
-  const sqliteModels = parseModels(sqliteSchema);
-  const postgresModels = parseModels(postgresSchema);
+  const sqliteModelFields = parseModelsAndFields(sqliteSchema);
+  const postgresModelFields = parseModelsAndFields(postgresSchema);
 
-  console.log(`- SQLite schema contains ${sqliteModels.size} models.`);
-  console.log(`- PostgreSQL schema contains ${postgresModels.size} models.`);
+  console.log(`- SQLite schema contains ${sqliteModelFields.size} models.`);
+  console.log(`- PostgreSQL schema contains ${postgresModelFields.size} models.`);
 
   let schemaAligns = true;
-  for (const model of sqliteModels) {
-    if (!postgresModels.has(model)) {
+  for (const [model, fields] of sqliteModelFields.entries()) {
+    if (!postgresModelFields.has(model)) {
       console.warn(`⚠️  Model mismatch: Model "${model}" exists in SQLite but not in Postgres schema.`);
       schemaAligns = false;
+    } else {
+      const pgFields = postgresModelFields.get(model)!;
+      for (const field of fields) {
+        if (!pgFields.has(field)) {
+          console.warn(`⚠️  Field mismatch in model "${model}": Field "${field}" exists in SQLite but missing in Postgres.`);
+          schemaAligns = false;
+        }
+      }
     }
   }
 
-  for (const model of postgresModels) {
-    if (!sqliteModels.has(model)) {
+  for (const [model, fields] of postgresModelFields.entries()) {
+    if (!sqliteModelFields.has(model)) {
       console.warn(`⚠️  Model mismatch: Model "${model}" exists in Postgres but not in SQLite schema.`);
       schemaAligns = false;
+    } else {
+      const sqliteFields = sqliteModelFields.get(model)!;
+      for (const field of fields) {
+        if (!sqliteFields.has(field)) {
+          console.warn(`⚠️  Field mismatch in model "${model}": Field "${field}" exists in Postgres but missing in SQLite.`);
+          schemaAligns = false;
+        }
+      }
     }
   }
 
   if (schemaAligns) {
-    console.log('✅ Success: Models are perfectly aligned between SQLite and PostgreSQL schemas.');
+    console.log('✅ Success: Models and fields are perfectly aligned between SQLite and PostgreSQL schemas.');
   } else {
-    console.warn('⚠️  Warning: Schema models are not perfectly identical. Review required.');
+    console.warn('⚠️  Warning: Schema models or fields are not perfectly identical. Review required.');
   }
 
   console.log('🔍 Step 2: Index Health Check & Verification...');

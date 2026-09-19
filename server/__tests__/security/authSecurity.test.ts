@@ -336,3 +336,73 @@ describe('Session Management & Zero-Trust Tier Tests', () => {
     expect(checkB.status).toBe(401);
   });
 });
+
+describe('HttpOnly Cookie Authentication Compliance Tests', () => {
+  const COOKIE_TEST_EMAIL = 'cookie_compliance_test@test.com';
+
+  beforeAll(async () => {
+    await prisma.users.deleteMany({ where: { email: COOKIE_TEST_EMAIL } });
+  });
+
+  afterAll(async () => {
+    await prisma.users.deleteMany({ where: { email: COOKIE_TEST_EMAIL } });
+  });
+
+  it('sets rt_auth_token cookie with HttpOnly, SameSite=Lax, and Path=/ on registration', async () => {
+    const res = await request(app)
+      .post('/api/auth/register')
+      .send({
+        name: 'Cookie Compliance User',
+        email: COOKIE_TEST_EMAIL,
+        password: 'Password123!',
+        role: 'mahasiswa'
+      });
+
+    expect(res.status).toBe(201);
+    const cookies = res.headers['set-cookie'] as string[];
+    expect(cookies).toBeDefined();
+
+    const authCookie = cookies.find((c: string) => c.startsWith('rt_auth_token='));
+    expect(authCookie).toBeDefined();
+    expect(authCookie).toMatch(/HttpOnly/i);
+    expect(authCookie).toMatch(/SameSite=Lax/i);
+    expect(authCookie).toMatch(/Path=\//i);
+  });
+
+  it('sets rt_auth_token cookie with HttpOnly, SameSite=Lax, and Path=/ on login', async () => {
+    await prisma.users.updateMany({
+      where: { email: COOKIE_TEST_EMAIL },
+      data: { emailVerified: true }
+    });
+
+    const res = await request(app)
+      .post('/api/auth/login')
+      .send({
+        email: COOKIE_TEST_EMAIL,
+        password: 'Password123!'
+      });
+
+    expect(res.status).toBe(200);
+    const cookies = res.headers['set-cookie'] as string[];
+    expect(cookies).toBeDefined();
+
+    const authCookie = cookies.find((c: string) => c.startsWith('rt_auth_token='));
+    expect(authCookie).toBeDefined();
+    expect(authCookie).toMatch(/HttpOnly/i);
+    expect(authCookie).toMatch(/SameSite=Lax/i);
+    expect(authCookie).toMatch(/Path=\//i);
+  });
+
+  it('clears rt_auth_token cookie on logout with Max-Age=0 or expired date', async () => {
+    const res = await request(app)
+      .post('/api/auth/logout');
+
+    expect(res.status).toBe(200);
+    const cookies = res.headers['set-cookie'] as string[];
+    expect(cookies).toBeDefined();
+
+    const clearedCookie = cookies.find((c: string) => c.startsWith('rt_auth_token='));
+    expect(clearedCookie).toBeDefined();
+    expect(clearedCookie).toMatch(/Max-Age=0|Expires=Thu, 01 Jan 1970/i);
+  });
+});

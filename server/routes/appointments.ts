@@ -96,6 +96,69 @@ const AvailabilityQuerySchema = z.object({
   }).regex(/^\d{4}-\d{2}-\d{2}$/, 'Format tanggal harus YYYY-MM-DD')
 });
 
+// Middleware for strict Appointment & Room Access Authorization
+export const verifyAppointmentAccess = async (req: Request, res: Response, next: () => void) => {
+  try {
+    const appointmentId = req.params.id || req.body.appointmentId;
+    if (!appointmentId) {
+      return res.status(400).json({ success: false, error: 'MISSING_APPOINTMENT_ID', message: 'ID Janji temu wajib diisi.' });
+    }
+    const appt = await serverDb.findAppointmentById(appointmentId);
+    if (!appt) {
+      return res.status(404).json({ success: false, error: 'NOT_FOUND', message: 'Jadwal tidak ditemukan.' });
+    }
+
+    const user = req.user;
+    if (!user) {
+      return res.status(401).json({ success: false, error: 'UNAUTHORIZED', message: 'Sesi tidak valid.' });
+    }
+
+    // Admin has unrestricted access
+    if (user.role === 'admin') {
+      (req as any).appointment = appt;
+      return next();
+    }
+
+    // Mahasiswa must be the owner
+    if (user.role === 'mahasiswa') {
+      if (appt.userId !== user.userId) {
+        return res.status(403).json({
+          success: false,
+          error: 'ACCESS_DENIED',
+          message: 'Akses ditolak. Anda tidak memiliki izin untuk sesi konsultasi ini.'
+        });
+      }
+      (req as any).appointment = appt;
+      return next();
+    }
+
+    // Counselor must be assigned to this appointment
+    if (user.role === 'konselor') {
+      const counselor = await prisma.counselors.findFirst({
+        where: { userId: user.userId }
+      });
+      if (!counselor || appt.counselorId !== counselor.id) {
+        return res.status(403).json({
+          success: false,
+          error: 'ACCESS_DENIED',
+          message: 'Akses ditolak. Anda tidak memiliki izin untuk sesi konsultasi ini.'
+        });
+      }
+      (req as any).appointment = appt;
+      return next();
+    }
+
+    return res.status(403).json({
+      success: false,
+      error: 'ACCESS_DENIED',
+      message: 'Akses ditolak. Anda tidak memiliki izin untuk sesi konsultasi ini.'
+    });
+  } catch (err: any) {
+    console.error('Error in verifyAppointmentAccess:', err);
+    res.status(500).json({ success: false, error: 'INTERNAL_SERVER_ERROR', message: 'Gagal memverifikasi otorisasi janji temu.' });
+  }
+};
+
 // Availability Check
 router.get(['/availability', '/appointments/availability'], async (req: Request, res: Response) => {
   try {
@@ -232,6 +295,82 @@ router.get(['/', '/db/appointments'], requireAuth, async (req: Request, res: Res
   } catch (err: any) {
     console.error('Error fetching appointments:', err);
     res.status(500).json({ error: 'Gagal mengambil data jadwal dari database.' });
+  }
+});
+
+// Single Appointment by ID with Access Verification
+router.get(['/:id', '/db/appointments/:id'], requireAuth, verifyAppointmentAccess, async (req: Request, res: Response) => {
+  try {
+    const appt = (req as any).appointment;
+    res.json({ success: true, record: mapAppointmentToResponse(appt) });
+  } catch (err: any) {
+    console.error('Error fetching appointment by ID:', err);
+    res.status(500).json({ error: 'Gagal mengambil data janji temu.' });
+  }
+});
+
+// Video Consultation Room Access Verification
+router.get(['/:id/room-access', '/db/appointments/:id/room-access'], requireAuth, verifyAppointmentAccess, async (req: Request, res: Response) => {
+  try {
+    const appt = (req as any).appointment;
+    
+    // Check if appointment status is eligible for video call
+    const isEligibleStatus = ['CONFIRMED', 'PENDING', 'APPROVED'].includes(appt.status) || ['APPROVED', 'PENDING_APPROVAL'].includes(appt.approvalStatus);
+    if (!isEligibleStatus || appt.status === 'CANCELLED' || appt.status === 'REJECTED') {
+      return res.status(403).json({
+        success: false,
+        allowed: false,
+        error: 'ROOM_ACCESS_NOT_PERMITTED',
+        message: 'Sesi video konsultasi tidak dapat diakses karena status janji temu telah dibatalkan atau ditolak.'
+      });
+    }
+
+    // Time window validation: Sesi video hanya dapat diakses paling awal 15 menit sebelum waktu mulai
+    const dateStr = appt.date;
+    const rawTime = (appt.time || '').trim();
+    const timeMatch = rawTime.match(/(\d{1,2}):(\d{2})/);
+
+    if (dateStr && timeMatch) {
+      const hours = timeMatch[1].padStart(2, '0');
+      const minutes = timeMatch[2];
+      const startIso = `${dateStr}T${hours}:${minutes}:00+07:00`;
+      const startTime = new Date(startIso).getTime();
+
+      if (!isNaN(startTime)) {
+        let currentTime = Date.now();
+        const simTimeHeader = (req.headers['x-simulated-time'] as string) || (req.query.simulatedTime as string);
+        if (simTimeHeader) {
+          if (simTimeHeader.includes('T')) {
+            currentTime = new Date(simTimeHeader).getTime();
+          } else if (/^\d{1,2}:\d{2}/.test(simTimeHeader)) {
+            const [sh, sm] = simTimeHeader.split(':');
+            currentTime = new Date(`${dateStr}T${sh.padStart(2, '0')}:${sm.padStart(2, '0')}:00+07:00`).getTime();
+          }
+        }
+
+        const earliestAllowed = startTime - (15 * 60 * 1000); // 15 menit sebelum jadwal
+        if (currentTime < earliestAllowed) {
+          const minutesLeft = Math.ceil((startTime - currentTime) / 60000);
+          return res.status(403).json({
+            success: false,
+            allowed: false,
+            error: 'ROOM_ACCESS_TOO_EARLY',
+            message: `Sesi video konsultasi hanya dapat diakses paling cepat 15 menit sebelum jadwal dimulai (mulai dalam ${minutesLeft} menit).`
+          });
+        }
+      }
+    }
+
+    res.json({
+      success: true,
+      allowed: true,
+      appointment: mapAppointmentToResponse(appt),
+      userRole: req.user!.role,
+      userId: req.user!.userId
+    });
+  } catch (err: any) {
+    console.error('Error validating room access:', err);
+    res.status(500).json({ success: false, error: 'INTERNAL_SERVER_ERROR', message: 'Gagal memvalidasi izin akses room.' });
   }
 });
 
