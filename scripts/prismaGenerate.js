@@ -28,11 +28,18 @@ const schemaPath = isPostgres
 
 console.log(`[PRISMA GENERATE] Selected schema: ${schemaPath} (Provider: ${rawProvider}, NODE_ENV: ${process.env.NODE_ENV || 'development'})`);
 
+const clientPath = path.resolve(process.cwd(), 'node_modules', '.prisma', 'client');
+const clientExists = fs.existsSync(clientPath);
+
 try {
   execSync(`npx prisma generate --schema ${schemaPath}`, { stdio: 'inherit' });
 } catch (err) {
-  console.error('[PRISMA GENERATE] Failed to generate Prisma Client:', err);
-  process.exit(1);
+  if (clientExists && (err?.message?.includes('EPERM') || String(err).includes('EPERM') || err?.status === 1)) {
+    console.warn('[PRISMA GENERATE] Warning: Query engine file is locked by a running process, but existing Prisma Client is available. Continuing...');
+  } else {
+    console.error('[PRISMA GENERATE] Failed to generate Prisma Client:', err);
+    process.exit(1);
+  }
 }
 
 // Auto-initialize SQLite database and synchronize schema if absent

@@ -28,8 +28,35 @@ vi.mock('fs', async () => {
   };
 });
 
-vi.mock('../database', () => ({
+vi.mock('../../database', () => ({
   prisma: {
+    users: {
+      findUnique: vi.fn().mockResolvedValue({
+        id: 'user-1',
+        name: 'Budi Santoso',
+        university: 'Universitas Indonesia'
+      })
+    },
+    chats: {
+      findUnique: vi.fn().mockResolvedValue({
+        id: 'chat-1',
+        summary: JSON.stringify({
+          masalahUtama: 'Mengalami ketegangan akademis karena tugas menumpuk.',
+          emosi: ['Cemas', 'Lelah'],
+          poinPenting: ['Mengerjakan tugas kecil', 'Istirahat teratur'],
+          langkahBerikutnya: ['Pernapasan 4-4-4-4', 'Jurnal harian']
+        })
+      }),
+      findFirst: vi.fn().mockResolvedValue({
+        id: 'chat-1',
+        summary: JSON.stringify({
+          masalahUtama: 'Mengalami ketegangan akademis karena tugas menumpuk.',
+          emosi: ['Cemas', 'Lelah'],
+          poinPenting: ['Mengerjakan tugas kecil', 'Istirahat teratur'],
+          langkahBerikutnya: ['Pernapasan 4-4-4-4', 'Jurnal harian']
+        })
+      })
+    },
     assessmentResult: {
       findMany: vi.fn().mockResolvedValue([
         {

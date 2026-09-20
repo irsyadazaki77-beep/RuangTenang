@@ -368,14 +368,17 @@ describe('FASE 7: Data Privacy, Sensitive Data Lifecycle & Security Tests', () =
       const screenCheck = await prisma.screenings.findMany({ where: { userId: TEST_USER_ID } });
       expect(screenCheck).toHaveLength(0);
 
-      // Verify DataErasureRequests has SHA-256 hashed email
+      // Verify DataErasureRequests has HMAC-SHA256 hashed email
       const erasureLog = await prisma.dataErasureRequests.findFirst({
         where: { userId: TEST_USER_ID },
         orderBy: { requestedAt: 'desc' }
       });
       expect(erasureLog).not.toBeNull();
       expect(erasureLog?.userEmail).not.toContain('@');
-      expect(erasureLog?.userEmail).toHaveLength(64); // SHA-256 hex
+      expect(erasureLog?.userEmail).toHaveLength(64); // HMAC-SHA256 hex
+      const secretKey = process.env.BLIND_INDEX_SECRET || process.env.JWT_SECRET || 'ruangtenang_secret_key_for_blind_index_2026';
+      const expectedHmac = crypto.createHmac('sha256', secretKey).update('mahasiswa.rahasia@kampus.ac.id'.toLowerCase().trim().normalize('NFKC')).digest('hex');
+      expect(erasureLog?.userEmail).toBe(expectedHmac);
     });
   });
 

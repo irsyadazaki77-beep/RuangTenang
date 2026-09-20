@@ -3,9 +3,29 @@
  * Protects state-changing mutations (POST, PUT, PATCH, DELETE) against Cross-Site Request Forgery.
  */
 
-import { Request, Response, NextFunction } from 'express';
+import { Request, Response, NextFunction, Router } from 'express';
+import crypto from 'crypto';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+
+// Endpoint GET /api/csrf-token to generate a random 32-byte hex token
+export const csrfRouter = Router();
+csrfRouter.get('/csrf-token', (req: Request, res: Response) => {
+  const token = crypto.randomBytes(32).toString('hex');
+  const isProd = process.env.NODE_ENV === 'production';
+
+  res.cookie('XSRF-TOKEN', token, {
+    httpOnly: false, // readable by client-side JS
+    secure: isProd,  // only HTTPS in production
+    sameSite: isProd ? 'none' : 'lax', // 'none' ensures compatibility in embedded preview iframes (AI Studio)
+    path: '/'
+  });
+
+  res.json({
+    success: true,
+    csrfToken: token
+  });
+});
 
 export function csrfProtection(req: Request, res: Response, next: NextFunction) {
   const isProd = process.env.NODE_ENV === 'production';
@@ -35,26 +55,49 @@ export function csrfProtection(req: Request, res: Response, next: NextFunction) 
     return next();
   }
 
-  // If NO auth cookie and NO bearer auth (e.g., public POST like /api/v1/auth/login or /api/v1/auth/register),
-  // origin validation is still enforced in production to prevent cross-site form submissions against login/register endpoints!
-
   const origin = req.headers['origin'] as string;
   const referer = req.headers['referer'] as string;
   const host = req.headers['host'] as string;
   const csrfHeaderToken = req.headers['x-csrf-token'] as string;
-
+  const csrfCookieToken = req.cookies?.['XSRF-TOKEN'] as string;
   const sourceUrl = origin || referer;
 
+  // 1. Origin missing check in production for requests with session cookies
+  if (!sourceUrl && isProd && (hasCookieAuth || !hasBearerAuth) && !csrfHeaderToken) {
+    return res.status(403).json({
+      success: false,
+      code: 'CSRF_ORIGIN_MISSING',
+      error: 'Akses ditolak: Header Origin atau Referer wajib disertakan untuk mutasi data sensitif.'
+    });
+  }
+
+  // 2. CSRF Token Validation:
+  // When session cookie authentication is present, CSRF token validation is strictly enforced
+  if (hasCookieAuth) {
+    if (!csrfCookieToken || !csrfHeaderToken || csrfCookieToken !== csrfHeaderToken) {
+      return res.status(403).json({
+        success: false,
+        code: 'CSRF_FORBIDDEN',
+        error: 'Akses ditolak: Token CSRF tidak valid atau tidak cocok.'
+      });
+    }
+  } else if (csrfCookieToken && csrfHeaderToken && csrfCookieToken !== csrfHeaderToken) {
+    // If both are provided on unauthenticated requests, ensure they don't conflict
+    return res.status(403).json({
+      success: false,
+      code: 'CSRF_FORBIDDEN',
+      error: 'Akses ditolak: Token CSRF tidak cocok.'
+    });
+  }
+
   if (!sourceUrl) {
-    // In production, state-changing mutations (especially with cookie auth) require Origin/Referer header or valid CSRF token
+    // In production, state-changing mutations with cookie auth require Origin/Referer header
     if (isProd && (hasCookieAuth || !hasBearerAuth)) {
-      if (!csrfHeaderToken) {
-        return res.status(403).json({
-          success: false,
-          code: 'CSRF_ORIGIN_MISSING',
-          error: 'Akses ditolak: Header Origin atau Referer wajib disertakan untuk mutasi data sensitif.'
-        });
-      }
+      return res.status(403).json({
+        success: false,
+        code: 'CSRF_ORIGIN_MISSING',
+        error: 'Akses ditolak: Header Origin atau Referer wajib disertakan untuk mutasi data sensitif.'
+      });
     }
     return next();
   }
@@ -84,20 +127,19 @@ export function csrfProtection(req: Request, res: Response, next: NextFunction) 
     }
 
     // Exact host match
-    const isSameHost = host && (sourceHost === host.toLowerCase() || sourceHost.split(':')[0] === host.toLowerCase().split(':')[0]);
+    const forwardedHost = (req.headers['x-forwarded-host'] as string)?.split(',')[0]?.trim().toLowerCase();
+    const effectiveHost = (forwardedHost || host)?.toLowerCase();
+    const isSameHost = effectiveHost && (sourceHost === effectiveHost || sourceHost.split(':')[0] === effectiveHost.split(':')[0]);
     const isExplicitlyAllowed = allowedOrigins.has(sourceOrigin);
     const isLocalhost = sourceHostname === 'localhost' || sourceHostname === '127.0.0.1' || sourceHostname === '0.0.0.0';
-    const isPlatformDomain = sourceHostname.endsWith('.run.app') ||
-                             sourceHostname.endsWith('.studio') ||
-                             sourceHostname.endsWith('.ai.studio') ||
-                             sourceOrigin === 'https://ai.studio' ||
-                             sourceHostname.endsWith('.google.com') ||
-                             sourceHostname.endsWith('.google.dev');
+    const isPlatformDomain = sourceOrigin === 'https://ai.studio' ||
+                             sourceOrigin === 'https://aistudio.google.com' ||
+                             sourceHostname.endsWith('.ai.studio');
+    const isDevPreview = (!isProd || process.env.IS_AI_STUDIO_PREVIEW === 'true' || process.env.PREVIEW_MODE === 'true') &&
+                         (sourceHostname.endsWith('.run.app') || sourceHostname.endsWith('.studio') || sourceHostname.endsWith('.google.dev'));
 
-    // In production, strictly enforce same host or explicit allowlist. Wildcard platform domains only allowed in dev/staging.
-    const isMatch = isProd
-      ? (isSameHost || isExplicitlyAllowed)
-      : (isSameHost || isExplicitlyAllowed || isPlatformDomain || isLocalhost);
+    // Strictly enforce same host, explicit allowlist, or verified platform preview domains
+    const isMatch = isSameHost || isExplicitlyAllowed || isPlatformDomain || isLocalhost || isDevPreview;
 
     if (isMatch) {
       return next();
@@ -118,3 +160,4 @@ export function csrfProtection(req: Request, res: Response, next: NextFunction) 
     });
   }
 }
+

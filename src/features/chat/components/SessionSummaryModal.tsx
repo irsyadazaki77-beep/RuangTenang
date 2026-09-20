@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { apiClient } from '../../../lib/apiClient';
 import { useToast } from '../../../components/Toast';
 import { StructuredSessionSummary } from '../types';
-import { Sparkles, RefreshCw, Copy, Check, AlertCircle, Calendar, MessageSquareQuote, Target, ShieldCheck } from 'lucide-react';
+import { Sparkles, RefreshCw, Copy, Check, AlertCircle, Calendar, MessageSquareQuote, Target, ShieldCheck, Download, FileText } from 'lucide-react';
 import { ModalShell } from '../../../components/ui/ModalShell';
 
 interface SessionSummaryModalProps {
@@ -15,6 +15,7 @@ export function SessionSummaryModal({ chatId, isOpen, onClose }: SessionSummaryM
   const { showToast } = useToast();
   const [summary, setSummary] = useState<StructuredSessionSummary | null>(null);
   const [loading, setLoading] = useState(false);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -100,6 +101,31 @@ export function SessionSummaryModal({ chatId, isOpen, onClose }: SessionSummaryM
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const handleDownloadPdf = async () => {
+    setDownloadingPdf(true);
+    try {
+      const url = `/api/user-data/export-pdf${chatId ? `?chatId=${encodeURIComponent(chatId)}` : ''}`;
+      const response = await fetch(url, { credentials: 'include' });
+      if (!response.ok) {
+        throw new Error('Gagal mengunduh berkas PDF');
+      }
+      const blob = await response.blob();
+      const downloadUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      a.download = `Resume_Konseling_RuangTenang_${Date.now()}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(downloadUrl);
+      showToast('Laporan PDF berhasil diunduh', 'success');
+    } catch (err: any) {
+      showToast(err?.message || 'Gagal mengunduh laporan PDF', 'error');
+    } finally {
+      setDownloadingPdf(false);
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -131,12 +157,25 @@ export function SessionSummaryModal({ chatId, isOpen, onClose }: SessionSummaryM
         ) : summary ? (
           <>
             {/* Header meta & copy button */}
-            <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60 text-xs">
+            <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60 text-xs">
               <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
                 <Calendar className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
                 <span>Dibuat: {new Date(summary.generatedAt).toLocaleDateString('id-ID')}</span>
               </div>
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <button
+                  onClick={handleDownloadPdf}
+                  disabled={downloadingPdf}
+                  className="flex items-center gap-1.5 px-3 py-1 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium transition-colors cursor-pointer disabled:opacity-50 shadow-xs"
+                  title="Unduh Laporan PDF Resume Konseling"
+                >
+                  {downloadingPdf ? (
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Download className="w-3.5 h-3.5" />
+                  )}
+                  <span>{downloadingPdf ? 'Mengunduh...' : 'Unduh Laporan PDF'}</span>
+                </button>
                 <button
                   onClick={handleCopy}
                   className="flex items-center gap-1 px-2.5 py-1 text-slate-700 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-700/60 rounded-md transition-colors cursor-pointer"

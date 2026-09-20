@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Wind, RotateCcw, Check, Sparkles } from 'lucide-react';
+import { Wind, RotateCcw, Check, Sparkles, Volume2, VolumeX } from 'lucide-react';
 import { ModalShell } from '../../../components/ui/ModalShell';
+import { playTibetanBowlSound } from '../../../lib/soundEffects';
 
 interface BreathingModalProps {
   isOpen: boolean;
@@ -22,6 +23,29 @@ export function BreathingModal({ isOpen, onClose }: BreathingModalProps) {
   const [isCompleted, setIsCompleted] = useState(false);
   const [cycleTime, setCycleTime] = useState(0); // 0 to 14 within current cycle
   const [completedCycles, setCompletedCycles] = useState(0);
+
+  // Sound toggle (persisted in localStorage, default: true)
+  const [isSoundEnabled, setIsSoundEnabled] = useState(() => {
+    try {
+      const saved = localStorage.getItem('rt_breathing_sound');
+      return saved !== null ? saved === 'true' : true;
+    } catch {
+      return true;
+    }
+  });
+
+  const toggleSound = () => {
+    setIsSoundEnabled(prev => {
+      const next = !prev;
+      try {
+        localStorage.setItem('rt_breathing_sound', String(next));
+      } catch {}
+      if (next) {
+        playTibetanBowlSound(432);
+      }
+      return next;
+    });
+  };
 
   // Reset or initialize when modal opens
   useEffect(() => {
@@ -85,7 +109,68 @@ export function BreathingModal({ isOpen, onClose }: BreathingModalProps) {
     phaseSubtext = 'Lepaskan semua ketegangan, biarkan bahumu rileks.';
   }
 
+  // Haptic Sensory & Audio Bell Feedback for breathing phase transitions
+  const prevPhaseRef = React.useRef<BreathingPhase | null>(null);
+
+  useEffect(() => {
+    if (!isOpen || !isActive || isCompleted) {
+      prevPhaseRef.current = null;
+      return;
+    }
+
+    if (prevPhaseRef.current !== currentPhase) {
+      prevPhaseRef.current = currentPhase;
+
+      // Web Audio API: Sound bell guide
+      if (isSoundEnabled) {
+        if (currentPhase === 'inhale') {
+          playTibetanBowlSound(432); // Inhale fundamental bell (432 Hz)
+        } else if (currentPhase === 'exhale') {
+          playTibetanBowlSound(360); // Exhale grounding warm bell (360 Hz)
+        }
+      }
+
+      // Tactile Haptic Vibration
+      if (typeof window !== 'undefined' && 'vibrate' in navigator) {
+        try {
+          if (currentPhase === 'inhale') {
+            // Gentle rising tactile cue: [30, 40, 30]
+            navigator.vibrate([30, 40, 30]);
+          } else if (currentPhase === 'hold') {
+            // Steady grounding pulse
+            navigator.vibrate(30);
+          } else if (currentPhase === 'exhale') {
+            // Calming release tactile cue: 60
+            navigator.vibrate(60);
+          }
+        } catch {
+          // Graceful fallback for devices or browsers blocking vibration
+        }
+      }
+    }
+  }, [currentPhase, isOpen, isActive, isCompleted, isSoundEnabled]);
+
+  // Haptic feedback on session completion
+  useEffect(() => {
+    if (isCompleted && isOpen) {
+      if (typeof window !== 'undefined' && 'vibrate' in navigator) {
+        try {
+          navigator.vibrate([60, 50, 100]);
+        } catch {
+          // Graceful fallback
+        }
+      }
+    }
+  }, [isCompleted, isOpen]);
+
   const handleRestart = () => {
+    if (typeof window !== 'undefined' && 'vibrate' in navigator) {
+      try {
+        navigator.vibrate(30);
+      } catch {
+        // Graceful fallback
+      }
+    }
     setTimeLeft(TOTAL_DURATION_SECONDS);
     setCycleTime(0);
     setCompletedCycles(0);
@@ -106,6 +191,21 @@ export function BreathingModal({ isOpen, onClose }: BreathingModalProps) {
       title="Jeda Hening 1-Menit"
       subtitle="Latihan pernapasan terarah untuk menstabilkan detak jantung & sistem saraf"
       maxWidth="md"
+      headerRight={
+        <button
+          type="button"
+          onClick={toggleSound}
+          className={`p-2 rounded-xl transition-colors cursor-pointer min-w-[38px] min-h-[38px] flex items-center justify-center ${
+            isSoundEnabled
+              ? 'text-teal-600 dark:text-teal-400 bg-teal-50 dark:bg-teal-950/60 hover:bg-teal-100 dark:hover:bg-teal-900/60'
+              : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 bg-slate-100 dark:bg-slate-800'
+          }`}
+          title={isSoundEnabled ? 'Suara Panduan Aktif (Klik untuk mute)' : 'Suara Panduan Hening (Klik untuk bunyikan)'}
+          aria-label={isSoundEnabled ? 'Bisukan suara panduan' : 'Nyalakan suara panduan'}
+        >
+          {isSoundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+        </button>
+      }
     >
       <div className="flex flex-col items-center text-center py-2 sm:py-4 px-2 select-none">
         

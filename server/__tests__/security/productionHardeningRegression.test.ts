@@ -305,18 +305,20 @@ describe('Phase 1 Production Hardening & Regression Test Suite', () => {
       process.env.NODE_ENV = 'production';
       process.env.APP_ORIGIN = 'https://ruangtenang.ui.ac.id';
 
-      // Attacker origin with cookie
+      // Attacker origin with cookie and matching CSRF token but untrusted origin
       const resUntrusted = await request(csrfApp)
         .post('/api/sensitive-mutation')
-        .set('Cookie', ['ruangtenang_session=mock-session'])
+        .set('Cookie', ['ruangtenang_session=mock-session', 'XSRF-TOKEN=test-token'])
+        .set('x-csrf-token', 'test-token')
         .set('Origin', 'https://attacker.run.app');
       expect(resUntrusted.status).toBe(403);
       expect(resUntrusted.body.code).toBe('CSRF_FORBIDDEN');
 
-      // Trusted origin with cookie
+      // Trusted origin with cookie and matching CSRF token
       const resTrusted = await request(csrfApp)
         .post('/api/sensitive-mutation')
-        .set('Cookie', ['ruangtenang_session=mock-session'])
+        .set('Cookie', ['ruangtenang_session=mock-session', 'XSRF-TOKEN=test-token'])
+        .set('x-csrf-token', 'test-token')
         .set('Origin', 'https://ruangtenang.ui.ac.id');
       expect(resTrusted.status).toBe(200);
       expect(resTrusted.body.success).toBe(true);

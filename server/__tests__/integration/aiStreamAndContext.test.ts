@@ -12,8 +12,8 @@ describe('FASE 9: AI Context & Streaming System Upgrade Tests', () => {
   });
 
   describe('1. Token Budgeting & Chunked Chat Summarization', () => {
-    it('returns empty summary for short chat history (<=8 messages)', async () => {
-      const shortHistory = Array.from({ length: 6 }, (_, i) => ({
+    it('returns empty summary for short chat history (<=10 messages)', async () => {
+      const shortHistory = Array.from({ length: 8 }, (_, i) => ({
         id: `msg_${i}`,
         role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
         content: `Pesan percakapan singkat nomor ${i}`
@@ -24,7 +24,7 @@ describe('FASE 9: AI Context & Streaming System Upgrade Tests', () => {
       expect(res.tokensSaved).toBe(0);
     });
 
-    it('summarizes older messages for long chat history (>8 messages) and caches result', async () => {
+    it('summarizes older messages for long chat history (>10 messages) and caches result', async () => {
       const longHistory = Array.from({ length: 15 }, (_, i) => ({
         id: `msg_${i}`,
         role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
@@ -44,7 +44,7 @@ describe('FASE 9: AI Context & Streaming System Upgrade Tests', () => {
 
   describe('2. Context Deduplication & Safety Sanitization', () => {
     it('deduplicates memory content if already present in recent history or summary', async () => {
-      const historyWithTopic = Array.from({ length: 10 }, (_, i) => ({
+      const historyWithTopic = Array.from({ length: 12 }, (_, i) => ({
         id: `msg_${i}`,
         role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
         content: `Saya sedang mengerjakan skripsi di Jakarta`
@@ -58,7 +58,7 @@ describe('FASE 9: AI Context & Streaming System Upgrade Tests', () => {
       });
 
       expect(result.systemContext).not.toContain('ignore');
-      expect(result.recentHistory.length).toBeLessThanOrEqual(6);
+      expect(result.recentHistory.length).toBeLessThanOrEqual(5);
     });
 
     it('sanitizes PII and strips prompt injection delimiters from context', async () => {

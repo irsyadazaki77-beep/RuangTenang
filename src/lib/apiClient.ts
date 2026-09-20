@@ -48,6 +48,13 @@ function extractErrorCode(body: unknown, fallbackCode: string): string {
   return fallbackCode;
 }
 
+function getCookie(name: string): string | null {
+  if (typeof document === 'undefined') return null;
+  const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+  if (match) return decodeURIComponent(match[2]);
+  return null;
+}
+
 export async function fetchWithTimeoutAndRetry<T = unknown>(
   url: string,
   options: RequestInit = {},
@@ -112,6 +119,24 @@ export async function fetchWithTimeoutAndRetry<T = unknown>(
         ...finalHeaders,
         'Idempotency-Key': idempotencyKey
       };
+    }
+  }
+
+  // Also attach CSRF token for mutation requests if cookie is present
+  if (!isGetOrHead) {
+    const csrfToken = getCookie('XSRF-TOKEN');
+    if (csrfToken) {
+      if (options.headers instanceof Headers) {
+        finalHeaders = new Headers(options.headers) as unknown as Record<string, string>;
+        (finalHeaders as unknown as Headers).set('X-CSRF-Token', csrfToken);
+      } else if (Array.isArray(options.headers)) {
+        finalHeaders = [...options.headers, ['X-CSRF-Token', csrfToken]] as unknown as Record<string, string>;
+      } else {
+        finalHeaders = {
+          ...finalHeaders,
+          'X-CSRF-Token': csrfToken
+        };
+      }
     }
   }
 

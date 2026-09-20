@@ -7,6 +7,14 @@ export interface EncryptedRecord {
   updatedAt: string;
 }
 
+export interface OutboxItem {
+  id?: number;
+  type: 'mood_log' | 'journal_entry' | 'screening_result' | 'appointment';
+  url: string;
+  payload: any;
+  createdAt: string;
+}
+
 // Volatile memory stores for current tab/session
 // memoryCipherStore: retains valid AES-GCM ciphertext in memory
 const memoryCipherStore = new Map<string, string>();
@@ -24,6 +32,7 @@ function isIndexedDBAvailable(): boolean {
 class ClientIndexedDB {
   private db: Dexie | null = null;
   private encryptedStore: Table<EncryptedRecord> | null = null;
+  public outboxQueue: Table<OutboxItem> | null = null;
 
   constructor() {
     if (isIndexedDBAvailable()) {
@@ -32,11 +41,17 @@ class ClientIndexedDB {
         this.db.version(1).stores({
           encryptedStore: 'id, updatedAt'
         });
+        this.db.version(2).stores({
+          encryptedStore: 'id, updatedAt',
+          outboxQueue: '++id, type, createdAt'
+        });
         this.encryptedStore = this.db.table('encryptedStore');
+        this.outboxQueue = this.db.table('outboxQueue');
       } catch (e) {
         console.warn('Dexie schema init warning:', e);
         this.db = null;
         this.encryptedStore = null;
+        this.outboxQueue = null;
       }
     }
   }
@@ -107,6 +122,65 @@ class ClientIndexedDB {
       } catch (err) {
         console.warn(`clientDb delete error:`, err);
       }
+    }
+  }
+
+  /**
+   * Add a pending payload to the offline outbox queue
+   */
+  async addToOutbox(type: OutboxItem['type'], url: string, payload: any): Promise<void> {
+    if (this.outboxQueue) {
+      try {
+        await this.outboxQueue.add({
+          type,
+          url,
+          payload,
+          createdAt: new Date().toISOString()
+        });
+      } catch (err) {
+        console.warn('Failed to queue item in outbox:', err);
+      }
+    }
+  }
+
+  /**
+   * Retrieve all items from the offline outbox queue
+   */
+  async getOutboxItems(): Promise<OutboxItem[]> {
+    if (!this.outboxQueue) return [];
+    try {
+      return await this.outboxQueue.toArray();
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Process and sync pending offline items when connection is restored
+   */
+  async processOutboxQueue(apiClientInstance: any): Promise<number> {
+    if (!this.outboxQueue) return 0;
+    try {
+      const items = await this.outboxQueue.toArray();
+      if (items.length === 0) return 0;
+
+      let syncedCount = 0;
+      for (const item of items) {
+        if (!item.id) continue;
+        try {
+          const res = await apiClientInstance.post(item.url, item.payload);
+          if (res && (res.success || res.status < 400)) {
+            await this.outboxQueue.delete(item.id);
+            syncedCount++;
+          }
+        } catch (err) {
+          console.warn(`Outbox item ${item.id} sync attempt failed:`, err);
+        }
+      }
+      return syncedCount;
+    } catch (e) {
+      console.warn('Error processing outbox queue:', e);
+      return 0;
     }
   }
 

@@ -48,31 +48,45 @@ const REDACT_KEYS = new Set([
   'mfacode',
   'mfatoken',
   'otp',
-  'pin'
+  'pin',
+  'payload',
+  'cvv'
 ]);
 
-function sanitize(obj: any): any {
-  if (!obj || typeof obj !== 'object') {
-    if (typeof obj === 'string') {
-      return scanAndSanitizePII(obj).sanitizedText;
-    }
-    return obj;
+export function maskSensitivePayload(data: any): any {
+  if (data === null || data === undefined) {
+    return data;
   }
-  if (Array.isArray(obj)) return obj.map(sanitize);
 
-  const clean: Record<string, any> = {};
-  for (const [key, val] of Object.entries(obj)) {
-    if (REDACT_KEYS.has(key.toLowerCase())) {
-      clean[key] = '[REDACTED]';
-    } else if (typeof val === 'object' && val !== null) {
-      clean[key] = sanitize(val);
-    } else if (typeof val === 'string') {
-      clean[key] = scanAndSanitizePII(val).sanitizedText;
-    } else {
-      clean[key] = val;
-    }
+  if (Array.isArray(data)) {
+    return data.map(maskSensitivePayload);
   }
-  return clean;
+
+  if (typeof data === 'object') {
+    const masked: Record<string, any> = {};
+    for (const [key, val] of Object.entries(data)) {
+      if (REDACT_KEYS.has(key.toLowerCase())) {
+        masked[key] = '[REDACTED]';
+      } else if (typeof val === 'object' && val !== null) {
+        masked[key] = maskSensitivePayload(val);
+      } else if (typeof val === 'string') {
+        masked[key] = scanAndSanitizePII(val).sanitizedText;
+      } else {
+        masked[key] = val;
+      }
+    }
+    return masked;
+  }
+
+  if (typeof data === 'string') {
+    return scanAndSanitizePII(data).sanitizedText;
+  }
+
+  return data;
+}
+
+function sanitize(obj: any): any {
+  return maskSensitivePayload(obj);
 }
 
 export const logger = {

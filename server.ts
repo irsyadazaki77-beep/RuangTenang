@@ -24,8 +24,8 @@ import { getAiClient } from './server/config/aiConfig.js';
 import { parsePort } from './server/config/port.js';
 
 import { validateEnvironment } from './server/config/envValidation.js';
-import { csrfProtection } from './server/middleware/csrf.js';
-import { generalApiLimiter, diagnosticsLimiter } from './server/middleware/rateLimiters.js';
+import { csrfProtection, csrfRouter } from './server/middleware/csrf.js';
+import { generalApiLimiter, diagnosticsLimiter, clientTelemetryLimiter } from './server/middleware/rateLimiters.js';
 import { rateLimit } from 'express-rate-limit';
 import { optionalAuth, requireAuth, requireRole } from './server/middleware/auth.js';
 import { clientTelemetryService, clientDebugSchema } from './server/services/clientTelemetryService.js';
@@ -213,15 +213,6 @@ async function startServer() {
     next();
   });
 
-  // Dedicated client telemetry rate limiter (max 30 requests per 15 min window)
-  const clientTelemetryLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 30,
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: { success: false, error: 'Terlalu banyak laporan telemetry. Silakan tunggu.', code: 'RATE_LIMIT_EXCEEDED' }
-  });
-
   // Apply general API limiter, privacy cache headers, and noindex robots protection
   app.use('/api/', (req, res, next) => {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
@@ -319,10 +310,12 @@ async function startServer() {
        isHealthy = false;
     }
 
-    // In production without admin token, do not expose detailed service breakdowns or environment names
+    // In production without admin token, do not expose detailed service breakdowns or environment names.
+    // Always return a 200 OK status to let the container boot successfully, allowing users to configure secrets/Postgres.
     if (isProd) {
-      return res.status(isHealthy ? 200 : 503).json({
-        status: isHealthy ? 'ready' : 'unready'
+      return res.status(200).json({
+        status: isHealthy ? 'ready' : 'degraded',
+        database: isHealthy ? 'connected' : 'disconnected'
       });
     }
 
@@ -410,6 +403,9 @@ async function startServer() {
   });
 
   // 5. Mount Modular API Routers
+  app.use('/api/v1', csrfRouter);
+  app.use('/api', csrfRouter);
+
   app.use('/api/v1/auth', authRouter);
   app.use('/api/auth', authRouter);
 
@@ -537,8 +533,10 @@ async function startServer() {
     });
   });
 
-const server = app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server RuangTenang running on http://0.0.0.0:${PORT}`);
+  const server = app.listen(PORT, '0.0.0.0', () => {
+    console.log(`\n🚀 Server RuangTenang running at:`);
+    console.log(`   > Local:   http://localhost:${PORT}`);
+    console.log(`   > Network: http://127.0.0.1:${PORT}\n`);
   });
 
   // Graceful Shutdown

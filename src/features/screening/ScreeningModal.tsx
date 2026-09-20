@@ -77,7 +77,7 @@ const cardVariants = {
     scale: 1,
     transition: {
       duration: 0.28,
-      ease: [0.16, 1, 0.3, 1],
+      ease: [0.16, 1, 0.3, 1] as const,
     },
   },
   exit: (direction: 'next' | 'prev') => ({
@@ -86,7 +86,7 @@ const cardVariants = {
     scale: 0.98,
     transition: {
       duration: 0.18,
-      ease: 'easeIn',
+      ease: 'easeIn' as const,
     },
   }),
 };
@@ -905,13 +905,13 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
                 <button
                   onClick={() => {
                     onClose();
-                    navigate('/');
+                    navigate('/', { state: { discussScreening: finalResult } });
                   }}
-                  className="p-3 rounded-xl border border-teal-200/60 dark:border-teal-900 hover:border-teal-300 dark:hover:border-teal-800 bg-teal-50/40 dark:bg-teal-950/20 hover:bg-teal-50 dark:hover:bg-teal-950/40 text-left transition-all group flex items-start gap-2.5 cursor-pointer"
+                  className="p-3 rounded-xl border border-teal-200/60 dark:border-teal-900 hover:border-teal-300 dark:hover:border-teal-800 bg-teal-50/40 dark:bg-teal-950/20 hover:bg-teal-50 dark:hover:bg-teal-950/40 text-left transition-all group flex items-start gap-2.5 cursor-pointer shadow-3xs hover:shadow-xs"
                 >
                   <MessageSquare className="w-4 h-4 text-teal-600 dark:text-teal-400 mt-0.5 shrink-0 group-hover:scale-110 transition-transform" />
                   <div>
-                    <span className="text-xs font-bold text-teal-800 dark:text-teal-300 block mb-0.5">Diskusikan Hasil di Chat</span>
+                    <span className="text-xs font-bold text-teal-800 dark:text-teal-300 block mb-0.5">Bahas Hasil Ini Bersama AI</span>
                     <span className="text-[10.5px] text-teal-600 dark:text-teal-400/80 leading-snug block">Bimbing asisten AI untuk mengurai perasaan Anda secara aman dan personal.</span>
                   </div>
                 </button>

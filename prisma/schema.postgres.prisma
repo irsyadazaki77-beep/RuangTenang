@@ -54,9 +54,7 @@ model Appointments {
   id               String   @id
   counselorId      String
   counselorName    String
-  date             String
-  time             String
-  timezone         String   @default("WIB")
+  scheduledAt      DateTime @default(now())
   notes            String?
   status           String
   approvalStatus   String
@@ -79,8 +77,8 @@ model Appointments {
   @@index([userId])
   @@index([counselorId])
   @@index([userId, status])
-  @@index([counselorId, date, time])
-  @@index([date, status])
+  @@index([counselorId, scheduledAt])
+  @@index([scheduledAt, status])
   @@index([createdAt])
   @@index([studentNimHash])
   @@index([studentEmailHash])
@@ -414,12 +412,11 @@ model SecurityNotification {
 model AppointmentSlot {
   id            String   @id
   counselorId   String
-  date          String
-  time          String
+  scheduledAt   DateTime
   appointmentId String   @unique
   appointment   Appointments @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
 
-  @@unique([counselorId, date, time])
+  @@unique([counselorId, scheduledAt])
 }
 
 model IdempotencyRecord {
@@ -434,27 +431,6 @@ model IdempotencyRecord {
 
   @@index([expiresAt])
   @@index([key, route])
-}
-
-model DistributedState {
-  key        String   @id
-  category   String   // 'RATE_LIMIT' | 'SOS_COOLDOWN' | 'THROTTLE' | 'CIRCUIT_BREAKER'
-  value      String   // JSON payload / count / timestamp
-  expiresAt  DateTime
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-
-  @@index([category, key])
-  @@index([expiresAt])
-}
-
-model DistributedLock {
-  id         String   @id
-  holder     String   // Host / worker pod identifier
-  acquiredAt DateTime @default(now())
-  expiresAt  DateTime
-
-  @@index([expiresAt])
 }
 
 

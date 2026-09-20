@@ -7,6 +7,7 @@ import { prisma, serverDb } from '../../database.js';
 import { getJwtSecret } from '../../middleware/auth.js';
 import emergencyRouter, { clearSosHistoryForTesting } from '../../routes/emergency.js';
 import { encryptionService } from '../../services/encryptionService.js';
+import { redisService } from '../../services/redisService.js';
 
 const app = express();
 app.use(express.json());
@@ -131,13 +132,7 @@ describe('SOS Trigger API Contract & Security Integration Tests', () => {
 
   beforeEach(async () => {
     clearSosHistoryForTesting();
-    await prisma.distributedState.deleteMany({
-      where: {
-        key: {
-          contains: 'user-sos-contract'
-        }
-      }
-    });
+    await redisService.delPattern('*user-sos-contract*');
   });
 
   afterAll(async () => {

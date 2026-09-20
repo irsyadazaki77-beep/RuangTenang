@@ -1,10 +1,10 @@
 /**
  * Persistent Distributed State Service
  * Handles multi-instance rate-limiting, SOS cooldowns, security throttling, and circuit breakers.
- * Backed by Redis with graceful fallback to DistributedState table in the database.
+ * 100% backed by Redis atomic operations (SETNX, EX, INCR, PEXPIRE) with graceful in-memory fallback.
+ * Eliminates RDBMS connection pool bottlenecks by removing distributed state table queries.
  */
 
-import { prisma } from '../database.js';
 import { redisService } from './redisService.js';
 
 export interface RateLimitResult {
@@ -20,36 +20,67 @@ export interface SosCooldownResult {
   lastDispatchTimestamp?: number;
 }
 
+class MemoryStateStore {
+  private static store = new Map<string, { value: string; expiresAt: number }>();
+
+  static set(compositeKey: string, value: any, ttlSeconds: number): void {
+    const expiresAt = Date.now() + ttlSeconds * 1000;
+    const valueStr = typeof value === 'string' ? value : JSON.stringify(value);
+    this.store.set(compositeKey, { value: valueStr, expiresAt });
+  }
+
+  static get<T = any>(compositeKey: string): T | null {
+    const entry = this.store.get(compositeKey);
+    if (!entry) return null;
+    if (Date.now() > entry.expiresAt) {
+      this.store.delete(compositeKey);
+      return null;
+    }
+    try {
+      return JSON.parse(entry.value) as T;
+    } catch {
+      return entry.value as any;
+    }
+  }
+
+  static delete(compositeKey: string): void {
+    this.store.delete(compositeKey);
+  }
+
+  static incr(compositeKey: string, windowSeconds: number): number {
+    const entry = this.store.get(compositeKey);
+    let count = 1;
+    const now = Date.now();
+    if (entry && now <= entry.expiresAt) {
+      try {
+        count = parseInt(entry.value, 10) + 1;
+      } catch {
+        count = 1;
+      }
+      entry.value = count.toString();
+    } else {
+      this.set(compositeKey, "1", windowSeconds);
+    }
+    return count;
+  }
+}
+
 export class DistributedStateService {
   /**
    * Set a key-value pair with TTL in seconds
    */
   static async set(category: string, key: string, value: any, ttlSeconds: number): Promise<void> {
     const compositeKey = `${category}:${key}`;
-    const expiresAt = new Date(Date.now() + ttlSeconds * 1000);
-    const valueStr = typeof value === 'string' ? value : JSON.stringify(value);
-
-    // 1. Write to Redis/In-Memory Cache
-    await redisService.set(compositeKey, valueStr, ttlSeconds);
-
-    // 2. Non-blocking sync to DB
-    prisma.distributedState.upsert({
-      where: { key: compositeKey },
-      create: {
-        key: compositeKey,
-        category,
-        value: valueStr,
-        expiresAt,
-      },
-      update: {
-        category,
-        value: valueStr,
-        expiresAt,
-        updatedAt: new Date(),
-      },
-    }).catch((err: any) => {
-      console.warn(`[DISTRIBUTED_STATE] DB sync warning for key ${compositeKey}:`, err.message);
-    });
+    try {
+      if (await redisService.isHealthy()) {
+        const valueStr = typeof value === 'string' ? value : JSON.stringify(value);
+        await redisService.set(compositeKey, valueStr, ttlSeconds);
+        return;
+      }
+    } catch (err: any) {
+      console.warn(`[DISTRIBUTED_STATE] Redis set failed for ${compositeKey}:`, err.message);
+    }
+    MemoryStateStore.set(compositeKey, value, ttlSeconds);
   }
 
   /**
@@ -57,43 +88,14 @@ export class DistributedStateService {
    */
   static async get<T = any>(category: string, key: string): Promise<T | null> {
     const compositeKey = `${category}:${key}`;
-
-    // 1. Try Redis/In-Memory
-    const cached = await redisService.get<T>(compositeKey);
-    if (cached !== null) {
-      return cached;
-    }
-
-    // 2. Fallback to Database
     try {
-      const record = await prisma.distributedState.findUnique({
-        where: { key: compositeKey },
-      });
-
-      if (!record) return null;
-
-      if (new Date(record.expiresAt).getTime() <= Date.now()) {
-        // Expired, asynchronously clean up
-        prisma.distributedState.delete({ where: { key: compositeKey } }).catch(() => {});
-        return null;
+      if (await redisService.isHealthy()) {
+        return await redisService.get<T>(compositeKey);
       }
-
-      let parsed: T;
-      try {
-        parsed = JSON.parse(record.value) as T;
-      } catch {
-        parsed = record.value as unknown as T;
-      }
-
-      // Populate cache
-      const ttlRemaining = Math.max(1, Math.floor((new Date(record.expiresAt).getTime() - Date.now()) / 1000));
-      await redisService.set(compositeKey, record.value, ttlRemaining);
-
-      return parsed;
     } catch (err: any) {
-      console.warn(`[DISTRIBUTED_STATE] Failed to read state from DB for key ${compositeKey}:`, err.message);
-      return null;
+      console.warn(`[DISTRIBUTED_STATE] Redis get failed for ${compositeKey}:`, err.message);
     }
+    return MemoryStateStore.get<T>(compositeKey);
   }
 
   /**
@@ -101,18 +103,20 @@ export class DistributedStateService {
    */
   static async delete(category: string, key: string): Promise<void> {
     const compositeKey = `${category}:${key}`;
-    await redisService.del(compositeKey);
     try {
-      await prisma.distributedState.delete({
-        where: { key: compositeKey },
-      });
-    } catch {
-      // Ignored if key doesn't exist
+      if (await redisService.isHealthy()) {
+        await redisService.del(compositeKey);
+        return;
+      }
+    } catch (err: any) {
+      console.warn(`[DISTRIBUTED_STATE] Redis delete failed for ${compositeKey}:`, err.message);
     }
+    MemoryStateStore.delete(compositeKey);
   }
 
   /**
    * Sliding window / Token rate-limiting safe for multi-instance deployments
+   * Uses Redis atomic INCR and EXPIRE operations
    */
   static async checkRateLimit(
     key: string,
@@ -124,42 +128,35 @@ export class DistributedStateService {
     const now = Date.now();
 
     try {
-      const currentCount = await redisService.incr(compositeKey, windowSeconds);
-      const resetTime = now + windowSeconds * 1000;
+      if (await redisService.isHealthy()) {
+        const currentCount = await redisService.incr(compositeKey, windowSeconds);
+        const resetTime = now + windowSeconds * 1000;
 
-      const allowed = currentCount <= maxRequests;
-      const remaining = Math.max(0, maxRequests - currentCount);
+        const allowed = currentCount <= maxRequests;
+        const remaining = Math.max(0, maxRequests - currentCount);
 
-      // Async DB sync for durability/auditing
-      prisma.distributedState.upsert({
-        where: { key: compositeKey },
-        create: {
-          key: compositeKey,
-          category,
-          value: String(currentCount),
-          expiresAt: new Date(resetTime),
-        },
-        update: {
-          value: String(currentCount),
-          expiresAt: new Date(resetTime),
-        },
-      }).catch(() => {});
-
-      return {
-        allowed,
-        count: currentCount,
-        remaining,
-        resetTime,
-      };
+        return {
+          allowed,
+          count: currentCount,
+          remaining,
+          resetTime,
+        };
+      }
     } catch (err: any) {
-      console.warn(`[DISTRIBUTED_STATE] Rate limit check error for ${key}:`, err.message);
-      return {
-        allowed: true,
-        count: 1,
-        remaining: maxRequests - 1,
-        resetTime: now + windowSeconds * 1000,
-      };
+      console.warn(`[DISTRIBUTED_STATE] Redis rate limit check failed for ${key}, using in-memory:`, err.message);
     }
+
+    const currentCount = MemoryStateStore.incr(compositeKey, windowSeconds);
+    const resetTime = now + windowSeconds * 1000;
+    const allowed = currentCount <= maxRequests;
+    const remaining = Math.max(0, maxRequests - currentCount);
+
+    return {
+      allowed,
+      count: currentCount,
+      remaining,
+      resetTime,
+    };
   }
 
   /**
@@ -217,21 +214,9 @@ export class DistributedStateService {
   }
 
   /**
-   * Clean expired state records in bulk
+   * Clean expired state records in bulk (No-op as Redis handles TTL automatically)
    */
   static async cleanExpired(): Promise<number> {
-    try {
-      const res = await prisma.distributedState.deleteMany({
-        where: {
-          expiresAt: {
-            lte: new Date(),
-          },
-        },
-      });
-      return res.count;
-    } catch {
-      return 0;
-    }
+    return 0;
   }
 }
-

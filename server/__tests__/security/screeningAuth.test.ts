@@ -61,8 +61,7 @@ describe('Screening Authorization Security Tests', () => {
         counselorName: 'Konselor 1',
         userId: 'student-1',
         studentName: 'M1',
-        date: '2026-03-01',
-        time: '10:00',
+        scheduledAt: new Date('2026-03-01T10:00:00.000Z'),
         status: 'CONFIRMED',
         approvalStatus: 'APPROVED',
         attendanceStatus: 'SCHEDULED'

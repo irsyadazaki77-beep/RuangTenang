@@ -64,17 +64,25 @@ describe('HttpOnly Cookie Auth Lifecycle & Bootstrap Tests', () => {
   it('bootstraps session via GET /api/v1/auth/me without reading token from localStorage', async () => {
     const getItemSpy = vi.spyOn(Storage.prototype, 'getItem');
 
-    vi.mocked(apiClient.get).mockResolvedValueOnce({
-      success: true,
-      data: {
-        user: {
-          id: 'user-boot-1',
-          name: 'Mahasiswa Beriman',
-          email: 'mhs@ui.ac.id',
-          role: 'mahasiswa',
-          tier: 'Free'
-        }
+    vi.mocked(apiClient.get).mockImplementation((url: string) => {
+      if (url.includes('/csrf-token')) {
+        return Promise.resolve({ success: true, data: { csrfToken: 'mock-csrf' } });
       }
+      if (url.includes('/auth/me')) {
+        return Promise.resolve({
+          success: true,
+          data: {
+            user: {
+              id: 'user-boot-1',
+              name: 'Mahasiswa Beriman',
+              email: 'mhs@ui.ac.id',
+              role: 'mahasiswa',
+              tier: 'Free'
+            }
+          }
+        });
+      }
+      return Promise.resolve({ success: true, data: {} });
     });
 
     let contextUser: any = null;
@@ -104,17 +112,25 @@ describe('HttpOnly Cookie Auth Lifecycle & Bootstrap Tests', () => {
   });
 
   it('logs out by calling POST /api/auth/logout and resetting state without localStorage', async () => {
-    vi.mocked(apiClient.get).mockResolvedValueOnce({
-      success: true,
-      data: {
-        user: {
-          id: 'user-logout-1',
-          name: 'User In Session',
-          email: 'logout@test.com',
-          role: 'mahasiswa',
-          tier: 'Free'
-        }
+    vi.mocked(apiClient.get).mockImplementation((url: string) => {
+      if (url.includes('/csrf-token')) {
+        return Promise.resolve({ success: true, data: { csrfToken: 'mock-csrf' } });
       }
+      if (url.includes('/auth/me')) {
+        return Promise.resolve({
+          success: true,
+          data: {
+            user: {
+              id: 'user-logout-1',
+              name: 'User In Session',
+              email: 'logout@test.com',
+              role: 'mahasiswa',
+              tier: 'Free'
+            }
+          }
+        });
+      }
+      return Promise.resolve({ success: true, data: {} });
     });
     vi.mocked(apiClient.post).mockResolvedValueOnce({ success: true });
 

@@ -7,13 +7,56 @@ import { blindIndexService } from "../services/crypto/BlindIndexService";
 const HARD_MAX_PAGE_SIZE = 100;
 
 /**
+ * Calculates absolute UTC DateTime from local date string, time string, and timezone.
+ * Handles WIB (+07:00), WITA (+08:00), and WIT (+09:00).
+ */
+export function calculateScheduledAtUtc(dateStr: string, timeStr: string, timezoneStr: string = 'WIB'): Date {
+  const tz = (timezoneStr || 'WIB').toUpperCase();
+  const offsetMap: Record<string, string> = {
+    WIB: '+07:00',
+    WITA: '+08:00',
+    WIT: '+09:00'
+  };
+  const offset = offsetMap[tz] || '+07:00';
+  const cleanTime = (timeStr || '09:00').trim();
+  const timeMatch = cleanTime.match(/(\d{1,2}):(\d{2})/);
+  const hours = timeMatch ? timeMatch[1].padStart(2, '0') : '09';
+  const minutes = timeMatch ? timeMatch[2] : '00';
+  const isoStr = `${dateStr}T${hours}:${minutes}:00${offset}`;
+  const dt = new Date(isoStr);
+  return isNaN(dt.getTime()) ? new Date() : dt;
+}
+
+/**
+ * Converts a UTC scheduledAt date back into local date, time, and timezone fields.
+ */
+export function utcToLocalAppointmentFields(scheduledAt: Date, tz: string = 'WIB'): { date: string; time: string; timezone: "WIB" | "WITA" | "WIT" } {
+  const offsetMap: Record<string, number> = {
+    WIB: 7 * 60, // +07:00 in minutes
+    WITA: 8 * 60, // +08:00 in minutes
+    WIT: 9 * 60  // +09:00 in minutes
+  };
+  const offsetMinutes = offsetMap[tz] || 7 * 60;
+  // Apply local offset to the UTC date
+  const localTime = new Date(scheduledAt.getTime() + offsetMinutes * 60 * 1000);
+  const isoString = localTime.toISOString();
+  const date = isoString.split('T')[0];
+  const timeMatch = isoString.split('T')[1].match(/^(\d{2}):(\d{2})/);
+  const time = timeMatch ? `${timeMatch[1]}:${timeMatch[2]}` : '09:00';
+  return { date, time, timezone: tz as "WIB" | "WITA" | "WIT" };
+}
+
+/**
  * Transforms a raw database record from Prisma into a fully decrypted,
  * strongly-typed `AppointmentRecord` domain model.
  */
 function mapDbAppointmentToRecord(a: any): AppointmentRecord {
+  const fields = utcToLocalAppointmentFields(new Date(a.scheduledAt), 'WIB');
   return {
     ...a,
-    timezone: a.timezone as any,
+    date: fields.date,
+    time: fields.time,
+    timezone: fields.timezone,
     status: a.status as any,
     approvalStatus: a.approvalStatus as any,
     attendanceStatus: a.attendanceStatus as any,
@@ -178,15 +221,21 @@ export class AppointmentRepository {
     }
 
     const standardSlots = ["09:00", "10:30", "14:00", "16:00"];
+    const tz = 'WIB';
+    const slotTimes = standardSlots.map(time => calculateScheduledAtUtc(date, time, tz));
 
     const activeSlots = await prisma.appointmentSlot.findMany({
       where: {
         counselorId,
-        date,
+        scheduledAt: { in: slotTimes },
       },
     });
 
-    const bookedSlots = activeSlots.map((s) => s.time);
+    const bookedSlots = activeSlots.map((s) => {
+      const fields = utcToLocalAppointmentFields(new Date(s.scheduledAt), tz);
+      return fields.time;
+    });
+
     const availableSlots = standardSlots.filter(
       (slot) => !bookedSlots.includes(slot),
     );
@@ -278,13 +327,14 @@ export class AppointmentRepository {
         }
       }
 
+      const scheduledAt = calculateScheduledAtUtc(appt.date, appt.time, appt.timezone || "WIB");
+
       // Check slot availability
       if (!isCancelledOrRejected) {
         const conflict = await tx.appointments.findFirst({
           where: {
             counselorId: resolvedCounselorId,
-            date: appt.date,
-            time: appt.time,
+            scheduledAt,
             status: { notIn: ["CANCELLED", "REJECTED"] },
           },
         });
@@ -299,9 +349,7 @@ export class AppointmentRepository {
           id,
           counselorId: resolvedCounselorId,
           counselorName: appt.counselorName,
-          date: appt.date,
-          time: appt.time,
-          timezone: appt.timezone || "WIB",
+          scheduledAt,
           notes: encryptedNotes,
           status: initialStatus,
           approvalStatus: initialApproval,
@@ -318,14 +366,13 @@ export class AppointmentRepository {
       });
 
       if (!isCancelledOrRejected) {
-        const slotId = `slot-${resolvedCounselorId}-${appt.date}-${appt.time}`;
+        const slotId = `slot-${resolvedCounselorId}-${scheduledAt.getTime()}`;
         try {
           await tx.appointmentSlot.create({
             data: {
               id: slotId,
               counselorId: resolvedCounselorId,
-              date: appt.date,
-              time: appt.time,
+              scheduledAt,
               appointmentId: id,
             },
           });
@@ -342,7 +389,7 @@ export class AppointmentRepository {
           data: {
             id: "log-" + Date.now() + "-" + Math.floor(Math.random() * 1000),
             action: "CREATE_APPOINTMENT",
-            details: `Jadwal konseling (Status: ${initialStatus}) dibuat untuk ID sesi ${id} tanggal ${appt.date} (${created.timezone})`,
+            details: `Jadwal konseling (Status: ${initialStatus}) dibuat untuk ID sesi ${id} tanggal ${appt.date} (${created.scheduledAt.toISOString()})`,
             timestamp: new Date(),
             userRole: appt.userId || "mahasiswa",
           },
@@ -372,18 +419,22 @@ export class AppointmentRepository {
       const current = await tx.appointments.findUnique({ where: { id } });
       if (!current) return null;
 
+      const currentFields = utcToLocalAppointmentFields(new Date(current.scheduledAt), 'WIB');
       const targetCounselorId = updates.counselorId || current.counselorId;
-      const targetDate = updates.date || current.date;
-      const targetTime = updates.time || current.time;
+      const targetDate = updates.date || currentFields.date;
+      const targetTime = updates.time || currentFields.time;
       const targetStatus = updates.status || current.status;
 
       const isCancelledOrRejected = ["CANCELLED", "REJECTED"].includes(targetStatus);
       const isChangingSlot =
-        (updates.date && updates.date !== current.date) ||
-        (updates.time && updates.time !== current.time) ||
+        (updates.date && updates.date !== currentFields.date) ||
+        (updates.time && updates.time !== currentFields.time) ||
         (updates.counselorId && updates.counselorId !== current.counselorId);
 
       const wasCancelledOrRejected = ["CANCELLED", "REJECTED"].includes(current.status);
+
+      const targetTimezone = updates.timezone || currentFields.timezone || "WIB";
+      const scheduledAt = calculateScheduledAtUtc(targetDate, targetTime, targetTimezone);
 
       if (isCancelledOrRejected) {
         await tx.appointmentSlot.deleteMany({
@@ -394,14 +445,13 @@ export class AppointmentRepository {
           where: { appointmentId: id },
         });
 
-        const slotId = `slot-${targetCounselorId}-${targetDate}-${targetTime}`;
+        const slotId = `slot-${targetCounselorId}-${scheduledAt.getTime()}`;
         try {
           await tx.appointmentSlot.create({
             data: {
               id: slotId,
               counselorId: targetCounselorId,
-              date: targetDate,
-              time: targetTime,
+              scheduledAt,
               appointmentId: id,
             },
           });
@@ -441,9 +491,7 @@ export class AppointmentRepository {
         data: {
           counselorId: updates.counselorId,
           counselorName: updates.counselorName,
-          date: updates.date,
-          time: updates.time,
-          timezone: updates.timezone,
+          scheduledAt,
           notes: encryptedNotes,
           status: updates.status,
           approvalStatus: updates.approvalStatus,
@@ -473,8 +521,8 @@ export class AppointmentRepository {
         console.warn("Non-fatal audit log failure in transaction:", logErr);
       }
 
-      await redisService.del(`availability:${current.counselorId}:${current.date}`);
-      if (targetCounselorId !== current.counselorId || targetDate !== current.date) {
+      await redisService.del(`availability:${current.counselorId}:${currentFields.date}`);
+      if (targetCounselorId !== current.counselorId || targetDate !== currentFields.date) {
         await redisService.del(`availability:${targetCounselorId}:${targetDate}`);
       }
 
@@ -512,7 +560,8 @@ export class AppointmentRepository {
         });
 
         if (appt) {
-          await redisService.del(`availability:${appt.counselorId}:${appt.date}`);
+          const apptFields = utcToLocalAppointmentFields(new Date(appt.scheduledAt), 'WIB');
+          await redisService.del(`availability:${appt.counselorId}:${apptFields.date}`);
         }
       });
 

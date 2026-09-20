@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Smile, X, Lightbulb, RefreshCw, Check } from 'lucide-react';
 import { apiClient } from '../../lib/apiClient';
+import { clientDb } from '../../lib/clientDb';
 
 export interface MoodLog {
   id: string;
@@ -141,18 +142,67 @@ export const DailyCheckinModal: React.FC<DailyCheckinModalProps> = ({
     }
 
     setIsSubmitting(true);
+    const payload = { 
+      mood: selectedMood, 
+      notes: journalNote.trim(), 
+      sleepHours,
+      sleepQuality: sleepQuality === 'Nyenyak' ? 'good' : sleepQuality === 'Insomnia' ? 'very_poor' : 'poor',
+      factors: selectedFactors,
+      emotions: selectedEmotions 
+    };
+
     try {
-      const res = await apiClient.post<{ success: boolean; log: any }>("/api/v1/mood", { 
-        mood: selectedMood, 
-        notes: journalNote.trim(), 
-        sleepHours,
-        sleepQuality: sleepQuality === 'Nyenyak' ? 'good' : sleepQuality === 'Insomnia' ? 'very_poor' : 'poor',
-        factors: selectedFactors,
-        emotions: selectedEmotions 
-      });
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        // Offline mode fallback
+        await clientDb.addToOutbox('mood_log', '/api/v1/mood', payload);
+        const offlineLog: MoodLog = {
+          id: `offline-${Date.now()}`,
+          date: logDate,
+          mood: selectedMood,
+          emotions: selectedEmotions,
+          notes: journalNote.trim() ? `${journalNote.trim()} (Offline)` : '(Disimpan Offline)',
+          factors: selectedFactors,
+          sleepHours,
+          sleepQuality: sleepQuality === 'Nyenyak' ? 'good' : sleepQuality === 'Insomnia' ? 'very_poor' : 'poor'
+        };
+
+        setSelectedMood(null);
+        setSelectedEmotions([]);
+        setSelectedFactors([]);
+        setJournalNote('');
+        setLogDate(new Date().toISOString().split('T')[0]);
+
+        onSaveSuccess(offlineLog);
+        onClose();
+        showToast('Catatan Mood disimpan di antrean offline. Akan disinkronkan saat terhubung.', 'info');
+        return;
+      }
+
+      const res = await apiClient.post<{ success: boolean; log: any }>("/api/v1/mood", payload);
 
       if (!res.success || !res.data?.log) {
-        showToast(res.error || 'Gagal menyimpan catatan mood ke server.', 'error');
+        // Fallback to outbox on API failure
+        await clientDb.addToOutbox('mood_log', '/api/v1/mood', payload);
+        const offlineLog: MoodLog = {
+          id: `offline-${Date.now()}`,
+          date: logDate,
+          mood: selectedMood,
+          emotions: selectedEmotions,
+          notes: journalNote.trim() ? `${journalNote.trim()} (Offline)` : '(Disimpan Offline)',
+          factors: selectedFactors,
+          sleepHours,
+          sleepQuality: sleepQuality === 'Nyenyak' ? 'good' : sleepQuality === 'Insomnia' ? 'very_poor' : 'poor'
+        };
+
+        setSelectedMood(null);
+        setSelectedEmotions([]);
+        setSelectedFactors([]);
+        setJournalNote('');
+        setLogDate(new Date().toISOString().split('T')[0]);
+
+        onSaveSuccess(offlineLog);
+        onClose();
+        showToast('Koneksi terganggu. Catatan Mood disimpan offline.', 'warning');
         return;
       }
 
@@ -184,7 +234,27 @@ export const DailyCheckinModal: React.FC<DailyCheckinModalProps> = ({
       showToast('Catatan Mood harian berhasil disimpan! 🎉', 'success');
     } catch (err: any) {
       console.error("Failed to sync mood with backend:", err);
-      showToast('Terjadi kesalahan jaringan saat menyimpan catatan mood.', 'error');
+      await clientDb.addToOutbox('mood_log', '/api/v1/mood', payload);
+      const offlineLog: MoodLog = {
+        id: `offline-${Date.now()}`,
+        date: logDate,
+        mood: selectedMood,
+        emotions: selectedEmotions,
+        notes: journalNote.trim() ? `${journalNote.trim()} (Offline)` : '(Disimpan Offline)',
+        factors: selectedFactors,
+        sleepHours,
+        sleepQuality: sleepQuality === 'Nyenyak' ? 'good' : sleepQuality === 'Insomnia' ? 'very_poor' : 'poor'
+      };
+
+      setSelectedMood(null);
+      setSelectedEmotions([]);
+      setSelectedFactors([]);
+      setJournalNote('');
+      setLogDate(new Date().toISOString().split('T')[0]);
+
+      onSaveSuccess(offlineLog);
+      onClose();
+      showToast('Gagal terhubung ke server. Catatan Mood disimpan di antrean offline.', 'warning');
     } finally {
       setIsSubmitting(false);
     }

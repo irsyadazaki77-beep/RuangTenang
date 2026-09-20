@@ -359,7 +359,8 @@ describe('HttpOnly Cookie Authentication Compliance Tests', () => {
       });
 
     expect(res.status).toBe(201);
-    const cookies = res.headers['set-cookie'] as string[];
+    const rawCookies = res.headers['set-cookie'];
+    const cookies = (Array.isArray(rawCookies) ? rawCookies : (rawCookies ? [rawCookies] : [])) as string[];
     expect(cookies).toBeDefined();
 
     const authCookie = cookies.find((c: string) => c.startsWith('rt_auth_token='));
@@ -383,7 +384,8 @@ describe('HttpOnly Cookie Authentication Compliance Tests', () => {
       });
 
     expect(res.status).toBe(200);
-    const cookies = res.headers['set-cookie'] as string[];
+    const rawCookies = res.headers['set-cookie'];
+    const cookies = (Array.isArray(rawCookies) ? rawCookies : (rawCookies ? [rawCookies] : [])) as string[];
     expect(cookies).toBeDefined();
 
     const authCookie = cookies.find((c: string) => c.startsWith('rt_auth_token='));
@@ -398,7 +400,8 @@ describe('HttpOnly Cookie Authentication Compliance Tests', () => {
       .post('/api/auth/logout');
 
     expect(res.status).toBe(200);
-    const cookies = res.headers['set-cookie'] as string[];
+    const rawCookies = res.headers['set-cookie'];
+    const cookies = (Array.isArray(rawCookies) ? rawCookies : (rawCookies ? [rawCookies] : [])) as string[];
     expect(cookies).toBeDefined();
 
     const clearedCookie = cookies.find((c: string) => c.startsWith('rt_auth_token='));

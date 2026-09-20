@@ -27,7 +27,7 @@ export const WorkspaceLayout: React.FC<WorkspaceLayoutProps> = ({
   const shouldReduceMotion = useReducedMotion();
 
   return (
-    <div className="flex-1 flex flex-col h-[100dvh] max-h-[100dvh] overflow-hidden bg-white dark:bg-[#131314] relative min-w-0">
+    <div className="flex-1 flex flex-col h-[100dvh] max-h-[100dvh] overflow-hidden bg-white/40 dark:bg-transparent backdrop-blur-[2px] relative min-w-0">
       {/* Top Navbar */}
       <header className="h-12 md:h-13 surface-card px-3 sm:px-4 flex items-center justify-between shrink-0 sticky top-0 z-20 border-b border-default">
         <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">

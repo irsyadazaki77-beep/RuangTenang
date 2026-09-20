@@ -5,7 +5,7 @@ import { GoogleGenAI } from '@google/genai';
  */
 
 export const DEFAULT_AI_MODEL = 'gemini-2.5-flash';
-export const RESILIENT_FALLBACK_AI_MODEL = 'gemini-3.5-flash-lite';
+export const RESILIENT_FALLBACK_AI_MODEL = 'gemini-2.5-flash-lite';
 
 export const CALMING_FALLBACK_MESSAGE = 'Maaf ya, aku lagi agak kesulitan merespons saat ini 🌿. Kamu boleh coba lagi beberapa saat lagi, atau langsung hubungi konselor kampus yaa 🤍.';
 
@@ -16,10 +16,10 @@ export const AI_MODELS = {
   DYNAMIC_FLASH: 'gemini-flash-latest',
   PRO_REASONING: 'gemini-3.1-pro-preview',
   BALANCED: 'gemini-2.5-flash',
-  PRO_LEGACY: 'gemini-2.5-flash',
-  LITE_FAST: 'gemini-3.5-flash-lite',
-  LITE_LEGACY: 'gemini-3.5-flash-lite',
-  FALLBACK: 'gemini-3.5-flash-lite',
+  PRO_LEGACY: 'gemini-2.5-pro',
+  LITE_FAST: 'gemini-2.5-flash-lite',
+  LITE_LEGACY: 'gemini-3.1-flash-lite',
+  FALLBACK: 'gemini-2.5-flash-lite',
   CRISIS_CLASSIFIER: 'gemini-2.5-flash',
   COUNSELOR_SIMULATION: 'gemini-2.5-flash',
 } as const;
@@ -123,7 +123,7 @@ export const AI_CONFIG = {
   TEMPERATURE_PRECISE: 0.2,
   TOP_P: 0.9,
   MAX_OUTPUT_TOKENS: 1000,
-  MAX_HISTORY_MESSAGES: 12,
+  MAX_HISTORY_MESSAGES: 60,
 
   // Retry settings
   MAX_RETRIES: 2,

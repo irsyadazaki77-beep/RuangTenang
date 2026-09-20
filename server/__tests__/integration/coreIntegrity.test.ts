@@ -117,7 +117,6 @@ describe('Core Feature Integrity Integration Tests (FASE 8)', () => {
 
   beforeEach(async () => {
     await redisService.flush();
-    await prisma.distributedState.deleteMany({});
   });
 
   afterAll(async () => {

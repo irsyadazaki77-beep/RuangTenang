@@ -15,7 +15,8 @@ import {
   CheckCircle2, 
   Plus, 
   ChevronRight,
-  Brain
+  Brain,
+  MessageSquare
 } from 'lucide-react';
 import { EmptyState } from '../../components/common/EmptyState';
 import { apiClient } from '../../lib/apiClient';
@@ -651,6 +652,23 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
                         <span>{log.sleepHours} Jam {log.sleepQuality ? `(${log.sleepQuality})` : ''}</span>
                       </div>
                     )}
+                  </div>
+
+                  {/* One-Click Discussion with AI Assistant */}
+                  <div className="pt-2 border-t border-default/70 flex items-center justify-end">
+                    <button
+                      type="button"
+                      onClick={() => navigate('/', { state: { discussMood: log } })}
+                      className={`px-3 py-1.5 min-h-[34px] rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                        log.mood <= 2
+                          ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-900/60 border border-rose-200 dark:border-rose-800'
+                          : 'surface-muted text-secondary hover:text-primary hover:bg-slate-200/60 dark:hover:bg-slate-800/80 border border-default'
+                      }`}
+                      title="Bahas kondisi perasaan ini langsung bersama AI Pendamping"
+                    >
+                      <MessageSquare className="w-3.5 h-3.5" />
+                      <span>{log.mood <= 2 ? 'Bahas Keluhan Ini Bersama AI' : 'Bahas di Chat'}</span>
+                    </button>
                   </div>
                 </div>
               );

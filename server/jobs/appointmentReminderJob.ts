@@ -1,6 +1,7 @@
 import cron from 'node-cron';
-import { prisma } from '../database';
-import { DistributedLockService } from '../services/distributedLockService';
+import { prisma } from '../database.js';
+import { DistributedLockService } from '../services/distributedLockService.js';
+import { redisService } from '../services/redisService.js';
 
 /**
  * Appointment Reminder Job Queue
@@ -42,8 +43,7 @@ async function processReminders() {
 
   for (const appt of upcomingAppointments) {
     try {
-      const apptDateStr = `${appt.date}T${appt.time}:00`;
-      const apptDate = new Date(apptDateStr);
+      const apptDate = new Date(appt.scheduledAt);
       if (isNaN(apptDate.getTime())) {
         continue;
       }
@@ -70,24 +70,15 @@ async function sendReminder(appt: any, milestone: string, message: string) {
   const reminderKey = `reminder:${appt.id}:${milestone}`;
   
   try {
-    // Check if already sent
-    const existing = await prisma.distributedState.findUnique({ where: { key: reminderKey } });
+    // Check if already sent in Redis
+    const existing = await redisService.get<string>(reminderKey);
     if (existing) return; // Already sent
 
     const studentDisplayName = appt.studentName || appt.user?.name || 'Mahasiswa';
     console.log(`[ReminderJob] Sending ${milestone} reminder (${message}) to ${studentDisplayName} for appointment ${appt.id}`);
     
-    // Mark as sent atomically using upsert to avoid duplicate key errors
-    await prisma.distributedState.upsert({
-      where: { key: reminderKey },
-      update: {},
-      create: {
-        key: reminderKey,
-        category: 'REMINDER_LOG',
-        value: 'SENT',
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // Keep log for 7 days
-      }
-    });
+    // Mark as sent atomically in Redis with a 7-day TTL
+    await redisService.set(reminderKey, 'SENT', 7 * 24 * 60 * 60);
   } catch (err) {
     console.error(`[ReminderJob] Failed to send ${milestone} reminder for appointment ${appt.id}:`, err);
   }

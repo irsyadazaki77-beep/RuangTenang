@@ -1,13 +1,44 @@
 /**
  * Distributed Lock Service
  * Provides multi-instance safe locks for scheduled background jobs (e.g. data retention, migrations, batch tasks).
- * Utilizes Redis atomic lock (SET key val NX EX) with DB lease lock fallback.
+ * Utilizes Redis atomic lock (SET key val EX ttl NX) with graceful in-memory fallback.
+ * 100% decoupled from RDBMS connection pool to eliminate database bottlenecks.
  */
 
 import crypto from 'crypto';
 import os from 'os';
-import { prisma } from '../database.js';
 import { redisService } from './redisService.js';
+
+class MemoryLockStore {
+  private static locks = new Map<string, { holder: string; expiresAt: number }>();
+
+  static acquire(lockId: string, holder: string, ttlSeconds: number): boolean {
+    const now = Date.now();
+    const existing = this.locks.get(lockId);
+    if (existing && now <= existing.expiresAt) {
+      if (existing.holder === holder) {
+        existing.expiresAt = now + ttlSeconds * 1000;
+        return true;
+      }
+      return false;
+    }
+    this.locks.set(lockId, { holder, expiresAt: now + ttlSeconds * 1000 });
+    return true;
+  }
+
+  static release(lockId: string, holder: string): boolean {
+    const existing = this.locks.get(lockId);
+    if (!existing || Date.now() > existing.expiresAt) {
+      this.locks.delete(lockId);
+      return true;
+    }
+    if (existing.holder === holder) {
+      this.locks.delete(lockId);
+      return true;
+    }
+    return false;
+  }
+}
 
 export class DistributedLockService {
   private static instanceId = `${os.hostname()}-${process.pid}-${crypto.randomBytes(4).toString('hex')}`;
@@ -18,82 +49,31 @@ export class DistributedLockService {
    */
   static async acquireLock(lockId: string, ttlSeconds: number = 300, customHolder?: string): Promise<boolean> {
     const holder = customHolder || this.instanceId;
-    const now = new Date();
-    const expiresAt = new Date(now.getTime() + ttlSeconds * 1000);
     const redisLockKey = `lock:${lockId}`;
 
-    // 1. Try Redis Atomic Lock (SET key val NX EX)
-    const redisAcquired = await redisService.setnx(redisLockKey, holder, ttlSeconds);
-    if (redisAcquired) {
-      // Sync to DB for monitoring/fallback
-      try {
-        await prisma.distributedLock.upsert({
-          where: { id: lockId },
-          create: {
-            id: lockId,
-            holder,
-            acquiredAt: now,
-            expiresAt,
-          },
-          update: {
-            holder,
-            acquiredAt: now,
-            expiresAt,
-          },
-        });
-      } catch (_) {}
-
-      return true;
-    }
-
-    // Check if Redis lock exists and belongs to holder (renew lock)
-    const existingHolder = await redisService.get<string>(redisLockKey);
-    if (existingHolder) {
-      if (existingHolder === holder) {
-        await redisService.set(redisLockKey, holder, ttlSeconds);
-        return true;
-      }
-      // Redis lock is actively held by another instance
-      return false;
-    }
-
-    // 2. Fallback to Database Lock if Redis did not acquire
     try {
-      const existing = await prisma.distributedLock.findUnique({
-        where: { id: lockId },
-      });
-
-      if (existing) {
-        // If expired or already held by this instance, renew lock
-        if (new Date(existing.expiresAt).getTime() <= now.getTime() || existing.holder === holder) {
-          await prisma.distributedLock.update({
-            where: { id: lockId },
-            data: {
-              holder,
-              acquiredAt: now,
-              expiresAt,
-            },
-          });
+      if (await redisService.isHealthy()) {
+        // 1. Try Redis Atomic Lock (SET key val EX ttl NX)
+        const redisAcquired = await redisService.setnx(redisLockKey, holder, ttlSeconds);
+        if (redisAcquired) {
           return true;
         }
-        // Held by another active instance
+
+        // Check if Redis lock exists and belongs to holder (renew lock)
+        const existingHolder = await redisService.get<string>(redisLockKey);
+        if (existingHolder && existingHolder === holder) {
+          await redisService.set(redisLockKey, holder, ttlSeconds);
+          return true;
+        }
+
         return false;
       }
-
-      // Create new DB lock if not existing in DB
-      await prisma.distributedLock.create({
-        data: {
-          id: lockId,
-          holder,
-          acquiredAt: now,
-          expiresAt,
-        },
-      });
-      return true;
     } catch (err: any) {
-      console.warn(`[DISTRIBUTED_LOCK] Failed to acquire lock for ${lockId}:`, err.message);
-      return false;
+      console.warn(`[DISTRIBUTED_LOCK] Redis healthy check/op failed, falling back to in-memory lock for ${lockId}:`, err.message);
     }
+
+    // Graceful in-memory fallback
+    return MemoryLockStore.acquire(lockId, holder, ttlSeconds);
   }
 
   /**
@@ -103,32 +83,21 @@ export class DistributedLockService {
     const holder = customHolder || this.instanceId;
     const redisLockKey = `lock:${lockId}`;
 
-    let released = false;
-
-    // 1. Release from Redis
-    const currentRedisHolder = await redisService.get<string>(redisLockKey);
-    if (currentRedisHolder === holder || !currentRedisHolder) {
-      await redisService.del(redisLockKey);
-      released = true;
-    }
-
-    // 2. Release from DB
     try {
-      const existing = await prisma.distributedLock.findUnique({
-        where: { id: lockId },
-      });
-
-      if (existing && existing.holder === holder) {
-        await prisma.distributedLock.delete({
-          where: { id: lockId },
-        });
-        released = true;
+      if (await redisService.isHealthy()) {
+        const currentRedisHolder = await redisService.get<string>(redisLockKey);
+        if (currentRedisHolder === holder || !currentRedisHolder) {
+          await redisService.del(redisLockKey);
+          return true;
+        }
+        return false;
       }
     } catch (err: any) {
-      console.warn(`[DISTRIBUTED_LOCK] Failed to release DB lock for ${lockId}:`, err.message);
+      console.warn(`[DISTRIBUTED_LOCK] Redis operation failed on release, falling back to in-memory for ${lockId}:`, err.message);
     }
 
-    return released;
+    // Graceful in-memory fallback
+    return MemoryLockStore.release(lockId, holder);
   }
 
   /**
@@ -157,4 +126,3 @@ export class DistributedLockService {
     }
   }
 }
-

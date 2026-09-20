@@ -10,8 +10,10 @@ const CounselorDirectory = lazyWithRetry(() => import('../../../features/counsel
 const UserProgressTracker = lazyWithRetry(() => import('../../../features/mood/UserProgressTracker').then(m => ({ default: m.UserProgressTracker })));
 const EmergencyCenter = lazyWithRetry(() => import('../../../components/EmergencyCenter').then(m => ({ default: m.EmergencyCenter })));
 const MentalHealthArticles = lazyWithRetry(() => import('../../../components/MentalHealthArticles').then(m => ({ default: m.MentalHealthArticles })));
-import { RefreshCw, ChevronDown,  } from 'lucide-react';
+import { RefreshCw, ChevronDown, Sparkles, Clock, Wind, Calendar, ArrowDown, Shield, Eye, X, Video } from 'lucide-react';
 import { useToast } from '../../../components/Toast';
+import { Appointment } from '../../../types';
+import { parseAppointmentDateTime } from '../../../lib/calendarAndReminders';
 import { DEFAULT_AI_MODEL_ID } from '../../../lib/aiModels';
 import { safeLocalStorage } from '../../../lib/storage';
 
@@ -29,6 +31,7 @@ import { SessionSummaryModal } from './SessionSummaryModal';
 import { BookmarksModal } from './BookmarksModal';
 import { BranchChatModal } from './BranchChatModal';
 import { ChatMemoryModal } from './ChatMemoryModal';
+import { GroundingModal } from './GroundingModal';
 
 interface MainChatProps {
   user: UserSession | null;
@@ -85,14 +88,135 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
   // --- Feature 6: Guided Breathing Modal State ---
   const [isBreathingOpen, setIsBreathingOpen] = useState(false);
 
-  const handleOpenPlugin = (plugin: string) => {
+  // --- Feature 7: Grounding 5-4-3-2-1 Sensory Modal State ---
+  const [isGroundingOpen, setIsGroundingOpen] = useState(false);
+
+  // --- Feature 8: Privacy Shield State (Instant Blur untuk Privasi Kampus) ---
+  const [isPrivacyMode, setIsPrivacyMode] = useState(false);
+
+  // --- Feature 9: Upcoming Appointment Reminder Capsule (48 Jam ke Depan) ---
+  const [upcomingAppointment, setUpcomingAppointment] = useState<{
+    appointment: Appointment;
+    countdownText: string;
+  } | null>(null);
+  const [isReminderDismissed, setIsReminderDismissed] = useState(false);
+
+  useEffect(() => {
+    if (!user || user.role === 'guest') return;
+
+    apiClient.get<any[]>('/api/v1/appointments?limit=upcoming')
+      .then(res => {
+        if (!res.success || !Array.isArray(res.data) || res.data.length === 0) {
+          setUpcomingAppointment(null);
+          return;
+        }
+
+        const now = Date.now();
+        const maxThresholdMs = 48 * 60 * 60 * 1000; // 48 jam
+
+        // Cari appointment terdekat yang CONFIRMED / APPROVED atau SCHEDULED
+        for (const item of res.data) {
+          if (item.status === 'CANCELLED' || item.status === 'REJECTED') continue;
+
+          const dateStr = item.date;
+          const timeSlot = `${item.time} ${item.timezone || 'WIB'}`;
+          const timeData = parseAppointmentDateTime(dateStr, timeSlot, item.timezone);
+          const aptTime = timeData.startDate.getTime();
+          const diffMs = aptTime - now;
+
+          if (diffMs > 0 && diffMs <= maxThresholdMs) {
+            // Hitung teks human-friendly countdown
+            const hoursLeft = Math.floor(diffMs / (1000 * 60 * 60));
+            const minsLeft = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+
+            let countdownText: string;
+            const isToday = new Date().toDateString() === timeData.startDate.toDateString();
+            const tomorrow = new Date();
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            const isTomorrow = tomorrow.toDateString() === timeData.startDate.toDateString();
+
+            if (isToday) {
+              countdownText = `Hari ini pukul ${item.time} (${hoursLeft > 0 ? `${hoursLeft} jam lagi` : `${minsLeft} menit lagi`})`;
+            } else if (isTomorrow) {
+              countdownText = `Besok pukul ${item.time}`;
+            } else {
+              countdownText = `Dalam ${hoursLeft} jam (pukul ${item.time})`;
+            }
+
+            const formatted: Appointment = {
+              id: item.id,
+              counselorId: item.counselorId,
+              counselorName: item.counselor?.name || item.counselorName || 'Konselor Kampus',
+              counselorTitle: item.counselor?.title || 'Psikolog Klinis Kampus',
+              counselorAvatar: item.counselor?.avatar || '',
+              studentName: item.studentName || user.name,
+              studentNIM: item.studentNIM || '',
+              studentEmail: item.studentEmail || user.email,
+              studentPhone: '0812xxxxxx',
+              date: item.date,
+              timeSlot: `${item.time} ${item.timezone || 'WIB'}`,
+              timezone: item.timezone || 'WIB',
+              mode: item.mode || 'video_call',
+              primaryConcern: item.notes || 'Konseling Mental',
+              status: item.status,
+              approvalStatus: item.approvalStatus || 'APPROVED',
+              attendanceStatus: item.attendanceStatus || 'SCHEDULED',
+              meetingLink: item.meetingLink || `https://meet.jit.si/ruangtenang-session-${item.id}`,
+              reminderEnabled: true,
+              reminderMinutesBefore: 30,
+              createdAt: item.createdAt
+            };
+
+            setUpcomingAppointment({
+              appointment: formatted,
+              countdownText
+            });
+            break;
+          }
+        }
+      })
+      .catch(() => {
+        // Abaikan jika network offline
+      });
+  }, [user]);
+
+  const handleTogglePrivacy = useCallback(() => {
+    setIsPrivacyMode(prev => {
+      const next = !prev;
+      if (typeof window !== 'undefined' && 'vibrate' in navigator) {
+        try {
+          navigator.vibrate(next ? [30, 40] : 25);
+        } catch {
+          // Graceful fallback
+        }
+      }
+      return next;
+    });
+  }, []);
+
+  // Quick unlock with Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isPrivacyMode) {
+        setIsPrivacyMode(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isPrivacyMode]);
+
+  const handleOpenPlugin = useCallback((plugin: string) => {
     if (plugin === 'breathing') {
       setIsBreathingOpen(true);
       return;
     }
+    if (plugin === 'grounding' || plugin === '54321' || plugin === 'panik') {
+      setIsGroundingOpen(true);
+      return;
+    }
     setActivePlugin(plugin);
-  };
-  const handleClosePlugin = () => setActivePlugin(null);
+  }, []);
+  const handleClosePlugin = useCallback(() => setActivePlugin(null), []);
 
   useEffect(() => {
     if (location.state && (location.state as any).discussMood) {
@@ -128,6 +252,28 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
   }, [location.state]);
 
   useEffect(() => {
+    if (location.state && (location.state as any).discussScreening) {
+      const res = (location.state as any).discussScreening;
+      // Clear navigation state instantly to respect privacy and prevent double triggers
+      window.history.replaceState({}, document.title);
+
+      const phqScore = res.phq9?.score ?? 0;
+      const phqSeverity = res.phq9?.severity ?? 'Minimal';
+      const gadScore = res.gad7?.score ?? 0;
+      const gadSeverity = res.gad7?.severity ?? 'Minimal';
+
+      const initialPrompt = `Halo RuangTenang, aku baru saja menyelesaikan evaluasi kesehatan mental dengan hasil PHQ-9: ${phqScore}/27 (${phqSeverity}) dan GAD-7: ${gadScore}/21 (${gadSeverity}). Boleh bantu aku memahami apa yang sedang terjadi pada diriku dan langkah kecil apa yang bisa aku ambil hari ini?`;
+
+      // Trigger automatic discussion safely after short delay
+      const delay = setTimeout(() => {
+        handleSend(initialPrompt);
+      }, 500);
+
+      return () => clearTimeout(delay);
+    }
+  }, [location.state]);
+
+  useEffect(() => {
     const handleOpenPluginEvent = (e: Event) => {
       const customEvent = e as CustomEvent;
       handleOpenPlugin(customEvent.detail);
@@ -143,9 +289,22 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
 
   const { isTyping, streamMessage, abortStream } = useChatStreaming();
 
+  // Sinkronisasi status AI streaming ke root ambient Aurora mesh
+  useEffect(() => {
+    window.dispatchEvent(
+      new CustomEvent('rt-aurora-streaming', { detail: { isStreaming: isTyping } })
+    );
+  }, [isTyping]);
+
   const bottomRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [showScrollBottom, setShowScrollBottom] = useState(false);
+  const [isAtBottom, setIsAtBottom] = useState(true);
+  const [quotaExceededInfo, setQuotaExceededInfo] = useState<{
+    isExceeded: boolean;
+    message?: string;
+    resetAt?: string;
+  } | null>(null);
   const [viewportHeight, setViewportHeight] = useState<number | null>(null);
 
   // Dynamic visualViewport management for mobile virtual keyboards (iOS / Android)
@@ -165,7 +324,7 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
     updateViewportHeight();
     const vv = window.visualViewport;
     vv.addEventListener('resize', updateViewportHeight);
-    vv.addEventListener('scroll', updateViewportHeight);
+    vv.addEventListener('scroll', updateViewportHeight, { passive: true });
 
     return () => {
       vv.removeEventListener('resize', updateViewportHeight);
@@ -193,9 +352,13 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
   const handleScroll = () => {
     if (scrollContainerRef.current) {
       const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
-      setShowScrollBottom(scrollHeight - scrollTop - clientHeight > 100);
+      const nearBottom = scrollHeight - scrollTop - clientHeight <= 120;
+      setIsAtBottom(nearBottom);
+      setShowScrollBottom(!nearBottom);
     } else {
-      setShowScrollBottom(document.documentElement.scrollHeight - window.scrollY - window.innerHeight > 100);
+      const nearBottom = document.documentElement.scrollHeight - window.scrollY - window.innerHeight <= 120;
+      setIsAtBottom(nearBottom);
+      setShowScrollBottom(!nearBottom);
     }
   };
 
@@ -207,24 +370,27 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
     };
   }, []);
 
-  const scrollToBottom = useCallback((force = false) => {
-    if (force || !showScrollBottom) {
-      if (scrollContainerRef.current) {
-        if (typeof scrollContainerRef.current.scrollTo === 'function') {
-          scrollContainerRef.current.scrollTo({
-            top: scrollContainerRef.current.scrollHeight,
-            behavior: 'smooth'
-          });
-        } else {
-          scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
-        }
+  const scrollToBottom = useCallback((smooth = true) => {
+    if (scrollContainerRef.current) {
+      if (smooth && typeof scrollContainerRef.current.scrollTo === 'function') {
+        scrollContainerRef.current.scrollTo({
+          top: scrollContainerRef.current.scrollHeight,
+          behavior: 'smooth'
+        });
+      } else {
+        scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
       }
     }
-  }, [showScrollBottom]);
+    setIsAtBottom(true);
+    setShowScrollBottom(false);
+  }, []);
 
+  // Smart Auto-Scroll: Auto-scroll during stream ONLY IF user is near bottom
   useEffect(() => {
-    scrollToBottom();
-  }, [messages, isTyping, streamingMessage?.content, scrollToBottom]);
+    if (isAtBottom && scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+    }
+  }, [messages, isTyping, streamingMessage?.content, isAtBottom]);
 
   useEffect(() => {
     const handleGlobalKeydown = (e: KeyboardEvent) => {
@@ -256,7 +422,7 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
   }, [user, chatId]);
 
   // Bookmark toggle handler
-  const handleToggleBookmark = async (messageId: string, currentStatus: boolean) => {
+  const handleToggleBookmark = useCallback(async (messageId: string, currentStatus: boolean) => {
     if (!user || user.role === 'guest') {
       showToast('Silakan masuk untuk menyimpan pesan.', 'info');
       return;
@@ -287,7 +453,7 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
         showToast('Gagal menyimpan pesan', 'error');
       }
     }
-  };
+  }, [user, chatId, showToast]);
 
   // Backend search integration across all messages in conversation
   const [backendMatchedIds, setBackendMatchedIds] = useState<string[]>([]);
@@ -375,17 +541,17 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
   }, [currentChat]);
 
   // Branch conversation trigger
-  const handleOpenBranch = (messageId: string, contentSnippet: string) => {
+  const handleOpenBranch = useCallback((messageId: string, contentSnippet: string) => {
     setBranchTarget({ messageId, contentSnippet });
     setIsBranchModalOpen(true);
-  };
+  }, []);
 
   const handleChatBranched = (newChat: Chat) => {
     setChats(prev => [newChat, ...prev]);
     navigate(`/c/${newChat.id}`);
   };
 
-  const handleSend = async (content: string, pluginResult?: string, attachments?: any[]) => {
+  const handleSend = useCallback(async (content: string, pluginResult?: string, attachments?: any[]) => {
     if (!content.trim() && !pluginResult && (!attachments || attachments.length === 0)) return;
     
     const tempId = `msg_${Date.now()}`;
@@ -442,13 +608,31 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
           }
           setStreamingMessage(null);
         },
+        onQuotaExceeded: (data) => {
+          setStreamingMessage(null);
+          setQuotaExceededInfo({
+            isExceeded: true,
+            message: data.message,
+            resetAt: data.resetAt
+          });
+        },
         onError: (err) => {
           setStreamingMessage(null);
+          if (err.includes('DAILY_LIMIT_EXCEEDED') || err.toLowerCase().includes('kuota') || err.toLowerCase().includes('limit')) {
+            const tomorrow = new Date();
+            tomorrow.setUTCHours(24, 0, 0, 0);
+            setQuotaExceededInfo({
+              isExceeded: true,
+              message: err,
+              resetAt: tomorrow.toISOString()
+            });
+            return;
+          }
+          showToast(err || 'Gagal mengirim pesan', 'error');
           setMessages(prev => {
             if (prev.some(m => m.id === assistantMsgId)) {
                return prev.map(m => m.id === assistantMsgId ? { ...m, content: err || 'Koneksi terputus.', error: true } : m);
             }
-            showToast(err || 'Gagal mengirim pesan', 'error');
             return [...prev, { id: assistantMsgId, role: 'assistant', content: err || 'Koneksi terputus.', error: true }];
           });
         },
@@ -466,10 +650,9 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
         }
       }
     );
-  };
+  }, [chatId, isTemporary, chatMode, responseStyle, aiModel, streamMessage, navigate, setChats, showToast, setMessages]);
 
-  
-  const handleEditMessage = async (msgId: string, newContent: string) => {
+  const handleEditMessage = useCallback(async (msgId: string, newContent: string) => {
     if (!newContent.trim()) return;
 
     const previousMessages = [...messages];
@@ -491,7 +674,33 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
       setMessages(previousMessages);
       fetchMessages();
     }
-  };
+  }, [messages, chatId, handleSend, setMessages, fetchMessages, showToast]);
+
+  const handleRegenerate = useCallback((messageId?: string) => {
+    // Cari pesan user terakhir sebelum messageId ini (atau pesan user terakhir jika tidak ada messageId)
+    let lastUser: Message | undefined;
+    if (messageId) {
+      const idx = messages.findIndex(m => m.id === messageId);
+      if (idx !== -1) {
+        lastUser = messages.slice(0, idx).reverse().find((m: Message) => m.role === 'user');
+      }
+    }
+    if (!lastUser) {
+      lastUser = [...messages].reverse().find((m: Message) => m.role === 'user');
+    }
+
+    if (lastUser) {
+      if (chatId) {
+        handleEditMessage(lastUser.id, lastUser.content);
+      } else {
+        handleSend(lastUser.content);
+      }
+    }
+  }, [messages, chatId, handleEditMessage, handleSend]);
+
+  const handleSendPluginResult = useCallback((res: string) => {
+    handleSend('', res);
+  }, [handleSend]);
 
   const exportChatHistory = () => {
     if (messages.length === 0) {
@@ -532,6 +741,11 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
 
     if (cleanCmd === '/jeda' || cleanCmd === '/breath' || cleanCmd === '/breathing') {
       setIsBreathingOpen(true);
+      return;
+    }
+
+    if (cleanCmd === '/grounding' || cleanCmd === '/54321' || cleanCmd === '/panik') {
+      setIsGroundingOpen(true);
       return;
     }
 
@@ -725,11 +939,20 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
         onClose={() => setIsBreathingOpen(false)}
       />
 
+      {/* Feature 7: Sensory Grounding 5-4-3-2-1 Modal */}
+      <GroundingModal
+        isOpen={isGroundingOpen}
+        onClose={() => setIsGroundingOpen(false)}
+        onOpenBreathing={() => setIsBreathingOpen(true)}
+      />
+
     <div 
-      className="flex-1 flex flex-col h-full h-[100dvh] min-h-0 surface-page relative min-w-0 overflow-hidden"
+      className="flex-1 flex flex-col h-full h-[100dvh] min-h-0 bg-transparent relative min-w-0 overflow-hidden"
       style={viewportHeight ? { height: `${viewportHeight}px`, maxHeight: `${viewportHeight}px` } : undefined}
     >
-      <ChatHeader 
+      {/* Konten Chat Utama (z-10 relative di atas ambient aurora root) */}
+      <div className="relative z-10 flex flex-col flex-1 h-full min-h-0 overflow-hidden bg-transparent">
+        <ChatHeader 
         user={user}
         chatId={chatId}
         isBranch={isBranch}
@@ -752,7 +975,10 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
         onOpenSummary={() => setIsSummaryModalOpen(true)}
         onOpenBookmarks={() => setIsBookmarksModalOpen(true)}
         onOpenMemory={() => setIsMemoryModalOpen(true)}
+        onOpenGrounding={() => setIsGroundingOpen(true)}
         hasMessages={messages.length > 0}
+        isPrivacyMode={isPrivacyMode}
+        onTogglePrivacy={handleTogglePrivacy}
       />
 
       {/* Feature 5: In-Chat Search Bar */}
@@ -770,7 +996,59 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
         onPrev={handleSearchPrev}
       />
 
-      <div className="flex-1 overflow-y-auto w-full min-w-0 flex flex-col px-3 sm:px-4 pt-3 sm:pt-4 pb-36 sm:pb-32" ref={scrollContainerRef}>
+      {/* Chat Messages Area Container with Privacy Shield */}
+      <div className="relative flex-1 min-h-0 flex flex-col overflow-hidden bg-transparent">
+        {/* Feature 9: Glassmorphic Reminder Capsule for Upcoming Appointment (< 48 hours) */}
+        {upcomingAppointment && !isReminderDismissed && (
+          <div className="px-3 sm:px-4 pt-2.5 pb-1 shrink-0 z-20 animate-fade-in">
+            <div className="max-w-3xl mx-auto surface-card/85 backdrop-blur-md rounded-2xl border border-teal-200/60 dark:border-teal-800/60 p-2.5 sm:p-3 shadow-md hover:shadow-lg transition-all flex items-center justify-between gap-3 bg-gradient-to-r from-teal-500/10 via-emerald-500/5 to-cyan-500/10">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-teal-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                  <Video className="w-4 h-4 animate-pulse" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs sm:text-sm font-bold text-primary truncate">
+                      Sesi Konseling Mendatang
+                    </span>
+                    <span className="hidden sm:inline-block px-2 py-0.5 rounded-full text-[10.5px] font-bold bg-teal-100 dark:bg-teal-900/60 text-teal-800 dark:text-teal-200">
+                      Terkonfirmasi
+                    </span>
+                  </div>
+                  <p className="text-[11px] sm:text-xs text-secondary truncate">
+                    Bersama <strong className="text-teal-700 dark:text-teal-300 font-semibold">{upcomingAppointment.appointment.counselorName}</strong> • {upcomingAppointment.countdownText}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => navigate('/counselors', { state: { selectedAppointment: upcomingAppointment.appointment } })}
+                  className="px-3 py-1.5 min-h-[34px] rounded-xl text-xs font-bold bg-teal-600 hover:bg-teal-700 text-white shadow-3xs hover:shadow-xs transition-all flex items-center gap-1 cursor-pointer whitespace-nowrap"
+                >
+                  <span>Masuk Ruang Sesi / Detail</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsReminderDismissed(true)}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                  title="Tutup Pengingat"
+                  aria-label="Tutup Pengingat"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div 
+          className={`flex-1 overflow-y-auto chat-scroll-container w-full min-w-0 flex flex-col px-3 sm:px-4 pt-3 sm:pt-4 pb-36 sm:pb-32 transition-all duration-300 bg-transparent ${
+            isPrivacyMode ? 'backdrop-blur-md filter blur-md select-none pointer-events-none' : ''
+          }`} 
+          ref={scrollContainerRef}
+        >
         {isLoadingMessages ? (
           <div className="flex-1 flex items-start justify-center pt-4">
             <ChatSkeleton />
@@ -807,21 +1085,18 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
               </div>
             )}
             
-            {messages.map((msg, idx) => (
+            {messages.map((msg) => (
               <MessageBubble 
                 key={msg.id} 
                 msg={msg} 
                 isTyping={false} 
-                onRegenerate={() => {
-                  const lastUser = messages.slice(0, idx).reverse().find((m: Message) => m.role === 'user');
-                  if (lastUser) { if (chatId) handleEditMessage(lastUser.id, lastUser.content); else handleSend(lastUser.content); }
-                }}
-                onSendPluginResult={(res) => handleSend('', res)}
+                onRegenerate={handleRegenerate}
+                onSendPluginResult={handleSendPluginResult}
                 onOpenPlugin={handleOpenPlugin}
                 onEditMessage={handleEditMessage}
                 isBookmarked={bookmarkedMessageIds.has(msg.id)}
-                onBookmarkToggle={(msgId, status) => handleToggleBookmark(msgId, status)}
-                onBranch={(msgId, snippet) => handleOpenBranch(msgId, snippet)}
+                onBookmarkToggle={handleToggleBookmark}
+                onBranch={handleOpenBranch}
                 searchHighlightQuery={isSearchOpen ? searchQuery : undefined}
                 isSearchTarget={isSearchOpen && searchMatches[currentSearchIndex] === msg.id}
               />
@@ -832,10 +1107,10 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
                 key={streamingMessage.id} 
                 msg={streamingMessage} 
                 isTyping={true} 
-                onRegenerate={() => {}}
-                onSendPluginResult={() => {}}
-                onOpenPlugin={() => {}}
-                onEditMessage={() => {}}
+                onRegenerate={handleRegenerate}
+                onSendPluginResult={handleSendPluginResult}
+                onOpenPlugin={handleOpenPlugin}
+                onEditMessage={handleEditMessage}
               />
             )}
             
@@ -863,30 +1138,126 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
                 ))}
               </div>
             )}
+
+            {/* Empathetic Quota Closure Card */}
+            {quotaExceededInfo?.isExceeded && (
+              <div className="mx-auto max-w-2xl my-4 animate-in fade-in zoom-in-95 duration-200 w-full">
+                <div className="p-4 sm:p-5 rounded-2xl bg-teal-50/90 dark:bg-slate-850 border border-teal-200/90 dark:border-teal-900/80 shadow-md text-slate-800 dark:text-slate-100 space-y-3.5">
+                  <div className="flex items-start gap-3">
+                    <div className="p-2 rounded-xl bg-teal-100 dark:bg-teal-900/60 text-teal-700 dark:text-teal-300 shrink-0 mt-0.5">
+                      <Sparkles className="w-5 h-5 animate-pulse" />
+                    </div>
+                    <div className="space-y-1 flex-1 min-w-0">
+                      <h4 className="font-bold text-sm sm:text-base text-teal-950 dark:text-teal-100">
+                        Terima kasih telah berbagi hari ini
+                      </h4>
+                      <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+                        {quotaExceededInfo.message || "Kamu sudah meluangkan waktu untuk berbagi banyak hal hari ini. Istirahat sejenak ya. Sambil menunggu kuota harianmu di-reset, kamu bisa mencoba relaksasi pernapasan atau menjadwalkan konsultasi dengan konselor kami."}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-between gap-2.5 pt-2.5 border-t border-teal-200/60 dark:border-teal-900/60 text-xs">
+                    <div className="flex items-center gap-1.5 text-teal-800 dark:text-teal-300 font-medium">
+                      <Clock className="w-3.5 h-3.5 shrink-0" />
+                      <span>Reset kuota otomatis besok pukul 00:00 WIB</span>
+                    </div>
+                    <div className="flex items-center gap-2 w-full sm:w-auto">
+                      <button
+                        type="button"
+                        onClick={() => setIsBreathingOpen(true)}
+                        className="flex-1 sm:flex-initial px-3.5 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95"
+                      >
+                        <Wind className="w-3.5 h-3.5" />
+                        <span>Mulai Latihan Napas</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => navigate('/appointments')}
+                        className="flex-1 sm:flex-initial px-3.5 py-2 bg-white dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-100 rounded-xl text-xs font-semibold border border-slate-200 dark:border-slate-600 flex items-center justify-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95"
+                      >
+                        <Calendar className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+                        <span>Jadwalkan Konselor</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div ref={bottomRef} className="h-2" />
+          </div>
+        )}
+        </div>
+
+        {/* Privacy Shield Instant Blur Overlay */}
+        {isPrivacyMode && (
+          <div 
+            onClick={handleTogglePrivacy}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ' || e.key === 'Escape') handleTogglePrivacy();
+            }}
+            aria-label="Layar disamarkan untuk privasi Anda. Klik untuk membuka kembali"
+            className="absolute inset-0 z-30 flex flex-col items-center justify-center p-4 sm:p-6 bg-stone-900/35 dark:bg-black/55 backdrop-blur-xs cursor-pointer select-none transition-all duration-200 animate-fade-in"
+          >
+            <div 
+              className="max-w-md w-full mx-auto p-6 sm:p-7 rounded-3xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-stone-200/80 dark:border-slate-800 shadow-2xl flex flex-col items-center text-center space-y-4 transform transition-transform hover:scale-[1.01] active:scale-[0.99]"
+            >
+              <div className="w-16 h-16 rounded-2xl bg-teal-50 dark:bg-teal-950/60 border border-teal-200/70 dark:border-teal-800/70 flex items-center justify-center text-teal-600 dark:text-teal-400 shadow-inner">
+                <Shield className="w-8 h-8 animate-pulse" />
+              </div>
+              <div className="space-y-2">
+                <h3 className="text-base sm:text-lg font-serif font-semibold text-stone-900 dark:text-stone-100">
+                  Mode Privasi Aktif
+                </h3>
+                <p className="text-xs sm:text-sm text-stone-700 dark:text-stone-200 leading-relaxed font-medium">
+                  Layar disamarkan untuk privasi Anda. Klik untuk membuka kembali
+                </p>
+                <p className="text-[11px] text-stone-400 dark:text-stone-500">
+                  Isi obrolan Anda aman dan terlindungi dari pandangan orang di sekitar kampus.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleTogglePrivacy();
+                }}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-teal-700 hover:bg-teal-800 active:bg-teal-900 text-white text-xs font-semibold shadow-md shadow-teal-700/20 transition cursor-pointer"
+              >
+                <Eye className="w-4 h-4" />
+                <span>Buka Tampilan Obrolan</span>
+              </button>
+            </div>
           </div>
         )}
       </div>
       
-      {showScrollBottom && (
+      {/* Smart Floating "Pesan Baru ↓" Button */}
+      {showScrollBottom && !isPrivacyMode && (
         <button 
           onClick={() => scrollToBottom(true)} 
-          className="absolute bottom-28 sm:bottom-24 right-4 z-20 w-9 h-9 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:text-slate-900 border border-slate-200/80 dark:border-slate-700 shadow-md hover:shadow-lg rounded-full flex items-center justify-center transition-all cursor-pointer"
-          title="Pesan Terbaru"
-          aria-label="Gulir ke Pesan Terbaru"
+          className="absolute bottom-24 sm:bottom-22 left-1/2 -translate-x-1/2 z-30 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-full shadow-lg text-xs font-semibold flex items-center gap-1.5 transition-all animate-bounce cursor-pointer active:scale-95 border border-teal-400/50"
+          title="Pesan Baru ↓"
+          aria-label="Gulir ke Pesan Baru"
         >
-          <ChevronDown className="w-4 h-4" />
+          <span>Pesan Baru ↓</span>
+          <ArrowDown className="w-3.5 h-3.5" />
         </button>
       )}
       
-      <ChatComposer 
-        onSend={handleSend} 
-        isTyping={isTyping} 
-        onStop={abortStream} 
-        chatId={chatId} 
-        onCommand={handleCommand}
-        onOpenPlugin={handleOpenPlugin}
-      />
+        <ChatComposer 
+          onSend={handleSend} 
+          isTyping={isTyping} 
+          onStop={abortStream} 
+          chatId={chatId} 
+          onCommand={handleCommand}
+          onOpenPlugin={handleOpenPlugin}
+          quotaExceeded={quotaExceededInfo?.isExceeded}
+        />
+      </div>
     </div>
     </>
   );

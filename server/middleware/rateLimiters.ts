@@ -193,3 +193,18 @@ export const adminDeletionLimiter = rateLimit({
     error: 'Batas percobaan penghapusan akun oleh admin tercapai. Silakan coba lagi setelah 15 menit.'
   }
 });
+
+// Dedicated Client Telemetry Rate Limiter (Max 10 requests per 15 minutes to prevent log spamming)
+export const clientTelemetryLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 mins
+  max: 10, // Strictly capped at 10 requests per 15 minutes
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: () => process.env.NODE_ENV === 'test',
+  message: {
+    success: false,
+    code: 'RATE_LIMIT_EXCEEDED',
+    error: 'Terlalu banyak laporan telemetry (maksimal 10x per 15 menit). Silakan tunggu.'
+  }
+});
+

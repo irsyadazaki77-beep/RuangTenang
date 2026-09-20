@@ -344,13 +344,14 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
             </button>
             <button
               onClick={() => {
-                showToast('Menyiapkan dokumen PDF Anda...');
+                showToast('Menyiapkan Laporan Kesehatan Mental (PDF) Anda...');
                 window.open('/api/v1/user/export-progress-pdf', '_blank');
               }}
-              className="btn-secondary flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold"
+              className="btn-secondary flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold border-teal-300 dark:border-teal-700 bg-teal-50/50 dark:bg-teal-950/30 text-teal-800 dark:text-teal-200 hover:bg-teal-100 dark:hover:bg-teal-900/50 shadow-3xs"
+              title="Unduh Laporan Kesehatan Mental Terpadu 30 Hari format PDF"
             >
               <FileDown className="w-4 h-4 text-teal-600 dark:text-teal-400" />
-              <span>Unduh Ringkasan (.PDF)</span>
+              <span>Unduh Laporan Kesehatan Mental (PDF)</span>
             </button>
           </div>
         </motion.div>

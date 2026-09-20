@@ -23,6 +23,8 @@ export const VideoConsultationRoom: React.FC<VideoConsultationRoomProps> = ({
   const [networkQuality, setNetworkQuality] = useState<'good' | 'poor'>('good');
   const [showSimNotice, setShowSimNotice] = useState(true);
   const [apiAccessDeniedMsg, setApiAccessDeniedMsg] = useState<string | null>(null);
+  const [iceServers, setIceServers] = useState<any[]>([]);
+  const [iceServersError, setIceServersError] = useState<string | null>(null);
 
   // Backend room-access permission check
   useEffect(() => {
@@ -33,9 +35,25 @@ export const VideoConsultationRoom: React.FC<VideoConsultationRoomProps> = ({
             setApiAccessDeniedMsg(res.message || 'Akses ditolak. Anda tidak memiliki izin untuk sesi konsultasi ini.');
           } else {
             setApiAccessDeniedMsg(null);
+            // Fetch ICE/TURN servers upon authorized room access check
+            apiClient.get<{ iceServers?: RTCIceServer[] }>(`/api/v1/appointments/${appointment.id}/ice-servers`)
+              .then(iceRes => {
+                const iceServersData = iceRes?.data?.iceServers || (iceRes as { iceServers?: RTCIceServer[] })?.iceServers;
+                if (iceRes && iceRes.success && Array.isArray(iceServersData)) {
+                  setIceServers(iceServersData);
+                  console.info('[WEBRTC SECURED] ICE/TURN Server Configured successfully:', iceServersData);
+                } else {
+                  setIceServersError('Gagal memuat konfigurasi ICE/TURN.');
+                }
+              })
+              .catch(err => {
+                console.error('Failed to fetch ICE servers:', err);
+                setIceServersError('Gagal mengambil konfigurasi ICE/TURN.');
+              });
           }
         })
         .catch(err => {
+          console.error('Room access check failed:', err);
           setApiAccessDeniedMsg('Akses ditolak. Anda tidak memiliki izin untuk sesi konsultasi ini.');
         });
     }
@@ -105,6 +123,15 @@ export const VideoConsultationRoom: React.FC<VideoConsultationRoomProps> = ({
               <span className="text-white font-semibold flex items-center gap-2 pointer-events-auto">
                 <Lock className="w-4 h-4 text-emerald-400" />
                 Sesi Konsultasi Terenkripsi & Privat
+                {iceServers.length > 0 ? (
+                  <span className="text-[10px] text-emerald-400 font-normal bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                    ICE/TURN Aktif
+                  </span>
+                ) : iceServersError ? (
+                  <span className="text-[10px] text-rose-400 font-normal bg-rose-500/10 px-1.5 py-0.5 rounded border border-rose-500/20">
+                    WebRTC Error
+                  </span>
+                ) : null}
               </span>
               <span className="text-slate-300 text-xs">ID: {appointment.id}</span>
             </div>

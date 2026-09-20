@@ -159,12 +159,14 @@ export function downloadIcsCalendarFile(apt: Appointment): void {
   const url = window.URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.setAttribute('download', `Jadwal_Konseling_${apt.counselorName.replace(/\s+/g, '_')}_${apt.date}.ics`);
+  link.setAttribute('download', `Jadwal_Konseling_${(apt.counselorName || 'Konselor').replace(/\s+/g, '_')}_${apt.date}.ics`);
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
   window.URL.revokeObjectURL(url);
 }
+
+export const downloadIcsFile = downloadIcsCalendarFile;
 
 /**
  * Generate dynamic Google Calendar URL

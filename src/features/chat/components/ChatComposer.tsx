@@ -8,12 +8,15 @@ import {
   FileText, 
   ShieldCheck, 
   Command,
+  Mic,
+  MicOff,
   LucideIcon
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { safeLocalStorage } from '../../../lib/storage';
 import { CHAT_COMMANDS, CHAT_PLUGINS } from '../constants/commands';
 import { Attachment } from '../types';
+import { useToast } from '../../../components/Toast';
 
 interface Props {
   onSend: (msg: string, plugin?: string, attachments?: any[]) => void;
@@ -22,6 +25,7 @@ interface Props {
   chatId?: string;
   onCommand?: (cmd: string) => void;
   onOpenPlugin?: (pluginId: string) => void;
+  quotaExceeded?: boolean;
 }
 
 export function ChatComposer({ 
@@ -30,17 +34,86 @@ export function ChatComposer({
   onStop, 
   chatId, 
   onCommand, 
-  onOpenPlugin 
+  onOpenPlugin,
+  quotaExceeded = false
 }: Props) {
+  const { showToast } = useToast();
   const [input, setInput] = useState('');
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [showActionMenu, setShowActionMenu] = useState(false);
   const [showCommands, setShowCommands] = useState(false);
   const [selectedCmdIndex, setSelectedCmdIndex] = useState(0);
+  const [isListening, setIsListening] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const composerContainerRef = useRef<HTMLDivElement>(null);
+  const recognitionRef = useRef<any>(null);
+
+  // Toggle Voice Input Speech-to-Text (id-ID)
+  const toggleListening = () => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      showToast('Browser Anda tidak mendukung fitur perekaman suara (Speech Recognition).', 'info');
+      return;
+    }
+
+    if (isListening) {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+      setIsListening(false);
+    } else {
+      try {
+        const recognition = new SpeechRecognition();
+        recognition.lang = 'id-ID';
+        recognition.continuous = false;
+        recognition.interimResults = true;
+
+        const initialInput = input;
+
+        recognition.onresult = (event: any) => {
+          let transcript = '';
+          for (let i = event.resultIndex; i < event.results.length; i++) {
+            transcript += event.results[i][0].transcript;
+          }
+          if (transcript) {
+            const prefix = initialInput ? (initialInput.endsWith(' ') ? initialInput : initialInput + ' ') : '';
+            setInput(prefix + transcript);
+          }
+        };
+
+        recognition.onerror = (event: any) => {
+          console.warn('[STT] Error:', event.error);
+          setIsListening(false);
+          if (event.error === 'not-allowed') {
+            showToast('Izin mikrofon ditolak oleh browser.', 'error');
+          }
+        };
+
+        recognition.onend = () => {
+          setIsListening(false);
+        };
+
+        recognition.start();
+        recognitionRef.current = recognition;
+        setIsListening(true);
+        showToast('Mendengarkan suara (Bahasa Indonesia)...', 'info');
+      } catch (err) {
+        console.error('[STT] Failed to start:', err);
+        setIsListening(false);
+      }
+    }
+  };
+
+  // Clean up recognition on unmount
+  useEffect(() => {
+    return () => {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+    };
+  }, []);
 
   // Load and persist draft per chat session
   useEffect(() => {
@@ -272,9 +345,9 @@ export function ChatComposer({
   return (
     <div 
       ref={composerContainerRef}
-      className="w-full sticky bottom-0 z-20 shrink-0 bg-gradient-to-t from-slate-50/95 via-slate-50/80 to-transparent dark:from-[#0c1117]/95 dark:via-[#0c1117]/80"
+      className="w-full sticky bottom-0 z-20 shrink-0 bg-gradient-to-t from-slate-50/80 via-slate-50/40 to-transparent dark:from-[#080d16]/80 dark:via-[#080d16]/40 pointer-events-none [&>*]:pointer-events-auto"
     >
-      <div className="pt-1 pb-[max(0.5rem,env(safe-area-inset-bottom))] px-3 max-w-2xl mx-auto w-full relative">
+      <div className="pt-1 pb-safe pb-[max(0.5rem,env(safe-area-inset-bottom))] px-3 max-w-2xl mx-auto w-full relative">
         
         {/* 1. Quick Slash Commands Dropdown */}
         <AnimatePresence>
@@ -461,72 +534,104 @@ export function ChatComposer({
           </div>
         )}
 
-        {/* 4. Ultra-Compact Sleek Input Bar */}
-        <div className="relative flex items-center gap-2 bg-white dark:bg-slate-800 rounded-full border border-slate-200 dark:border-slate-700 shadow-xs px-3 py-1 focus-within:border-teal-500 transition-all">
-          
-          {/* Plus Action Button */}
-          <motion.button
-            type="button"
-            whileTap={{ scale: 0.92 }}
-            onClick={() => {
-              setShowActionMenu(!showActionMenu);
-              setShowCommands(false);
-            }}
-            className={`w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 shrink-0 transition-colors cursor-pointer ${
-              showActionMenu ? 'rotate-45 text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-700' : ''
-            }`}
-            aria-label="Buka Menu Bantuan & Fitur"
-            title="Layanan & Bantuan (+)"
-            aria-expanded={showActionMenu}
-          >
-            <Plus className="w-4 h-4 transition-transform duration-200" />
-          </motion.button>
-          
-          {/* Textarea Input */}
-          <textarea
-            ref={textareaRef}
-            value={input}
-            onFocus={() => {
-              setTimeout(() => {
-                composerContainerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-              }, 120);
-            }}
-            onChange={e => {
-              setInput(e.target.value);
-            }}
-            onKeyDown={handleKeyDown}
-            placeholder="Ketik apa yang kamu rasakan..."
-            className="w-full bg-transparent text-sm text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none resize-none h-[38px] py-2 px-1 leading-normal overflow-hidden"
-            rows={1}
-            disabled={isTyping}
-            aria-label="Ketik pesan konsultasi"
-          />
-          
-          {/* Smart Send / Stop Button */}
-          {isTyping ? (
+        {/* 4. Ultra-Compact Sleek Input Bar with Aurora Glowing Border */}
+        <div className="relative w-full max-w-3xl mx-auto group">
+          {/* Ambient Halo di Belakang Input Bar */}
+          <div className="absolute -inset-0.5 bg-gradient-to-r from-teal-400/40 via-cyan-400/30 to-indigo-500/30 rounded-full sm:rounded-3xl blur-sm opacity-0 group-focus-within:opacity-100 group-hover:opacity-50 transition-all duration-500 pointer-events-none" />
+
+          {/* Kotak Input Utama dengan Glassmorphism */}
+          <div className="relative flex items-center gap-2 p-1.5 sm:p-2 rounded-full sm:rounded-3xl bg-white/85 dark:bg-slate-900/85 backdrop-blur-xl border border-slate-200/80 dark:border-slate-800/80 group-focus-within:border-teal-400/60 dark:group-focus-within:border-teal-400/50 shadow-xl shadow-teal-950/5 transition-all duration-300">
+            
+            {/* Plus Action Button */}
             <motion.button
               type="button"
-              whileTap={{ scale: 0.9 }}
-              onClick={onStop}
-              className="w-8 h-8 rounded-full bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center shrink-0 transition-transform active:scale-95 cursor-pointer shadow-xs"
-              aria-label="Hentikan Jawaban AI"
-              title="Hentikan respons AI"
+              whileTap={{ scale: 0.92 }}
+              onClick={() => {
+                setShowActionMenu(!showActionMenu);
+                setShowCommands(false);
+              }}
+              className={`w-11 h-11 min-w-[44px] min-h-[44px] sm:w-10 sm:h-10 sm:min-w-[40px] sm:min-h-[40px] rounded-full flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 shrink-0 transition-colors cursor-pointer ${
+                showActionMenu ? 'rotate-45 text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-700' : ''
+              }`}
+              aria-label="Buka Menu Bantuan & Fitur"
+              title="Layanan & Bantuan (+)"
+              aria-expanded={showActionMenu}
             >
-              <Square className="w-3.5 h-3.5 fill-current" />
+              <Plus className="w-4 h-4 transition-transform duration-200" />
             </motion.button>
-          ) : (
+            
+            {/* Textarea Input - Font size 16px on mobile prevents iOS Safari forced viewport auto-zoom */}
+            <textarea
+              ref={textareaRef}
+              value={input}
+              onFocus={() => {
+                setTimeout(() => {
+                  composerContainerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+                }, 120);
+              }}
+              onChange={e => {
+                setInput(e.target.value);
+              }}
+              onKeyDown={handleKeyDown}
+              placeholder={
+                quotaExceeded 
+                  ? "Kuota harian telah digunakan. Istirahatlah sejenak dan kembali besok."
+                  : isListening 
+                    ? "Mendengarkan ucapan Anda (Bahasa Indonesia)..." 
+                    : "Ketik apa yang kamu rasakan..."
+              }
+              className="w-full bg-transparent text-[16px] sm:text-sm text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none resize-none min-h-[40px] sm:min-h-[38px] py-2 px-1.5 leading-normal overflow-hidden disabled:opacity-60 disabled:cursor-not-allowed"
+              rows={1}
+              disabled={isTyping || quotaExceeded}
+              aria-label="Ketik pesan konsultasi"
+            />
+
+            {/* Voice Input Button */}
             <motion.button
               type="button"
-              whileTap={hasContent ? { scale: 0.92 } : undefined}
-              onClick={handleSend}
-              disabled={!hasContent}
-              className="w-8 h-8 rounded-full bg-teal-600 hover:bg-teal-700 text-white flex items-center justify-center shrink-0 transition-transform active:scale-95 disabled:opacity-40 disabled:bg-slate-300 dark:disabled:bg-slate-700 cursor-pointer disabled:cursor-not-allowed shadow-xs"
-              aria-label="Kirim Pesan"
-              title="Kirim pesan (Enter)"
+              whileTap={{ scale: 0.92 }}
+              onClick={toggleListening}
+              className={`w-11 h-11 min-w-[44px] min-h-[44px] sm:w-10 sm:h-10 sm:min-w-[40px] sm:min-h-[40px] rounded-full flex items-center justify-center shrink-0 transition-all cursor-pointer ${
+                isListening
+                  ? 'bg-rose-500 text-white animate-pulse shadow-md'
+                  : 'text-slate-400 hover:text-teal-600 dark:hover:text-teal-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+              }`}
+              aria-label={isListening ? "Hentikan rekam suara" : "Input suara (Speech-to-Text)"}
+              title={isListening ? "Hentikan rekam suara (Sedang mendengarkan...)" : "Bicara (Input Suara Speech-to-Text)"}
             >
-              <Send className="w-3.5 h-3.5 ml-0.5" />
+              {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
             </motion.button>
-          )}
+            
+            {/* Smart Send / Stop Button */}
+            {isTyping ? (
+              <motion.button
+                type="button"
+                whileTap={{ scale: 0.9 }}
+                onClick={onStop}
+                className="w-11 h-11 min-w-[44px] min-h-[44px] sm:w-10 sm:h-10 sm:min-w-[40px] sm:min-h-[40px] rounded-full bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center shrink-0 transition-transform active:scale-95 cursor-pointer shadow-xs"
+                aria-label="Hentikan Jawaban AI"
+                title="Hentikan respons AI"
+              >
+                <Square className="w-3.5 h-3.5 fill-current" />
+              </motion.button>
+            ) : (
+              <motion.button
+                type="button"
+                whileTap={hasContent ? { scale: 0.92 } : undefined}
+                onClick={handleSend}
+                disabled={!hasContent}
+                className={`w-11 h-11 min-w-[44px] min-h-[44px] sm:w-10 sm:h-10 sm:min-w-[40px] sm:min-h-[40px] rounded-full flex items-center justify-center shrink-0 transition-all active:scale-95 cursor-pointer disabled:cursor-not-allowed shadow-xs ${
+                  hasContent
+                    ? 'bg-gradient-to-tr from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white shadow-md shadow-emerald-500/25'
+                    : 'bg-slate-200 dark:bg-slate-700/60 text-slate-400 dark:text-slate-500 opacity-60'
+                }`}
+                aria-label="Kirim Pesan"
+                title="Kirim pesan (Enter)"
+              >
+                <Send className="w-3.5 h-3.5 ml-0.5" />
+              </motion.button>
+            )}
+          </div>
         </div>
         
         {/* Reassurance Disclaimer */}

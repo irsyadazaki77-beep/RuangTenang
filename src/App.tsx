@@ -8,11 +8,14 @@ import Sidebar from './components/layout/Sidebar';
 import { WifiOff } from 'lucide-react';
 import { Chat } from './features/chat/types';
 import MainChat from './features/chat/components/MainChat';
+import ChatAuroraBackground from './features/chat/components/ChatAuroraBackground';
 import { WorkspaceLayout } from './components/layout/WorkspaceLayout';
 import { useToast } from './components/Toast';
 import { lazyWithRetry } from './lib/lazyWithRetry';
+import { GlobalErrorBoundary } from './components/error/GlobalErrorBoundary';
 
 const UserProgressTracker = lazyWithRetry(() => import('./features/mood/UserProgressTracker').then(module => ({ default: module.UserProgressTracker })));
+const MindfulnessWorkshop = lazyWithRetry(() => import('./features/mood/MindfulnessWorkshop').then(module => ({ default: module.MindfulnessWorkshop })));
 const ScreeningModal = lazyWithRetry(() => import('./features/screening/ScreeningModal').then(module => ({ default: module.ScreeningModal })));
 const CounselorDirectory = lazyWithRetry(() => import('./features/counselors/CounselorDirectory').then(module => ({ default: module.CounselorDirectory })));
 const AppointmentScheduler = lazyWithRetry(() => import('./features/appointments/AppointmentScheduler').then(module => ({ default: module.AppointmentScheduler })));
@@ -365,7 +368,8 @@ export default function App() {
   }
 
   return (
-    <div className="flex w-full h-[100dvh] surface-page text-primary font-sans relative overflow-hidden">
+    <div className="flex w-full h-[100dvh] bg-transparent text-primary font-sans relative overflow-hidden">
+      <ChatAuroraBackground />
       <Sidebar 
         isOpen={isSidebarOpen} 
         setIsOpen={setIsSidebarOpen} 
@@ -394,7 +398,7 @@ export default function App() {
           </div>
         )}
         {isSettingsOpen ? (
-          <div className="absolute inset-0 bg-slate-50 dark:bg-slate-900 z-20 flex flex-col overflow-hidden">
+          <div className="absolute inset-0 bg-slate-50/75 dark:bg-[#0e141b]/80 backdrop-blur-md z-20 flex flex-col overflow-hidden">
             <div className="p-3 sm:p-3.5 border-b border-default flex items-center surface-card shadow-xs shrink-0">
               <button onClick={() => setIsSettingsOpen(false)} className="mr-3 text-secondary hover:text-slate-800 dark:hover:text-slate-200 text-xs sm:text-sm font-medium" aria-label="Kembali">&larr; Kembali</button>
               <h2 className="font-semibold text-xs sm:text-sm text-primary">Pengaturan & Profil</h2>
@@ -419,96 +423,112 @@ export default function App() {
             </div>
           </div>
         ) : (
-          <Suspense fallback={<div className="flex h-full items-center justify-center surface-page"><div className="w-8 h-8 border-4 border-teal-500 border-t-transparent rounded-full animate-spin"></div></div>}>
-            <Routes>
-              <Route path="/" element={<MainChat user={user} chats={chats} setChats={setChats} onOpenSidebar={() => setIsSidebarOpen(true)} onOpenSettings={() => setIsSettingsOpen(true)} onOpenChangelog={() => setIsChangelogOpen(true)} />} />
-              <Route path="/c/:chatId" element={<MainChat user={user} chats={chats} setChats={setChats} onOpenSidebar={() => setIsSidebarOpen(true)} onOpenSettings={() => setIsSettingsOpen(true)} onOpenChangelog={() => setIsChangelogOpen(true)} />} />
-              <Route
-                path="/mood"
-                element={
-                  <WorkspaceLayout
-                    title="Mood Tracker & Progress"
-                    subtitle="Pantau perkembangan kesehatan mental dan emosi Anda secara berkala"
-                    badge="Lokal & Privat"
-                    onOpenSidebar={() => setIsSidebarOpen(true)}
-                    onOpenChangelog={() => setIsChangelogOpen(true)}
-                  >
-                    <UserProgressTracker
-                      onOpenScreening={() => navigate('/screening')}
-                      onNavigateToSchedule={() => navigate('/counselors')}
-                    />
-                  </WorkspaceLayout>
-                }
-              />
-              <Route
-                path="/screening"
-                element={
-                  <WorkspaceLayout
-                    title="Cek Kondisi Mental"
-                    subtitle="Instrumen cek kondisi awal mandiri. BUKAN alat diagnosis medis."
-                    badge="Cek Kondisi"
-                    onOpenSidebar={() => setIsSidebarOpen(true)}
-                    onOpenChangelog={() => setIsChangelogOpen(true)}
-                  >
-                    <ScreeningModal
-                      isOpen={true}
-                      isPageMode={true}
-                      onClose={() => navigate('/mood')}
-                      onComplete={() => {
-                        // Local completion
-                      }}
-                      onPersisted={() => {
-                        showToast('Skrining berhasil disimpan ke profil Anda.', 'success');
-                      }}
-                    />
-                  </WorkspaceLayout>
-                }
-              />
-              <Route
-                path="/counselors"
-                element={
-                  <WorkspaceLayout
-                    title="Jadwal & Direktori Konselor"
-                    subtitle="Temui konselor atau psikolog berlisensi untuk pendampingan."
-                    badge="Terverifikasi"
-                    onOpenSidebar={() => setIsSidebarOpen(true)}
-                    onOpenChangelog={() => setIsChangelogOpen(true)}
-                  >
-                    <div className="max-w-7xl mx-auto flex flex-col xl:flex-row gap-3.5 sm:gap-4.5 p-3 sm:p-4 md:p-5 w-full">
-                      <div className="flex-1 xl:w-2/3">
-                        <CounselorDirectory onSelectCounselorForBooking={(c) => setSelectedCounselor(c)} />
+          <GlobalErrorBoundary>
+            <Suspense fallback={<div className="flex h-full items-center justify-center surface-page"><div className="w-8 h-8 border-4 border-teal-500 border-t-transparent rounded-full animate-spin"></div></div>}>
+              <Routes>
+                <Route path="/" element={<MainChat user={user} chats={chats} setChats={setChats} onOpenSidebar={() => setIsSidebarOpen(true)} onOpenSettings={() => setIsSettingsOpen(true)} onOpenChangelog={() => setIsChangelogOpen(true)} />} />
+                <Route path="/c/:chatId" element={<MainChat user={user} chats={chats} setChats={setChats} onOpenSidebar={() => setIsSidebarOpen(true)} onOpenSettings={() => setIsSettingsOpen(true)} onOpenChangelog={() => setIsChangelogOpen(true)} />} />
+                <Route
+                  path="/mood"
+                  element={
+                    <WorkspaceLayout
+                      title="Mood Tracker & Progress"
+                      subtitle="Pantau perkembangan kesehatan mental dan emosi Anda secara berkala"
+                      badge="Lokal & Privat"
+                      onOpenSidebar={() => setIsSidebarOpen(true)}
+                      onOpenChangelog={() => setIsChangelogOpen(true)}
+                    >
+                      <UserProgressTracker
+                        onOpenScreening={() => navigate('/screening')}
+                        onNavigateToSchedule={() => navigate('/counselors')}
+                      />
+                    </WorkspaceLayout>
+                  }
+                />
+                <Route
+                  path="/mindfulness"
+                  element={
+                    <WorkspaceLayout
+                      title="Workshop Meditasi & Tenang Mandiri"
+                      subtitle="Latih ketenangan diri, atasi panik, dan catat jurnal syukur harian"
+                      badge="Lokakarya Batin"
+                      onOpenSidebar={() => setIsSidebarOpen(true)}
+                      onOpenChangelog={() => setIsChangelogOpen(true)}
+                    >
+                      <MindfulnessWorkshop />
+                    </WorkspaceLayout>
+                  }
+                />
+                <Route
+                  path="/screening"
+                  element={
+                    <WorkspaceLayout
+                      title="Cek Kondisi Mental"
+                      subtitle="Instrumen cek kondisi awal mandiri. BUKAN alat diagnosis medis."
+                      badge="Cek Kondisi"
+                      onOpenSidebar={() => setIsSidebarOpen(true)}
+                      onOpenChangelog={() => setIsChangelogOpen(true)}
+                    >
+                      <ScreeningModal
+                        isOpen={true}
+                        isPageMode={true}
+                        onClose={() => navigate('/mood')}
+                        onComplete={() => {
+                          // Local completion
+                        }}
+                        onPersisted={() => {
+                          showToast('Skrining berhasil disimpan ke profil Anda.', 'success');
+                        }}
+                      />
+                    </WorkspaceLayout>
+                  }
+                />
+                <Route
+                  path="/counselors"
+                  element={
+                    <WorkspaceLayout
+                      title="Jadwal & Direktori Konselor"
+                      subtitle="Temui konselor atau psikolog berlisensi untuk pendampingan."
+                      badge="Terverifikasi"
+                      onOpenSidebar={() => setIsSidebarOpen(true)}
+                      onOpenChangelog={() => setIsChangelogOpen(true)}
+                    >
+                      <div className="max-w-7xl mx-auto flex flex-col xl:flex-row gap-3.5 sm:gap-4.5 p-3 sm:p-4 md:p-5 w-full">
+                        <div className="flex-1 xl:w-2/3">
+                          <CounselorDirectory onSelectCounselorForBooking={(c) => setSelectedCounselor(c)} />
+                        </div>
+                        <div className="xl:w-1/3">
+                          <AppointmentScheduler 
+                             selectedCounselorFromDir={selectedCounselor}
+                             userSession={user}
+                             setUserSession={setUser}
+                          />
+                        </div>
                       </div>
-                      <div className="xl:w-1/3">
-                        <AppointmentScheduler 
-                           selectedCounselorFromDir={selectedCounselor}
-                           userSession={user}
-                           setUserSession={setUser}
-                        />
+                    </WorkspaceLayout>
+                  }
+                />
+                <Route
+                  path="/emergency"
+                  element={
+                    <WorkspaceLayout
+                      title="Pusat Bantuan Krisis & Darurat"
+                      subtitle="Layanan tanggap cepat, tele-konseling krisis, dan tombol darurat SOS 24 jam"
+                      badge="24 Jam"
+                      onOpenSidebar={() => setIsSidebarOpen(true)}
+                      onOpenChangelog={() => setIsChangelogOpen(true)}
+                    >
+                      <div className="max-w-4xl mx-auto p-3 sm:p-4 md:p-5 w-full">
+                        <EmergencyCenter onTriggerSOS={() => showToast('Sinyal SOS darurat diaktifkan.', 'info')} />
                       </div>
-                    </div>
-                  </WorkspaceLayout>
-                }
-              />
-              <Route
-                path="/emergency"
-                element={
-                  <WorkspaceLayout
-                    title="Pusat Bantuan Krisis & Darurat"
-                    subtitle="Layanan tanggap cepat, tele-konseling krisis, dan tombol darurat SOS 24 jam"
-                    badge="24 Jam"
-                    onOpenSidebar={() => setIsSidebarOpen(true)}
-                    onOpenChangelog={() => setIsChangelogOpen(true)}
-                  >
-                    <div className="max-w-4xl mx-auto p-3 sm:p-4 md:p-5 w-full">
-                      <EmergencyCenter onTriggerSOS={() => showToast('Sinyal SOS darurat diaktifkan.', 'info')} />
-                    </div>
-                  </WorkspaceLayout>
-                }
-              />
-              {/* Fallback route */}
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
-          </Suspense>
+                    </WorkspaceLayout>
+                  }
+                />
+                {/* Fallback route */}
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </Suspense>
+          </GlobalErrorBoundary>
         )}
       </div>
 

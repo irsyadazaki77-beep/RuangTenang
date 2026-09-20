@@ -1,5 +1,11 @@
 export type StreamState = 'idle' | 'connecting' | 'streaming' | 'completed' | 'aborted' | 'failed';
 
+export interface QuotaExceededData {
+  message: string;
+  resetAt?: string;
+  suggestedActions?: string[];
+}
+
 export interface StreamCallbacks {
   onStateChange?: (state: StreamState) => void;
   onMessageStart?: (msgId: string) => void;
@@ -9,6 +15,7 @@ export interface StreamCallbacks {
   onError?: (error: string) => void;
   onFollowUps?: (followUps: string[]) => void;
   onChatCreated?: (chatId: string) => void;
+  onQuotaExceeded?: (data: QuotaExceededData) => void;
 }
 
 export interface StreamPayload {
@@ -20,6 +27,13 @@ export interface StreamPayload {
   responseStyle?: string;
   aiModel?: string;
   attachments?: any[];
+}
+
+function getCookie(name: string): string | null {
+  if (typeof document === 'undefined') return null;
+  const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+  if (match) return decodeURIComponent(match[2]);
+  return null;
 }
 
 export class ChatStreamingClient {
@@ -61,13 +75,45 @@ export class ChatStreamingClient {
         callbacks.onMessageStart(assistantMsgId);
       }
 
-      const response = await fetch('/api/v1/chat/stream', {
+      const csrfToken = getCookie('XSRF-TOKEN');
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest'
+      };
+      if (csrfToken) {
+        headers['X-CSRF-Token'] = csrfToken;
+      }
+
+      let response = await fetch('/api/v1/chat/stream', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         credentials: 'include',
         body: JSON.stringify(payload),
         signal: abortController.signal
       });
+
+      // If 403 occurs due to CSRF token mismatch/expiry, attempt fresh token refresh once
+      if (response.status === 403 && token === this.activeToken && !abortController.signal.aborted) {
+        try {
+          const freshRes = await fetch('/api/csrf-token', { credentials: 'include' });
+          if (freshRes.ok) {
+            const freshData = await freshRes.json();
+            const freshToken = freshData.csrfToken || getCookie('XSRF-TOKEN');
+            if (freshToken) {
+              headers['X-CSRF-Token'] = freshToken;
+              response = await fetch('/api/v1/chat/stream', {
+                method: 'POST',
+                headers,
+                credentials: 'include',
+                body: JSON.stringify(payload),
+                signal: abortController.signal
+              });
+            }
+          }
+        } catch {
+          // ignore retry error
+        }
+      }
 
       if (token !== this.activeToken) {
         return;
@@ -141,7 +187,18 @@ export class ChatStreamingClient {
                   try {
                     const parsed = JSON.parse(dataStr);
                     
-                    if (parsed.error) {
+                    if (parsed.quotaExceeded || parsed.error === 'DAILY_LIMIT_EXCEEDED') {
+                      if (token === this.activeToken && callbacks.onQuotaExceeded) {
+                        callbacks.onQuotaExceeded({
+                          message: parsed.message || parsed.text || 'Kuota harian Anda telah tercapai.',
+                          resetAt: parsed.resetAt,
+                          suggestedActions: parsed.suggestedActions
+                        });
+                      }
+                      if (parsed.error) {
+                        throw new Error(parsed.message || parsed.text || parsed.error || 'Gagal memproses respons');
+                      }
+                    } else if (parsed.error) {
                       throw new Error(parsed.text || parsed.error || 'Gagal memproses respons');
                     } else if (parsed.tool_call || (parsed.type === 'plugin' && parsed.plugin)) {
                       pluginName = parsed.tool_call || parsed.plugin;

@@ -34,19 +34,19 @@ export const chatSummarizer = {
   },
 
   /**
-   * Retrieves or incrementally updates summary for chat history older than the last 6 turns.
+   * Retrieves or incrementally updates summary for chat history older than the last 5 turns.
    */
   async getOrUpdateSummary(
     chatId: string,
     fullHistory: ChatMessageItem[],
     options?: { userId?: string; abortSignal?: AbortSignal }
   ): Promise<{ summary: string; lastSummarizedMsgId: string; tokensSaved: number }> {
-    if (!chatId || !Array.isArray(fullHistory) || fullHistory.length <= 8) {
+    if (!chatId || !Array.isArray(fullHistory) || fullHistory.length <= 10) {
       return { summary: '', lastSummarizedMsgId: '', tokensSaved: 0 };
     }
 
-    // Keep the last 6 messages as recent raw history
-    const RECENT_KEEP_COUNT = 6;
+    // Keep the last 5 messages as recent raw history
+    const RECENT_KEEP_COUNT = 5;
     const olderMessages = fullHistory.slice(0, fullHistory.length - RECENT_KEEP_COUNT);
     if (olderMessages.length === 0) {
       return { summary: '', lastSummarizedMsgId: '', tokensSaved: 0 };

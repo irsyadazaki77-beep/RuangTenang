@@ -1,0 +1,18 @@
+{
+  "short_name": "RuangTenang",
+  "name": "RuangTenang - Konseling & Ruang Teduh Mahasiswa",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "type": "image/svg+xml",
+      "sizes": "192x192 512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#080d16",
+  "theme_color": "#080d16",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "categories": ["health", "lifestyle", "education"]
+}

@@ -9,6 +9,7 @@ import {
   Download, 
   Sparkles,
   Wind,
+  HeartPulse,
   LucideIcon
 } from 'lucide-react';
 
@@ -18,11 +19,11 @@ export interface ChatCommand {
   desc: string;
   icon: LucideIcon;
   actionType: 'plugin' | 'system';
-  pluginId?: 'mood' | 'articles' | 'screening' | 'counselors' | 'emergency' | 'breathing';
+  pluginId?: 'mood' | 'articles' | 'screening' | 'counselors' | 'emergency' | 'breathing' | 'grounding';
 }
 
 export interface ChatPluginOption {
-  id: 'mood' | 'articles' | 'screening' | 'counselors' | 'emergency' | 'breathing';
+  id: 'mood' | 'articles' | 'screening' | 'counselors' | 'emergency' | 'breathing' | 'grounding';
   icon: LucideIcon;
   label: string;
   desc: string;
@@ -30,6 +31,7 @@ export interface ChatPluginOption {
 }
 
 export const CHAT_COMMANDS: ChatCommand[] = [
+  { cmd: '/grounding', label: 'Grounding 5-4-3-2-1', desc: 'Latihan sensorik meredakan serangan panik', icon: HeartPulse, actionType: 'plugin', pluginId: 'grounding' },
   { cmd: '/mood', label: 'Catat Suasana Hati', desc: 'Buka modal mood tracker & grafik emosi', icon: Heart, actionType: 'plugin', pluginId: 'mood' },
   { cmd: '/jeda', label: 'Jeda Hening 1-Menit', desc: 'Latihan relaksasi pernapasan terpandu', icon: Wind, actionType: 'plugin', pluginId: 'breathing' },
   { cmd: '/skrining', label: 'Skrining Mandiri', desc: 'Tes psikometri klinis PHQ-9 & GAD-7', icon: Stethoscope, actionType: 'plugin', pluginId: 'screening' },
@@ -44,6 +46,13 @@ export const CHAT_COMMANDS: ChatCommand[] = [
 ];
 
 export const CHAT_PLUGINS: ChatPluginOption[] = [
+  { 
+    id: 'grounding', 
+    icon: HeartPulse, 
+    label: 'Grounding 5-4-3-2-1', 
+    desc: 'Teknik redakan panik & cemas akut',
+    color: 'text-rose-500 bg-rose-50 dark:bg-rose-950/60' 
+  },
   { 
     id: 'mood', 
     icon: Heart, 

@@ -283,12 +283,21 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
     // Enforce atomic daily usage limit check to prevent API key exhaustion and parallel race conditions
     const usageCheck = await checkUserAiUsageLimit(userId, clientIp, userTier, userRole);
     if (!usageCheck.allowed) {
+      const tomorrow = new Date();
+      tomorrow.setUTCHours(24, 0, 0, 0);
+      const resetAt = tomorrow.toISOString();
+      const empatheticMsg = usageCheck.message || "Kamu sudah meluangkan waktu untuk berbagi banyak hal hari ini. Istirahat sejenak ya. Sambil menunggu kuota harianmu di-reset, kamu bisa mencoba relaksasi pernapasan atau menjadwalkan konsultasi dengan konselor kami.";
+
       res.setHeader('Content-Type', 'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('Connection', 'keep-alive');
       res.write('data: ' + JSON.stringify({ 
         error: 'DAILY_LIMIT_EXCEEDED', 
-        text: `⚠️ ${usageCheck.message}` 
+        quotaExceeded: true,
+        message: empatheticMsg,
+        text: `⚠️ ${empatheticMsg}`,
+        resetAt,
+        suggestedActions: ["BREATHING", "COUNSELOR_BOOKING"]
       }) + '\n\n');
       res.write('data: [DONE]\n\n');
       res.end();

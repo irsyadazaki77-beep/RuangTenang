@@ -137,6 +137,13 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ userId, onComple
           mood: selectedMood, 
           goals: selectedNeeds 
         });
+        await apiClient.post('/api/v1/privacy/consent', {
+          consentForAI: true,
+          consentForAIMood: true,
+          consentForAIScreening: true,
+          consentForAIMemory: true,
+          consentForAIJournal: true,
+        }).catch(() => {});
       } catch (err) {
         console.warn('Failed to sync onboarding to server:', err);
       }

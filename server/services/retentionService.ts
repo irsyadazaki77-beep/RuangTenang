@@ -250,7 +250,7 @@ export class RetentionService {
 
       const now = new Date();
       const erasureId = `erasure-${Date.now()}`;
-      const hashedEmail = userEmail ? crypto.createHash('sha256').update(userEmail).digest('hex') : 'anonymized';
+      const hashedEmail = this.hashEmailForErasure(userEmail);
       await tx.dataErasureRequests.create({
         data: {
           id: erasureId,
@@ -442,17 +442,24 @@ export class RetentionService {
         status: s.status,
         timestamp: s.timestamp
       })),
-      appointments: appointments.map((a) => ({
-        id: a.id,
-        counselorName: a.counselorName,
-        date: a.date,
-        time: a.time,
-        mode: a.mode,
-        status: a.status,
-        approvalStatus: a.approvalStatus,
-        notes: a.notes,
-        createdAt: a.createdAt
-      })),
+      appointments: appointments.map((a) => {
+        const localTime = new Date(a.scheduledAt.getTime() + 7 * 60 * 60 * 1000);
+        const isoString = localTime.toISOString();
+        const dateStr = isoString.split('T')[0];
+        const timeMatch = isoString.split('T')[1].match(/^(\d{2}):(\d{2})/);
+        const timeStr = timeMatch ? `${timeMatch[1]}:${timeMatch[2]}` : '09:00';
+        return {
+          id: a.id,
+          counselorName: a.counselorName,
+          date: dateStr,
+          time: timeStr,
+          mode: a.mode,
+          status: a.status,
+          approvalStatus: a.approvalStatus,
+          notes: a.notes,
+          createdAt: a.createdAt
+        };
+      }),
       chats: chats.map((ch) => ({
         id: ch.id,
         title: encryptionService.decryptSensitive(ch.title) || ch.title,
@@ -486,6 +493,24 @@ export class RetentionService {
         timestamp: l.timestamp
       }))
     };
+  }
+
+  /**
+   * Hashes a user email using HMAC-SHA256 with BLIND_INDEX_SECRET as the salt
+   * to protect against rainbow table attacks and comply with UU PDP.
+   * 
+   * @param email - Plaintext email address of the user.
+   * @returns Deterministic 64-character hex-encoded SHA-256 HMAC hash.
+   */
+  public hashEmailForErasure(email: string | null | undefined): string {
+    if (!email) {
+      return 'anonymized';
+    }
+    const secretKey = process.env.BLIND_INDEX_SECRET || process.env.JWT_SECRET || 'ruangtenang_secret_key_for_blind_index_2026';
+    return crypto
+      .createHmac('sha256', secretKey)
+      .update(email.toLowerCase().trim().normalize('NFKC'))
+      .digest('hex');
   }
 }
 

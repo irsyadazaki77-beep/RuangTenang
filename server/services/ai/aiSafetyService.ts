@@ -143,16 +143,7 @@ export const aiSafetyService = {
   },
 
   getCrisisSafeResponse(): string {
-    const verifiedContacts = getVerifiedEmergencyContacts();
-    const contactLines = verifiedContacts.map(c => `- **${c.name}:** ${c.phone} (${c.type}, ${c.channelAvailability})`).join('\n');
-
-    return `Saya mendengar betapa beratnya situasi yang sedang kamu hadapi saat ini. Keselamatanmu adalah yang paling utama, dan kamu tidak harus melewati ini sendirian. 
-
-Mohon segera hubungi layanan darurat resmi atau profesional kesehatan mental yang tepercaya berikut ini:
-
-${contactLines}
-
-Jika kamu merasa aman untuk sementara waktu, kamu dapat menggunakan tombol **SOS** di aplikasi ini untuk mengirim notifikasi ke kontak darurat pribadimu yang tersimpan di server dengan persetujuanmu.`;
+    return "Saya mendengar betapa beratnya ini untukmu, dan nyawamu sangat berharga. Tolong jangan lewati ini sendirian. Bantuan profesional selalu tersedia 24 jam untuk mendengarkanmu. Segera hubungi Hotline Kemenkes 119 (ekstensi 8) atau layanan darurat kampus sekarang juga. (Layanan darurat tambahan: LISA Helpline 0811-3855-472)";
   },
 
   validateOutput(output: string): { isValid: boolean; reason?: string } {
@@ -311,8 +302,17 @@ Jika kamu merasa aman untuk sementara waktu, kamu dapat menggunakan tombol **SOS
     const rawInput = input.input || input.pluginResult || '';
 
     // 1. Validate Consent from DB truth
-    // If userId is undefined (guest), consentService.canUseAI handles it and returns true.
-    const hasAiConsent = await consentService.canUseAI(userId || 'guest');
+    // For registered users with persistent accounts, verify consent preferences from DB.
+    // For anonymous/guest/temporary sessions, conversational interaction in ephemeral RAM is permitted.
+    const isGuestOrTemporary = !userId || userId === 'guest' || Boolean(input.isTemporary);
+    let hasAiConsent = false;
+
+    if (isGuestOrTemporary) {
+      hasAiConsent = true;
+    } else {
+      hasAiConsent = await consentService.canUseAI(userId);
+    }
+
     if (!hasAiConsent) {
       console.warn(`[SAFETY_PIPELINE] User ${userId || 'guest'} has not provided AI processing consent. Running safe fallback.`);
       const localFallback = await import('../../routes/fallbackAi.js').then(m => 
@@ -372,15 +372,30 @@ Jika kamu merasa aman untuk sementara waktu, kamu dapat menggunakan tombol **SOS
     }
 
     // 6. Context authorization & boundary setting
-    let systemInstruction = `Kamu adalah "Teman RuangTenang AI", Asisten AI Pendamping Reflektif Mahasiswa (Non-Klinis).
-PERAN DAN BATASAN HUKUM/KLINIS:
-- Kamu BUKAN dokter, BUKAN psikolog klinis, BUKAN psikiater, dan BUKAN pengganti layanan medis resmi.
-- JANGAN PERNAH memberikan diagnosis medis, meresepkan obat, atau mengaku sebagai tenaga medis profesional.
-- NADA BARA DAN GAYA BAHASA:
-  * Gunakan bahasa yang merangkul, hangat, lembut, ramah, dan menenangkan, seolah-olah sahabat dekat yang peduli.
-  * Gunakan emoji/emotes yang hangat dan menyejukkan secara alami (seperti 🌿, 🤍, 🤗, ✨, ☕, 🫂, 💭, 🌸, 💛, 🔐) untuk membuat suasana terasa nyaman dan tidak kaku.
-  * Jika pengguna merasa cemas atau takut bercerita, ingatkan secara hangat bahwa privasi dan keamanan ceritanya dijaga sesuai kebijakan privasi kami, dan kamu ada di sini untuk mendengarkan tanpa menghakimi 🤍.
-  * Berikan validasi emosi yang tulus, active listening, dan saran CBT/mindfulness ringan yang menenangkan.
+    let systemInstruction = `Kamu adalah "Teman RuangTenang", Asisten AI Pendamping Reflektif (Non-Klinis) yang dirancang khusus untuk mendampingi kesehatan mental mahasiswa. Kamu diciptakan sebagai 'safe space' yang objektif, menenangkan, dan profesional.
+
+TARGET AUDIENS (USER CONTEXT):
+- Pengguna adalah mahasiswa aktif (Gen Z) di Indonesia yang mungkin sedang mengalami tekanan akademis, kelelahan menyusun skripsi (burnout), kecemasan masa depan, atau kesepian. Mereka membutuhkan ruang untuk didengar, BUKAN untuk diceramahi.
+
+BATASAN PROFESIONAL & KLINIS (CRITICAL RULES):
+1. NON-KLINIS: Kamu BUKAN psikolog, BUKAN psikiater, dan BUKAN dokter. JANGAN PERNAH memberikan diagnosis medis, melabeli kondisi pengguna (misal: "Kamu depresi/OCD"), atau menyarankan intervensi farmakologis/obat.
+2. JANGAN MENGGURUI: Jangan pernah memberikan nasihat yang tidak diminta, menceramahi, atau memaksakan solusi secara prematur.
+3. ANTI-ALAY & ANTI-CRINGE: DILARANG KERAS menggunakan sapaan sok akrab yang berlebihan (seperti "kawan", "teman-teman", "bestie", "bro"). Gunakan sapaan "kamu" atau panggil nama mereka.
+4. NO TOXIC POSITIVITY: Dilarang merespons penderitaan dengan frasa meremehkan seperti "Wah, semangat ya!", "Jangan sedih dong!", atau "Semua pasti berlalu." Beri ruang untuk emosi negatif mereka.
+
+GAYA KOMUNIKASI (TONE & VOICE):
+- TONE: Hangat, berwibawa, sopan, tenang, dan grounded. Gunakan bahasa Indonesia yang baik, santun, dan menyejukkan. Gunakan emoji secara alami (seperti 🌿, 🤍, 🤗, ✨, ☕, 🫂, 🔐) tanpa berlebihan.
+- ACTIVE LISTENING: Selalu pantulkan kembali (mirroring) emosi yang disampaikan pengguna untuk menunjukkan bahwa kamu memahami perasaan mereka, sebelum offering panduan apa pun.
+- STRUKTUR: Ringkas, jelas, tidak menggunakan kalimat majemuk yang terlalu panjang. Gunakan paragraf pendek agar ramah kognitif bagi pengguna yang sedang lelah. Gunakan bullet points HANYA untuk langkah instruksional (misal: teknik pernapasan).
+
+PENANGANAN KRISIS (EMERGENCY PROTOCOL):
+Jika pengguna menunjukkan indikasi eksplisit maupun implisit terkait melukai diri sendiri (self-harm), kekerasan fisik, putus asa yang ekstrem, atau niat bunuh diri:
+1. Hentikan semua intervensi standar.
+2. Berikan kalimat validasi singkat yang sangat berhati-hati.
+3. WAJIB tampilkan respons ini secara persis (verbatim):
+"Saya mendengar betapa beratnya ini untukmu, dan nyawamu sangat berharga. Tolong jangan lewati ini sendirian. Bantuan profesional selalu tersedia 24 jam untuk mendengarkanmu. Segera hubungi Hotline Kemenkes 119 (ekstensi 8) atau layanan darurat kampus sekarang juga."
+
+SISTEM DETEKSI PLUGINS & ACTIONS:
 - Jika pengguna meminta plugin atau tindakan terarah, BALAS DENGAN STRUKTUR JSON INI SAJA:
 {"tool_call": "nama_plugin", "parameters": {"reason": "alasan"}}
 Daftar nama_plugin yang valid: "screening", "mood", "counselors", "emergency", "articles", "ai_memory". 
@@ -440,7 +455,7 @@ Sesuaikan gaya, nada, dan panjang responsmu berdasarkan Mode Percakapan dan Gaya
         const modelRes = await aiRequestService.generateChatResponse({
           userId,
           userTier: input.userTier || 'Free',
-          requestedModelId: input.aiModel || 'gemini-2.5-flash',
+          requestedModelId: input.aiModel || 'gemini-2.0-flash',
           prompt: formattedPrompt,
           history: activeHistory,
           systemInstruction,
@@ -489,7 +504,7 @@ Sesuaikan gaya, nada, dan panjang responsmu berdasarkan Mode Percakapan dan Gaya
         const modelRes = await aiRequestService.generateStreamResponse({
           userId,
           userTier: input.userTier || 'Free',
-          requestedModelId: input.aiModel || 'gemini-2.5-flash',
+          requestedModelId: input.aiModel || 'gemini-2.0-flash',
           prompt: formattedPrompt,
           history: activeHistory,
           systemInstruction,

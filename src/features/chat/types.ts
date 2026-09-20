@@ -27,7 +27,7 @@ export interface Message {
   role: 'user' | 'assistant';
   content: string;
   plugin?: string;
-  pluginResult?: any;
+  pluginResult?: Record<string, unknown>;
   error?: boolean;
   createdAt?: string | Date;
   attachments?: StoredAttachment[];

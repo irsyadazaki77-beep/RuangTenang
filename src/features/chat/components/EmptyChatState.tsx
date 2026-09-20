@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { apiClient } from '../../../lib/apiClient';
 import { ArrowRight } from 'lucide-react';
 import { BreathingModal } from './BreathingModal';
@@ -86,8 +86,18 @@ const QUICK_STARTERS = [
 export function EmptyChatState({ userName, onSelectPrompt, onOpenBreathing }: EmptyChatStateProps) {
   const [selectedMood, setSelectedMood] = useState<MoodItem | null>(null);
   const [isBreathingModalOpen, setIsBreathingModalOpen] = useState(false);
+  const shouldReduceMotion = useReducedMotion();
 
   const handleMoodSelect = async (mood: MoodItem) => {
+    // Tactile sensory grounding feedback on mood selection
+    if (typeof window !== 'undefined' && 'vibrate' in navigator) {
+      try {
+        navigator.vibrate(15);
+      } catch {
+        // Graceful fallback if device/browser disables vibration
+      }
+    }
+
     setSelectedMood(mood);
     
     // Auto-log silently in background
@@ -105,7 +115,25 @@ export function EmptyChatState({ userName, onSelectPrompt, onOpenBreathing }: Em
     }
   };
 
+  const handlePromptSelectWithHaptic = (prompt: string) => {
+    if (typeof window !== 'undefined' && 'vibrate' in navigator) {
+      try {
+        navigator.vibrate(15);
+      } catch {
+        // Graceful fallback
+      }
+    }
+    onSelectPrompt(prompt);
+  };
+
   const handleOpenBreathing = () => {
+    if (typeof window !== 'undefined' && 'vibrate' in navigator) {
+      try {
+        navigator.vibrate(15);
+      } catch {
+        // Graceful fallback
+      }
+    }
     if (onOpenBreathing) {
       onOpenBreathing();
     } else {
@@ -118,13 +146,19 @@ export function EmptyChatState({ userName, onSelectPrompt, onOpenBreathing }: Em
       
       {/* 1. Hero Section Super Ringkas: Hidden on mobile */}
       <div className="hidden sm:block">
-        <div className="relative w-12 h-12 rounded-2xl bg-gradient-to-b from-white to-teal-50/80 dark:from-slate-900 dark:to-teal-950/70 border border-teal-200/80 dark:border-teal-800/80 shadow-[0_4px_20px_-3px_rgba(13,148,136,0.18)] flex items-center justify-center p-2.5 mx-auto mb-2">
-          <img 
-            src="/favicon.svg" 
-            alt="RuangTenang" 
-            className="w-full h-full object-contain pointer-events-none select-none" 
-            loading="eager"
-          />
+        <div className="relative inline-flex items-center justify-center mb-4">
+          {/* Breathing Halo Effect */}
+          <div className="absolute inset-0 rounded-2xl bg-gradient-to-tr from-emerald-400 to-teal-300 dark:from-emerald-500 dark:to-teal-400 blur-lg opacity-40 dark:opacity-30 animate-pulse-gentle pointer-events-none" />
+          
+          {/* Icon Container with official RuangTenang Logo */}
+          <div className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border border-emerald-200/80 dark:border-emerald-800/60 shadow-lg shadow-emerald-500/10 flex items-center justify-center p-3 sm:p-3.5">
+            <img 
+              src="/favicon.svg" 
+              alt="RuangTenang" 
+              className="w-full h-full object-contain pointer-events-none select-none animate-float-subtle" 
+              loading="eager"
+            />
+          </div>
         </div>
       </div>
 
@@ -151,32 +185,35 @@ export function EmptyChatState({ userName, onSelectPrompt, onOpenBreathing }: Em
         onClose={() => setIsBreathingModalOpen(false)} 
       />
 
-      {/* 2. Mood Selector Ringkas (Micro-Cards) */}
+      {/* 2. Mood Selector Ringkas (Micro-Cards with Spring Physics) */}
       <div className="flex items-center justify-center gap-1.5 sm:gap-2.5 my-2">
         {EMOTIONAL_MOODS.map(item => {
           const isSelected = selectedMood?.id === item.id;
           return (
-            <button
+            <motion.button
               key={item.id}
               type="button"
               onClick={() => handleMoodSelect(item)}
               aria-label={`Perasaan: ${item.label}`}
               title={item.label}
-              className={`w-13 h-14 sm:w-16 sm:h-16 rounded-2xl flex flex-col items-center justify-center bg-slate-100/80 dark:bg-slate-800/80 hover:bg-white dark:hover:bg-slate-700 transition-all border border-slate-200/50 dark:border-slate-700/50 shadow-2xs cursor-pointer ${
+              whileHover={shouldReduceMotion ? undefined : { scale: 1.03 }}
+              whileTap={shouldReduceMotion ? undefined : { scale: 0.96 }}
+              transition={{ type: "spring", stiffness: 340, damping: 26, mass: 0.8 }}
+              className={`flex flex-col items-center justify-center p-3 sm:p-3.5 rounded-2xl bg-white/70 dark:bg-slate-900/70 backdrop-blur-md border border-slate-200/70 dark:border-slate-800/70 hover:border-emerald-400/60 dark:hover:border-emerald-500/50 hover:bg-white/90 dark:hover:bg-slate-800/90 hover:shadow-lg hover:shadow-emerald-500/10 transition-colors duration-200 cursor-pointer ${
                 isSelected
-                  ? 'ring-2 ring-teal-500/80 dark:ring-teal-400 border-teal-400 dark:border-teal-600 bg-white dark:bg-slate-700 shadow-sm scale-105'
-                  : 'hover:shadow-2xs active:scale-95'
+                  ? 'ring-2 ring-emerald-500/80 dark:ring-emerald-400 border-emerald-400 dark:border-emerald-600 bg-white/95 dark:bg-slate-800/95 shadow-md scale-105'
+                  : 'shadow-2xs'
               }`}
             >
               <span className="w-5 h-5 flex items-center justify-center text-lg sm:text-xl leading-none shrink-0" role="img" aria-hidden="true">
                 {item.emoji}
               </span>
               <span className={`text-[10px] sm:text-xs font-medium text-slate-600 dark:text-slate-300 mt-1 ${
-                isSelected ? 'text-teal-700 dark:text-teal-300 font-semibold' : ''
+                isSelected ? 'text-emerald-700 dark:text-emerald-300 font-semibold' : ''
               }`}>
                 {item.label}
               </span>
-            </button>
+            </motion.button>
           );
         })}
       </div>
@@ -185,18 +222,18 @@ export function EmptyChatState({ userName, onSelectPrompt, onOpenBreathing }: Em
       <AnimatePresence>
         {selectedMood && (
           <motion.div 
-            initial={{ opacity: 0, y: 3, height: 0 }}
-            animate={{ opacity: 1, y: 0, height: 'auto' }}
-            exit={{ opacity: 0, y: -3, height: 0 }}
-            transition={{ duration: 0.2 }}
-            className="my-1.5 flex items-center justify-center gap-2 overflow-hidden text-xs"
+            initial={{ opacity: 0, y: 4, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -4, scale: 0.95 }}
+            transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+            className="my-1.5 flex items-center justify-center gap-2 text-xs will-change-transform"
           >
             <span className="text-slate-600 dark:text-slate-300">
               Kamu <span className="font-medium text-slate-800 dark:text-slate-100">{selectedMood.feeling}</span>.
             </span>
             <button
               type="button"
-              onClick={() => onSelectPrompt(selectedMood.prompt)}
+              onClick={() => handlePromptSelectWithHaptic(selectedMood.prompt)}
               className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-teal-700 hover:bg-teal-800 active:bg-teal-900 text-white font-medium text-xs shadow-2xs transition cursor-pointer shrink-0"
             >
               <span>Mulai Cerita</span>
@@ -206,19 +243,22 @@ export function EmptyChatState({ userName, onSelectPrompt, onOpenBreathing }: Em
         )}
       </AnimatePresence>
 
-      {/* 3. Topik Obrolan Cepat: JADIKAN 1 BARIS HORIZONTAL SCROLL (WAJIB) */}
+      {/* 3. Topik Obrolan Cepat: JADIKAN 1 BARIS HORIZONTAL SCROLL (WAJIB) dengan Spring Chips */}
       <div className="w-full mt-2">
         <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-2 px-4 -mx-4 sm:mx-auto sm:justify-center sm:flex-wrap max-w-lg">
           {QUICK_STARTERS.map((starter) => (
-            <button
+            <motion.button
               key={starter.id}
               type="button"
-              onClick={() => onSelectPrompt(starter.prompt)}
-              className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 text-slate-700 dark:text-slate-200 shadow-2xs active:scale-95 transition-all cursor-pointer hover:border-teal-500 hover:text-teal-600 dark:hover:border-teal-400"
+              onClick={() => handlePromptSelectWithHaptic(starter.prompt)}
+              whileHover={shouldReduceMotion ? undefined : { scale: 1.03 }}
+              whileTap={shouldReduceMotion ? undefined : { scale: 0.96 }}
+              transition={{ type: "spring", stiffness: 340, damping: 26, mass: 0.8 }}
+              className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-medium bg-white/60 dark:bg-slate-900/60 backdrop-blur-md border border-slate-200/70 dark:border-slate-800/70 text-slate-700 dark:text-slate-300 hover:border-emerald-300 hover:text-emerald-700 dark:hover:text-emerald-300 hover:bg-emerald-50/50 dark:hover:bg-emerald-950/30 transition-colors duration-200 cursor-pointer shadow-sm shrink-0"
             >
               <span>{starter.iconEmoji}</span>
               <span>{starter.title}</span>
-            </button>
+            </motion.button>
           ))}
         </div>
       </div>

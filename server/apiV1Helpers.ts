@@ -23,20 +23,53 @@ declare global {
   }
 }
 
-function sanitizeUrlForLogs(rawUrl: string): string {
+/**
+ * Sanitizes URLs before logging by applying a strict ALLOWLIST policy on query parameters.
+ * Prevents accidental leak of sensitive medical/clinical PII or credentials (e.g. ?keluhan=depresi, ?token=xyz) in ELK/Datadog logs.
+ *
+ * @param rawUrl - The raw input URL string.
+ * @returns Sanitized URL string where any non-allowlisted query parameter value is replaced with [REDACTED].
+ */
+export function sanitizeUrlForLogs(rawUrl: string): string {
+  if (!rawUrl || typeof rawUrl !== 'string') {
+    return '';
+  }
+
   try {
     const [pathname, queryString] = rawUrl.split('?');
-    if (!queryString) return pathname;
+    if (!queryString) {
+      return pathname;
+    }
+
+    const ALLOWED_QUERY_KEYS = new Set([
+      'page',
+      'limit',
+      'offset',
+      'sort',
+      'order',
+      'format',
+      'view',
+      'tab',
+      'mode',
+      'filter',
+      'status',
+      'approvalstatus',
+      'category',
+      'type',
+      'lang'
+    ]);
+
     const params = new URLSearchParams(queryString);
-    const SENSITIVE_KEYS = ['token', 'secret', 'email', 'code', 'key', 'password', 'mfa', 'auth'];
     for (const key of Array.from(params.keys())) {
-      if (SENSITIVE_KEYS.some(s => key.toLowerCase().includes(s))) {
+      const normalizedKey = key.toLowerCase().trim();
+      if (!ALLOWED_QUERY_KEYS.has(normalizedKey)) {
         params.set(key, '[REDACTED]');
       }
     }
+
     return `${pathname}?${params.toString()}`;
   } catch {
-    return rawUrl;
+    return rawUrl.split('?')[0] || rawUrl;
   }
 }
 
@@ -620,6 +653,64 @@ export function logAiTelemetry(data: AiTelemetryData) {
   console.log(JSON.stringify(safeLogPayload));
 }
 
+/**
+ * Formats a Prisma P2002 Unique Constraint Violation error into a human-friendly, field-specific error message.
+ * Extracts metadata from Prisma's `err.meta?.target` to deliver exact context to the end user.
+ */
+export function formatP2002ErrorMessage(err: any): { code: string; message: string; field?: string } {
+  const target = err?.meta?.target;
+  let targetStr = '';
+
+  if (Array.isArray(target)) {
+    targetStr = target.join(', ').toLowerCase();
+  } else if (typeof target === 'string') {
+    targetStr = target.toLowerCase();
+  }
+
+  if (targetStr.includes('email')) {
+    return {
+      code: 'DUPLICATE_EMAIL',
+      message: 'Email sudah terdaftar. Silakan gunakan email lain atau masuk ke akun Anda.',
+      field: 'email'
+    };
+  }
+
+  if (targetStr.includes('nim') || targetStr.includes('studentnim')) {
+    return {
+      code: 'DUPLICATE_NIM',
+      message: 'NIM ini sudah terdaftar dalam sistem.',
+      field: 'studentNIM'
+    };
+  }
+
+  if (
+    targetStr.includes('slot') ||
+    targetStr.includes('appointment') ||
+    targetStr.includes('counselorid') ||
+    targetStr.includes('date') ||
+    targetStr.includes('time')
+  ) {
+    return {
+      code: 'SLOT_ALREADY_BOOKED',
+      message: 'Slot jadwal konseling pada tanggal dan waktu tersebut sudah terisi.',
+      field: 'slot'
+    };
+  }
+
+  if (targetStr) {
+    return {
+      code: 'DUPLICATE_ENTRY',
+      message: `Data dengan ${targetStr} tersebut sudah terdaftar dalam sistem.`,
+      field: targetStr
+    };
+  }
+
+  return {
+    code: 'DUPLICATE_ENTRY',
+    message: 'Data dengan informasi tersebut sudah terdaftar dalam sistem.'
+  };
+}
+
 // ==========================================
 // 9. CENTRALIZED ERROR HANDLER
 // ==========================================
@@ -693,13 +784,15 @@ export function centralizedErrorHandler(err: any, req: Request, res: Response, _
     });
   }
 
-  // 3. Prisma Database Errors (Prevent DB schema/SQL leaks)
+  // 3. Prisma Database Errors (Prevent DB schema/SQL leaks with dynamic context)
   if (errorCode === 'P2002') {
+    const p2002Info = formatP2002ErrorMessage(err);
     return res.status(409).json({
       success: false,
-      code: 'DUPLICATE_ENTRY',
-      error: 'DUPLICATE_ENTRY',
-      message: 'Data dengan informasi tersebut sudah terdaftar dalam sistem.',
+      code: p2002Info.code,
+      error: p2002Info.code,
+      message: p2002Info.message,
+      ...(p2002Info.field ? { field: p2002Info.field } : {}),
       requestId
     });
   }

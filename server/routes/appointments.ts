@@ -65,6 +65,27 @@ export interface AppointmentResponseDTO {
   studentEmail?: string;
 }
 
+/**
+ * Utility to parse local appointment date, time, and timezone into an absolute UTC Date object.
+ * Handles WIB (+07:00), WITA (+08:00), and WIT (+09:00).
+ */
+export function parseAppointmentToUtcDate(dateStr: string, timeStr: string, timezoneStr: string = 'WIB'): Date {
+  const tz = (timezoneStr || 'WIB').toUpperCase();
+  const offsetMap: Record<string, string> = {
+    WIB: '+07:00',
+    WITA: '+08:00',
+    WIT: '+09:00'
+  };
+  const offset = offsetMap[tz] || '+07:00';
+  const cleanTime = (timeStr || '09:00').trim();
+  const timeMatch = cleanTime.match(/(\d{1,2}):(\d{2})/);
+  const hours = timeMatch ? timeMatch[1].padStart(2, '0') : '09';
+  const minutes = timeMatch ? timeMatch[2] : '00';
+  const isoStr = `${dateStr}T${hours}:${minutes}:00${offset}`;
+  const dt = new Date(isoStr);
+  return isNaN(dt.getTime()) ? new Date() : dt;
+}
+
 export function mapAppointmentToResponse(appt: any): AppointmentResponseDTO {
   return {
     id: appt.id,
@@ -248,7 +269,14 @@ router.get(['/', '/db/appointments'], requireAuth, async (req: Request, res: Res
     // Filter by date
     const dateFilter = req.query.date as string;
     if (dateFilter) {
-      andConditions.push({ date: dateFilter });
+      const startOfDay = new Date(`${dateFilter}T00:00:00+07:00`);
+      const endOfDay = new Date(`${dateFilter}T23:59:59.999+07:00`);
+      andConditions.push({
+        scheduledAt: {
+          gte: startOfDay,
+          lte: endOfDay
+        }
+      });
     }
 
     // Search query
@@ -371,6 +399,28 @@ router.get(['/:id/room-access', '/db/appointments/:id/room-access'], requireAuth
   } catch (err: any) {
     console.error('Error validating room access:', err);
     res.status(500).json({ success: false, error: 'INTERNAL_SERVER_ERROR', message: 'Gagal memvalidasi izin akses room.' });
+  }
+});
+
+// GET /api/appointments/:id/ice-servers secured by verifyAppointmentAccess
+router.get(['/:id/ice-servers', '/db/appointments/:id/ice-servers'], requireAuth, verifyAppointmentAccess, async (req: Request, res: Response) => {
+  try {
+    const iceServers = [
+      { urls: "stun:stun.l.google.com:19302" },
+      { 
+        urls: "turn:turn.ruangtenang.ui.ac.id:3478", 
+        username: "ruangtenang_secure_user", 
+        credential: "secret_password_here" 
+      }
+    ];
+
+    res.json({
+      success: true,
+      iceServers
+    });
+  } catch (err: any) {
+    console.error('Error fetching ice servers:', err);
+    res.status(500).json({ success: false, error: 'INTERNAL_SERVER_ERROR', message: 'Gagal mengambil konfigurasi ICE/TURN.' });
   }
 });
 

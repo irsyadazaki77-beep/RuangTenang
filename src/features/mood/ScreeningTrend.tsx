@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Activity, Compass, BookOpen, ArrowRight, FileSpreadsheet, RotateCcw, Moon, Heart, TrendingDown, TrendingUp, Minus } from 'lucide-react';
+import { Activity, Compass, BookOpen, ArrowRight, FileSpreadsheet, RotateCcw, Moon, Heart, TrendingDown, TrendingUp, Minus, Download, FileText } from 'lucide-react';
 import { HistoricalScore, TriageCategory } from '../../types';
 
 interface MoodLog {
@@ -39,6 +39,28 @@ export const ScreeningTrend: React.FC<ScreeningTrendProps> = ({
   getTriageBadge
 }) => {
   const [chartType, setChartType] = useState<'line' | 'bar'>('line');
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
+
+  const handleDownloadPdf = async () => {
+    setDownloadingPdf(true);
+    try {
+      const response = await fetch('/api/user-data/export-pdf', { credentials: 'include' });
+      if (!response.ok) throw new Error('Gagal mengunduh PDF');
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Resume_Konseling_RuangTenang_${Date.now()}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch {
+      alert('Gagal mengunduh laporan PDF. Silakan coba lagi.');
+    } finally {
+      setDownloadingPdf(false);
+    }
+  };
 
   // Calculate Deltas (Recent [0] vs Previous [1])
   let phqDelta = 0;
@@ -506,15 +528,25 @@ export const ScreeningTrend: React.FC<ScreeningTrendProps> = ({
               Log Riwayat Tes Skrining Lengkap
             </span>
           </div>
-          {screenHistory.length > 0 && (
+          <div className="flex items-center gap-2">
             <button
-              onClick={onClearHistory}
-              className="text-xs text-rose-600 dark:text-rose-400 hover:underline font-semibold flex items-center gap-1 cursor-pointer"
+              onClick={handleDownloadPdf}
+              disabled={downloadingPdf}
+              className="px-3 py-1 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
             >
-              <RotateCcw className="w-3.5 h-3.5" />
-              Reset Riwayat
+              <Download className="w-3.5 h-3.5" />
+              <span>{downloadingPdf ? 'Mengunduh...' : 'Unduh Laporan PDF'}</span>
             </button>
-          )}
+            {screenHistory.length > 0 && (
+              <button
+                onClick={onClearHistory}
+                className="text-xs text-rose-600 dark:text-rose-400 hover:underline font-semibold flex items-center gap-1 cursor-pointer"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                Reset Riwayat
+              </button>
+            )}
+          </div>
         </div>
         
         <div className="overflow-x-auto custom-scrollbar">

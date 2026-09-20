@@ -181,17 +181,9 @@ export async function executeDailyMaintenance(): Promise<DailyMaintenanceReport>
     });
     hygiene.expiredIdempotencyRecordsCleaned = delIdempotency.count;
 
-    // Clean expired distributed states (rate limit counters, cooling timers)
-    const delStates = await prisma.distributedState.deleteMany({
-      where: { expiresAt: { lt: now } }
-    });
-    hygiene.expiredDistributedStatesCleaned = delStates.count;
-
-    // Clean expired distributed locks
-    const delLocks = await prisma.distributedLock.deleteMany({
-      where: { expiresAt: { lt: now } }
-    });
-    hygiene.expiredLocksCleaned = delLocks.count;
+    // Expired distributed states and locks are managed with TTL by Redis and in-memory stores automatically
+    hygiene.expiredDistributedStatesCleaned = 0;
+    hygiene.expiredLocksCleaned = 0;
 
     console.log(
       `[5/6 HYGIENE PURGE] Selesai: ` +

@@ -93,8 +93,7 @@ describe('Appointment Security & IDOR Prevention Tests', () => {
           counselorName: 'Counselor Alpha',
           userId: 'std-idor-1',
           studentName: 'Student One',
-          date: '2026-03-10',
-          time: '09:00',
+          scheduledAt: new Date('2026-03-10T09:00:00.000Z'),
           status: 'PENDING',
           approvalStatus: 'PENDING_APPROVAL',
           attendanceStatus: 'SCHEDULED',
@@ -106,8 +105,7 @@ describe('Appointment Security & IDOR Prevention Tests', () => {
           counselorName: 'Counselor Beta',
           userId: 'std-idor-2',
           studentName: 'Student Two',
-          date: '2026-03-11',
-          time: '14:00',
+          scheduledAt: new Date('2026-03-11T14:00:00.000Z'),
           status: 'CONFIRMED',
           approvalStatus: 'APPROVED',
           attendanceStatus: 'SCHEDULED',
@@ -119,9 +117,7 @@ describe('Appointment Security & IDOR Prevention Tests', () => {
           counselorName: 'Counselor Room 2',
           userId: 'user-room-1',
           studentName: 'User Room 1',
-          date: '2026-09-20',
-          time: '10:00 - 11:00',
-          timezone: 'WIB',
+          scheduledAt: new Date('2026-09-20T10:00:00.000Z'),
           status: 'CONFIRMED',
           approvalStatus: 'APPROVED',
           attendanceStatus: 'SCHEDULED',
@@ -133,9 +129,7 @@ describe('Appointment Security & IDOR Prevention Tests', () => {
           counselorName: 'Counselor Room 2',
           userId: 'user-room-1',
           studentName: 'User Room 1',
-          date: '2026-09-20',
-          time: '10:00 - 11:00',
-          timezone: 'WIB',
+          scheduledAt: new Date('2026-09-20T10:00:00.000Z'),
           status: 'CANCELLED',
           approvalStatus: 'REJECTED',
           attendanceStatus: 'CANCELLED',
@@ -290,6 +284,39 @@ describe('Appointment Security & IDOR Prevention Tests', () => {
       expect(res.body.success).toBe(false);
       expect(res.body.allowed).toBe(false);
       expect(res.body.error).toBe('ROOM_ACCESS_NOT_PERMITTED');
+    });
+
+    it('Scenario 5: Attacker (User 3) accessing /ice-servers MUST return HTTP 403 Forbidden', async () => {
+      const res = await request(app)
+        .get('/api/appointments/apt-room-video-1/ice-servers')
+        .set('Cookie', [`rt_auth_token=${user3AttackerToken}`]);
+
+      expect(res.status).toBe(403);
+      expect(res.body.error).toBe('ACCESS_DENIED');
+    });
+
+    it('Scenario 6: Authorized student (User 1) accessing /ice-servers MUST return HTTP 200 and dynamic iceServers config', async () => {
+      const res = await request(app)
+        .get('/api/appointments/apt-room-video-1/ice-servers')
+        .set('Cookie', [`rt_auth_token=${user1ClientToken}`]);
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(Array.isArray(res.body.iceServers)).toBe(true);
+      expect(res.body.iceServers[0].urls).toBe('stun:stun.l.google.com:19302');
+      expect(res.body.iceServers[1].urls).toBe('turn:turn.ruangtenang.ui.ac.id:3478');
+      expect(res.body.iceServers[1].username).toBeDefined();
+      expect(res.body.iceServers[1].credential).toBeDefined();
+    });
+
+    it('Scenario 7: Authorized counselor (User 2) accessing /ice-servers MUST return HTTP 200 and dynamic iceServers config', async () => {
+      const res = await request(app)
+        .get('/api/appointments/apt-room-video-1/ice-servers')
+        .set('Cookie', [`rt_auth_token=${user2CounselorToken}`]);
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(Array.isArray(res.body.iceServers)).toBe(true);
     });
   });
 });

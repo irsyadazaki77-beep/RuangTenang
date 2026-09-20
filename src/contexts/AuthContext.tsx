@@ -87,7 +87,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   useEffect(() => {
-    refreshSession();
+    // Pre-fetch CSRF token so the XSRF-TOKEN cookie is established immediately
+    apiClient.get('/api/csrf-token')
+      .then(() => {
+        refreshSession();
+      })
+      .catch(() => {
+        refreshSession();
+      });
   }, []);
 
   const logout = async () => {

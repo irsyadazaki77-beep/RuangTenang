@@ -331,7 +331,7 @@ export async function ensureDatabaseReady(): Promise<void> {
   const isPostgres = hasPostgresUrl || (explicitProvider === 'postgresql' && hasPostgresUrl);
 
   if (isProd && !isPostgres) {
-    throw new Error('FATAL DATABASE ERROR: Production requires PostgreSQL database.');
+    throw new Error('FATAL DATABASE ERROR: Production requires PostgreSQL');
   }
 
   try {

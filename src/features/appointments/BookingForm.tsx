@@ -10,6 +10,7 @@ import {
 import { UserSession, Appointment, TIER_LIMITS, Counselor } from "../../types";
 import { useCounselors } from "../../hooks/useCounselors";
 import { apiClient } from "../../lib/apiClient";
+import { clientDb } from "../../lib/clientDb";
 import { addNotification } from "../../lib/notificationStore";
 
 interface BookingFormProps {
@@ -218,21 +219,69 @@ export const BookingForm: React.FC<BookingFormProps> = ({
 
     setIsSubmitting(true);
     const fullTimeSlot = `${timeSlot} ${timezone}`;
+    const appointmentPayload = {
+      counselorId: counselorObj.id,
+      counselorName: counselorObj.name,
+      date,
+      time: timeSlot,
+      timezone,
+      mode,
+      notes: selectedConcern,
+      userId: studentNIM || "mahasiswa-anon",
+      studentName: studentName.trim(),
+      studentNIM: studentNIM.trim(),
+      studentEmail: studentEmail.trim(),
+    };
+
+    // Offline check: store directly to local encrypted outbox queue if disconnected
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      try {
+        await clientDb.addToOutbox("appointment", "/api/v1/appointments", appointmentPayload);
+        const offlineAppointment: Appointment = {
+          id: `offline-apt-${Date.now()}`,
+          counselorId: counselorObj.id,
+          counselorName: counselorObj.name,
+          counselorTitle: counselorObj.title,
+          counselorAvatar: counselorObj.avatar,
+          studentName: studentName.trim(),
+          studentNIM: studentNIM.trim(),
+          studentEmail: studentEmail.trim(),
+          date,
+          timeSlot: fullTimeSlot,
+          timezone,
+          mode,
+          primaryConcern: `${selectedConcern} (Offline)`,
+          status: "PENDING",
+          approvalStatus: "PENDING_APPROVAL",
+          attendanceStatus: "SCHEDULED",
+          reminderEnabled: true,
+          reminderMinutesBefore: reminderMinutes,
+          createdAt: new Date().toISOString(),
+        };
+
+        onAddAppointment(offlineAppointment);
+        addNotification(
+          "Jadwal Konseling Disimpan Offline 🗓️",
+          `Pertemuan dengan ${counselorObj.name} disimpan di antrean offline dan akan disinkronkan saat terhubung kembali.`,
+          "info"
+        );
+        onClose();
+        setFormError(null);
+        showToast(
+          "Jadwal disimpan di antrean offline. Akan disinkronkan otomatis saat online.",
+          "info"
+        );
+      } catch (err) {
+        console.warn("Failed to store offline appointment:", err);
+        setFormError("Gagal menyimpan jadwal secara offline. Silakan coba lagi.");
+      } finally {
+        setIsSubmitting(false);
+      }
+      return;
+    }
 
     try {
-      const res = await apiClient.post<any>("/api/v1/appointments", {
-        counselorId: counselorObj.id,
-        counselorName: counselorObj.name,
-        date,
-        time: timeSlot,
-        timezone,
-        mode,
-        notes: selectedConcern,
-        userId: studentNIM || "mahasiswa-anon",
-        studentName: studentName.trim(),
-        studentNIM: studentNIM.trim(),
-        studentEmail: studentEmail.trim(),
-      });
+      const res = await apiClient.post<any>("/api/v1/appointments", appointmentPayload);
 
       if (!res.success) {
         if (res.status === 409) {
@@ -290,7 +339,45 @@ export const BookingForm: React.FC<BookingFormProps> = ({
       );
     } catch (e) {
       console.warn("Backend appointment save failed:", e);
-      setFormError("Terjadi kesalahan jaringan saat menyimpan jadwal.");
+      try {
+        await clientDb.addToOutbox("appointment", "/api/v1/appointments", appointmentPayload);
+        const offlineAppointment: Appointment = {
+          id: `offline-apt-${Date.now()}`,
+          counselorId: counselorObj.id,
+          counselorName: counselorObj.name,
+          counselorTitle: counselorObj.title,
+          counselorAvatar: counselorObj.avatar,
+          studentName: studentName.trim(),
+          studentNIM: studentNIM.trim(),
+          studentEmail: studentEmail.trim(),
+          date,
+          timeSlot: fullTimeSlot,
+          timezone,
+          mode,
+          primaryConcern: `${selectedConcern} (Offline)`,
+          status: "PENDING",
+          approvalStatus: "PENDING_APPROVAL",
+          attendanceStatus: "SCHEDULED",
+          reminderEnabled: true,
+          reminderMinutesBefore: reminderMinutes,
+          createdAt: new Date().toISOString(),
+        };
+
+        onAddAppointment(offlineAppointment);
+        addNotification(
+          "Jadwal Konseling Disimpan Offline 🗓️",
+          `Koneksi terputus. Pertemuan dengan ${counselorObj.name} telah disimpan di antrean offline.`,
+          "info"
+        );
+        onClose();
+        setFormError(null);
+        showToast(
+          "Koneksi terputus. Jadwal disimpan di antrean offline.",
+          "info"
+        );
+      } catch {
+        setFormError("Terjadi kesalahan jaringan saat menyimpan jadwal.");
+      }
     } finally {
       setIsSubmitting(false);
     }

@@ -109,7 +109,6 @@ describe('FASE 1 SECURITY HOTFIX REGRESSION TEST SUITE', () => {
     clearIdempotencyStoreForTesting();
     clearSosHistoryForTesting();
     await redisService.flush();
-    await prisma.distributedState.deleteMany({});
   });
 
   afterAll(async () => {

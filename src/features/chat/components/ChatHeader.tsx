@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Menu, Moon, Sun, Ghost, Brain, ChevronDown, Search, MoreVertical, Sparkles, Bookmark, GitBranch } from 'lucide-react';
+import { Menu, Moon, Sun, Ghost, Brain, ChevronDown, Search, MoreVertical, Sparkles, Bookmark, GitBranch, HeartPulse, Eye, EyeOff, Shield } from 'lucide-react';
 import { ChatMode, ResponseStyle } from '../types';
 import { UserSession } from '../../../types';
 import { useTheme } from '../../../contexts/ThemeContext';
@@ -29,7 +29,10 @@ interface ChatHeaderProps {
   onOpenSummary?: () => void;
   onOpenBookmarks?: () => void;
   onOpenMemory?: () => void;
+  onOpenGrounding?: () => void;
   hasMessages?: boolean;
+  isPrivacyMode?: boolean;
+  onTogglePrivacy?: () => void;
 }
 
 export function ChatHeader({
@@ -39,8 +42,10 @@ export function ChatHeader({
   isTemporary, setIsTemporary,
   activePlugin, setActivePlugin,
   onToggleSearch, isSearchOpen,
-  onOpenSummary, onOpenBookmarks, onOpenMemory,
-  hasMessages = false
+  onOpenSummary, onOpenBookmarks, onOpenMemory, onOpenGrounding,
+  hasMessages = false,
+  isPrivacyMode = false,
+  onTogglePrivacy
 }: ChatHeaderProps) {
   const { actualTheme, toggleTheme } = useTheme();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -48,13 +53,13 @@ export function ChatHeader({
   const isSettingsOpen = activePlugin === 'chat_settings';
 
   return (
-    <header className="h-12 sm:h-12 sticky top-0 z-20 w-full shrink-0 flex items-center justify-between px-3 sm:px-4 bg-stone-50/85 dark:bg-[#0c1117]/85 backdrop-blur-md border-b border-stone-200/60 dark:border-slate-800/60 transition-colors">
+    <header className="sticky top-0 z-20 w-full shrink-0 flex items-center justify-between px-3 sm:px-4 pt-safe pt-[env(safe-area-inset-top,0px)] min-h-[calc(3.25rem+env(safe-area-inset-top,0px))] bg-stone-50/70 dark:bg-slate-950/60 backdrop-blur-2xl border-b border-stone-200/40 dark:border-slate-800/40 transition-colors">
       {/* Left side: Mobile menu button & Minimalist Model Trigger */}
       <div className="flex items-center gap-1 sm:gap-2 min-w-0 flex-1">
         {onOpenSidebar && (
           <button
             onClick={onOpenSidebar}
-            className="lg:hidden w-10 h-10 min-w-[40px] min-h-[40px] flex items-center justify-center text-stone-500 hover:text-stone-900 dark:hover:text-stone-100 hover:bg-stone-200/50 dark:hover:bg-slate-800/60 rounded-xl shrink-0 transition-colors cursor-pointer"
+            className="lg:hidden w-11 h-11 min-w-[44px] min-h-[44px] flex items-center justify-center text-stone-500 hover:text-stone-900 dark:hover:text-stone-100 hover:bg-stone-200/50 dark:hover:bg-slate-800/60 rounded-xl shrink-0 transition-colors cursor-pointer"
             aria-label="Buka Menu"
           >
             <Menu className="w-5 h-5" />
@@ -64,7 +69,7 @@ export function ChatHeader({
         <div className="relative min-w-0">
           <button
             onClick={() => setActivePlugin(isSettingsOpen ? null : 'chat_settings')}
-            className="flex items-center gap-1.5 px-2 py-1.5 min-h-[40px] rounded-xl hover:bg-stone-200/50 dark:hover:bg-slate-800/60 transition-colors cursor-pointer text-left group min-w-0"
+            className="flex items-center gap-1.5 px-2.5 py-2 min-h-[44px] rounded-xl hover:bg-stone-200/50 dark:hover:bg-slate-800/60 transition-colors cursor-pointer text-left group min-w-0"
             title="Pilih Model dan Preferensi"
           >
             <BrandLogo size="xs" iconOnly />
@@ -192,12 +197,12 @@ export function ChatHeader({
         ) : null}
       </div>
 
-      {/* Right side: Search, More Actions, and Theme toggle */}
+      {/* Right side: Search, Privacy Shield, More Actions, and Theme toggle */}
       <div className="flex items-center gap-1 shrink-0">
         {onToggleSearch && hasMessages && (
           <button
             onClick={onToggleSearch}
-            className={`w-10 h-10 min-w-[40px] min-h-[40px] flex items-center justify-center rounded-xl transition-colors cursor-pointer ${
+            className={`w-11 h-11 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl transition-colors cursor-pointer ${
               isSearchOpen
                 ? 'text-teal-600 dark:text-teal-400 bg-teal-50 dark:bg-teal-950/60'
                 : 'text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-200/50 dark:hover:bg-slate-800/60'
@@ -209,11 +214,27 @@ export function ChatHeader({
           </button>
         )}
 
+        {/* Feature: Privacy Shield Toggle Button */}
+        {onTogglePrivacy && (
+          <button
+            onClick={onTogglePrivacy}
+            className={`w-11 h-11 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl transition-all cursor-pointer ${
+              isPrivacyMode
+                ? 'text-amber-700 dark:text-amber-300 bg-amber-100/90 dark:bg-amber-950/80 ring-1 ring-amber-400/60 shadow-xs'
+                : 'text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-200/50 dark:hover:bg-slate-800/60'
+            }`}
+            title={isPrivacyMode ? "Nonaktifkan Mode Privasi (Layar Disamarkan)" : "Mode Privasi Kampus (Samarkan Layar Obrolan)"}
+            aria-label={isPrivacyMode ? "Nonaktifkan Mode Privasi" : "Aktifkan Mode Privasi"}
+          >
+            {isPrivacyMode ? <EyeOff className="w-4 h-4 text-amber-600 dark:text-amber-400" /> : <Eye className="w-4 h-4" />}
+          </button>
+        )}
+
         {/* Three dots contextual menu */}
         <div className="relative">
           <button
             onClick={() => setIsMenuOpen(!isMenuOpen)}
-            className="w-10 h-10 min-w-[40px] min-h-[40px] flex items-center justify-center text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-200/50 dark:hover:bg-slate-800/60 rounded-xl transition-colors cursor-pointer"
+            className="w-11 h-11 min-w-[44px] min-h-[44px] flex items-center justify-center text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-200/50 dark:hover:bg-slate-800/60 rounded-xl transition-colors cursor-pointer"
             title="Menu Percakapan"
             aria-label="Menu Percakapan"
           >
@@ -224,13 +245,48 @@ export function ChatHeader({
             <>
               <div className="fixed inset-0 z-40" onClick={() => setIsMenuOpen(false)} />
               <div className="absolute top-full right-0 mt-1 w-56 bg-white dark:bg-slate-900 rounded-2xl p-1.5 z-50 shadow-xl border border-stone-200/80 dark:border-slate-800 animate-in fade-in zoom-in-95 duration-120 text-xs">
+                {onTogglePrivacy && (
+                  <button
+                    onClick={() => {
+                      setIsMenuOpen(false);
+                      onTogglePrivacy();
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2.5 min-h-[44px] rounded-xl text-stone-700 dark:text-slate-300 hover:bg-stone-100 dark:hover:bg-slate-800 text-left transition-colors cursor-pointer"
+                  >
+                    {isPrivacyMode ? (
+                      <EyeOff className="w-4 h-4 text-amber-500 shrink-0" />
+                    ) : (
+                      <Shield className="w-4 h-4 text-teal-600 dark:text-teal-400 shrink-0" />
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <div className="font-medium">{isPrivacyMode ? 'Buka Mode Privasi' : 'Mode Privasi Kampus'}</div>
+                      <div className="text-[10.5px] text-stone-400">{isPrivacyMode ? 'Buka kembali penyamaran layar' : 'Samarkan layar dari pandangan'}</div>
+                    </div>
+                  </button>
+                )}
+                {onOpenGrounding && (
+                  <button
+                    onClick={() => {
+                      setIsMenuOpen(false);
+                      onOpenGrounding();
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2.5 min-h-[44px] rounded-xl text-stone-700 dark:text-slate-300 hover:bg-stone-100 dark:hover:bg-slate-800 text-left transition-colors cursor-pointer"
+                  >
+                    <HeartPulse className="w-4 h-4 text-rose-500 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <div className="font-medium">Grounding 5-4-3-2-1</div>
+                      <div className="text-[10.5px] text-stone-400">Teknik redakan panik & cemas</div>
+                    </div>
+                  </button>
+                )}
+
                 {chatId && hasMessages && (
                   <button
                     onClick={() => {
                       setIsMenuOpen(false);
                       onOpenSummary?.();
                     }}
-                    className="w-full flex items-center gap-2.5 px-3 py-2.5 min-h-[40px] rounded-xl text-stone-700 dark:text-slate-300 hover:bg-stone-100 dark:hover:bg-slate-800 text-left transition-colors cursor-pointer"
+                    className="w-full flex items-center gap-2.5 px-3 py-2.5 min-h-[44px] rounded-xl text-stone-700 dark:text-slate-300 hover:bg-stone-100 dark:hover:bg-slate-800 text-left transition-colors cursor-pointer"
                   >
                     <Sparkles className="w-4 h-4 text-teal-600 dark:text-teal-400 shrink-0" />
                     <div className="min-w-0 flex-1">
@@ -245,7 +301,7 @@ export function ChatHeader({
                     setIsMenuOpen(false);
                     onOpenBookmarks?.();
                   }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2.5 min-h-[40px] rounded-xl text-stone-700 dark:text-slate-300 hover:bg-stone-100 dark:hover:bg-slate-800 text-left transition-colors cursor-pointer"
+                  className="w-full flex items-center gap-2.5 px-3 py-2.5 min-h-[44px] rounded-xl text-stone-700 dark:text-slate-300 hover:bg-stone-100 dark:hover:bg-slate-800 text-left transition-colors cursor-pointer"
                 >
                   <Bookmark className="w-4 h-4 text-amber-500 shrink-0" />
                   <div className="min-w-0 flex-1">
@@ -259,7 +315,7 @@ export function ChatHeader({
                     setIsMenuOpen(false);
                     onOpenMemory?.();
                   }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2.5 min-h-[40px] rounded-xl text-stone-700 dark:text-slate-300 hover:bg-stone-100 dark:hover:bg-slate-800 text-left transition-colors cursor-pointer"
+                  className="w-full flex items-center gap-2.5 px-3 py-2.5 min-h-[44px] rounded-xl text-stone-700 dark:text-slate-300 hover:bg-stone-100 dark:hover:bg-slate-800 text-left transition-colors cursor-pointer"
                 >
                   <Brain className="w-4 h-4 text-teal-600 dark:text-teal-400 shrink-0" />
                   <div className="min-w-0 flex-1">
@@ -274,7 +330,7 @@ export function ChatHeader({
 
         <button 
           onClick={toggleTheme} 
-          className="w-10 h-10 min-w-[40px] min-h-[40px] flex items-center justify-center text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-200/50 dark:hover:bg-slate-800/60 rounded-xl transition-colors cursor-pointer" 
+          className="w-11 h-11 min-w-[44px] min-h-[44px] flex items-center justify-center text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-200/50 dark:hover:bg-slate-800/60 rounded-xl transition-colors cursor-pointer" 
           aria-label="Ganti Tema"
           title={actualTheme === 'dark' ? 'Mode Terang' : 'Mode Gelap'}
         >

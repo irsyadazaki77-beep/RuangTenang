@@ -43,6 +43,7 @@ export function useChatStreaming() {
       onError: (error: string) => void;
       onFollowUps?: (followUps: string[]) => void;
       onChatCreated?: (chatId: string) => void;
+      onQuotaExceeded?: (data: { message: string; resetAt?: string; suggestedActions?: string[] }) => void;
     }
   ) => {
     const token = ++currentTokenRef.current;
@@ -131,6 +132,10 @@ export function useChatStreaming() {
         onChatCreated: (chatId) => {
           if (token !== currentTokenRef.current) return;
           callbacks.onChatCreated?.(chatId);
+        },
+        onQuotaExceeded: (data) => {
+          if (token !== currentTokenRef.current) return;
+          callbacks.onQuotaExceeded?.(data);
         }
       });
     } finally {

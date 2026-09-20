@@ -1,7 +1,8 @@
 import { useEscapeKey } from '../../hooks/useEscapeKey';
 import React from 'react';
-import { XCircle, FileText, Download, GraduationCap } from 'lucide-react';
+import { XCircle, FileText, Download, GraduationCap, Calendar, Share2 } from 'lucide-react';
 import { Appointment } from '../../types';
+import { downloadIcsFile, generateGoogleCalendarUrl } from '../../lib/calendarAndReminders';
 
 interface AppointmentDetailsModalProps {
   appointment: Appointment | null;
@@ -112,20 +113,43 @@ export const AppointmentDetailsModal: React.FC<AppointmentDetailsModalProps> = (
         </div>
 
         {/* Footer Actions */}
-        <div className="p-3.5 surface-card border-t border-default flex justify-end gap-2.5 shrink-0">
-          <button
-            onClick={handleDownload}
-            className="px-4 py-2 min-h-[44px] surface-card hover:bg-slate-100 dark:hover:bg-slate-800 text-secondary text-xs sm:text-sm font-semibold rounded-xl border border-default transition-all flex items-center gap-1.5 cursor-pointer active:scale-[0.98]"
-          >
-            <Download className="w-4 h-4" />
-            <span>Unduh Berkas (.txt)</span>
-          </button>
-          <button
-            onClick={onClose}
-            className="px-5 py-2 min-h-[44px] bg-slate-800 dark:bg-white hover:bg-slate-900 dark:hover:bg-slate-100 text-white dark:text-slate-900 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer active:scale-[0.98]"
-          >
-            Tutup Dokumen
-          </button>
+        <div className="p-3.5 surface-card border-t border-default flex flex-wrap items-center justify-between gap-2 shrink-0">
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+            <a
+              href={generateGoogleCalendarUrl(appointment)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-3.5 py-2 min-h-[40px] bg-teal-50 dark:bg-teal-950/40 hover:bg-teal-100 dark:hover:bg-teal-900/60 text-teal-800 dark:text-teal-300 text-xs font-semibold rounded-xl border border-teal-200/80 dark:border-teal-900/60 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              <Calendar className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+              <span>Google Calendar</span>
+            </a>
+            <button
+              type="button"
+              onClick={() => downloadIcsFile(appointment)}
+              className="px-3.5 py-2 min-h-[40px] surface-card hover:bg-slate-100 dark:hover:bg-slate-800 text-secondary text-xs font-semibold rounded-xl border border-default transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              <Share2 className="w-3.5 h-3.5" />
+              <span>Simpan (.ics)</span>
+            </button>
+          </div>
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+            <button
+              type="button"
+              onClick={handleDownload}
+              className="px-3.5 py-2 min-h-[40px] surface-card hover:bg-slate-100 dark:hover:bg-slate-800 text-secondary text-xs font-semibold rounded-xl border border-default transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Unduh (.txt)</span>
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 min-h-[40px] bg-slate-800 dark:bg-white hover:bg-slate-900 dark:hover:bg-slate-100 text-white dark:text-slate-900 rounded-xl text-xs font-semibold transition-all cursor-pointer"
+            >
+              Tutup
+            </button>
+          </div>
         </div>
       </div>
     </div>

@@ -277,8 +277,8 @@ router.get('/onboarding', requireAuth, async (req: Request, res: Response) => {
 
 const OnboardingSchema = z.object({
   completed: z.boolean().optional().default(true),
-  goals: z.array(z.enum(['academic', 'anxiety', 'relations', 'mindfulness']))
-    .max(4)
+  goals: z.array(z.enum(['academic', 'anxiety', 'relations', 'mindfulness', 'listen', 'unclutter', 'calm']))
+    .max(6)
     .refine((arr) => new Set(arr).size === arr.length, {
       message: "Goals must be unique and contain no duplicates"
     })
@@ -422,22 +422,27 @@ router.post('/profile', requireAuth, async (req: Request, res: Response) => {
 });
 
 // --- EXPORT PDF ---
-router.get('/export-progress-pdf', requireAuth, async (req: Request, res: Response) => {
+const handleExportPdf = async (req: Request, res: Response) => {
   try {
     const user = await prisma.users.findUnique({ where: { id: req.user!.userId } });
     if (!user) {
       return res.status(404).json({ success: false, error: 'User tidak ditemukan' });
     }
-    const pdfBuffer = await generateStudentProgressPdf(user.id, user.name);
+    const chatId = typeof req.query.chatId === 'string' ? req.query.chatId : undefined;
+    const pdfBuffer = await generateStudentProgressPdf(user.id, user.name, chatId);
     
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename=Progress_RuangTenang_${Date.now()}.pdf`);
+    res.setHeader('Content-Disposition', `attachment; filename=Resume_Konseling_RuangTenang_${Date.now()}.pdf`);
     res.send(pdfBuffer);
   } catch (e: any) {
     console.error('[EXPORT PDF] Error:', e);
-    sendError(res, 'EXPORT_FAILED', 'Gagal menghasilkan PDF perkembangan');
+    sendError(res, 'EXPORT_FAILED', 'Gagal menghasilkan PDF laporan resume konseling');
   }
-});
+};
+
+router.get('/export-pdf', requireAuth, handleExportPdf);
+router.get('/export-progress-pdf', requireAuth, handleExportPdf);
+router.get('/export-counseling-pdf', requireAuth, handleExportPdf);
 
 export default router;
 

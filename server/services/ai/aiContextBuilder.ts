@@ -31,7 +31,7 @@ export const aiContextBuilder = {
    * Builds an optimized, deduplicated, and privacy-sanitized AI context within budget constraints.
    */
   async buildContext(params: AiContextParams): Promise<BuiltContextResult> {
-    const { userId, chatId, fullHistory = [], currentMessage = '', pluginResult = '', abortSignal, isTemporary } = params;
+    const { userId, chatId, fullHistory = [], currentMessage = '', pluginResult: _pluginResult = '', abortSignal, isTemporary } = params;
     
     let tokensSavedTotal = 0;
     const consents = await consentService.getUserConsents(userId);
@@ -52,19 +52,19 @@ export const aiContextBuilder = {
     const screeningConsent = isTemp ? false : consents.consentForAIScreening;
     const memoryConsent = isTemp ? false : consents.consentForAIMemory;
 
-    // 1. Process Chat Summarization for Long History (>8 messages)
+    // 1. Process Chat Summarization for Long History (>10 messages) - Sliding Window with Rolling Summary
     let conversationSummary = '';
     let recentHistoryItems: ChatMessageItem[] = fullHistory;
 
-    if (chatId && fullHistory.length > 8) {
+    if (chatId && fullHistory.length > 10) {
       const summaryResult = await chatSummarizer.getOrUpdateSummary(chatId, fullHistory, { userId, abortSignal });
       conversationSummary = summaryResult.summary;
       tokensSavedTotal += summaryResult.tokensSaved;
       
-      // Keep only recent 6 messages in active prompt history
-      recentHistoryItems = fullHistory.slice(-6);
+      // Keep strictly 5 most recent raw messages in active prompt history
+      recentHistoryItems = fullHistory.slice(-5);
     } else {
-      recentHistoryItems = fullHistory.slice(-10);
+      recentHistoryItems = fullHistory;
     }
 
     // Prepare recent history strings for deduplication matching
@@ -158,7 +158,7 @@ Skor skrining psikologis awal (PHQ-9: ${s.phq9Score}, GAD-7: ${s.gad7Score})
 
     if (memoryConsent && memoryAllowed) {
       // Enhanced Relevance Scoring for Memory
-      let memories = await MemoryService.getRelevantMemories(userId, currentMessage, 3);
+      const memories = await MemoryService.getRelevantMemories(userId, currentMessage, 3);
 
       if (memories.length > 0) {
         const memoryLines: string[] = [];

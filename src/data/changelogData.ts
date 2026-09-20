@@ -26,14 +26,53 @@ export { CURRENT_APP_VERSION, LAST_UPDATED_DATE, isNewUpdateAvailable, markUpdat
 
 export const APP_CHANGELOG: ReleaseNote[] = [
   {
-    version: 'v3.2.1',
-    date: '2026-09-10',
-    releaseTime: 'Hari Ini, 10:55 WIB',
+    version: 'v3.3.0',
+    date: '2026-09-19',
+    releaseTime: 'Hari Ini, 15:33 WIB',
     periodLabel: 'Hari Ini',
-    title: 'Pemeliharaan Rutin Harian & Pembaruan Sistem v3.2.1: Audit Enkripsi, Pembersihan Retensi & Peningkatan Kestabilan',
-    tagline: 'Pembaruan pemeliharaan harian 10 September 2026 dengan verifikasi integritas enkripsi AES-256-GCM, pencadangan snapshot otomatis, isolasi data pengguna, dan pembersihan sesi inaktif.',
+    title: 'Pembaruan Web Resmi v3.3.0: Optimasi Performa Chat, Memori AI Context Window & Global Error Boundary',
+    tagline: 'Pembaruan versi web 19 September 2026 yang menghadirkan rendering obrolan bebas lag, memori riwayat AI tanpa amnesia (Rolling Summary 60 Pesan), dan proteksi crash antarmuka terpadu.',
     badge: 'Terbaru',
     isLatest: true,
+    highlights: [
+      'Pembaruan versi web resmi v3.3.0 (19 September 2026)',
+      'Optimasi Animasi Chat Streaming: Eliminasi layout thrashing dan pemanfaatan GPU acceleration',
+      'Manajemen Memori AI Context: Expansion kapasitas hingga 60 pesan dengan kompresi otomatis Rolling Summary',
+      'Global Error Boundary: Proteksi runtime error terisolasi dengan tampilan pemulihan sesi tenang'
+    ],
+    changes: [
+      {
+        id: 'ch-330-1',
+        category: 'improvement',
+        title: 'Optimasi Performa Rendering Obrolan (Streaming Fluidity)',
+        description: 'Penyempurnaan komponen MessageBubble dengan mengisolasi animasi masuk dan menghapus reflow layout saat streaming teks aktif.',
+        impact: 'Sesi obrolan dengan AI berjalan mulus, tanpa stuttering atau patah-patah di perangkat seluler maupun desktop.'
+      },
+      {
+        id: 'ch-330-2',
+        category: 'ai',
+        title: 'Arsitektur Memori AI Windowing & Ringkasan Otomatis',
+        description: 'Mengisi memori AI hingga 60 pesan dengan mekanisme Sliding Window yang meringkas percakapan lama ke dalam konteks instruksi sistem secara transparan.',
+        impact: 'Asisten AI mengingat riwayat percakapan panjang tanpa kehilangan konteks awal atau mengalami batas memori.'
+      },
+      {
+        id: 'ch-330-3',
+        category: 'fix',
+        title: 'Proteksi Global Error Boundary & Pemulihan Sesi',
+        description: 'Penanganan kegagalan tak terduga dengan tampilan alternatif yang ramah pengguna, tanpa menampilkan layar putih kosong atau stack trace teknis.',
+        impact: 'Pengguna dapat memulihkan sesi atau kembali ke halaman utama dengan aman dan tenang saat terjadi kendala jaringan.'
+      }
+    ],
+    buildNumber: 'build.20260919.01'
+  },
+  {
+    version: 'v3.2.1',
+    date: '2026-09-10',
+    releaseTime: '10 September 2026, 10:55 WIB',
+    periodLabel: 'Minggu Lalu',
+    title: 'Pemeliharaan Rutin Harian & Pembaruan Sistem v3.2.1: Audit Enkripsi, Pembersihan Retensi & Peningkatan Kestabilan',
+    tagline: 'Pembaruan pemeliharaan harian 10 September 2026 dengan verifikasi integritas enkripsi AES-256-GCM, pencadangan snapshot otomatis, isolasi data pengguna, dan pembersihan sesi inaktif.',
+    isLatest: false,
     highlights: [
       'Pembaruan versi web resmi v3.2.1 (10 September 2026)',
       'Pemeliharaan harian sukses: validasi konektivitas DB (latensi rendah), verifikasi AES-256-GCM, dan pencadangan snapshot basis data',

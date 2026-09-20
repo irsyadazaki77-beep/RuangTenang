@@ -315,7 +315,7 @@ router.get(
             ]
           }
         }),
-        prisma.appointments.findMany({ select: { notes: true, date: true, status: true } })
+        prisma.appointments.findMany({ select: { notes: true, scheduledAt: true, status: true } })
       ]);
 
       const dist = { minimal: 0, mild: 0, moderate: 0, severe: 0 };

@@ -1,7 +1,7 @@
 import { safeLocalStorage } from '../lib/storage';
 
-export const CURRENT_APP_VERSION = 'v3.2.1';
-export const LAST_UPDATED_DATE = '10 September 2026';
+export const CURRENT_APP_VERSION = 'v3.3.0';
+export const LAST_UPDATED_DATE = '19 September 2026';
 
 const STORAGE_LAST_SEEN_VERSION_KEY = 'ruangtenang_last_seen_version';
 
