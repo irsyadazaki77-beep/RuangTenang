@@ -150,6 +150,42 @@ Sebelum melakukan migrasi skema baru ke produksi, selalu lakukan langkah-langkah
 
 ---
 
+## 🐳 Panduan Deployment Produksi (Docker & Hardened Nginx)
+
+RuangTenang & RuangKerja telah dilengkapi arsitektur produksi berbasis **Multi-Stage Docker**, **Docker Compose Isolated Network**, dan **Hardened Nginx Reverse Proxy**.
+
+### 1. Struktur Stack Produksi
+- **Proxy:** Nginx 1.27 Alpine (Gzip/Brotli, CSP, HSTS, Rate Limiting Auth/SOS, WebSocket Pass-through)
+- **Web App:** Node.js 22 Alpine (Non-root `USER node`, dumb-init, Prisma Client SSOT)
+- **Database:** PostgreSQL 16 Alpine (Network Internal Terisolasi - Port tidak diekspos ke publik)
+- **Cache:** Redis 7 Alpine (Auth Protected, Persistent Append-Only File)
+
+### 2. Langkah Cepat Deployment Produksi
+
+1. **Siapkan Berkas Konfigurasi Produksi:**
+   ```bash
+   cp .env.production.example .env.production
+   chmod 600 .env.production
+   # Buka dan isi rahasia (JWT_SECRET, ENCRYPTION_KEY, POSTGRES_PASSWORD, REDIS_PASSWORD)
+   nano .env.production
+   ```
+
+2. **Jalankan Skrip Otomasi Deployment:**
+   ```bash
+   chmod +x deploy.sh
+   ./deploy.sh
+   ```
+
+   *Skrip `deploy.sh` secara otomatis menjalankan: validasi pre-flight, backup database snapshot, build multi-stage, eksekusi migrasi Prisma PostgreSQL, rolling container rollout, dan verifikasi healthcheck API.*
+
+3. **Perintah Manajemen Operasional:**
+   - Cek status container: `docker compose -f docker-compose.prod.yml ps`
+   - Pantau live log aplikasi: `docker compose -f docker-compose.prod.yml logs -f web`
+   - Pantau live log Nginx proxy: `docker compose -f docker-compose.prod.yml logs -f proxy`
+   - Matikan stack produksi: `docker compose -f docker-compose.prod.yml down`
+
+---
+
 ## 🔒 Kebijakan Privasi & Disclaimer Medis
 
 - **Bukan Layanan Diagnosis Klinis:** Asisten AI RuangTenang adalah pendamping reflektif emosional awal dan **BUKAN** psikolog, psikiater, atau pengganti penanganan medis darurat.

@@ -179,8 +179,6 @@ export function GroundingModal({ isOpen, onClose, onOpenBreathing }: GroundingMo
     }
   };
 
-  if (!isOpen) return null;
-
   return (
     <ModalShell
       isOpen={isOpen}

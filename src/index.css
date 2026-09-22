@@ -50,6 +50,42 @@
   }
 }
 
+/* Tactile Micro-Interactions (GPU-accelerated scale with cubic-bezier) */
+.btn-tactile,
+.btn-press {
+  transition: transform 0.14s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.15s ease, opacity 0.15s ease;
+  will-change: transform;
+}
+.btn-tactile:active,
+.btn-press:active {
+  transform: scale(0.97);
+}
+
+.btn-press-compact {
+  transition: transform 0.12s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform;
+}
+.btn-press-compact:active {
+  transform: scale(0.96);
+}
+
+.chip-tactile {
+  transition: transform 0.14s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.15s ease, border-color 0.15s ease;
+  will-change: transform;
+}
+.chip-tactile:active {
+  transform: scale(0.96);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn-tactile:active,
+  .btn-press:active,
+  .btn-press-compact:active,
+  .chip-tactile:active {
+    transform: none !important;
+  }
+}
+
 /* Utility to hide scrollbars while allowing scroll */
 .no-scrollbar::-webkit-scrollbar {
   display: none;
@@ -391,5 +427,112 @@
     animation: none !important;
   }
 }
+
+/* Academic Document Print Styles (@media print) */
+@media print {
+  /* Hide non-printable web UI, navigation, sidebars, modals, floating buttons */
+  nav,
+  aside,
+  header,
+  footer,
+  .no-print,
+  button,
+  [role="dialog"] {
+    display: none !important;
+  }
+
+  /* Specific canvas document target */
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    font-family: 'Times New Roman', Times, serif !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  @page {
+    size: A4 portrait;
+    margin: 4cm 3cm 3cm 4cm; /* Top, Right, Bottom, Left (Standar Skripsi: Kiri 4, Atas 4, Kanan 3, Bawah 3) */
+  }
+
+  .print-document-area {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: transparent !important;
+    color: #000000 !important;
+    font-family: 'Times New Roman', Times, serif !important;
+    font-size: 12pt !important;
+    line-height: 1.5 !important;
+  }
+
+  .print-document-area h1 {
+    font-size: 14pt !important;
+    font-weight: bold !important;
+    text-align: center !important;
+    text-transform: uppercase !important;
+    margin-bottom: 24pt !important;
+    page-break-after: avoid !important;
+  }
+
+  .print-document-area h2 {
+    font-size: 12pt !important;
+    font-weight: bold !important;
+    text-align: left !important;
+    margin-top: 18pt !important;
+    margin-bottom: 12pt !important;
+    page-break-after: avoid !important;
+  }
+
+  .print-document-area h3 {
+    font-size: 12pt !important;
+    font-weight: bold !important;
+    font-style: italic !important;
+    text-align: left !important;
+    margin-top: 14pt !important;
+    margin-bottom: 8pt !important;
+    page-break-after: avoid !important;
+  }
+
+  .print-document-area p {
+    text-align: justify !important;
+    text-indent: 1cm !important;
+    margin-bottom: 8pt !important;
+    line-height: 1.5 !important;
+  }
+
+  .print-document-area table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    margin: 14pt 0 !important;
+    page-break-inside: avoid !important;
+  }
+
+  .print-document-area table th,
+  .print-document-area table td {
+    border: 1px solid #000000 !important;
+    padding: 6pt 8pt !important;
+    font-size: 11pt !important;
+    text-align: left !important;
+  }
+
+  .print-document-area table th {
+    text-align: center !important;
+    font-weight: bold !important;
+  }
+
+  .print-document-area blockquote {
+    margin: 12pt 24pt !important;
+    padding-left: 12pt !important;
+    border-left: 2pt solid #666666 !important;
+    font-style: italic !important;
+    font-size: 11pt !important;
+    line-height: 1.2 !important;
+    text-align: justify !important;
+  }
+}
+
 
 

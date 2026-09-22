@@ -136,8 +136,6 @@ export function ChatMemoryModal({
     }
   };
 
-  if (!isOpen) return null;
-
   return (
     <ModalShell
       isOpen={isOpen}

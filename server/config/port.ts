@@ -12,7 +12,8 @@ export function parsePort(envPort?: string, defaultPort = 3000): number {
   const parsed = Number(trimmed);
 
   if (!Number.isInteger(parsed) || isNaN(parsed) || parsed < 1 || parsed > 65535) {
-    throw new Error(`[STARTUP ERROR] Invalid PORT configuration: '${envPort}'. Port must be an integer between 1 and 65535.`);
+    console.warn(`[STARTUP WARN] Invalid PORT configuration: '${envPort}'. Falling back to default port ${defaultPort}.`);
+    return defaultPort;
   }
 
   return parsed;

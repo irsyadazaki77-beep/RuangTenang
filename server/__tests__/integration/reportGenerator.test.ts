@@ -78,6 +78,17 @@ vi.mock('../../database', () => ({
           gad7Score: 10
         }
       ])
+    },
+    moodLogs: {
+      findMany: vi.fn().mockResolvedValue([
+        {
+          id: 'mood-1',
+          userId: 'user-1',
+          score: 4,
+          note: 'Merasa lebih baik',
+          timestamp: new Date()
+        }
+      ])
     }
   }
 }));

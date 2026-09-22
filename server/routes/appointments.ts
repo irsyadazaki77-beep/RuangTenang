@@ -730,4 +730,168 @@ router.post(['/:id/reschedule', '/db/appointments/:id/reschedule'], requireAuth,
   }
 });
 
+// ============================================================================
+// REAL-TIME VIDEO ROOM SIGNALING & IN-CALL COLLABORATION
+// ============================================================================
+
+interface RoomParticipant {
+  userId: string;
+  role: 'mahasiswa' | 'konselor' | 'admin';
+  name: string;
+  isScreenSharing: boolean;
+  networkQuality: 'good' | 'poor';
+  joinedAt: string;
+  lastPing: number;
+}
+
+interface InCallNote {
+  appointmentId: string;
+  sharedContent: string;
+  lastUpdatedBy: string;
+  updatedAt: string;
+}
+
+const activeRoomPresences = new Map<string, Map<string, RoomParticipant>>();
+const activeInCallNotes = new Map<string, InCallNote>();
+
+// Clean up stale participants (no ping for > 30s)
+setInterval(() => {
+  const now = Date.now();
+  for (const [roomId, participants] of activeRoomPresences.entries()) {
+    for (const [userId, participant] of participants.entries()) {
+      if (now - participant.lastPing > 35000) {
+        participants.delete(userId);
+      }
+    }
+    if (participants.size === 0) {
+      activeRoomPresences.delete(roomId);
+    }
+  }
+}, 15000);
+
+// GET /api/v1/appointments/:id/room-presence
+router.get('/:id/room-presence', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const appointmentId = req.params.id;
+    const roomMap = activeRoomPresences.get(appointmentId) || new Map<string, RoomParticipant>();
+    const participants = Array.from(roomMap.values());
+    
+    // Check if counselor is connected
+    const hasCounselor = participants.some(p => p.role === 'konselor');
+    const hasStudent = participants.some(p => p.role === 'mahasiswa');
+    const activeScreenSharer = participants.find(p => p.isScreenSharing);
+
+    let statusText = 'Menunggu konselor terhubung...';
+    if (hasCounselor && hasStudent) {
+      statusText = 'Konselor dan Mahasiswa terhubung';
+    } else if (hasCounselor) {
+      statusText = 'Konselor telah berada di ruangan';
+    } else if (hasStudent) {
+      statusText = 'Mahasiswa menunggu di ruangan';
+    }
+
+    res.json({
+      success: true,
+      data: {
+        appointmentId,
+        participants,
+        participantCount: participants.length,
+        hasCounselor,
+        hasStudent,
+        statusText,
+        activeScreenSharer: activeScreenSharer ? { userId: activeScreenSharer.userId, name: activeScreenSharer.name } : null
+      }
+    });
+  } catch (err) {
+    console.error('Error fetching room presence:', err);
+    res.status(500).json({ success: false, error: 'Gagal mengambil status ruangan' });
+  }
+});
+
+// POST /api/v1/appointments/:id/room-presence (Heartbeat / Status update)
+router.post('/:id/room-presence', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const appointmentId = req.params.id;
+    const user = req.user;
+    if (!user) {
+      return res.status(401).json({ success: false, error: 'Unauthorized' });
+    }
+
+    const { isScreenSharing = false, networkQuality = 'good', action = 'ping' } = req.body;
+
+    let roomMap = activeRoomPresences.get(appointmentId);
+    if (!roomMap) {
+      roomMap = new Map<string, RoomParticipant>();
+      activeRoomPresences.set(appointmentId, roomMap);
+    }
+
+    if (action === 'leave') {
+      roomMap.delete(user.userId);
+      return res.json({ success: true, message: 'Berhasil keluar dari ruangan' });
+    }
+
+    const participant: RoomParticipant = {
+      userId: user.userId,
+      role: (user.role as any) || 'mahasiswa',
+      name: user.name || (user.role === 'konselor' ? 'Konselor' : 'Mahasiswa'),
+      isScreenSharing: !!isScreenSharing,
+      networkQuality: networkQuality === 'poor' ? 'poor' : 'good',
+      joinedAt: roomMap.get(user.userId)?.joinedAt || new Date().toISOString(),
+      lastPing: Date.now()
+    };
+
+    roomMap.set(user.userId, participant);
+
+    res.json({
+      success: true,
+      participant,
+      participantCount: roomMap.size
+    });
+  } catch (err) {
+    console.error('Error updating room presence:', err);
+    res.status(500).json({ success: false, error: 'Gagal memperbarui status ruangan' });
+  }
+});
+
+// GET /api/v1/appointments/:id/in-call-notes
+router.get('/:id/in-call-notes', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const appointmentId = req.params.id;
+    const existing = activeInCallNotes.get(appointmentId) || {
+      appointmentId,
+      sharedContent: '',
+      lastUpdatedBy: 'Sistem',
+      updatedAt: new Date().toISOString()
+    };
+
+    res.json({ success: true, data: existing });
+  } catch (err) {
+    console.error('Error fetching in-call notes:', err);
+    res.status(500).json({ success: false, error: 'Gagal mengambil catatan in-call' });
+  }
+});
+
+// POST /api/v1/appointments/:id/in-call-notes
+router.post('/:id/in-call-notes', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const appointmentId = req.params.id;
+    const user = req.user;
+    const { sharedContent = '' } = req.body;
+
+    const updatedNote: InCallNote = {
+      appointmentId,
+      sharedContent: sanitizeInput(sharedContent),
+      lastUpdatedBy: user?.name || (user?.role === 'konselor' ? 'Konselor' : 'Mahasiswa'),
+      updatedAt: new Date().toISOString()
+    };
+
+    activeInCallNotes.set(appointmentId, updatedNote);
+
+    res.json({ success: true, data: updatedNote });
+  } catch (err) {
+    console.error('Error updating in-call notes:', err);
+    res.status(500).json({ success: false, error: 'Gagal menyimpan catatan in-call' });
+  }
+});
+
 export default router;

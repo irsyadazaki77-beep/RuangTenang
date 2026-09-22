@@ -84,13 +84,37 @@ export class ChatStreamingClient {
         headers['X-CSRF-Token'] = csrfToken;
       }
 
-      let response = await fetch('/api/v1/chat/stream', {
-        method: 'POST',
-        headers,
-        credentials: 'include',
-        body: JSON.stringify(payload),
-        signal: abortController.signal
-      });
+      let response: Response | null = null;
+      let lastFetchErr: any = null;
+      const MAX_RETRIES = 2;
+
+      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        if (token !== this.activeToken || abortController.signal.aborted) return;
+        try {
+          response = await fetch('/api/v1/chat/stream', {
+            method: 'POST',
+            headers,
+            credentials: 'include',
+            body: JSON.stringify(payload),
+            signal: abortController.signal
+          });
+          lastFetchErr = null;
+          break;
+        } catch (fetchErr: any) {
+          lastFetchErr = fetchErr;
+          if (abortController.signal.aborted || fetchErr.name === 'AbortError') {
+            throw fetchErr;
+          }
+          if (attempt < MAX_RETRIES) {
+            console.warn(`[CHAT_STREAM] Percobaan koneksi ${attempt + 1} gagal (${fetchErr.message}), mencoba ulang...`);
+            await new Promise((r) => setTimeout(r, (attempt + 1) * 700));
+          }
+        }
+      }
+
+      if (lastFetchErr || !response) {
+        throw lastFetchErr || new Error('Koneksi ke server terputus.');
+      }
 
       // If 403 occurs due to CSRF token mismatch/expiry, attempt fresh token refresh once
       if (response.status === 403 && token === this.activeToken && !abortController.signal.aborted) {

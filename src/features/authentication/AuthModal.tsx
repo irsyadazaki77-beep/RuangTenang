@@ -1,6 +1,6 @@
 import { useEscapeKey } from '../../hooks/useEscapeKey';
 import React, { useState, useEffect, useRef } from 'react';
-import { User, AlertCircle, CheckCircle, UserPlus, LogIn, KeyRound, ShieldCheck, MailCheck, Lock, X } from 'lucide-react';
+import { User, AlertCircle, CheckCircle, UserPlus, LogIn, KeyRound, ShieldCheck, MailCheck, Lock, X, GraduationCap, Building2, ArrowRight } from 'lucide-react';
 import { UserSession } from '../../types';
 import { apiClient } from '../../lib/apiClient';
 import { useAuth } from '../../contexts/AuthContext';
@@ -14,7 +14,7 @@ interface AuthModalProps {
   requiredRoleNotice?: string;
 }
 
-type AuthTab = 'login' | 'register' | 'mfa' | 'forgot' | 'verify';
+type AuthTab = 'login' | 'register' | 'mfa' | 'forgot' | 'verify' | 'sso';
 
 export const AuthModal: React.FC<AuthModalProps> = ({
   isOpen,
@@ -138,6 +138,38 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       onClose();
     } catch (err: any) {
       setErrorMsg(err.message || 'Koneksi server gagal.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCampusSsoLogin = async (ssoProvider: { id: string; name: string; domain: string }) => {
+    setErrorMsg('');
+    setSuccessMsg('');
+    setLoading(true);
+    try {
+      const emailDomain = ssoProvider.domain.startsWith('*') ? 'kampus.ac.id' : ssoProvider.domain.split(',')[0].trim();
+      const ssoEmail = email.trim().includes('@') ? email.trim() : `mahasiswa_${Math.floor(Math.random() * 89999 + 10000)}@${emailDomain}`;
+      
+      const response = await apiClient.post<any>('/api/v1/auth/sso/campus-login', {
+        email: ssoEmail,
+        name: name.trim() || `Civitas Akademika (${ssoProvider.name.split(' ')[1] || 'Kampus'})`,
+        university: ssoProvider.name.replace('SSO ', ''),
+        providerId: ssoProvider.id
+      });
+
+      if (!response.success) {
+        throw new Error(response.error || 'Login SSO Kampus gagal.');
+      }
+
+      const data = response.data;
+      onLogin({
+        ...data.user,
+        usageStats: { chatMessagesSent: 0, appointmentsBooked: 0 }
+      });
+      onClose();
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Gagal memproses autentikasi SSO Kampus.');
     } finally {
       setLoading(false);
     }
@@ -414,25 +446,33 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           ) : (
             <>
               {/* Tab Navigation */}
-              <div className="flex border-b border-default -mx-1">
+              <div className="flex border-b border-default -mx-1 overflow-x-auto no-scrollbar">
                 <button
                   type="button"
                   onClick={() => { setActiveTab('login'); resetFormState(); }}
-                  className={`flex-1 py-2 text-xs font-semibold border-b-2 transition min-h-[40px] cursor-pointer ${activeTab === 'login' ? 'border-teal-600 text-teal-700 dark:text-teal-400 font-bold' : 'border-transparent text-secondary hover:text-primary'}`}
+                  className={`flex-1 py-2 px-2 text-xs font-semibold border-b-2 transition min-h-[40px] cursor-pointer whitespace-nowrap ${activeTab === 'login' ? 'border-teal-600 text-teal-700 dark:text-teal-400 font-bold' : 'border-transparent text-secondary hover:text-primary'}`}
                 >
                   Masuk Sesi
                 </button>
                 <button
                   type="button"
+                  onClick={() => { setActiveTab('sso'); resetFormState(); }}
+                  className={`flex-1 py-2 px-2 text-xs font-semibold border-b-2 transition min-h-[40px] cursor-pointer whitespace-nowrap flex items-center justify-center gap-1 ${activeTab === 'sso' ? 'border-teal-600 text-teal-700 dark:text-teal-400 font-bold' : 'border-transparent text-secondary hover:text-primary'}`}
+                >
+                  <GraduationCap className="w-3.5 h-3.5 text-teal-600" />
+                  <span>SSO Kampus</span>
+                </button>
+                <button
+                  type="button"
                   onClick={() => { setActiveTab('register'); resetFormState(); }}
-                  className={`flex-1 py-2 text-xs font-semibold border-b-2 transition min-h-[40px] cursor-pointer ${activeTab === 'register' ? 'border-teal-600 text-teal-700 dark:text-teal-400 font-bold' : 'border-transparent text-secondary hover:text-primary'}`}
+                  className={`flex-1 py-2 px-2 text-xs font-semibold border-b-2 transition min-h-[40px] cursor-pointer whitespace-nowrap ${activeTab === 'register' ? 'border-teal-600 text-teal-700 dark:text-teal-400 font-bold' : 'border-transparent text-secondary hover:text-primary'}`}
                 >
                   Registrasi
                 </button>
                 <button
                   type="button"
                   onClick={() => { setActiveTab('forgot'); resetFormState(); }}
-                  className={`flex-1 py-2 text-xs font-semibold border-b-2 transition min-h-[40px] cursor-pointer ${activeTab === 'forgot' ? 'border-teal-600 text-teal-700 dark:text-teal-400 font-bold' : 'border-transparent text-secondary hover:text-primary'}`}
+                  className={`flex-1 py-2 px-2 text-xs font-semibold border-b-2 transition min-h-[40px] cursor-pointer whitespace-nowrap ${activeTab === 'forgot' ? 'border-teal-600 text-teal-700 dark:text-teal-400 font-bold' : 'border-transparent text-secondary hover:text-primary'}`}
                 >
                   Lupa Sandi
                 </button>
@@ -509,6 +549,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       <LogIn className="w-4 h-4" />
                       <span>{loading ? 'Memproses...' : 'Masuk Akun'}</span>
                     </button>
+
+                    <button
+                      type="button"
+                      onClick={() => { setActiveTab('sso'); resetFormState(); }}
+                      disabled={loading}
+                      className="w-full py-2.5 min-h-[44px] bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-900/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded-xl text-sm font-semibold transition cursor-pointer disabled:opacity-50 flex items-center justify-center space-x-2"
+                    >
+                      <GraduationCap className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                      <span>Masuk dengan SSO Kampus</span>
+                    </button>
                     
                     <div className="relative flex items-center py-1">
                       <div className="flex-grow border-t border-default"></div>
@@ -539,6 +589,78 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     )}
                   </div>
                 </form>
+              )}
+
+              {/* TAB: SSO KAMPUS */}
+              {activeTab === 'sso' && (
+                <div className="space-y-4 animate-fade-in">
+                  <div className="p-3 bg-indigo-50/80 dark:bg-indigo-950/40 border border-indigo-200/80 dark:border-indigo-900/50 rounded-xl text-xs text-indigo-900 dark:text-indigo-200">
+                    <div className="flex items-center gap-2 font-bold mb-1">
+                      <ShieldCheck className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                      <span>Single Sign-On (SSO) Institusi Pendidikan</span>
+                    </div>
+                    <p className="text-[11px] leading-relaxed opacity-90">
+                      Login otomatis dengan akun resmi universitas Anda. Tier Kampus Pro & hak akses institusi otomatis terhubung.
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="block text-xs font-semibold text-secondary">Pilih Perguruan Tinggi / IDP:</label>
+                    <div className="grid grid-cols-1 gap-2">
+                      {[
+                        { id: 'sso-ui', name: 'SSO Universitas Indonesia', domain: 'ui.ac.id', color: 'border-amber-500/30 hover:bg-amber-50 dark:hover:bg-amber-950/30' },
+                        { id: 'sso-itb', name: 'Akun ITB (Institut Teknologi Bandung)', domain: 'itb.ac.id', color: 'border-sky-500/30 hover:bg-sky-50 dark:hover:bg-sky-950/30' },
+                        { id: 'sso-ugm', name: 'Simaster UGM (Universitas Gadjah Mada)', domain: 'ugm.ac.id', color: 'border-teal-500/30 hover:bg-teal-50 dark:hover:bg-teal-950/30' },
+                        { id: 'sso-unair', name: 'CyberCampus UNAIR (Universitas Airlangga)', domain: 'unair.ac.id', color: 'border-blue-500/30 hover:bg-blue-50 dark:hover:bg-blue-950/30' },
+                        { id: 'sso-gsuite-edu', name: 'Google Workspace for Education', domain: '*.ac.id, *.edu', color: 'border-emerald-500/30 hover:bg-emerald-50 dark:hover:bg-emerald-950/30' },
+                        { id: 'sso-kemendikbud', name: 'SSO Kemendikbudristek (Belajar.id)', domain: 'belajar.id', color: 'border-rose-500/30 hover:bg-rose-50 dark:hover:bg-rose-950/30' }
+                      ].map((provider) => (
+                        <button
+                          key={provider.id}
+                          type="button"
+                          onClick={() => handleCampusSsoLogin(provider)}
+                          disabled={loading}
+                          className={`w-full p-3 rounded-xl border border-default surface-card ${provider.color} transition-all flex items-center justify-between text-left cursor-pointer group disabled:opacity-50`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                              <Building2 className="w-4 h-4 text-indigo-500" />
+                            </div>
+                            <div>
+                              <div className="text-xs font-semibold text-primary group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                                {provider.name}
+                              </div>
+                              <div className="text-[10px] text-secondary font-mono">{provider.domain}</div>
+                            </div>
+                          </div>
+                          <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-indigo-500 group-hover:translate-x-0.5 transition-all" />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Manual SSO Email Input */}
+                  <div className="pt-2 border-t border-default space-y-2">
+                    <label className="block text-xs font-semibold text-secondary">Atau Masukkan Email Kampus Lainnya (*.ac.id / *.edu):</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="email"
+                        placeholder="nim_atau_nama@univ.ac.id"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        className="flex-1 px-3 py-2 text-xs border border-default surface-muted rounded-xl text-primary focus:outline-none focus:border-indigo-600"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleCampusSsoLogin({ id: 'sso-custom', name: 'SSO Kampus Mitra', domain: email.split('@')[1] || 'ac.id' })}
+                        disabled={loading || !email.includes('@')}
+                        className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold disabled:opacity-50 cursor-pointer"
+                      >
+                        Login
+                      </button>
+                    </div>
+                  </div>
+                </div>
               )}
 
               {/* TAB 2: MFA 2FA STEP */}

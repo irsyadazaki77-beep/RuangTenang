@@ -87,16 +87,30 @@ export const slideUpVariants: Variants = {
   }
 };
 
+// Message feed container with staggered children
+export const messageFeedContainerVariants: Variants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.04,
+      delayChildren: 0.02
+    }
+  }
+};
+
 // Message entrance for Chat bubbles
 export const messageBubbleVariants: Variants = {
-  hidden: { opacity: 0, y: 6, scale: 0.99 },
+  hidden: { opacity: 0, y: 10, scale: 0.98 },
   visible: { 
     opacity: 1, 
     y: 0, 
     scale: 1,
     transition: {
-      duration: MOTION_DURATIONS.normal,
-      ease: MOTION_EASINGS.easeOut
+      type: "spring",
+      stiffness: 350,
+      damping: 28,
+      mass: 0.8
     }
   }
 };
@@ -115,22 +129,46 @@ export const modalBackdropVariants: Variants = {
 };
 
 export const modalPanelVariants: Variants = {
-  hidden: { opacity: 0, scale: 0.97, y: 8 },
+  hidden: { opacity: 0, scale: 0.95, y: 10 },
   visible: { 
     opacity: 1, 
     scale: 1, 
     y: 0,
     transition: { 
-      duration: MOTION_DURATIONS.gentle, 
-      ease: MOTION_EASINGS.easeOut 
+      type: "spring",
+      stiffness: 380,
+      damping: 26,
+      mass: 0.85
     } 
   },
   exit: { 
     opacity: 0, 
-    scale: 0.97, 
-    y: 6,
+    scale: 0.95, 
+    y: 8,
     transition: { 
       duration: MOTION_DURATIONS.fast, 
+      ease: MOTION_EASINGS.easeInOut 
+    } 
+  }
+};
+
+// Slide-over drawer variants for mobile canvas
+export const slideOverDrawerVariants: Variants = {
+  hidden: { x: '100%', opacity: 0.7 },
+  visible: { 
+    x: 0, 
+    opacity: 1,
+    transition: { 
+      type: "spring", 
+      stiffness: 320, 
+      damping: 30 
+    } 
+  },
+  exit: { 
+    x: '100%', 
+    opacity: 0.5,
+    transition: { 
+      duration: 0.2, 
       ease: MOTION_EASINGS.easeInOut 
     } 
   }

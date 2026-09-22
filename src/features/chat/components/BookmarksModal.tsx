@@ -109,8 +109,6 @@ export function BookmarksModal({
     ? bookmarks.filter(b => b.chatId === currentChatId)
     : bookmarks;
 
-  if (!isOpen) return null;
-
   return (
     <ModalShell
       isOpen={isOpen}

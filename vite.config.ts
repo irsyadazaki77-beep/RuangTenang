@@ -29,6 +29,7 @@ export default defineConfig(() => {
       alias: {
         '@': path.resolve(__dirname, '.'),
       },
+      dedupe: ['react', 'react-dom'],
     },
     optimizeDeps: {
       include: [
@@ -54,19 +55,19 @@ export default defineConfig(() => {
         output: {
           manualChunks(id) {
             if (id.includes('node_modules')) {
-              if (id.includes('react-dom') || id.includes('/react/') || id.includes('scheduler')) {
+              if (/\/node_modules\/(react|react-dom|scheduler)\//.test(id)) {
                 return 'vendor-react';
               }
-              if (id.includes('react-router')) {
+              if (/\/node_modules\/react-router/.test(id)) {
                 return 'vendor-router';
               }
-              if (id.includes('motion') || id.includes('framer-motion')) {
+              if (/\/node_modules\/(motion|framer-motion)\//.test(id)) {
                 return 'vendor-motion';
               }
-              if (id.includes('react-markdown') || id.includes('micromark') || id.includes('unified') || id.includes('mdast') || id.includes('unist') || id.includes('vfile')) {
+              if (/\/node_modules\/(react-markdown|micromark|unified|mdast|unist|vfile)\//.test(id)) {
                 return 'vendor-markdown';
               }
-              if (id.includes('lucide-react')) {
+              if (/\/node_modules\/lucide-react\//.test(id)) {
                 return 'vendor-icons';
               }
             }

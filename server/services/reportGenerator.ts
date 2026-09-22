@@ -129,13 +129,15 @@ export async function generateCounselingResumePdf(userId: string, studentName: s
         // Fetch 30-day mood logs
         const thirtyDaysAgo = new Date();
         thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-        const moodLogs = await (prisma as any).moodLogs.findMany({
-          where: {
-            userId,
-            timestamp: { gte: thirtyDaysAgo }
-          },
-          orderBy: { timestamp: 'desc' }
-        });
+        const moodLogs = (prisma as any).moodLogs?.findMany
+          ? await (prisma as any).moodLogs.findMany({
+              where: {
+                userId,
+                timestamp: { gte: thirtyDaysAgo }
+              },
+              orderBy: { timestamp: 'desc' }
+            })
+          : [];
 
         // Compute mood metrics
         const moodCounts: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };

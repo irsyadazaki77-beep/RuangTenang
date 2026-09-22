@@ -37,8 +37,7 @@ describe('VideoConsultationRoom', () => {
     );
 
     // Verify UI elements
-    expect(screen.getByText('Sesi Konsultasi Terenkripsi & Privat')).toBeInTheDocument();
-    expect(screen.getByText('ID: apt-123')).toBeInTheDocument();
+    expect(screen.getByText(/Tele-Konseling Terenkripsi/i)).toBeInTheDocument();
     expect(screen.getByText('Dr. Jane Doe')).toBeInTheDocument();
   });
 
@@ -55,12 +54,9 @@ describe('VideoConsultationRoom', () => {
       />
     );
 
-    // Default state: not muted, there's a Mic icon and clicking it toggles it.
-    const muteButton = screen.getAllByRole('button')[0]; // First button is usually Mic
+    const muteButton = screen.getByTitle(/Mikrofon/i);
     fireEvent.click(muteButton);
-    // After clicking, the MicOff icon should be rendered, but we just check if it doesn't crash 
-    // and state updates. We can verify if "MicOff" SVG is present (we could test classes).
-    expect(muteButton.className).toContain('text-rose-500');
+    expect(muteButton.className).toContain('text-rose-400');
   });
 
   it('toggles video state', () => {
@@ -76,9 +72,9 @@ describe('VideoConsultationRoom', () => {
       />
     );
 
-    const videoButton = screen.getAllByRole('button')[1]; // Second button is Video
+    const videoButton = screen.getByTitle(/Kamera/i);
     fireEvent.click(videoButton);
-    expect(videoButton.className).toContain('text-rose-500');
+    expect(videoButton.className).toContain('text-rose-400');
   });
 
   it('shows counselor notes panel for counselor role', () => {
@@ -92,7 +88,7 @@ describe('VideoConsultationRoom', () => {
     );
 
     // Assert side panel is visible
-    expect(screen.getByText('Catatan Klinis (Privat)')).toBeInTheDocument();
+    expect(screen.getByText(/Catatan Klinis/i)).toBeInTheDocument();
     expect(screen.getByText('Stress Test')).toBeInTheDocument(); // Primary concern
     expect(screen.getByPlaceholderText(/Ketik catatan medis/i)).toBeInTheDocument();
   });
@@ -107,7 +103,7 @@ describe('VideoConsultationRoom', () => {
       />
     );
 
-    expect(screen.queryByText('Catatan Klinis (Privat)')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Catatan Klinis/i)).not.toBeInTheDocument();
   });
 
   it('calls onEndCall and onClose when End Call button is clicked and confirmed', () => {
@@ -130,8 +126,8 @@ describe('VideoConsultationRoom', () => {
     const textarea = screen.getByPlaceholderText(/Ketik catatan medis/i);
     fireEvent.change(textarea, { target: { value: 'Patient feels better' } });
 
-    // End call button is the third one
-    const endCallButton = screen.getByTitle('Akhiri Panggilan');
+    // End call button
+    const endCallButton = screen.getByTitle(/Akhiri Panggilan/i);
     fireEvent.click(endCallButton);
 
     expect(handleEndCall).toHaveBeenCalledWith('apt-123', 'Patient feels better');

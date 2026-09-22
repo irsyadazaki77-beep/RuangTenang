@@ -126,8 +126,6 @@ export function SessionSummaryModal({ chatId, isOpen, onClose }: SessionSummaryM
     }
   };
 
-  if (!isOpen) return null;
-
   return (
     <ModalShell
       isOpen={isOpen}

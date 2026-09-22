@@ -13,7 +13,7 @@ import { User,
   Lock
 } from 'lucide-react';
 import { UserSession, SubscriptionTier } from '../../types';
-import { Brain, MessageSquare, Gauge, Cpu, CheckCircle2, History, Calendar, Bell, Terminal } from 'lucide-react';
+import { Brain, MessageSquare, Gauge, Cpu, CheckCircle2, History, Calendar, Bell, Terminal, Volume2 } from 'lucide-react';
 import { DEFAULT_AI_MODEL_ID, AVAILABLE_AI_MODELS } from '../../lib/aiModels';
 import { safeLocalStorage } from '../../lib/storage';
 import { AiQuotaBadge } from '../../components/AiQuotaBadge';
@@ -22,6 +22,7 @@ import { CURRENT_APP_VERSION, LAST_UPDATED_DATE, APP_CHANGELOG, CATEGORY_METADAT
 import { ErrorState } from '../../components/common/ErrorState';
 import { EmptyState } from '../../components/common/EmptyState';
 import { BrandLogo } from '../../components/ui/BrandLogo';
+import { playCompletionChime } from '../../lib/soundEffects';
 
 interface SettingsPageProps {
   userSession: UserSession | null;
@@ -62,6 +63,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   const [prefDailyReminders, setPrefDailyReminders] = useState(() => safeLocalStorage.getItem('pref_daily_reminders') !== 'false');
   const [prefCounselingUpdates, setPrefCounselingUpdates] = useState(() => safeLocalStorage.getItem('pref_counseling_updates') !== 'false');
   const [prefNewsletter, setPrefNewsletter] = useState(() => safeLocalStorage.getItem('pref_newsletter') === 'true');
+  const [prefAiCompletionChime, setPrefAiCompletionChime] = useState(() => safeLocalStorage.getItem('pref_ai_completion_chime') !== 'false');
 
   const triggerNotificationSaved = () => {
     setSuccessMsg('Preferensi notifikasi berhasil diperbarui.');
@@ -500,6 +502,47 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                   </button>
                 ))}
               </div>
+            </div>
+
+            {/* AI Completion Audio Chime Setting */}
+            <div className="pt-4 border-t border-default">
+              <label className="flex items-start justify-between gap-3 p-3.5 hover:surface-muted/55 rounded-xl border border-default transition-colors cursor-pointer">
+                <div className="flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    checked={prefAiCompletionChime}
+                    onChange={(e) => {
+                      setPrefAiCompletionChime(e.target.checked);
+                      safeLocalStorage.setItem('pref_ai_completion_chime', e.target.checked ? 'true' : 'false');
+                      triggerNotificationSaved();
+                    }}
+                    className="mt-1 rounded border-default text-teal-600 focus:ring-teal-500 w-4 h-4 cursor-pointer"
+                  />
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <Volume2 className="w-4 h-4 text-teal-600 shrink-0" />
+                      <span className="text-xs font-bold text-primary">Notifikasi Suara Lembut (Audio Chime)</span>
+                    </div>
+                    <span className="text-[11px] text-muted block leading-relaxed">
+                      Memainkan nada harmonis Web Audio lembut (D5 → A5) ketika AI selesai menyusun respons panjang (&gt;150 karakter), terutama saat Anda membuka tab lain.
+                    </span>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    playCompletionChime();
+                  }}
+                  className="px-2.5 py-1 text-[11px] font-semibold bg-teal-50 dark:bg-teal-950/60 hover:bg-teal-100 text-teal-700 dark:text-teal-300 rounded-lg border border-teal-200 dark:border-teal-800 transition-colors shrink-0 cursor-pointer flex items-center gap-1"
+                  title="Tes suara notifikasi"
+                >
+                  <Volume2 className="w-3.5 h-3.5" />
+                  <span>Uji Nada</span>
+                </button>
+              </label>
             </div>
           </div>
         </div>
@@ -1181,6 +1224,45 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                     Rilis berkala artikel tips kesehatan mental mahasiswa, pernapasan kesadaran, dan artikel pendukung dari psikolog RuangTenang.
                   </span>
                 </div>
+              </label>
+
+              {/* Checkbox 4: Audio Completion Chime */}
+              <label className="flex items-start justify-between gap-3 p-3.5 hover:surface-muted/55 rounded-xl border border-default transition-colors cursor-pointer">
+                <div className="flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    checked={prefAiCompletionChime}
+                    onChange={(e) => {
+                      setPrefAiCompletionChime(e.target.checked);
+                      safeLocalStorage.setItem('pref_ai_completion_chime', e.target.checked ? 'true' : 'false');
+                      triggerNotificationSaved();
+                    }}
+                    className="mt-1 rounded border-default text-teal-600 focus:ring-teal-500 w-4 h-4 cursor-pointer"
+                  />
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-1.5">
+                      <Volume2 className="w-3.5 h-3.5 text-teal-600 shrink-0" />
+                      <span className="text-xs font-bold text-primary block">Nada Suara Penyelesaian AI (Completion Chime)</span>
+                    </div>
+                    <span className="text-[11px] text-muted block leading-relaxed">
+                      Bunyikan nada Web Audio lembut saat AI selesai mengetik respon panjang (&gt;150 karakter), terutama saat berpindah tab.
+                    </span>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    playCompletionChime();
+                  }}
+                  className="px-2.5 py-1 text-[11px] font-semibold bg-teal-50 dark:bg-teal-950/60 hover:bg-teal-100 text-teal-700 dark:text-teal-300 rounded-lg border border-teal-200 dark:border-teal-800 transition-colors shrink-0 cursor-pointer flex items-center gap-1"
+                  title="Uji nada suara notifikasi"
+                >
+                  <Volume2 className="w-3.5 h-3.5" />
+                  <span>Uji</span>
+                </button>
               </label>
             </div>
 

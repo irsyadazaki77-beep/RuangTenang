@@ -21,6 +21,9 @@ import {
 import { EmptyState } from '../../components/common/EmptyState';
 import { apiClient } from '../../lib/apiClient';
 import { DailyCheckinModal, MoodLog, MOOD_OPTIONS, EMOTION_TAGS, FACTOR_TAGS } from './DailyCheckinModal';
+import { AcademicMoodCorrelationChart } from './components/AcademicMoodCorrelationChart';
+import { CounselingReportModal } from './components/CounselingReportModal';
+import { FileText } from 'lucide-react';
 
 interface MoodTrackerProps {
   moodLogs: MoodLog[];
@@ -37,6 +40,7 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
 }) => {
   const navigate = useNavigate();
   const [isCheckinModalOpen, setIsCheckinModalOpen] = useState<boolean>(false);
+  const [isReportModalOpen, setIsReportModalOpen] = useState<boolean>(false);
   const [savedLogForBridge, setSavedLogForBridge] = useState<MoodLog | null>(null);
 
   useEscapeKey(() => {
@@ -206,13 +210,25 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
             Catat ritme emosi harian dan dapatkan wawasan pola suasana hati Anda.
           </p>
         </div>
-        <button
-          onClick={handleOpenCheckin}
-          className="btn-primary flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold shadow-xs"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Catat Mood Hari Ini</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setIsReportModalOpen(true)}
+            className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs sm:text-sm font-semibold shadow-3xs transition-colors cursor-pointer"
+            title="Ekspor Ringkasan Laporan Konseling (PDF)"
+          >
+            <FileText className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+            <span>Laporan Konseling (PDF)</span>
+          </button>
+          <button
+            type="button"
+            onClick={handleOpenCheckin}
+            className="btn-primary flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold shadow-xs"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Catat Mood Hari Ini</span>
+          </button>
+        </div>
       </div>
 
       {/* 4-Column Statistics Overview */}
@@ -308,6 +324,9 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Academic Mood & Sleep Correlation Multi-Axis Analytics */}
+      <AcademicMoodCorrelationChart logs={moodLogs} />
 
       {/* Mood Grid Heatmap Section */}
       <div className="surface-card rounded-2xl p-4 sm:p-6 border border-default space-y-4 shadow-3xs">
@@ -739,6 +758,14 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
           </div>
         </div>
       )}
+
+      {/* Counseling Summary PDF Report Modal */}
+      <CounselingReportModal
+        isOpen={isReportModalOpen}
+        onClose={() => setIsReportModalOpen(false)}
+        logs={moodLogs}
+        user={null}
+      />
     </div>
   );
 };

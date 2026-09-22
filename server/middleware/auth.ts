@@ -91,16 +91,35 @@ export const optionalAuth = async (req: Request, res: Response, next: NextFuncti
   next();
 };
 
-export const requireRole = (allowedRoles: ('mahasiswa' | 'konselor' | 'admin')[]) => {
+export const normalizeRole = (role: string | undefined): string => {
+  if (!role) return 'guest';
+  const r = role.toLowerCase().trim();
+  if (r === 'student' || r === 'mahasiswa') return 'mahasiswa';
+  if (r === 'peer_counselor' || r === 'peer-counselor') return 'peer_counselor';
+  if (r === 'konselor' || r === 'counselor' || r === 'licensed_psychologist' || r === 'clinical_counselor') return 'konselor';
+  if (r === 'admin' || r === 'campus_admin' || r === 'campus-admin') return 'admin';
+  return r;
+};
+
+export const requireRole = (allowedRoles: (string)[]) => {
   return (req: Request, res: Response, next: NextFunction) => {
     if (!req.user) {
       return res.status(401).json({ success: false, code: 'UNAUTHORIZED', message: 'Akses ditolak. Silakan login terlebih dahulu.' });
     }
 
-    if (!allowedRoles.includes(req.user.role)) {
+    const normalizedUserRole = normalizeRole(req.user.role);
+    const normalizedAllowed = allowedRoles.map(r => normalizeRole(r));
+
+    // Admin has superuser access to all roles
+    if (normalizedUserRole === 'admin') {
+      return next();
+    }
+
+    if (!normalizedAllowed.includes(normalizedUserRole) && !allowedRoles.includes(req.user.role)) {
       return res.status(403).json({ success: false, code: 'FORBIDDEN', message: 'Akses ditolak. Anda tidak memiliki izin untuk halaman ini.' });
     }
 
     next();
   };
 };
+

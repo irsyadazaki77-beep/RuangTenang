@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { ChatStreamingClient, StreamPayload } from '../services/chatStreamingClient';
+import { playCompletionChime } from '../../../lib/soundEffects';
 
 export function useChatStreaming() {
   const [isTyping, setIsTyping] = useState(false);
@@ -113,6 +114,9 @@ export function useChatStreaming() {
           }
           setIsTyping(false);
           setStreamingError(null);
+          if (text && text.length > 150) {
+            playCompletionChime();
+          }
           callbacks.onMessageComplete(text);
         },
         onError: (err) => {

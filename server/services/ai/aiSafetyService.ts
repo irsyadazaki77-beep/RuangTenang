@@ -20,6 +20,7 @@ export interface UnifiedPipelineInput {
   userId?: string;
   input: string;
   chatId?: string;
+  mode?: string;
   chatMode?: string;
   responseStyle?: string;
   aiModel?: string;
@@ -79,7 +80,7 @@ export const aiSafetyService = {
     return false;
   },
 
-  detectCrisis(input: string, history?: any[]): CrisisDetectionResult {
+  detectCrisis(input: string, history?: any[], context?: { isRuangKerja?: boolean; mode?: string }): CrisisDetectionResult {
     if (!input) {
       return { isCrisis: false, riskLevel: 'LOW', reasoning: 'Empty input', recommendedAction: 'None' };
     }
@@ -97,8 +98,116 @@ export const aiSafetyService = {
       riskLevel = 'ELEVATED';
     }
 
-    // Handle benign metaphorical expressions (e.g., "Tugas ini membunuhku", "Mati gaya", "Pengen tidur seharian")
     const lowerInput = input.toLowerCase();
+
+    // 1. Detection of personal self-harm / crisis intent
+    // Explicit 1st person markers + suicidal / acute self-harm desires or preparations
+    const personalIntentPatterns = [
+      /(saya|aku|gue|gw|ku)\s.*(ingin|mau|berencana|siap|sudah|niat|pengen|akan|nekad|merasa ingin).*(bunuh diri|bundir|mati|akhiri hidup|gantung diri|sayat|potong nadi|racun|lompat|loncat)/i,
+      /(saya|aku|gue|gw)\s.*(capek|lelah|tidak tahan|gak tahan|ga sanggup|gak sanggup|muak).*(hidup|didunia|di dunia)/i,
+      /\b(ingin|mau|pengen|nekad)\s*(bunuh diri|bundir|mati aja|mati saja|akhiri hidup)/i,
+      /tolong\s.*(aku|saya).*ingin\s*mati/i,
+      /(sayat|menyayat|motong|potong)\s*(tangan|nadi|urat|pergelangan)\s*(saya|aku|sendiri)/i,
+      /\b(sudah siapkan tali|sudah beli racun|mau minum racun|mau tenggak racun)\b/i
+    ];
+    const hasPersonalIntent = personalIntentPatterns.some(pattern => pattern.test(lowerInput));
+
+    // 2. Detection of academic, literature, or forensic study context
+    const academicKeywords = [
+      'jurnal',
+      'penelitian',
+      'skripsi',
+      'tesis',
+      'makalah',
+      'paper',
+      'studi kasus',
+      'case study',
+      'tinjauan pustaka',
+      'kajian pustaka',
+      'literatur',
+      'bedah jurnal',
+      'abstrak',
+      'karya ilmiah',
+      'analisis forensik',
+      'forensik',
+      'kriminologi',
+      'sosiologi',
+      'durkheim',
+      'et al.',
+      'who report',
+      'prevalensi',
+      'epidemiologi',
+      'statistik',
+      'angka kejadian',
+      'kutipan:',
+      'menurut durkheim',
+      'menurut penelitian',
+      'menurut jurnal',
+      'menurut data',
+      'menurut who',
+      'menurut teori',
+      'teori bunuh diri',
+      'dalam novel',
+      'dalam cerpen',
+      'bedah buku',
+      'tokoh dalam',
+      'karakter dalam',
+      'tugas mata kuliah',
+      'tugas kuliah',
+      'tugas akhir',
+      'mata kuliah',
+      'metodologi riset',
+      'analisis kasus',
+      'buatkan tinjauan pustaka',
+      'resume jurnal',
+      'parafrase kutipan',
+      'kode',
+      'koding',
+      'program',
+      'algoritma',
+      'debugging',
+      'error',
+      'syntax error',
+      'deadlock',
+      'kill process',
+      'abort',
+      'sigterm',
+      'panic',
+      'stack trace',
+      'refactor',
+      'typescript',
+      'python',
+      'javascript',
+      'sql',
+      'query',
+      'mermaid',
+      'diagram',
+      'flowchart'
+    ];
+
+    const hasAcademicKeywords = academicKeywords.some(kw => lowerInput.includes(kw));
+    const hasQuotedText = /["'].*?(bunuh diri|bundir|depresi|suicide).*?["']/i.test(input);
+    const isAcademicAnalysis = hasAcademicKeywords || hasQuotedText || Boolean(context?.isRuangKerja);
+
+    // If text is purely academic / forensic / research citation without personal crisis intent,
+    // prevent false positive override so students can complete papers and studies safely
+    if (isAcademicAnalysis && !hasPersonalIntent) {
+      riskLevel = 'LOW';
+      return {
+        isCrisis: false,
+        riskLevel: 'LOW',
+        score: 0.1,
+        matchedPatterns: [],
+        reasoning: 'Konteks analisis akademik/studi kasus tanpa intensi krisis personal',
+        recommendedAction: 'Lanjutkan panduan akademik dengan integritas ilmiah',
+        analysisDetails: {
+          ...localResult,
+          isAcademicExemption: true
+        }
+      };
+    }
+
+    // Handle benign metaphorical expressions (e.g., "Tugas ini membunuhku", "Mati gaya", "Pengen tidur seharian")
     const metaphors = [
       'mati gaya',
       'mati rasa',
@@ -114,7 +223,7 @@ export const aiSafetyService = {
     ];
     
     // If a metaphor is matched, but there is no acute crisis trigger, demote risk to LOW
-    if (metaphors.some(m => lowerInput.includes(m)) && 
+    if (metaphors.some(m => lowerInput.includes(m)) && !hasPersonalIntent &&
         !lowerInput.includes('bunuh diri') && 
         !lowerInput.includes('bundir') && 
         !lowerInput.includes('akhiri hidup') && 
@@ -357,8 +466,11 @@ export const aiSafetyService = {
       };
     }
 
-    // 5. Crisis triage
-    const crisisCheck = this.detectCrisis(redactedInput, input.history);
+    // 5. Context determination & Crisis triage
+    const isRuangKerja = (input.chatMode || '').toLowerCase().includes('ruangkerja') || 
+                          (input.mode || '').toUpperCase() === 'RUANG_KERJA';
+
+    const crisisCheck = this.detectCrisis(redactedInput, input.history, { isRuangKerja, mode: input.chatMode || input.mode });
     if (crisisCheck.isCrisis) {
       console.warn(`[SAFETY_PIPELINE] Active acute crisis detected in user input! Triage triggered.`);
       return {
@@ -372,7 +484,29 @@ export const aiSafetyService = {
     }
 
     // 6. Context authorization & boundary setting
-    let systemInstruction = `Kamu adalah "Teman RuangTenang", Asisten AI Pendamping Reflektif (Non-Klinis) yang dirancang khusus untuk mendampingi kesehatan mental mahasiswa. Kamu diciptakan sebagai 'safe space' yang objektif, menenangkan, dan profesional.
+
+    let systemInstruction = '';
+
+    if (isRuangKerja) {
+      systemInstruction = `Kamu adalah Asisten RuangKerja Mahasiswa dengan motto 'Selesaikan Tugas Tanpa Cemas'. Peranmu adalah menjadi rekan belajar kritis dan mentor riset yang suportif.
+Prinsip utamamu:
+1. Bantu mahasiswa memahami konsep dan struktur penyelesaian tugas, jangan hanya menyodorkan jawaban mentah tanpa penjelasan.
+2. Saat memberikan draf tulisan atau kode panjang, gunakan format artefak terstruktur agar otomatis tampil di Canvas kerja mahasiswa.
+3. Selalu kedepankan integritas akademik: ingatkan pentingnya parafrase dan sitasi ilmiah yang dapat diverifikasi.
+
+PEDOMAN FORMAT ARTIFAK CANVAS:
+Ketika kamu menghasilkan kode program, draf dokumen/karya ilmiah panjang, resume/bedah jurnal, format sitasi (APA 7th, IEEE, Harvard, BibTeX), atau kerangka proposal skripsi BAB 1-3:
+KAMU HARUS MEMBUNGKUS KONTEN DOKUMEN/KODE LENGKAP DALAM FORMAT ARTIFAK BERIKUT:
+<artifact type="document|code|citation|outline" title="Judul Spesifik & Informatif" language="python|javascript|typescript|sql|markdown|html|css|latex">
+...isi lengkap dokumen, kode, atau sitasi...
+</artifact>
+- Berikan ulasan singkat, pengantar, atau ringkasan penjelasan di luar tag <artifact>.
+- Taruh seluruh isi kode program, draf esai/makalah, atau daftar sitasi di dalam tag <artifact>.
+- Untuk kode dan algoritma, jelaskan analisis kompleksitas (Big-O), potensi bug edge-case, dan praktik clean code.
+
+Gaya Respons yang diharapkan: ${input.responseStyle || 'Mendalam'}.`;
+    } else {
+      systemInstruction = `Kamu adalah "Teman RuangTenang", Asisten AI Pendamping Reflektif (Non-Klinis) yang dirancang khusus untuk mendampingi kesehatan mental mahasiswa. Kamu diciptakan sebagai 'safe space' yang objektif, menenangkan, dan profesional.
 
 TARGET AUDIENS (USER CONTEXT):
 - Pengguna adalah mahasiswa aktif (Gen Z) di Indonesia yang mungkin sedang mengalami tekanan akademis, kelelahan menyusun skripsi (burnout), kecemasan masa depan, atau kesepian. Mereka membutuhkan ruang untuk didengar, BUKAN untuk diceramahi.
@@ -405,6 +539,7 @@ JIKA MENGIRIM JSON TOOL CALL, JANGAN MENULIS TEKS APA PUN DI LUAR JSON TERSEBUT.
 Mode Percakapan saat ini: ${input.chatMode || 'Teman Cerita'}.
 Gaya Respons yang diharapkan: ${input.responseStyle || 'Seimbang'}.
 Sesuaikan gaya, nada, dan panjang responsmu berdasarkan Mode Percakapan dan Gaya Respons ini.`;
+    }
 
     let activeHistory = (input.history || []).slice(-10).map(h => ({
       ...h,

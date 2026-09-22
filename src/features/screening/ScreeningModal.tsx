@@ -1,7 +1,7 @@
 import { useEscapeKey } from '../../hooks/useEscapeKey';
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import {
   ArrowRight,
   CheckCircle2,
@@ -29,6 +29,7 @@ import { PHQ9_QUESTIONS, GAD7_QUESTIONS, OPTIONS } from './constants';
 import { SafetyCheckModal } from './components/SafetyCheckModal';
 import { useAuth } from '../../contexts/AuthContext';
 import { addNotification } from '../../lib/notificationStore';
+import { modalBackdropVariants, modalPanelVariants, reducedMotionVariants } from '../../lib/motionTokens';
 
 interface ScreeningModalProps {
   isOpen: boolean;
@@ -168,6 +169,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
   onPersisted,
   isPageMode = false
 }) => {
+  const shouldReduceMotion = useReducedMotion();
   const { user } = useAuth();
   let navigate: (to: string, options?: any) => void;
   try {
@@ -307,8 +309,6 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
     fetchHistory();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, isPageMode]);
-
-  if (!isOpen && !isPageMode) return null;
 
   // Handle single question answer choice
   const handleSelectOption = (value: number) => {
@@ -541,33 +541,10 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
     finalResult.gad7.score >= 10
   ) : false;
 
-  return (
-    <div className={isPageMode ? "w-full max-w-3xl mx-auto px-3.5 sm:px-4 md:px-5 py-3.5 sm:py-4 md:py-5 font-sans" : "fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center max-sm:items-end p-3 sm:p-4 max-sm:p-0 animate-fade-in font-sans"}>
-      <div
-        ref={modalRef}
-        role={isPageMode ? undefined : "dialog"}
-        aria-modal={isPageMode ? undefined : "true"}
-        aria-labelledby="screening-modal-title"
-        className={isPageMode
-          ? "surface-card border border-default text-primary rounded-2xl w-full p-4 sm:p-6 shadow-3xs relative overflow-hidden"
-          : "surface-card border border-default text-primary rounded-2xl max-w-2xl w-full p-4 sm:p-6 shadow-xl relative max-h-[88dvh] max-sm:max-h-[92dvh] max-sm:rounded-b-none max-sm:w-full overflow-y-auto transition-transform duration-300 animate-scale-up max-sm:animate-slide-up"
-        }
-      >
-        {/* Mobile bottom sheet drag handle */}
-        {!isPageMode && <div className="w-10 h-1 bg-slate-200 dark:bg-slate-700 rounded-full mx-auto mb-3 sm:hidden shrink-0" />}
-
-        {!isPageMode && (
-          <button
-            onClick={onClose}
-            aria-label="Tutup"
-            className="absolute top-3 right-3 p-1.5 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-all z-10 cursor-pointer min-h-[44px] min-w-[44px] sm:min-h-[36px] sm:min-w-[36px] flex items-center justify-center"
-          >
-            <X className="w-5 h-5 sm:w-4 sm:h-4" />
-          </button>
-        )}
-
-        {/* Top Header */}
-        <div className="flex items-center gap-3 mb-4 border-b border-default pb-3.5">
+  const modalContent = (
+    <>
+      {/* Top Header */}
+      <div className="flex items-center gap-3 mb-4 border-b border-default pb-3.5">
           <div className="p-2.5 bg-teal-50 dark:bg-teal-950/60 text-teal-600 dark:text-teal-400 rounded-xl border border-teal-200/80 dark:border-teal-800/80 shrink-0">
             <HeartPulse className="w-5 h-5" />
           </div>
@@ -647,7 +624,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
                   setSlideDirection('next');
                 }}
                 aria-label="Mulai Cek Kondisi Mental"
-                className="btn-primary flex items-center justify-center gap-2 px-5 py-2.5 min-h-[44px] rounded-xl text-xs sm:text-sm cursor-pointer shadow-md hover:shadow-lg transition-all"
+                className="btn-primary flex items-center justify-center gap-2 px-5 py-2.5 min-h-[44px] rounded-xl text-xs sm:text-sm cursor-pointer shadow-md hover:shadow-lg transition-all btn-tactile"
               >
                 <span>Mulai Skrining Mandiri</span>
                 <ArrowRight className="w-4 h-4" />
@@ -714,7 +691,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
                         <button
                           key={opt.value}
                           onClick={() => handleSelectOption(opt.value)}
-                          className={`p-3.5 sm:p-4 min-h-[52px] rounded-xl text-xs sm:text-sm font-medium border text-left transition-all active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-teal-500/30 cursor-pointer flex items-center justify-between group ${
+                          className={`p-3.5 sm:p-4 min-h-[52px] rounded-xl text-xs sm:text-sm font-medium border text-left transition-all focus:outline-none focus:ring-2 focus:ring-teal-500/30 cursor-pointer flex items-center justify-between group chip-tactile ${
                             isSelected
                               ? 'bg-teal-600 text-white border-teal-600 shadow-md scale-[1.01]'
                               : 'surface-card border-default text-primary hover:bg-teal-50/60 dark:hover:bg-teal-950/30 hover:border-teal-300 dark:hover:border-teal-700 shadow-3xs'
@@ -746,7 +723,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
             <div className="flex items-center justify-between pt-3 border-t border-default">
               <button
                 onClick={handlePrevQuestion}
-                className="px-4 py-2 min-h-[44px] sm:min-h-[36px] text-xs font-semibold text-secondary hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all cursor-pointer flex items-center gap-1.5"
+                className="px-4 py-2 min-h-[44px] sm:min-h-[36px] text-xs font-semibold text-secondary hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 btn-press"
               >
                 <ChevronLeft className="w-4 h-4" />
                 <span>Sebelumnya</span>
@@ -756,7 +733,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
                 <button
                   onClick={handleNextQuestion}
                   disabled={!hasCurrentAnswer}
-                  className={`flex items-center justify-center gap-1.5 px-5 py-2 min-h-[44px] sm:min-h-[36px] rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 cursor-pointer ${
+                  className={`flex items-center justify-center gap-1.5 px-5 py-2 min-h-[44px] sm:min-h-[36px] rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer btn-tactile ${
                     hasCurrentAnswer
                       ? 'bg-teal-600 text-white hover:bg-teal-700 shadow-3xs'
                       : 'bg-slate-100 dark:bg-slate-800 text-muted border border-default cursor-not-allowed opacity-60'
@@ -907,7 +884,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
                     onClose();
                     navigate('/', { state: { discussScreening: finalResult } });
                   }}
-                  className="p-3 rounded-xl border border-teal-200/60 dark:border-teal-900 hover:border-teal-300 dark:hover:border-teal-800 bg-teal-50/40 dark:bg-teal-950/20 hover:bg-teal-50 dark:hover:bg-teal-950/40 text-left transition-all group flex items-start gap-2.5 cursor-pointer shadow-3xs hover:shadow-xs"
+                  className="p-3 rounded-xl border border-teal-200/60 dark:border-teal-900 hover:border-teal-300 dark:hover:border-teal-800 bg-teal-50/40 dark:bg-teal-950/20 hover:bg-teal-50 dark:hover:bg-teal-950/40 text-left transition-all group flex items-start gap-2.5 cursor-pointer shadow-3xs hover:shadow-xs btn-press"
                 >
                   <MessageSquare className="w-4 h-4 text-teal-600 dark:text-teal-400 mt-0.5 shrink-0 group-hover:scale-110 transition-transform" />
                   <div>
@@ -921,7 +898,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
                     onClose();
                     navigate('/counselors');
                   }}
-                  className="p-3 rounded-xl border border-indigo-200/60 dark:border-indigo-900 hover:border-indigo-300 dark:hover:border-indigo-800 bg-indigo-50/40 dark:bg-indigo-950/20 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 text-left transition-all group flex items-start gap-2.5 cursor-pointer"
+                  className="p-3 rounded-xl border border-indigo-200/60 dark:border-indigo-900 hover:border-indigo-300 dark:hover:border-indigo-800 bg-indigo-50/40 dark:bg-indigo-950/20 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 text-left transition-all group flex items-start gap-2.5 cursor-pointer btn-press"
                 >
                   <Calendar className="w-4 h-4 text-indigo-600 dark:text-indigo-400 mt-0.5 shrink-0 group-hover:scale-110 transition-transform" />
                   <div>
@@ -942,7 +919,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
             <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5 pt-3 border-t border-default">
               <button
                 onClick={() => downloadReportTxt(finalResult)}
-                className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-3.5 py-2 min-h-[44px] sm:min-h-[36px] bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-xl border border-default transition-all cursor-pointer"
+                className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-3.5 py-2 min-h-[44px] sm:min-h-[36px] bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-xl border border-default transition-all cursor-pointer btn-press"
               >
                 <Download className="w-3.5 h-3.5" />
                 <span>Unduh Laporan (.txt)</span>
@@ -957,14 +934,14 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
                     setGad7Answers(Array(7).fill(-1));
                     setSlideDirection('next');
                   }}
-                  className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-3.5 py-2 min-h-[44px] sm:min-h-[36px] bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-secondary text-xs font-semibold rounded-xl transition-all cursor-pointer"
+                  className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-3.5 py-2 min-h-[44px] sm:min-h-[36px] bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-secondary text-xs font-semibold rounded-xl transition-all cursor-pointer btn-press"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
                   <span>Tes Ulang</span>
                 </button>
                 <button
                   onClick={onClose}
-                  className="w-full sm:w-auto px-5 py-2 min-h-[44px] sm:min-h-[36px] bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold rounded-xl shadow-3xs transition-all cursor-pointer flex items-center justify-center"
+                  className="w-full sm:w-auto px-5 py-2 min-h-[44px] sm:min-h-[36px] bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold rounded-xl shadow-3xs transition-all cursor-pointer flex items-center justify-center btn-tactile"
                 >
                   Selesai
                 </button>
@@ -980,7 +957,65 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
           safetyAssessment={safetyAssessment}
           setSafetyAssessment={setSafetyAssessment}
         />
+    </>
+  );
+
+  if (isPageMode) {
+    if (!isOpen) return null;
+    return (
+      <div className="w-full max-w-3xl mx-auto px-3.5 sm:px-4 md:px-5 py-3.5 sm:py-4 md:py-5 font-sans">
+        <div
+          ref={modalRef}
+          className="surface-card border border-default text-primary rounded-2xl w-full p-4 sm:p-6 shadow-3xs relative overflow-hidden"
+        >
+          {modalContent}
+        </div>
       </div>
-    </div>
+    );
+  }
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          key="screening-modal-backdrop"
+          initial="hidden"
+          animate="visible"
+          exit="exit"
+          variants={shouldReduceMotion ? reducedMotionVariants : modalBackdropVariants}
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center max-sm:items-end p-3 sm:p-4 max-sm:p-0 font-sans select-none"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) onClose();
+          }}
+        >
+          <motion.div
+            key="screening-modal-panel"
+            ref={modalRef}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            variants={shouldReduceMotion ? reducedMotionVariants : modalPanelVariants}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="screening-modal-title"
+            className="surface-card border border-default text-primary rounded-2xl max-w-2xl w-full p-4 sm:p-6 shadow-xl relative max-h-[88dvh] max-sm:max-h-[92dvh] max-sm:rounded-b-none max-sm:w-full overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Mobile bottom sheet drag handle */}
+            <div className="w-10 h-1 bg-slate-200 dark:bg-slate-700 rounded-full mx-auto mb-3 sm:hidden shrink-0" />
+
+            <button
+              onClick={onClose}
+              aria-label="Tutup"
+              className="absolute top-3 right-3 p-1.5 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-all z-10 cursor-pointer min-h-[44px] min-w-[44px] sm:min-h-[36px] sm:min-w-[36px] flex items-center justify-center btn-press-compact"
+            >
+              <X className="w-5 h-5 sm:w-4 sm:h-4" />
+            </button>
+
+            {modalContent}
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 };

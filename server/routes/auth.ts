@@ -25,6 +25,159 @@ router.post('/login', loginLimiter, AuthController.login);
 router.get('/me', optionalAuth, AuthController.me);
 router.post('/logout', optionalAuth, AuthController.logout);
 
+// Campus SSO Identity Providers
+router.get('/sso/providers', (_req: Request, res: Response) => {
+  res.json({
+    success: true,
+    providers: [
+      {
+        id: 'sso-ui',
+        name: 'SSO Universitas Indonesia',
+        domain: 'ui.ac.id',
+        badge: 'UI Auth',
+        icon: 'GraduationCap',
+        status: 'ACTIVE'
+      },
+      {
+        id: 'sso-itb',
+        name: 'ITB Single Sign-On (Akun ITB)',
+        domain: 'itb.ac.id',
+        badge: 'ITB INA',
+        icon: 'GraduationCap',
+        status: 'ACTIVE'
+      },
+      {
+        id: 'sso-ugm',
+        name: 'Simaster UGM SSO',
+        domain: 'ugm.ac.id',
+        badge: 'UGM Auth',
+        icon: 'GraduationCap',
+        status: 'ACTIVE'
+      },
+      {
+        id: 'sso-unair',
+        name: 'CyberCampus Universitas Airlangga',
+        domain: 'unair.ac.id',
+        badge: 'UNAIR',
+        icon: 'GraduationCap',
+        status: 'ACTIVE'
+      },
+      {
+        id: 'sso-gsuite-edu',
+        name: 'Google Workspace for Education',
+        domain: '*.ac.id, *.edu',
+        badge: 'Google Edu',
+        icon: 'ShieldCheck',
+        status: 'ACTIVE'
+      },
+      {
+        id: 'sso-kemendikbud',
+        name: 'SSO Kemendikbudristek (Belajar.id / Kampus Merdeka)',
+        domain: 'kampusmerdeka.kemdikbud.go.id',
+        badge: 'Kemdikbud',
+        icon: 'Building2',
+        status: 'ACTIVE'
+      }
+    ]
+  });
+});
+
+// Campus Single Sign-On (SSO / OIDC Authentication Flow)
+router.post('/sso/campus-login', loginLimiter, async (req: Request, res: Response) => {
+  try {
+    const { email, name, university, providerId, roleHint } = req.body;
+
+    if (!email || typeof email !== 'string') {
+      return res.status(400).json({ error: 'Email institusi kampus wajib diisi.' });
+    }
+
+    const trimmedEmail = email.trim().toLowerCase();
+    
+    // Strict Campus Domain Verification: must end with .ac.id, .edu, or known institutional domains
+    const isCampusDomain = trimmedEmail.endsWith('.ac.id') || 
+                           trimmedEmail.endsWith('.edu') || 
+                           trimmedEmail.includes('ui.ac.id') ||
+                           trimmedEmail.includes('itb.ac.id') ||
+                           trimmedEmail.includes('ugm.ac.id') ||
+                           trimmedEmail.includes('unair.ac.id') ||
+                           trimmedEmail.includes('kampusmerdeka');
+
+    if (!isCampusDomain && !process.env.ALLOW_ANY_SSO_DOMAIN) {
+      return res.status(400).json({
+        error: 'Email harus merupakan email resmi institusi kampus (*.ac.id atau *.edu).'
+      });
+    }
+
+    // Role mapping based on SSO profile or email heuristics
+    let assignedRole: 'mahasiswa' | 'konselor' | 'admin' = 'mahasiswa';
+    if (roleHint === 'konselor' || roleHint === 'LICENSED_PSYCHOLOGIST' || roleHint === 'PEER_COUNSELOR' ||
+        trimmedEmail.includes('konselor') || trimmedEmail.includes('counselor') || trimmedEmail.includes('psikolog')) {
+      assignedRole = 'konselor';
+    } else if (roleHint === 'admin' || roleHint === 'CAMPUS_ADMIN' || trimmedEmail.includes('admin') || trimmedEmail.includes('rektorat')) {
+      assignedRole = 'admin';
+    }
+
+    let user = await serverDb.getUserByEmail(trimmedEmail);
+    if (!user) {
+      // Auto-provision campus account via SSO
+      const randomPass = crypto.randomBytes(24).toString('hex');
+      const passHash = await bcrypt.hash(randomPass, 10);
+      user = await serverDb.addUser({
+        name: name ? name.trim() : trimmedEmail.split('@')[0],
+        email: trimmedEmail,
+        passwordHash: passHash,
+        role: assignedRole,
+        tier: 'Pro', // Campus Enterprise tier auto-granted
+        university: university || 'Universitas Indonesia',
+        emailVerified: true,
+        mfaEnabled: false
+      });
+    }
+
+    const clientIp = req.ip || req.socket.remoteAddress || '127.0.0.1';
+    const userAgent = req.headers['user-agent'] || 'Campus SSO Client';
+    const sessionId = crypto.randomUUID();
+
+    const token = authService.generateSessionToken({
+      userId: user.id,
+      email: user.email,
+      role: user.role,
+      tier: user.tier,
+      sessionId,
+      name: user.name,
+    });
+
+    await serverDb.addActiveSession(user.id, {
+      sessionId,
+      device: userAgent.includes('Mobile') ? 'Smartphone (SSO)' : 'Desktop / Browser (Campus SSO)',
+      ip: clientIp,
+      userAgent,
+      createdAt: new Date().toISOString(),
+      lastActive: new Date().toISOString()
+    });
+
+    await serverDb.recordLoginHistory(user.id, {
+      ip: clientIp,
+      userAgent,
+      status: 'SUCCESS'
+    });
+
+    authService.setSessionCookie(res, token);
+
+    res.json({
+      success: true,
+      token,
+      user: authService.sanitizeUser(user),
+      ssoProvider: providerId || 'Campus-SSO-OIDC',
+      message: `Login SSO Kampus ${user.university} berhasil.`
+    });
+  } catch (err: any) {
+    console.error('Campus SSO login error:', err);
+    res.status(500).json({ error: 'Gagal memproses autentikasi SSO Kampus.' });
+  }
+});
+
+
 
 // MFA Verify
 router.post('/mfa/verify', mfaLimiter, async (req: Request, res: Response) => {

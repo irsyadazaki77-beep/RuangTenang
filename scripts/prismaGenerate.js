@@ -31,11 +31,14 @@ console.log(`[PRISMA GENERATE] Selected schema: ${schemaPath} (Provider: ${rawPr
 const clientPath = path.resolve(process.cwd(), 'node_modules', '.prisma', 'client');
 const clientExists = fs.existsSync(clientPath);
 
+const prismaBin = path.resolve(process.cwd(), 'node_modules', '.bin', 'prisma');
+const prismaCmd = fs.existsSync(prismaBin) ? `"${prismaBin}"` : 'npx prisma';
+
 try {
-  execSync(`npx prisma generate --schema ${schemaPath}`, { stdio: 'inherit' });
+  execSync(`${prismaCmd} generate --schema ${schemaPath}`, { stdio: 'inherit' });
 } catch (err) {
-  if (clientExists && (err?.message?.includes('EPERM') || String(err).includes('EPERM') || err?.status === 1)) {
-    console.warn('[PRISMA GENERATE] Warning: Query engine file is locked by a running process, but existing Prisma Client is available. Continuing...');
+  if (clientExists) {
+    console.warn('[PRISMA GENERATE] Warning: Prisma generate encountered an issue, but existing Prisma Client is available. Continuing...', err?.message || err);
   } else {
     console.error('[PRISMA GENERATE] Failed to generate Prisma Client:', err);
     process.exit(1);
@@ -48,7 +51,7 @@ if (!isPostgres) {
   if (!fs.existsSync(dbPath)) {
     console.log('[PRISMA INIT] SQLite database not detected. Auto-creating database and synchronizing schema...');
     try {
-      execSync('npx prisma db push --schema prisma/schema.sqlite.prisma --skip-generate', { stdio: 'inherit' });
+      execSync(`${prismaCmd} db push --schema prisma/schema.sqlite.prisma --skip-generate`, { stdio: 'inherit' });
       console.log('[PRISMA INIT] SQLite database schema synchronized successfully.');
     } catch (pushErr) {
       console.error('[PRISMA INIT] Warning: Failed to auto-initialize SQLite schema:', pushErr);

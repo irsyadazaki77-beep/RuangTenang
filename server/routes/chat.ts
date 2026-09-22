@@ -194,6 +194,7 @@ router.post(['/chat', '/api/chat'], optionalAuth, aiChatLimiter, aiAbuseLimiter,
     const { 
       message, 
       chatId, 
+      mode,
       isTemporary, 
       chatMode, 
       responseStyle, 
@@ -225,6 +226,7 @@ router.post(['/chat', '/api/chat'], optionalAuth, aiChatLimiter, aiAbuseLimiter,
       userId: req.user?.userId,
       input: cleanMessage,
       chatId,
+      mode,
       chatMode,
       responseStyle,
       aiModel,
@@ -254,6 +256,7 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
     const { 
       message, 
       chatId, 
+      mode,
       isTemporary, 
       pluginResult, 
       chatMode, 
@@ -570,6 +573,23 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
     res.setHeader('Connection', 'keep-alive');
     res.flushHeaders();
 
+    // Periodically send SSE keepalive heartbeat every 15 seconds to prevent Cloud Run / Nginx / reverse proxy timeouts
+    const keepAliveTimer = setInterval(() => {
+      if (!res.writableEnded) {
+        res.write(': keepalive\n\n');
+      } else {
+        clearInterval(keepAliveTimer);
+      }
+    }, 15000);
+
+    const cleanupKeepAlive = () => {
+      clearInterval(keepAliveTimer);
+    };
+
+    req.on('close', cleanupKeepAlive);
+    res.on('finish', cleanupKeepAlive);
+    res.on('close', cleanupKeepAlive);
+
     const runLocalFallback = async () => {
       console.warn('Executing Local Fallback AI stream response');
       const fallbackResponse = getLocalFallbackResponse(cleanMessage || pluginResult || '', chatMode, responseStyle);
@@ -650,6 +670,7 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
         userId,
         input: cleanMessage,
         chatId: currentChatId,
+        mode,
         chatMode,
         responseStyle,
         aiModel,

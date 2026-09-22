@@ -44,6 +44,9 @@ import chatRouter from './server/routes/chat.js';
 import attachmentsRouter from './server/routes/attachments.js';
 import userDataRouter from './server/routes/userData.js';
 import counselorsRouter from './server/routes/counselors.js';
+import counselorPortalRouter from './server/routes/counselorPortal.js';
+import systemStatsRouter from './server/routes/systemStats.js';
+import workspaceArtifactsRouter from './server/routes/workspaceArtifacts.js';
 
 async function startServer() {
   const isProd = process.env.NODE_ENV === 'production';
@@ -63,7 +66,7 @@ async function startServer() {
 
   const app = express();
   
-  const PORT = parsePort(process.env.PORT, 3000);
+  const PORT = 3000;
 
   // Trust proxy setup for Cloud Run / reverse proxies
   const trustProxySetting = process.env.TRUST_PROXY || '1';
@@ -439,6 +442,15 @@ async function startServer() {
 
   app.use('/api/v1', counselorsRouter);
   app.use('/api', counselorsRouter);
+
+  app.use('/api/v1/counselor-portal', counselorPortalRouter);
+  app.use('/api/counselor-portal', counselorPortalRouter);
+
+  app.use('/api/v1/health', systemStatsRouter);
+  app.use('/api/health', systemStatsRouter);
+
+  app.use('/api/v1/workspace/artifacts', workspaceArtifactsRouter);
+  app.use('/api/workspace/artifacts', workspaceArtifactsRouter);
 
   // Dedicated 404 handler for unhandled /api/* routes before SPA fallback
   app.all('/api/*', (_req, res) => {

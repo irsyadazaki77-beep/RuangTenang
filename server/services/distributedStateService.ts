@@ -47,6 +47,10 @@ class MemoryStateStore {
     this.store.delete(compositeKey);
   }
 
+  static clear(): void {
+    this.store.clear();
+  }
+
   static incr(compositeKey: string, windowSeconds: number): number {
     const entry = this.store.get(compositeKey);
     let count = 1;
@@ -218,5 +222,19 @@ export class DistributedStateService {
    */
   static async cleanExpired(): Promise<number> {
     return 0;
+  }
+
+  /**
+   * Clears in-memory store for unit & integration testing
+   */
+  static async clearAllForTesting(): Promise<void> {
+    MemoryStateStore.clear();
+    try {
+      if (await redisService.isHealthy()) {
+        await redisService.flushdb();
+      }
+    } catch {
+      // ignore in test
+    }
   }
 }

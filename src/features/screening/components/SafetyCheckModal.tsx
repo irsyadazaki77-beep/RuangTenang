@@ -1,6 +1,8 @@
 import React from 'react';
 import { ShieldAlert, PhoneCall, Phone } from 'lucide-react';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { EMERGENCY_CONTACTS } from '../../../lib/emergencyResources';
+import { modalBackdropVariants, modalPanelVariants, reducedMotionVariants } from '../../../lib/motionTokens';
 
 interface SafetyCheckModalProps {
   isOpen: boolean;
@@ -23,11 +25,27 @@ export const SafetyCheckModal: React.FC<SafetyCheckModalProps> = ({
   safetyAssessment,
   setSafetyAssessment,
 }) => {
-  if (!isOpen) return null;
+  const shouldReduceMotion = useReducedMotion();
 
   return (
-    <div className="fixed inset-0 z-[60] bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
-      <div className="bg-white dark:bg-slate-800 border border-rose-300 dark:border-rose-900 text-primary rounded-xl max-w-lg w-full p-4 sm:p-5 shadow-xl space-y-3.5 font-sans">
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div 
+          key="safety-backdrop"
+          initial="hidden"
+          animate="visible"
+          exit="exit"
+          variants={shouldReduceMotion ? reducedMotionVariants : modalBackdropVariants}
+          className="fixed inset-0 z-[60] bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4"
+        >
+          <motion.div 
+            key="safety-panel"
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            variants={shouldReduceMotion ? reducedMotionVariants : modalPanelVariants}
+            className="bg-white dark:bg-slate-800 border border-rose-300 dark:border-rose-900 text-primary rounded-xl max-w-lg w-full p-4 sm:p-5 shadow-xl space-y-3.5 font-sans"
+          >
         <div className="flex items-start gap-2.5 bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900 p-3 rounded-lg text-rose-950 dark:text-rose-200">
           <ShieldAlert className="w-5 h-5 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
           <div>
@@ -149,19 +167,21 @@ export const SafetyCheckModal: React.FC<SafetyCheckModalProps> = ({
         <div className="flex items-center justify-end gap-2 pt-2.5 border-t border-slate-200 dark:border-slate-700">
           <a
             href="tel:119"
-            className="px-3.5 py-2 min-h-[44px] sm:min-h-[36px] bg-rose-600 hover:bg-rose-700 text-white text-xs font-medium rounded-lg flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+            className="px-3.5 py-2 min-h-[44px] sm:min-h-[36px] bg-rose-600 hover:bg-rose-700 text-white text-xs font-medium rounded-lg flex items-center justify-center gap-1.5 transition-colors cursor-pointer btn-press"
           >
             <Phone className="w-3.5 h-3.5" />
             <span>Hubungi Hotline 119</span>
           </a>
           <button
             onClick={onClose}
-            className="px-4 py-2 min-h-[44px] sm:min-h-[36px] bg-slate-800 hover:bg-slate-900 text-white text-xs font-medium rounded-lg transition-all active:scale-95 cursor-pointer flex items-center justify-center"
+            className="px-4 py-2 min-h-[44px] sm:min-h-[36px] bg-slate-800 hover:bg-slate-900 text-white text-xs font-medium rounded-lg transition-all cursor-pointer flex items-center justify-center btn-press"
           >
             Saya Aman, Lanjutkan
           </button>
         </div>
-      </div>
-    </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 };

@@ -4,12 +4,7 @@ import { MessageBubble } from './MessageBubble';
 import { ChatComposer } from './ChatComposer';
 import { Message, ChatMode, ResponseStyle, Chat } from '../types';
 import { UserSession } from '../../../types';
-import { lazyWithRetry } from '../../../lib/lazyWithRetry';
-const ScreeningModal = lazyWithRetry(() => import('../../../features/screening/ScreeningModal').then(m => ({ default: m.ScreeningModal })));
-const CounselorDirectory = lazyWithRetry(() => import('../../../features/counselors/CounselorDirectory').then(m => ({ default: m.CounselorDirectory })));
-const UserProgressTracker = lazyWithRetry(() => import('../../../features/mood/UserProgressTracker').then(m => ({ default: m.UserProgressTracker })));
-const EmergencyCenter = lazyWithRetry(() => import('../../../components/EmergencyCenter').then(m => ({ default: m.EmergencyCenter })));
-const MentalHealthArticles = lazyWithRetry(() => import('../../../components/MentalHealthArticles').then(m => ({ default: m.MentalHealthArticles })));
+import { ChatModalContainer } from './ChatModalContainer';
 import { RefreshCw, ChevronDown, Sparkles, Clock, Wind, Calendar, ArrowDown, Shield, Eye, X, Video } from 'lucide-react';
 import { useToast } from '../../../components/Toast';
 import { Appointment } from '../../../types';
@@ -21,17 +16,11 @@ import { useChatHistory } from '../hooks/useChatHistory';
 import { useChatStreaming } from '../hooks/useChatStreaming';
 import { ChatHeader } from './ChatHeader';
 import { EmptyChatState } from './EmptyChatState';
-import { BreathingModal } from './BreathingModal';
 import { ChatSkeleton } from '../../../components/common/Skeleton';
 import { ErrorState } from '../../../components/common/ErrorState';
 import { apiClient } from '../../../lib/apiClient';
-import { ModalShell } from '../../../components/ui/ModalShell';
 import { ChatSearchBar } from './ChatSearchBar';
-import { SessionSummaryModal } from './SessionSummaryModal';
-import { BookmarksModal } from './BookmarksModal';
-import { BranchChatModal } from './BranchChatModal';
-import { ChatMemoryModal } from './ChatMemoryModal';
-import { GroundingModal } from './GroundingModal';
+import { RhythmicTypingIndicator } from '../../../components/ui/RhythmicTypingIndicator';
 
 interface MainChatProps {
   user: UserSession | null;
@@ -385,11 +374,34 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
     setShowScrollBottom(false);
   }, []);
 
-  // Smart Auto-Scroll: Auto-scroll during stream ONLY IF user is near bottom
+  // Smart Auto-Scroll: Smoothly auto-scroll during stream with RAF dampener
+  const scrollRafRef = useRef<number | null>(null);
+
   useEffect(() => {
-    if (isAtBottom && scrollContainerRef.current) {
-      scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+    if (!isAtBottom || !scrollContainerRef.current) return;
+    
+    if (scrollRafRef.current) {
+      cancelAnimationFrame(scrollRafRef.current);
     }
+
+    scrollRafRef.current = requestAnimationFrame(() => {
+      const el = scrollContainerRef.current;
+      if (!el) return;
+      const target = el.scrollHeight;
+      const distance = target - (el.scrollTop + el.clientHeight);
+      if (distance > 2) {
+        // If small token progression, follow immediately without heavy layout jumps
+        // If large gap, smooth scroll gently
+        el.scrollTo({
+          top: target,
+          behavior: distance > 240 ? 'smooth' : 'auto'
+        });
+      }
+    });
+
+    return () => {
+      if (scrollRafRef.current) cancelAnimationFrame(scrollRafRef.current);
+    };
   }, [messages, isTyping, streamingMessage?.content, isAtBottom]);
 
   useEffect(() => {
@@ -825,77 +837,21 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
   };
   
 
-  const renderPluginWrapper = (title: string, component: React.ReactNode, subtitle?: string) => (
-    <ModalShell
-      isOpen={true}
-      onClose={handleClosePlugin}
-      title={title}
-      subtitle={subtitle}
-      maxWidth="3xl"
-    >
-      <React.Suspense fallback={
-        <div className="flex flex-col items-center justify-center h-48 p-8 text-secondary text-xs animate-pulse gap-2">
-          <RefreshCw className="w-5 h-5 animate-spin text-teal-600 dark:text-teal-400" />
-          <span>Memuat modul {title}...</span>
-        </div>
-      }>
-        {component}
-      </React.Suspense>
-    </ModalShell>
-  );
-
   return (
     <>
-      {activePlugin === 'screening' && renderPluginWrapper(
-        'Skrining Mandiri Psikometri',
-        <ScreeningModal 
-          isOpen={true} 
-          onClose={handleClosePlugin} 
-          onComplete={(score: any) => { 
-            handleClosePlugin(); 
-            showToast('Skrining berhasil diselesaikan.', 'success');
-            handleSend('', `Saya telah menyelesaikan skrining mandiri PHQ-9 (skor: ${score.phq9.score}, kategori: ${score.phq9.severity}) dan GAD-7 (skor: ${score.gad7.score}, kategori: ${score.gad7.severity}). Catatan: Skrining ini adalah alat evaluasi mandiri awal dan BUKAN diagnosis medis.`); 
-          }} 
-        />,
-        'Instrumen PHQ-9 & GAD-7 untuk deteksi dini'
-      )}
-      {activePlugin === 'counselors' && renderPluginWrapper(
-        'Direktori Konselor & Psikolog Kampus',
-        <CounselorDirectory onSelectCounselorForBooking={(counselor: any) => {
+      <ChatModalContainer
+        activePlugin={activePlugin}
+        onClosePlugin={handleClosePlugin}
+        onScreeningComplete={(score: any) => {
           handleClosePlugin();
-          navigate('/counselors', { state: { selectedCounselor: counselor } });
-        }} />,
-        'Jadwalkan sesi pendampingan psikologis terpercaya'
-      )}
-      {activePlugin === 'mood' && renderPluginWrapper(
-        'Progress & Mood Tracker',
-        <UserProgressTracker />,
-        'Pantau grafik emosi dan capaian harian Anda'
-      )}
-      {activePlugin === 'articles' && renderPluginWrapper(
-        'Perpustakaan & Artikel Edukasi',
-        <MentalHealthArticles />,
-        'Panduan psikologi praktis & manajemen stres'
-      )}
-      {activePlugin === 'emergency' && renderPluginWrapper(
-        'Pusat Bantuan Darurat SOS',
-        <EmergencyCenter onTriggerSOS={() => showToast('Sinyal SOS darurat diaktifkan.', 'info')} />,
-        'Layanan krisis 24 jam & nomor darurat langsung'
-      )}
-
-      {/* Feature 1: Smart Session Summary Modal */}
-      <SessionSummaryModal
-        isOpen={isSummaryModalOpen}
-        onClose={() => setIsSummaryModalOpen(false)}
-        chatId={chatId}
-      />
-
-      {/* Feature 2: Bookmarks Modal */}
-      <BookmarksModal
-        isOpen={isBookmarksModalOpen}
-        onClose={() => setIsBookmarksModalOpen(false)}
-        currentChatId={chatId}
-        onSelectChat={(targetChatId) => navigate(`/c/${targetChatId}`)}
+          showToast('Skrining berhasil diselesaikan.', 'success');
+          handleSend('', `Saya telah menyelesaikan skrining mandiri PHQ-9 (skor: ${score.phq9.score}, kategori: ${score.phq9.severity}) dan GAD-7 (skor: ${score.gad7.score}, kategori: ${score.gad7.severity}). Catatan: Skrining ini adalah alat evaluasi mandiri awal dan BUKAN diagnosis medis.`);
+        }}
+        onTriggerSOS={() => showToast('Sinyal SOS darurat diaktifkan.', 'info')}
+        isSummaryModalOpen={isSummaryModalOpen}
+        onCloseSummaryModal={() => setIsSummaryModalOpen(false)}
+        isBookmarksModalOpen={isBookmarksModalOpen}
+        onCloseBookmarksModal={() => setIsBookmarksModalOpen(false)}
         onBookmarkRemoved={(msgId) => {
           setBookmarkedMessageIds(prev => {
             const next = new Set(prev);
@@ -903,27 +859,15 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
             return next;
           });
         }}
-      />
-
-      {/* Feature 3: Branch Chat Modal */}
-      <BranchChatModal
-        isOpen={isBranchModalOpen}
-        onClose={() => {
+        isBranchModalOpen={isBranchModalOpen}
+        onCloseBranchModal={() => {
           setIsBranchModalOpen(false);
           setBranchTarget(null);
         }}
-        parentChatId={chatId}
-        parentChatTitle={currentChat?.title || 'Percakapan Asli'}
-        messageId={branchTarget?.messageId}
-        messageSnippet={branchTarget?.contentSnippet}
+        branchTarget={branchTarget}
         onChatBranched={handleChatBranched}
-      />
-
-      {/* Feature 4: AI Memory Control Modal */}
-      <ChatMemoryModal
-        isOpen={isMemoryModalOpen}
-        onClose={() => setIsMemoryModalOpen(false)}
-        chatId={chatId}
+        isMemoryModalOpen={isMemoryModalOpen}
+        onCloseMemoryModal={() => setIsMemoryModalOpen(false)}
         useMemoryForChat={useMemoryForChat}
         onToggleChatMemory={(val) => {
           setUseMemoryForChat(val);
@@ -931,19 +875,13 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
             setChats(prev => prev.map(c => c.id === chatId ? { ...c, useMemory: val } : c));
           }
         }}
-      />
-
-      {/* Feature 6: Guided Breathing 1-Minute Modal */}
-      <BreathingModal
-        isOpen={isBreathingOpen}
-        onClose={() => setIsBreathingOpen(false)}
-      />
-
-      {/* Feature 7: Sensory Grounding 5-4-3-2-1 Modal */}
-      <GroundingModal
-        isOpen={isGroundingOpen}
-        onClose={() => setIsGroundingOpen(false)}
+        isBreathingOpen={isBreathingOpen}
+        onCloseBreathing={() => setIsBreathingOpen(false)}
+        isGroundingOpen={isGroundingOpen}
+        onCloseGrounding={() => setIsGroundingOpen(false)}
         onOpenBreathing={() => setIsBreathingOpen(true)}
+        chatId={chatId}
+        currentChatTitle={currentChat?.title}
       />
 
     <div 
@@ -1115,14 +1053,7 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
             )}
             
             {isTyping && !streamingMessage && messages[messages.length - 1]?.role !== 'assistant' && (
-              <div className="flex items-center gap-2 text-slate-400 py-1 pl-9 animate-fade-in">
-                <div className="flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse [animation-delay:0ms]"></span>
-                  <span className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse [animation-delay:200ms]"></span>
-                  <span className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse [animation-delay:400ms]"></span>
-                </div>
-                <span className="text-xs text-slate-400">RuangTenang sedang merespons...</span>
-              </div>
+              <RhythmicTypingIndicator label="RuangTenang sedang merespons..." />
             )}
             
             {!isTyping && followUps.length > 0 && (
@@ -1131,7 +1062,7 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
                   <button 
                     key={idx} 
                     onClick={() => handleSend(q)} 
-                    className="px-3 py-1.5 bg-slate-100/80 hover:bg-slate-200/80 dark:bg-slate-800/80 dark:hover:bg-slate-700/80 rounded-full text-xs text-slate-600 dark:text-slate-300 transition-colors text-left cursor-pointer"
+                    className="px-3 py-1.5 bg-slate-100/80 hover:bg-slate-200/80 dark:bg-slate-800/80 dark:hover:bg-slate-700/80 rounded-full text-xs text-slate-600 dark:text-slate-300 transition-colors text-left cursor-pointer chip-tactile active:scale-[0.96]"
                   >
                     {q}
                   </button>

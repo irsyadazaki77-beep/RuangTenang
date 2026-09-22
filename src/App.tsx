@@ -13,6 +13,7 @@ import { WorkspaceLayout } from './components/layout/WorkspaceLayout';
 import { useToast } from './components/Toast';
 import { lazyWithRetry } from './lib/lazyWithRetry';
 import { GlobalErrorBoundary } from './components/error/GlobalErrorBoundary';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 
 const UserProgressTracker = lazyWithRetry(() => import('./features/mood/UserProgressTracker').then(module => ({ default: module.UserProgressTracker })));
 const MindfulnessWorkshop = lazyWithRetry(() => import('./features/mood/MindfulnessWorkshop').then(module => ({ default: module.MindfulnessWorkshop })));
@@ -23,13 +24,16 @@ const EmergencyCenter = lazyWithRetry(() => import('./components/EmergencyCenter
 const LegalDocsModal = lazyWithRetry(() => import('./features/privacy/LegalDocsModal').then(module => ({ default: module.LegalDocsModal })));
 const OnboardingFlow = lazyWithRetry(() => import('./features/onboarding/OnboardingFlow').then(module => ({ default: module.OnboardingFlow })));
 import { Counselor } from './types';
+import { WorkspaceMode } from './features/workspace/types';
 const NotificationCenter = lazyWithRetry(() => import('./components/notifications/NotificationCenter').then(module => ({ default: module.NotificationCenter })));
 
 const AuthModal = lazyWithRetry(() => import('./features/authentication/AuthModal').then(module => ({ default: module.AuthModal })));
 const SettingsPage = lazyWithRetry(() => import('./features/settings/SettingsPage').then(module => ({ default: module.SettingsPage })));
 const CounselorDashboard = lazyWithRetry(() => import('./features/counselors/CounselorDashboard').then(module => ({ default: module.CounselorDashboard })));
+const CounselorPortal = lazyWithRetry(() => import('./features/counselor-portal/CounselorPortal').then(module => ({ default: module.CounselorPortal })));
 const ChangelogModal = lazyWithRetry(() => import('./components/changelog/ChangelogModal').then(module => ({ default: module.ChangelogModal })));
 const NewUpdateToast = lazyWithRetry(() => import('./components/changelog/NewUpdateToast').then(module => ({ default: module.NewUpdateToast })));
+const StudentWorkspace = lazyWithRetry(() => import('./features/workspace/StudentWorkspace').then(module => ({ default: module.StudentWorkspace })));
 
 export default function App() {
   const { user, setUser, loading, isOffline, logout } = useAuth();
@@ -44,8 +48,32 @@ export default function App() {
   const [selectedCounselor, setSelectedCounselor] = useState<Counselor | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
+  const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>(() => {
+    const saved = safeLocalStorage.getItem('ruangtenang_workspace_mode') as WorkspaceMode;
+    return saved === 'RUANG_KERJA' ? 'RUANG_KERJA' : 'RUANG_TENANG';
+  });
   const navigate = useNavigate();
   const location = useLocation();
+  const shouldReduceMotion = useReducedMotion();
+
+  const handleSwitchMode = (mode: WorkspaceMode) => {
+    setWorkspaceMode(mode);
+    safeLocalStorage.setItem('ruangtenang_workspace_mode', mode);
+    if (mode === 'RUANG_KERJA') {
+      navigate('/workspace');
+    } else {
+      navigate('/');
+    }
+  };
+
+  useEffect(() => {
+    if (location.pathname.startsWith('/workspace')) {
+      if (workspaceMode !== 'RUANG_KERJA') {
+        setWorkspaceMode('RUANG_KERJA');
+        safeLocalStorage.setItem('ruangtenang_workspace_mode', 'RUANG_KERJA');
+      }
+    }
+  }, [location.pathname]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -165,6 +193,28 @@ export default function App() {
     if (user?.id) {
       fetchChats();
     }
+  }, [user?.id]);
+
+  // Automatic Offline Outbox Synchronization
+  useEffect(() => {
+    const handleOnlineSync = async () => {
+      try {
+        const synced = await clientDb.processOutboxQueue(apiClient);
+        if (synced > 0) {
+          showToast(`Berhasil menyinkronkan ${synced} data offline ke server`, 'success', 'Sinkronisasi Selesai');
+          fetchChats();
+        }
+      } catch (err) {
+        console.warn('Background sync error:', err);
+      }
+    };
+
+    window.addEventListener('online', handleOnlineSync);
+    // Also trigger on mount if online
+    if (navigator.onLine) {
+      handleOnlineSync();
+    }
+    return () => window.removeEventListener('online', handleOnlineSync);
   }, [user?.id]);
 
   useEffect(() => {
@@ -373,10 +423,24 @@ export default function App() {
       <Sidebar 
         isOpen={isSidebarOpen} 
         setIsOpen={setIsSidebarOpen} 
-        onNewChat={() => navigate('/')}
+        onNewChat={() => {
+          if (workspaceMode === 'RUANG_KERJA') {
+            navigate('/workspace');
+          } else {
+            navigate('/');
+          }
+        }}
         chats={chats}
-        currentChatId={location.pathname.startsWith('/c/') ? location.pathname.split('/c/')[1] : undefined}
-        onSelectChat={(id) => navigate(`/c/${id}`)}
+        currentChatId={location.pathname.startsWith('/c/') ? location.pathname.split('/c/')[1] : (location.pathname.startsWith('/workspace/c/') ? location.pathname.split('/workspace/c/')[1] : undefined)}
+        currentMode={workspaceMode}
+        onSwitchMode={handleSwitchMode}
+        onSelectChat={(id) => {
+          if (workspaceMode === 'RUANG_KERJA') {
+            navigate(`/workspace/c/${id}`);
+          } else {
+            navigate(`/c/${id}`);
+          }
+        }}
         onDeleteChat={handleDeleteChat}
         onUpdateTitle={handleUpdateTitle}
         onTogglePin={handleTogglePin}
@@ -425,108 +489,181 @@ export default function App() {
         ) : (
           <GlobalErrorBoundary>
             <Suspense fallback={<div className="flex h-full items-center justify-center surface-page"><div className="w-8 h-8 border-4 border-teal-500 border-t-transparent rounded-full animate-spin"></div></div>}>
-              <Routes>
-                <Route path="/" element={<MainChat user={user} chats={chats} setChats={setChats} onOpenSidebar={() => setIsSidebarOpen(true)} onOpenSettings={() => setIsSettingsOpen(true)} onOpenChangelog={() => setIsChangelogOpen(true)} />} />
-                <Route path="/c/:chatId" element={<MainChat user={user} chats={chats} setChats={setChats} onOpenSidebar={() => setIsSidebarOpen(true)} onOpenSettings={() => setIsSettingsOpen(true)} onOpenChangelog={() => setIsChangelogOpen(true)} />} />
-                <Route
-                  path="/mood"
-                  element={
-                    <WorkspaceLayout
-                      title="Mood Tracker & Progress"
-                      subtitle="Pantau perkembangan kesehatan mental dan emosi Anda secara berkala"
-                      badge="Lokal & Privat"
-                      onOpenSidebar={() => setIsSidebarOpen(true)}
-                      onOpenChangelog={() => setIsChangelogOpen(true)}
-                    >
-                      <UserProgressTracker
-                        onOpenScreening={() => navigate('/screening')}
-                        onNavigateToSchedule={() => navigate('/counselors')}
-                      />
-                    </WorkspaceLayout>
+              <AnimatePresence mode="wait" initial={false}>
+                <motion.div
+                  key={
+                    location.pathname.startsWith('/workspace')
+                      ? 'workspace-mode'
+                      : (location.pathname === '/' || location.pathname.startsWith('/c/'))
+                      ? 'tenang-mode'
+                      : location.pathname
                   }
-                />
-                <Route
-                  path="/mindfulness"
-                  element={
-                    <WorkspaceLayout
-                      title="Workshop Meditasi & Tenang Mandiri"
-                      subtitle="Latih ketenangan diri, atasi panik, dan catat jurnal syukur harian"
-                      badge="Lokakarya Batin"
-                      onOpenSidebar={() => setIsSidebarOpen(true)}
-                      onOpenChangelog={() => setIsChangelogOpen(true)}
-                    >
-                      <MindfulnessWorkshop />
-                    </WorkspaceLayout>
-                  }
-                />
-                <Route
-                  path="/screening"
-                  element={
-                    <WorkspaceLayout
-                      title="Cek Kondisi Mental"
-                      subtitle="Instrumen cek kondisi awal mandiri. BUKAN alat diagnosis medis."
-                      badge="Cek Kondisi"
-                      onOpenSidebar={() => setIsSidebarOpen(true)}
-                      onOpenChangelog={() => setIsChangelogOpen(true)}
-                    >
-                      <ScreeningModal
-                        isOpen={true}
-                        isPageMode={true}
-                        onClose={() => navigate('/mood')}
-                        onComplete={() => {
-                          // Local completion
-                        }}
-                        onPersisted={() => {
-                          showToast('Skrining berhasil disimpan ke profil Anda.', 'success');
-                        }}
-                      />
-                    </WorkspaceLayout>
-                  }
-                />
-                <Route
-                  path="/counselors"
-                  element={
-                    <WorkspaceLayout
-                      title="Jadwal & Direktori Konselor"
-                      subtitle="Temui konselor atau psikolog berlisensi untuk pendampingan."
-                      badge="Terverifikasi"
-                      onOpenSidebar={() => setIsSidebarOpen(true)}
-                      onOpenChangelog={() => setIsChangelogOpen(true)}
-                    >
-                      <div className="max-w-7xl mx-auto flex flex-col xl:flex-row gap-3.5 sm:gap-4.5 p-3 sm:p-4 md:p-5 w-full">
-                        <div className="flex-1 xl:w-2/3">
-                          <CounselorDirectory onSelectCounselorForBooking={(c) => setSelectedCounselor(c)} />
-                        </div>
-                        <div className="xl:w-1/3">
-                          <AppointmentScheduler 
-                             selectedCounselorFromDir={selectedCounselor}
-                             userSession={user}
-                             setUserSession={setUser}
+                  initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={shouldReduceMotion ? { opacity: 1 } : { opacity: 0 }}
+                  transition={{ duration: 0.2, ease: 'easeOut' }}
+                  className="h-full w-full flex-1 flex flex-col min-h-0 overflow-hidden"
+                >
+                  <Routes location={location}>
+                    <Route path="/" element={<MainChat user={user} chats={chats} setChats={setChats} onOpenSidebar={() => setIsSidebarOpen(true)} onOpenSettings={() => setIsSettingsOpen(true)} onOpenChangelog={() => setIsChangelogOpen(true)} />} />
+                    <Route path="/c/:chatId" element={<MainChat user={user} chats={chats} setChats={setChats} onOpenSidebar={() => setIsSidebarOpen(true)} onOpenSettings={() => setIsSettingsOpen(true)} onOpenChangelog={() => setIsChangelogOpen(true)} />} />
+                    <Route 
+                      path="/workspace" 
+                      element={
+                        <StudentWorkspace 
+                          user={user} 
+                          chats={chats} 
+                          setChats={setChats} 
+                          onOpenSidebar={() => setIsSidebarOpen(true)} 
+                          onOpenSettings={() => setIsSettingsOpen(true)} 
+                          onOpenChangelog={() => setIsChangelogOpen(true)} 
+                          onSwitchMode={handleSwitchMode} 
+                        />
+                      } 
+                    />
+                    <Route 
+                      path="/workspace/c/:chatId" 
+                      element={
+                        <StudentWorkspace 
+                          user={user} 
+                          chats={chats} 
+                          setChats={setChats} 
+                          onOpenSidebar={() => setIsSidebarOpen(true)} 
+                          onOpenSettings={() => setIsSettingsOpen(true)} 
+                          onOpenChangelog={() => setIsChangelogOpen(true)} 
+                          onSwitchMode={handleSwitchMode} 
+                        />
+                      } 
+                    />
+                    <Route
+                      path="/mood"
+                      element={
+                        <WorkspaceLayout
+                          title="Mood Tracker & Progress"
+                          subtitle="Pantau perkembangan kesehatan mental dan emosi Anda secara berkala"
+                          badge="Lokal & Privat"
+                          onOpenSidebar={() => setIsSidebarOpen(true)}
+                          onOpenChangelog={() => setIsChangelogOpen(true)}
+                        >
+                          <UserProgressTracker
+                            onOpenScreening={() => navigate('/screening')}
+                            onNavigateToSchedule={() => navigate('/counselors')}
                           />
-                        </div>
-                      </div>
-                    </WorkspaceLayout>
-                  }
-                />
-                <Route
-                  path="/emergency"
-                  element={
-                    <WorkspaceLayout
-                      title="Pusat Bantuan Krisis & Darurat"
-                      subtitle="Layanan tanggap cepat, tele-konseling krisis, dan tombol darurat SOS 24 jam"
-                      badge="24 Jam"
-                      onOpenSidebar={() => setIsSidebarOpen(true)}
-                      onOpenChangelog={() => setIsChangelogOpen(true)}
-                    >
-                      <div className="max-w-4xl mx-auto p-3 sm:p-4 md:p-5 w-full">
-                        <EmergencyCenter onTriggerSOS={() => showToast('Sinyal SOS darurat diaktifkan.', 'info')} />
-                      </div>
-                    </WorkspaceLayout>
-                  }
-                />
-                {/* Fallback route */}
-                <Route path="*" element={<Navigate to="/" replace />} />
-              </Routes>
+                        </WorkspaceLayout>
+                      }
+                    />
+                    <Route
+                      path="/mindfulness"
+                      element={
+                        <WorkspaceLayout
+                          title="Workshop Meditasi & Tenang Mandiri"
+                          subtitle="Latih ketenangan diri, atasi panik, dan catat jurnal syukur harian"
+                          badge="Lokakarya Batin"
+                          onOpenSidebar={() => setIsSidebarOpen(true)}
+                          onOpenChangelog={() => setIsChangelogOpen(true)}
+                        >
+                          <MindfulnessWorkshop />
+                        </WorkspaceLayout>
+                      }
+                    />
+                    <Route
+                      path="/screening"
+                      element={
+                        <WorkspaceLayout
+                          title="Cek Kondisi Mental"
+                          subtitle="Instrumen cek kondisi awal mandiri. BUKAN alat diagnosis medis."
+                          badge="Cek Kondisi"
+                          onOpenSidebar={() => setIsSidebarOpen(true)}
+                          onOpenChangelog={() => setIsChangelogOpen(true)}
+                        >
+                          <ScreeningModal
+                            isOpen={true}
+                            isPageMode={true}
+                            onClose={() => navigate('/mood')}
+                            onComplete={() => {
+                              // Local completion
+                            }}
+                            onPersisted={() => {
+                              showToast('Skrining berhasil disimpan ke profil Anda.', 'success');
+                            }}
+                          />
+                        </WorkspaceLayout>
+                      }
+                    />
+                    <Route
+                      path="/counselors"
+                      element={
+                        <WorkspaceLayout
+                          title="Jadwal & Direktori Konselor"
+                          subtitle="Temui konselor atau psikolog berlisensi untuk pendampingan."
+                          badge="Terverifikasi"
+                          onOpenSidebar={() => setIsSidebarOpen(true)}
+                          onOpenChangelog={() => setIsChangelogOpen(true)}
+                        >
+                          <div className="max-w-7xl mx-auto flex flex-col xl:flex-row gap-3.5 sm:gap-4.5 p-3 sm:p-4 md:p-5 w-full">
+                            <div className="flex-1 xl:w-2/3">
+                              <CounselorDirectory onSelectCounselorForBooking={(c) => setSelectedCounselor(c)} />
+                            </div>
+                            <div className="xl:w-1/3">
+                              <AppointmentScheduler 
+                                 selectedCounselorFromDir={selectedCounselor}
+                                 userSession={user}
+                                 setUserSession={setUser}
+                              />
+                            </div>
+                          </div>
+                        </WorkspaceLayout>
+                      }
+                    />
+                    <Route
+                      path="/counselor-portal"
+                      element={
+                        <WorkspaceLayout
+                          title="Portal Layanan Konselor & Rekam Medis SOAP"
+                          subtitle="Triase kasus klinis, catatan SOAP terenkripsi AES-256-GCM, dan analitik kampus"
+                          badge="Konselor"
+                          onOpenSidebar={() => setIsSidebarOpen(true)}
+                          onOpenChangelog={() => setIsChangelogOpen(true)}
+                        >
+                          <CounselorPortal />
+                        </WorkspaceLayout>
+                      }
+                    />
+                    <Route
+                      path="/counselordashboard"
+                      element={
+                        <WorkspaceLayout
+                          title="Dashboard Konselor"
+                          subtitle="Kelola jadwal sesi dan antrean konsultasi mahasiswa"
+                          badge="Konselor"
+                          onOpenSidebar={() => setIsSidebarOpen(true)}
+                          onOpenChangelog={() => setIsChangelogOpen(true)}
+                        >
+                          <CounselorDashboard />
+                        </WorkspaceLayout>
+                      }
+                    />
+                    <Route
+                      path="/emergency"
+                      element={
+                        <WorkspaceLayout
+                          title="Pusat Bantuan Krisis & Darurat"
+                          subtitle="Layanan tanggap cepat, tele-konseling krisis, dan tombol darurat SOS 24 jam"
+                          badge="24 Jam"
+                          onOpenSidebar={() => setIsSidebarOpen(true)}
+                          onOpenChangelog={() => setIsChangelogOpen(true)}
+                        >
+                          <div className="max-w-4xl mx-auto p-3 sm:p-4 md:p-5 w-full">
+                            <EmergencyCenter onTriggerSOS={() => showToast('Sinyal SOS darurat diaktifkan.', 'info')} />
+                          </div>
+                        </WorkspaceLayout>
+                      }
+                    />
+                    {/* Fallback route */}
+                    <Route path="*" element={<Navigate to="/" replace />} />
+                  </Routes>
+                </motion.div>
+              </AnimatePresence>
             </Suspense>
           </GlobalErrorBoundary>
         )}

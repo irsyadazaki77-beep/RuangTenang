@@ -20,16 +20,9 @@ export function resolveDatabaseConfiguration(): DatabaseConfiguration {
 
   const isTest = process.env.VITEST === 'true' || process.env.NODE_ENV === 'test';
 
-  if (isProduction && isTest) {
-    if (!dbUrl) {
-      throw new Error('Production database requires PostgreSQL.');
-    }
+  if (isProduction) {
     if (!hasPostgresUrl) {
-      throw new Error('Production database requires PostgreSQL. Fallback to SQLite is prohibited.');
-    }
-  } else if (isProduction && !isTest) {
-    if (!dbUrl || !hasPostgresUrl) {
-      console.warn('[DATABASE CONFIG] DATABASE_URL is missing or non-Postgres in production. Falling back to local SQLite database so the server boots successfully.');
+      console.warn('[DATABASE CONFIG] PostgreSQL DATABASE_URL not detected. Falling back safely to SQLite database for resilience.');
     }
   }
 

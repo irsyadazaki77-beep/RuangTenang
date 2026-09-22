@@ -1,0 +1,196 @@
+version: '3.8'
+
+# ==============================================================================
+# RuangTenang & RuangKerja - Production Docker Compose Stack
+# Architecture: Nginx (Proxy) -> App (Node.js/Vite) -> PostgreSQL 16 & Redis 7
+# Security: Database & Cache are isolated inside internal non-routable network
+# ==============================================================================
+
+services:
+  # ----------------------------------------------------------------------------
+  # 1. PostgreSQL 16 Relational Database Service (Internal Isolated Network)
+  # ----------------------------------------------------------------------------
+  db:
+    image: postgres:16-alpine
+    container_name: ruangtenang_db_prod
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-ruangtenang_prod}
+      POSTGRES_USER: ${POSTGRES_USER:-ruangtenang_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Database password is required}
+      PGDATA: /var/lib/postgresql/data/pgdata
+      TZ: Asia/Jakarta
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - internal_backend
+    # Security: No ports exposed to host or internet; internal network only
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ruangtenang_admin} -d ${POSTGRES_DB:-ruangtenang_prod}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2048M
+        reservations:
+          memory: 512M
+
+  # ----------------------------------------------------------------------------
+  # 2. Redis 7 High-Performance In-Memory Cache & Distributed Lock Service
+  # ----------------------------------------------------------------------------
+  cache:
+    image: redis:7-alpine
+    container_name: ruangtenang_redis_prod
+    restart: unless-stopped
+    command: >
+      redis-server 
+      --requirepass ${REDIS_PASSWORD:?Redis password is required}
+      --appendonly yes 
+      --maxmemory 512mb 
+      --maxmemory-policy volatile-lru
+      --save 60 1
+      --loglevel notice
+    volumes:
+      - redis_data:/data
+    networks:
+      - internal_backend
+    # Security: No ports exposed to host or internet; internal network only
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1024M
+        reservations:
+          memory: 256M
+
+  # ----------------------------------------------------------------------------
+  # 3. RuangTenang Core Node.js Web Application & API Server
+  # ----------------------------------------------------------------------------
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runner
+    container_name: ruangtenang_app_prod
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      TZ: Asia/Jakarta
+      TRUST_PROXY: "1"
+      
+      # Database & Cache Connection Strings (Using internal service names)
+      DATABASE_URL: postgresql://${POSTGRES_USER:-ruangtenang_admin}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-ruangtenang_prod}?schema=public
+      REDIS_URL: redis://:${REDIS_PASSWORD}@cache:6379
+      
+      # Security & Cryptography Keys
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY is required}
+      BLIND_INDEX_SECRET: ${BLIND_INDEX_SECRET:?BLIND_INDEX_SECRET is required}
+      
+      # AI & External Integrations
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      APP_ORIGIN: ${APP_ORIGIN:-https://ruangtenang.example.ac.id}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://ruangtenang.example.ac.id}
+      
+      # Rate Limiting & Diagnostic Flags
+      DAILY_AI_LIMIT_FREE: ${DAILY_AI_LIMIT_FREE:-20}
+      DAILY_AI_LIMIT_PRO: ${DAILY_AI_LIMIT_PRO:-100}
+      ENABLE_AI_DIAGNOSTICS: ${ENABLE_AI_DIAGNOSTICS:-false}
+      ENABLE_PUBLIC_DOCS: ${ENABLE_PUBLIC_DOCS:-false}
+      
+      # Emergency & SMS Services (Twilio Optional)
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      TWILIO_PHONE_NUMBER: ${TWILIO_PHONE_NUMBER:-}
+    volumes:
+      - uploads_data:/app/uploads
+    networks:
+      - internal_backend
+      - frontend_public
+    depends_on:
+      db:
+        condition: service_healthy
+      cache:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:3000/api/v1/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2048M
+        reservations:
+          memory: 512M
+
+  # ----------------------------------------------------------------------------
+  # 4. Hardened Nginx Reverse Proxy (SSL, CSP, Rate Limiting, Compression)
+  # ----------------------------------------------------------------------------
+  proxy:
+    image: nginx:1.27-alpine
+    container_name: ruangtenang_proxy_prod
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./nginx/certbot/conf:/etc/letsencrypt:ro
+      - ./nginx/certbot/www:/var/www/certbot:ro
+    networks:
+      - frontend_public
+    depends_on:
+      web:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          memory: 128M
+
+# ==============================================================================
+# Isolated Networks (Strict Backend Isolation)
+# ==============================================================================
+networks:
+  # Public frontend network shared between Nginx and Node.js App container
+  frontend_public:
+    driver: bridge
+
+  # Internal backend network strictly isolated from outside host/internet routing
+  internal_backend:
+    driver: bridge
+    internal: true
+
+# ==============================================================================
+# Persistent Named Storage Volumes
+# ==============================================================================
+volumes:
+  postgres_data:
+    name: ruangtenang_postgres_prod_data
+  redis_data:
+    name: ruangtenang_redis_prod_data
+  uploads_data:
+    name: ruangtenang_uploads_prod_data

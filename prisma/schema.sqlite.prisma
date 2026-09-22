@@ -48,6 +48,9 @@ model Users {
   loginEvents               LoginEvent[]
   notifications             SecurityNotification[]
   messageBookmarks          MessageBookmarks[]
+  soapNotesAsStudent        ClinicalSoapNotes[]   @relation("StudentSoapNotes")
+  soapNotesAsCounselor      ClinicalSoapNotes[]   @relation("CounselorSoapNotes")
+  artifacts                 Artifacts[]
 }
 
 model Appointments {
@@ -244,6 +247,7 @@ model Chats {
   updatedAt             DateTime @updatedAt
   messages              ChatMessages[]
   bookmarks             MessageBookmarks[]
+  artifacts             Artifacts[]
 
   // Relations
   user                  Users    @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -465,3 +469,62 @@ model Attachments {
   @@index([chatId])
   @@index([userId])
 }
+
+model ClinicalSoapNotes {
+  id              String   @id
+  appointmentId   String?  @unique
+  studentUserId   String
+  counselorUserId String
+  subjective      String   // AES-256-GCM Encrypted
+  objective       String   // AES-256-GCM Encrypted
+  assessment      String   // AES-256-GCM Encrypted
+  plan            String   // AES-256-GCM Encrypted
+  summary         String?  // AES-256-GCM Encrypted
+  riskLevel       String   @default("Rendah")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  student         Users    @relation("StudentSoapNotes", fields: [studentUserId], references: [id], onDelete: Cascade)
+  counselor       Users    @relation("CounselorSoapNotes", fields: [counselorUserId], references: [id], onDelete: Cascade)
+
+  @@index([studentUserId])
+  @@index([counselorUserId])
+  @@index([createdAt])
+}
+
+model Artifacts {
+  id        String             @id
+  chatId    String?
+  userId    String
+  title     String
+  type      String             // DOCUMENT, CODE, CITATION, OUTLINE
+  language  String?
+  content   String             // Saved encrypted or safe text
+  version   Int                @default(1)
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+
+  // Relations
+  user      Users              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chat      Chats?             @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  versions  ArtifactVersions[]
+
+  @@index([chatId])
+  @@index([userId])
+}
+
+model ArtifactVersions {
+  id         String    @id
+  artifactId String
+  version    Int
+  content    String
+  title      String
+  createdAt  DateTime  @default(now())
+
+  // Relations
+  artifact   Artifacts @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+
+  @@index([artifactId])
+}
+

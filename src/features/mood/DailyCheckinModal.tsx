@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Smile, X, Lightbulb, RefreshCw, Check } from 'lucide-react';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { apiClient } from '../../lib/apiClient';
 import { clientDb } from '../../lib/clientDb';
+import { modalBackdropVariants, modalPanelVariants, reducedMotionVariants } from '../../lib/motionTokens';
 
 export interface MoodLog {
   id: string;
@@ -61,6 +63,7 @@ export const DailyCheckinModal: React.FC<DailyCheckinModalProps> = ({
   onSaveSuccess,
   showToast
 }) => {
+  const shouldReduceMotion = useReducedMotion();
   const [selectedMood, setSelectedMood] = useState<number | null>(null);
   const [selectedEmotions, setSelectedEmotions] = useState<string[]>([]);
   const [selectedFactors, setSelectedFactors] = useState<string[]>([]);
@@ -260,22 +263,30 @@ export const DailyCheckinModal: React.FC<DailyCheckinModalProps> = ({
     }
   };
 
-  if (!isOpen) return null;
-
   return (
-    <div 
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 md:p-6 bg-slate-900/60 backdrop-blur-xs overflow-y-auto animate-fade-in"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="daily-checkin-title"
-    >
-      <div 
-        className="relative w-full max-w-lg surface-card rounded-2xl sm:rounded-3xl border border-default shadow-2xl overflow-hidden flex flex-col max-h-[92vh] my-auto animate-scale-up"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 md:p-6 bg-slate-900/60 backdrop-blur-xs overflow-y-auto"
+          initial="hidden"
+          animate="visible"
+          exit="exit"
+          variants={shouldReduceMotion ? reducedMotionVariants : modalBackdropVariants}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) onClose();
+          }}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="daily-checkin-title"
+        >
+          <motion.div 
+            className="relative w-full max-w-lg surface-card rounded-2xl sm:rounded-3xl border border-default shadow-2xl overflow-hidden flex flex-col max-h-[92vh] my-auto"
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            variants={shouldReduceMotion ? reducedMotionVariants : modalPanelVariants}
+            onClick={(e) => e.stopPropagation()}
+          >
         {/* Modal Header */}
         <div className="flex items-center justify-between px-5 py-4 sm:px-6 border-b border-default shrink-0 bg-stone-50/50 dark:bg-slate-900/50">
           <div className="flex items-center gap-2.5 text-primary font-bold text-base sm:text-lg">
@@ -329,7 +340,7 @@ export const DailyCheckinModal: React.FC<DailyCheckinModalProps> = ({
                     key={opt.value}
                     type="button"
                     onClick={() => setSelectedMood(opt.value)}
-                    className={`p-2 sm:p-3 rounded-xl sm:rounded-2xl border flex flex-col items-center justify-center gap-1 sm:gap-1.5 transition-all cursor-pointer ${
+                    className={`p-2 sm:p-3 rounded-xl sm:rounded-2xl border flex flex-col items-center justify-center gap-1 sm:gap-1.5 transition-all cursor-pointer chip-tactile ${
                       isActive
                         ? `${opt.activeColor} shadow-xs scale-105`
                         : 'surface-muted border-default text-secondary hover:text-primary hover:border-slate-300 dark:hover:border-slate-700'
@@ -358,7 +369,7 @@ export const DailyCheckinModal: React.FC<DailyCheckinModalProps> = ({
                     key={tag.label}
                     type="button"
                     onClick={() => handleToggleEmotion(tag.label)}
-                    className={`px-3 py-1.5 text-xs rounded-xl border transition-all flex items-center gap-1.5 cursor-pointer ${
+                    className={`px-3 py-1.5 text-xs rounded-xl border transition-all flex items-center gap-1.5 cursor-pointer chip-tactile ${
                       isSelected
                         ? 'bg-teal-600 border-teal-600 text-white font-semibold shadow-xs'
                         : 'surface-muted border-default text-secondary hover:text-primary hover:border-slate-300 dark:hover:border-slate-700'
@@ -385,7 +396,7 @@ export const DailyCheckinModal: React.FC<DailyCheckinModalProps> = ({
                     key={factor.label}
                     type="button"
                     onClick={() => handleToggleFactor(factor.label)}
-                    className={`px-3 py-1.5 text-xs rounded-xl border transition-all flex items-center gap-1.5 cursor-pointer ${
+                    className={`px-3 py-1.5 text-xs rounded-xl border transition-all flex items-center gap-1.5 cursor-pointer chip-tactile ${
                       isSelected
                         ? 'bg-blue-600 border-blue-600 text-white font-semibold shadow-xs'
                         : 'surface-muted border-default text-secondary hover:text-primary hover:border-slate-300 dark:hover:border-slate-700'
@@ -496,14 +507,14 @@ export const DailyCheckinModal: React.FC<DailyCheckinModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 py-3 px-4 btn-secondary rounded-xl text-sm font-semibold transition-all"
+              className="flex-1 py-3 px-4 btn-secondary rounded-xl text-sm font-semibold transition-all btn-press"
             >
               Batal
             </button>
             <button
               type="submit"
               disabled={isSubmitting || selectedMood === null}
-              className="flex-2 py-3 px-4 btn-primary rounded-xl text-sm font-semibold shadow-xs transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-2 py-3 px-4 btn-primary rounded-xl text-sm font-semibold shadow-xs transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed btn-tactile"
             >
               {isSubmitting ? (
                 <>
@@ -519,7 +530,9 @@ export const DailyCheckinModal: React.FC<DailyCheckinModalProps> = ({
             </button>
           </div>
         </form>
-      </div>
-    </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 };

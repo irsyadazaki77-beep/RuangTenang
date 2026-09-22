@@ -10,6 +10,7 @@ import ArticlesCard from '../../plugins/ArticlesCard';
 import { Copy, RefreshCw, ThumbsUp, ThumbsDown, Edit2, Check, Bookmark, GitBranch, FileText, Volume2, VolumeX } from 'lucide-react';
 import { useToast } from '../../../components/Toast';
 import { motion, useReducedMotion } from 'motion/react';
+import { RhythmicTypingIndicator } from '../../../components/ui/RhythmicTypingIndicator';
 
 interface Props {
   msg: Message;
@@ -252,19 +253,26 @@ export const MessageBubble = memo(function MessageBubble({
                 </button>
               </div>
             ) : isTyping && !msg.content ? (
-              <div className="flex items-center gap-1.5 py-2 text-stone-400 dark:text-stone-500 text-xs sm:text-sm">
-                <span className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse"></span>
-                <span className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse [animation-delay:200ms]"></span>
-                <span className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse [animation-delay:400ms]"></span>
-                <span className="text-stone-400 text-xs ml-1">Menuliskan pesan yang tenang...</span>
+              <div className="py-1">
+                <RhythmicTypingIndicator label="Menuliskan pesan yang tenang..." avatarSrc="" />
               </div>
             ) : (
               <div className="prose prose-stone dark:prose-invert max-w-none break-words text-[14.5px] sm:text-[15px] leading-[1.65] text-stone-800 dark:text-stone-200 space-y-2.5 font-normal">
                 <LazyMarkdown content={msg.content} />
                 {isTyping && (
-                  <span
+                  <motion.span
                     aria-hidden="true"
-                    className="inline-block w-1.5 h-4 ml-1 bg-teal-500 rounded-xs animate-pulse align-middle"
+                    className="inline-block w-1.5 h-4 ml-1 bg-teal-500 rounded-xs align-middle"
+                    animate={
+                      shouldReduceMotion
+                        ? { opacity: [0.35, 1, 0.35] }
+                        : { opacity: [0.25, 1, 0.25], scaleY: [0.85, 1.05, 0.85] }
+                    }
+                    transition={{
+                      duration: 0.9,
+                      repeat: Infinity,
+                      ease: 'easeInOut'
+                    }}
                   />
                 )}
               </div>

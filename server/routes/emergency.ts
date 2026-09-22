@@ -14,15 +14,13 @@ export { sosTriggerSchema };
 
 const router = Router();
 
-// SOS Rate limiting tracker
-const sosDispatchHistory = new Map<string, number[]>();
-const COOLDOWN_MS = 3 * 60 * 1000; // 3 minutes cooldown
-const WINDOW_MS = 15 * 60 * 1000;   // 15 minutes window
+// SOS Rate limiting constants (Distributed across container instances)
+const COOLDOWN_SECONDS = 3 * 60; // 3 minutes cooldown
+const WINDOW_SECONDS = 15 * 60;   // 15 minutes window
 const MAX_DISPATCHES_PER_WINDOW = 2;
 
 export function clearSosHistoryForTesting() {
-  sosDispatchHistory.clear();
-  DistributedStateService.cleanExpired().catch(() => {});
+  DistributedStateService.clearAllForTesting().catch(() => {});
 }
 
 export function maskPhoneNumber(phone: string): string {
@@ -127,14 +125,10 @@ router.post(
         });
       }
 
-      // 3. Rate limiting and cooldown enforcement per user (Multi-Instance & Local Distributed Safe)
-      const now = Date.now();
-      const userHistory = (sosDispatchHistory.get(userId) || []).filter(t => now - t < WINDOW_MS);
-      const lastDispatchTime = userHistory[userHistory.length - 1];
+      // 3. Rate limiting and cooldown enforcement per user (Multi-Instance Distributed State)
+      const distributedCooldown = await DistributedStateService.checkSosCooldown(userId, COOLDOWN_SECONDS);
 
-      const distributedCooldown = await DistributedStateService.checkSosCooldown(userId, 180);
-
-      if ((lastDispatchTime && (now - lastDispatchTime < COOLDOWN_MS)) || distributedCooldown.inCooldown) {
+      if (distributedCooldown.inCooldown) {
         await serverDb.logAudit(
           'SOS_TRIGGER_RATE_LIMITED',
           `Pemicuan SOS dibatasi cooldown (3 menit) untuk user ${userId}`,
@@ -149,7 +143,14 @@ router.post(
         });
       }
 
-      if (userHistory.length >= MAX_DISPATCHES_PER_WINDOW) {
+      const windowRateLimit = await DistributedStateService.checkRateLimit(
+        userId,
+        MAX_DISPATCHES_PER_WINDOW,
+        WINDOW_SECONDS,
+        'SOS_WINDOW'
+      );
+
+      if (!windowRateLimit.allowed) {
         await serverDb.logAudit(
           'SOS_TRIGGER_RATE_LIMITED',
           `Pemicuan SOS melebihi batas kuota (maksimal 2 kali per 15 menit) untuk user ${userId}`,
@@ -179,10 +180,8 @@ router.post(
       const { sendEmergencySOS } = await import('../services/sosGateway.js');
       const gatewayResult = await sendEmergencySOS(sosPayload);
 
-      // Record dispatch timestamp both in-memory and persistent distributed state
-      userHistory.push(now);
-      sosDispatchHistory.set(userId, userHistory);
-      await DistributedStateService.recordSosDispatch(userId, 180);
+      // Record dispatch cooldown across distributed instances
+      await DistributedStateService.recordSosDispatch(userId, COOLDOWN_SECONDS);
 
       const maskedPhone = maskPhoneNumber(decryptedPhone);
       const maskedName = maskPersonName(decryptedName);
