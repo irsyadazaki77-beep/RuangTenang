@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { MessageBubble } from './MessageBubble';
+import { StreamingBubble } from './StreamingBubble';
 import { ChatComposer } from './ChatComposer';
 import { Message, ChatMode, ResponseStyle, Chat } from '../types';
 import { UserSession } from '../../../types';
@@ -21,6 +22,8 @@ import { ErrorState } from '../../../components/common/ErrorState';
 import { apiClient } from '../../../lib/apiClient';
 import { ChatSearchBar } from './ChatSearchBar';
 import { RhythmicTypingIndicator } from '../../../components/ui/RhythmicTypingIndicator';
+import { detectAcademicDistress } from '../../workspace/utils/distressDetector';
+import { usePrivacyVault } from '../../../contexts/PrivacyVaultContext';
 
 interface MainChatProps {
   user: UserSession | null;
@@ -36,6 +39,7 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
   const navigate = useNavigate();
   const location = useLocation();
   const { showToast } = useToast();
+  const { isIncognitoMode } = usePrivacyVault();
 
   const currentChat = chats.find(c => c.id === chatId);
   const isBranch = Boolean(currentChat?.parentChatId);
@@ -567,6 +571,8 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
     if (!content.trim() && !pluginResult && (!attachments || attachments.length === 0)) return;
     
     const tempId = `msg_${Date.now()}`;
+    const distressCheck = content ? detectAcademicDistress(content) : null;
+
     if (!pluginResult) {
       setMessages(prev => [...prev, {
         id: tempId,
@@ -616,7 +622,22 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
         },
         onMessageComplete: (text) => {
           if (text) {
-            setMessages(prev => [...prev, { id: assistantMsgId, role: 'assistant', content: text }]);
+            setMessages(prev => [
+              ...prev,
+              {
+                id: assistantMsgId,
+                role: 'assistant',
+                content: text,
+                plugin: distressCheck?.isDistressed ? 'burnout' : undefined,
+                pluginResult: distressCheck?.isDistressed
+                  ? {
+                      distressType: distressCheck.distressType,
+                      triggerReason: distressCheck.suggestedAction,
+                      triggerKeywords: distressCheck.triggerKeywords
+                    }
+                  : undefined
+              }
+            ]);
           }
           setStreamingMessage(null);
         },
@@ -982,7 +1003,7 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
         )}
 
         <div 
-          className={`flex-1 overflow-y-auto chat-scroll-container w-full min-w-0 flex flex-col px-3 sm:px-4 pt-3 sm:pt-4 pb-36 sm:pb-32 transition-all duration-300 bg-transparent ${
+          className={`flex-1 overflow-y-auto chat-scroll-container w-full min-w-0 flex flex-col px-3 sm:px-4 pt-3 sm:pt-4 pb-40 sm:pb-36 transition-all duration-300 bg-transparent ${
             isPrivacyMode ? 'backdrop-blur-md filter blur-md select-none pointer-events-none' : ''
           }`} 
           ref={scrollContainerRef}
@@ -1010,6 +1031,21 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
           </div>
         ) : (
           <div key={chatId || 'empty'} className="max-w-3xl mx-auto space-y-4 sm:space-y-5 pb-6 w-full animate-fade-in">
+            {/* Mode Anonim (Zero-Log) Banner */}
+            {isIncognitoMode && (
+              <div className="p-3 rounded-2xl bg-purple-50/90 dark:bg-purple-950/50 border border-purple-200/80 dark:border-purple-800 text-purple-900 dark:text-purple-200 text-xs flex items-center justify-between shadow-xs">
+                <div className="flex items-center gap-2">
+                  <Shield className="w-4 h-4 text-purple-600 dark:text-purple-400 shrink-0 animate-pulse" />
+                  <div>
+                    <span className="font-bold">Mode Anonim Aktif (Zero-Log)</span>
+                    <span className="text-purple-700/80 dark:text-purple-300/80 ml-1.5 hidden sm:inline">
+                      • Pesan percakapan ini tidak disimpan di riwayat atau server.
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {nextCursor && (
               <div className="flex justify-center mb-4">
                 <button 
@@ -1041,14 +1077,9 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
             ))}
             
             {streamingMessage && (
-              <MessageBubble 
+              <StreamingBubble 
                 key={streamingMessage.id} 
                 msg={streamingMessage} 
-                isTyping={true} 
-                onRegenerate={handleRegenerate}
-                onSendPluginResult={handleSendPluginResult}
-                onOpenPlugin={handleOpenPlugin}
-                onEditMessage={handleEditMessage}
               />
             )}
             

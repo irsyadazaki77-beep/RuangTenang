@@ -12,10 +12,13 @@ import {
   FileText, 
   BookOpen,
   LayoutDashboard,
-  ChevronDown
+  ChevronDown,
+  Lock,
+  ShieldCheck
 } from 'lucide-react';
 import { WorkspaceMode } from '../../../features/workspace/types';
 import { SidebarTooltip } from './SidebarTooltip';
+import { usePrivacyVault } from '../../../contexts/PrivacyVaultContext';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface SidebarNavLinksProps {
@@ -37,6 +40,7 @@ export const SidebarNavLinks: React.FC<SidebarNavLinksProps> = ({
 }) => {
   const location = useLocation();
   const navigate = useNavigate();
+  const { isVaultConfigured, isVaultUnlocked, lockVault, triggerPanicScreen } = usePrivacyVault();
   const [isExpanded, setIsExpanded] = useState(false);
 
   const isRuangKerja = currentMode === 'RUANG_KERJA';
@@ -343,6 +347,31 @@ export const SidebarNavLinks: React.FC<SidebarNavLinksProps> = ({
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Bilik Privasi & Kunci Layar Row */}
+      {isVaultConfigured && (
+        <button
+          type="button"
+          onClick={() => {
+            if (isVaultUnlocked) {
+              lockVault();
+            } else {
+              triggerPanicScreen();
+            }
+            onCloseMobile();
+          }}
+          className="w-full flex items-center justify-between px-2 py-1 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100/80 dark:hover:bg-slate-800/60 transition-colors cursor-pointer"
+          title={isVaultUnlocked ? "Kunci Bilik Privasi Sekarang" : "Bilik Privasi Terkunci (Alt+X)"}
+        >
+          <div className="flex items-center gap-1.5">
+            <Lock className={`w-3.5 h-3.5 shrink-0 ${isVaultUnlocked ? 'text-amber-500' : 'text-emerald-500'}`} />
+            <span>Bilik Privasi & PIN</span>
+          </div>
+          <span className={`text-[9px] px-1.5 py-0.2 rounded font-bold ${isVaultUnlocked ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300' : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'}`}>
+            {isVaultUnlocked ? 'Terbuka' : 'Terkunci'}
+          </span>
+        </button>
+      )}
 
       {/* Notifications Row */}
       <button 

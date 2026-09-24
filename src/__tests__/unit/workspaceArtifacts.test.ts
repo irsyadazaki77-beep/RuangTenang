@@ -92,4 +92,27 @@ Selesai isi dokumen.
     expect(cleanedText).not.toContain('<artifact');
     expect(cleanedText).toContain('Artefak Aktif');
   });
+
+  it('correctly parses markdown directive artifact format :::artifact{...}', () => {
+    const rawText = `Berikut draf latar belakang Bab 1 Anda:
+
+:::artifact{type="markdown" title="Draf Latar Belakang Masalah (Bab 1)"}
+# Bab 1: Pendahuluan
+## 1.1 Latar Belakang
+Kondisi ideal menunjukkan pentingnya efisiensi akademik.
+:::
+
+Silakan tinjau dan lakukan revisi di Canvas.`;
+
+    const { artifacts, cleanedText } = parseArtifactsFromText(rawText, false);
+
+    expect(artifacts).toHaveLength(1);
+    expect(artifacts[0].title).toBe('Draf Latar Belakang Masalah (Bab 1)');
+    expect(artifacts[0].type).toBe('DOCUMENT');
+    expect(artifacts[0].language).toBe('markdown');
+    expect(artifacts[0].content).toContain('# Bab 1: Pendahuluan');
+    expect(artifacts[0].content).toContain('Kondisi ideal menunjukkan pentingnya efisiensi akademik.');
+    expect(cleanedText).not.toContain(':::artifact');
+    expect(cleanedText).toContain('Artefak Aktif (DOCUMENT)');
+  });
 });

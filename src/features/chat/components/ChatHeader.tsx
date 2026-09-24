@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { Menu, Moon, Sun, Ghost, Brain, ChevronDown, Search, MoreVertical, Sparkles, Bookmark, GitBranch, HeartPulse, Eye, EyeOff, Shield } from 'lucide-react';
+import { Menu, Moon, Sun, Ghost, Brain, ChevronDown, Search, MoreVertical, Sparkles, Bookmark, GitBranch, HeartPulse, Eye, EyeOff, Shield, Incognito as IncognitoIcon, Lock } from 'lucide-react';
 import { ChatMode, ResponseStyle } from '../types';
 import { UserSession } from '../../../types';
 import { useTheme } from '../../../contexts/ThemeContext';
+import { usePrivacyVault } from '../../../contexts/PrivacyVaultContext';
 import { AVAILABLE_AI_MODELS } from '../../../lib/aiModels';
 import { BrandLogo } from '../../../components/ui/BrandLogo';
 
@@ -48,6 +49,7 @@ export function ChatHeader({
   onTogglePrivacy
 }: ChatHeaderProps) {
   const { actualTheme, toggleTheme } = useTheme();
+  const { isIncognitoMode, toggleIncognito, triggerPanicScreen, isVaultConfigured } = usePrivacyVault();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const currentModel = AVAILABLE_AI_MODELS.find(m => m.id === aiModel) || AVAILABLE_AI_MODELS[0];
   const isSettingsOpen = activePlugin === 'chat_settings';
@@ -181,6 +183,18 @@ export function ChatHeader({
           </span>
         )}
 
+        {/* Incognito Mode Badge */}
+        {isIncognitoMode && (
+          <button
+            onClick={toggleIncognito}
+            className="inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 whitespace-nowrap rounded-full border border-purple-300 dark:border-purple-800 text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/60 hover:bg-purple-100 dark:hover:bg-purple-900/40 transition-all cursor-pointer shadow-3xs shrink-0 animate-pulse"
+            title="Mode Anonim Aktif (Pesan tidak disimpan). Klik untuk matikan."
+          >
+            <Shield className="w-3 h-3 text-purple-600 dark:text-purple-400" />
+            <span className="hidden sm:inline">Mode Anonim</span>
+          </button>
+        )}
+
         {/* Temporary / Guest badge if active */}
         {user?.role === 'guest' ? (
           <span className="hidden sm:inline-flex items-center gap-1 text-[11px] px-2 py-0.5 whitespace-nowrap rounded-full border border-amber-200/60 dark:border-amber-900/60 text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 shrink-0">
@@ -213,6 +227,16 @@ export function ChatHeader({
             <Search className="w-4 h-4" />
           </button>
         )}
+
+        {/* Feature: Panic Screen Quick Conceal Button */}
+        <button
+          onClick={triggerPanicScreen}
+          className="w-11 h-11 min-w-[44px] min-h-[44px] flex items-center justify-center text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-200/50 dark:hover:bg-slate-800/60 rounded-xl transition-colors cursor-pointer"
+          title="Sembunyikan Layar Cepat / Panic Screen (Alt+X atau Dobel Esc)"
+          aria-label="Sembunyikan Layar Cepat"
+        >
+          <Lock className="w-4 h-4" />
+        </button>
 
         {/* Feature: Privacy Shield Toggle Button */}
         {onTogglePrivacy && (

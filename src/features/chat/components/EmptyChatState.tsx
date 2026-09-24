@@ -64,6 +64,12 @@ const EMOTIONAL_MOODS: MoodItem[] = [
 
 const QUICK_STARTERS = [
   {
+    id: 'cbt-reflection',
+    iconEmoji: '🪞',
+    title: 'Refleksi Jurnal CBT',
+    prompt: 'Aku ingin menceritakan catatan hariku untuk refleksi diri. Boleh bantu telaah pemicu, pikiran otomatis, dan temani aku mencari sudut pandang yang lebih seimbang?'
+  },
+  {
     id: 'burnout',
     iconEmoji: '📖',
     title: 'Burnout kuliah',

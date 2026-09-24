@@ -4,10 +4,10 @@ import { GoogleGenAI } from '@google/genai';
  * RuangTenang Centralized AI Configuration & Model Registry
  */
 
-export const DEFAULT_AI_MODEL = 'gemini-2.5-flash';
-export const RESILIENT_FALLBACK_AI_MODEL = 'gemini-2.5-flash-lite';
+export const DEFAULT_AI_MODEL = 'gemini-3.8-flash';
+export const RESILIENT_FALLBACK_AI_MODEL = 'gemini-3.1-flash-lite';
 
-export const CALMING_FALLBACK_MESSAGE = 'Maaf ya, aku lagi agak kesulitan merespons saat ini 🌿. Kamu boleh coba lagi beberapa saat lagi, atau langsung hubungi konselor kampus yaa 🤍.';
+export const CALMING_FALLBACK_MESSAGE = 'Aku sedang menyimak ceritamu, namun koneksi kita sempat terhenti sejenak 🌿. Tarik napas perlahan ya, kamu bisa mengirim ulang ceritamu atau beristirahat sejenak 🤍.';
 
 export const AI_MODELS = {
   DEFAULT_FAST: 'gemini-2.5-flash',

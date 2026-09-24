@@ -59,13 +59,12 @@ export const AuroraBackground: React.FC<AuroraBackgroundProps> = memo(({
   // Organik cubic-bezier easing [0.4, 0, 0.2, 1]
   const organicEase: [number, number, number, number] = [0.4, 0, 0.2, 1];
 
-  // Siklus durasi asinkron (18s - 26s). Saat streaming aktif, pergerakan dipercepat ~25% (durasi * 0.75)
-  const duration1 = activeStreaming ? 18 * 0.75 : 18; // 13.5s vs 18s
-  const duration2 = activeStreaming ? 22 * 0.75 : 22; // 16.5s vs 22s
-  const duration3 = activeStreaming ? 24 * 0.75 : 24; // 18.0s vs 24s
-  const duration4 = activeStreaming ? 26 * 0.75 : 26; // 19.5s vs 26s
+  // Siklus durasi lambat & tenang (18s - 25s)
+  const duration1 = activeStreaming ? 18 * 0.8 : 20; // 16s vs 20s
+  const duration2 = activeStreaming ? 22 * 0.8 : 24; // 17.6s vs 24s
+  const duration3 = activeStreaming ? 25 * 0.8 : 25; // 20s vs 25s
 
-  // GPU Hardware Layer Style dengan 3D transform acceleration (zero CPU re-rasterization)
+  // GPU Hardware Layer Style
   const hardwareLayerStyle: React.CSSProperties = {
     transformOrigin: 'center center',
     willChange: 'transform, opacity',
@@ -74,15 +73,14 @@ export const AuroraBackground: React.FC<AuroraBackgroundProps> = memo(({
     WebkitTransform: 'translate3d(0, 0, 0)',
   };
 
-  // Trajectory 1: Pendaran 1 (Teal/Emerald) - Top-Left Mesh Flow
+  // Mesh 1: Soft Sanctuary Teal/Emerald (Top Left)
   const layer1Animation: TargetAndTransition = shouldReduceMotion
-    ? { opacity: activeStreaming ? 0.85 : 0.7 }
+    ? { opacity: activeStreaming ? 0.7 : 0.55 }
     : {
-        x: ['-6%', '14%', '-10%', '-6%'],
-        y: ['-10%', '12%', '-4%', '-10%'],
-        scale: activeStreaming ? [1.02, 1.25, 1.08, 1.02] : [1, 1.15, 0.95, 1],
-        rotate: [0, 45, 90, 0],
-        opacity: activeStreaming ? [0.85, 0.98, 0.88, 0.85] : [0.7, 0.82, 0.68, 0.7],
+        x: ['-4%', '8%', '-6%', '-4%'],
+        y: ['-6%', '8%', '-3%', '-6%'],
+        scale: activeStreaming ? [1.02, 1.12, 1.04, 1.02] : [1, 1.06, 0.98, 1],
+        opacity: activeStreaming ? [0.72, 0.85, 0.74, 0.72] : [0.55, 0.65, 0.52, 0.55],
       };
 
   const layer1Transition: Transition = {
@@ -91,15 +89,14 @@ export const AuroraBackground: React.FC<AuroraBackgroundProps> = memo(({
     ease: organicEase,
   };
 
-  // Trajectory 2: Pendaran 2 (Electric Cyan) - Top-Right Mesh Wave
+  // Mesh 2: Electric Indigo / Serenity Slate (Bottom Right)
   const layer2Animation: TargetAndTransition = shouldReduceMotion
-    ? { opacity: activeStreaming ? 0.8 : 0.65 }
+    ? { opacity: activeStreaming ? 0.65 : 0.5 }
     : {
-        x: ['8%', '-12%', '8%', '8%'],
-        y: ['-8%', '14%', '-10%', '-8%'],
-        scale: activeStreaming ? [1.08, 0.95, 1.22, 1.08] : [1.02, 0.92, 1.12, 1.02],
-        rotate: [0, -40, -85, 0],
-        opacity: activeStreaming ? [0.8, 0.95, 0.78, 0.8] : [0.65, 0.78, 0.62, 0.65],
+        x: ['6%', '-8%', '5%', '6%'],
+        y: ['6%', '-8%', '4%', '6%'],
+        scale: activeStreaming ? [1.04, 1.14, 0.98, 1.04] : [1, 1.08, 0.96, 1],
+        opacity: activeStreaming ? [0.68, 0.8, 0.64, 0.68] : [0.5, 0.6, 0.46, 0.5],
       };
 
   const layer2Transition: Transition = {
@@ -108,15 +105,14 @@ export const AuroraBackground: React.FC<AuroraBackgroundProps> = memo(({
     ease: organicEase,
   };
 
-  // Trajectory 3: Pendaran 3 (Gemini Indigo/Violet Magic touch) - Bottom-Right Mesh
+  // Mesh 3: Soft Cyan & Mint Ambient (Top Right / Center)
   const layer3Animation: TargetAndTransition = shouldReduceMotion
-    ? { opacity: activeStreaming ? 0.75 : 0.6 }
+    ? { opacity: activeStreaming ? 0.6 : 0.45 }
     : {
-        x: ['12%', '-10%', '14%', '12%'],
-        y: ['10%', '-12%', '8%', '10%'],
-        scale: activeStreaming ? [1.08, 1.28, 0.98, 1.08] : [1, 1.18, 0.92, 1],
-        rotate: [0, -55, -110, 0],
-        opacity: activeStreaming ? [0.75, 0.9, 0.7, 0.75] : [0.6, 0.75, 0.55, 0.6],
+        x: ['5%', '-6%', '4%', '5%'],
+        y: ['-5%', '6%', '-4%', '-5%'],
+        scale: activeStreaming ? [1, 1.1, 1.02, 1] : [0.96, 1.05, 0.96, 0.96],
+        opacity: activeStreaming ? [0.62, 0.75, 0.58, 0.62] : [0.45, 0.55, 0.42, 0.45],
       };
 
   const layer3Transition: Transition = {
@@ -125,97 +121,56 @@ export const AuroraBackground: React.FC<AuroraBackgroundProps> = memo(({
     ease: organicEase,
   };
 
-  // Trajectory 4: Pendaran 4 (Luminous Sky Mint) - Bottom-Left Mesh
-  const layer4Animation: TargetAndTransition = shouldReduceMotion
-    ? { opacity: activeStreaming ? 0.72 : 0.55 }
-    : {
-        x: ['-10%', '16%', '-14%', '-10%'],
-        y: ['12%', '-10%', '15%', '12%'],
-        scale: activeStreaming ? [1, 1.28, 1.05, 1] : [0.95, 1.15, 0.96, 0.95],
-        rotate: [0, 65, 125, 0],
-        opacity: activeStreaming ? [0.72, 0.88, 0.68, 0.72] : [0.55, 0.7, 0.5, 0.55],
-      };
-
-  const layer4Transition: Transition = {
-    duration: duration4,
-    repeat: Infinity,
-    ease: organicEase,
-  };
-
   return (
     <div
       aria-hidden="true"
-      className={`fixed inset-0 z-0 overflow-hidden pointer-events-none select-none bg-[#f8fafc] dark:bg-[#080d16] transition-colors duration-700 ${className}`}
+      style={{
+        contain: 'strict',
+        transform: 'translate3d(0, 0, 0)',
+        WebkitTransform: 'translate3d(0, 0, 0)',
+      }}
+      className={`fixed inset-0 z-0 overflow-hidden pointer-events-none select-none bg-[#fafaf9] dark:bg-[#080d16] transition-colors duration-700 ${className}`}
     >
-      {/* 4 Gemini Ambient Aurora GPU Radial Mesh Layers */}
-      <div className="absolute inset-0 w-full h-full overflow-hidden">
-        
-        {/* Layer 1: Pendaran 1 (Teal/Emerald) - rgba(13, 148, 136, 0.38) & rgba(16, 185, 129, 0.22) */}
+      {/* 3 GPU-Accelerated Mesh Gradient Ellipses */}
+      <div className="absolute inset-0 w-full h-full overflow-hidden" style={{ contain: 'strict' }}>
+        {/* Layer 1: Emerald / Teal Sanctuary (#0d9488 / #10b981) */}
         <motion.div
-          className="absolute -top-[20%] -left-[15%] w-[85vw] sm:w-[55vw] h-[85vw] sm:h-[55vw] rounded-full blur-[42px] md:blur-[60px]"
+          className="absolute -top-[20%] -left-[15%] w-[80vw] sm:w-[50vw] h-[80vw] sm:h-[50vw] rounded-full blur-[32px] sm:blur-[48px] md:blur-[56px]"
           style={{
             ...hardwareLayerStyle,
-            background: 'radial-gradient(circle at center, rgba(13, 148, 136, 0.38) 0%, rgba(16, 185, 129, 0.22) 48%, rgba(13, 148, 136, 0.08) 70%, transparent 80%)',
+            background: 'radial-gradient(circle at center, rgba(13, 148, 136, 0.30) 0%, rgba(16, 185, 129, 0.16) 50%, rgba(13, 148, 136, 0.04) 70%, transparent 80%)',
           }}
           animate={layer1Animation}
           transition={layer1Transition}
         />
 
-        {/* Layer 2: Pendaran 2 (Electric Cyan) - rgba(6, 182, 212, 0.32) */}
+        {/* Layer 2: Electric Indigo & Minimalist Slate (#6366f1) */}
         <motion.div
-          className="absolute -top-[15%] -right-[15%] w-[80vw] sm:w-[50vw] h-[80vw] sm:h-[50vw] rounded-full blur-[42px] md:blur-[60px]"
+          className="absolute -bottom-[15%] -right-[10%] w-[75vw] sm:w-[46vw] h-[75vw] sm:h-[46vw] rounded-full blur-[32px] sm:blur-[48px] md:blur-[56px]"
           style={{
             ...hardwareLayerStyle,
-            background: 'radial-gradient(circle at center, rgba(6, 182, 212, 0.32) 0%, rgba(6, 182, 212, 0.18) 50%, rgba(6, 182, 212, 0.06) 70%, transparent 80%)',
+            background: 'radial-gradient(circle at center, rgba(99, 102, 241, 0.20) 0%, rgba(129, 140, 248, 0.12) 45%, rgba(99, 102, 241, 0.03) 70%, transparent 75%)',
           }}
           animate={layer2Animation}
           transition={layer2Transition}
         />
 
-        {/* Layer 3: Pendaran 3 (Gemini Indigo/Violet Magic touch) - rgba(99, 102, 241, 0.24) */}
+        {/* Layer 3: Luminous Cyan & Mint Wave (#06b6d4 / #38bdf8) */}
         <motion.div
-          className="absolute -bottom-[15%] -right-[10%] w-[75vw] sm:w-[48vw] h-[75vw] sm:h-[48vw] rounded-full blur-[42px] md:blur-[60px]"
+          className="absolute -top-[10%] -right-[12%] w-[70vw] sm:w-[44vw] h-[70vw] sm:h-[44vw] rounded-full blur-[32px] sm:blur-[48px] md:blur-[56px]"
           style={{
             ...hardwareLayerStyle,
-            background: 'radial-gradient(circle at center, rgba(99, 102, 241, 0.24) 0%, rgba(129, 140, 248, 0.16) 45%, rgba(99, 102, 241, 0.05) 70%, transparent 75%)',
+            background: 'radial-gradient(circle at center, rgba(6, 182, 212, 0.22) 0%, rgba(56, 189, 248, 0.10) 50%, rgba(6, 182, 212, 0.03) 70%, transparent 80%)',
           }}
           animate={layer3Animation}
           transition={layer3Transition}
-        />
-
-        {/* Layer 4: Pendaran 4 (Luminous Sky Mint) - rgba(56, 189, 248, 0.18) & rgba(16, 185, 129, 0.15) */}
-        <motion.div
-          className="absolute -bottom-[20%] -left-[10%] w-[90vw] sm:w-[60vw] h-[90vw] sm:h-[60vw] rounded-full blur-[42px] md:blur-[60px]"
-          style={{
-            ...hardwareLayerStyle,
-            background: 'radial-gradient(circle at center, rgba(56, 189, 248, 0.18) 0%, rgba(16, 185, 129, 0.15) 45%, rgba(56, 189, 248, 0.05) 68%, transparent 80%)',
-          }}
-          animate={layer4Animation}
-          transition={layer4Transition}
         />
       </div>
 
       {/* Subtle Central Ambient Glow */}
       <div 
-        className="absolute inset-0 pointer-events-none bg-[radial-gradient(ellipse_at_center,_transparent_30%,_rgba(248,250,252,0.4)_85%)] dark:bg-[radial-gradient(ellipse_at_center,_transparent_30%,_rgba(8,13,22,0.65)_90%)] transition-colors duration-700" 
+        className="absolute inset-0 pointer-events-none bg-[radial-gradient(ellipse_at_center,_transparent_35%,_rgba(250,250,249,0.5)_85%)] dark:bg-[radial-gradient(ellipse_at_center,_transparent_35%,_rgba(8,13,22,0.65)_90%)] transition-colors duration-700" 
       />
-
-      {/* Fine Noise Grain ultra-halus (opacity 0.02) untuk mencegah color banding pada monitor OLED & Retina */}
-      <svg 
-        className="absolute inset-0 w-full h-full opacity-[0.02] dark:opacity-[0.02] pointer-events-none mix-blend-overlay"
-        xmlns="http://www.w3.org/2000/svg"
-      >
-        <filter id="gemini-aurora-grain">
-          <feTurbulence 
-            type="fractalNoise" 
-            baseFrequency="0.8" 
-            numOctaves="3" 
-            stitchTiles="stitch" 
-          />
-          <feColorMatrix type="saturate" values="0" />
-        </filter>
-        <rect width="100%" height="100%" filter="url(#gemini-aurora-grain)" />
-      </svg>
 
       {children}
     </div>

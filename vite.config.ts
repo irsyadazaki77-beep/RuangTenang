@@ -67,8 +67,17 @@ export default defineConfig(() => {
               if (/\/node_modules\/(react-markdown|micromark|unified|mdast|unist|vfile)\//.test(id)) {
                 return 'vendor-markdown';
               }
+              if (/\/node_modules\/docx\//.test(id)) {
+                return 'vendor-docx';
+              }
+              if (/\/node_modules\/mermaid\//.test(id)) {
+                return 'vendor-mermaid';
+              }
               if (/\/node_modules\/lucide-react\//.test(id)) {
                 return 'vendor-icons';
+              }
+              if (/\/node_modules\/(date-fns|canvas-confetti)\//.test(id)) {
+                return 'vendor-utils';
               }
             }
           },

@@ -1,7 +1,7 @@
 /**
- * Academic Distress Detector for RuangKerja
- * Detects patterns of cognitive overwhelm, panic, despair, or burnout in academic prompts.
- * Non-intrusive, designed to offer gentle micro-regulation without disrupting productivity.
+ * Academic Distress & Burnout Detector for RuangTenang & RuangKerja
+ * Detects cognitive overwhelm, deadline panic, thesis despair, or emotional burnout in prompts.
+ * Non-intrusive, designed to offer gentle micro-regulation without disrupting user flow.
  */
 
 export interface DistressDetectionResult {
@@ -22,13 +22,17 @@ const PANIC_TRIGGERS = [
   'gugup parah',
   'gemeteran',
   'ngeblank',
-  'blank total'
+  'blank total',
+  'sesak napas',
+  'cemas banget',
+  'ketakutan'
 ];
 
 const OVERWHELM_TRIGGERS = [
   'deadline 1 jam',
   'deadline 2 jam',
   'deadline besok pagi',
+  'deadline mepet',
   'ga paham apa-apa',
   'ga ngerti apa apa',
   'otak buntu',
@@ -39,8 +43,13 @@ const OVERWHELM_TRIGGERS = [
   'menumpuk parah',
   'ga keburu',
   'dosen nolak lagi',
+  'dosen galak',
   'revisi mulu',
-  'revisi terus ga selesai'
+  'revisi terus ga selesai',
+  'sidang skripsi',
+  'dosen pembimbing ngilang',
+  'dospem killer',
+  'overthinking skripsi'
 ];
 
 const EXHAUSTION_TRIGGERS = [
@@ -54,11 +63,17 @@ const EXHAUSTION_TRIGGERS = [
   'ga kuat lagi',
   'ga sanggup lagi',
   'burnout parah',
-  'frustrasi berat'
+  'frustrasi berat',
+  'hampa',
+  'lelah hidup',
+  'stres berat',
+  'stress berat',
+  'capek fisik dan mental',
+  'mental break'
 ];
 
 export function detectAcademicDistress(text: string): DistressDetectionResult {
-  if (!text || text.trim().length < 5) {
+  if (!text || text.trim().length < 4) {
     return { isDistressed: false, triggerKeywords: [], suggestedAction: '' };
   }
 
@@ -72,7 +87,7 @@ export function detectAcademicDistress(text: string): DistressDetectionResult {
       isDistressed: true,
       distressType: 'panic',
       triggerKeywords: matchedPanic,
-      suggestedAction: 'Ambil Napas 1 Menit'
+      suggestedAction: 'Latihan Napas 1 Menit (Box Breathing)'
     };
   }
 
@@ -81,7 +96,7 @@ export function detectAcademicDistress(text: string): DistressDetectionResult {
       isDistressed: true,
       distressType: 'overwhelm',
       triggerKeywords: matchedOverwhelm,
-      suggestedAction: 'Jeda Relaksasi Singkat'
+      suggestedAction: 'Teknik Grounding 5-4-3-2-1'
     };
   }
 
@@ -90,7 +105,7 @@ export function detectAcademicDistress(text: string): DistressDetectionResult {
       isDistressed: true,
       distressType: 'exhaustion',
       triggerKeywords: matchedExhaustion,
-      suggestedAction: 'Atur Ritme Pikiran'
+      suggestedAction: 'Jeda Pemulihan & Konselor Kampus'
     };
   }
 

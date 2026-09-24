@@ -6,6 +6,7 @@ import './index.css';
 import { ToastProvider } from "./components/Toast";
 import { AuthProvider } from "./contexts/AuthContext";
 import { ThemeProvider } from "./contexts/ThemeContext";
+import { PrivacyVaultProvider } from "./contexts/PrivacyVaultContext";
 import { ErrorBoundary } from './components/ErrorBoundary';
 
 // Swallow benign Vite HMR WebSocket connection warnings caused by sandbox environment constraints
@@ -44,9 +45,11 @@ createRoot(document.getElementById('root')!).render(
       <BrowserRouter>
         <AuthProvider>
           <ThemeProvider>
-            <ToastProvider>
-              <App />
-            </ToastProvider>
+            <PrivacyVaultProvider>
+              <ToastProvider>
+                <App />
+              </ToastProvider>
+            </PrivacyVaultProvider>
           </ThemeProvider>
         </AuthProvider>
       </BrowserRouter>

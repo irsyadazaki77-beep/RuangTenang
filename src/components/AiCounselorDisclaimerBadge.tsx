@@ -14,12 +14,12 @@ export const CounselorBadge: React.FC<DisclaimerProps> = ({ type, className = ''
         <div className="flex items-center gap-2">
           <Bot size={16} className="text-teal-600 shrink-0" />
           <span className="font-semibold text-[14px] text-slate-800 leading-none flex items-center gap-1.5">
-            Teman RuangTenang AI 🌿
+            RuangTenang Companion 🌿
           </span>
         </div>
         {showDetails && (
           <span className="text-slate-600 text-[12px] leading-[1.4]">
-            Ruang refleksi & teman cerita hangat (non-klinis). Privasi & keamanan ceritamu dijaga sesuai kebijakan privasi 🔐✨
+            Pendamping reflektif & suportif mahasiswa (non-klinis). Mendengarkan untuk memahami, bukan terburu-buru memperbaiki 🔐✨
           </span>
         )}
       </div>

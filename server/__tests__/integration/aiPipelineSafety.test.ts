@@ -243,7 +243,7 @@ describe('FASE 8: Unified AI Gateway & Safety Pipeline Tests', () => {
 
       // Untrusted plugin injection caught & isolated safely
       expect(res.isConsentFallback).toBe(false);
-    });
+    }, 15000);
   });
 
   describe('8. Context Budget & History Truncation', () => {

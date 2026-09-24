@@ -7,6 +7,7 @@ import EmergencyCard from '../../plugins/EmergencyCard';
 import MoodCard from '../../plugins/MoodCard';
 import ScreeningCard from '../../plugins/ScreeningCard';
 import ArticlesCard from '../../plugins/ArticlesCard';
+import { BurnoutInterventionCard } from './BurnoutInterventionCard';
 import { Copy, RefreshCw, ThumbsUp, ThumbsDown, Edit2, Check, Bookmark, GitBranch, FileText, Volume2, VolumeX } from 'lucide-react';
 import { useToast } from '../../../components/Toast';
 import { motion, useReducedMotion } from 'motion/react';
@@ -279,6 +280,14 @@ export const MessageBubble = memo(function MessageBubble({
             )}
             
             {/* Plugins / Cards */}
+            {(msg.plugin === 'burnout' || msg.plugin === 'distress') && (
+              <BurnoutInterventionCard
+                distressType={(msg.pluginResult?.distressType as any) || 'overwhelm'}
+                triggerReason={msg.pluginResult?.triggerReason as string}
+                onOpenBreathingModal={() => onOpenPlugin?.('breathing')}
+                onOpenCounselorBooking={() => onOpenPlugin?.('counselors')}
+              />
+            )}
             {msg.plugin === 'screening' && <div className="mt-3"><ScreeningCard onAction={() => onOpenPlugin?.('screening')} /></div>}
             {msg.plugin === 'mood' && <div className="mt-3"><MoodCard /></div>}
             {msg.plugin === 'counselors' && <div className="mt-3"><CounselorCard onAction={() => onOpenPlugin?.('counselors')} /></div>}
@@ -379,17 +388,24 @@ export const MessageBubble = memo(function MessageBubble({
     </motion.div>
   );
 }, (prevProps, nextProps) => {
-  return (
-    prevProps.msg.id === nextProps.msg.id &&
-    prevProps.msg.content === nextProps.msg.content &&
-    prevProps.isTyping === nextProps.isTyping &&
-    prevProps.msg.error === nextProps.msg.error &&
-    prevProps.msg.plugin === nextProps.msg.plugin &&
-    prevProps.isBookmarked === nextProps.isBookmarked &&
-    prevProps.isSearchTarget === nextProps.isSearchTarget &&
-    prevProps.searchHighlightQuery === nextProps.searchHighlightQuery &&
-    JSON.stringify(prevProps.msg.attachments) === JSON.stringify(nextProps.msg.attachments)
-  );
+  if (prevProps.msg.id !== nextProps.msg.id) return false;
+  if (prevProps.msg.content !== nextProps.msg.content) return false;
+  if (prevProps.isTyping !== nextProps.isTyping) return false;
+  if (prevProps.msg.error !== nextProps.msg.error) return false;
+  if (prevProps.msg.plugin !== nextProps.msg.plugin) return false;
+  if (prevProps.isBookmarked !== nextProps.isBookmarked) return false;
+  if (prevProps.isSearchTarget !== nextProps.isSearchTarget) return false;
+  if (prevProps.searchHighlightQuery !== nextProps.searchHighlightQuery) return false;
+  
+  // Fast reference & length comparison for attachments to avoid heavy JSON.stringify
+  const prevAtt = prevProps.msg.attachments;
+  const nextAtt = nextProps.msg.attachments;
+  if (prevAtt !== nextAtt) {
+    if (!prevAtt || !nextAtt || prevAtt.length !== nextAtt.length) return false;
+    if (prevAtt[0]?.id !== nextAtt[0]?.id) return false;
+  }
+
+  return true;
 });
 
 

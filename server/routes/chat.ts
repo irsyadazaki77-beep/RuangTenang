@@ -262,7 +262,8 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
       chatMode, 
       responseStyle, 
       aiModel = DEFAULT_AI_MODEL,
-      attachments
+      attachments,
+      workspaceMode
     } = req.body;
     
     const isAnonymous = !req.user || req.user.userId === 'guest';
@@ -569,8 +570,9 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
     }
 
     res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
     res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
     res.flushHeaders();
 
     // Periodically send SSE keepalive heartbeat every 15 seconds to prevent Cloud Run / Nginx / reverse proxy timeouts
@@ -678,6 +680,7 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
         userRole,
         history: messagesToSend,
         pluginResult,
+        workspaceMode: Boolean(workspaceMode) || (mode || '').toLowerCase().includes('ruang_kerja') || (chatMode || '').toLowerCase().includes('ruangkerja'),
         isStreaming: true,
         isTemporary: activeIsTemporary,
         abortSignal: reqAbortController.signal

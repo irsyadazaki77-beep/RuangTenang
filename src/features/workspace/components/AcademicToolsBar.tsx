@@ -14,24 +14,56 @@ import { AcademicTaskTemplate } from '../types';
 
 export const ACADEMIC_TEMPLATES: AcademicTaskTemplate[] = [
   {
+    id: 'latar-belakang-bab1',
+    title: 'Draf Bab 1 (Latar Belakang)',
+    description: 'Susun Latar Belakang Masalah dengan 4 pilar argumen (Das Sollen, Das Sein, Gap, Solusi).',
+    icon: 'FileText',
+    targetArtifact: 'DOCUMENT',
+    prompt: `Bantu saya menyusun draf Latar Belakang Masalah (Bab 1) berbobot ilmiah tinggi untuk topik penelitian berikut.
+Wajib gunakan format kanvas:
+:::artifact{type="markdown" title="Draf Latar Belakang Masalah (Bab 1)"}
+Sertakan 4 pilar argumen secara berurutan:
+1. Fenomena Ideal (Das Sollen)
+2. Kondisi Faktual Lapangan (Das Sein) [Sertakan data statistik/observasi lapangan di sini]
+3. Analisis Kesenjangan (Research Gap)
+4. Urgensi & Usulan Solusi
+:::
+
+Topik / Judul Skripsi:`
+  },
+  {
     id: 'resume-jurnal',
     title: 'Bedah Paper & Jurnal',
-    description: 'Ekstrak latar belakang masalah, metodologi riset, dan celah penelitian.',
+    description: 'Bedah kritis artikel jurnal untuk Bab 2 (APA 7th, variabel, temuan, limitasi, narasi).',
     icon: 'BookOpen',
     targetArtifact: 'DOCUMENT',
-    prompt: `Mohon bedah dan buatkan resume kritis dari materi/paper berikut. 
-Sajikan terstruktur dengan format:
-1. Latar Belakang & Problem Statement
-2. Research Gap yang Disasar
-3. Metodologi & Pendekatan yang Digunakan
-4. Temuan Utama & Analisis Hasil
-5. Keterbatasan Penelitian (Limitations) & Peluang Riset Lanjutan
-Bungkus draf resume dalam format:
-<artifact type="document" title="Resume Kritis Jurnal">
-...konten resume...
-</artifact>
+    prompt: `Kamu adalah Analis Literatur Ilmiah di RuangKerja.
+Tugasmu adalah membedah artikel jurnal ilmiah dan menyusun ringkasan kritis yang siap digunakan mahasiswa untuk menyusun Bab 2 (Tinjauan Pustaka).
 
-Materi / Judul Paper:`
+Format Output Wajib:
+:::artifact{type="markdown" title="Telaah Kritis Jurnal: [Nama Penulis, Tahun]"}
+### 1. Rujukan Sitasi Resmi (APA 7th)
+\`[Nama Belakang, Inisial. (Tahun). Judul Artikel. Nama Jurnal, Volume(Nomor), Halaman. DOI/URL]\`
+
+### 2. Peta Variabel & Metodologi
+- Variabel Bebas (Independent): ...
+- Variabel Terikat (Dependent): ...
+- Pendekatan & Teknik Sampling: (cth: Kuantitatif asosiatif, purposive sampling N=120)
+- Instrumen/Analisis Data: (cth: PLS-SEM / Uji Regresi Berganda)
+
+### 3. Temuan Kunci Empiris
+- [Poin temuan 1 beserta nilai signifikansi jika ada]
+- [Poin temuan 2]
+
+### 4. Limitasi & Peluang Penelitian Lebih Lanjut
+- Apa kelemahan atau batasan lingkup dari paper ini yang belum terselesaikan?
+
+### 5. Template Narasi untuk Bab 2 Skripsi
+*(Gunakan paragraf di bawah ini untuk sub-bab Kajian Penelitian Terdahulu)*:
+"[Nama Peneliti] ([Tahun]) dalam penelitiannya yang berjudul '[Judul]' meneliti mengenai [fokus utama]. Hasil penelitian menunjukkan bahwa [temuan utama]. Namun demikian, penelitian tersebut memiliki keterbatasan pada [limitasi]. Hal ini menjadi pembeda dengan penelitian yang dilakukan saat ini, di mana fokus penelitian ini diarahkan pada [kebaruan penelitian mahasiswa]."
+:::
+
+Berikut artikel / abstrak jurnal yang ingin dibedah:`
   },
   {
     id: 'format-sitasi',

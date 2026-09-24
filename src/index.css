@@ -29,15 +29,19 @@
     font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
     font-weight: 600;
   }
+
+  .font-serif,
+  .font-document {
+    font-family: 'Lora', Georgia, Cambria, 'Times New Roman', Times, serif;
+  }
   
   body {
-    @apply bg-stone-50/80 text-stone-800 dark:bg-[#0e141b] dark:text-stone-100 antialiased selection:bg-teal-100 selection:text-teal-900 dark:selection:bg-teal-950 dark:selection:text-teal-200;
+    @apply bg-[#fafaf9] text-slate-850 dark:bg-[#080d16] dark:text-slate-100 antialiased selection:bg-teal-100 selection:text-teal-900 dark:selection:bg-teal-950 dark:selection:text-teal-200;
     min-height: 100dvh;
     font-size: 15px;
     line-height: 1.6;
     overscroll-behavior-y: none;
   }
-
 
   /* Global focus visible accessibility defaults */
   button:focus-visible,

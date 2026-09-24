@@ -6,7 +6,11 @@
  * - Typography: Times New Roman
  *   - Judul BAB: 14 pt, Tebal (Bold), Rata Tengah (Centered), Huruf Kapital (Uppercase)
  *   - Sub-bab / Judul Bagian: 12 pt, Tebal (Bold), Rata Kiri
+ *   - Sub-sub-bab: 12 pt, Regular/Italic, Rata Kiri
  *   - Isi Paragraf: 12 pt, Rata Kanan-Kiri (Justified), Spasi 1.5 Baris, Indentasi Baris Pertama 1 cm (567 twips)
+ * - Format Paper IEEE/APA:
+ *   - Margin: 2.54 cm / 1 inch (1440 twips) keliling
+ *   - Typography: Times New Roman 12 pt (APA) / 10 pt (IEEE)
  * - Penomoran Halaman Otomatis:
  *   - Bagian Awal (Abstrak, Kata Pengantar, Daftar Isi): Angka Romawi Kecil (i, ii, iii) di tengah bawah.
  *   - Bagian Utama (BAB I s.d. Selesai): Angka Arab (1, 2, 3) di kanan atas.
@@ -15,10 +19,129 @@
 export interface ExportDocxOptions {
   title: string;
   content: string;
-  templateType?: 'skripsi' | 'makalah';
+  templateType?: 'skripsi' | 'makalah' | 'ieee_apa';
   authorName?: string;
   university?: string;
   faculty?: string;
+}
+
+export interface AcademicCompletenessCheck {
+  score: number; // 0 - 100
+  wordCount: number;
+  estimatedPages: number;
+  hasTitle: boolean;
+  hasAbstract: boolean;
+  hasCitations: boolean;
+  hasReferences: boolean;
+  hasBabStructure: boolean;
+  citationCount: number;
+  checks: {
+    id: string;
+    label: string;
+    description: string;
+    passed: boolean;
+    required: boolean;
+  }[];
+}
+
+/**
+ * Validates the academic completeness of an artifact/document before export
+ */
+export function validateAcademicCompleteness(content: string, title?: string): AcademicCompletenessCheck {
+  if (!content || !content.trim()) {
+    return {
+      score: 0,
+      wordCount: 0,
+      estimatedPages: 0,
+      hasTitle: false,
+      hasAbstract: false,
+      hasCitations: false,
+      hasReferences: false,
+      hasBabStructure: false,
+      citationCount: 0,
+      checks: [
+        { id: 'title', label: 'Judul Naskah', description: 'Judul karya ilmiah yang jelas', passed: false, required: true },
+        { id: 'abstract', label: 'Abstrak / Ringkasan', description: 'Ringkasan esensial karya ilmiah', passed: false, required: true },
+        { id: 'structure', label: 'Struktur BAB / Bagian', description: 'Struktur bab (BAB I, BAB II, dst.)', passed: false, required: false },
+        { id: 'citations', label: 'Sitasi Dalam Teks', description: 'Kutipan rujukan format (Nama, Tahun) atau [1]', passed: false, required: true },
+        { id: 'references', label: 'Daftar Pustaka / Referensi', description: 'Daftar pustaka atau bibliografi di akhir', passed: false, required: true }
+      ]
+    };
+  }
+
+  const words = content.trim().split(/\s+/).filter(Boolean);
+  const wordCount = words.length;
+  const estimatedPages = Math.max(1, Math.ceil(wordCount / 300)); // ~300 words per page in 1.5 line spacing
+
+  const hasTitle = Boolean(title && title.trim().length > 3 && !title.toLowerCase().includes('tanpa judul')) || /^#\s+[^\n]+/m.test(content);
+  const hasAbstract = /^(?:#+\s*)?(ABSTRAK|ABSTRACT|RINGKASAN EKSEKUTIF)\b/im.test(content);
+  const hasBabStructure = /^(?:#+\s*)?(BAB\s+[IVXLCDM\d]+|BAB\s+1\b|1\.\s+PENDAHULUAN)/im.test(content);
+  
+  // Deteksi sitasi format (Author, Year), (Author et al., Year), atau [1], [2]
+  const citationMatches = content.match(/\((?:[A-Z][a-zA-Z\s]+,\s*(?:19|20)\d{2}|[A-Z][a-zA-Z\s]+(?:\s+et\s+al\.?|\s+dkk\.?),\s*(?:19|20)\d{2})\)|\[\d+\]/g) || [];
+  const citationCount = citationMatches.length;
+  const hasCitations = citationCount > 0;
+
+  // Deteksi daftar pustaka
+  const hasReferences = /^(?:#+\s*)?(DAFTAR\s+PUSTAKA|REFERENCES|BIBLIOGRAPHY|DAFTAR\s+REFERENSI)\b/im.test(content);
+
+  const checks = [
+    {
+      id: 'title',
+      label: 'Judul Karya Ilmiah',
+      description: hasTitle ? 'Judul naskah telah terdefinisi' : 'Belum memiliki judul formal yang spesifik',
+      passed: hasTitle,
+      required: true
+    },
+    {
+      id: 'abstract',
+      label: 'Abstrak / Ringkasan',
+      description: hasAbstract ? 'Bagian Abstrak/Abstract terdeteksi' : 'Disarankan menambahkan Abstrak bahasa Indonesia & Inggris',
+      passed: hasAbstract,
+      required: true
+    },
+    {
+      id: 'structure',
+      label: 'Struktur BAB & Sub-bab',
+      description: hasBabStructure ? 'Struktur BAB baku terdeteksi (BAB I, 1.1, dst.)' : 'Format bab belum menggunakan penomoran BAB formal',
+      passed: hasBabStructure,
+      required: false
+    },
+    {
+      id: 'citations',
+      label: 'Sitasi Dalam Teks',
+      description: hasCitations ? `${citationCount} sitasi terdeteksi (APA/IEEE)` : 'Belum ditemukan rujukan sitasi (Nama, Tahun) atau [1]',
+      passed: hasCitations,
+      required: true
+    },
+    {
+      id: 'references',
+      label: 'Daftar Pustaka / Referensi',
+      description: hasReferences ? 'Bagian Daftar Pustaka terdeteksi' : 'Tambahkan bagian DAFTAR PUSTAKA di akhir naskah',
+      passed: hasReferences,
+      required: true
+    }
+  ];
+
+  let passedPoints = 0;
+  if (hasTitle) passedPoints += 20;
+  if (hasAbstract) passedPoints += 20;
+  if (hasBabStructure) passedPoints += 20;
+  if (hasCitations) passedPoints += 20;
+  if (hasReferences) passedPoints += 20;
+
+  return {
+    score: passedPoints,
+    wordCount,
+    estimatedPages,
+    hasTitle,
+    hasAbstract,
+    hasCitations,
+    hasReferences,
+    hasBabStructure,
+    citationCount,
+    checks
+  };
 }
 
 export async function exportToAcademicDocx(options: ExportDocxOptions): Promise<void> {
@@ -47,26 +170,29 @@ export async function exportToAcademicDocx(options: ExportDocxOptions): Promise<
     Footer
   } = await import('docx');
 
-  // Convert CM to Twips (1 cm = 567 twips)
+  // Convert CM to Twips (1 cm = 567 twips, 1 inch = 1440 twips)
   // Format Skripsi: Kiri 4cm (2268 twips), Atas 4cm (2268 twips), Kanan 3cm (1701 twips), Bawah 3cm (1701 twips)
+  // Format IEEE/APA: 1 inch (1440 twips) keliling
   // Format Makalah: Kiri 3cm (1701 twips), Atas 3cm (1701 twips), Kanan 3cm (1701 twips), Bawah 3cm (1701 twips)
   const isSkripsi = templateType === 'skripsi';
-  const MARGIN_LEFT_TWIPS = isSkripsi ? 2268 : 1701;
-  const MARGIN_TOP_TWIPS = isSkripsi ? 2268 : 1701;
-  const MARGIN_RIGHT_TWIPS = 1701;
-  const MARGIN_BOTTOM_TWIPS = 1701;
+  const isIeeeApa = templateType === 'ieee_apa';
+
+  const MARGIN_LEFT_TWIPS = isSkripsi ? 2268 : isIeeeApa ? 1440 : 1701;
+  const MARGIN_TOP_TWIPS = isSkripsi ? 2268 : isIeeeApa ? 1440 : 1701;
+  const MARGIN_RIGHT_TWIPS = isSkripsi ? 1701 : isIeeeApa ? 1440 : 1701;
+  const MARGIN_BOTTOM_TWIPS = isSkripsi ? 1701 : isIeeeApa ? 1440 : 1701;
 
   // A4 dimensions in twips: 210mm x 297mm -> 11906 x 16838 twips
   const A4_WIDTH_TWIPS = 11906;
   const A4_HEIGHT_TWIPS = 16838;
 
   const FONT_FAMILY = 'Times New Roman';
-  const BODY_FONT_SIZE = 24; // 12 pt (docx uses half-points: 12 * 2 = 24)
+  const BODY_FONT_SIZE = isIeeeApa ? 22 : 24; // 11 pt (IEEE/APA) or 12 pt (Skripsi)
   const HEADING1_FONT_SIZE = 28; // 14 pt
   const HEADING2_FONT_SIZE = 24; // 12 pt
   const LINE_SPACING_1_5 = 360; // 1.5 lines (240 * 1.5 = 360)
   const LINE_SPACING_SINGLE = 240; // 1.0 line
-  const FIRST_LINE_INDENT_TWIPS = 567; // 1 cm indentasi paragraf pertama baku
+  const FIRST_LINE_INDENT_TWIPS = isIeeeApa ? 720 : 567; // 1.27 cm (0.5 in) APA or 1 cm (567 twips) Skripsi
 
   /**
    * Helper function: parse inline Markdown (**bold**, *italic*, `code`) into safe TextRun array
@@ -310,12 +436,12 @@ export async function exportToAcademicDocx(options: ExportDocxOptions): Promise<
         children.push(
           new Paragraph({
             heading: HeadingLevel.HEADING_1,
-            alignment: AlignmentType.CENTER,
+            alignment: isSkripsi ? AlignmentType.CENTER : AlignmentType.LEFT,
             pageBreakBefore: isBabTitle,
             spacing: { before: 240, after: 180, line: LINE_SPACING_1_5 },
             children: [
               new TextRun({
-                text: headingText.toUpperCase(),
+                text: isSkripsi ? headingText.toUpperCase() : headingText,
                 bold: true,
                 font: FONT_FAMILY,
                 size: HEADING1_FONT_SIZE
@@ -359,7 +485,7 @@ export async function exportToAcademicDocx(options: ExportDocxOptions): Promise<
               new TextRun({
                 text: headingText,
                 bold: true,
-                italics: true,
+                italics: isSkripsi,
                 font: FONT_FAMILY,
                 size: BODY_FONT_SIZE
               })
@@ -449,7 +575,7 @@ export async function exportToAcademicDocx(options: ExportDocxOptions): Promise<
 
   const docSections: any[] = [];
 
-  if (hasFrontMatter && hasBab) {
+  if (hasFrontMatter && hasBab && isSkripsi) {
     // Split into Section 1 (Front Matter) and Section 2 (Main Body)
     const babIndex = content.search(babRegex);
     const frontMatterText = content.substring(0, babIndex).trim();
@@ -546,7 +672,11 @@ export async function exportToAcademicDocx(options: ExportDocxOptions): Promise<
                   font: FONT_FAMILY,
                   size: BODY_FONT_SIZE - 6,
                   color: '888888',
-                  text: 'Draf Akademik disusun via RuangKerja RuangTenang'
+                  text: isSkripsi
+                    ? 'Draf Skripsi Standar Baku 4-4-3-3 • Disusun via RuangKerja RuangTenang'
+                    : isIeeeApa
+                    ? 'Academic Paper Format (IEEE/APA) • RuangKerja'
+                    : 'Naskah Akademik • RuangKerja RuangTenang'
                 })
               ]
             })
@@ -571,10 +701,11 @@ export async function exportToAcademicDocx(options: ExportDocxOptions): Promise<
     .toLowerCase()
     .replace(/[^a-z0-9]/g, '_')
     .substring(0, 40);
-  const suffix = isSkripsi ? 'standar_skripsi_id' : 'standar_makalah_id';
+  const suffix = isSkripsi ? 'standar_skripsi_4433' : isIeeeApa ? 'paper_ieee_apa' : 'standar_makalah_id';
   link.download = `${safeFilename}_${suffix}.docx`;
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
 }
+

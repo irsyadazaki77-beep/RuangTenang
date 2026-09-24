@@ -424,14 +424,12 @@ router.get(
           return res.json([]);
         }
 
-        // 3. Consent check per assigned student
-        const authorizedStudentUserIds: string[] = [];
-        for (const sUserId of candidateUserIds) {
-          const canShare = await consentService.canShareWithCounselor(sUserId);
-          if (canShare) {
-            authorizedStudentUserIds.push(sUserId);
-          }
-        }
+        // 3. Consent check per assigned student (Batch optimized)
+        const batchConsents = await consentService.getBatchUserConsents(candidateUserIds);
+        const authorizedStudentUserIds = candidateUserIds.filter(sUserId => {
+          const c = batchConsents.get(sUserId);
+          return c && (c.consentForCounselorSharing || c.consentForCounselorSummary);
+        });
 
         if (authorizedStudentUserIds.length === 0) {
           return res.json([]);

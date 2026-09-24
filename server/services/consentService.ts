@@ -62,6 +62,44 @@ export class ConsentService {
   }
 
   /**
+   * Get canonical user consents from database for multiple users in a single batch query.
+   */
+  async getBatchUserConsents(userIds: string[]): Promise<Map<string, UserConsentDTO>> {
+    const map = new Map<string, UserConsentDTO>();
+    const validIds = userIds.filter(id => id && id !== 'guest');
+    if (validIds.length === 0) return map;
+
+    const consents = await prisma.userConsents.findMany({
+      where: { userId: { in: validIds } }
+    });
+
+    for (const consent of consents) {
+      map.set(consent.userId, {
+        userId: consent.userId,
+        consentForAI: Boolean(consent.consentForAI),
+        consentForAIMood: Boolean(consent.consentForAIMood),
+        consentForAIScreening: Boolean(consent.consentForAIScreening),
+        consentForAIMemory: Boolean(consent.consentForAIMemory),
+        consentForAIJournal: Boolean(consent.consentForAIJournal),
+        consentForEmergencySOS: Boolean(consent.consentForEmergencySOS),
+        consentForCounselorSummary: Boolean(consent.consentForCounselorSummary),
+        consentForCounselorSharing: Boolean(consent.consentForCounselorSharing),
+        consentForTelemetry: Boolean(consent.consentForTelemetry),
+        consentForAnalytics: Boolean(consent.consentForAnalytics),
+        consentVersion: consent.consentVersion || 'v1.3-2026',
+        policyVersion: consent.policyVersion || 'v2.0-PDP-2026',
+        consentTimestamp: consent.consentTimestamp ? consent.consentTimestamp.toISOString() : undefined,
+        grantedAt: consent.grantedAt ? consent.grantedAt.toISOString() : undefined,
+        withdrawnAt: consent.withdrawnAt ? consent.withdrawnAt.toISOString() : undefined,
+        retentionDays: consent.retentionDays ?? 90,
+        updatedAt: consent.updatedAt ? consent.updatedAt.toISOString() : new Date().toISOString()
+      });
+    }
+
+    return map;
+  }
+
+  /**
    * Check if core AI processing is allowed
    */
   async canUseAI(userId: string): Promise<boolean> {

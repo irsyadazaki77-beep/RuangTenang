@@ -34,6 +34,10 @@ const CounselorPortal = lazyWithRetry(() => import('./features/counselor-portal/
 const ChangelogModal = lazyWithRetry(() => import('./components/changelog/ChangelogModal').then(module => ({ default: module.ChangelogModal })));
 const NewUpdateToast = lazyWithRetry(() => import('./components/changelog/NewUpdateToast').then(module => ({ default: module.NewUpdateToast })));
 const StudentWorkspace = lazyWithRetry(() => import('./features/workspace/StudentWorkspace').then(module => ({ default: module.StudentWorkspace })));
+import { CommandPalette } from './components/CommandPalette';
+import { AmbientSoundscapeWidget } from './components/soundscape/AmbientSoundscapeWidget';
+import { PanicScreen } from './features/privacy/PanicScreen';
+import { PrivacyGuard } from './features/privacy/PrivacyGuard';
 
 export default function App() {
   const { user, setUser, loading, isOffline, logout } = useAuth();
@@ -48,6 +52,7 @@ export default function App() {
   const [selectedCounselor, setSelectedCounselor] = useState<Counselor | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>(() => {
     const saved = safeLocalStorage.getItem('ruangtenang_workspace_mode') as WorkspaceMode;
     return saved === 'RUANG_KERJA' ? 'RUANG_KERJA' : 'RUANG_TENANG';
@@ -219,7 +224,10 @@ export default function App() {
 
   useEffect(() => {
     const handleKeydown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'o') {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setIsCommandPaletteOpen(prev => !prev);
+      } else if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'o') {
         e.preventDefault();
         navigate('/');
       }
@@ -545,10 +553,15 @@ export default function App() {
                           onOpenSidebar={() => setIsSidebarOpen(true)}
                           onOpenChangelog={() => setIsChangelogOpen(true)}
                         >
-                          <UserProgressTracker
-                            onOpenScreening={() => navigate('/screening')}
-                            onNavigateToSchedule={() => navigate('/counselors')}
-                          />
+                          <PrivacyGuard
+                            title="Bilik Catatan Suasana Hati Terkunci"
+                            description="Jurnal mood dan catatan emosional Anda dilindungi dengan PIN keamanan terenkripsi."
+                          >
+                            <UserProgressTracker
+                              onOpenScreening={() => navigate('/screening')}
+                              onNavigateToSchedule={() => navigate('/counselors')}
+                            />
+                          </PrivacyGuard>
                         </WorkspaceLayout>
                       }
                     />
@@ -576,17 +589,22 @@ export default function App() {
                           onOpenSidebar={() => setIsSidebarOpen(true)}
                           onOpenChangelog={() => setIsChangelogOpen(true)}
                         >
-                          <ScreeningModal
-                            isOpen={true}
-                            isPageMode={true}
-                            onClose={() => navigate('/mood')}
-                            onComplete={() => {
-                              // Local completion
-                            }}
-                            onPersisted={() => {
-                              showToast('Skrining berhasil disimpan ke profil Anda.', 'success');
-                            }}
-                          />
+                          <PrivacyGuard
+                            title="Riwayat Skrining Terkunci"
+                            description="Hasil evaluasi mandiri PHQ-9 & GAD-7 Anda dilindungi dengan PIN keamanan terenkripsi."
+                          >
+                            <ScreeningModal
+                              isOpen={true}
+                              isPageMode={true}
+                              onClose={() => navigate('/mood')}
+                              onComplete={() => {
+                                // Local completion
+                              }}
+                              onPersisted={() => {
+                                showToast('Skrining berhasil disimpan ke profil Anda.', 'success');
+                              }}
+                            />
+                          </PrivacyGuard>
                         </WorkspaceLayout>
                       }
                     />
@@ -723,6 +741,18 @@ export default function App() {
       <Suspense fallback={null}>
         <NewUpdateToast onOpenChangelog={() => setIsChangelogOpen(true)} />
       </Suspense>
+
+      <CommandPalette 
+        isOpen={isCommandPaletteOpen} 
+        onClose={() => setIsCommandPaletteOpen(false)} 
+        chats={chats} 
+      />
+
+      {/* Module 1: Ambient Soundscape & Focus Timer Floating Widget */}
+      <AmbientSoundscapeWidget currentMode={workspaceMode} />
+
+      {/* Module 3: Panic Screen Decoy & Privacy Screen */}
+      <PanicScreen />
     </div>
   );
 }

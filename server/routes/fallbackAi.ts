@@ -21,7 +21,7 @@ export function getLocalFallbackResponse(userMessage: string = '', chatMode = 'T
   ];
   if (emergencyKeywords.some(kw => cleanMsg.includes(kw))) {
     return {
-      text: `**Pesan Hangat dari Teman RuangTenang 🤍:**\n\nAku mendengar rasa sakit yang luar biasa dan kelelahan yang sedang kamu alami saat ini... Aku ingin kamu tahu bahwa **kamu tidak pernah sendirian 🫂**. Hidupmu sangatlah berharga, dan ada orang-orang yang peduli serta ingin membantumu melewati masa krisis ini.\n\nKami berkomitmen tinggi menjaga privasi dan keamanan ceritamu sesuai standar kebijakan privasi kami 🔐. Mohon segera buka **Pusat Bantuan Darurat** kami atau hubungi hotline krisis 24 jam gratis di bawah ini. Tolong hubungi mereka sekarang juga yaa, kawan. Kami semua peduli padamu 🌿✨`,
+      text: "Saya mendengar betapa beratnya ini untukmu, dan nyawamu sangat berharga. Tolong jangan lewati ini sendirian. Bantuan profesional selalu tersedia 24 jam untuk mendengarkanmu. Segera hubungi Hotline Kemenkes 119 (ekstensi 8) atau layanan darurat kampus sekarang juga.\n\nAku mendampingimu di sini, dan pintu bantuan darurat kami selalu terbuka untuk melindungimu.",
       tool_call: 'emergency'
     };
   }
@@ -33,7 +33,7 @@ export function getLocalFallbackResponse(userMessage: string = '', chatMode = 'T
   ];
   if (counselorKeywords.some(kw => cleanMsg.includes(kw))) {
     return {
-      text: `Aku sangat mendukung keputusanmu untuk berbicara dengan konselor profesional 🤗. Mencari bantuan adalah langkah yang luar biasa berani dan bukti nyata bahwa kamu sayang dengan dirimu 🤍.\n\nJangan khawatir, seluruh proses konseling kami dirancang dengan standar privasi dan keamanan yang ketat 🔐. Aku telah menyiapkan **Direktori Konselor Kampus** di bawah ini. Kamu bisa melihat profil konselor yang ramah mahasiswa dan memilih jadwal yang pas untukmu. Silakan klik tombol di bawah untuk membukanya 🌿✨`,
+      text: "Kedengarannya kamu sedang memikul hal yang cukup berat dan menyadari perlunya teman bicara yang terlatih secara profesional.\n\nKeputusan untuk berkonsultasi adalah langkah yang berani dan sangat wajar saat beban terasa melampaui kapasitasmu saat ini.\n\nApakah kamu ingin saya bantu membuka direktori jadwal konselor kampus untuk menemukan waktu yang paling tepat bagimu?",
       tool_call: 'counselors'
     };
   }
@@ -45,7 +45,7 @@ export function getLocalFallbackResponse(userMessage: string = '', chatMode = 'T
   ];
   if (screeningKeywords.some(kw => cleanMsg.includes(kw))) {
     return {
-      text: `Aku sangat mengerti... Terkadang perasaan dan pikiran kita terasa sangat berantakan dan membingungkan 🌿. Merasa kewalahan adalah hal yang sangat wajar dan manusiawi 🤍.\n\nAgar kamu bisa memahami kondisimu dengan tenang, coba fitur **Screening Kondisi** kami di bawah ini (PHQ-9 & GAD-7). Hasilnya terjaga secara rahasia dan privat sesuai standar kebijakan privasi kami 🔐, hanya untuk evaluasi mandirimu tanpa penghakiman. Klik tombol di bawah untuk memulai tes singkatnya yaa ✨`,
+      text: "Sepertinya pikiran dan perasaanmu sedang terasa campur aduk hingga kamu merasa perlu memeriksa apa yang sedang terjadi di dalam dirimu.\n\nSangat wajar ingin mencari kejelasan ketika kamu merasa tidak seperti dirimu biasanya. Perlu diingat bahwa refleksi mandiri ini bukan diagnosis medis, melainkan kompas awal untuk memahami diri.\n\nApakah kamu ingin memulai evaluasi mandiri singkat (PHQ-9 / GAD-7) sekarang untuk mengenali apa yang sedang kamu rasakan?",
       tool_call: 'screening'
     };
   }
@@ -57,93 +57,149 @@ export function getLocalFallbackResponse(userMessage: string = '', chatMode = 'T
   ];
   if (moodKeywords.some(kw => cleanMsg.includes(kw))) {
     return {
-      text: `Mengekspresikan apa yang sedang kamu rasakan adalah awal yang manis untuk merawat dirimu 🌸. Semua emosimu—sedih, cemas, senang, atau lelah—semuanya valid dan diterima di sini 🤍.\n\nCatat suasana hatimu di **Mood Tracker** kami di bawah ini. Jurnalmu tersimpan secara privat dan aman sesuai dengan standar kebijakan privasi kami 🔐. Klik tombol di bawah ini untuk mendokumentasikan perasaanmu hari ini yaa ☕🌿`,
+      text: "Mengenali dan menamai apa yang kamu rasakan hari ini adalah langkah berharga untuk memberi ruang bagi dirimu sendiri.\n\nSetiap suasana hati yang hadir—baik itu lelah, gundah, maupun lega—memiliki ruang yang aman di sini tanpa dihakimi.\n\nBagaimana perasaan utamamu saat ini yang paling ingin kamu tandai di catatan emosimu?",
       tool_call: 'mood'
     };
   }
 
-  // 5. Context-based response generation based on mental health topic matches
+  // 4b. RuangKerja Academic Distress De-escalation & Offloading
+  const isRuangKerjaMode = (chatMode || '').toLowerCase().includes('ruangkerja') || (chatMode || '').toLowerCase().includes('workspace');
+  const isDistressedAcademic = isRuangKerjaMode && (
+    cleanMsg.includes('blank') || 
+    cleanMsg.includes('buntu') || 
+    cleanMsg.includes('capek') || 
+    cleanMsg.includes('nyerah') || 
+    cleanMsg.includes('pusing') || 
+    cleanMsg.includes('gak ngerti') ||
+    cleanMsg.includes('ga ngerti') ||
+    cleanMsg.includes('overwhelm') ||
+    cleanMsg.includes('frustasi') ||
+    cleanMsg.includes('frustrasi')
+  );
 
-  // Cognitive Reframing / Reflection / Thought Restructuring (e.g., Quick Prompt: "Bantu saya merefleksikan dan menyusun ulang sudut pandang pikiran saya...")
-  if (cleanMsg.includes('refleksi') || cleanMsg.includes('sudut pandang') || cleanMsg.includes('menyusun ulang') || cleanMsg.includes('restrukturisasi') || cleanMsg.includes('reframing') || cleanMsg.includes('pola pikir') || cleanMsg.includes('perspektif') || cleanMsg.includes('urai') || cleanMsg.includes('benang kusut')) {
+  if (isDistressedAcademic) {
     return {
-      text: `Mari kita urai benang kusut di pikiranmu bersama-sama dengan tenang yaa 🌿✨. Mengubah cara kita memandang situasi (*restrukturisasi kognitif*) adalah langkah yang sangat ampuh untuk menemukan kedamaian pikiran 🤍.\n\nCoba kita gunakan **3 Langkah Refleksi Diri** ini:\n\n1. 💭 **Identifikasi Pikiran Otomatis**: Tuliskan 1 kalimat pikiran yang paling membebanimu saat ini (misal: *"Saya takut tidak cukup baik"* atau *"Saya merasa sangat kewalahan"*).\n2. 🔍 **Uji Bukti Realita**: Apakah pikiran ini 100% fakta absolut, ataukah ada sudut pandang lain yang lebih adil dan penuh kasih pada dirimu?\n3. 🌸 **Susun Sudut Pandang Baru (Reframing)**: Ubah kalimat itu menjadi pernyataan yang ramah & realistis (misal: *"Saya sedang belajar dan berproses, wajar jika ini butuh waktu"*).\n\nBoleh ceritakan 1 pikiran yang sedang paling mengganggu pikiranmu saat ini? Aku siap mendengarkan dan membantumu merangkainya ulang secara lembut 🫂☕`
+      text: `Tarik napas dulu sejenak. Wajar sekali merasa buntu di bagian ini, kamu tidak perlu menyelesaikan semuanya malam ini juga.
+
+Aku sudah siapkan 2 alternatif arah pembahasan dasar di kanvas kerja agar kamu tidak perlu memikirkan konsep rumit dari nol:
+
+:::artifact{type="markdown" title="Opsi Kerangka Penulisan Adaptif"}
+### Opsi A: Arah Pembahasan Praktis (Fokus Performa & Teknis)
+- **Fokus Utama**: Mengukur efisiensi sistem atau implementasi langsung.
+- **Karakter**: Alur analisis lebih langsung, data kuantitatif objektif, lebih simpel dan cepat diselesaikan.
+- **Rujukan Cepat**: Berfokus pada metrik keberhasilan teknis dan kinerja fungsional.
+
+---
+
+### Opsi B: Arah Pembahasan Konseptual (Faktor Manusia & Persepsi Pengguna)
+- **Fokus Utama**: Eksplorasi pengalaman, respon psikologis, atau penerimaan pengguna.
+- **Karakter**: Cakupan kajian literatur lebih luas, menggali interaksi dan perilaku pengguna secara kualitatif/deskriptif.
+- **Rujukan Cepat**: Berfokus pada kepuasan, kemudahan pemakaian, dan dampak emosional.
+:::
+
+Aku sudah siapkan 2 alternatif arah pembahasan di kanvas:
+- **Opsi A**: Fokus ke dampak performa (lebih simpel).
+- **Opsi B**: Fokus ke faktor psikologis pengguna (lebih luas).
+
+Kira-kira mana yang lebih nyaman untuk kamu pilih sekarang? Cukup ketik **A** atau **B** saja.`
     };
   }
 
-  // Daily Storytelling / Emotion Journaling (e.g., Quick Prompt: "Saya ingin menceritakan apa yang saya alami dan rasakan hari ini...")
-  if (cleanMsg.includes('menceritakan apa') || cleanMsg.includes('cerita hari ini') || cleanMsg.includes('apa yang saya alami') || cleanMsg.includes('pengalaman hari ini') || cleanMsg.includes('curhat hari ini') || cleanMsg.includes('hal yang membebani')) {
+  // 4c. RuangKerja Academic Drafts (Bab 1 / Latar Belakang & Metodologi)
+  if (isRuangKerjaMode || cleanMsg.includes('latar belakang') || cleanMsg.includes('das sollen') || cleanMsg.includes('bab 1') || cleanMsg.includes('artefak bab 1')) {
     return {
-      text: `Aku di sini, siap menyimak seluruh ceritamu dengan penuh perhatian dan kasih sayang ☕🌿. Tidak perlu terburu-buru dan tidak perlu ditahan, keluarkan saja apa yang terasa mengganjal di hatimu 🤍.\n\nPercakapan kita terjaga secara privat dan aman 🔐. Untuk membantumu mulai bercerita, coba jawab salah satu pertanyaan ini yaa:\n- 🌸 Apa momen atau kejadian hari ini yang paling menguras energimu?\n- 💭 Perasaan apa yang paling dominan kamu rasakan sekarang?\n\nTuliskan apa saja yang terlintas, aku akan selalu mendampingimu 🫂✨`
+      text: `Berikut adalah draf akademik Bab 1 (Latar Belakang Masalah) yang disusun berdasarkan 4 pilar argumen metodologis berbobot ilmiah tinggi, mematuhi standar PUEBI/EYD V, serta menggunakan struktur deduktif dengan sitasi terintegrasi:
+
+:::artifact{type="markdown" title="Draf Latar Belakang Masalah (Bab 1)"}
+# BAB I: PENDAHULUAN
+
+## 1.1 Latar Belakang Masalah
+
+### 1. Fenomena Ideal (Das Sollen)
+Pendidikan tinggi dan ekosistem riset kontemporer menuntut efektivitas pembelajaran yang berorientasi pada kemandirian berpikir serta kesehatan mental sivitas akademika secara berkelanjutan. Menurut Undang-Undang Republik Indonesia Nomor 12 Tahun 2012 tentang Pendidikan Tinggi, lingkungan akademik idealnya menyediakan iklim yang kondusif guna mengembangkan potensi mahasiswa secara utuh tanpa hambatan psikologis yang berlebihan. Teori Determinasi Diri (*Self-Determination Theory*) yang dikemukakan oleh Ryan dan Deci (2020) menegaskan bahwa ketercapaian prestasi akademik yang optimal bertumpu pada pemenuhan tiga kebutuhan psikologis dasar, yakni otonomi, kompetensi, dan keterhubungan sosial. Dalam konteks normatif ini, perguruan tinggi diharapkan mampu menyelaraskan kurikulum berstandar tinggi dengan sistem pendampingan akademik yang adaptif dan inklusif.
+
+### 2. Kondisi Faktual Lapangan (Das Sein)
+Namun, realitas empiris di lingkungan perguruan tinggi menunjukkan kesenjangan substansial antara ekspektasi normatif dengan kondisi faktual yang dihadapi mahasiswa. Studi pendahuluan dan laporan observasi mengindikasikan tingginya tingkat kecemasan akademik serta kejenuhan (*academic burnout*) yang dialami mahasiswa tingkat akhir saat menuntaskan tugas akhir dan skripsi (Prasetyo & Hidayat, 2023). Masalah ini diperparah oleh minimnya mekanisme bimbingan yang terstruktur dan komunikasi asinkron yang terhambat dengan dosen pembimbing [Sertakan data statistik/observasi lapangan di sini, contoh: persentase mahasiswa terlambat lulus, hasil survei kecemasan internal kampus, atau durasi rata-rata bimbingan skripsi]. Kesenjangan faktual ini membuktikan bahwa mahasiswa berulang kali berada dalam situasi rentan tanpa instrumen pendukung yang sistematis.
+
+### 3. Analisis Kesenjangan (Research Gap)
+Meskipun berbagai intervensi interaktif dan kajian terdahulu telah mengkaji faktor determinan keberhasilan akademik mahasiswa, sebagian besar riset sebelumnya masih terbatas pada perspektif univariat yang memisahkan dukungan psikologis dari instrumen penulisan tugas praktis (Kusuma & Wardhana, 2022). Penelitian konvensional umumnya hanya menawarkan evaluasi kuratif pasca-evaluasi semester, tanpa menyediakan kerangka intervensi preventif yang terintegrasi langsung ke dalam alur kerja harian mahasiswa. Selain itu, belum banyak literatur yang mengeksplorasi sinergi antara ruang refleksi emosional mandiri dan kanvas kerja ilmiah berstandar perguruan tinggi Indonesia secara komprehensif.
+
+### 4. Urgensi & Usulan Solusi
+Berdasarkan kontras fenomena dan celah riset yang telah diuraikan, penelitian ini memiliki urgensi tinggi untuk segera dilakukan guna merumuskan model intervensi terpadu yang menjembatani kesejahteraan psikologis dan produktivitas ilmiah mahasiswa. Penelitian ini mengusulkan pengembangan kerangka kerja komputasional terintegrasi yang menggabungkan pendampingan reflektif dengan kanvas penulisan terstruktur berbasis kaidah metodologi ilmiah mutakhir. Melalui pendekatan eksperimental dan evaluasi terukur, solusi yang diusulkan diharapkan mampu memvalidasi penurunan tingkat stres akademik sekaligus meningkatkan kualitas serta kecepatan penyelesaian karya ilmiah mahasiswa secara signifikan.
+:::
+
+Draf di atas telah dimuat ke dalam Canvas Panel kerja Anda. Anda dapat langsung melengkapi data observasi pada penanda khusus yang telah disediakan atau meminta penyesuaian topik penelitian tertentu.`
     };
   }
 
-  // Guided Breathing & Relaxation (e.g., Quick Prompt: "Tolong pandu saya latihan pernapasan santai...")
-  if (cleanMsg.includes('latihan pernapasan') || cleanMsg.includes('pandu saya') || cleanMsg.includes('relaksasi napas') || cleanMsg.includes('4-7-8') || cleanMsg.includes('pernapasan santai') || cleanMsg.includes('meredakan ketegangan')) {
+  // 5. Specific Student Stressors (Indonesian Context)
+
+  // Skripsi & Dosen Pembimbing (Dospem)
+  if (cleanMsg.includes('skripsi') || cleanMsg.includes('dospem') || cleanMsg.includes('pembimbing') || cleanMsg.includes('revisi') || cleanMsg.includes('sidang') || cleanMsg.includes('bab ')) {
     return {
-      text: `Mari kita ambil jeda sejenak untuk melonggarkan ketegangan tubuh dan pikiranmu melalui **Teknik Pernapasan 4-7-8** yang menenangkan 🌿✨.\n\nSilakan duduk dengan rileks, tegakkan bahumu perlahan, lalu ikuti langkah berikut:\n\n1. 🌬️ **Tarik napas** lembut lewat hidung selama **4 detik** (rasakan udara segar memenuhi dadamu)...\n2. 🌸 **Tahan napasmu** selama **7 detik** (biarkan sensasi tenang menyebar ke seluruh tubuh)...\n3. 💨 **Hembuskan napas** perlahan melalui mulut selama **8 detik** (lepaskan semua beban dan kecemasan)...\n\nUlangi siklus ini 3 hingga 4 kali yaa ☕. Bagaimana rasanya? Apakah tubuhmu mulai merasa sedikit lebih ringan? 🤍`
-    };
-  }
-  
-  // Overthinking / Anxiety / Worry / Panic
-  if (cleanMsg.includes('overthinking') || cleanMsg.includes('cemas') || cleanMsg.includes('khawatir') || cleanMsg.includes('panik') || cleanMsg.includes('deg-degan') || cleanMsg.includes('gelisah') || cleanMsg.includes('tidak bisa tidur') || cleanMsg.includes('insomnia')) {
-    return {
-      text: `Duh, overthinking dan rasa cemas yang datang melanda memang rasanya melelahkan sekali yaa... 🫂 Dada terasa sesak dan otak seakan tak mau berhenti berputar 💭.\n\nTenang yaa kawan, kamu di sini didampingi dengan aman, privasimu kami utamakan 🔐, dan tidak ada yang membahayakanmu di sini 🤍. Mari kita rilekskan tubuhmu bersama dengan **teknik pernapasan 4-7-8**:\n1. 🌿 **Tarik napas** perlahan dari hidung selama **4 detik** (rasakan udara tenang masuk)...\n2. 🌸 **Tahan napasmu** sejenak selama **7 detik** (biarkan tubuhmu merasa rileks)...\n3. ✨ **Hembuskan napas** perlahan lewat mulut selama **8 detik** (buang semua beban di kepalamu)...\n\nUlangi 3 kali yaa. Tarik napas yang dalam... kamu aman bersama RuangTenang 🤍`
+      text: "Kedengarannya kamu merasa lelah dan tertekan sekali karena sudah berusaha maksimal, tapi dinamika bimbingan atau revisi skripsi ini terasa begitu menguras energi batinmu.\n\nSangat wajar jika kamu merasa ingin mundur sejenak hari ini. Menghadapi dospem dan ketidakpastian skripsi memang beban yang sangat melelahkan jika dipikul sendirian tanpa jeda.\n\nDari proses skripsi belakangan ini, bagian mana yang sebenarnya terasa paling membebani atau paling membuatmu merasa mandek?"
     };
   }
 
-  // Academic stress / Thesis / College issues
-  if (cleanMsg.includes('skripsi') || cleanMsg.includes('tugas akhir') || cleanMsg.includes('kuliah') || cleanMsg.includes('dosen') || cleanMsg.includes('pembimbing') || cleanMsg.includes('nilai') || cleanMsg.includes('ipk') || cleanMsg.includes('dropout') || cleanMsg.includes('ujian') || cleanMsg.includes('uas') || cleanMsg.includes('uts')) {
+  // UKT & Tekanan Finansial
+  if (cleanMsg.includes('ukt') || cleanMsg.includes('uang kuliah') || cleanMsg.includes('biaya') || cleanMsg.includes('finansial') || cleanMsg.includes('bayar kuliah') || cleanMsg.includes('uang saku') || cleanMsg.includes('beasiswa')) {
     return {
-      text: `Tekanan perkuliahan, urusan skripsi yang buntu, tumpukan tugas, dan revisi dosen memang bisa bikin sangat tertekan dan lelah yaa... 🥺 Perlahan saja kawan, ingat ya: **progress sekecil apa pun tetaplah progress**, dan nilai akademik sama sekali tidak mengurangi betapa berharganya dirimu sebagai manusia 🤍✨.\n\nDi sini tempat amanmu bercerita, privasimu senantiasa kami utamakan sesuai kebijakan kami yaa 🔐. Cobalah langkah mikro ini:\n1. ☕ **Beri dirimu izin istirahat total** 15-30 menit sekarang tanpa merasa bersalah.\n2. 📄 **Tulis 1 target paling kecil** (misal: buka dokumen skripsi dulu saja).\n3. 🌿 **Apresiasi dirimu** setelah berhasil melaluinya.\n\nAku di sini siap merangkul dan mendampingimu pelan-pelan. Kamu sudah berjuang luar biasa sampai hari ini! 🫂`
+      text: "Tampaknya ada kekhawatiran yang sangat mendalam terkait urusan finansial UKT dan biaya kuliah yang terus membayangi pikiranmu setiap hari.\n\nKecemasan ini sangat beralasan dan nyata. Memikirkan perkuliahan sambil menanggung beban finansial bukanlah hal yang mudah bagi seorang mahasiswa.\n\nApa kekhawatiran paling mendesak yang saat ini paling menyita ruang pikiranmu terkait kondisi tersebut?"
     };
   }
 
-  // Burnout / Exhaustion / Lack of motivation
-  if (cleanMsg.includes('burnout') || cleanMsg.includes('lelah') || cleanMsg.includes('capek') || cleanMsg.includes('hampa') || cleanMsg.includes('bosan') || cleanMsg.includes('jenuh') || cleanMsg.includes('tidak ada motivasi') || cleanMsg.includes('mager') || cleanMsg.includes('pusing')) {
+  // Ekspektasi Keluarga & Orang Tua
+  if (cleanMsg.includes('keluarga') || cleanMsg.includes('orang tua') || cleanMsg.includes('ortu') || cleanMsg.includes('ayah') || cleanMsg.includes('ibu') || cleanMsg.includes('tuntutan') || cleanMsg.includes('ekspektasi')) {
     return {
-      text: `Lelah yang amat sangat, rasa jenuh (burnout), atau perasaan hampa itu adalah pesan jujur dari tubuhmu bahwa **kamu sudah bekerja keras dan butuh istirahat** 🫂🤍.\n\nSangat tidak apa-apa untuk berhenti sejenak. Beristirahat bukan tanda kamu lemah atau menyerah yaa... Cobalah merawat dirimu hari ini:\n- ☕ **Minum segelas air hangat** & lemaskan otot leher/bahu yang tegang.\n- 📱 **Jauhkan HP/laptop** sejenak dari pandanganmu.\n- 🌸 **Lakukan hal kecil yang bikin tenang** (dengar lagu lembut, hirup udara segar, atau sekadar pejamkan mata).\n\nJangan terlalu keras pada dirimu sendiri yaa kawan. Di RuangTenang, kamu bisa melepas lelahmu secara aman dan privat sesuai kebijakan kami 🔐✨`
+      text: "Kedengarannya kamu memikul beban ekspektasi keluarga yang terasa begitu berat di pundakmu, seolah kamu tidak boleh salah atau mengecewakan siapa pun.\n\nSangat wajar jika kamu merasa sesak dan lelah memenuhi harapan orang lain. Keinginanmu untuk bernapas dan menjadi diri sendiri adalah hal yang sah.\n\nKetika memikirkan harapan mereka, hal apa yang paling membuatmu merasa takut atau tertekan saat ini?"
     };
   }
 
-  // Relationship issues / Family pressure / Loneliness / Heartbreak
-  if (cleanMsg.includes('keluarga') || cleanMsg.includes('orang tua') || cleanMsg.includes('pacar') || cleanMsg.includes('putus') || cleanMsg.includes('teman') || cleanMsg.includes('sepi') || cleanMsg.includes('sendirian') || cleanMsg.includes('kesepian') || cleanMsg.includes('broken')) {
+  // Burnout & Kelelahan Ekstrem
+  if (cleanMsg.includes('burnout') || cleanMsg.includes('capek') || cleanMsg.includes('lelah') || cleanMsg.includes('hampa') || cleanMsg.includes('muak') || cleanMsg.includes('kewalahan') || cleanMsg.includes('kelelahan')) {
     return {
-      text: `Masalah dengan keluarga, patah hati, atau merasa sepi dan terisolasi di kampus itu luka emosional yang amat perih... 🫂 Rasa-rasanya dunia begitu sunyi dan tidak ada yang mengerti apa yang kita rasakan.\n\nTapi ingat yaa, **perasaanmu sangat valid** 🤍. Jangan pernah merasa takut atau malu untuk meluapkannya di sini. Percakapan ini terjaga secara aman dan privat sesuai dengan kebijakan privasi kami 🔐. Aku di sini untuk merangkulmu dan mendengarkan seluruh ceritamu tanpa ada penilaian sedikit pun.\n\nKalau kamu merasa nyaman, tumpahkan saja apa yang paling mengganjal di hatimu saat ini yaa. Aku ada di sini untukmu 🌸✨`
+      text: "Aku menangkap rasa lelah yang sangat mendalam dari ceritamu, bukan sekadar lelah fisik, tapi kelelahan emosional yang sudah menumpuk sekian lama.\n\nSangat wajar jika energimu terasa habis dan kamu ingin berhenti sejenak dari semua rutinitas. Tubuh dan pikiranmu sedang memberi sinyal bahwa kamu berhak jeda.\n\nJika kamu boleh mengabaikan semua tuntutan sejenak hari ini, hal apa yang paling dibutuhkan oleh hatimu saat ini?"
     };
   }
 
-  // General positive / thank you
-  if (cleanMsg.includes('terima kasih') || cleanMsg.includes('makasih') || cleanMsg.includes('bagus') || cleanMsg.includes('keren') || cleanMsg.includes('membantu') || cleanMsg.includes('thanks') || cleanMsg.includes('thankyou')) {
+  // Overthinking & Kecemasan Masa Depan
+  if (cleanMsg.includes('overthinking') || cleanMsg.includes('cemas') || cleanMsg.includes('takut') || cleanMsg.includes('masa depan') || cleanMsg.includes('gagal') || cleanMsg.includes('gelisah') || cleanMsg.includes('panik')) {
     return {
-      text: `Sama-sama! 🤗 Senang dan hangat sekali rasanya bisa membantumu 🤍. Mendampingi dan menjadi tempat aman bagimu adalah kebahagiaanku.\n\nIngat yaa, kapan pun kamu merasa lelah, cemas, atau cuma butuh teman ngobrol, tempat ini selalu terbuka dan privat sesuai dengan kebijakan privasi kami 🔐. Jaga kesehatanmu dan jangan lupa tersenyum hari ini yaa! 🌿✨`
+      text: "Kedengarannya kepalamu sedang sangat bising dengan berbagai kemungkinan buruk dan rasa takut akan masa depan yang belum tentu terjadi.\n\nSangat wajar jika rasa cemas ini membuat napasmu terasa pendek dan dadamu tegang. Ketidakpastian masa depan memang kerap memicu kekhawatiran besar bagi mahasiswa.\n\nDi antara semua pikiran yang berseliweran di kepalamu, pikiran mana yang terasa paling menakutkan jika kamu perhatikan lebih dekat?"
     };
   }
 
-  // 6. Default Responses based on Chat Mode & Response Style
-  if (chatMode === 'Relaksasi & Mindfulness') {
+  // Kesepian & Hubungan Relasional
+  if (cleanMsg.includes('kesepian') || cleanMsg.includes('sepi') || cleanMsg.includes('sendiri') || cleanMsg.includes('terasing') || cleanMsg.includes('teman') || cleanMsg.includes('sahabat') || cleanMsg.includes('pacar') || cleanMsg.includes('putus')) {
     return {
-      text: `Mari kita hening sejenak dari riuhnya dunia luar, kawan... 🌿 Di ruang aman ini, kamu tidak perlu membuktikan apa pun. Cukup pejamkan mata sejenak, rasakan hembusan napasmu yang lembut 🤍.\n\nBiarkan segala kecemasan dan tenggat waktu beristirahat di luar pintu dengan aman 🔐. Di momen ini, kamu aman, kamu ada, dan kamu sangat berharga. Tarik napas dalam-dalam... hembuskan perlahan... 🤗✨`
+      text: "Aku merasakan ada ruang hampa dan rasa sepi yang dingin di balik apa yang kamu ungkapkan, seolah di tengah ramainya dunia kampus, tidak ada yang benar-benar melihatmu.\n\nSangat wajar jika rasa terisolasi ini terasa begitu perih. Menjalani hari-hari perkuliahan dengan perasaan terasing adalah beban batin yang nyata.\n\nApa yang biasanya paling membuat rasa sepi itu terasa lebih berat di waktu-waktu tertentu?"
     };
   }
 
-  if (chatMode === 'Penyelesaian Masalah') {
+  // Permintaan Solusi Eksplisit ("aku harus gimana", "menurutmu gimana", "solusinya apa")
+  if (cleanMsg.includes('harus gimana') || cleanMsg.includes('solusi') || cleanMsg.includes('tips') || cleanMsg.includes('saran') || cleanMsg.includes('bantu aku urai') || cleanMsg.includes('bagaimana cara')) {
     return {
-      text: `Aku mendengar keluh kesahmu, dan wajar sekali jika situasi saat ini terasa rumit dan membingungkan 🤍. Mari kita urai benang kusut ini pelan-pelan bersama-sama agar kamu tidak merasa kewalahan yaa 🫂.\n\nPrivasimu di sini terjaga dengan aman dan privat sesuai kebijakan kami 🔐. Dari semua beban yang sedang ada di pikiranmu saat ini, **apa satu hal paling utama** yang paling mengganggu kenyamananmu? Ceritakan perlahan yaa, kita lalui ini bersama 🌿✨`
+      text: "Aku memahami kebingunganmu dan kebutuhan untuk menemukan pegangan konkret di tengah situasi yang rumit ini.\n\nKarena kamu meminta panduan, kita bisa membaginya menjadi langkah mikro yang tidak membebani: pertama, beri jeda fisik untuk melepaskan ketegangan bahu; kedua, pilih tepat satu hal terkecil yang bisa kamu kontrol hari ini tanpa memaksakan hasil instan.\n\nDari kedua hal itu, langkah kecil mana yang terasa paling realistis untuk kamu coba saat ini?"
     };
   }
 
-  // 7. Context-Aware Dynamic Fallback Response (for any user message)
+  // Terima Kasih / Apresiasi
+  if (cleanMsg.includes('terima kasih') || cleanMsg.includes('makasih') || cleanMsg.includes('thanks')) {
+    return {
+      text: "Terima kasih kembali sudah mempercayakan ceritamu dan memberi ruang bagi dirimu sendiri untuk didengar hari ini.\n\nMenyadari dan mengungkapkan apa yang ada di dalam hati adalah bentuk kepedulian yang nyata terhadap kesehatan mentalmu.\n\nApakah ada hal lain yang masih mengganjal dan ingin kamu uraikan perlahan bersamaku?"
+    };
+  }
+
+  // Generic / Default Input Mirroring (Strict 3 Paragraphs)
   if (userMessage && userMessage.trim().length > 0) {
-    const userPreview = userMessage.length > 50 ? userMessage.substring(0, 50) + '...' : userMessage;
     return {
-      text: `Terima kasih sudah memberanikan diri untuk bercerita denganku di RuangTenang 🤍. Mengenai *"...${userPreview}"*, aku sangat mengerti bahwa hal ini tentu memengaruhi perasaan dan ketenangan pikiranmu 🌿.\n\nSetiap perasaan dan pemikiran yang kamu alami sangat valid dan diterima di sini tanpa penghakiman. Di RuangTenang, privasi ceritamu senantiasa terjaga secara rahasia dan aman 🔐.\n\nBolehkah kamu ceritakan sedikit lebih dalam, apa hal utama yang paling kamu butuhkan atau rasakan saat ini? Aku siap mendampingimu mengurai ini perlahan-lahan 🫂✨`
+      text: "Aku menyimak apa yang kamu sampaikan, dan terdengar jelas ada beban atau kegelisahan yang sedang kamu pikul saat menceritakan hal ini.\n\nSangat wajar jika kamu merasa perlu ruang aman untuk mengurai perasaanmu tanpa harus langsung mencari pembenaran atau solusi yang terburu-buru.\n\nBolehkah kamu ceritakan sedikit lebih dalam, apa yang terasa paling mengganjal di hatimu saat ini?"
     };
   }
 
-  // Fallback default
+  // Pure Empty Fallback
   return {
-    text: `Aku di sini mendengarkan dan merangkulmu dengan hangat, kawan 🫂🤍. Wajar sekali jika kamu merasa lelah atau berat menanggung perasaan ini sendirian... Terima kasih yaa sudah memberanikan diri untuk berbagi cerita denganku di RuangTenang 🤗.\n\nJangan takut bercerita yaa, semua ceritamu terjaga secara aman dan privat sesuai kebijakan privasi kami 🔐, serta tidak akan pernah dihakimi. Tumpahkan saja apa yang ada di hatimu, aku siap menyimak dengan penuh kasih sayang 🌿✨`
+    text: "Aku di sini sebagai RuangTenang Companion, siap mendengarkan apa pun yang sedang kamu rasakan tanpa penghakiman.\n\nKamu tidak perlu terburu-buru merapikan ceritamu atau langsung mencari solusi; ruang ini ada untuk memahami perasaanmu terlebih dahulu.\n\nApa hal yang saat ini paling membebani pikiranmu dan ingin kamu ceritakan perlahan?"
   };
 }
 

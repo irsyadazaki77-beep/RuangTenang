@@ -8,9 +8,16 @@ export function useChatStreaming() {
   const clientRef = useRef<ChatStreamingClient | null>(null);
   const currentTokenRef = useRef(0);
   const timeoutRef = useRef<any>(null);
+  const rafRef = useRef<number | null>(null);
+  const chunkBufferRef = useRef<string>('');
 
   const abortStream = useCallback(() => {
     currentTokenRef.current++;
+    if (rafRef.current) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+    chunkBufferRef.current = '';
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
       timeoutRef.current = null;
@@ -24,6 +31,9 @@ export function useChatStreaming() {
 
   useEffect(() => {
     return () => {
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+      }
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
       }
@@ -50,7 +60,13 @@ export function useChatStreaming() {
     const token = ++currentTokenRef.current;
     setStreamingError(null);
 
-    // Clear previous timeout if any
+    // Clear previous timeout and animation frame if any
+    if (rafRef.current) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+    chunkBufferRef.current = '';
+
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
       timeoutRef.current = null;
@@ -81,6 +97,15 @@ export function useChatStreaming() {
       }
     }, 12000);
 
+    const flushChunkBuffer = () => {
+      if (token === currentTokenRef.current && chunkBufferRef.current) {
+        const buffered = chunkBufferRef.current;
+        chunkBufferRef.current = '';
+        callbacks.onChunk(buffered);
+      }
+      rafRef.current = null;
+    };
+
     try {
       await client.stream(payload, {
         onMessageStart: (msgId) => {
@@ -95,7 +120,11 @@ export function useChatStreaming() {
             clearTimeout(timeoutRef.current);
             timeoutRef.current = null;
           }
-          callbacks.onChunk(text);
+          // Batch fast token emissions into 60 FPS rAF frames to prevent main thread choke
+          chunkBufferRef.current += text;
+          if (!rafRef.current) {
+            rafRef.current = requestAnimationFrame(flushChunkBuffer);
+          }
         },
         onPluginSwitch: (pluginName) => {
           if (token !== currentTokenRef.current) return;
@@ -104,10 +133,16 @@ export function useChatStreaming() {
             clearTimeout(timeoutRef.current);
             timeoutRef.current = null;
           }
+          flushChunkBuffer();
           callbacks.onPluginSwitch(pluginName);
         },
         onMessageComplete: (text) => {
           if (token !== currentTokenRef.current) return;
+          if (rafRef.current) {
+            cancelAnimationFrame(rafRef.current);
+            rafRef.current = null;
+          }
+          flushChunkBuffer();
           if (timeoutRef.current) {
             clearTimeout(timeoutRef.current);
             timeoutRef.current = null;
@@ -121,6 +156,11 @@ export function useChatStreaming() {
         },
         onError: (err) => {
           if (token !== currentTokenRef.current) return;
+          if (rafRef.current) {
+            cancelAnimationFrame(rafRef.current);
+            rafRef.current = null;
+          }
+          chunkBufferRef.current = '';
           if (timeoutRef.current) {
             clearTimeout(timeoutRef.current);
             timeoutRef.current = null;
@@ -143,6 +183,10 @@ export function useChatStreaming() {
         }
       });
     } finally {
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
         timeoutRef.current = null;

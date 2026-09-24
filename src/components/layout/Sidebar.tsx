@@ -122,8 +122,8 @@ export default function Sidebar({
           setIsOpen(!isOpen);
         }
       } 
-      // Focus Search (Cmd/Ctrl + K or forward slash '/')
-      else if (((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') || (e.key === '/' && !isInput)) {
+      // Focus Search via forward slash '/'
+      else if (e.key === '/' && !isInput) {
         e.preventDefault();
         setIsOpen(true);
         setIsCollapsed(false);

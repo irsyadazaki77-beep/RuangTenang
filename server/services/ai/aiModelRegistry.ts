@@ -103,7 +103,7 @@ export const AVAILABLE_AI_MODELS: AiModelOption[] = [
   }
 ];
 
-export const DEFAULT_AI_MODEL_ID = 'gemini-2.5-flash';
+export const DEFAULT_AI_MODEL_ID = 'gemini-3.8-flash';
 
 export function getActualGeminiModel(modelId: string): string {
   const map: Record<string, string> = {

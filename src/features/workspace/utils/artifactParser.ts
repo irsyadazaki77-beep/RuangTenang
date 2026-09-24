@@ -45,8 +45,8 @@ export function parseTagAttributes(attrString: string): ParsedTagAttributes {
   const len = attrString.length;
 
   while (index < len) {
-    // Skip whitespace
-    while (index < len && /\s/.test(attrString[index])) {
+    // Skip whitespace and curly braces
+    while (index < len && (/\s/.test(attrString[index]) || attrString[index] === '{' || attrString[index] === '}')) {
       index++;
     }
     if (index >= len) break;
@@ -59,13 +59,13 @@ export function parseTagAttributes(attrString: string): ParsedTagAttributes {
     const key = attrString.substring(keyStart, index).toLowerCase();
 
     // Skip whitespace around '='
-    while (index < len && /\s/.test(attrString[index])) {
+    while (index < len && (/\s/.test(attrString[index]) || attrString[index] === '{' || attrString[index] === '}')) {
       index++;
     }
 
     if (index < len && attrString[index] === '=') {
       index++; // consume '='
-      while (index < len && /\s/.test(attrString[index])) {
+      while (index < len && (/\s/.test(attrString[index]) || attrString[index] === '{' || attrString[index] === '}')) {
         index++;
       }
 
@@ -85,7 +85,7 @@ export function parseTagAttributes(attrString: string): ParsedTagAttributes {
         } else {
           // Unquoted value
           const valStart = index;
-          while (index < len && !/\s|>/.test(attrString[index])) {
+          while (index < len && !/\s|>|\}/.test(attrString[index])) {
             index++;
           }
           value = attrString.substring(valStart, index);
@@ -98,6 +98,9 @@ export function parseTagAttributes(attrString: string): ParsedTagAttributes {
         const upperType = cleanValue.toUpperCase();
         if (upperType === 'CODE' || upperType === 'CITATION' || upperType === 'OUTLINE' || upperType === 'DOCUMENT') {
           result.type = upperType as ArtifactType;
+        } else if (upperType === 'MARKDOWN' || upperType === 'TEXT' || upperType === 'MD') {
+          result.type = 'DOCUMENT';
+          result.language = 'markdown';
         } else {
           result.type = 'DOCUMENT';
         }
@@ -183,20 +186,49 @@ export function parseArtifactsFromText(text: string, isStreaming = false): Extra
       continue;
     }
 
-    // 3. Check for '<artifact' tag start
-    if (text.startsWith('<artifact', index)) {
-      const tagStartIndex = index;
-      const charAfterTag = text[index + 9];
+    // 3. Check for '<artifact' or ':::artifact' tag start
+    const isXmlArtifact = text.startsWith('<artifact', index);
+    const isDirectiveArtifact = text.startsWith(':::artifact', index);
 
-      // Must be followed by space, newline, tab, or '>'
-      if (charAfterTag === undefined || /\s|>/.test(charAfterTag)) {
-        // Find closing '>' of opening tag
-        const openTagCloseIndex = text.indexOf('>', index + 9);
+    if (isXmlArtifact || isDirectiveArtifact) {
+      const tagPrefixLen = isDirectiveArtifact ? 11 : 9;
+      const tagStartIndex = index;
+      const charAfterTag = text[index + tagPrefixLen];
+
+      // Must be followed by space, newline, tab, '>', or '{'
+      if (charAfterTag === undefined || /\s|>|\{/.test(charAfterTag)) {
+        let openTagCloseIndex = -1;
+        let attrContent = '';
+        let bodyStartIndex = -1;
+
+        if (isDirectiveArtifact) {
+          const nextNewline = text.indexOf('\n', index + tagPrefixLen);
+          const nextBrace = text.indexOf('}', index + tagPrefixLen);
+
+          if (nextBrace !== -1 && (nextNewline === -1 || nextBrace < nextNewline)) {
+            openTagCloseIndex = nextBrace;
+            attrContent = text.substring(index + tagPrefixLen, nextBrace + 1);
+            const afterBrace = nextBrace + 1;
+            bodyStartIndex = (afterBrace < len && text[afterBrace] === '\n') ? afterBrace + 1 : afterBrace;
+          } else if (nextNewline !== -1) {
+            openTagCloseIndex = nextNewline;
+            attrContent = text.substring(index + tagPrefixLen, nextNewline);
+            bodyStartIndex = nextNewline + 1;
+          } else {
+            openTagCloseIndex = -1;
+          }
+        } else {
+          openTagCloseIndex = text.indexOf('>', index + 9);
+          if (openTagCloseIndex !== -1) {
+            attrContent = text.substring(index + 9, openTagCloseIndex);
+            bodyStartIndex = openTagCloseIndex + 1;
+          }
+        }
 
         if (openTagCloseIndex === -1) {
           // Opening tag is incomplete (streaming in progress)
           if (isStreaming) {
-            const rawHeader = text.substring(index + 9);
+            const rawHeader = text.substring(index + tagPrefixLen);
             const attrs = parseTagAttributes(rawHeader);
             activeStreamingArtifact = {
               id: attrs.id || `art_streaming_${Date.now()}`,
@@ -216,12 +248,9 @@ export function parseArtifactsFromText(text: string, isStreaming = false): Extra
           break;
         }
 
-        // Opening tag is complete, extract attributes
-        const attrContent = text.substring(index + 9, openTagCloseIndex);
         const attrs = parseTagAttributes(attrContent);
-        const bodyStartIndex = openTagCloseIndex + 1;
 
-        // Scan for matching `</artifact>` with nested tag depth & inner code block awareness
+        // Scan for matching closing tag with nested tag depth & inner code block awareness
         let scanPos = bodyStartIndex;
         let nestingDepth = 0;
         let foundClosingTag = false;
@@ -256,28 +285,44 @@ export function parseArtifactsFromText(text: string, isStreaming = false): Extra
             }
           }
 
-          // If not inside inner code block, check for nested `<artifact` or closing `</artifact>`
+          // If not inside inner code block, check for closing tag
           if (!inInnerCodeBlock) {
-            if (text.startsWith('<artifact', scanPos)) {
-              const charAfterInner = text[scanPos + 9];
-              if (charAfterInner === undefined || /\s|>/.test(charAfterInner)) {
-                nestingDepth++;
-                scanPos += 9;
-                continue;
-              }
-            }
-
-            if (text.startsWith('</artifact>', scanPos)) {
-              if (nestingDepth > 0) {
-                nestingDepth--;
-                scanPos += 11;
-                continue;
-              } else {
-                // Found matching outer closing tag!
+            if (isDirectiveArtifact) {
+              if (text.startsWith('\n:::', scanPos) || (scanPos === bodyStartIndex && text.startsWith(':::', scanPos))) {
                 foundClosingTag = true;
                 bodyEndIndex = scanPos;
-                tagEndIndex = scanPos + 11;
+                const afterColonPos = text.startsWith('\n:::', scanPos) ? scanPos + 4 : scanPos + 3;
+                let endOfDirective = afterColonPos;
+                while (endOfDirective < len && text[endOfDirective] !== '\n') {
+                  endOfDirective++;
+                }
+                if (endOfDirective < len && text[endOfDirective] === '\n') {
+                  endOfDirective++;
+                }
+                tagEndIndex = endOfDirective;
                 break;
+              }
+            } else {
+              if (text.startsWith('<artifact', scanPos)) {
+                const charAfterInner = text[scanPos + 9];
+                if (charAfterInner === undefined || /\s|>/.test(charAfterInner)) {
+                  nestingDepth++;
+                  scanPos += 9;
+                  continue;
+                }
+              }
+
+              if (text.startsWith('</artifact>', scanPos)) {
+                if (nestingDepth > 0) {
+                  nestingDepth--;
+                  scanPos += 11;
+                  continue;
+                } else {
+                  foundClosingTag = true;
+                  bodyEndIndex = scanPos;
+                  tagEndIndex = scanPos + 11;
+                  break;
+                }
               }
             }
           }
