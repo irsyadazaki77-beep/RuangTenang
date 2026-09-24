@@ -28,8 +28,10 @@ const schemaPath = isPostgres
 
 console.log(`[PRISMA GENERATE] Selected schema: ${schemaPath} (Provider: ${rawProvider}, NODE_ENV: ${process.env.NODE_ENV || 'development'})`);
 
-const clientPath = path.resolve(process.cwd(), 'node_modules', '.prisma', 'client');
+const clientPath = path.resolve(process.cwd(), 'node_modules', '.prisma', 'client', 'index.js');
 const clientExists = fs.existsSync(clientPath);
+const dbPath = path.resolve(process.cwd(), 'prisma', 'ruangtenang_sqlite.db');
+const dbExists = fs.existsSync(dbPath);
 
 const prismaBin = path.resolve(process.cwd(), 'node_modules', '.bin', 'prisma');
 const prismaCmd = fs.existsSync(prismaBin) ? `"${prismaBin}"` : 'npx prisma';
@@ -46,16 +48,13 @@ try {
 }
 
 // Auto-initialize SQLite database and synchronize schema if absent
-if (!isPostgres) {
-  const dbPath = path.resolve(process.cwd(), 'prisma', 'ruangtenang_sqlite.db');
-  if (!fs.existsSync(dbPath)) {
-    console.log('[PRISMA INIT] SQLite database not detected. Auto-creating database and synchronizing schema...');
-    try {
-      execSync(`${prismaCmd} db push --schema prisma/schema.sqlite.prisma --skip-generate`, { stdio: 'inherit' });
-      console.log('[PRISMA INIT] SQLite database schema synchronized successfully.');
-    } catch (pushErr) {
-      console.error('[PRISMA INIT] Warning: Failed to auto-initialize SQLite schema:', pushErr);
-    }
+if (!isPostgres && !dbExists) {
+  console.log('[PRISMA INIT] SQLite database not detected. Auto-creating database and synchronizing schema...');
+  try {
+    execSync(`${prismaCmd} db push --schema prisma/schema.sqlite.prisma --skip-generate`, { stdio: 'inherit' });
+    console.log('[PRISMA INIT] SQLite database schema synchronized successfully.');
+  } catch (pushErr) {
+    console.error('[PRISMA INIT] Warning: Failed to auto-initialize SQLite schema:', pushErr);
   }
 }
 
