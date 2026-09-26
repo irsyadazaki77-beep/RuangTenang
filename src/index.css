@@ -43,6 +43,11 @@
     overscroll-behavior-y: none;
   }
 
+  /* Optical compensation for dark surfaces */
+  .dark body {
+    letter-spacing: 0.01em;
+  }
+
   /* Global focus visible accessibility defaults */
   button:focus-visible,
   a:focus-visible,
@@ -52,6 +57,25 @@
     outline: 2px solid #0d9488;
     outline-offset: 2px;
   }
+}
+
+/* Typography Hierarchy Scale (Anti-Slop Restraint) */
+.headline-display {
+  @apply text-2xl sm:text-3xl font-semibold tracking-tight text-slate-900 dark:text-slate-100;
+  text-wrap: balance;
+}
+
+.headline-page {
+  @apply text-lg sm:text-xl font-semibold tracking-tight text-slate-900 dark:text-slate-100;
+  text-wrap: balance;
+}
+
+.headline-section {
+  @apply text-sm sm:text-base font-semibold text-slate-900 dark:text-slate-100;
+}
+
+.text-meta-inline {
+  @apply text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1.5;
 }
 
 /* Tactile Micro-Interactions (GPU-accelerated scale with cubic-bezier) */
@@ -107,9 +131,19 @@
   }
 }
 
+/* Minimalist, subtle scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.22) transparent;
+}
+
+.dark * {
+  scrollbar-color: rgba(100, 116, 139, 0.2) transparent;
+}
+
 ::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
+  width: 4px;
+  height: 4px;
 }
 
 ::-webkit-scrollbar-track {
@@ -117,16 +151,17 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.4);
+  background: rgba(148, 163, 184, 0.22);
   border-radius: 9999px;
+  transition: background-color 0.2s ease;
 }
 
 .dark ::-webkit-scrollbar-thumb {
-  background: rgba(71, 85, 105, 0.5);
+  background: rgba(100, 116, 139, 0.2);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(13, 148, 136, 0.5);
+  background: rgba(13, 148, 136, 0.4);
 }
 
 /* Breathing animation for crisis/calm exercise */
@@ -214,10 +249,10 @@
     @apply bg-stone-50/80 dark:bg-slate-950/60 backdrop-blur-3xl;
   }
   .surface-card {
-    @apply bg-white/95 dark:bg-slate-900/90 border border-stone-200/70 dark:border-slate-800/80 rounded-xl sm:rounded-2xl shadow-[0_2px_10px_-2px_rgba(0,0,0,0.03)] dark:shadow-[0_2px_14px_-2px_rgba(0,0,0,0.25)];
+    @apply bg-white/95 dark:bg-slate-900/90 border border-stone-200/70 dark:border-slate-800/80 rounded-xl sm:rounded-2xl shadow-3xs hover:shadow-2xs transition-shadow;
   }
   .surface-elevated {
-    @apply bg-white dark:bg-slate-900 border border-stone-200/70 dark:border-slate-800/80 rounded-2xl shadow-[0_6px_22px_-4px_rgba(0,0,0,0.04)] dark:shadow-[0_6px_26px_-4px_rgba(0,0,0,0.35)];
+    @apply bg-white dark:bg-slate-900 border border-stone-200/80 dark:border-slate-800 rounded-2xl shadow-xs;
   }
   .surface-muted {
     @apply bg-stone-100/70 dark:bg-slate-800/50 border border-stone-200/60 dark:border-slate-800/60 rounded-lg;

@@ -408,6 +408,17 @@ export const aiSafetyService = {
    * Canonical Unified AI Safety Pipeline
    */
   async runUnifiedPipeline(input: UnifiedPipelineInput): Promise<UnifiedPipelineOutput> {
+    if (input.abortSignal?.aborted) {
+      return {
+        text: 'Permintaan dibatalkan.',
+        modelUsed: 'aborted-signal',
+        isFallback: true,
+        isCrisisOverride: false,
+        isPromptInjectionOverride: false,
+        isConsentFallback: false
+      };
+    }
+
     const userId = input.userId;
     const rawInput = input.input || input.pluginResult || '';
 

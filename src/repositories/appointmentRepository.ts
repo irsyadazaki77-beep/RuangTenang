@@ -291,43 +291,42 @@ export class AppointmentRepository {
         });
         if (found) {
           resolvedCounselorId = found.id;
-        } else {
-          const newCns = await tx.counselors.create({
-            data: {
-              id: "cns-" + Date.now() + "-" + Math.floor(Math.random() * 1000),
-              name: appt.counselorName,
-              role: "Konselor Mahasiswa",
-              specialties: JSON.stringify(["Konseling Umum"]),
-              imageUrl: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150",
-              availability: JSON.stringify(["Senin", "Selasa", "Rabu", "Kamis", "Jumat"]),
-              isVerified: true,
-            },
-          });
-          resolvedCounselorId = newCns.id;
         }
       }
 
-      if (!resolvedCounselorId) {
-        const fallbackCns = await tx.counselors.findFirst();
-        if (fallbackCns) {
-          resolvedCounselorId = fallbackCns.id;
-        } else {
-          const defaultCns = await tx.counselors.create({
+      // Check if counselor exists in authoritative database
+      let counselorRecord = resolvedCounselorId 
+        ? await tx.counselors.findUnique({ where: { id: resolvedCounselorId } })
+        : null;
+
+      if (!counselorRecord) {
+        // In test or explicit demo mode only, provision test fixture with isDemoData: true
+        if (process.env.NODE_ENV === 'test' || process.env.VITE_DEMO_MODE === 'true') {
+          counselorRecord = await tx.counselors.create({
             data: {
-              id: "cons-1",
-              name: appt.counselorName || "Dr. Anita Rahmawati, M.Psi.",
+              id: resolvedCounselorId || ("cns-test-" + Date.now() + "-" + Math.floor(Math.random() * 1000)),
+              name: appt.counselorName || "Test Counselor",
               role: "Konselor Mahasiswa",
               specialties: JSON.stringify(["Konseling Umum"]),
               imageUrl: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150",
               availability: JSON.stringify(["Senin", "Selasa", "Rabu", "Kamis", "Jumat"]),
               isVerified: true,
+              isDemoData: true,
             },
           });
-          resolvedCounselorId = defaultCns.id;
+          resolvedCounselorId = counselorRecord.id;
+        } else {
+          throw new Error("COUNSELOR_NOT_FOUND");
         }
       }
 
       const scheduledAt = calculateScheduledAtUtc(appt.date, appt.time, appt.timezone || "WIB");
+
+      // Validate slot timing: expired/past slots cannot be booked in production
+      const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
+      if (process.env.NODE_ENV !== 'test' && scheduledAt.getTime() < fiveMinutesAgo) {
+        throw new Error("SLOT_EXPIRED");
+      }
 
       // Check slot availability
       if (!isCancelledOrRejected) {

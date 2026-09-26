@@ -100,6 +100,8 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ userId, onComple
   const [step, setStep] = useState(1);
   const [selectedMood, setSelectedMood] = useState<string>('anxious');
   const [selectedNeeds, setSelectedNeeds] = useState<string[]>(['listen']);
+  const [consentForAI, setConsentForAI] = useState<boolean>(true);
+  const [consentForAIMemory, setConsentForAIMemory] = useState<boolean>(true);
 
   const handleToggleNeed = (id: string) => {
     if (selectedNeeds.includes(id)) {
@@ -138,11 +140,16 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ userId, onComple
           goals: selectedNeeds 
         });
         await apiClient.post('/api/v1/privacy/consent', {
-          consentForAI: true,
-          consentForAIMood: true,
-          consentForAIScreening: true,
-          consentForAIMemory: true,
-          consentForAIJournal: true,
+          consentForAI,
+          consentForAIMood: consentForAI,
+          consentForAIScreening: consentForAI,
+          consentForAIMemory: consentForAI && consentForAIMemory,
+          consentForAIJournal: consentForAI,
+          consentForEmergencySOS: false,
+          consentForCounselorSharing: false,
+          consentForCounselorSummary: false,
+          consentForTelemetry: false,
+          consentForAnalytics: false
         }).catch(() => {});
       } catch (err) {
         console.warn('Failed to sync onboarding to server:', err);
@@ -227,11 +234,43 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ userId, onComple
                   </p>
                 </div>
 
-                <div className="p-3 rounded-xl bg-teal-50/60 dark:bg-teal-950/30 border border-teal-100/80 dark:border-teal-900/40 flex items-start gap-2.5">
-                  <ShieldCheck className="w-4 h-4 text-teal-600 dark:text-teal-400 shrink-0 mt-0.5" />
-                  <p className="text-xs text-stone-600 dark:text-stone-300 leading-normal">
-                    <strong>100% Privat & Terlindungi:</strong> Setiap refleksi, perasaan, dan ceritamu tersimpan secara rahasia dan aman.
-                  </p>
+                <div className="p-3 rounded-xl bg-teal-50/60 dark:bg-teal-950/30 border border-teal-100/80 dark:border-teal-900/40 space-y-2">
+                  <div className="flex items-start gap-2.5">
+                    <ShieldCheck className="w-4 h-4 text-teal-600 dark:text-teal-400 shrink-0 mt-0.5" />
+                    <p className="text-xs text-stone-600 dark:text-stone-300 leading-normal">
+                      <strong>Privat & Terlindungi:</strong> Setiap refleksi dan ceritamu diproses aman sesuai prinsip UU PDP (Kerahasiaan Data Pribadi).
+                    </p>
+                  </div>
+
+                  <div className="pt-1.5 border-t border-teal-100 dark:border-teal-900/50 space-y-2">
+                    <label className="flex items-start gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={consentForAI}
+                        onChange={(e) => setConsentForAI(e.target.checked)}
+                        className="mt-0.5 w-3.5 h-3.5 rounded text-teal-600 focus:ring-teal-500 border-stone-300 dark:border-slate-700"
+                      />
+                      <div className="text-[11.5px] leading-tight">
+                        <span className="font-semibold text-stone-800 dark:text-stone-200">Izin Pendampingan Teman Bicara AI</span>
+                        <p className="text-stone-500 dark:text-stone-400 text-[10.5px]">Pemrosesan refleksi via proxy Google Gemini (Data efemeral & tidak digunakan melatih model).</p>
+                      </div>
+                    </label>
+
+                    {consentForAI && (
+                      <label className="flex items-start gap-2 pl-4 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={consentForAIMemory}
+                          onChange={(e) => setConsentForAIMemory(e.target.checked)}
+                          className="mt-0.5 w-3.5 h-3.5 rounded text-teal-600 focus:ring-teal-500 border-stone-300 dark:border-slate-700"
+                        />
+                        <div className="text-[11px] leading-tight">
+                          <span className="font-semibold text-stone-800 dark:text-stone-200">Izin Memori Refleksi Jangka Panjang</span>
+                          <p className="text-stone-500 dark:text-stone-400 text-[10px]">Mengingat poin penting agar tidak perlu mengulang cerita (Dapat dihapus kapan saja).</p>
+                        </div>
+                      </label>
+                    )}
+                  </div>
                 </div>
               </motion.div>
             )}

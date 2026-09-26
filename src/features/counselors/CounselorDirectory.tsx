@@ -78,7 +78,7 @@ export const CounselorDirectory: React.FC<CounselorDirectoryProps> = ({
       {/* Header Section */}
       <div className="surface-card rounded-xl p-3.5 sm:p-4 space-y-1.5 border border-default shadow-3xs">
         <div className="flex items-center gap-2">
-          <span className="text-[11px] font-semibold text-teal-700 dark:text-teal-400 bg-teal-50 dark:bg-teal-950/50 px-2.5 py-0.5 rounded-full border border-teal-200 dark:border-teal-900">
+          <span className="text-xs font-semibold text-teal-600 dark:text-teal-400 uppercase tracking-wider">
             Direktori Konselor & Psikolog
           </span>
         </div>
@@ -321,20 +321,20 @@ export const CounselorDirectory: React.FC<CounselorDirectoryProps> = ({
                 <span className="text-[9.5px] text-muted uppercase tracking-wider block font-bold">Pengalaman</span>
                 <span className="text-xs sm:text-sm font-bold text-secondary flex items-center justify-center gap-1 mt-0.5">
                   <Briefcase className="w-3 h-3 text-teal-500" />
-                  {selectedCounselorModal.experienceYears} Tahun
+                  {selectedCounselorModal.experienceYears ? `${selectedCounselorModal.experienceYears} Tahun` : 'Tersertifikasi'}
                 </span>
               </div>
               <div>
                 <span className="text-[9.5px] text-muted uppercase tracking-wider block font-bold">Rating</span>
                 <span className="text-xs sm:text-sm font-bold text-secondary flex items-center justify-center gap-1 mt-0.5">
                   <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
-                  {selectedCounselorModal.rating.toFixed(1)}
+                  {selectedCounselorModal.rating && selectedCounselorModal.rating > 0 ? selectedCounselorModal.rating.toFixed(1) : '-'}
                 </span>
               </div>
               <div>
                 <span className="text-[9.5px] text-muted uppercase tracking-wider block font-bold">No. Lisensi</span>
-                <span className="text-[11px] font-semibold text-secondary block mt-0.5 truncate" title={selectedCounselorModal.licenseNumber || "N/A"}>
-                  {selectedCounselorModal.licenseNumber || "N/A"}
+                <span className="text-[11px] font-semibold text-secondary block mt-0.5 truncate" title={selectedCounselorModal.licenseNumber || "Belum Tersedia"}>
+                  {selectedCounselorModal.licenseNumber || "-"}
                 </span>
               </div>
             </div>
@@ -362,7 +362,7 @@ export const CounselorDirectory: React.FC<CounselorDirectoryProps> = ({
                 Biografi & Pendekatan
               </h4>
               <p className="text-xs text-secondary leading-relaxed surface-card/40 border border-slate-100 dark:border-slate-800 p-2.5 rounded-xl max-h-28 overflow-y-auto">
-                {selectedCounselorModal.bio || "Konselor berpengalaman yang siap mendampingi mahasiswa mengatasi tantangan akademik maupun personal dengan pendekatan yang ramah, hangat, dan solutif."}
+                {selectedCounselorModal.bio || "Informasi biografi belum dilengkapi oleh konselor."}
               </p>
             </div>
 
@@ -372,14 +372,14 @@ export const CounselorDirectory: React.FC<CounselorDirectoryProps> = ({
                 <span className="text-[9.5px] text-muted uppercase tracking-wider block font-bold">Bahasa</span>
                 <span className="text-xs font-medium text-secondary flex items-center gap-1">
                   <Languages className="w-3 h-3 text-slate-400" />
-                  {selectedCounselorModal.languages?.join(", ") || "Bahasa Indonesia"}
+                  {selectedCounselorModal.languages && selectedCounselorModal.languages.length > 0 ? selectedCounselorModal.languages.join(", ") : "Indonesia"}
                 </span>
               </div>
               <div className="space-y-0.5">
                 <span className="text-[9.5px] text-muted uppercase tracking-wider block font-bold">Lokasi Praktik</span>
                 <span className="text-xs font-medium text-secondary flex items-center gap-1">
                   <MapPin className="w-3 h-3 text-slate-400" />
-                  <span className="truncate">{selectedCounselorModal.location || "Kampus Utama"}</span>
+                  <span className="truncate">{selectedCounselorModal.location || "Layanan Konseling Digital"}</span>
                 </span>
               </div>
             </div>
@@ -388,7 +388,11 @@ export const CounselorDirectory: React.FC<CounselorDirectoryProps> = ({
             <div className="flex items-center justify-between pt-3 border-t border-default">
               <div>
                 <p className="text-[9.5px] text-slate-400 uppercase tracking-wider font-bold">Layanan Konseling</p>
-                <p className="text-xs font-bold text-teal-600 dark:text-teal-400">Gratis untuk Mahasiswa</p>
+                <p className="text-xs font-bold text-teal-600 dark:text-teal-400">
+                  {selectedCounselorModal.isFreeForStudents || selectedCounselorModal.price === 0
+                    ? 'Gratis untuk Mahasiswa'
+                    : `Rp ${selectedCounselorModal.price?.toLocaleString('id-ID')}`}
+                </p>
               </div>
 
               <button

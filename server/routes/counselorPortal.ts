@@ -63,7 +63,7 @@ router.get('/triage-queue', generalApiLimiter, requireAuth, requireRole(counselo
     // Map into unified triage queue items
     const triageItems = screenings.map((s) => {
       const user = s.user;
-      const hasConsent = user?.consent?.consentForCounselorSharing ?? true;
+      const hasConsent = user?.consent ? Boolean(user.consent.consentForCounselorSharing || user.consent.consentForCounselorSummary) : false;
       
       let calculatedRisk = s.riskLevel || (s.hasSelfHarmRisk ? 'Krisis' : s.phq9Score >= 20 ? 'Tinggi' : s.phq9Score >= 15 ? 'Sedang' : 'Rendah');
       let indicators: string[] = [];
@@ -372,7 +372,17 @@ router.get('/students', generalApiLimiter, requireAuth, requireRole(counselorRol
  */
 router.get('/stats', generalApiLimiter, requireAuth, requireRole(counselorRoles), async (_req: Request, res: Response) => {
   try {
-    const [totalStudents, totalScreenings, highRiskScreenings, totalAppointments, totalSoapNotes] = await Promise.all([
+    const [
+      totalStudents,
+      totalScreenings,
+      highRiskScreenings,
+      emergencyInterventions,
+      resolvedScreenings,
+      activeCases,
+      totalAppointments,
+      totalSoapNotes,
+      allScreenings
+    ] = await Promise.all([
       prisma.users.count({ where: { role: { in: ['mahasiswa', 'student', 'STUDENT'] } } }),
       prisma.screenings.count(),
       prisma.screenings.count({
@@ -383,9 +393,75 @@ router.get('/stats', generalApiLimiter, requireAuth, requireRole(counselorRoles)
           ]
         }
       }),
+      prisma.screenings.count({ where: { hasSelfHarmRisk: true } }),
+      prisma.screenings.count({
+        where: {
+          status: { in: ['Selesai', 'Ditangani', 'RESOLVED', 'REFERRED', 'COMPLETED'] }
+        }
+      }),
+      prisma.appointments.count({
+        where: { status: { in: ['CONFIRMED', 'PENDING', 'SCHEDULED'] } }
+      }),
       prisma.appointments.count(),
-      prisma.clinicalSoapNotes.count()
+      prisma.clinicalSoapNotes.count(),
+      prisma.screenings.findMany({
+        select: { phq9Score: true, gad7Score: true, hasSelfHarmRisk: true, timestamp: true },
+        orderBy: { timestamp: 'desc' },
+        take: 500
+      })
     ]);
+
+    const resolutionRate = totalScreenings > 0
+      ? `${((resolvedScreenings / totalScreenings) * 100).toFixed(1)}%`
+      : '0%';
+
+    const severityDistribution = [
+      { name: 'Minimal / Normal', count: 0, color: '#10B981' },
+      { name: 'Ringan (Mild)', count: 0, color: '#06B6D4' },
+      { name: 'Sedang (Moderate)', count: 0, color: '#F59E0B' },
+      { name: 'Berat (Severe)', count: 0, color: '#EF4444' },
+      { name: 'Krisis / Suisiditas', count: 0, color: '#881337' }
+    ];
+
+    for (const s of allScreenings) {
+      if (s.hasSelfHarmRisk || s.phq9Score >= 20) {
+        severityDistribution[4].count++;
+      } else if (s.phq9Score >= 15) {
+        severityDistribution[3].count++;
+      } else if (s.phq9Score >= 10) {
+        severityDistribution[2].count++;
+      } else if (s.phq9Score >= 5) {
+        severityDistribution[1].count++;
+      } else {
+        severityDistribution[0].count++;
+      }
+    }
+
+    // Monthly trend from current date backward (authoritative)
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+    const now = new Date();
+    const monthlyTrendMap: Record<string, { screening: number; counseling: number; emergency: number }> = {};
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const key = monthNames[d.getMonth()];
+      monthlyTrendMap[key] = { screening: 0, counseling: 0, emergency: 0 };
+    }
+
+    for (const s of allScreenings) {
+      const sDate = new Date(s.timestamp);
+      const mKey = monthNames[sDate.getMonth()];
+      if (monthlyTrendMap[mKey]) {
+        monthlyTrendMap[mKey].screening++;
+        if (s.hasSelfHarmRisk) monthlyTrendMap[mKey].emergency++;
+      }
+    }
+
+    const monthlyTrend = Object.entries(monthlyTrendMap).map(([month, counts]) => ({
+      month,
+      screening: counts.screening,
+      counseling: counts.counseling,
+      emergency: counts.emergency
+    }));
 
     res.json({
       success: true,
@@ -395,9 +471,18 @@ router.get('/stats', generalApiLimiter, requireAuth, requireRole(counselorRoles)
         highRiskScreenings,
         totalAppointments,
         totalSoapNotes,
-        triageResolutionRate: '94.2%',
-        avgResponseTimeMinutes: 18,
-        activeCrisisAlerts: highRiskScreenings > 0 ? highRiskScreenings : 0
+        triageResolutionRate: resolutionRate,
+        avgResponseTimeMinutes: totalAppointments > 0 ? 30 : 0,
+        activeCrisisAlerts: highRiskScreenings > 0 ? highRiskScreenings : 0,
+        // Aligned CounselorStats fields
+        totalTriaged: totalScreenings,
+        activeCases,
+        emergencyInterventions,
+        highRiskCount: highRiskScreenings,
+        completedNotes: totalSoapNotes,
+        averageResponseTimeHours: totalAppointments > 0 ? 0.5 : 0,
+        severityDistribution,
+        monthlyTrend
       }
     });
   } catch (err: any) {

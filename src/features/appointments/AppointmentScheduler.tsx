@@ -209,19 +209,19 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
       .then(res => {
         if (!res.success) throw new Error(res.error || 'Gagal memuat jadwal dari server.');
         const data = res.data;
-        if (Array.isArray(data) && data.length > 0 && counselors.length > 0) {
+        if (Array.isArray(data) && data.length > 0) {
           const formatted: Appointment[] = data.map((item: any) => {
-            const counselor = counselors.find(c => c.id === item.counselorId) || counselors[0];
+            const counselor = counselors.find(c => c.id === item.counselorId);
             return {
               id: item.id,
-              counselorId: counselor.id,
-              counselorName: counselor.name,
-              counselorTitle: counselor.title,
-              counselorAvatar: counselor.avatar,
+              counselorId: item.counselorId,
+              counselorName: item.counselorName || counselor?.name || 'Konselor Kampus',
+              counselorTitle: counselor?.title || item.counselorTitle || 'Konselor',
+              counselorAvatar: counselor?.avatar || 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150',
               studentName: item.studentName || 'Mahasiswa',
               studentNIM: item.studentNIM || '',
-              studentEmail: item.studentEmail || 'mahasiswa@kampus.ac.id',
-              studentPhone: '0812xxxxxx',
+              studentEmail: item.studentEmail || '',
+              studentPhone: item.studentPhone || '',
               date: item.date,
               timeSlot: `${item.time} ${item.timezone || 'WIB'}`,
               timezone: item.timezone || 'WIB',
@@ -230,7 +230,7 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
               status: item.status,
               approvalStatus: item.approvalStatus || 'PENDING_APPROVAL',
               attendanceStatus: item.attendanceStatus || 'SCHEDULED',
-              meetingLink: item.meetingLink || `https://meet.jit.si/ruangtenang-session-${item.id}`,
+              meetingLink: item.meetingLink || undefined,
               reminderEnabled: true,
               reminderMinutesBefore: 30,
               createdAt: item.createdAt
@@ -255,13 +255,13 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
       setNotificationPermission(Notification.permission);
     }
 
-    if (!counselorsLoading && counselors.length > 0) {
+    if (!counselorsLoading) {
       fetchAppointments();
-    } else if (!counselorsLoading && counselorsError) {
+    } else if (counselorsError) {
       setErrorAppointments(counselorsError);
       setLoadingAppointments(false);
     }
-  }, [counselors, counselorsLoading, counselorsError]);
+  }, [counselorsLoading, counselorsError]);
 
   useEffect(() => {
     if (selectedCounselorFromDir) {
@@ -387,13 +387,15 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
         return;
       }
 
+      const rec = (res.data as any)?.record || (res as any)?.record;
       setAppointments(prev => prev.map(a => {
         if (a.id === appointmentId) {
           return {
             ...a,
-            status: 'COMPLETED' as const,
-            attendanceStatus: 'ATTENDED' as const,
-            notes: summaryNotes
+            status: (rec?.status || a.status) as any,
+            approvalStatus: (rec?.approvalStatus || a.approvalStatus) as any,
+            attendanceStatus: (rec?.attendanceStatus || a.attendanceStatus) as any,
+            notes: rec?.notes || summaryNotes
           };
         }
         return a;
@@ -650,13 +652,15 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
                       </button>
                     ) : (
                       <>
-                        <button
-                          onClick={() => setActiveChatApt(apt)}
-                          className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-all shadow-sm cursor-pointer"
-                        >
-                          <MessageSquare className="w-4 h-4" />
-                          <span>Mulai Sesi Chat Teks (Simulasi)</span>
-                        </button>
+                        {import.meta.env.VITE_DEMO_MODE === 'true' && (
+                          <button
+                            onClick={() => setActiveChatApt(apt)}
+                            className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-all shadow-sm cursor-pointer"
+                          >
+                            <MessageSquare className="w-4 h-4" />
+                            <span>Mulai Sesi Chat Teks (Simulasi Demo)</span>
+                          </button>
+                        )}
                         
                         {apt.mode === 'video_call' && (
                           <button

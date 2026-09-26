@@ -379,7 +379,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                   Pilih model kecerdasan buatan yang sesuai dengan kebutuhan refleksi dan kecepatan respon Anda.
                 </p>
               </div>
-              <span className="text-[11px] font-semibold text-teal-700 bg-teal-50 px-2.5 py-1 rounded-full border border-teal-200 self-start sm:self-auto">
+              <span className="text-xs font-medium text-teal-700 dark:text-teal-400 bg-teal-50/70 dark:bg-teal-950/50 px-2.5 py-1 rounded-md border border-teal-200/80 dark:border-teal-800 self-start sm:self-auto">
                 Default Aktif: {AVAILABLE_AI_MODELS.find(m => m.id === aiModel)?.name || 'Gemini 3.1 Flash Lite'}
               </span>
             </div>
@@ -414,11 +414,11 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                             )}
                           </div>
                           {isSelected ? (
-                            <span className="flex items-center gap-1 text-[11px] font-bold text-teal-700 bg-teal-100 px-2 py-0.5 rounded-full">
+                            <span className="flex items-center gap-1 text-xs font-semibold text-teal-700 dark:text-teal-400 bg-teal-50 dark:bg-teal-950/60 px-2 py-0.5 rounded-md">
                               <CheckCircle2 className="w-3.5 h-3.5 text-teal-600" /> Dipilih
                             </span>
                           ) : (
-                            <span className="text-[10px] text-muted bg-slate-100 px-1.5 py-0.5 rounded font-medium">
+                            <span className="text-[10px] text-muted bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded font-medium">
                               {model.tag}
                             </span>
                           )}
@@ -592,6 +592,27 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                   </span>
                 </button>
               )}
+
+              {/* 3 Pillars Overview in Settings */}
+              <div className="pt-3 border-t border-default space-y-2">
+                <span className="text-xs font-bold text-secondary uppercase tracking-wide">
+                  3 Pilar Arsitektur Keamanan RuangTenang
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
+                  <div className="p-3 surface-muted border border-default rounded-xl space-y-1">
+                    <span className="font-bold text-amber-700 dark:text-amber-400 block">1. Temporary / Incognito</span>
+                    <p className="text-secondary text-[11px] leading-tight">Obrolan efemeral transient di RAM. Tidak disimpan ke database atau cache.</p>
+                  </div>
+                  <div className="p-3 surface-muted border border-default rounded-xl space-y-1">
+                    <span className="font-bold text-teal-700 dark:text-teal-400 block">2. Private Vault</span>
+                    <p className="text-secondary text-[11px] leading-tight">PIN 4-6 digit WebCrypto + Server AES-256-GCM. Mengunci jurnal & skrining.</p>
+                  </div>
+                  <div className="p-3 surface-muted border border-default rounded-xl space-y-1">
+                    <span className="font-bold text-blue-700 dark:text-blue-400 block">3. Instant Conceal</span>
+                    <p className="text-secondary text-[11px] leading-tight">Penyamaran layar instan via Alt+X, Ctrl+Shift+L, atau Dobel Esc.</p>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -1014,10 +1035,10 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                     <h3 className="text-lg font-bold text-primary dark:text-white">
                       RuangTenang Web App
                     </h3>
-                    <span className="font-mono px-2.5 py-0.5 text-xs font-extrabold bg-teal-100 dark:bg-teal-900/80 text-teal-800 dark:text-teal-200 rounded-full border border-teal-300 dark:border-teal-700">
+                    <span className="font-mono px-2 py-0.5 text-xs font-bold bg-teal-100 dark:bg-teal-950/80 text-teal-800 dark:text-teal-200 rounded-md border border-teal-200 dark:border-teal-800">
                       {CURRENT_APP_VERSION}
                     </span>
-                    <span className="px-2 py-0.5 text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 rounded-full border border-emerald-200 dark:border-emerald-800">
+                    <span className="px-2 py-0.5 text-[11px] font-medium bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 rounded-md border border-emerald-200 dark:border-emerald-800">
                       Stabil & Terkini
                     </span>
                   </div>
@@ -1084,7 +1105,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                         {rel.version}
                       </span>
                       {rel.badge && (
-                        <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full border ${
+                        <span className={`px-2 py-0.5 text-[10px] font-semibold rounded-md border ${
                           rel.isLatest
                             ? 'bg-teal-500 text-white border-teal-600'
                             : 'bg-slate-100 dark:bg-slate-800 text-secondary dark:text-slate-300 border-default dark:border-slate-700'
@@ -1092,7 +1113,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                           {rel.badge}
                         </span>
                       )}
-                      <span className="px-2 py-0.5 text-[10px] font-medium bg-stone-100 dark:bg-slate-800 text-secondary dark:text-slate-300 rounded-full">
+                      <span className="px-2 py-0.5 text-[10px] font-medium bg-stone-100 dark:bg-slate-800 text-secondary dark:text-slate-300 rounded-md">
                         {rel.periodLabel}
                       </span>
                       <span className="text-xs text-muted flex items-center gap-1">

@@ -233,31 +233,36 @@ router.get(['/', '/counselors', '/api/counselors', '/api/v1/counselors'], async 
       if (c.languages) {
         try { languages = JSON.parse(c.languages); } catch (e) {}
       }
+
+      // Authoritative day calculation: check whether today is in counselor's schedule
+      const daysMap = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+      const todayName = daysMap[new Date().getDay()];
+      const isAvailableToday = Array.isArray(availability) && availability.includes(todayName);
       
       return {
         id: c.id,
         name: c.name,
         title: c.role,
-        university: c.university || 'Perguruan Tinggi Indonesia',
+        university: c.university || '',
         specialties,
         avatar: c.imageUrl,
-        rating: c.rating || 5.0,
-        reviewsCount: c.sessionCount || 0,
-        experienceYears: c.experienceYears ?? 5,
-        isFreeForStudents: c.isFreeForStudents ?? true,
+        rating: typeof c.rating === 'number' ? c.rating : null,
+        reviewsCount: c.sessionCount ?? 0,
+        experienceYears: typeof c.experienceYears === 'number' ? c.experienceYears : null,
+        isFreeForStudents: c.isFreeForStudents ?? (c.price === 0),
         price: c.price ?? 0,
         consultationType,
         contactPhone: c.contactPhone || '',
         contactWhatsapp: c.contactWhatsapp || '',
         availableDays: availability,
-        nextAvailableSlot: 'Sesuai Jadwal Konselor',
-        availableToday: true,
+        nextAvailableSlot: Array.isArray(availability) && availability.length > 0 ? `Tersedia: ${availability.join(', ')}` : 'Sesuai Jadwal',
+        availableToday: isAvailableToday,
         languages,
-        bio: c.bio || 'Konselor profesional kampus terdaftar.',
+        bio: c.bio || '',
         isDemoData: Boolean(c.isDemoData),
         isVerified: Boolean(c.isVerified && c.licenseNumber), // Explicit verification requires server record & licenseNumber
-        licenseNumber: c.licenseNumber || null, // NEVER fallback to 'SIPP/HIMPSI Terverifikasi' when empty!
-        location: c.location || 'Pusat Layanan Konseling Kampus'
+        licenseNumber: (c.isVerified && c.licenseNumber) ? c.licenseNumber : null,
+        location: c.location || ''
       };
     });
 
@@ -343,21 +348,23 @@ router.get(
         'Karir & Masa Depan': 0,
       };
 
-      for (const apt of appointments) {
-        const note = (apt.notes || '').toLowerCase();
-        if (note.includes('akademik') || note.includes('skripsi')) concernCounts['Kendala Akademik & Skripsi']++;
-        else if (note.includes('cemas') || note.includes('anxiety') || note.includes('burnout')) concernCounts['Kecemasan & Burnout']++;
-        else if (note.includes('hubungan') || note.includes('teman') || note.includes('keluarga')) concernCounts['Hubungan & Sosial Kampus']++;
-        else if (note.includes('depresi') || note.includes('sedih') || note.includes('mood')) concernCounts['Suasana Hati & Depresi']++;
-        else if (note.includes('karir') || note.includes('masa depan')) concernCounts['Karir & Masa Depan']++;
-        else concernCounts['Kendala Akademik & Skripsi']++;
+      if (appointments.length > 0) {
+        for (const apt of appointments) {
+          const note = (apt.notes || '').toLowerCase();
+          if (note.includes('akademik') || note.includes('skripsi')) concernCounts['Kendala Akademik & Skripsi']++;
+          else if (note.includes('cemas') || note.includes('anxiety') || note.includes('burnout')) concernCounts['Kecemasan & Burnout']++;
+          else if (note.includes('hubungan') || note.includes('teman') || note.includes('keluarga')) concernCounts['Hubungan & Sosial Kampus']++;
+          else if (note.includes('depresi') || note.includes('sedih') || note.includes('mood')) concernCounts['Suasana Hati & Depresi']++;
+          else if (note.includes('karir') || note.includes('masa depan')) concernCounts['Karir & Masa Depan']++;
+          else if (note.trim().length > 0) concernCounts['Kendala Akademik & Skripsi']++;
+        }
       }
 
-      const totalConcerns = Object.values(concernCounts).reduce((a, b) => a + b, 0) || 1;
+      const totalConcerns = Object.values(concernCounts).reduce((a, b) => a + b, 0);
       const stressorsBreakdown = Object.entries(concernCounts).map(([category, count]) => ({
         category,
         count,
-        percentage: Math.round((count / totalConcerns) * 100)
+        percentage: totalConcerns > 0 ? Math.round((count / totalConcerns) * 100) : 0
       }));
 
       // Real Monthly Trend

@@ -62,34 +62,9 @@ export const CalendarReminderModal: React.FC<CalendarReminderModalProps> = ({
     }
   }, [appointment]);
 
-  if (!isOpen) return null;
+  if (!isOpen || !appointment) return null;
 
-  // Fallback default sample appointment if none supplied
-  const defaultApt: Appointment = {
-    id: 'demo-apt-1',
-    counselorId: 'cons-1',
-    counselorName: 'Dr. Anita Rahmawati, M.Psi.',
-    counselorTitle: 'Spesialis Kecemasan & Akut',
-    counselorAvatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=200',
-    studentName: 'Mahasiswa Kampus',
-    studentNIM: '2106xxxxxx',
-    studentEmail: 'mahasiswa@kampus.ac.id',
-    studentPhone: '081234567890',
-    date: new Date().toISOString().split('T')[0],
-    timeSlot: '10:30 WIB',
-    timezone: 'WIB',
-    mode: 'video_call',
-    primaryConcern: 'Manajemen Stres Akademik & Kecemasan',
-    status: 'CONFIRMED',
-    approvalStatus: 'APPROVED',
-    attendanceStatus: 'SCHEDULED',
-    meetingLink: 'https://meet.jit.si/ruangtenang-session-demo',
-    reminderEnabled: true,
-    reminderMinutesBefore: 10,
-    createdAt: new Date().toISOString()
-  };
-
-  const currentApt = appointment || defaultApt;
+  const currentApt = appointment;
   const timeData = parseAppointmentDateTime(
     currentApt.date,
     currentApt.timeSlot,

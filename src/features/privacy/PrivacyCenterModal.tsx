@@ -12,7 +12,10 @@ import {
   CheckCircle2,
   AlertTriangle,
   ChevronLeft, 
-  ChevronRight
+  ChevronRight,
+  Lock,
+  Ghost,
+  Shield
 } from 'lucide-react';
 import { UserSession } from '../../types';
 import { apiClient } from '../../lib/apiClient';
@@ -262,7 +265,12 @@ export const PrivacyCenterModal: React.FC<PrivacyCenterModalProps> = ({
   // Download Data Export
   const handleDownloadData = async () => {
     try {
-      window.open('/api/v1/privacy/download-data', '_blank');
+      const link = document.createElement('a');
+      link.href = '/api/v1/privacy/download-data';
+      link.setAttribute('download', 'ruangtenang_data_export.json');
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
       setMsg({ type: 'success', text: 'Mengunduh berkas ekspor data lengkap Anda (.json)...' });
     } catch {
       setMsg({ type: 'error', text: 'Gagal mengunduh berkas data.' });
@@ -478,6 +486,45 @@ export const PrivacyCenterModal: React.FC<PrivacyCenterModalProps> = ({
               />
             ) : (
               <>
+                {/* 3 Main Privacy Pillars Summary */}
+                <div className="surface-muted border border-default p-3.5 rounded-2xl space-y-2 mb-4">
+                  <h3 className="text-xs font-bold text-primary flex items-center gap-1.5 uppercase tracking-wide">
+                    <Shield className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+                    3 Pilar Utama Arsitektur Keamanan & Privasi RuangTenang
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11.5px]">
+                    <div className="p-2.5 surface-card border border-default rounded-xl space-y-1">
+                      <div className="font-bold text-amber-700 dark:text-amber-400 flex items-center gap-1">
+                        <Ghost className="w-3.5 h-3.5" />
+                        1. Temporary / Incognito
+                      </div>
+                      <p className="text-secondary text-[10.5px] leading-tight">
+                        Obrolan sementara efemeral. Teks diproses transient di RAM tanpa disimpan ke basis data atau cache browser.
+                      </p>
+                    </div>
+
+                    <div className="p-2.5 surface-card border border-default rounded-xl space-y-1">
+                      <div className="font-bold text-teal-700 dark:text-teal-400 flex items-center gap-1">
+                        <Lock className="w-3.5 h-3.5" />
+                        2. Private Vault (PIN)
+                      </div>
+                      <p className="text-secondary text-[10.5px] leading-tight">
+                        Proteksi data sensitif (jurnal, mood, PHQ-9/GAD-7) dengan PIN WebCrypto + Server AES-256-GCM. Auto-lock 5 menit.
+                      </p>
+                    </div>
+
+                    <div className="p-2.5 surface-card border border-default rounded-xl space-y-1">
+                      <div className="font-bold text-blue-700 dark:text-blue-400 flex items-center gap-1">
+                        <Shield className="w-3.5 h-3.5" />
+                        3. Instant Conceal / Panic
+                      </div>
+                      <p className="text-secondary text-[10.5px] leading-tight">
+                        Penyamaran layar cepat ke portal repositori jurnal akademik Sinta/Scopus via tombol, Alt+X, Ctrl+Shift+L, atau Dobel Esc.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
                 {activeTab === 'consent' && (
                   <ConsentTab
                     loading={loading}

@@ -27,12 +27,12 @@ export const CounselorPortal: React.FC = () => {
   const [triageItems, setTriageItems] = useState<TriageItem[]>([]);
   const [soapNotes, setSoapNotes] = useState<SoapNote[]>([]);
   const [stats, setStats] = useState<CounselorStats>({
-    totalTriaged: 661,
-    activeCases: 48,
-    emergencyInterventions: 11,
-    highRiskCount: 24,
-    completedNotes: 142,
-    averageResponseTimeHours: 1.4,
+    totalTriaged: 0,
+    activeCases: 0,
+    emergencyInterventions: 0,
+    highRiskCount: 0,
+    completedNotes: 0,
+    averageResponseTimeHours: 0,
   });
   const [loading, setLoading] = useState<boolean>(true);
   const [selectedStudentForSoap, setSelectedStudentForSoap] = useState<TriageItem | null>(null);
@@ -46,60 +46,10 @@ export const CounselorPortal: React.FC = () => {
     try {
       // Fetch Triage Queue
       const queueRes = await apiClient.get<TriageItem[]>('/api/v1/counselor-portal/triage-queue');
-      if (queueRes.success && queueRes.data && queueRes.data.length > 0) {
+      if (queueRes.success && Array.isArray(queueRes.data)) {
         setTriageItems(queueRes.data);
       } else {
-        // Fallback default mock triage items for clinical interface display
-        setTriageItems([
-          {
-            id: 'trg-001',
-            studentId: 'std-21067',
-            studentName: 'Bima Satria (Teknik)',
-            studentEmail: 'bima.satria@ui.ac.id',
-            university: 'Universitas Indonesia',
-            phq9Score: 21,
-            phq9Severity: 'Depresi Berat',
-            gad7Score: 18,
-            gad7Severity: 'Kecemasan Berat',
-            suicideRisk: true,
-            riskLevel: 'CRITICAL',
-            status: 'PENDING',
-            priority: 'URGENT',
-            createdAt: new Date(Date.now() - 1000 * 60 * 35).toISOString()
-          },
-          {
-            id: 'trg-002',
-            studentId: 'std-22041',
-            studentName: 'Siti Nurhaliza (Kedokteran)',
-            studentEmail: 'siti.nur@ugm.ac.id',
-            university: 'Universitas Gadjah Mada',
-            phq9Score: 16,
-            phq9Severity: 'Depresi Sedang-Berat',
-            gad7Score: 14,
-            gad7Severity: 'Kecemasan Sedang',
-            suicideRisk: false,
-            riskLevel: 'HIGH',
-            status: 'IN_PROGRESS',
-            priority: 'HIGH',
-            createdAt: new Date(Date.now() - 1000 * 60 * 120).toISOString()
-          },
-          {
-            id: 'trg-003',
-            studentId: 'std-23098',
-            studentName: 'Rian Pratama (Fasilkom)',
-            studentEmail: 'rian.pratama@itb.ac.id',
-            university: 'Institut Teknologi Bandung',
-            phq9Score: 11,
-            phq9Severity: 'Depresi Sedang',
-            gad7Score: 12,
-            gad7Severity: 'Kecemasan Sedang',
-            suicideRisk: false,
-            riskLevel: 'MODERATE',
-            status: 'PENDING',
-            priority: 'MEDIUM',
-            createdAt: new Date(Date.now() - 1000 * 60 * 300).toISOString()
-          }
-        ]);
+        setTriageItems([]);
       }
 
       // Fetch Stats
@@ -331,72 +281,25 @@ export const CounselorPortal: React.FC = () => {
             </div>
 
             {soapNotes.length === 0 ? (
-              /* Fallback sample notes for demo */
-              <div className="grid grid-cols-1 gap-4">
-                {[
-                  {
-                    id: 'note-01',
-                    studentName: 'Bima Satria (Teknik)',
-                    studentId: 'std-21067',
-                    riskLevel: 'CRISIS',
-                    subjective: 'Konseli mengeluhkan insomnia kronis 3 minggu, hilangnya motivasi menyelesaikan tugas akhir, ide melukai diri.',
-                    objective: 'Afek cemas, kontak mata minimal, skor PHQ-9: 21 (Depresi Berat), skor GAD-7: 18.',
-                    assessment: 'Major Depressive Episode dengan distress akademik dan risiko krisis tinggi.',
-                    plan: 'Protokol krisis darurat diaktifkan. Konseling CBT intensif 2x/minggu + Rujukan evaluasi psikiatri ke RSUI.',
-                    referralTarget: 'RS Universitas Indonesia (RSUI)',
-                    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString()
-                  },
-                  {
-                    id: 'note-02',
-                    studentName: 'Siti Nurhaliza (Kedokteran)',
-                    studentId: 'std-22041',
-                    riskLevel: 'HIGH',
-                    subjective: 'Kecemasan intens menjelang ujian OSPE klinis, serangan panik ringan saat belajar malam.',
-                    objective: 'Skor GAD-7: 14 (Kecemasan Sedang), kesadaran compos mentis, afek cemas fluktuatif.',
-                    assessment: 'Academic Performance Anxiety dengan somatisasi insomnia.',
-                    plan: 'Cognitive reframing, teknik grounding 5-4-3-2-1, sleep hygiene schedule.',
-                    referralTarget: 'Pusat Kesehatan Mahasiswa / PKM',
-                    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString()
-                  }
-                ].map((note) => (
-                  <div key={note.id} className="surface-card p-5 rounded-2xl border border-default space-y-3">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-default pb-3">
-                      <div>
-                        <h4 className="font-bold text-sm text-primary">{note.studentName}</h4>
-                        <p className="text-[11px] text-secondary">NIM / ID: {note.studentId} • {new Date(note.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
-                      </div>
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-200 border border-rose-300 dark:border-rose-900">
-                        {note.riskLevel}
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-                      <div className="surface-muted p-3 rounded-xl border border-default">
-                        <span className="font-bold text-indigo-600 dark:text-indigo-400 block mb-1">S (Subjective):</span>
-                        <p className="text-secondary leading-relaxed">{note.subjective}</p>
-                      </div>
-                      <div className="surface-muted p-3 rounded-xl border border-default">
-                        <span className="font-bold text-indigo-600 dark:text-indigo-400 block mb-1">O (Objective):</span>
-                        <p className="text-secondary leading-relaxed">{note.objective}</p>
-                      </div>
-                      <div className="surface-muted p-3 rounded-xl border border-default">
-                        <span className="font-bold text-indigo-600 dark:text-indigo-400 block mb-1">A (Assessment):</span>
-                        <p className="text-secondary leading-relaxed">{note.assessment}</p>
-                      </div>
-                      <div className="surface-muted p-3 rounded-xl border border-default">
-                        <span className="font-bold text-indigo-600 dark:text-indigo-400 block mb-1">P (Plan):</span>
-                        <p className="text-secondary leading-relaxed">{note.plan}</p>
-                      </div>
-                    </div>
-
-                    {note.referralTarget && (
-                      <div className="text-[11px] text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/40 p-2.5 rounded-xl border border-indigo-200 dark:border-indigo-900 flex items-center gap-2">
-                        <GraduationCap className="w-4 h-4 text-indigo-600" />
-                        <span>Rujukan Fasilitas Medis: <strong>{note.referralTarget}</strong></span>
-                      </div>
-                    )}
-                  </div>
-                ))}
+              <div className="surface-card p-12 rounded-2xl border border-default text-center text-secondary text-xs space-y-3">
+                <FileText className="w-10 h-10 text-secondary mx-auto opacity-50" />
+                <h4 className="font-bold text-sm text-primary">Belum Ada Rekam Medis SOAP</h4>
+                <p className="text-secondary max-w-sm mx-auto">
+                  Catatan rekam medis klinis mahasiswa yang telah didokumentasikan dan dienkripsi AES-256-GCM akan tampil di sini.
+                </p>
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedStudentForSoap(null);
+                      setActiveTab('soap-editor');
+                    }}
+                    className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer shadow-xs"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Tulis Catatan SOAP Baru</span>
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="grid grid-cols-1 gap-4">

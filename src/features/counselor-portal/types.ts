@@ -45,4 +45,6 @@ export interface CounselorStats {
   highRiskCount: number;
   completedNotes: number;
   averageResponseTimeHours: number;
+  severityDistribution?: Array<{ name: string; count: number; color?: string }>;
+  monthlyTrend?: Array<{ month: string; screening: number; counseling: number; emergency: number }>;
 }

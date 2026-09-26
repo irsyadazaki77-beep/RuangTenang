@@ -180,7 +180,7 @@ export function ChatComposer({
     if (!files.length) return;
 
     if (attachments.length + files.length > 3) {
-      alert('Maksimal 3 lampiran diperbolehkan dalam satu pesan.');
+      showToast('Maksimal 3 lampiran diperbolehkan dalam satu pesan.', 'warning');
       return;
     }
 
@@ -534,13 +534,10 @@ export function ChatComposer({
           </div>
         )}
 
-        {/* 4. Floating Island Input Bar with Glassmorphism & Spring Morph Button */}
-        <div className="relative w-full max-w-2xl mx-auto group">
-          {/* Subtle Ambient Halo on Focus */}
-          <div className="absolute -inset-0.5 bg-gradient-to-r from-teal-500/20 via-emerald-500/20 to-indigo-500/20 rounded-3xl blur-sm opacity-0 group-focus-within:opacity-100 group-hover:opacity-40 transition-opacity duration-300 pointer-events-none" />
-
-          {/* Floating Island Container */}
-          <div className="relative flex items-center gap-1.5 sm:gap-2 p-1.5 sm:p-2 rounded-3xl bg-white/90 dark:bg-slate-900/90 backdrop-blur-[20px] border border-slate-200/70 dark:border-slate-800/80 group-focus-within:border-teal-500/60 dark:group-focus-within:border-teal-400/50 shadow-lg shadow-slate-950/5 transition-all duration-200">
+        {/* 4. Floating Island Input Bar with Restrained Borders */}
+        <div className="relative w-full max-w-2xl mx-auto">
+          {/* Input Container */}
+          <div className="relative flex items-center gap-1 sm:gap-1.5 p-1.5 sm:p-2 rounded-2xl bg-white dark:bg-slate-900 border border-stone-200/90 dark:border-slate-800 shadow-2xs transition-all duration-150 focus-within:border-teal-500/80 dark:focus-within:border-teal-500/80 focus-within:ring-1 focus-within:ring-teal-500/20">
             
             {/* Left Actions: Plus (+) & Mic */}
             <div className="flex items-center gap-0.5 shrink-0">
@@ -551,7 +548,7 @@ export function ChatComposer({
                   setShowActionMenu(!showActionMenu);
                   setShowCommands(false);
                 }}
-                className={`w-11 h-11 min-w-[44px] min-h-[44px] sm:w-10 sm:h-10 sm:min-w-[40px] sm:min-h-[40px] rounded-full flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100/80 dark:hover:bg-slate-800/80 shrink-0 transition-colors cursor-pointer ${
+                className={`w-8.5 h-8.5 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-slate-800 shrink-0 transition-colors cursor-pointer ${
                   showActionMenu ? 'rotate-45 text-teal-700 dark:text-teal-300 bg-teal-50 dark:bg-teal-950/60' : ''
                 }`}
                 aria-label="Buka Menu Bantuan & Fitur"
@@ -565,10 +562,10 @@ export function ChatComposer({
                 type="button"
                 whileTap={{ scale: 0.94 }}
                 onClick={toggleListening}
-                className={`w-11 h-11 min-w-[44px] min-h-[44px] sm:w-10 sm:h-10 sm:min-w-[40px] sm:min-h-[40px] rounded-full flex items-center justify-center shrink-0 transition-all cursor-pointer ${
+                className={`w-8.5 h-8.5 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center shrink-0 transition-all cursor-pointer ${
                   isListening
-                    ? 'bg-rose-500 text-white animate-pulse shadow-xs'
-                    : 'text-slate-400 hover:text-teal-600 dark:hover:text-teal-400 hover:bg-slate-100/80 dark:hover:bg-slate-800/80'
+                    ? 'bg-rose-500 text-white animate-pulse shadow-3xs'
+                    : 'text-stone-400 hover:text-teal-600 dark:hover:text-teal-400 hover:bg-stone-100 dark:hover:bg-slate-800'
                 }`}
                 aria-label={isListening ? "Hentikan rekam suara" : "Input suara (Speech-to-Text)"}
                 title={isListening ? "Hentikan rekam suara (Sedang mendengarkan...)" : "Bicara (Input Suara Speech-to-Text)"}
@@ -597,24 +594,24 @@ export function ChatComposer({
                     ? "Mendengarkan ucapan Anda (Bahasa Indonesia)..." 
                     : "Ketik apa yang kamu rasakan..."
               }
-              className="flex-1 bg-transparent text-[16px] sm:text-[14.5px] text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none resize-none min-h-[40px] py-2 px-1 leading-relaxed overflow-y-auto custom-scrollbar disabled:opacity-60 disabled:cursor-not-allowed"
+              className="flex-1 bg-transparent text-[16px] sm:text-[14px] text-stone-850 dark:text-stone-100 placeholder:text-stone-400 dark:placeholder:text-slate-500 focus:outline-none resize-none min-h-[38px] py-2 px-1.5 leading-relaxed overflow-y-auto custom-scrollbar disabled:opacity-60 disabled:cursor-not-allowed"
               rows={1}
               disabled={isTyping || quotaExceeded}
               aria-label="Ketik pesan konsultasi"
             />
             
-            {/* Smart Send / Stop Button with Spring Morphing */}
+            {/* Primary Conversational Send / Stop Action Button */}
             <AnimatePresence mode="wait" initial={false}>
               {isTyping ? (
                 <motion.button
                   key="stop-btn"
                   type="button"
-                  initial={{ scale: 0.8, opacity: 0 }}
+                  initial={{ scale: 0.85, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
-                  exit={{ scale: 0.8, opacity: 0 }}
-                  transition={{ type: "spring", stiffness: 400, damping: 28 }}
+                  exit={{ scale: 0.85, opacity: 0 }}
+                  transition={{ duration: 0.12 }}
                   onClick={onStop}
-                  className="w-11 h-11 min-w-[44px] min-h-[44px] sm:w-10 sm:h-10 sm:min-w-[40px] sm:min-h-[40px] rounded-full bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center shrink-0 cursor-pointer shadow-xs"
+                  className="w-8.5 h-8.5 sm:w-9 sm:h-9 rounded-xl bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center shrink-0 cursor-pointer shadow-3xs"
                   aria-label="Hentikan Jawaban AI"
                   title="Hentikan respons AI"
                 >
@@ -624,17 +621,17 @@ export function ChatComposer({
                 <motion.button
                   key="send-btn"
                   type="button"
-                  initial={{ scale: 0.8, opacity: 0 }}
+                  initial={{ scale: 0.85, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
-                  exit={{ scale: 0.8, opacity: 0 }}
-                  transition={{ type: "spring", stiffness: 400, damping: 28 }}
+                  exit={{ scale: 0.85, opacity: 0 }}
+                  transition={{ duration: 0.12 }}
                   whileTap={hasContent ? { scale: 0.94 } : undefined}
                   onClick={handleSend}
                   disabled={!hasContent}
-                  className={`w-11 h-11 min-w-[44px] min-h-[44px] sm:w-10 sm:h-10 sm:min-w-[40px] sm:min-h-[40px] rounded-full flex items-center justify-center shrink-0 transition-all cursor-pointer disabled:cursor-not-allowed shadow-xs ${
+                  className={`w-8.5 h-8.5 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center shrink-0 transition-all duration-120 ${
                     hasContent
-                      ? 'bg-teal-600 hover:bg-teal-700 text-white shadow-xs'
-                      : 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600 opacity-60'
+                      ? 'bg-teal-600 hover:bg-teal-700 text-white shadow-3xs cursor-pointer'
+                      : 'text-stone-300 dark:text-slate-600 bg-transparent cursor-not-allowed'
                   }`}
                   aria-label="Kirim Pesan"
                   title="Kirim pesan (Enter)"
@@ -647,7 +644,7 @@ export function ChatComposer({
         </div>
         
         {/* Reassurance Caption */}
-        <p className="text-[11px] text-slate-400 dark:text-slate-500 text-center mt-1.5 select-none">
+        <p className="text-[11px] text-stone-400 dark:text-slate-500 text-center mt-1.5 select-none">
           Ruang aman tanpa penghakiman <span className="opacity-40">·</span> Rahasia & Terenkripsi
         </p>
       </div>

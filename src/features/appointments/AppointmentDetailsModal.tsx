@@ -108,7 +108,7 @@ export const AppointmentDetailsModal: React.FC<AppointmentDetailsModalProps> = (
 
           {/* Professional Legal Disclaimer */}
           <div className="p-3 surface-muted border border-default rounded-xl text-[10.5px] text-secondary leading-relaxed">
-            <strong>Pernyataan Hukum (Simulasi):</strong> Ini adalah dokumen ringkasan bimbingan konseling simulasi yang diterbitkan oleh sistem RuangTenang Kampus untuk demonstrasi/proyek akademik. Tidak mengandung resep medis nyata, rujukan hukum, atau diagnosis fisik yang mengikat.
+            <strong>Kerahasiaan &amp; Etika Klinis:</strong> Dokumen ringkasan konseling ini bersifat rahasia di bawah regulasi UU Perlindungan Data Pribadi (UU PDP). Digunakan khusus untuk pendampingan bimbingan konseling mahasiswa dan bukan merupakan resep farmakologis atau tindakan medis darurat rumah sakit.
           </div>
         </div>
 

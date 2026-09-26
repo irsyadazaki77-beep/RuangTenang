@@ -6,7 +6,6 @@ import {
   PanelRightOpen, 
   FilePlus, 
   Layers, 
-  MessageSquare, 
   Send, 
   StopCircle, 
   Trash2, 
@@ -16,13 +15,14 @@ import {
   ChevronRight, 
   X,
   RefreshCw,
-  AlertCircle,
   Quote,
   ListTree,
   ChevronDown,
-  HeartHandshake
+  HeartHandshake,
+  MoreVertical,
+  BookOpen
 } from 'lucide-react';
-import { WorkspaceArtifact, ArtifactType, AcademicTaskTemplate } from './types';
+import { WorkspaceArtifact, ArtifactType, AcademicTaskTemplate, WorkspaceMode } from './types';
 import { ArtifactCanvas } from './components/ArtifactCanvas';
 import { ACADEMIC_TEMPLATES } from './components/AcademicToolsBar';
 import { WorkspaceTemplateModal } from './components/WorkspaceTemplateModal';
@@ -32,7 +32,6 @@ import { ChatStreamingClient } from '../chat/services/chatStreamingClient';
 import { LazyMarkdown } from '../../components/common/LazyMarkdown';
 import { useToast } from '../../components/Toast';
 import { Chat, Message } from '../chat/types';
-import { WorkspaceMode } from './types';
 import { apiClient } from '../../lib/apiClient';
 import { BrandLogo } from '../../components/ui/BrandLogo';
 import { detectAcademicDistress, DistressDetectionResult } from './utils/distressDetector';
@@ -81,23 +80,30 @@ export function StudentWorkspace({ user, onSwitchMode, onOpenSidebar }: StudentW
   const { showToast } = useToast();
   const shouldReduceMotion = useReducedMotion();
   const scrollRafRef = useRef<number | null>(null);
+
+  // Core Canvas & Workspace State
   const [artifacts, setArtifacts] = useState<WorkspaceArtifact[]>([DEFAULT_WELCOME_ARTIFACT]);
   const [activeArtifactId, setActiveArtifactId] = useState<string>(DEFAULT_WELCOME_ARTIFACT.id);
   const [isCanvasOpen, setIsCanvasOpen] = useState<boolean>(true);
   const [isCanvasExpanded, setIsCanvasExpanded] = useState<boolean>(false);
   const [mobileActiveTab, setMobileActiveTab] = useState<'chat' | 'canvas'>('chat');
   const [hasUnreadArtifact, setHasUnreadArtifact] = useState<boolean>(false);
-  const [selectedTemplateForModal, setSelectedTemplateForModal] = useState<AcademicTaskTemplate | null>(null);
-  const [templateInputSnippet, setTemplateInputSnippet] = useState('');
+
+  // Popover & Dropdown State
+  const [showMoreMenu, setShowMoreMenu] = useState<boolean>(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<boolean>(false);
   const [showNewArtifactMenu, setShowNewArtifactMenu] = useState<boolean>(false);
-  const deletePopoverRef = useRef<HTMLDivElement>(null);
+  const [selectedTemplateForModal, setSelectedTemplateForModal] = useState<AcademicTaskTemplate | null>(null);
+  const [templateInputSnippet, setTemplateInputSnippet] = useState('');
+
+  const moreMenuRef = useRef<HTMLDivElement>(null);
   const newArtifactMenuRef = useRef<HTMLDivElement>(null);
 
   // Close popovers on click outside
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (deletePopoverRef.current && !deletePopoverRef.current.contains(e.target as Node)) {
+      if (moreMenuRef.current && !moreMenuRef.current.contains(e.target as Node)) {
+        setShowMoreMenu(false);
         setShowDeleteConfirm(false);
       }
       if (newArtifactMenuRef.current && !newArtifactMenuRef.current.contains(e.target as Node)) {
@@ -108,7 +114,7 @@ export function StudentWorkspace({ user, onSwitchMode, onOpenSidebar }: StudentW
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Academic Quick-Action Prompt Pills
+  // Academic Quick Suggestions
   const ACADEMIC_PROMPT_PILLS = [
     {
       label: "Bab 1: 4 Pilar Latar Belakang",
@@ -119,15 +125,15 @@ export function StudentWorkspace({ user, onSwitchMode, onOpenSidebar }: StudentW
       prompt: "Bantu saya menyusun kerangka dan struktur Bab 2 (Tinjauan Pustaka / Landasan Teori) secara sistematis untuk topik penelitian saya:\n\n[Tuliskan topik atau judul skripsi Anda di sini]"
     },
     {
-      label: "Parafrase Akademik & Cek PUEBI",
+      label: "Parafrase Akademik PUEBI",
       prompt: "Tolong parafrase paragraf berikut dengan gaya penulisan ilmiah formal, sesuai kaidah PUEBI dan KBBI, serta pertahankan makna aslinya agar lolos uji orisinalitas/Turnitin:\n\n[Tempelkan draf teks di sini]"
     },
     {
-      label: "Bedah Metodologi & Ringkas Jurnal",
+      label: "Bedah Metodologi Jurnal",
       prompt: "Bantu saya membedah dan meringkas jurnal/paper ilmiah ini: ekstrak latar belakang masalah, urgensi riset, metodologi & instrumen analisis, temuan kunci, serta celah/keterbatasan penelitian:\n\n[Tempelkan abstrak atau isi jurnal di sini]"
     },
     {
-      label: "Susun Format Sitasi (APA 7th/IEEE)",
+      label: "Format Sitasi APA 7th / IEEE",
       prompt: "Bantu saya menyusun daftar pustaka dan format sitasi ilmiah (dalam standar APA 7th Edition dan IEEE) dari referensi berikut:\n\n[Tuliskan judul artikel, penulis, tahun rilis, nama jurnal/penerbit, dan DOI/URL]"
     }
   ];
@@ -143,22 +149,21 @@ export function StudentWorkspace({ user, onSwitchMode, onOpenSidebar }: StudentW
         }
       }, 50);
     }
-    showToast('Template prompt dimasukkan ke kolom pesan', 'info');
   };
 
-  // Academic Distress Bridge State
+  // Academic Distress State
   const [distressResult, setDistressResult] = useState<DistressDetectionResult>({ isDistressed: false, triggerKeywords: [], suggestedAction: '' });
   const [isDistressDismissed, setIsDistressDismissed] = useState<boolean>(false);
   const [isBreathingModalOpen, setIsBreathingModalOpen] = useState<boolean>(false);
 
-  // Chat state
+  // Chat State
   const [messages, setMessages] = useState<Message[]>([
     {
       id: 'msg_welcome',
       role: 'assistant',
       content: `Halo ${user?.name ? user.name.split(' ')[0] : 'Rekan Mahasiswa'}! 👋 Saya asisten akademik RuangKerja. 
 
-Ada tugas kuliah, draf skripsi, resume jurnal, atau kode yang butuh di-review dan dioptimasi hari ini? Pilih aksi cepat di bawah atau ketik langsung pertanyaanmu!`,
+Ada tugas kuliah, draf skripsi, resume jurnal, atau kode yang butuh di-review dan dioptimasi hari ini? Ketik langsung tugas Anda atau pilih instruksi di bawah.`,
       createdAt: new Date()
     }
   ]);
@@ -166,7 +171,10 @@ Ada tugas kuliah, draf skripsi, resume jurnal, atau kode yang butuh di-review da
   const [isStreaming, setIsStreaming] = useState(false);
   const [activeStreamingMessage, setActiveStreamingMessage] = useState<Message | null>(null);
 
-  // Real-time Academic Distress detection on typing
+  // Drag-and-drop state
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
+
+  // Real-time Academic Distress Detection
   useEffect(() => {
     if (!inputText.trim() || isDistressDismissed) {
       if (!inputText.trim()) setIsDistressDismissed(false);
@@ -184,18 +192,23 @@ Ada tugas kuliah, draf skripsi, resume jurnal, atau kode yang butuh di-review da
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [attachedFile, setAttachedFile] = useState<{ name: string; content: string } | null>(null);
 
-  // Auto-expand textarea with 180px ceiling
+  // Auto-expand textarea (min 44px, max 160px)
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
       const scrollH = textareaRef.current.scrollHeight;
-      textareaRef.current.style.height = `${Math.min(Math.max(scrollH, 44), 180)}px`;
+      textareaRef.current.style.height = `${Math.min(Math.max(scrollH, 44), 160)}px`;
     }
   }, [inputText]);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    processSelectedFile(file);
+    e.target.value = '';
+  };
+
+  const processSelectedFile = (file: File) => {
     if (file.size > 5 * 1024 * 1024) {
       showToast('Ukuran file maksimal 5MB', 'error');
       return;
@@ -204,18 +217,17 @@ Ada tugas kuliah, draf skripsi, resume jurnal, atau kode yang butuh di-review da
     reader.onload = (event) => {
       const text = event.target?.result as string;
       setAttachedFile({ name: file.name, content: text });
-      showToast(`Dokumen "${file.name}" berhasil dilampirkan`, 'info');
+      showToast(`Dokumen "${file.name}" dilampirkan`, 'info');
     };
     reader.onerror = () => {
       showToast('Gagal membaca dokumen', 'error');
     };
     reader.readAsText(file);
-    e.target.value = '';
   };
 
   const activeArtifact = artifacts.find(a => a.id === activeArtifactId) || artifacts[0] || null;
 
-  // Listen for template triggers from Sidebar or other sources
+  // Listen for template triggers
   useEffect(() => {
     const handleTemplateEvent = (e: any) => {
       const templateId = e.detail;
@@ -230,7 +242,7 @@ Ada tugas kuliah, draf skripsi, resume jurnal, atau kode yang butuh di-review da
     return () => window.removeEventListener('ruangkerja_trigger_template', handleTemplateEvent);
   }, []);
 
-  // Load chat history and persisted artifacts if chatId is present in URL
+  // Load chat history & persisted artifacts
   useEffect(() => {
     let isCancelled = false;
 
@@ -307,7 +319,7 @@ Ada tugas kuliah, draf skripsi, resume jurnal, atau kode yang butuh di-review da
     };
   }, [chatId]);
 
-  // Auto scroll to latest chat message with smooth RAF dampener
+  // Auto scroll to latest chat message
   useEffect(() => {
     if (scrollRafRef.current) {
       cancelAnimationFrame(scrollRafRef.current);
@@ -371,7 +383,7 @@ Ada tugas kuliah, draf skripsi, resume jurnal, atau kode yang butuh di-review da
       if (res.success && res.data) {
         const rolledBack = res.data;
         setArtifacts(prev => prev.map(a => a.id === activeArtifact.id ? rolledBack : a));
-        showToast(`Artefak berhasil dipulihkan ke versi ${targetVersion}`, 'success');
+        showToast(`Versi ${targetVersion} berhasil dipulihkan`, 'success');
       }
     } catch (err: any) {
       showToast(`Gagal memulihkan versi: ${err?.message || 'Terjadi kendala'}`, 'error');
@@ -414,7 +426,7 @@ Ada tugas kuliah, draf skripsi, resume jurnal, atau kode yang butuh di-review da
       console.warn('Failed to persist new artifact immediately:', err);
     }
 
-    showToast('Artefak baru berhasil dibuka di Canvas', 'success');
+    showToast('Draf baru dibuka di Canvas', 'success');
   };
 
   const executeSendMessage = async (userPrompt: string, customSystemNote?: string) => {
@@ -625,50 +637,61 @@ Mohon berikan hasil revisi lengkapnya yang dibungkus dalam tag:
       streamingClientRef.current.abort();
       setIsStreaming(false);
       setActiveStreamingMessage(null);
-      showToast('Pembuatan respons dihentikan.', 'info');
+      showToast('Respons dihentikan.', 'info');
     }
   };
 
   const handleConfirmClearWorkspace = () => {
     setShowDeleteConfirm(false);
+    setShowMoreMenu(false);
     setMessages([
       {
         id: `msg_clear_${Date.now()}`,
         role: 'assistant',
-        content: 'RuangKerja telah dibersihkan. Siap memulai sesi riset atau koding baru!',
+        content: 'Obrolan telah dibersihkan. Siap memulai sesi pekerjaan akademik baru.',
         createdAt: new Date()
       }
     ]);
-    showToast('Riwayat percakapan berhasil dibersihkan', 'info');
+    showToast('Sesi obrolan dibersihkan', 'info');
   };
 
-  const MINIMAL_PROMPT_CHIPS = [
+  // Compact Starter Tasks for Fresh Workspace
+  const STARTER_TASKS = [
     {
+      id: 'bedah-paper',
       title: 'Bedah Paper & Jurnal',
-      subtitle: 'Ekstrak problem statement, research gap, dan metodologi',
-      icon: <FileText className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />,
+      subtitle: 'Ringkas problem gap, variabel & metodologi Bab 2',
+      icon: <BookOpen className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />,
+      primary: true,
       prompt: 'Bantu saya membedah dan menganalisis jurnal/paper ilmiah ini: ekstrak latar belakang masalah, urgensi riset, metodologi dan instrumen analisis yang digunakan, temuan kunci, serta buat ringkasan eksekutif yang sistematis:\n\n[Tempelkan abstrak atau isi jurnal di sini]'
     },
     {
+      id: 'format-sitasi',
       title: 'Format Sitasi APA 7th / IEEE',
-      subtitle: 'Buat bibliografi otomatis & ekspor berkas .bib / .ris',
-      icon: <Quote className="w-4 h-4 text-amber-500" />,
-      prompt: 'Tolong review bagian metodologi penelitian dan periksa format sitasi serta daftar pustaka berikut sesuai standar APA 7th Edition dan IEEE (cek keakuratan in-text citation, nama penulis, tahun, dan format referensi):\n\n[Tempelkan draf metodologi atau referensi di sini]'
+      subtitle: 'Susun bibliografi otomatis & ekspor berkas .bib',
+      icon: <Quote className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />,
+      primary: false,
+      prompt: 'Tolong review bagian metodologi penelitian dan periksa format sitasi serta daftar pustaka berikut sesuai standar APA 7th Edition dan IEEE:\n\n[Tempelkan draf referensi di sini]'
     },
     {
+      id: 'struktur-skripsi',
       title: 'Struktur Skripsi Bab 1-3',
       subtitle: 'Kerangka pendahuluan piramida terbalik & landasan teori',
-      icon: <ListTree className="w-4 h-4 text-teal-500" />,
-      prompt: 'Bantu saya menyusun kerangka penulisan (outline) skripsi yang komprehensif mulai dari Bab 1 (Pendahuluan metode piramida terbalik), Bab 2 (Tinjauan Pustaka), hingga Bab 3 (Metodologi Penelitian), lengkap dengan poin-poin sub-bab yang sistematis:\n\n[Topik / Judul Skripsi: ]'
+      icon: <ListTree className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />,
+      primary: false,
+      prompt: 'Bantu saya menyusun kerangka penulisan (outline) skripsi yang komprehensif mulai dari Bab 1 (Pendahuluan), Bab 2 (Tinjauan Pustaka), hingga Bab 3 (Metodologi Penelitian):\n\n[Topik / Judul Skripsi: ]'
     },
     {
+      id: 'debug-kode',
       title: 'Debug Kode & Optimasi Big-O',
       subtitle: 'Telusuri bug, perbaiki runtime, dan analisis kompleksitas',
       icon: <FileCode className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />,
+      primary: false,
       prompt: 'Tolong telusuri bug/error pada kode program berikut, jelaskan penyebab masalahnya, berikan kode perbaikan yang bersih dan efisien, serta analisis kompleksitas waktu (Big-O):\n\n[Tempelkan kode dan pesan error di sini]'
     }
   ];
 
+  // Active work state detector: true if user has sent messages or is streaming
   const hasUserSentMessage = messages.some(m => m.role === 'user') || isStreaming || messages.length > 1;
 
   const formatMessageTime = (date?: Date | string) => {
@@ -687,113 +710,121 @@ Mohon berikan hasil revisi lengkapnya yang dibungkus dalam tag:
   };
 
   return (
-    <div className="flex flex-col h-dvh w-full bg-slate-50/60 dark:bg-[#0B101B] text-slate-800 dark:text-slate-100 overflow-hidden relative">
+    <div 
+      className="flex flex-col h-dvh w-full bg-slate-50/60 dark:bg-[#0B101B] text-slate-800 dark:text-slate-100 overflow-hidden relative"
+      onDragOver={(e) => {
+        e.preventDefault();
+        setIsDraggingOver(true);
+      }}
+      onDragLeave={() => setIsDraggingOver(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setIsDraggingOver(false);
+        const file = e.dataTransfer.files?.[0];
+        if (file) processSelectedFile(file);
+      }}
+    >
+      {/* Drag & Drop Overlay Indicator */}
+      {isDraggingOver && (
+        <div className="absolute inset-0 z-50 bg-emerald-900/40 backdrop-blur-xs flex items-center justify-center p-6 animate-fade-in pointer-events-none">
+          <div className="bg-white dark:bg-slate-900 border-2 border-dashed border-emerald-500 rounded-2xl p-6 text-center max-w-sm shadow-2xl space-y-2">
+            <Paperclip className="w-8 h-8 text-emerald-600 dark:text-emerald-400 mx-auto animate-bounce" />
+            <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100">Lepaskan Berkas di Sini</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400">Lampirkan dokumen atau kode langsung ke composer RuangKerja</p>
+          </div>
+        </div>
+      )}
+
       {/* ========================================================================= */}
-      {/* 1. NOTION/LINEAR STYLE APPLICATION WORKSPACE TOOLBAR (h-14 / 56px) */}
+      {/* 1. WORKSPACE HEADER TOOLBAR (h-13 / 52px) */}
       {/* ========================================================================= */}
-      <header className="h-14 px-3 sm:px-4 lg:px-6 bg-white/95 dark:bg-[#0F172A]/95 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-3 z-30 shrink-0">
-        {/* Left Zone: Brand + Title + Badge + Breadcrumb */}
+      <header className="h-13 px-3 sm:px-4 lg:px-6 bg-white dark:bg-[#0F172A] border-b border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-3 z-30 shrink-0">
+        {/* Left Zone: Workspace Identity & Mobile Navigation Toggle */}
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           {onOpenSidebar && (
             <button
               type="button"
               onClick={onOpenSidebar}
-              className="lg:hidden min-h-[40px] min-w-[40px] flex items-center justify-center rounded-xl text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              className="lg:hidden p-1.5 rounded-lg text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
               aria-label="Buka Sidebar Menu"
             >
-              <Layers className="w-5 h-5" />
+              <Layers className="w-4 h-4" />
             </button>
           )}
 
-          <div className="flex items-center gap-2.5 min-w-0">
+          <div className="flex items-center gap-2 min-w-0">
             <BrandLogo mode="RUANG_KERJA" size="sm" />
-            <div className="flex items-center gap-2 min-w-0">
-              <h1 className="font-bold text-sm sm:text-base text-slate-900 dark:text-slate-50 tracking-tight leading-none">
-                RuangKerja
-              </h1>
-              <span className="hidden xs:inline-flex px-2 py-0.5 rounded-full text-[10.5px] font-semibold bg-emerald-50 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/80 select-none">
-                Akademik
-              </span>
-            </div>
+            <span className="font-bold text-sm sm:text-base text-slate-900 dark:text-slate-100 tracking-tight leading-none">
+              RuangKerja
+            </span>
           </div>
 
-          {/* Active Document Breadcrumb (Desktop) */}
+          {/* Active Document Kicker (Desktop) */}
           {activeArtifact && (
-            <div className="hidden xl:flex items-center gap-1.5 text-xs text-slate-400 pl-2 border-l border-slate-200 dark:border-slate-800 min-w-0">
+            <div className="hidden xl:flex items-center gap-1.5 text-xs text-slate-400 pl-3 border-l border-slate-200 dark:border-slate-800 min-w-0">
               <span className="truncate max-w-[200px] text-slate-600 dark:text-slate-300 font-medium">
                 {activeArtifact.title}
               </span>
-              <span className="text-[10px] font-mono px-1 rounded bg-slate-100 dark:bg-slate-800 text-slate-500">
+              <span className="text-[10px] font-mono opacity-60">
                 v{activeArtifact.version || 1}
               </span>
             </div>
           )}
         </div>
 
-        {/* Right Zone: Cohesive Button Group with Clear Hierarchy */}
-        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-          {/* Switch to RuangTenang Shortcut */}
-          {onSwitchMode && (
+        {/* Center / Right Zone: Compact Segmented Switcher & Workspace Actions */}
+        <div className="flex items-center gap-2 shrink-0">
+          {/* Compact View Switcher on Mobile/Tablet */}
+          <div className="lg:hidden flex items-center p-0.5 bg-slate-100/90 dark:bg-slate-800/90 rounded-lg border border-slate-200/60 dark:border-slate-700/60">
             <button
               type="button"
-              onClick={() => onSwitchMode('RUANG_TENANG')}
-              className="h-9 px-2.5 sm:px-3 rounded-xl bg-slate-100/90 hover:bg-teal-50 dark:bg-slate-800/80 dark:hover:bg-teal-950/40 text-slate-600 hover:text-teal-700 dark:text-slate-300 dark:hover:text-teal-300 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer border border-slate-200/60 dark:border-slate-700/60"
-              title="Kembali ke RuangTenang untuk relaksasi & konseling"
+              onClick={() => setMobileActiveTab('chat')}
+              className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+                mobileActiveTab === 'chat'
+                  ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-semibold shadow-2xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+              }`}
             >
-              <HeartHandshake className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
-              <span className="hidden md:inline">RuangTenang</span>
+              Obrolan
             </button>
-          )}
-
-          {/* Primary Action: Toggle Canvas */}
-          <button
-            type="button"
-            onClick={() => {
-              if (window.innerWidth < 1024) {
-                setMobileActiveTab(mobileActiveTab === 'canvas' ? 'chat' : 'canvas');
+            <button
+              type="button"
+              onClick={() => {
+                setMobileActiveTab('canvas');
                 setHasUnreadArtifact(false);
-              } else {
-                setIsCanvasOpen(!isCanvasOpen);
-              }
-            }}
-            className="h-9 px-3 rounded-xl bg-emerald-50 hover:bg-emerald-100/90 dark:bg-emerald-950/70 dark:hover:bg-emerald-900/80 text-emerald-800 dark:text-emerald-200 border border-emerald-200/80 dark:border-emerald-800/80 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-3xs"
-            title={isCanvasOpen ? 'Sembunyikan Panel Canvas' : 'Buka Panel Canvas'}
-          >
-            {isCanvasOpen ? (
-              <>
-                <PanelRightClose className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                <span className="hidden sm:inline">Tutup Canvas</span>
-              </>
-            ) : (
-              <>
-                <PanelRightOpen className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                <span>Buka Canvas</span>
-              </>
-            )}
-            {hasUnreadArtifact && (
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse ml-0.5" />
-            )}
-          </button>
+              }}
+              className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer relative ${
+                mobileActiveTab === 'canvas'
+                  ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-semibold shadow-2xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+              }`}
+            >
+              Canvas
+              {hasUnreadArtifact && (
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block ml-1 animate-pulse" />
+              )}
+            </button>
+          </div>
 
-          {/* Secondary Action: + Draf Baru Dropdown */}
+          {/* Primary Action: + Draf Baru Dropdown */}
           <div className="relative" ref={newArtifactMenuRef}>
             <button
               type="button"
               onClick={() => setShowNewArtifactMenu(!showNewArtifactMenu)}
-              className="h-9 px-2.5 sm:px-3 rounded-xl bg-white hover:bg-slate-50 dark:bg-slate-800/90 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold transition-all cursor-pointer border border-slate-200/90 dark:border-slate-700 flex items-center gap-1.5 shadow-3xs"
+              className="h-8 px-2.5 sm:px-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs active:scale-95"
               title="Buat Berkas / Draf Baru"
             >
-              <FilePlus className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+              <FilePlus className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Draf Baru</span>
-              <ChevronDown className="w-2.5 h-2.5 text-slate-400" />
+              <ChevronDown className="w-3 h-3 opacity-80" />
             </button>
 
             {showNewArtifactMenu && (
-              <div className="absolute right-0 top-full mt-1.5 w-48 p-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl z-50 animate-scale-up space-y-0.5">
+              <div className="absolute right-0 top-full mt-1.5 w-48 p-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl z-50 animate-scale-up space-y-0.5">
                 <button
                   type="button"
                   onClick={() => handleCreateNewArtifact('DOCUMENT')}
-                  className="w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/50 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors flex items-center gap-2 cursor-pointer"
+                  className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center gap-2 cursor-pointer"
                 >
                   <FileText className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                   <span>Draf Dokumen (.md)</span>
@@ -801,7 +832,7 @@ Mohon berikan hasil revisi lengkapnya yang dibungkus dalam tag:
                 <button
                   type="button"
                   onClick={() => handleCreateNewArtifact('CODE')}
-                  className="w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/50 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors flex items-center gap-2 cursor-pointer"
+                  className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center gap-2 cursor-pointer"
                 >
                   <FileCode className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                   <span>Skrip Kode (.py/.ts)</span>
@@ -809,7 +840,7 @@ Mohon berikan hasil revisi lengkapnya yang dibungkus dalam tag:
                 <button
                   type="button"
                   onClick={() => handleCreateNewArtifact('CITATION')}
-                  className="w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/50 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors flex items-center gap-2 cursor-pointer"
+                  className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center gap-2 cursor-pointer"
                 >
                   <Quote className="w-3.5 h-3.5 text-amber-500" />
                   <span>Daftar Sitasi (.bib)</span>
@@ -818,47 +849,105 @@ Mohon berikan hasil revisi lengkapnya yang dibungkus dalam tag:
             )}
           </div>
 
-          {/* Tertiary Action: Bersihkan Obrolan Popover */}
-          <div className="relative" ref={deletePopoverRef}>
+          {/* Desktop Canvas Toggle */}
+          <button
+            type="button"
+            onClick={() => setIsCanvasOpen(!isCanvasOpen)}
+            className="hidden lg:flex h-8 px-2.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200/80 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-medium items-center gap-1.5 transition-colors cursor-pointer"
+            title={isCanvasOpen ? 'Sembunyikan Panel Canvas' : 'Tampilkan Panel Canvas'}
+          >
+            {isCanvasOpen ? (
+              <>
+                <PanelRightClose className="w-3.5 h-3.5" />
+                <span>Tutup Canvas</span>
+              </>
+            ) : (
+              <>
+                <PanelRightOpen className="w-3.5 h-3.5" />
+                <span>Canvas</span>
+              </>
+            )}
+            {hasUnreadArtifact && (
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse ml-0.5" />
+            )}
+          </button>
+
+          {/* More Actions Menu (•••) */}
+          <div className="relative" ref={moreMenuRef}>
             <button
               type="button"
-              onClick={() => setShowDeleteConfirm(!showDeleteConfirm)}
-              className="h-9 w-9 flex items-center justify-center rounded-xl text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-transparent hover:border-rose-200 dark:hover:border-rose-900 transition-colors cursor-pointer"
-              title="Bersihkan Percakapan Obrolan"
-              aria-label="Bersihkan Obrolan"
+              onClick={() => setShowMoreMenu(!showMoreMenu)}
+              className="h-8 w-8 flex items-center justify-center rounded-lg text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              title="Menu Opsi Workspace"
+              aria-label="Opsi Lebih Lanjut"
             >
-              <Trash2 className="w-4 h-4" />
+              <MoreVertical className="w-4 h-4" />
             </button>
 
-            {showDeleteConfirm && (
-              <div className="absolute right-0 top-full mt-2 w-64 p-3.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl z-50 animate-scale-up">
-                <div className="flex items-start gap-2.5 mb-2.5">
-                  <div className="p-1.5 rounded-lg bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 shrink-0">
-                    <AlertCircle className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100">Bersihkan Obrolan?</h4>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
-                      Riwayat pesan dalam sesi ini akan dikosongkan. Artefak di Canvas tetap tersimpan.
+            {showMoreMenu && (
+              <div className="absolute right-0 top-full mt-1.5 w-52 p-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl z-50 animate-scale-up space-y-0.5">
+                {onSwitchMode && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowMoreMenu(false);
+                      onSwitchMode('RUANG_TENANG');
+                    }}
+                    className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-teal-50 dark:hover:bg-teal-950/50 hover:text-teal-700 dark:hover:text-teal-300 transition-colors flex items-center gap-2 cursor-pointer"
+                  >
+                    <HeartHandshake className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+                    <span>Ke RuangTenang</span>
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowMoreMenu(false);
+                    setSelectedTemplateForModal(ACADEMIC_TEMPLATES[0]);
+                    setTemplateInputSnippet('');
+                  }}
+                  className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center gap-2 cursor-pointer"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                  <span>Galeri Template</span>
+                </button>
+
+                <div className="border-t border-slate-100 dark:border-slate-800 my-1" />
+
+                <button
+                  type="button"
+                  onClick={() => setShowDeleteConfirm(true)}
+                  className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors flex items-center gap-2 cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Bersihkan Obrolan</span>
+                </button>
+
+                {/* Delete Confirmation Sub-Popover */}
+                {showDeleteConfirm && (
+                  <div className="p-2.5 mt-1 bg-rose-50/90 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-900 rounded-lg text-xs space-y-2">
+                    <p className="text-[11px] text-rose-800 dark:text-rose-200">
+                      Bersihkan riwayat percakapan sesi ini? Artefak Canvas tetap tersimpan.
                     </p>
+                    <div className="flex items-center justify-end gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setShowDeleteConfirm(false)}
+                        className="px-2 py-0.5 rounded text-[11px] text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                      >
+                        Batal
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleConfirmClearWorkspace}
+                        className="px-2 py-0.5 rounded bg-rose-600 text-white font-semibold text-[11px] hover:bg-rose-700 transition-colors cursor-pointer"
+                      >
+                        Ya, Bersihkan
+                      </button>
+                    </div>
                   </div>
-                </div>
-                <div className="flex items-center justify-end gap-1.5 pt-1.5 border-t border-slate-100 dark:border-slate-800">
-                  <button
-                    type="button"
-                    onClick={() => setShowDeleteConfirm(false)}
-                    className="px-2.5 py-1 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-                  >
-                    Batal
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleConfirmClearWorkspace}
-                    className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-rose-600 hover:bg-rose-700 text-white transition-colors cursor-pointer shadow-3xs"
-                  >
-                    Ya, Bersihkan
-                  </button>
-                </div>
+                )}
               </div>
             )}
           </div>
@@ -867,13 +956,13 @@ Mohon berikan hasil revisi lengkapnya yang dibungkus dalam tag:
 
       {/* Floating Notification for Mobile when Artifact Updates */}
       {mobileActiveTab === 'chat' && hasUnreadArtifact && activeArtifact && (
-        <div className="lg:hidden absolute top-16 left-3 right-3 z-30 animate-slide-down">
-          <div className="bg-emerald-900/95 dark:bg-emerald-950/95 text-white px-3.5 py-2.5 rounded-2xl shadow-xl flex items-center justify-between border border-emerald-500/40 backdrop-blur-md">
+        <div className="lg:hidden absolute top-14 left-3 right-3 z-30 animate-slide-down">
+          <div className="bg-slate-900/95 dark:bg-slate-900/95 text-white px-3 py-2 rounded-xl shadow-xl flex items-center justify-between border border-slate-700/80 backdrop-blur-md">
             <div className="flex items-center gap-2 min-w-0">
-              <Sparkles className="w-4 h-4 text-emerald-300 shrink-0 animate-pulse" />
+              <Sparkles className="w-3.5 h-3.5 text-emerald-400 shrink-0 animate-pulse" />
               <div className="text-xs truncate">
-                <span className="font-bold">Artefak diperbarui:</span>{' '}
-                <span className="text-emerald-200">{activeArtifact.title}</span>
+                <span className="font-semibold">Artefak diperbarui:</span>{' '}
+                <span className="text-slate-300">{activeArtifact.title}</span>
               </div>
             </div>
             <button
@@ -882,7 +971,7 @@ Mohon berikan hasil revisi lengkapnya yang dibungkus dalam tag:
                 setMobileActiveTab('canvas');
                 setHasUnreadArtifact(false);
               }}
-              className="h-8 px-3 bg-white text-emerald-900 rounded-xl text-xs font-bold hover:bg-emerald-100 transition-colors shrink-0 ml-2 cursor-pointer shadow-sm"
+              className="h-7 px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold transition-colors shrink-0 ml-2 cursor-pointer"
             >
               Lihat Canvas
             </button>
@@ -890,63 +979,13 @@ Mohon berikan hasil revisi lengkapnya yang dibungkus dalam tag:
         </div>
       )}
 
-      {/* Mobile Tab Segmented Switcher */}
-      <div className="lg:hidden flex items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0F172A] px-3 py-1.5 gap-2 shrink-0 z-10">
-        <div className="flex-1 flex items-center gap-2 relative bg-slate-100/90 dark:bg-slate-900/90 p-1 rounded-xl border border-slate-200/60 dark:border-slate-800/60">
-          <button
-            type="button"
-            onClick={() => setMobileActiveTab('chat')}
-            className={`flex-1 h-8 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors relative cursor-pointer z-10 ${
-              mobileActiveTab === 'chat'
-                ? 'text-white'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-            }`}
-          >
-            {mobileActiveTab === 'chat' && (
-              <motion.div
-                layoutId="mobileWorkspaceTabPill"
-                className="absolute inset-0 bg-emerald-600 rounded-lg shadow-xs -z-10"
-                transition={{ type: 'spring', stiffness: 450, damping: 32 }}
-              />
-            )}
-            <MessageSquare className="w-3.5 h-3.5" />
-            <span>Obrolan</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setMobileActiveTab('canvas');
-              setHasUnreadArtifact(false);
-            }}
-            className={`flex-1 h-8 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors relative cursor-pointer z-10 ${
-              mobileActiveTab === 'canvas'
-                ? 'text-white'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-            }`}
-          >
-            {mobileActiveTab === 'canvas' && (
-              <motion.div
-                layoutId="mobileWorkspaceTabPill"
-                className="absolute inset-0 bg-emerald-600 rounded-lg shadow-xs -z-10"
-                transition={{ type: 'spring', stiffness: 450, damping: 32 }}
-              />
-            )}
-            <FileCode className="w-3.5 h-3.5" />
-            <span>Canvas</span>
-            {hasUnreadArtifact && (
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            )}
-          </button>
-        </div>
-      </div>
-
       {/* ========================================================================= */}
       {/* 2. DUAL-PANE WORKSPACE BODY */}
       {/* ========================================================================= */}
       <main className="flex-1 flex overflow-hidden relative">
-        {/* SISI KIRI: AI COMMAND & CHAT PANE (~38-40% desktop) */}
+        {/* LEFT PANE: CONVERSATION & COMMAND WORKSPACE */}
         <section 
-          className={`flex flex-col h-full bg-white dark:bg-[#0F172A] border-r border-slate-200/80 dark:border-slate-800 transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+          className={`flex flex-col h-full bg-white dark:bg-[#0F172A] border-r border-slate-200/80 dark:border-slate-800 transition-all duration-200 ${
             isCanvasExpanded 
               ? 'hidden' 
               : isCanvasOpen 
@@ -954,93 +993,86 @@ Mohon berikan hasil revisi lengkapnya yang dibungkus dalam tag:
                 : 'w-full max-w-3xl mx-auto border-r-0'
           } ${mobileActiveTab === 'chat' ? 'flex' : 'hidden lg:flex'}`}
         >
-          {/* Chat Messages Feed */}
-          <div className="flex-1 overflow-y-auto p-3.5 sm:p-5 space-y-4 custom-scrollbar flex flex-col">
+          {/* Chat Messages Feed (Single Primary Scroll Container) */}
+          <div className="flex-1 overflow-y-auto p-3.5 sm:p-5 space-y-4 custom-scrollbar flex flex-col min-h-0">
             {!hasUserSentMessage && !activeStreamingMessage ? (
-              /* CLEAN EMPTY STATE HERO */
-              <div className="h-full flex-1 flex flex-col items-center justify-center py-6 px-3 text-center my-auto animate-fade-in">
-                <div className="max-w-md w-full space-y-4">
-                  <div className="inline-flex p-3 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200/80 dark:border-emerald-800/70 text-emerald-600 dark:text-emerald-400 shadow-3xs">
-                    <Sparkles className="w-6 h-6" />
-                  </div>
-                  <div className="space-y-1">
-                    <h2 className="text-lg sm:text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
-                      Asisten Akademik RuangKerja
-                    </h2>
-                    <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 leading-relaxed max-w-sm mx-auto">
-                      Bedah paper, susun outline skripsi, buat sitasi APA/IEEE, atau debugging kode langsung ke Canvas.
-                    </p>
-                  </div>
+              /* FRESH WORKSPACE STATE: Compact Intro & Starter Tasks */
+              <div className="my-auto py-6 px-2 space-y-6 animate-fade-in max-w-lg mx-auto w-full">
+                {/* Compact Workspace Introduction */}
+                <div className="text-center space-y-1.5">
+                  <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100">
+                    Asisten Akademik
+                  </h2>
+                  <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 max-w-sm mx-auto leading-relaxed">
+                    Bantu riset, tulisan, coding, dan pekerjaan akademik secara terstruktur.
+                  </p>
+                </div>
 
-                  {/* 4 Minimalist Bento Action Cards */}
-                  <div className="grid grid-cols-1 gap-2 pt-1 text-left">
-                    {MINIMAL_PROMPT_CHIPS.map((chip, idx) => (
-                      <button
-                        key={idx}
-                        type="button"
-                        onClick={() => handleApplyPromptPill(chip.prompt)}
-                        className="w-full p-3 rounded-xl text-left bg-slate-50/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800 hover:border-emerald-400 dark:hover:border-emerald-600 hover:bg-emerald-50/40 dark:hover:bg-emerald-950/20 transition-all flex items-center justify-between group shadow-3xs cursor-pointer active:scale-[0.99]"
-                      >
-                        <div className="flex items-start gap-2.5 min-w-0 pr-2">
-                          <div className="p-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 shrink-0 mt-0.5 group-hover:border-emerald-300 dark:group-hover:border-emerald-700 transition-colors">
-                            {chip.icon}
+                {/* Compact Starter Actions List */}
+                <div className="space-y-1.5">
+                  {STARTER_TASKS.map((task) => (
+                    <button
+                      key={task.id}
+                      type="button"
+                      onClick={() => handleApplyPromptPill(task.prompt)}
+                      className={`w-full p-2.5 rounded-xl text-left transition-all flex items-center justify-between group cursor-pointer active:scale-[0.99] border ${
+                        task.primary
+                          ? 'bg-emerald-50/50 dark:bg-emerald-950/30 border-emerald-300/80 dark:border-emerald-800/80 hover:border-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-950/50'
+                          : 'bg-slate-50/70 dark:bg-slate-900/70 border-slate-200/80 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 hover:bg-slate-100/60 dark:hover:bg-slate-800/60'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                        <div className="p-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700 shrink-0">
+                          {task.icon}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-xs font-semibold text-slate-800 dark:text-slate-200 group-hover:text-emerald-700 dark:group-hover:text-emerald-300 transition-colors truncate">
+                            {task.title}
                           </div>
-                          <div className="min-w-0">
-                            <div className="text-xs font-semibold text-slate-800 dark:text-slate-200 group-hover:text-emerald-800 dark:group-hover:text-emerald-300 transition-colors truncate">
-                              {chip.title}
-                            </div>
-                            <div className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-1 mt-0.5">
-                              {chip.subtitle}
-                            </div>
+                          <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                            {task.subtitle}
                           </div>
                         </div>
-                        <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 group-hover:translate-x-0.5 transition-all shrink-0" />
-                      </button>
-                    ))}
-                  </div>
+                      </div>
+                      <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-200 transition-colors shrink-0" />
+                    </button>
+                  ))}
                 </div>
               </div>
             ) : (
-              /* CHAT MESSAGES FEED */
+              /* ACTIVE WORKSPACE STATE: Chat Messages Feed */
               <>
                 {messages.map((msg) => (
                   <motion.div 
                     key={msg.id}
-                    initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 6 }}
+                    initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 4 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={shouldReduceMotion ? { duration: 0.12 } : { type: 'spring', stiffness: 350, damping: 28 }}
+                    transition={shouldReduceMotion ? { duration: 0.1 } : { duration: 0.15 }}
                     className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
                   >
-                    {/* Header Baris Pesan Asisten */}
+                    {/* Assistant Message Header */}
                     {msg.role === 'assistant' && (
-                      <div className="flex items-center gap-2 mb-1 px-1 select-none">
-                        <div className="w-4.5 h-4.5 rounded-md bg-emerald-100 dark:bg-emerald-950/80 border border-emerald-300 dark:border-emerald-800 flex items-center justify-center p-0.5 text-emerald-700 dark:text-emerald-300">
-                          <Sparkles className="w-2.5 h-2.5" />
-                        </div>
-                        <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">
-                          Asisten RuangKerja
-                        </span>
-                        <span className="text-[10px] font-mono text-slate-400 dark:text-slate-500">
-                          {formatMessageTime(msg.createdAt)}
-                        </span>
+                      <div className="flex items-center gap-1.5 mb-1 px-1 select-none text-xs text-slate-500 dark:text-slate-400">
+                        <Sparkles className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                        <span className="font-semibold text-slate-700 dark:text-slate-300">Asisten RuangKerja</span>
+                        <span>·</span>
+                        <span className="font-mono text-[10.5px] opacity-75">{formatMessageTime(msg.createdAt)}</span>
                       </div>
                     )}
 
-                    {/* Header User Message */}
+                    {/* User Message Header */}
                     {msg.role === 'user' && (
-                      <div className="flex items-center gap-1.5 mb-1 px-1 select-none">
-                        <span className="text-[10px] font-mono text-slate-400 dark:text-slate-500">
-                          {formatMessageTime(msg.createdAt)}
-                        </span>
+                      <div className="flex items-center gap-1 mb-1 px-1 select-none text-[10.5px] font-mono text-slate-400">
+                        <span>{formatMessageTime(msg.createdAt)}</span>
                       </div>
                     )}
 
-                    {/* Bubble Konten */}
+                    {/* Message Content Bubble */}
                     <div 
                       className={`max-w-[92%] sm:max-w-[88%] leading-relaxed ${
                         msg.role === 'user'
-                          ? 'bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 rounded-2xl rounded-tr-xs px-4 py-3 shadow-sm text-xs sm:text-sm font-normal'
-                          : 'bg-slate-50/90 dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 text-slate-800 dark:text-slate-100 rounded-2xl rounded-tl-xs p-4 shadow-2xs text-xs sm:text-sm'
+                          ? 'bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 rounded-xl rounded-tr-xs px-3.5 py-2.5 text-xs sm:text-sm font-normal'
+                          : 'bg-slate-50/90 dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 text-slate-800 dark:text-slate-100 rounded-xl rounded-tl-xs p-3.5 text-xs sm:text-sm'
                       }`}
                     >
                       <div className={`prose max-w-none text-xs sm:text-sm prose-p:my-1.5 prose-pre:my-1.5 ${
@@ -1051,7 +1083,7 @@ Mohon berikan hasil revisi lengkapnya yang dibungkus dalam tag:
 
                       {/* Error Retry Option */}
                       {msg.error && (
-                        <div className="mt-3 pt-2.5 border-t border-red-200 dark:border-red-900/50 flex items-center gap-2">
+                        <div className="mt-2.5 pt-2 border-t border-rose-200 dark:border-rose-900/50 flex items-center gap-2">
                           <button
                             type="button"
                             onClick={() => {
@@ -1061,7 +1093,7 @@ Mohon berikan hasil revisi lengkapnya yang dibungkus dalam tag:
                                 executeSendMessage(lastUserMsg.content);
                               }
                             }}
-                            className="inline-flex items-center gap-1.5 px-3 py-1 bg-red-50 hover:bg-red-100 dark:bg-red-950/60 dark:hover:bg-red-900/80 text-red-700 dark:text-red-300 rounded-lg text-xs font-medium transition-colors cursor-pointer"
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/60 dark:hover:bg-rose-900/80 text-rose-700 dark:text-rose-300 rounded-lg text-xs font-medium transition-colors cursor-pointer"
                           >
                             <RefreshCw className="w-3.5 h-3.5" />
                             <span>Kirim Ulang Pesan</span>
@@ -1069,16 +1101,16 @@ Mohon berikan hasil revisi lengkapnya yang dibungkus dalam tag:
                         </div>
                       )}
 
-                      {/* Canvas Shortcut Pill */}
+                      {/* Canvas Link Shortcut */}
                       {msg.role === 'assistant' && artifacts.length > 0 && msg.content.includes('📦 **Artefak Aktif') && (
-                        <div className="mt-3 pt-2.5 border-t border-slate-200/70 dark:border-slate-800 flex items-center justify-between">
+                        <div className="mt-2.5 pt-2 border-t border-slate-200/70 dark:border-slate-800 flex items-center justify-between">
                           <button
                             type="button"
                             onClick={() => {
                               setIsCanvasOpen(true);
                               setMobileActiveTab('canvas');
                             }}
-                            className="text-xs text-emerald-700 dark:text-emerald-400 font-semibold hover:underline flex items-center gap-1.5 cursor-pointer"
+                            className="text-xs text-emerald-700 dark:text-emerald-400 font-semibold hover:underline flex items-center gap-1 cursor-pointer"
                           >
                             <FileText className="w-3.5 h-3.5" />
                             <span>Buka Dokumen di Canvas &rarr;</span>
@@ -1089,30 +1121,25 @@ Mohon berikan hasil revisi lengkapnya yang dibungkus dalam tag:
                   </motion.div>
                 ))}
 
-                {/* Active Streaming Message Preview */}
+                {/* Active Streaming Preview */}
                 {activeStreamingMessage && (
                   <motion.div 
-                    initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 6 }}
+                    initial={{ opacity: 0, y: 4 }}
                     animate={{ opacity: 1, y: 0 }}
                     className="flex flex-col items-start"
                   >
-                    <div className="flex items-center gap-2 mb-1 px-1 select-none">
-                      <div className="w-4.5 h-4.5 rounded-md bg-emerald-100 dark:bg-emerald-950/80 border border-emerald-300 dark:border-emerald-800 flex items-center justify-center p-0.5 text-emerald-700 dark:text-emerald-300 animate-pulse">
-                        <Sparkles className="w-2.5 h-2.5" />
-                      </div>
-                      <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">
-                        Asisten RuangKerja
-                      </span>
-                      <span className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400 font-medium">
-                        Menulis...
-                      </span>
+                    <div className="flex items-center gap-1.5 mb-1 px-1 select-none text-xs text-slate-500 dark:text-slate-400">
+                      <Sparkles className="w-3 h-3 text-emerald-500 animate-pulse" />
+                      <span className="font-semibold text-slate-700 dark:text-slate-300">Asisten RuangKerja</span>
+                      <span>·</span>
+                      <span className="text-[10.5px] text-emerald-600 dark:text-emerald-400 font-medium">Menulis...</span>
                     </div>
 
-                    <div className="max-w-[92%] sm:max-w-[88%] rounded-2xl rounded-tl-xs p-4 bg-slate-50/90 dark:bg-slate-900/90 border border-emerald-300/80 dark:border-emerald-800/80 text-slate-800 dark:text-slate-100 shadow-sm leading-relaxed text-xs sm:text-sm">
+                    <div className="max-w-[92%] sm:max-w-[88%] rounded-xl rounded-tl-xs p-3.5 bg-slate-50/90 dark:bg-slate-900/90 border border-emerald-300/80 dark:border-emerald-800/80 text-slate-800 dark:text-slate-100 leading-relaxed text-xs sm:text-sm">
                       <div className="prose dark:prose-invert max-w-none text-xs sm:text-sm prose-p:my-1">
                         <LazyMarkdown content={activeStreamingMessage.content || '...'} />
                       </div>
-                      <div className="mt-3 pt-2.5 border-t border-slate-200/70 dark:border-slate-800">
+                      <div className="mt-2.5 pt-2 border-t border-slate-200/70 dark:border-slate-800">
                         <RhythmicTypingIndicator label="Menyusun konten akademik di Canvas..." />
                       </div>
                     </div>
@@ -1125,9 +1152,9 @@ Mohon berikan hasil revisi lengkapnya yang dibungkus dalam tag:
           </div>
 
           {/* ========================================================================= */}
-          {/* 3. REDESIGNED INPUT COMPOSER */}
+          {/* 3. REDESIGNED COMPACT COMPOSER */}
           {/* ========================================================================= */}
-          <div className="p-3 sm:p-4 bg-white/95 dark:bg-[#0F172A]/95 border-t border-slate-200/80 dark:border-slate-800 shrink-0">
+          <div className="p-3 bg-white/95 dark:bg-[#0F172A]/95 border-t border-slate-200/80 dark:border-slate-800 shrink-0">
             {/* Academic Distress Regulation Banner */}
             {distressResult.isDistressed && !isDistressDismissed && (
               <AcademicDistressBanner
@@ -1138,42 +1165,37 @@ Mohon berikan hasil revisi lengkapnya yang dibungkus dalam tag:
               />
             )}
 
-            {/* Prompt Inspiration Horizontal Scroll */}
-            <div className="relative w-full mb-2 overflow-hidden">
-              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 px-0.5 pr-8">
-                <span className="text-[11px] font-semibold text-emerald-800 dark:text-emerald-300 shrink-0 flex items-center gap-1 mr-0.5 select-none">
-                  <Sparkles className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
-                  Inspirasi:
-                </span>
+            {/* Quiet Contextual Suggestions Strip */}
+            <div className="relative w-full mb-1.5 overflow-hidden">
+              <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5 text-xs text-slate-500">
+                <span className="shrink-0 font-medium select-none pr-1 text-[11px]">Coba:</span>
                 {ACADEMIC_PROMPT_PILLS.map((pill, idx) => (
                   <button
                     key={idx}
                     type="button"
                     onClick={() => handleApplyPromptPill(pill.prompt)}
-                    className="px-2.5 py-1 rounded-full text-[11px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200/80 dark:border-slate-700 hover:border-emerald-400 dark:hover:border-emerald-500 hover:text-emerald-700 dark:hover:text-emerald-300 hover:bg-emerald-50/50 dark:hover:bg-emerald-950/40 shadow-3xs transition-all whitespace-nowrap shrink-0 cursor-pointer active:scale-95"
-                    title="Gunakan prompt inspirasi ini"
+                    className="px-2 py-0.5 rounded-md text-[11px] font-medium text-slate-600 dark:text-slate-400 hover:text-emerald-700 dark:hover:text-emerald-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
                   >
                     {pill.label}
                   </button>
                 ))}
               </div>
-              <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-white dark:from-[#0F172A] to-transparent z-10" />
             </div>
 
-            {/* Modern Floating Card Composer */}
-            <div className="relative rounded-2xl bg-slate-50/90 dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm focus-within:border-emerald-500/80 dark:focus-within:border-emerald-500/80 focus-within:ring-2 focus-within:ring-emerald-500/20 transition-all p-2.5 sm:p-3">
-              {/* Attached file tag preview */}
+            {/* Compact Floating Composer Container */}
+            <div className="relative rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 focus-within:border-emerald-500/80 focus-within:ring-1 focus-within:ring-emerald-500/30 transition-all p-2">
+              {/* Attached File Chip */}
               {attachedFile && (
-                <div className="flex items-center gap-2 mb-2 px-2.5 py-1 bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 rounded-xl text-xs text-emerald-800 dark:text-emerald-200 animate-fade-in">
+                <div className="flex items-center gap-2 mb-1.5 px-2 py-1 bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 rounded-lg text-xs text-emerald-800 dark:text-emerald-200">
                   <FileText className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
                   <span className="truncate flex-1 font-medium">{attachedFile.name}</span>
                   <button
                     type="button"
                     onClick={() => setAttachedFile(null)}
-                    className="h-5 w-5 flex items-center justify-center hover:bg-emerald-100 dark:hover:bg-emerald-900 rounded-lg text-emerald-700 dark:text-emerald-300 transition-colors"
+                    className="p-0.5 hover:bg-emerald-100 dark:hover:bg-emerald-900 rounded text-emerald-700 dark:text-emerald-300 transition-colors"
                     title="Hapus lampiran"
                   >
-                    <X className="w-3.5 h-3.5" />
+                    <X className="w-3 h-3" />
                   </button>
                 </div>
               )}
@@ -1196,15 +1218,15 @@ Mohon berikan hasil revisi lengkapnya yang dibungkus dalam tag:
                     if (fullPrompt) executeSendMessage(fullPrompt);
                   }
                 }}
-                placeholder="Tanyakan tugas akademik, format sitasi, draf skripsi, atau tempel kode..."
+                placeholder="Tanyakan tugas akademik, format sitasi, atau tempel draf/kode..."
                 rows={1}
-                className="w-full text-xs sm:text-sm px-1 pt-0.5 pb-2 bg-transparent text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none resize-none leading-relaxed min-h-[44px]"
+                className="w-full text-xs sm:text-sm px-1 py-1 bg-transparent text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none resize-none leading-relaxed min-h-[40px]"
               />
 
               {/* Action Bar Inside Composer */}
-              <div className="flex items-center justify-between pt-1.5 border-t border-slate-200/60 dark:border-slate-800">
-                {/* Left: Attachment & Template Picker Pill */}
-                <div className="flex items-center gap-1.5">
+              <div className="flex items-center justify-between pt-1 border-t border-slate-200/60 dark:border-slate-800">
+                {/* Left Controls: Attach & Template */}
+                <div className="flex items-center gap-1">
                   <input
                     type="file"
                     ref={fileInputRef}
@@ -1215,11 +1237,11 @@ Mohon berikan hasil revisi lengkapnya yang dibungkus dalam tag:
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    className="h-8 w-8 flex items-center justify-center rounded-lg text-slate-500 hover:text-emerald-700 dark:hover:text-emerald-300 hover:bg-slate-200/70 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-                    title="Lampirkan dokumen tugas atau kode (.pdf, .docx, .txt, .md, .py, dll)"
-                    aria-label="Lampirkan Dokumen"
+                    className="h-7 px-2 rounded-md text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-800 transition-colors cursor-pointer text-xs font-medium flex items-center gap-1"
+                    title="Lampirkan dokumen atau kode"
                   >
-                    <Paperclip className="w-4 h-4" />
+                    <Paperclip className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Lampirkan</span>
                   </button>
 
                   <button
@@ -1228,17 +1250,17 @@ Mohon berikan hasil revisi lengkapnya yang dibungkus dalam tag:
                       setSelectedTemplateForModal(ACADEMIC_TEMPLATES[0]);
                       setTemplateInputSnippet('');
                     }}
-                    className="h-8 flex items-center gap-1.5 px-2.5 rounded-lg text-slate-600 dark:text-slate-300 hover:text-emerald-700 dark:hover:text-emerald-300 hover:bg-slate-200/70 dark:hover:bg-slate-800 transition-colors text-xs font-medium cursor-pointer"
-                    title="Pilih Template Tugas Akademik"
+                    className="h-7 px-2 rounded-md text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-800 transition-colors text-xs font-medium cursor-pointer flex items-center gap-1"
+                    title="Buka Galeri Template"
                   >
                     <Sparkles className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                     <span>Template</span>
                   </button>
                 </div>
 
-                {/* Right: Enter hint & Send button */}
+                {/* Right Controls: Enter Hint & Send */}
                 <div className="flex items-center gap-2">
-                  <span className="text-[10.5px] text-slate-400 font-sans hidden sm:inline select-none">
+                  <span className="text-[10px] text-slate-400 font-sans hidden sm:inline select-none">
                     Enter ↵
                   </span>
 
@@ -1246,11 +1268,11 @@ Mohon berikan hasil revisi lengkapnya yang dibungkus dalam tag:
                     <button
                       type="button"
                       onClick={handleAbortStream}
-                      className="h-8.5 w-8.5 rounded-xl bg-rose-500 hover:bg-rose-600 active:scale-95 text-white flex items-center justify-center transition-all cursor-pointer shadow-xs"
-                      title="Hentikan pembuatan respons (Batal)"
-                      aria-label="Batal"
+                      className="h-7 w-7 rounded-lg bg-rose-500 hover:bg-rose-600 text-white flex items-center justify-center transition-all cursor-pointer"
+                      title="Hentikan respons"
+                      aria-label="Hentikan"
                     >
-                      <StopCircle className="w-4 h-4" />
+                      <StopCircle className="w-3.5 h-3.5" />
                     </button>
                   ) : (
                     <button
@@ -1266,12 +1288,12 @@ Mohon berikan hasil revisi lengkapnya yang dibungkus dalam tag:
                         if (fullPrompt) executeSendMessage(fullPrompt);
                       }}
                       disabled={!inputText.trim() && !attachedFile}
-                      className={`h-8.5 w-8.5 rounded-xl flex items-center justify-center transition-all cursor-pointer ${
+                      className={`h-7 w-7 rounded-lg flex items-center justify-center transition-all cursor-pointer ${
                         inputText.trim() || attachedFile
-                          ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm active:scale-95'
+                          ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs active:scale-95'
                           : 'bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
                       }`}
-                      title="Kirim pesan"
+                      title="Kirim"
                       aria-label="Kirim Pesan"
                     >
                       <Send className="w-3.5 h-3.5" />
@@ -1283,14 +1305,14 @@ Mohon berikan hasil revisi lengkapnya yang dibungkus dalam tag:
           </div>
         </section>
 
-        {/* SISI KANAN: LIVE ARTIFACT CANVAS (~60-62% desktop) */}
+        {/* RIGHT PANE: LIVE ARTIFACT CANVAS */}
         {isCanvasOpen && (
           <section 
-            className="hidden lg:flex flex-1 flex-col h-full overflow-hidden transition-[flex,width] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]"
+            className="hidden lg:flex flex-1 flex-col h-full overflow-hidden transition-all duration-200"
           >
-            {/* Multi-Artifact Tab Strip (when multiple artifacts exist) */}
+            {/* Multi-Artifact Tab Strip (when > 1 artifacts exist) */}
             {artifacts.length > 1 && (
-              <div className="h-10 px-3 bg-white/80 dark:bg-[#0F172A]/80 border-b border-slate-200/80 dark:border-slate-800 flex items-center gap-1.5 overflow-x-auto no-scrollbar shrink-0 z-10">
+              <div className="h-9 px-3 bg-white dark:bg-[#0F172A] border-b border-slate-200/80 dark:border-slate-800 flex items-center gap-1 overflow-x-auto no-scrollbar shrink-0 z-10">
                 {artifacts.map((art) => {
                   const isActive = art.id === activeArtifactId;
                   return (
@@ -1301,19 +1323,16 @@ Mohon berikan hasil revisi lengkapnya yang dibungkus dalam tag:
                         setActiveArtifactId(art.id);
                         setHasUnreadArtifact(false);
                       }}
-                      className={`h-7 px-2.5 rounded-lg text-xs font-medium flex items-center gap-1.5 whitespace-nowrap transition-all cursor-pointer shrink-0 ${
+                      className={`h-6.5 px-2.5 rounded-md text-xs font-medium flex items-center gap-1.5 whitespace-nowrap transition-colors cursor-pointer shrink-0 ${
                         isActive
-                          ? 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100 shadow-2xs font-semibold ring-1 ring-slate-300/70 dark:ring-slate-700'
-                          : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-850'
+                          ? 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-semibold'
+                          : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
                       }`}
                       title={art.title}
                     >
                       {getArtifactTabIcon(art.type)}
-                      <span className="truncate max-w-[140px]">{art.title}</span>
+                      <span className="truncate max-w-[130px]">{art.title}</span>
                       <span className="text-[9.5px] font-mono opacity-60">v{art.version || 1}</span>
-                      {hasUnreadArtifact && art.id === activeArtifactId && (
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                      )}
                     </button>
                   );
                 })}
@@ -1326,9 +1345,7 @@ Mohon berikan hasil revisi lengkapnya yang dibungkus dalam tag:
                 onUpdateArtifact={handleUpdateActiveArtifact}
                 onSaveArtifact={handleSaveArtifact}
                 onRollbackVersion={handleRollbackArtifact}
-                onClose={() => {
-                  setIsCanvasOpen(false);
-                }}
+                onClose={() => setIsCanvasOpen(false)}
                 onRequestRevision={handleRequestRevision}
                 isStreaming={isStreaming}
                 isExpanded={isCanvasExpanded}
@@ -1336,17 +1353,17 @@ Mohon berikan hasil revisi lengkapnya yang dibungkus dalam tag:
               />
             ) : (
               <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-slate-400">
-                <FileText className="w-12 h-12 text-slate-300 dark:text-slate-700 mb-3" />
-                <h3 className="font-semibold text-slate-700 dark:text-slate-300 text-base">Belum Ada Artefak Aktif</h3>
-                <p className="text-xs max-w-sm mt-1 mb-4">
+                <FileText className="w-10 h-10 text-slate-300 dark:text-slate-700 mb-2" />
+                <h3 className="font-semibold text-slate-700 dark:text-slate-300 text-sm">Belum Ada Artefak Aktif</h3>
+                <p className="text-xs max-w-xs mt-1 mb-3">
                   Kirim pertanyaan di kolom obrolan atau buat draf dokumen/kode baru untuk ditampilkan di Canvas.
                 </p>
                 <button
                   type="button"
                   onClick={() => handleCreateNewArtifact('DOCUMENT')}
-                  className="h-9 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-sm transition-all cursor-pointer flex items-center gap-1.5"
+                  className="h-8 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-2xs transition-all cursor-pointer flex items-center gap-1.5"
                 >
-                  <FilePlus className="w-4 h-4" />
+                  <FilePlus className="w-3.5 h-3.5" />
                   <span>+ Buat Draf Baru</span>
                 </button>
               </div>
@@ -1354,44 +1371,37 @@ Mohon berikan hasil revisi lengkapnya yang dibungkus dalam tag:
           </section>
         )}
 
-        {/* Mobile Slide-Over Drawer with Spring Transition */}
+        {/* Mobile Slide-Over Drawer for Canvas */}
         <AnimatePresence>
           {mobileActiveTab === 'canvas' && (
             <motion.div
               key="mobile-canvas-drawer"
-              initial={shouldReduceMotion ? { opacity: 0 } : { x: '100%', opacity: 0.8 }}
-              animate={{ x: 0, opacity: 1 }}
-              exit={shouldReduceMotion ? { opacity: 0 } : { x: '100%', opacity: 0 }}
-              transition={{ type: 'spring', stiffness: 350, damping: 32 }}
+              initial={shouldReduceMotion ? { opacity: 0 } : { x: '100%' }}
+              animate={{ x: 0 }}
+              exit={shouldReduceMotion ? { opacity: 0 } : { x: '100%' }}
+              transition={{ duration: 0.18 }}
               className="lg:hidden fixed inset-0 z-40 bg-white dark:bg-[#0F172A] flex flex-col shadow-2xl"
             >
               {/* Mobile Drawer Top Bar */}
-              <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-200 dark:border-slate-800 bg-slate-50/90 dark:bg-slate-900/90 shrink-0">
-                <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-lg bg-emerald-100 dark:bg-emerald-950/80 border border-emerald-300 dark:border-emerald-800 flex items-center justify-center text-emerald-700 dark:text-emerald-300">
-                    <FileCode className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100">
-                      {activeArtifact?.title || 'Canvas Dokumen'}
-                    </h4>
-                    <p className="text-[10px] text-slate-500 dark:text-slate-400">
-                      Slide-Over Canvas
-                    </p>
-                  </div>
+              <div className="flex items-center justify-between px-3 py-2 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 shrink-0">
+                <div className="flex items-center gap-2 min-w-0">
+                  <FileCode className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                  <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">
+                    {activeArtifact?.title || 'Canvas Dokumen'}
+                  </h4>
                 </div>
                 <button
                   type="button"
                   onClick={() => setMobileActiveTab('chat')}
-                  className="h-8 px-3 rounded-xl bg-slate-200/70 hover:bg-slate-300/70 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                  className="h-7 px-2.5 rounded-md bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
                   aria-label="Kembali ke Obrolan"
                 >
-                  <X className="w-4 h-4" />
+                  <X className="w-3.5 h-3.5" />
                   <span>Tutup</span>
                 </button>
               </div>
 
-              {/* Drawer Content */}
+              {/* Drawer Body */}
               <div className="flex-1 overflow-hidden">
                 {activeArtifact ? (
                   <ArtifactCanvas
@@ -1407,14 +1417,14 @@ Mohon berikan hasil revisi lengkapnya yang dibungkus dalam tag:
                   />
                 ) : (
                   <div className="flex-1 h-full flex flex-col items-center justify-center p-8 text-center text-slate-400">
-                    <FileText className="w-12 h-12 text-slate-300 dark:text-slate-700 mb-3" />
-                    <h3 className="font-semibold text-slate-700 dark:text-slate-300 text-base">Belum Ada Artefak Aktif</h3>
+                    <FileText className="w-10 h-10 text-slate-300 dark:text-slate-700 mb-2" />
+                    <h3 className="font-semibold text-slate-700 dark:text-slate-300 text-sm">Belum Ada Artefak Aktif</h3>
                     <button
                       type="button"
                       onClick={() => handleCreateNewArtifact('DOCUMENT')}
-                      className="h-9 px-4 mt-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-sm transition-all cursor-pointer flex items-center gap-1.5"
+                      className="h-8 px-3 mt-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-2xs transition-all cursor-pointer flex items-center gap-1.5"
                     >
-                      <FilePlus className="w-4 h-4" />
+                      <FilePlus className="w-3.5 h-3.5" />
                       <span>+ Buat Draf Baru</span>
                     </button>
                   </div>
@@ -1425,7 +1435,7 @@ Mohon berikan hasil revisi lengkapnya yang dibungkus dalam tag:
         </AnimatePresence>
       </main>
 
-      {/* Modal Template Quick Input */}
+      {/* Template Gallery Modal */}
       <WorkspaceTemplateModal
         template={selectedTemplateForModal}
         snippet={templateInputSnippet}

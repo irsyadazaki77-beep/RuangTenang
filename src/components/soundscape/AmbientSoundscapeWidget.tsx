@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Volume2,
@@ -11,23 +11,18 @@ import {
   Headphones,
   Music,
   Coffee,
-  Sparkles,
   Clock,
   Timer,
   ChevronDown,
   X,
-  Maximize2,
   Sliders,
   Radio,
-  RotateCcw,
   Zap
 } from 'lucide-react';
 import {
   soundscapeEngine,
   SOUNDSCAPE_TRACKS,
-  SoundscapeState,
-  SoundscapeTrackId,
-  TimerMode
+  SoundscapeState
 } from '../../lib/soundscapeEngine';
 
 interface AmbientSoundscapeWidgetProps {
@@ -92,113 +87,99 @@ export const AmbientSoundscapeWidget: React.FC<AmbientSoundscapeWidgetProps> = (
 
   return (
     <>
-      {/* Floating Widget: Minimized Badge vs Expanded Pill */}
+      {/* Floating Widget: Compact Icon when Inactive vs Ambient Pill when Playing */}
       <aside 
         aria-label="Pemutar Suara Latar Ambient & Timer Fokus"
-        className="fixed bottom-24 right-4 sm:right-6 sm:bottom-24 z-30 flex items-center gap-2 select-none pointer-events-auto"
+        className="fixed bottom-[5.5rem] right-3 sm:bottom-20 sm:right-4 z-20 flex items-center gap-2 select-none pointer-events-auto"
       >
         <AnimatePresence mode="wait">
-          {isMinimized ? (
+          {!engineState.isPlaying || isMinimized ? (
             <motion.div
-              key="minimized-soundscape"
-              initial={{ scale: 0.8, opacity: 0 }}
+              key="compact-soundscape"
+              initial={{ scale: 0.85, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.8, opacity: 0 }}
-              transition={{ type: 'spring', stiffness: 400, damping: 28 }}
+              exit={{ scale: 0.85, opacity: 0 }}
+              transition={{ duration: 0.15 }}
             >
               <button
-                onClick={() => setIsMinimized(false)}
-                className={`group relative w-10 h-10 rounded-full flex items-center justify-center backdrop-blur-xl border shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 transition-all cursor-pointer ${
+                onClick={() => {
+                  if (!engineState.isPlaying) {
+                    setIsOpen(true);
+                  } else {
+                    setIsMinimized(false);
+                  }
+                }}
+                className={`group relative w-8 h-8 sm:w-8.5 sm:h-8.5 rounded-full flex items-center justify-center backdrop-blur-md border shadow-2xs hover:shadow-xs transition-all cursor-pointer ${
                   engineState.isPlaying
-                    ? 'bg-gradient-to-tr from-teal-600 to-emerald-500 text-white border-teal-400/40 shadow-teal-500/25 ring-2 ring-teal-400/30'
-                    : 'bg-white/95 dark:bg-slate-900/95 border-stone-200/80 dark:border-slate-800 text-stone-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-teal-400'
+                    ? 'bg-teal-600 text-white border-teal-500 shadow-teal-600/20'
+                    : 'bg-white/90 dark:bg-slate-900/90 border-stone-200/70 dark:border-slate-800 text-stone-500 dark:text-slate-400 hover:text-teal-600 dark:hover:text-teal-400 hover:border-stone-300 dark:hover:border-slate-700'
                 }`}
                 title="Buka Pemutar Soundscape"
                 aria-label="Buka Pemutar Soundscape Ambient"
               >
-                {engineState.isPlaying ? (
-                  <div className="relative flex items-center justify-center">
-                    <Headphones className="w-4 h-4 animate-pulse" />
-                    <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-emerald-300 animate-ping" />
-                  </div>
-                ) : (
-                  <Headphones className="w-4 h-4" />
-                )}
+                <Headphones className="w-3.5 h-3.5" />
+                
                 {/* Tooltip on hover */}
-                <span className="absolute right-full mr-2 px-2 py-1 rounded-lg text-[10px] font-medium bg-slate-900/90 text-white dark:bg-slate-100 dark:text-slate-900 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap shadow-md">
-                  {engineState.isPlaying ? 'Soundscape Aktif' : 'Soundscape Tenang'}
+                <span className="absolute right-full mr-2 px-2 py-0.5 rounded-md text-[10px] font-medium bg-stone-900 text-white dark:bg-stone-100 dark:text-stone-900 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap shadow-3xs">
+                  {engineState.isPlaying ? 'Soundscape Aktif' : 'Soundscape'}
                 </span>
               </button>
             </motion.div>
           ) : (
             <motion.div
-              key="expanded-soundscape-pill"
+              key="active-soundscape-pill"
               layout
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
-              transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+              transition={{ duration: 0.18 }}
               className="relative group"
             >
               {/* Main Floating Pill Button */}
-              <div className="flex items-center gap-1 sm:gap-1.5 p-1 sm:p-1.5 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-stone-200/80 dark:border-slate-800 rounded-full shadow-lg hover:shadow-xl transition-all duration-200">
+              <div className="flex items-center gap-1 sm:gap-1.5 p-1 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-stone-200/80 dark:border-slate-800 rounded-full shadow-md hover:shadow-lg transition-all duration-150">
                 {/* Quick Play/Pause */}
                 <button
                   onClick={() => soundscapeEngine.togglePlay()}
-                  className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center transition-all cursor-pointer shrink-0 ${
-                    engineState.isPlaying
-                      ? 'bg-gradient-to-tr from-teal-600 to-emerald-500 text-white shadow-md shadow-teal-500/20'
-                      : 'bg-stone-100 dark:bg-slate-800 text-stone-600 dark:text-slate-300 hover:bg-stone-200 dark:hover:bg-slate-700'
-                  }`}
-                  title={engineState.isPlaying ? 'Jeda Suara Ambient' : 'Putar Suara Latar Ambient'}
-                  aria-label={engineState.isPlaying ? 'Jeda Suara Ambient' : 'Putar Suara Latar Ambient'}
+                  className="w-7 h-7 sm:w-7.5 sm:h-7.5 rounded-full flex items-center justify-center bg-teal-600 text-white hover:bg-teal-700 transition-all cursor-pointer shrink-0 shadow-3xs"
+                  title="Jeda Suara Ambient"
+                  aria-label="Jeda Suara Ambient"
                 >
-                  {engineState.isPlaying ? (
-                    <Pause className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                  ) : (
-                    <Play className="w-3.5 h-3.5 sm:w-4 sm:h-4 ml-0.5" />
-                  )}
+                  <Pause className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                 </button>
 
                 {/* Audio Waveform Bars (Visualizer) & Status */}
                 <button
                   onClick={() => setIsOpen(!isOpen)}
-                  className="flex items-center gap-1.5 sm:gap-2 px-1.5 sm:px-2.5 py-1 text-left cursor-pointer hover:opacity-80 transition-opacity"
+                  className="flex items-center gap-1.5 sm:gap-2 px-1 sm:px-2 py-0.5 text-left cursor-pointer hover:opacity-85 transition-opacity"
                   title="Buka Mixer Soundscape & Timer"
                   aria-label="Buka Mixer Soundscape & Timer"
                 >
                   {/* Dynamic Animated Bars */}
-                  <div className="flex items-end gap-[2.5px] sm:gap-[3px] h-3.5 sm:h-4 w-4 sm:w-5">
+                  <div className="flex items-end gap-[2px] h-3 w-3.5">
                     {[0.4, 0.8, 1.0, 0.6].map((multiplier, i) => {
-                      const baseHeight = engineState.isPlaying ? Math.max(3, (visualizerLevel * 20 + 4) * multiplier) : 3;
+                      const baseHeight = Math.max(3, (visualizerLevel * 14 + 3) * multiplier);
                       return (
                         <motion.div
                           key={i}
-                          className={`w-[2.5px] sm:w-[3px] rounded-full transition-all duration-75 ${
-                            engineState.isPlaying ? 'bg-teal-500 dark:bg-teal-400' : 'bg-stone-300 dark:bg-slate-700'
-                          }`}
+                          className="w-[2px] rounded-full bg-teal-500 dark:bg-teal-400 transition-all duration-75"
                           style={{ height: `${baseHeight}px` }}
                         />
                       );
                     })}
                   </div>
 
-                  {/* Text Title & Subtitle - Hidden on mobile (< sm) for compact pill form factor */}
+                  {/* Text Title & Subtitle - Hidden on small mobile for compact pill */}
                   <div className="hidden sm:block">
-                    <div className="text-[11.5px] font-semibold text-stone-800 dark:text-stone-200 leading-tight whitespace-nowrap">
-                      {engineState.isPlaying ? (
-                        currentMode === 'RUANG_KERJA' ? 'Fokus Suara Ambient' : 'Soundscape Tenang'
-                      ) : (
-                        'Suara Latar'
-                      )}
+                    <div className="text-[11px] font-medium text-stone-800 dark:text-stone-200 leading-tight whitespace-nowrap">
+                      Soundscape Tenang
                     </div>
-                    <div className="text-[9.5px] text-stone-500 dark:text-slate-400 flex items-center gap-1 whitespace-nowrap">
+                    <div className="text-[9px] text-stone-400 dark:text-slate-400 flex items-center gap-1 whitespace-nowrap">
                       {engineState.timerMode !== 'none' ? (
                         <span className="text-teal-600 dark:text-teal-400 font-medium">
                           ⏱ {formatTimer(engineState.timerRemainingSeconds)}
                         </span>
                       ) : (
-                        <span>{engineState.activeTracks.size} Layer Aktif</span>
+                        <span>{engineState.activeTracks.size} Layer</span>
                       )}
                     </div>
                   </div>
@@ -207,21 +188,21 @@ export const AmbientSoundscapeWidget: React.FC<AmbientSoundscapeWidgetProps> = (
                 {/* Open Mixer Drawer Button */}
                 <button
                   onClick={() => setIsOpen(!isOpen)}
-                  className="w-7 h-7 rounded-full flex items-center justify-center text-stone-400 hover:text-stone-700 dark:hover:text-slate-200 hover:bg-stone-100 dark:hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
-                  title="Buka Panel Mixer Audio & Timer"
-                  aria-label="Buka Panel Mixer Audio & Timer"
+                  className="w-6 h-6 rounded-full flex items-center justify-center text-stone-400 hover:text-stone-700 dark:hover:text-slate-200 hover:bg-stone-100 dark:hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
+                  title="Buka Panel Mixer"
+                  aria-label="Buka Panel Mixer Audio"
                 >
-                  <Sliders className="w-3.5 h-3.5" />
+                  <Sliders className="w-3 h-3" />
                 </button>
 
-                {/* Minimize / Collapse Button */}
+                {/* Minimize Button */}
                 <button
                   onClick={() => setIsMinimized(true)}
-                  className="w-6 h-6 sm:w-6.5 sm:h-6.5 rounded-full flex items-center justify-center text-stone-400 hover:text-stone-700 dark:hover:text-slate-200 hover:bg-stone-100 dark:hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
-                  title="Ciutkan Widget ke Samping"
-                  aria-label="Ciutkan Widget Pemutar Musik"
+                  className="w-5.5 h-5.5 rounded-full flex items-center justify-center text-stone-400 hover:text-stone-700 dark:hover:text-slate-200 hover:bg-stone-100 dark:hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
+                  title="Ciutkan Widget"
+                  aria-label="Ciutkan Widget"
                 >
-                  <ChevronDown className="w-3.5 h-3.5" />
+                  <ChevronDown className="w-3 h-3" />
                 </button>
               </div>
             </motion.div>
@@ -361,12 +342,12 @@ export const AmbientSoundscapeWidget: React.FC<AmbientSoundscapeWidgetProps> = (
                     {/* Multi-Track Layers */}
                     <div className="space-y-2.5">
                       <div className="flex items-center justify-between text-[11px] font-semibold text-stone-500 dark:text-slate-400 uppercase tracking-wider">
-                        <span>Pilihan Lapisan Suara ({SOUNDSCAPE_TRACKS.length} Track):</span>
+                        <span>Pilihan Lapisan Suara ({filteredTracks.length} Track):</span>
                         <span>Padukan Layer</span>
                       </div>
 
                       <div className="space-y-2">
-                        {SOUNDSCAPE_TRACKS.map(track => {
+                        {filteredTracks.map(track => {
                           const isActive = engineState.activeTracks.has(track.id);
                           const volume = engineState.trackVolumes[track.id] ?? 0.5;
 

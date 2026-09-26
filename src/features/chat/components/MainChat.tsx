@@ -4,7 +4,7 @@ import { MessageBubble } from './MessageBubble';
 import { StreamingBubble } from './StreamingBubble';
 import { ChatComposer } from './ChatComposer';
 import { Message, ChatMode, ResponseStyle, Chat } from '../types';
-import { UserSession, Appointment } from '../../../types';
+import { UserSession } from '../../../types';
 import { ChatModalContainer } from './ChatModalContainer';
 import { RefreshCw, ChevronDown, Sparkles, Clock, Wind, Calendar, ArrowDown, Shield, Eye, X, Video } from 'lucide-react';
 import { useToast } from '../../../components/Toast';

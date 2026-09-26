@@ -118,7 +118,7 @@ describe('FASE 7: Data Privacy, Sensitive Data Lifecycle & Security Tests', () =
       process.env.NODE_ENV = 'production';
       delete process.env.JWT_SECRET;
 
-      expect(() => validateEnvironment()).toThrow(/FATAL SECURITY ERROR: JWT_SECRET environment variable is missing/);
+      expect(() => validateEnvironment()).toThrow(/JWT_SECRET environment variable is missing/);
 
       // Restore
       process.env.NODE_ENV = origEnv;

@@ -109,6 +109,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     safeSessionStorage.removeItem('ruangtenang_session');
     safeSessionStorage.removeItem('active_counselor_tab');
     safeSessionStorage.removeItem('ruangtenang_draft_chat');
+    safeLocalStorage.removeItem('rt_privacy_vault_pin_hash');
+    safeLocalStorage.removeItem('rt_privacy_vault_salt');
     safeLocalStorage.setItem('rt_active_user_id', 'guest');
 
     // Clean up volatile clientDb memory
@@ -122,6 +124,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const handleSetUser = (newUser: UserSession | null) => {
     authVersionRef.current++;
     const finalUser = newUser || (isTestEnv() ? DEFAULT_GUEST_USER : null);
+    if (user && finalUser && user.id !== finalUser.id) {
+      // Account switch detected: Deterministically clean up volatile memory and private vault session
+      clientDb.clearAllMemory();
+      safeSessionStorage.removeItem('ruangtenang_draft_chat');
+      safeSessionStorage.removeItem('active_counselor_tab');
+      safeLocalStorage.removeItem('rt_privacy_vault_pin_hash');
+      safeLocalStorage.removeItem('rt_privacy_vault_salt');
+    }
     setUser(finalUser);
     safeLocalStorage.setItem('rt_active_user_id', finalUser ? finalUser.id : 'guest');
   };
