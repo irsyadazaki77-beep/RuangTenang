@@ -66,7 +66,18 @@ async function startServer() {
 
   const app = express();
   
-  const PORT = 3000;
+  let PORT = 3000;
+  const portArgIdx = process.argv.indexOf('--port');
+  if (portArgIdx !== -1 && process.argv[portArgIdx + 1]) {
+    const parsed = Number(process.argv[portArgIdx + 1]);
+    if (!isNaN(parsed) && parsed > 0) PORT = parsed;
+  } else if (process.env.PORT) {
+    try {
+      PORT = parsePort(process.env.PORT, 3000);
+    } catch {
+      PORT = 3000;
+    }
+  }
 
   // Trust proxy setup for Cloud Run / reverse proxies
   const trustProxySetting = process.env.TRUST_PROXY || '1';

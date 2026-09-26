@@ -5,6 +5,7 @@ import App from '../../App';
 import { AuthProvider } from '../../contexts/AuthContext';
 import { ThemeProvider } from '../../contexts/ThemeContext';
 import { ToastProvider } from '../../components/Toast';
+import { PrivacyVaultProvider } from '../../contexts/PrivacyVaultContext';
 import { lazyWithRetry } from '../../lib/lazyWithRetry';
 
 vi.mock('../../lib/apiClient', () => ({
@@ -52,11 +53,13 @@ const renderTestApp = (initialRoute = '/') => {
   return render(
     <AuthProvider>
       <ThemeProvider>
-        <ToastProvider>
-          <MemoryRouter initialEntries={[initialRoute]}>
-            <App />
-          </MemoryRouter>
-        </ToastProvider>
+        <PrivacyVaultProvider>
+          <ToastProvider>
+            <MemoryRouter initialEntries={[initialRoute]}>
+              <App />
+            </MemoryRouter>
+          </ToastProvider>
+        </PrivacyVaultProvider>
       </ThemeProvider>
     </AuthProvider>
   );

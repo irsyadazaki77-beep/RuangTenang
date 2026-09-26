@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { Shield, Lock, Unlock, KeyRound, AlertCircle, X, Check, Eye, EyeOff, RefreshCw } from 'lucide-react';
+import { Lock, Unlock, KeyRound, AlertCircle, X, RefreshCw } from 'lucide-react';
 import { usePrivacyVault } from '../../contexts/PrivacyVaultContext';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion } from 'motion/react';
 
 interface VaultPinModalProps {
   isOpen: boolean;
@@ -16,10 +16,9 @@ export const VaultPinModal: React.FC<VaultPinModalProps> = ({
   mode = 'unlock',
   onSuccess
 }) => {
-  const { isVaultConfigured, setupPin, unlockVault, changePin, removePin } = usePrivacyVault();
+  const { isVaultConfigured, setupPin, unlockVault, removePin } = usePrivacyVault();
   const [pin, setPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
-  const [oldPin, setOldPin] = useState('');
   const [step, setStep] = useState<'enter' | 'confirm'>('enter');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);

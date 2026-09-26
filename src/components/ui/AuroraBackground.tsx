@@ -133,44 +133,55 @@ export const AuroraBackground: React.FC<AuroraBackgroundProps> = memo(({
     >
       {/* 3 GPU-Accelerated Mesh Gradient Ellipses */}
       <div className="absolute inset-0 w-full h-full overflow-hidden" style={{ contain: 'strict' }}>
-        {/* Layer 1: Emerald / Teal Sanctuary (#0d9488 / #10b981) */}
-        <motion.div
-          className="absolute -top-[20%] -left-[15%] w-[80vw] sm:w-[50vw] h-[80vw] sm:h-[50vw] rounded-full blur-[32px] sm:blur-[48px] md:blur-[56px]"
-          style={{
-            ...hardwareLayerStyle,
-            background: 'radial-gradient(circle at center, rgba(13, 148, 136, 0.30) 0%, rgba(16, 185, 129, 0.16) 50%, rgba(13, 148, 136, 0.04) 70%, transparent 80%)',
-          }}
-          animate={layer1Animation}
-          transition={layer1Transition}
-        />
+        <div>
+          {/* Layer 1: Emerald / Teal Sanctuary (#0d9488 / #10b981) */}
+          <motion.div
+            className="absolute -top-[20%] -left-[15%] w-[80vw] sm:w-[50vw] h-[80vw] sm:h-[50vw] rounded-full blur-[32px] sm:blur-[48px] md:blur-[56px]"
+            style={{
+              ...hardwareLayerStyle,
+              background: 'radial-gradient(circle at center, rgba(13, 148, 136, 0.30) 0%, rgba(16, 185, 129, 0.16) 50%, rgba(13, 148, 136, 0.04) 70%, transparent 80%)',
+            }}
+            animate={layer1Animation}
+            transition={layer1Transition}
+          />
 
-        {/* Layer 2: Electric Indigo & Minimalist Slate (#6366f1) */}
-        <motion.div
-          className="absolute -bottom-[15%] -right-[10%] w-[75vw] sm:w-[46vw] h-[75vw] sm:h-[46vw] rounded-full blur-[32px] sm:blur-[48px] md:blur-[56px]"
-          style={{
-            ...hardwareLayerStyle,
-            background: 'radial-gradient(circle at center, rgba(99, 102, 241, 0.20) 0%, rgba(129, 140, 248, 0.12) 45%, rgba(99, 102, 241, 0.03) 70%, transparent 75%)',
-          }}
-          animate={layer2Animation}
-          transition={layer2Transition}
-        />
+          {/* Layer 2: Electric Indigo & Minimalist Slate (#6366f1) */}
+          <motion.div
+            className="absolute -bottom-[15%] -right-[10%] w-[75vw] sm:w-[46vw] h-[75vw] sm:h-[46vw] rounded-full blur-[32px] sm:blur-[48px] md:blur-[56px]"
+            style={{
+              ...hardwareLayerStyle,
+              background: 'radial-gradient(circle at center, rgba(99, 102, 241, 0.20) 0%, rgba(129, 140, 248, 0.12) 45%, rgba(99, 102, 241, 0.03) 70%, transparent 75%)',
+            }}
+            animate={layer2Animation}
+            transition={layer2Transition}
+          />
 
-        {/* Layer 3: Luminous Cyan & Mint Wave (#06b6d4 / #38bdf8) */}
-        <motion.div
-          className="absolute -top-[10%] -right-[12%] w-[70vw] sm:w-[44vw] h-[70vw] sm:h-[44vw] rounded-full blur-[32px] sm:blur-[48px] md:blur-[56px]"
-          style={{
-            ...hardwareLayerStyle,
-            background: 'radial-gradient(circle at center, rgba(6, 182, 212, 0.22) 0%, rgba(56, 189, 248, 0.10) 50%, rgba(6, 182, 212, 0.03) 70%, transparent 80%)',
-          }}
-          animate={layer3Animation}
-          transition={layer3Transition}
-        />
+          {/* Layer 3: Luminous Cyan & Mint Wave (#06b6d4 / #38bdf8) */}
+          <motion.div
+            className="absolute -top-[10%] -right-[12%] w-[70vw] sm:w-[44vw] h-[70vw] sm:h-[44vw] rounded-full blur-[32px] sm:blur-[48px] md:blur-[56px]"
+            style={{
+              ...hardwareLayerStyle,
+              background: 'radial-gradient(circle at center, rgba(6, 182, 212, 0.22) 0%, rgba(56, 189, 248, 0.10) 50%, rgba(6, 182, 212, 0.03) 70%, transparent 80%)',
+            }}
+            animate={layer3Animation}
+            transition={layer3Transition}
+          />
+        </div>
       </div>
 
       {/* Subtle Central Ambient Glow */}
       <div 
         className="absolute inset-0 pointer-events-none bg-[radial-gradient(ellipse_at_center,_transparent_35%,_rgba(250,250,249,0.5)_85%)] dark:bg-[radial-gradient(ellipse_at_center,_transparent_35%,_rgba(8,13,22,0.65)_90%)] transition-colors duration-700" 
       />
+
+      {/* SVG Grain filter to prevent color banding on OLED & Retina */}
+      <svg className="hidden">
+        <defs>
+          <filter id="noiseFilter">
+            <feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="3" stitchTiles="stitch" />
+          </filter>
+        </defs>
+      </svg>
 
       {children}
     </div>

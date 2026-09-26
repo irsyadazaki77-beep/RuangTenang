@@ -34,13 +34,7 @@ export function ChatMemoryModal({
   const [isAdding, setIsAdding] = useState(false);
   const [toggling, setToggling] = useState(false);
 
-  useEffect(() => {
-    if (isOpen) {
-      fetchMemories();
-    }
-  }, [isOpen]);
-
-  const fetchMemories = async (cursor?: string) => {
+  const fetchMemories = React.useCallback(async (cursor?: string) => {
     if (!cursor) {
       setLoading(true);
     } else {
@@ -75,7 +69,13 @@ export function ChatMemoryModal({
         setLoadingMore(false);
       }
     }
-  };
+  }, [showToast]);
+
+  useEffect(() => {
+    if (isOpen) {
+      fetchMemories();
+    }
+  }, [isOpen, fetchMemories]);
 
   const handleToggle = async () => {
     if (!chatId) return;

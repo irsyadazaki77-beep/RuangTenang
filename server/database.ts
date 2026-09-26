@@ -330,8 +330,9 @@ export async function ensureDatabaseReady(): Promise<void> {
   const hasPostgresUrl = dbUrl.startsWith('postgresql://') || dbUrl.startsWith('postgres://');
   const isPostgres = hasPostgresUrl || (explicitProvider === 'postgresql' && hasPostgresUrl);
 
-  if (isProd && !isPostgres) {
-    console.warn('[DATABASE INIT] Running with SQLite database engine.');
+  const isPreview = process.env.IS_AI_STUDIO_PREVIEW === 'true' || process.env.PREVIEW_MODE === 'true';
+  if (isProd && !isPostgres && !isPreview) {
+    throw new Error('FATAL DATABASE ERROR: Production requires PostgreSQL database engine');
   }
 
   try {

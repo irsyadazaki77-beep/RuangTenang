@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Menu, Moon, Sun, Ghost, Brain, ChevronDown, Search, MoreVertical, Sparkles, Bookmark, GitBranch, HeartPulse, Eye, EyeOff, Shield, Incognito as IncognitoIcon, Lock } from 'lucide-react';
+import { Menu, Moon, Sun, Ghost, Brain, ChevronDown, Search, MoreVertical, Sparkles, Bookmark, GitBranch, HeartPulse, Eye, EyeOff, Shield, Lock } from 'lucide-react';
 import { ChatMode, ResponseStyle } from '../types';
 import { UserSession } from '../../../types';
 import { useTheme } from '../../../contexts/ThemeContext';
@@ -49,7 +49,7 @@ export function ChatHeader({
   onTogglePrivacy
 }: ChatHeaderProps) {
   const { actualTheme, toggleTheme } = useTheme();
-  const { isIncognitoMode, toggleIncognito, triggerPanicScreen, isVaultConfigured } = usePrivacyVault();
+  const { isIncognitoMode, toggleIncognito, triggerPanicScreen } = usePrivacyVault();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const currentModel = AVAILABLE_AI_MODELS.find(m => m.id === aiModel) || AVAILABLE_AI_MODELS[0];
   const isSettingsOpen = activePlugin === 'chat_settings';

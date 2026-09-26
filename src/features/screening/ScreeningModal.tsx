@@ -262,8 +262,9 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
 
   useEffect(() => {
     return () => {
-      if (autoAdvanceTimerRef.current) {
-        clearTimeout(autoAdvanceTimerRef.current);
+      const timer = autoAdvanceTimerRef.current;
+      if (timer) {
+        clearTimeout(timer);
       }
     };
   }, []);

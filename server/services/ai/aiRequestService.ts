@@ -294,7 +294,21 @@ Pedoman Interaksi:
         return { stream: primaryStream, modelUsed: primaryModel };
       } catch (err: any) {
         primaryError = err;
+        const errMsg = (err?.message || String(err)).toLowerCase();
+        const isRateLimit = 
+          errMsg.includes('429') || 
+          errMsg.includes('quota') || 
+          errMsg.includes('resource_exhausted') || 
+          errMsg.includes('rate limit') || 
+          errMsg.includes('too many requests') ||
+          (err.status && Number(err.status) === 429) ||
+          (err.code && Number(err.code) === 429);
+
         console.warn(`[AI_RESILIENCE] Primary stream attempt ${attempt + 1} failed: ${err?.message || err}`);
+        if (isRateLimit) {
+          console.warn(`[AI_RESILIENCE] Primary model "${primaryModel}" quota exhausted (429). Fast-switching to fallback stream model.`);
+          break;
+        }
         if (attempt < maxRetries) {
           await new Promise(resolve => setTimeout(resolve, (attempt + 1) * 400));
         }
@@ -322,7 +336,21 @@ Pedoman Interaksi:
         aiModelRouter.recordSuccess();
         return { stream: fallbackStream, modelUsed: fallbackModel };
       } catch (fallbackErr: any) {
+        const errMsg = (fallbackErr?.message || String(fallbackErr)).toLowerCase();
+        const isRateLimit = 
+          errMsg.includes('429') || 
+          errMsg.includes('quota') || 
+          errMsg.includes('resource_exhausted') || 
+          errMsg.includes('rate limit') || 
+          errMsg.includes('too many requests') ||
+          (fallbackErr.status && Number(fallbackErr.status) === 429) ||
+          (fallbackErr.code && Number(fallbackErr.code) === 429);
+
         console.warn(`[AI_RESILIENCE] Fallback stream attempt ${fallbackAttempt + 1} failed: ${fallbackErr?.message || fallbackErr}`);
+        if (isRateLimit) {
+          console.warn(`[AI_RESILIENCE] Fallback stream model quota exhausted (429). Fast-switching to local calming stream.`);
+          break;
+        }
         if (fallbackAttempt === 0) {
           await new Promise(resolve => setTimeout(resolve, 500));
         }

@@ -19,10 +19,14 @@ export function resolveDatabaseConfiguration(): DatabaseConfiguration {
   const explicitProvider = (process.env.DB_PROVIDER || '').toLowerCase().trim();
 
   const isTest = process.env.VITEST === 'true' || process.env.NODE_ENV === 'test';
+  const isPreview = process.env.IS_AI_STUDIO_PREVIEW === 'true' || process.env.PREVIEW_MODE === 'true';
 
-  if (isProduction) {
-    if (!hasPostgresUrl) {
-      console.warn('[DATABASE CONFIG] PostgreSQL DATABASE_URL not detected. Falling back safely to SQLite database for resilience.');
+  if (isProduction && !isPreview) {
+    if (!dbUrl) {
+      throw new Error('Production database requires PostgreSQL');
+    }
+    if (!hasPostgresUrl || dbUrl.startsWith('file:')) {
+      throw new Error('Production database requires PostgreSQL. Fallback to SQLite is prohibited.');
     }
   }
 

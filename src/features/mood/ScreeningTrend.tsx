@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Activity, Compass, BookOpen, ArrowRight, FileSpreadsheet, RotateCcw, Moon, Heart, TrendingDown, TrendingUp, Minus, Download, FileText } from 'lucide-react';
+import { Activity, Compass, BookOpen, ArrowRight, FileSpreadsheet, RotateCcw, Moon, Heart, TrendingDown, TrendingUp, Minus, Download } from 'lucide-react';
 import { HistoricalScore, TriageCategory } from '../../types';
 
 interface MoodLog {

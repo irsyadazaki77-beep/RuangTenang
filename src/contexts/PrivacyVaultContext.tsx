@@ -209,10 +209,28 @@ export const PrivacyVaultProvider: React.FC<{ children: React.ReactNode }> = ({ 
   );
 };
 
-export const usePrivacyVault = () => {
+const defaultPrivacyVault: PrivacyVaultContextType = {
+  isVaultConfigured: false,
+  isVaultUnlocked: false,
+  isIncognitoMode: false,
+  isPanicScreenActive: false,
+  autoLockMinutes: 5,
+  setupPin: async () => false,
+  verifyPin: async () => false,
+  changePin: async () => false,
+  removePin: async () => false,
+  lockVault: () => {},
+  unlockVault: async () => false,
+  toggleIncognito: () => {},
+  setIncognitoMode: () => {},
+  triggerPanicScreen: () => {},
+  dismissPanicScreen: () => {}
+};
+
+export const usePrivacyVault = (): PrivacyVaultContextType => {
   const context = useContext(PrivacyVaultContext);
   if (!context) {
-    throw new Error('usePrivacyVault must be used within a PrivacyVaultProvider');
+    return defaultPrivacyVault;
   }
   return context;
 };

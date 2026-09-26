@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { apiClient } from '../../../lib/apiClient';
 import { useToast } from '../../../components/Toast';
 import { StructuredSessionSummary } from '../types';
-import { Sparkles, RefreshCw, Copy, Check, AlertCircle, Calendar, MessageSquareQuote, Target, ShieldCheck, Download, FileText } from 'lucide-react';
+import { Sparkles, RefreshCw, Copy, Check, AlertCircle, Calendar, MessageSquareQuote, Target, ShieldCheck, Download } from 'lucide-react';
 import { ModalShell } from '../../../components/ui/ModalShell';
 
 interface SessionSummaryModalProps {
@@ -19,13 +19,29 @@ export function SessionSummaryModal({ chatId, isOpen, onClose }: SessionSummaryM
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
-  useEffect(() => {
-    if (isOpen && chatId) {
-      fetchExistingSummary();
+  const handleGenerate = useCallback(async (_forceRegenerate = false) => {
+    if (!chatId) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await apiClient.post<{ success: boolean; summary: StructuredSessionSummary }>(
+        `/api/chat/${chatId}/summarize`,
+        { force: _forceRegenerate }
+      );
+      if (res.success && res.data?.summary) {
+        setSummary(res.data.summary);
+        showToast('Ringkasan sesi berhasil dibuat!', 'success');
+      } else {
+        setError('Gagal menghasilkan ringkasan sesi.');
+      }
+    } catch {
+      setError('Terjadi kesalahan saat memproses ringkasan.');
+    } finally {
+      setLoading(false);
     }
-  }, [isOpen, chatId]);
+  }, [chatId, showToast]);
 
-  const fetchExistingSummary = async () => {
+  const fetchExistingSummary = useCallback(async () => {
     if (!chatId) return;
     setLoading(true);
     setError(null);
@@ -44,29 +60,13 @@ export function SessionSummaryModal({ chatId, isOpen, onClose }: SessionSummaryM
     } finally {
       setLoading(false);
     }
-  };
+  }, [chatId, handleGenerate]);
 
-  const handleGenerate = async (force = false) => {
-    if (!chatId) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await apiClient.post<{ success: boolean; summary: StructuredSessionSummary }>(
-        `/api/chat/${chatId}/summary`,
-        { force }
-      );
-      if (res.success && res.data?.summary) {
-        setSummary(res.data.summary);
-        showToast(force ? 'Ringkasan berhasil diperbarui' : 'Ringkasan sesi berhasil dibuat', 'success');
-      } else {
-        setError(res.error || 'Gagal menghasilkan ringkasan sesi.');
-      }
-    } catch {
-      setError('Terjadi kendala saat menghubungi layanan ringkasan AI.');
-    } finally {
-      setLoading(false);
+  useEffect(() => {
+    if (isOpen && chatId) {
+      fetchExistingSummary();
     }
-  };
+  }, [isOpen, chatId, fetchExistingSummary]);
 
   const handleCopy = () => {
     if (!summary) return;

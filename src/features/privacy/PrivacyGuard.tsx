@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Lock, Shield, KeyRound, Unlock, ShieldAlert } from 'lucide-react';
+import { Lock, Unlock } from 'lucide-react';
 import { usePrivacyVault } from '../../contexts/PrivacyVaultContext';
 import { VaultPinModal } from './VaultPinModal';
 
@@ -14,7 +14,7 @@ export const PrivacyGuard: React.FC<PrivacyGuardProps> = ({
   title = 'Bilik Pribadi Terkunci',
   description = 'Data jurnal suasana hati, catatan emosional, dan riwayat skrining Anda dilindungi dengan PIN keamanan.'
 }) => {
-  const { isVaultConfigured, isVaultUnlocked, lockVault } = usePrivacyVault();
+  const { isVaultConfigured, isVaultUnlocked } = usePrivacyVault();
   const [isPinModalOpen, setIsPinModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'unlock' | 'setup'>('unlock');
 

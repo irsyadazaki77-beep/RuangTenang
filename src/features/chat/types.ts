@@ -43,6 +43,9 @@ export interface Chat {
   branchedFromMessageId?: string | null;
   useMemory?: boolean;
   summary?: string | null;
+  createdAt?: string;
+  workspaceMode?: 'RUANG_TENANG' | 'RUANG_KERJA';
+  messages?: Message[];
   updatedAt: string;
 }
 

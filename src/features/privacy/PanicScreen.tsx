@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Shield, BookOpen, Search, FileText, Lock, ExternalLink, GraduationCap, X } from 'lucide-react';
+import { Search, Lock, GraduationCap } from 'lucide-react';
 import { usePrivacyVault } from '../../contexts/PrivacyVaultContext';
 import { VaultPinModal } from './VaultPinModal';
 

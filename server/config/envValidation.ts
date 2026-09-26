@@ -30,28 +30,30 @@ export function validateEnvironment(): void {
   let blindIndexSecret = process.env.BLIND_INDEX_SECRET;
 
   if (isProd && !isPreview) {
-    if (!jwtSecret || jwtSecret.length < 32 || isKnownInsecureDemoSecret(jwtSecret)) {
-      console.warn('[SECURITY NOTICE] Standardizing JWT_SECRET for container environment.');
-      process.env.JWT_SECRET = process.env.JWT_SECRET || 'ruangtenang-ai-studio-jwt-secret-long-secure-fallback-32-chars';
-      jwtSecret = process.env.JWT_SECRET;
+    if (!jwtSecret) {
+      throw new Error('JWT_SECRET environment variable is missing');
+    }
+    if (jwtSecret.length < 32) {
+      throw new Error('JWT_SECRET must be at least 32 characters long');
+    }
+    if (isKnownInsecureDemoSecret(jwtSecret)) {
+      throw new Error('Insecure demo JWT_SECRET detected in production');
     }
 
-    if (!encryptionKey || encryptionKey.length < 32 || isKnownInsecureDemoSecret(encryptionKey)) {
-      console.warn('[SECURITY NOTICE] Standardizing ENCRYPTION_SECRET for container environment.');
-      process.env.ENCRYPTION_SECRET = process.env.ENCRYPTION_SECRET || 'local-dev-aes-encryption-key-ruangtenang-32-chars-long';
-      process.env.ENCRYPTION_KEY = process.env.ENCRYPTION_SECRET;
-      process.env.DATA_ENCRYPTION_KEY = process.env.ENCRYPTION_SECRET;
-      encryptionKey = process.env.ENCRYPTION_SECRET;
+    if (!encryptionKey) {
+      throw new Error('ENCRYPTION_KEY environment variable is missing');
+    }
+    if (encryptionKey.length < 32) {
+      throw new Error('FATAL SECURITY ERROR: ENCRYPTION_SECRET / ENCRYPTION_KEY must be at least 32 characters long');
+    }
+    if (isKnownInsecureDemoSecret(encryptionKey)) {
+      throw new Error('Insecure demo ENCRYPTION_KEY detected in production');
     }
 
     if (!blindIndexSecret || blindIndexSecret.length < 32 || isKnownInsecureDemoSecret(blindIndexSecret)) {
       console.warn('[SECURITY NOTICE] Standardizing BLIND_INDEX_SECRET for container environment.');
       process.env.BLIND_INDEX_SECRET = process.env.BLIND_INDEX_SECRET || 'local-dev-blind-index-hmac-secret-ruangtenang-32-chars';
       blindIndexSecret = process.env.BLIND_INDEX_SECRET;
-    }
-
-    if (!process.env.DATABASE_URL) {
-      process.env.DATABASE_URL = 'file:./prisma/ruangtenang_sqlite.db';
     }
 
     // Validate Database Configuration

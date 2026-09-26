@@ -138,7 +138,7 @@ export const MessageBubble = memo(function MessageBubble({
       initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 14, scale: 0.98 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={shouldReduceMotion ? { duration: 0.15 } : { type: "spring", stiffness: 340, damping: 26, mass: 0.8 }}
-      onAnimationComplete={(definition) => {
+      onAnimationComplete={() => {
         // Hapus willChange setelah animasi masuk selesai agar memori GPU tidak bocor
         const el = document.getElementById(`msg-${msg.id}`);
         if (el) el.style.willChange = 'auto';

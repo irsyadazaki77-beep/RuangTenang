@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { 
+  MessageSquare,
   Heart, 
   Compass, 
   Stethoscope, 
@@ -14,7 +15,7 @@ import {
   LayoutDashboard,
   ChevronDown,
   Lock,
-  ShieldCheck
+  PhoneCall
 } from 'lucide-react';
 import { WorkspaceMode } from '../../../features/workspace/types';
 import { SidebarTooltip } from './SidebarTooltip';
@@ -41,7 +42,15 @@ export const SidebarNavLinks: React.FC<SidebarNavLinksProps> = ({
   const location = useLocation();
   const navigate = useNavigate();
   const { isVaultConfigured, isVaultUnlocked, lockVault, triggerPanicScreen } = usePrivacyVault();
-  const [isExpanded, setIsExpanded] = useState(false);
+  
+  // Default expanded if currently on a secondary route
+  const [isExpanded, setIsExpanded] = useState(() => location.pathname !== '/');
+
+  useEffect(() => {
+    if (location.pathname !== '/') {
+      setIsExpanded(true);
+    }
+  }, [location.pathname]);
 
   const isRuangKerja = currentMode === 'RUANG_KERJA';
 
@@ -59,6 +68,21 @@ export const SidebarNavLinks: React.FC<SidebarNavLinksProps> = ({
   if (isCollapsed) {
     return (
       <div className="py-2 px-2 border-t border-slate-200/60 dark:border-slate-800/60 space-y-1 flex flex-col items-center shrink-0">
+        <SidebarTooltip content="AI Chat (Utama)" show={true} position="right">
+          <button
+            type="button"
+            onClick={() => handleNavigate('/')}
+            className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors cursor-pointer ${
+              location.pathname === '/'
+                ? 'bg-teal-500/20 text-teal-600 dark:text-teal-400 font-bold'
+                : 'text-slate-500 hover:bg-slate-200/70 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-200'
+            }`}
+            aria-label="AI Chat"
+          >
+            <MessageSquare className="w-4 h-4" />
+          </button>
+        </SidebarTooltip>
+
         {isRuangKerja ? (
           <>
             <SidebarTooltip content="Live Canvas Workspace" show={true} position="right">
@@ -159,6 +183,21 @@ export const SidebarNavLinks: React.FC<SidebarNavLinksProps> = ({
                 <Users className="w-4 h-4" />
               </button>
             </SidebarTooltip>
+
+            <SidebarTooltip content="Pusat Bantuan Krisis & Darurat" show={true} position="right">
+              <button
+                type="button"
+                onClick={() => handleNavigate('/emergency')}
+                className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors cursor-pointer ${
+                  location.pathname === '/emergency'
+                    ? 'bg-rose-500/20 text-rose-600 dark:text-rose-400 font-bold'
+                    : 'text-rose-500 hover:bg-rose-100/70 dark:hover:bg-rose-950/40'
+                }`}
+                aria-label="Pusat Bantuan Krisis"
+              >
+                <PhoneCall className="w-4 h-4" />
+              </button>
+            </SidebarTooltip>
           </>
         )}
 
@@ -200,8 +239,8 @@ export const SidebarNavLinks: React.FC<SidebarNavLinksProps> = ({
             </>
           ) : (
             <>
-              <Heart className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-              <span>Layanan & Fitur Kampus</span>
+              <Heart className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 shrink-0" />
+              <span>Layanan Sekunder</span>
             </>
           )}
         </div>
@@ -278,11 +317,11 @@ export const SidebarNavLinks: React.FC<SidebarNavLinksProps> = ({
                   onClick={() => handleNavigate('/mood')} 
                   className={`w-full flex items-center gap-2 px-2 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
                     location.pathname === '/mood'
-                      ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 font-semibold'
+                      ? 'bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300 font-semibold'
                       : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60'
                   }`}
                 >
-                  <Heart className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                  <Heart className="w-3.5 h-3.5 text-teal-500 shrink-0" />
                   <span>Mood & Jurnal</span>
                 </button>
 
@@ -291,11 +330,11 @@ export const SidebarNavLinks: React.FC<SidebarNavLinksProps> = ({
                   onClick={() => handleNavigate('/mindfulness')} 
                   className={`w-full flex items-center gap-2 px-2 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
                     location.pathname === '/mindfulness'
-                      ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 font-semibold'
+                      ? 'bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300 font-semibold'
                       : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60'
                   }`}
                 >
-                  <Compass className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                  <Compass className="w-3.5 h-3.5 text-teal-500 shrink-0" />
                   <span>Tenang Mandiri</span>
                 </button>
 
@@ -304,11 +343,11 @@ export const SidebarNavLinks: React.FC<SidebarNavLinksProps> = ({
                   onClick={() => handleNavigate('/screening')} 
                   className={`w-full flex items-center gap-2 px-2 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
                     location.pathname === '/screening'
-                      ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 font-semibold'
+                      ? 'bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300 font-semibold'
                       : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60'
                   }`}
                 >
-                  <Stethoscope className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                  <Stethoscope className="w-3.5 h-3.5 text-teal-500 shrink-0" />
                   <span>Skrining Mandiri</span>
                 </button>
 
@@ -317,12 +356,30 @@ export const SidebarNavLinks: React.FC<SidebarNavLinksProps> = ({
                   onClick={() => handleNavigate('/counselors')} 
                   className={`w-full flex items-center gap-2 px-2 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
                     location.pathname === '/counselors'
-                      ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 font-semibold'
+                      ? 'bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300 font-semibold'
                       : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60'
                   }`}
                 >
-                  <Users className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                  <Users className="w-3.5 h-3.5 text-teal-500 shrink-0" />
                   <span>Direktori Konselor</span>
+                </button>
+
+                <button 
+                  type="button"
+                  onClick={() => handleNavigate('/emergency')} 
+                  className={`w-full flex items-center justify-between px-2 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+                    location.pathname === '/emergency'
+                      ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 font-semibold'
+                      : 'text-rose-600 dark:text-rose-400 hover:bg-rose-50/70 dark:hover:bg-rose-950/30'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <PhoneCall className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+                    <span>Pusat Bantuan Krisis</span>
+                  </div>
+                  <span className="text-[9px] bg-rose-100 dark:bg-rose-900/50 text-rose-700 dark:text-rose-300 px-1 rounded font-bold">
+                    24 Jam
+                  </span>
                 </button>
 
                 <button 
@@ -392,4 +449,5 @@ export const SidebarNavLinks: React.FC<SidebarNavLinksProps> = ({
     </div>
   );
 };
+
 

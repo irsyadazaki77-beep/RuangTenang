@@ -5,6 +5,15 @@ import Sidebar from '../../components/layout/Sidebar';
 import { ThemeProvider } from '../../contexts/ThemeContext';
 import { Chat } from '../../features/chat/types';
 
+vi.mock('../../contexts/PrivacyVaultContext', () => ({
+  usePrivacyVault: () => ({
+    isVaultConfigured: false,
+    isVaultUnlocked: false,
+    lockVault: vi.fn(),
+    triggerPanicScreen: vi.fn()
+  })
+}));
+
 describe('Sidebar Overhaul Unit Tests', () => {
   const mockChats: Chat[] = [
     {

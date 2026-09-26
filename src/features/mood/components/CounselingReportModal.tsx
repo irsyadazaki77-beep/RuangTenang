@@ -85,6 +85,16 @@ export const CounselingReportModal: React.FC<CounselingReportModalProps> = ({
             <label className="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer select-none">
               <input 
                 type="checkbox" 
+                checked={includeReflectionNotes} 
+                onChange={(e) => setIncludeReflectionNotes(e.target.checked)} 
+                className="rounded text-teal-500"
+              />
+              <span>Sertakan Catatan</span>
+            </label>
+
+            <label className="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer select-none">
+              <input 
+                type="checkbox" 
                 checked={anonymizeName} 
                 onChange={(e) => setAnonymizeName(e.target.checked)} 
                 className="rounded text-teal-500"

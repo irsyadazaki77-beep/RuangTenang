@@ -4,6 +4,15 @@ import { MemoryRouter } from 'react-router-dom';
 import Sidebar from '../../components/layout/Sidebar';
 import { ThemeProvider } from '../../contexts/ThemeContext';
 
+vi.mock('../../contexts/PrivacyVaultContext', () => ({
+  usePrivacyVault: () => ({
+    isVaultConfigured: false,
+    isVaultUnlocked: false,
+    lockVault: vi.fn(),
+    triggerPanicScreen: vi.fn()
+  })
+}));
+
 describe('Mobile Navigation Drawer Unit Tests', () => {
   it('renders sidebar drawer when isOpen is true', () => {
     const setIsOpen = vi.fn();

@@ -62,8 +62,18 @@ export const aiModelRouter = {
         const errMsg = (err?.message || String(err)).toLowerCase();
         console.warn(`[AI_RESILIENCE] Attempt ${attempt} failed for "${modelName}": ${err?.message || 'Unknown error'}`);
         
-        // Define non-transient error classification (e.g., prompt safety, invalid params, auth errors)
+        // Define non-transient or rate-limit error classification (e.g., prompt safety, invalid params, 429 quota exhausted)
+        const isQuotaOrRateLimit = 
+          errMsg.includes('429') || 
+          errMsg.includes('quota') || 
+          errMsg.includes('resource_exhausted') || 
+          errMsg.includes('rate limit') || 
+          errMsg.includes('too many requests') ||
+          (err.status && Number(err.status) === 429) ||
+          (err.code && Number(err.code) === 429);
+
         const isNonTransient = 
+          isQuotaOrRateLimit ||
           errMsg.includes('safety_block') || 
           errMsg.includes('safety') || 
           errMsg.includes('policy') || 
@@ -74,7 +84,11 @@ export const aiModelRouter = {
           (err.status && [400, 401, 403, 422].includes(Number(err.status)));
 
         if (isNonTransient) {
-          console.warn(`[AI_RESILIENCE] Non-transient failure detected (${err?.message}). Skipping retries for this model.`);
+          if (isQuotaOrRateLimit) {
+            console.warn(`[AI_RESILIENCE] Quota/Rate-limit (429) hit on "${modelName}". Fast-switching to fallback without delay.`);
+          } else {
+            console.warn(`[AI_RESILIENCE] Non-transient failure detected (${err?.message}). Skipping retries for this model.`);
+          }
           break;
         }
         
