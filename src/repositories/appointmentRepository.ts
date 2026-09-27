@@ -301,7 +301,7 @@ export class AppointmentRepository {
 
       if (!counselorRecord) {
         // In test or explicit demo mode only, provision test fixture with isDemoData: true
-        if (process.env.NODE_ENV === 'test' || process.env.VITE_DEMO_MODE === 'true') {
+        if (process.env.NODE_ENV === 'test' || process.env.VITE_DEMO_MODE === 'true' || process.env.VITEST === 'true') {
           counselorRecord = await tx.counselors.create({
             data: {
               id: resolvedCounselorId || ("cns-test-" + Date.now() + "-" + Math.floor(Math.random() * 1000)),
@@ -324,7 +324,7 @@ export class AppointmentRepository {
 
       // Validate slot timing: expired/past slots cannot be booked in production
       const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
-      if (process.env.NODE_ENV !== 'test' && scheduledAt.getTime() < fiveMinutesAgo) {
+      if (process.env.NODE_ENV !== 'test' && process.env.VITEST !== 'true' && scheduledAt.getTime() < fiveMinutesAgo) {
         throw new Error("SLOT_EXPIRED");
       }
 

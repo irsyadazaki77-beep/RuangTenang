@@ -23,6 +23,7 @@ import {
   ChevronDown,
   Workflow,
   GraduationCap,
+  BookOpen,
   History,
   RotateCcw,
   Clock,

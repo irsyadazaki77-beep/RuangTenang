@@ -34,7 +34,7 @@ const dbPath = path.resolve(process.cwd(), 'prisma', 'ruangtenang_sqlite.db');
 const dbExists = fs.existsSync(dbPath);
 
 const prismaBin = path.resolve(process.cwd(), 'node_modules', '.bin', 'prisma');
-const prismaCmd = fs.existsSync(prismaBin) ? `"${prismaBin}"` : 'npx prisma';
+const prismaCmd = fs.existsSync(prismaBin) ? `"${prismaBin}"` : 'npx --yes prisma@6';
 
 try {
   execSync(`${prismaCmd} generate --schema ${schemaPath}`, { stdio: 'inherit' });

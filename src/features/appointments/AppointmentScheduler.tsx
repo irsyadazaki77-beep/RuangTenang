@@ -652,7 +652,7 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
                       </button>
                     ) : (
                       <>
-                        {import.meta.env.VITE_DEMO_MODE === 'true' && (
+                        {(import.meta as any).env?.VITE_DEMO_MODE === 'true' && (
                           <button
                             onClick={() => setActiveChatApt(apt)}
                             className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-all shadow-sm cursor-pointer"

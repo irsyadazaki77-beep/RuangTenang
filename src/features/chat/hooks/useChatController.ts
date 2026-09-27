@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { Message } from '../../../types';
+import { Message } from '../types';
 import { useChatStreaming } from './useChatStreaming';
 import { StreamPayload } from '../services/chatStreamingClient';
 

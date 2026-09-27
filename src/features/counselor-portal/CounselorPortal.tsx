@@ -39,7 +39,7 @@ export const CounselorPortal: React.FC = () => {
   const [activeNoteForEdit, setActiveNoteForEdit] = useState<SoapNote | null>(null);
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
-  const _isAuthorized = user && (user.role === 'konselor' || user.role === 'admin' || user.role === 'peer_counselor');
+  const _isAuthorized = user && ((user.role as string) === 'konselor' || (user.role as string) === 'admin' || (user.role as string) === 'peer_counselor');
 
   const fetchData = async () => {
     setLoading(true);
@@ -82,7 +82,7 @@ export const CounselorPortal: React.FC = () => {
 
   const handleUpdateStatus = async (id: string, status: 'IN_PROGRESS' | 'RESOLVED' | 'REFERRED') => {
     try {
-      await apiClient.patch(`/api/v1/counselor-portal/triage-queue/${id}/status`, { status });
+      await apiClient.put(`/api/v1/counselor-portal/triage-queue/${id}/status`, { status });
       setTriageItems((prev) =>
         prev.map((item) => (item.id === id ? { ...item, status } : item))
       );

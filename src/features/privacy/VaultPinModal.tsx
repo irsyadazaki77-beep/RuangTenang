@@ -53,7 +53,6 @@ export const VaultPinModal: React.FC<VaultPinModalProps> = ({
   const handleClear = () => {
     setPin('');
     setConfirmPin('');
-    setOldPin('');
     setErrorMsg(null);
     setStep('enter');
   };

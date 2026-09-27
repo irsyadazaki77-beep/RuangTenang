@@ -22,6 +22,14 @@ export const WorkspaceTemplateModal: React.FC<WorkspaceTemplateModalProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState<string>('ALL');
 
+  const categories = [
+    { id: 'ALL', label: 'Semua' },
+    { id: 'WRITING', label: 'Penulisan' },
+    { id: 'RESEARCH', label: 'Riset' },
+    { id: 'CITATION', label: 'Sitasi' },
+    { id: 'CODING', label: 'Koding' },
+  ];
+
   // Keep local state in sync if prop changes
   React.useEffect(() => {
     if (template) {

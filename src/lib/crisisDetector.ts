@@ -278,6 +278,7 @@ export interface CrisisAnalysisResult {
   escalationPath: 'none' | 'bot_support' | 'direct_safety_check' | 'human_escalation';
   confidenceScore: number;
   reasoning: string;
+  isAcademicExemption?: boolean;
 }
 
 // Past tense indicators

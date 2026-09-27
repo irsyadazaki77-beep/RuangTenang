@@ -612,7 +612,13 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
           setBranchTarget(null);
         }}
         branchTarget={branchTarget}
-        onChatBranched={handleChatBranched}
+        onChatBranched={(newChat: any) => {
+          if (typeof newChat === 'string') {
+            navigate(`/c/${newChat}`);
+          } else if (newChat && newChat.id) {
+            handleChatBranched(newChat);
+          }
+        }}
         isMemoryModalOpen={isMemoryModalOpen}
         onCloseMemoryModal={() => setIsMemoryModalOpen(false)}
         useMemoryForChat={useMemoryForChat}

@@ -231,7 +231,7 @@ export class DistributedStateService {
     MemoryStateStore.clear();
     try {
       if (await redisService.isHealthy()) {
-        await redisService.flushdb();
+        await redisService.flush();
       }
     } catch {
       // ignore in test

@@ -26,14 +26,53 @@ export { CURRENT_APP_VERSION, LAST_UPDATED_DATE, isNewUpdateAvailable, markUpdat
 
 export const APP_CHANGELOG: ReleaseNote[] = [
   {
-    version: 'v3.3.0',
-    date: '2026-09-19',
-    releaseTime: 'Hari Ini, 15:33 WIB',
+    version: 'v3.3.1',
+    date: '2026-09-27',
+    releaseTime: 'Hari Ini, 11:38 WIB',
     periodLabel: 'Hari Ini',
-    title: 'Pembaruan Web Resmi v3.3.0: Optimasi Performa Chat, Memori AI Context Window & Global Error Boundary',
-    tagline: 'Pembaruan versi web 19 September 2026 yang menghadirkan rendering obrolan bebas lag, memori riwayat AI tanpa amnesia (Rolling Summary 60 Pesan), dan proteksi crash antarmuka terpadu.',
+    title: 'Pemeliharaan Rutin Harian & Pembaruan Web Resmi v3.3.1',
+    tagline: 'Pemeliharaan harian sistem 27 September 2026: Verifikasi integritas AES-256-GCM, pencadangan otomatis snapshot DB, pembersihan retensi data, hygiene purge, dan pembaruan versi web app.',
     badge: 'Terbaru',
     isLatest: true,
+    highlights: [
+      'Pembaruan versi web resmi v3.3.1 (27 September 2026)',
+      'Pelaksanaan pemeliharaan harian sistem: Health check DB, verifikasi kriptografi & pencadangan otomatis',
+      'Pembersihan retensi data pengguna, sesi inaktif, dan kunci idempotensi kedaluwarsa',
+      'Peningkatan stabilitas platform & sinkronisasi indikator versi web'
+    ],
+    changes: [
+      {
+        id: 'ch-331-1',
+        category: 'improvement',
+        title: 'Eksekusi Rutinitas Pemeliharaan Harian Sistem',
+        description: 'Menjalankan 6 pilar pemeliharaan harian: uji latensi basis data, verifikasi cipher AES-256-GCM, pencadangan snapshot otomatis dengan pemangkasan cadangan lama (>7 hari), serta pembersihan retensi data privat.',
+        impact: 'Ketersediaan tinggi, keamanan data terjamin, dan performa basis data tetap optimal.'
+      },
+      {
+        id: 'ch-331-2',
+        category: 'security',
+        title: 'Sanitasi Retensi Data & Hygiene Purge',
+        description: 'Pembersihan otomatis rekaman sesi inaktif (>30 hari), data chat tamu sementara, serta pemicu reset state terdistribusi.',
+        impact: 'Meningkatkan kepatuhan UU PDP dan menjaga privasi ruang percakapan mahasiswa.'
+      },
+      {
+        id: 'ch-331-3',
+        category: 'fix',
+        title: 'Pembaruan Indikator Versi & Log Pembaruan Web App',
+        description: 'Pembaruan nomor versi aplikasi web v3.3.1 secara menyeluruh di seluruh komponen navigasi, topbar, dan modal catatan pembaruan.',
+        impact: 'Pengguna selalu mendapat konfirmasi visual bahwa aplikasi berjalan pada rilis versi paling aman dan mutakhir.'
+      }
+    ],
+    buildNumber: 'build.20260927.01'
+  },
+  {
+    version: 'v3.3.0',
+    date: '2026-09-19',
+    releaseTime: '19 September 2026, 15:33 WIB',
+    periodLabel: 'Minggu Lalu',
+    title: 'Pembaruan Web Resmi v3.3.0: Optimasi Performa Chat, Memori AI Context Window & Global Error Boundary',
+    tagline: 'Pembaruan versi web 19 September 2026 yang menghadirkan rendering obrolan bebas lag, memori riwayat AI tanpa amnesia (Rolling Summary 60 Pesan), dan proteksi crash antarmuka terpadu.',
+    isLatest: false,
     highlights: [
       'Pembaruan versi web resmi v3.3.0 (19 September 2026)',
       'Optimasi Animasi Chat Streaming: Eliminasi layout thrashing dan pemanfaatan GPU acceleration',

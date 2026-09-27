@@ -45,3 +45,56 @@ export interface ParsedCitationItem {
   journal?: string;
   doiOrUrl?: string;
 }
+
+export type StreamingStatus = 'idle' | 'connecting' | 'streaming' | 'completed' | 'aborted' | 'error';
+
+export interface WorkspaceFileAttachment {
+  name: string;
+  content: string;
+  size?: number;
+  mimeType?: string;
+  isText?: boolean;
+}
+
+export type FileValidationErrorType = 'TOO_LARGE' | 'EMPTY_FILE' | 'UNSUPPORTED_TYPE' | 'READ_FAILED';
+
+export interface FileValidationResult {
+  valid: boolean;
+  error?: FileValidationErrorType;
+  message?: string;
+  file?: WorkspaceFileAttachment;
+}
+
+export type WorkspaceErrorType = 
+  | 'network' 
+  | 'validation' 
+  | 'unauthorized' 
+  | 'conflict' 
+  | 'not-found' 
+  | 'parse-error' 
+  | 'persistence-failure' 
+  | 'stream-error';
+
+export interface WorkspaceError {
+  type: WorkspaceErrorType;
+  message: string;
+  details?: unknown;
+  timestamp: string;
+}
+
+export type WorkspaceTab = 'chat' | 'canvas';
+
+export interface StarterTaskItem {
+  id: string;
+  title: string;
+  subtitle: string;
+  icon: React.ReactNode;
+  primary?: boolean;
+  prompt: string;
+}
+
+export interface AcademicPromptPill {
+  label: string;
+  prompt: string;
+}
+

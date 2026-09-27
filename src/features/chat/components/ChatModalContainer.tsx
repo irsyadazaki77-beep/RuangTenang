@@ -184,7 +184,7 @@ export const ChatModalContainer: React.FC<ChatModalContainerProps> = ({
         parentChatTitle={currentChatTitle || 'Percakapan Asli'}
         messageId={branchTarget?.messageId}
         messageSnippet={branchTarget?.contentSnippet}
-        onChatBranched={onChatBranched}
+        onChatBranched={(newChat: any) => onChatBranched(typeof newChat === 'string' ? newChat : newChat?.id || String(newChat))}
       />
 
       {/* Feature 4: AI Memory Control Modal */}

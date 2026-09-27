@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { scanAndSanitizePII } from '../services/piiService.js';
 
 // Types for fallback responses
 export interface FallbackResponse {
@@ -9,9 +10,11 @@ export interface FallbackResponse {
 /**
  * Analyzes the user's input and returns a deeply empathetic, highly relevant
  * response or activates a plugin if required by the user's message.
+ * Enforces PII sanitization parity with the primary AI pipeline.
  */
 export function getLocalFallbackResponse(userMessage: string = '', chatMode = 'Teman Cerita', responseStyle = 'Seimbang'): FallbackResponse {
-  const cleanMsg = (userMessage || '').toLowerCase().trim();
+  const sanitizedInput = scanAndSanitizePII(userMessage || '').sanitizedText;
+  const cleanMsg = sanitizedInput.toLowerCase().trim();
 
   // 1. Check for Emergency / Crisis / Self-harm triggers
   const emergencyKeywords = [

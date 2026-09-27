@@ -165,7 +165,7 @@ export async function exportToAcademicDocx(options: ExportDocxOptions): Promise<
     TableCell,
     WidthType,
     PageNumber,
-    PageNumberFormat,
+    NumberFormat,
     Header,
     Footer
   } = await import('docx');
@@ -587,7 +587,7 @@ export async function exportToAcademicDocx(options: ExportDocxOptions): Promise<
         page: {
           size: { width: A4_WIDTH_TWIPS, height: A4_HEIGHT_TWIPS },
           margin: { top: MARGIN_TOP_TWIPS, bottom: MARGIN_BOTTOM_TWIPS, left: MARGIN_LEFT_TWIPS, right: MARGIN_RIGHT_TWIPS },
-          pageNumbers: { start: 1, formatType: PageNumberFormat.LOWER_ROMAN }
+          pageNumbers: { start: 1, formatType: NumberFormat.LOWER_ROMAN }
         }
       },
       footers: {
@@ -615,7 +615,7 @@ export async function exportToAcademicDocx(options: ExportDocxOptions): Promise<
         page: {
           size: { width: A4_WIDTH_TWIPS, height: A4_HEIGHT_TWIPS },
           margin: { top: MARGIN_TOP_TWIPS, bottom: MARGIN_BOTTOM_TWIPS, left: MARGIN_LEFT_TWIPS, right: MARGIN_RIGHT_TWIPS },
-          pageNumbers: { start: 1, formatType: PageNumberFormat.DECIMAL }
+          pageNumbers: { start: 1, formatType: NumberFormat.DECIMAL }
         }
       },
       headers: {
@@ -643,7 +643,7 @@ export async function exportToAcademicDocx(options: ExportDocxOptions): Promise<
         page: {
           size: { width: A4_WIDTH_TWIPS, height: A4_HEIGHT_TWIPS },
           margin: { top: MARGIN_TOP_TWIPS, bottom: MARGIN_BOTTOM_TWIPS, left: MARGIN_LEFT_TWIPS, right: MARGIN_RIGHT_TWIPS },
-          pageNumbers: { start: 1, formatType: PageNumberFormat.DECIMAL }
+          pageNumbers: { start: 1, formatType: NumberFormat.DECIMAL }
         }
       },
       headers: {

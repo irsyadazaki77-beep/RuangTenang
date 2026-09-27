@@ -79,8 +79,8 @@ export const MicroBreathingModal: React.FC<MicroBreathingModalProps> = ({
     setIsActive(true);
   };
 
-  // Sinusoidal easing curve: [0.37, 0, 0.63, 1] is standard mathematical sinus easeInOut
-  const sinusEase = [0.37, 0, 0.63, 1];
+  // Sinusoidal easing curve
+  const sinusEase = 'easeInOut';
 
   return (
     <AnimatePresence>

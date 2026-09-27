@@ -122,9 +122,9 @@ export function useChatStreaming() {
           }
           // Batch fast token emissions into 60 FPS rAF frames to prevent main thread choke
           const isTest = 
-            (typeof process !== 'undefined' && process.env?.NODE_ENV === 'test') ||
-            (typeof window !== 'undefined' && Boolean((window as any).__vitest_worker__ || (window as any).vi)) ||
-            (typeof import.meta !== 'undefined' && import.meta.env?.MODE === 'test');
+            (typeof process !== 'undefined' && (process.env?.NODE_ENV === 'test' || process.env?.VITEST === 'true')) ||
+            (typeof window !== 'undefined' && Boolean((window as any).__vitest_worker__ || (window as any).vi || (globalThis as any).vi)) ||
+            (typeof import.meta !== 'undefined' && Boolean((import.meta as any).env?.VITEST || (import.meta as any).env?.MODE === 'test'));
 
           if (isTest) {
             callbacks.onChunk(text);

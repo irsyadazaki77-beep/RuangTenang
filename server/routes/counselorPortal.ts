@@ -146,8 +146,9 @@ router.get('/soap-notes', generalApiLimiter, requireAuth, requireRole(counselorR
     }
 
     // Role check: counselors see notes they authored or if campus admin, all notes
-    const isCampusAdmin = req.user.role === 'admin' || req.user.role === 'campus_admin' || req.user.role === 'CAMPUS_ADMIN';
-    if (!isCampusAdmin && !whereClause.studentUserId) {
+    const userRole = String(req.user.role || '').toLowerCase();
+    const isCampusAdmin = userRole === 'admin' || userRole === 'campus_admin';
+    if (!isCampusAdmin) {
       whereClause.counselorUserId = counselorId;
     }
 
