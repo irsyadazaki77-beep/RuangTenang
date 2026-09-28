@@ -43,7 +43,8 @@ export function useWorkspaceStreaming({
 
   const sendMessageStream = useCallback(async (
     userPrompt: string,
-    customSystemNote?: string
+    customSystemNote?: string,
+    attachments?: any[]
   ) => {
     if (!userPrompt.trim() || streamingStatus === 'streaming' || streamingStatus === 'connecting') {
       return;
@@ -70,7 +71,8 @@ export function useWorkspaceStreaming({
           message: formattedPrompt,
           chatId: chatId || undefined,
           chatMode: 'RuangKerja',
-          responseStyle: 'Mendalam'
+          responseStyle: 'Mendalam',
+          attachments: attachments && attachments.length > 0 ? attachments : undefined
         },
         {
           onMessageStart: () => {

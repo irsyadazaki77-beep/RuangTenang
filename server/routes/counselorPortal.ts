@@ -4,6 +4,8 @@ import { prisma, serverDb } from '../database.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 import { encryptionService } from '../services/encryptionService.js';
 import { generalApiLimiter } from '../middleware/rateLimiters.js';
+import { canAccessHealthData, getAssignedStudentUserIds } from '../services/healthDataAuth.js';
+import { consentService } from '../services/consentService.js';
 
 const router = Router();
 
@@ -13,14 +15,35 @@ const counselorRoles = ['konselor', 'clinical_counselor', 'licensed_psychologist
 /**
  * GET /api/v1/counselor-portal/triage-queue
  * Fetches prioritized triage items from screenings, urgent appointments, and crisis alerts
+ * Strictly isolated to authorized counselor care relationships
  */
 router.get('/triage-queue', generalApiLimiter, requireAuth, requireRole(counselorRoles), async (req: Request, res: Response) => {
   try {
-    const counselorId = req.user.userId;
+    const counselorId = req.user!.userId;
+    const userRole = String(req.user!.role || '').toLowerCase();
+    const isCampusAdmin = userRole === 'admin' || userRole === 'campus_admin';
     const { status, riskLevel, search } = req.query;
 
-    // Fetch screenings ordered by risk and recency
+    let allowedStudentIds: string[] = [];
+    if (!isCampusAdmin) {
+      allowedStudentIds = await getAssignedStudentUserIds(counselorId);
+      if (allowedStudentIds.length === 0) {
+        return res.json({
+          success: true,
+          data: [],
+          total: 0,
+          timestamp: new Date().toISOString()
+        });
+      }
+    }
+
+    const screeningWhere: any = {};
+    if (!isCampusAdmin) {
+      screeningWhere.userId = { in: allowedStudentIds };
+    }
+
     const screenings = await prisma.screenings.findMany({
+      where: screeningWhere,
       orderBy: [
         { hasSelfHarmRisk: 'desc' },
         { phq9Score: 'desc' },
@@ -40,11 +63,21 @@ router.get('/triage-queue', generalApiLimiter, requireAuth, requireRole(counselo
       }
     });
 
-    // Fetch appointments that need attention
+    const appointmentWhere: any = {
+      status: { in: ['CONFIRMED', 'PENDING', 'SCHEDULED'] }
+    };
+    if (!isCampusAdmin) {
+      const counselorProfile = await prisma.counselors.findFirst({
+        where: { OR: [{ userId: counselorId }, { id: counselorId }] }
+      });
+      if (counselorProfile) {
+        appointmentWhere.counselorId = counselorProfile.id;
+      }
+      appointmentWhere.userId = { in: allowedStudentIds };
+    }
+
     const appointments = await prisma.appointments.findMany({
-      where: {
-        status: { in: ['CONFIRMED', 'PENDING', 'SCHEDULED'] }
-      },
+      where: appointmentWhere,
       orderBy: { scheduledAt: 'asc' },
       take: 30,
       include: {
@@ -87,8 +120,8 @@ router.get('/triage-queue', generalApiLimiter, requireAuth, requireRole(counselo
         sourceType: 'SCREENING',
         sourceId: s.id,
         userId: user?.id || s.userId || 'anonymous',
-        studentName: hasConsent && user?.name ? user.name : 'Mahasiswa Anonim',
-        studentEmail: hasConsent && user?.email ? user.email : 'terenkripsi@kampus.ac.id',
+        studentName: user?.name ? user.name : 'Mahasiswa',
+        studentEmail: user?.email ? user.email : '',
         university: user?.university || 'Universitas Indonesia',
         phq9Score: s.phq9Score,
         phq9Severity: s.phq9Severity,
@@ -130,12 +163,43 @@ router.get('/triage-queue', generalApiLimiter, requireAuth, requireRole(counselo
 
 /**
  * GET /api/v1/counselor-portal/soap-notes
- * Returns decrypted clinical SOAP notes for authorized counselor
+ * Returns decrypted clinical SOAP notes for authorized counselor with relationship verification
  */
 router.get('/soap-notes', generalApiLimiter, requireAuth, requireRole(counselorRoles), async (req: Request, res: Response) => {
   try {
-    const counselorId = req.user.userId;
+    const counselorId = req.user!.userId;
     const { studentUserId, appointmentId } = req.query;
+
+    const userRole = String(req.user!.role || '').toLowerCase();
+    const isCampusAdmin = userRole === 'admin' || userRole === 'campus_admin';
+
+    if (!isCampusAdmin) {
+      if (studentUserId && typeof studentUserId === 'string') {
+        const hasAccess = await canAccessHealthData(req.user!, studentUserId, 'VIEW_CONSULTATION_NOTE', {
+          appointmentId: appointmentId && typeof appointmentId === 'string' ? appointmentId : undefined
+        });
+        if (!hasAccess) {
+          return res.status(403).json({
+            success: false,
+            code: 'ACCESS_DENIED',
+            error: 'Akses ditolak. Anda tidak memiliki hubungan layanan atau izin persetujuan untuk mahasiswa ini.'
+          });
+        }
+      } else if (appointmentId && typeof appointmentId === 'string') {
+        const appt = await prisma.appointments.findUnique({ where: { id: appointmentId } });
+        if (!appt || !appt.userId) {
+          return res.status(404).json({ success: false, error: 'Janji temu tidak ditemukan.' });
+        }
+        const hasAccess = await canAccessHealthData(req.user!, appt.userId, 'VIEW_CONSULTATION_NOTE', { appointmentId });
+        if (!hasAccess) {
+          return res.status(403).json({
+            success: false,
+            code: 'ACCESS_DENIED',
+            error: 'Akses ditolak. Anda tidak memiliki hubungan layanan atau izin persetujuan untuk janji temu ini.'
+          });
+        }
+      }
+    }
 
     const whereClause: any = {};
     if (studentUserId && typeof studentUserId === 'string') {
@@ -145,11 +209,12 @@ router.get('/soap-notes', generalApiLimiter, requireAuth, requireRole(counselorR
       whereClause.appointmentId = appointmentId;
     }
 
-    // Role check: counselors see notes they authored or if campus admin, all notes
-    const userRole = String(req.user.role || '').toLowerCase();
-    const isCampusAdmin = userRole === 'admin' || userRole === 'campus_admin';
     if (!isCampusAdmin) {
       whereClause.counselorUserId = counselorId;
+      if (!studentUserId && !appointmentId) {
+        const assignedStudentIds = await getAssignedStudentUserIds(counselorId);
+        whereClause.studentUserId = { in: assignedStudentIds };
+      }
     }
 
     const notes = await prisma.clinicalSoapNotes.findMany({
@@ -206,11 +271,13 @@ router.get('/soap-notes', generalApiLimiter, requireAuth, requireRole(counselorR
 
 /**
  * POST /api/v1/counselor-portal/soap-notes
- * Creates or updates an AES-256-GCM encrypted SOAP note
+ * Creates or updates an AES-256-GCM encrypted SOAP note with strict counselor assignment & authorization
  */
 router.post('/soap-notes', generalApiLimiter, requireAuth, requireRole(counselorRoles), async (req: Request, res: Response) => {
   try {
-    const counselorId = req.user.userId;
+    const counselorUserId = req.user!.userId;
+    const userRole = String(req.user!.role || '').toLowerCase();
+    const isCampusAdmin = userRole === 'admin' || userRole === 'campus_admin';
     const { id, appointmentId, studentUserId, subjective, objective, assessment, plan, summary, riskLevel } = req.body;
 
     if (!studentUserId) {
@@ -228,6 +295,37 @@ router.post('/soap-notes', generalApiLimiter, requireAuth, requireRole(counselor
     const student = await prisma.users.findUnique({ where: { id: studentUserId } });
     if (!student) {
       return res.status(404).json({ success: false, error: 'Mahasiswa / Klien tidak ditemukan dalam sistem.' });
+    }
+
+    // STRICT COUNSELOR ASSIGNMENT & RELATIONSHIP CHECK (Non-admin)
+    if (!isCampusAdmin) {
+      const purpose = id ? 'UPDATE_SOAP_NOTE' : 'CREATE_SOAP_NOTE';
+      const hasAccess = await canAccessHealthData(
+        req.user!,
+        studentUserId,
+        purpose,
+        { appointmentId: appointmentId || undefined }
+      );
+
+      if (!hasAccess) {
+        return res.status(403).json({
+          success: false,
+          code: 'ACCESS_DENIED',
+          error: 'Konselor tidak memiliki izin atau hubungan layanan untuk membuat atau mengubah catatan SOAP untuk mahasiswa ini.'
+        });
+      }
+
+      // If updating an existing note, ensure the note was authored by this counselor
+      if (id) {
+        const existingNote = await prisma.clinicalSoapNotes.findUnique({ where: { id } });
+        if (existingNote && existingNote.counselorUserId !== counselorUserId) {
+          return res.status(403).json({
+            success: false,
+            code: 'ACCESS_DENIED',
+            error: 'Anda tidak memiliki hak untuk mengubah catatan SOAP yang dibuat oleh konselor lain.'
+          });
+        }
+      }
     }
 
     // Encrypt each clinical section with AES-256-GCM
@@ -255,7 +353,7 @@ router.post('/soap-notes', generalApiLimiter, requireAuth, requireRole(counselor
         id: noteId,
         appointmentId: appointmentId || undefined,
         studentUserId,
-        counselorUserId: counselorId,
+        counselorUserId,
         subjective: encSubjective,
         objective: encObjective,
         assessment: encAssessment,
@@ -269,9 +367,9 @@ router.post('/soap-notes', generalApiLimiter, requireAuth, requireRole(counselor
     await prisma.staffAccessLogs.create({
       data: {
         id: `audit-soap-${Date.now()}`,
-        staffUserId: counselorId,
-        staffName: req.user.name || 'Konselor Kampus',
-        staffRole: req.user.role,
+        staffUserId: counselorUserId,
+        staffName: req.user!.name || 'Konselor Kampus',
+        staffRole: req.user!.role,
         targetUserId: studentUserId,
         accessType: id ? 'UPDATE_CLINICAL_SOAP_NOTE' : 'CREATE_CLINICAL_SOAP_NOTE',
         purpose: 'Pencatatan Rekam Medis Klinis Konseling Mahasiswa (SOAP Standard)'
@@ -297,15 +395,85 @@ router.post('/soap-notes', generalApiLimiter, requireAuth, requireRole(counselor
 });
 
 /**
+ * DELETE /api/v1/counselor-portal/soap-notes/:id
+ * Deletes a SOAP note with strict authorization
+ */
+router.delete('/soap-notes/:id', generalApiLimiter, requireAuth, requireRole(counselorRoles), async (req: Request, res: Response) => {
+  try {
+    const counselorUserId = req.user!.userId;
+    const userRole = String(req.user!.role || '').toLowerCase();
+    const isCampusAdmin = userRole === 'admin' || userRole === 'campus_admin';
+    const { id } = req.params;
+
+    const existingNote = await prisma.clinicalSoapNotes.findUnique({ where: { id } });
+    if (!existingNote) {
+      return res.status(404).json({ success: false, error: 'Catatan SOAP tidak ditemukan.' });
+    }
+
+    if (!isCampusAdmin) {
+      if (existingNote.counselorUserId !== counselorUserId) {
+        return res.status(403).json({
+          success: false,
+          code: 'ACCESS_DENIED',
+          error: 'Anda tidak memiliki hak untuk menghapus catatan SOAP yang dibuat oleh konselor lain.'
+        });
+      }
+
+      const hasAccess = await canAccessHealthData(req.user!, existingNote.studentUserId, 'DELETE_SOAP_NOTE');
+      if (!hasAccess) {
+        return res.status(403).json({
+          success: false,
+          code: 'ACCESS_DENIED',
+          error: 'Akses ditolak.'
+        });
+      }
+    }
+
+    await prisma.clinicalSoapNotes.delete({ where: { id } });
+
+    await prisma.staffAccessLogs.create({
+      data: {
+        id: `audit-soap-del-${Date.now()}`,
+        staffUserId: counselorUserId,
+        staffName: req.user!.name || 'Konselor Kampus',
+        staffRole: req.user!.role,
+        targetUserId: existingNote.studentUserId,
+        accessType: 'DELETE_CLINICAL_SOAP_NOTE',
+        purpose: 'Penghapusan Catatan Rekam Medis Klinis SOAP'
+      }
+    });
+
+    res.json({ success: true, message: 'Catatan SOAP berhasil dihapus.' });
+  } catch (err: any) {
+    console.error('Error deleting SOAP note:', err);
+    res.status(500).json({ success: false, error: 'Gagal menghapus catatan SOAP.' });
+  }
+});
+
+/**
  * GET /api/v1/counselor-portal/students
- * Lists students registered for counseling
+ * Lists students registered for counseling assigned to the requesting counselor
  */
 router.get('/students', generalApiLimiter, requireAuth, requireRole(counselorRoles), async (req: Request, res: Response) => {
   try {
+    const counselorUserId = req.user!.userId;
+    const userRole = String(req.user!.role || '').toLowerCase();
+    const isCampusAdmin = userRole === 'admin' || userRole === 'campus_admin';
+
+    let userWhereClause: any = {
+      role: { in: ['mahasiswa', 'student', 'STUDENT'] }
+    };
+
+    if (!isCampusAdmin) {
+      const assignedStudentIds = await getAssignedStudentUserIds(counselorUserId);
+      if (assignedStudentIds.length === 0) {
+        return res.json({ success: true, data: [] });
+      }
+      userWhereClause.id = { in: assignedStudentIds };
+    }
+
     const students = await prisma.users.findMany({
-      where: {
-        role: { in: ['mahasiswa', 'student', 'STUDENT'] }
-      },
+      where: userWhereClause,
       select: {
         id: true,
         name: true,
@@ -353,7 +521,7 @@ router.get('/students', generalApiLimiter, requireAuth, requireRole(counselorRol
         joinedAt: s.createdAt,
         latestScreening,
         latestAppointment: latestAppt,
-        consentGranted: s.consent?.consentForCounselorSharing ?? true
+        consentGranted: s.consent?.consentForCounselorSharing ?? false
       };
     });
 
@@ -371,8 +539,29 @@ router.get('/students', generalApiLimiter, requireAuth, requireRole(counselorRol
  * GET /api/v1/counselor-portal/stats
  * Overview metrics for campus counseling center
  */
-router.get('/stats', generalApiLimiter, requireAuth, requireRole(counselorRoles), async (_req: Request, res: Response) => {
+router.get('/stats', generalApiLimiter, requireAuth, requireRole(counselorRoles), async (req: Request, res: Response) => {
   try {
+    const counselorUserId = req.user!.userId;
+    const userRole = String(req.user!.role || '').toLowerCase();
+    const isCampusAdmin = userRole === 'admin' || userRole === 'campus_admin';
+
+    let assignedStudentIds: string[] = [];
+    let counselorProfileId: string | null = null;
+
+    if (!isCampusAdmin) {
+      const counselor = await prisma.counselors.findFirst({
+        where: { OR: [{ userId: counselorUserId }, { id: counselorUserId }] }
+      });
+      if (counselor) {
+        counselorProfileId = counselor.id;
+      }
+      assignedStudentIds = await getAssignedStudentUserIds(counselorUserId);
+    }
+
+    const screeningWhere = !isCampusAdmin ? { userId: { in: assignedStudentIds } } : {};
+    const appointmentWhere = !isCampusAdmin && counselorProfileId ? { counselorId: counselorProfileId } : {};
+    const soapWhere = !isCampusAdmin ? { counselorUserId } : {};
+
     const [
       totalStudents,
       totalScreenings,
@@ -384,28 +573,36 @@ router.get('/stats', generalApiLimiter, requireAuth, requireRole(counselorRoles)
       totalSoapNotes,
       allScreenings
     ] = await Promise.all([
-      prisma.users.count({ where: { role: { in: ['mahasiswa', 'student', 'STUDENT'] } } }),
-      prisma.screenings.count(),
+      prisma.users.count({
+        where: !isCampusAdmin ? { id: { in: assignedStudentIds } } : { role: { in: ['mahasiswa', 'student', 'STUDENT'] } }
+      }),
+      prisma.screenings.count({ where: screeningWhere }),
       prisma.screenings.count({
         where: {
+          ...screeningWhere,
           OR: [
             { hasSelfHarmRisk: true },
             { phq9Score: { gte: 15 } }
           ]
         }
       }),
-      prisma.screenings.count({ where: { hasSelfHarmRisk: true } }),
+      prisma.screenings.count({ where: { ...screeningWhere, hasSelfHarmRisk: true } }),
       prisma.screenings.count({
         where: {
+          ...screeningWhere,
           status: { in: ['Selesai', 'Ditangani', 'RESOLVED', 'REFERRED', 'COMPLETED'] }
         }
       }),
       prisma.appointments.count({
-        where: { status: { in: ['CONFIRMED', 'PENDING', 'SCHEDULED'] } }
+        where: {
+          ...appointmentWhere,
+          status: { in: ['CONFIRMED', 'PENDING', 'SCHEDULED'] }
+        }
       }),
-      prisma.appointments.count(),
-      prisma.clinicalSoapNotes.count(),
+      prisma.appointments.count({ where: appointmentWhere }),
+      prisma.clinicalSoapNotes.count({ where: soapWhere }),
       prisma.screenings.findMany({
+        where: screeningWhere,
         select: { phq9Score: true, gad7Score: true, hasSelfHarmRisk: true, timestamp: true },
         orderBy: { timestamp: 'desc' },
         take: 500

@@ -681,6 +681,7 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
         history: messagesToSend,
         pluginResult,
         workspaceMode: Boolean(workspaceMode) || (mode || '').toLowerCase().includes('ruang_kerja') || (chatMode || '').toLowerCase().includes('ruangkerja'),
+        attachments,
         isStreaming: true,
         isTemporary: activeIsTemporary,
         abortSignal: reqAbortController.signal
@@ -758,6 +759,10 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
       let isToolCall = false;
       let validToolCallParsed: any = null;
       let hasStreamedAnyText = false;
+
+      if (pipelineRes.sourceReferences && pipelineRes.sourceReferences.length > 0 && !res.writableEnded) {
+        res.write(`data: ${JSON.stringify({ sources: pipelineRes.sourceReferences })}\n\n`);
+      }
 
       for await (const chunk of responseStream) {
         if (clientDisconnected || reqAbortController.signal.aborted || res.writableEnded) {
@@ -917,7 +922,7 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
       }
 
       if (!res.writableEnded) {
-        res.write(`data: ${JSON.stringify({ done: true, chatId: currentChatId })}\n\n`);
+        res.write(`data: ${JSON.stringify({ done: true, chatId: currentChatId, sources: pipelineRes.sourceReferences })}\n\n`);
         res.write('data: [DONE]\n\n');
         res.end();
       }

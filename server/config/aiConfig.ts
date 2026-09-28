@@ -7,6 +7,8 @@ import { GoogleGenAI } from '@google/genai';
 export const DEFAULT_AI_MODEL = 'gemini-3.8-flash';
 export const RESILIENT_FALLBACK_AI_MODEL = 'gemini-3.1-flash-lite';
 
+export const DEEPSEEK_API_KEY = (process.env.DEEPSEEK_API_KEY || '').trim();
+
 export const CALMING_FALLBACK_MESSAGE = 'Aku sedang menyimak ceritamu, namun koneksi kita sempat terhenti sejenak 🌿. Tarik napas perlahan ya, kamu bisa mengirim ulang ceritamu atau beristirahat sejenak 🤍.';
 
 export const AI_MODELS = {
@@ -22,6 +24,8 @@ export const AI_MODELS = {
   FALLBACK: 'gemini-2.5-flash-lite',
   CRISIS_CLASSIFIER: 'gemini-2.5-flash',
   COUNSELOR_SIMULATION: 'gemini-2.5-flash',
+  DEEPSEEK_CHAT: 'deepseek-chat',
+  DEEPSEEK_REASONER: 'deepseek-reasoner',
 } as const;
 
 export interface AiModelInfo {
@@ -36,6 +40,24 @@ export interface AiModelInfo {
 }
 
 export const AVAILABLE_AI_MODELS: AiModelInfo[] = [
+  {
+    id: 'deepseek-chat',
+    name: 'DeepSeek V3 (Chat)',
+    category: 'DeepSeek AI Series',
+    tag: 'Populer • Cerdas & Cepat',
+    description: 'Model percakapan unggulan DeepSeek-V3 dengan pemahaman bahasa alami yang sangat luwes, responsif, dan kaya empati.',
+    speed: 'Sangat Cepat',
+    reasoning: 'Tinggi'
+  },
+  {
+    id: 'deepseek-reasoner',
+    name: 'DeepSeek R1 (Reasoner)',
+    category: 'DeepSeek AI Series',
+    tag: 'R1 • Penalaran Mendalam',
+    description: 'Model reasoning canggih DeepSeek-R1 dengan proses berpikir bertahap (Chain-of-Thought) untuk analisis kognitif, CBT mendalam, dan pemecahan masalah kompleks.',
+    speed: 'Sedang',
+    reasoning: 'Sangat Tinggi'
+  },
   {
     id: 'gemini-3.8-flash',
     name: 'Gemini 3.8 Flash',

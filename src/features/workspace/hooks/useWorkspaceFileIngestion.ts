@@ -1,26 +1,42 @@
 import { useState, useRef, useCallback } from 'react';
-import { WorkspaceFileAttachment } from '../types';
-import { processFileForWorkspace } from '../services/fileIngestionService';
+import { WorkspaceFileAttachment } from '../types.js';
+import { processFileForWorkspace } from '../services/fileIngestionService.js';
 import { useToast } from '../../../components/Toast';
 
-export function useWorkspaceFileIngestion() {
+export function useWorkspaceFileIngestion(chatId?: string) {
   const { showToast } = useToast();
   const [attachedFile, setAttachedFile] = useState<WorkspaceFileAttachment | null>(null);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleProcessFile = useCallback(async (file: File) => {
-    const result = await processFileForWorkspace(file);
+    // Optimistic chip indicator during upload & server processing
+    setAttachedFile({
+      name: file.name,
+      size: file.size,
+      mimeType: file.type,
+      status: 'uploading'
+    });
+
+    const result = await processFileForWorkspace(file, chatId);
     if (!result.valid) {
+      setAttachedFile(null);
       showToast(result.message || 'Gagal memproses berkas.', 'error');
       return;
     }
 
     if (result.file) {
       setAttachedFile(result.file);
-      showToast(`Dokumen "${result.file.name}" dilampirkan`, 'info');
+      const meta = result.file.pageCount 
+        ? ` (${result.file.pageCount} halaman)` 
+        : result.file.slideCount 
+          ? ` (${result.file.slideCount} slide)` 
+          : result.file.sheetCount 
+            ? ` (${result.file.sheetCount} sheet)` 
+            : '';
+      showToast(`Dokumen "${result.file.name}" siap dianalisis${meta}`, 'info');
     }
-  }, [showToast]);
+  }, [chatId, showToast]);
 
   const handleFileUploadChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

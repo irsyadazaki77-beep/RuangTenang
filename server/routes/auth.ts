@@ -93,14 +93,23 @@ router.post('/sso/campus-login', loginLimiter, async (req: Request, res: Respons
 
     const trimmedEmail = email.trim().toLowerCase();
     
-    // Strict Campus Domain Verification: must end with .ac.id, .edu, or known institutional domains
-    const isCampusDomain = trimmedEmail.endsWith('.ac.id') || 
-                           trimmedEmail.endsWith('.edu') || 
-                           trimmedEmail.includes('ui.ac.id') ||
-                           trimmedEmail.includes('itb.ac.id') ||
-                           trimmedEmail.includes('ugm.ac.id') ||
-                           trimmedEmail.includes('unair.ac.id') ||
-                           trimmedEmail.includes('kampusmerdeka');
+    // Strict Campus Domain Verification: exact hostname match or valid institutional TLD
+    const emailParts = trimmedEmail.split('@');
+    if (emailParts.length !== 2) {
+      return res.status(400).json({ error: 'Format email institusi tidak valid.' });
+    }
+    const domain = emailParts[1].toLowerCase();
+    const isCampusDomain = domain === 'ui.ac.id' ||
+                           domain.endsWith('.ui.ac.id') ||
+                           domain === 'itb.ac.id' ||
+                           domain.endsWith('.itb.ac.id') ||
+                           domain === 'ugm.ac.id' ||
+                           domain.endsWith('.ugm.ac.id') ||
+                           domain === 'unair.ac.id' ||
+                           domain.endsWith('.unair.ac.id') ||
+                           domain === 'kampusmerdeka.kemdikbud.go.id' ||
+                           domain.endsWith('.ac.id') ||
+                           domain.endsWith('.edu');
 
     if (!isCampusDomain && !process.env.ALLOW_ANY_SSO_DOMAIN) {
       return res.status(400).json({
@@ -108,26 +117,30 @@ router.post('/sso/campus-login', loginLimiter, async (req: Request, res: Respons
       });
     }
 
-    // Role mapping based on SSO profile or email heuristics
-    let assignedRole: 'mahasiswa' | 'konselor' | 'admin' = 'mahasiswa';
-    if (roleHint === 'konselor' || roleHint === 'LICENSED_PSYCHOLOGIST' || roleHint === 'PEER_COUNSELOR' ||
-        trimmedEmail.includes('konselor') || trimmedEmail.includes('counselor') || trimmedEmail.includes('psikolog')) {
-      assignedRole = 'konselor';
-    } else if (roleHint === 'admin' || roleHint === 'CAMPUS_ADMIN' || trimmedEmail.includes('admin') || trimmedEmail.includes('rektorat')) {
-      assignedRole = 'admin';
+    // Production fail-closed if SSO provider is not configured or in invalid state
+    const isProduction = process.env.NODE_ENV === 'production';
+    const ssoSecretConfigured = Boolean(process.env.CAMPUS_SSO_SECRET || process.env.OIDC_CLIENT_SECRET);
+    if (isProduction && !ssoSecretConfigured) {
+      return res.status(503).json({
+        error: 'Layanan Autentikasi SSO Kampus Produksi belum dikonfigurasi. Hubungi administrator.'
+      });
     }
 
+    // STRICT SECURITY (Principle of Least Privilege):
+    // Never trust roleHint, client parameters, or email substrings to grant privileged roles (admin/konselor).
+    // All self-registered SSO accounts are strictly assigned 'mahasiswa'.
+    // Privileged roles (admin/konselor) must be provisioned via admin bootstrap or admin user management.
     let user = await serverDb.getUserByEmail(trimmedEmail);
     if (!user) {
-      // Auto-provision campus account via SSO
+      // Auto-provision campus student account via SSO
       const randomPass = crypto.randomBytes(24).toString('hex');
       const passHash = await bcrypt.hash(randomPass, 10);
       user = await serverDb.addUser({
         name: name ? name.trim() : trimmedEmail.split('@')[0],
         email: trimmedEmail,
         passwordHash: passHash,
-        role: assignedRole,
-        tier: 'Pro', // Campus Enterprise tier auto-granted
+        role: 'mahasiswa',
+        tier: 'Free',
         university: university || 'Universitas Indonesia',
         emailVerified: true,
         mfaEnabled: false

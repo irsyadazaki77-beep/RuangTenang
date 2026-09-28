@@ -405,14 +405,21 @@ router.get(['/:id/room-access', '/db/appointments/:id/room-access'], requireAuth
 // GET /api/appointments/:id/ice-servers secured by verifyAppointmentAccess
 router.get(['/:id/ice-servers', '/db/appointments/:id/ice-servers'], requireAuth, verifyAppointmentAccess, async (req: Request, res: Response) => {
   try {
-    const iceServers = [
-      { urls: "stun:stun.l.google.com:19302" },
-      { 
-        urls: "turn:turn.ruangtenang.ui.ac.id:3478", 
-        username: "ruangtenang_secure_user", 
-        credential: "secret_password_here" 
-      }
+    const turnUrl = process.env.TURN_URL || 'turn:turn.ruangtenang.ui.ac.id:3478';
+    const turnUsername = process.env.TURN_USERNAME || 'ruangtenang_secure_user';
+    const turnCredential = process.env.TURN_CREDENTIAL || 'turn_test_credential_2026';
+
+    const iceServers: Array<{ urls: string; username?: string; credential?: string }> = [
+      { urls: "stun:stun.l.google.com:19302" }
     ];
+
+    if (turnUrl && turnUsername && turnCredential) {
+      iceServers.push({
+        urls: turnUrl,
+        username: turnUsername,
+        credential: turnCredential
+      });
+    }
 
     res.json({
       success: true,
@@ -734,7 +741,7 @@ router.post(['/:id/reschedule', '/db/appointments/:id/reschedule'], requireAuth,
 // REAL-TIME VIDEO ROOM SIGNALING & IN-CALL COLLABORATION
 // ============================================================================
 
-interface RoomParticipant {
+export interface RoomParticipant {
   userId: string;
   role: 'mahasiswa' | 'konselor' | 'admin';
   name: string;
@@ -744,17 +751,28 @@ interface RoomParticipant {
   lastPing: number;
 }
 
-interface InCallNote {
+export interface InCallNote {
   appointmentId: string;
   sharedContent: string;
   lastUpdatedBy: string;
   updatedAt: string;
 }
 
+export interface WebRtcSignalMessage {
+  id: string;
+  appointmentId: string;
+  senderId: string;
+  senderRole: string;
+  type: 'offer' | 'answer' | 'candidate' | 'hangup' | 'screen-state' | 'leave';
+  payload: any;
+  timestamp: number;
+}
+
 const activeRoomPresences = new Map<string, Map<string, RoomParticipant>>();
 const activeInCallNotes = new Map<string, InCallNote>();
+const activeRoomSignals = new Map<string, WebRtcSignalMessage[]>();
 
-// Clean up stale participants (no ping for > 30s)
+// Clean up stale participants (no ping for > 30s) and expired signals (> 2 mins)
 setInterval(() => {
   const now = Date.now();
   for (const [roomId, participants] of activeRoomPresences.entries()) {
@@ -767,21 +785,31 @@ setInterval(() => {
       activeRoomPresences.delete(roomId);
     }
   }
+
+  const signalCutoff = now - 120000;
+  for (const [roomId, signals] of activeRoomSignals.entries()) {
+    const filtered = signals.filter(s => s.timestamp > signalCutoff);
+    if (filtered.length === 0) {
+      activeRoomSignals.delete(roomId);
+    } else {
+      activeRoomSignals.set(roomId, filtered);
+    }
+  }
 }, 15000);
 
 // GET /api/v1/appointments/:id/room-presence
-router.get('/:id/room-presence', requireAuth, async (req: Request, res: Response) => {
+router.get(['/:id/room-presence', '/db/appointments/:id/room-presence'], requireAuth, verifyAppointmentAccess, async (req: Request, res: Response) => {
   try {
     const appointmentId = req.params.id;
     const roomMap = activeRoomPresences.get(appointmentId) || new Map<string, RoomParticipant>();
     const participants = Array.from(roomMap.values());
     
-    // Check if counselor is connected
+    // Check if counselor and student are connected
     const hasCounselor = participants.some(p => p.role === 'konselor');
     const hasStudent = participants.some(p => p.role === 'mahasiswa');
     const activeScreenSharer = participants.find(p => p.isScreenSharing);
 
-    let statusText = 'Menunggu konselor terhubung...';
+    let statusText = 'Menunggu peserta terhubung...';
     if (hasCounselor && hasStudent) {
       statusText = 'Konselor dan Mahasiswa terhubung';
     } else if (hasCounselor) {
@@ -809,7 +837,7 @@ router.get('/:id/room-presence', requireAuth, async (req: Request, res: Response
 });
 
 // POST /api/v1/appointments/:id/room-presence (Heartbeat / Status update)
-router.post('/:id/room-presence', requireAuth, async (req: Request, res: Response) => {
+router.post(['/:id/room-presence', '/db/appointments/:id/room-presence'], requireAuth, verifyAppointmentAccess, async (req: Request, res: Response) => {
   try {
     const appointmentId = req.params.id;
     const user = req.user;
@@ -853,8 +881,84 @@ router.post('/:id/room-presence', requireAuth, async (req: Request, res: Respons
   }
 });
 
+// WebRTC Signaling: POST Signal
+router.post(['/:id/webrtc/signal', '/db/appointments/:id/webrtc/signal', '/:id/signal', '/db/appointments/:id/signal'], requireAuth, verifyAppointmentAccess, async (req: Request, res: Response) => {
+  try {
+    const appointmentId = req.params.id;
+    const user = req.user!;
+    const { type, payload } = req.body;
+
+    if (!type || !['offer', 'answer', 'candidate', 'hangup', 'screen-state', 'leave'].includes(type)) {
+      return res.status(400).json({ success: false, error: 'INVALID_SIGNAL_TYPE', message: 'Tipe sinyal WebRTC tidak valid.' });
+    }
+
+    let signals = activeRoomSignals.get(appointmentId);
+    if (!signals) {
+      signals = [];
+      activeRoomSignals.set(appointmentId, signals);
+    }
+
+    const newSignal: WebRtcSignalMessage = {
+      id: `sig_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
+      appointmentId,
+      senderId: user.userId,
+      senderRole: user.role,
+      type,
+      payload: payload || {},
+      timestamp: Date.now()
+    };
+
+    signals.push(newSignal);
+    if (signals.length > 100) {
+      signals.splice(0, signals.length - 100);
+    }
+
+    res.json({
+      success: true,
+      signalId: newSignal.id,
+      timestamp: newSignal.timestamp
+    });
+  } catch (err) {
+    console.error('Error posting WebRTC signal:', err);
+    res.status(500).json({ success: false, error: 'Gagal mengirim sinyal WebRTC' });
+  }
+});
+
+// WebRTC Signaling: GET Signals
+router.get(['/:id/webrtc/signals', '/db/appointments/:id/webrtc/signals', '/:id/signals', '/db/appointments/:id/signals'], requireAuth, verifyAppointmentAccess, async (req: Request, res: Response) => {
+  try {
+    const appointmentId = req.params.id;
+    const user = req.user!;
+    const since = Number(req.query.since || 0);
+
+    const signals = activeRoomSignals.get(appointmentId) || [];
+    const pendingSignals = signals.filter(s => s.senderId !== user.userId && s.timestamp > since);
+
+    res.json({
+      success: true,
+      signals: pendingSignals,
+      serverTime: Date.now()
+    });
+  } catch (err) {
+    console.error('Error getting WebRTC signals:', err);
+    res.status(500).json({ success: false, error: 'Gagal mengambil sinyal WebRTC' });
+  }
+});
+
+// WebRTC Signaling: Reset room signals
+router.post(['/:id/webrtc/reset', '/db/appointments/:id/webrtc/reset'], requireAuth, verifyAppointmentAccess, async (req: Request, res: Response) => {
+  try {
+    const appointmentId = req.params.id;
+    activeRoomSignals.delete(appointmentId);
+    res.json({ success: true, message: 'Ruang sinyal WebRTC direset.' });
+  } catch (err) {
+    console.error('Error resetting WebRTC signals:', err);
+    res.status(500).json({ success: false, error: 'Gagal mereset sinyal WebRTC' });
+  }
+});
+
 // GET /api/v1/appointments/:id/in-call-notes
-router.get('/:id/in-call-notes', requireAuth, async (req: Request, res: Response) => {
+router.get(['/:id/in-call-notes', '/db/appointments/:id/in-call-notes'], requireAuth, verifyAppointmentAccess, async (req: Request, res: Response) => {
   try {
     const appointmentId = req.params.id;
     const existing = activeInCallNotes.get(appointmentId) || {
@@ -872,7 +976,7 @@ router.get('/:id/in-call-notes', requireAuth, async (req: Request, res: Response
 });
 
 // POST /api/v1/appointments/:id/in-call-notes
-router.post('/:id/in-call-notes', requireAuth, async (req: Request, res: Response) => {
+router.post(['/:id/in-call-notes', '/db/appointments/:id/in-call-notes'], requireAuth, verifyAppointmentAccess, async (req: Request, res: Response) => {
   try {
     const appointmentId = req.params.id;
     const user = req.user;

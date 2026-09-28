@@ -304,7 +304,7 @@ describe('Appointment Security & IDOR Prevention Tests', () => {
       expect(res.body.success).toBe(true);
       expect(Array.isArray(res.body.iceServers)).toBe(true);
       expect(res.body.iceServers[0].urls).toBe('stun:stun.l.google.com:19302');
-      expect(res.body.iceServers[1].urls).toBe('turn:turn.ruangtenang.ui.ac.id:3478');
+      expect(res.body.iceServers[1].urls).toBe(process.env.TURN_URL || 'turn:turn.ruangtenang.ui.ac.id:3478');
       expect(res.body.iceServers[1].username).toBeDefined();
       expect(res.body.iceServers[1].credential).toBeDefined();
     });
@@ -317,6 +317,150 @@ describe('Appointment Security & IDOR Prevention Tests', () => {
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
       expect(Array.isArray(res.body.iceServers)).toBe(true);
+    });
+
+    it('Scenario 8: Counselor A (counselor1Token) accessing Counselor B (User 2) room MUST return HTTP 403 Forbidden', async () => {
+      const res = await request(app)
+        .get('/api/v1/appointments/apt-room-video-1/room-access')
+        .set('Cookie', [`rt_auth_token=${counselor1Token}`]);
+
+      expect(res.status).toBe(403);
+      expect(res.body.error).toBe('ACCESS_DENIED');
+    });
+
+    it('Scenario 9: Student B (student2Token) accessing Student A (User 1) room MUST return HTTP 403 Forbidden', async () => {
+      const res = await request(app)
+        .get('/api/v1/appointments/apt-room-video-1/room-access')
+        .set('Cookie', [`rt_auth_token=${student2Token}`]);
+
+      expect(res.status).toBe(403);
+      expect(res.body.error).toBe('ACCESS_DENIED');
+    });
+
+    it('Scenario 10: Unauthorized user cannot read or update room presence (HTTP 403)', async () => {
+      const resGet = await request(app)
+        .get('/api/v1/appointments/apt-room-video-1/room-presence')
+        .set('Cookie', [`rt_auth_token=${user3AttackerToken}`]);
+      expect(resGet.status).toBe(403);
+
+      const resPost = await request(app)
+        .post('/api/v1/appointments/apt-room-video-1/room-presence')
+        .set('Cookie', [`rt_auth_token=${user3AttackerToken}`])
+        .send({ isScreenSharing: true });
+      expect(resPost.status).toBe(403);
+    });
+
+    it('Scenario 11: Unauthorized user cannot read or update in-call notes (HTTP 403)', async () => {
+      const resGet = await request(app)
+        .get('/api/v1/appointments/apt-room-video-1/in-call-notes')
+        .set('Cookie', [`rt_auth_token=${user3AttackerToken}`]);
+      expect(resGet.status).toBe(403);
+
+      const resPost = await request(app)
+        .post('/api/v1/appointments/apt-room-video-1/in-call-notes')
+        .set('Cookie', [`rt_auth_token=${user3AttackerToken}`])
+        .send({ sharedContent: 'Hacked Notes' });
+      expect(resPost.status).toBe(403);
+    });
+
+    it('Scenario 12: Unauthorized user cannot send or receive WebRTC signals (HTTP 403)', async () => {
+      const resPost = await request(app)
+        .post('/api/v1/appointments/apt-room-video-1/webrtc/signal')
+        .set('Cookie', [`rt_auth_token=${user3AttackerToken}`])
+        .send({ type: 'offer', payload: { sdp: 'fake-sdp', type: 'offer' } });
+      expect(resPost.status).toBe(403);
+
+      const resGet = await request(app)
+        .get('/api/v1/appointments/apt-room-video-1/webrtc/signals')
+        .set('Cookie', [`rt_auth_token=${user3AttackerToken}`]);
+      expect(resGet.status).toBe(403);
+    });
+
+    it('Scenario 13: Valid participants can perform WebRTC signaling exchange (offer, answer, candidate, cleanup)', async () => {
+      // 1. Reset signals
+      await request(app)
+        .post('/api/v1/appointments/apt-room-video-1/webrtc/reset')
+        .set('Cookie', [`rt_auth_token=${user2CounselorToken}`]);
+
+      // 2. Counselor sends WebRTC offer
+      const offerPayload = { sdp: 'mock-counselor-sdp-offer-v1', type: 'offer' };
+      const offerRes = await request(app)
+        .post('/api/v1/appointments/apt-room-video-1/webrtc/signal')
+        .set('Cookie', [`rt_auth_token=${user2CounselorToken}`])
+        .send({ type: 'offer', payload: offerPayload });
+
+      expect(offerRes.status).toBe(200);
+      expect(offerRes.body.success).toBe(true);
+      expect(offerRes.body.signalId).toBeDefined();
+
+      // 3. Student receives the offer
+      const studentSignals = await request(app)
+        .get('/api/v1/appointments/apt-room-video-1/webrtc/signals')
+        .set('Cookie', [`rt_auth_token=${user1ClientToken}`]);
+
+      expect(studentSignals.status).toBe(200);
+      expect(studentSignals.body.signals.length).toBe(1);
+      expect(studentSignals.body.signals[0].type).toBe('offer');
+      expect(studentSignals.body.signals[0].payload.sdp).toBe('mock-counselor-sdp-offer-v1');
+
+      // 4. Student sends WebRTC answer
+      const answerPayload = { sdp: 'mock-student-sdp-answer-v1', type: 'answer' };
+      const answerRes = await request(app)
+        .post('/api/v1/appointments/apt-room-video-1/webrtc/signal')
+        .set('Cookie', [`rt_auth_token=${user1ClientToken}`])
+        .send({ type: 'answer', payload: answerPayload });
+
+      expect(answerRes.status).toBe(200);
+
+      // 5. Counselor receives the answer
+      const counselorSignals = await request(app)
+        .get('/api/v1/appointments/apt-room-video-1/webrtc/signals')
+        .set('Cookie', [`rt_auth_token=${user2CounselorToken}`]);
+
+      expect(counselorSignals.status).toBe(200);
+      expect(counselorSignals.body.signals.some((s: any) => s.type === 'answer')).toBe(true);
+
+      // 6. ICE candidate exchange
+      const candidatePayload = { candidate: 'candidate:1 1 UDP 2122252543 192.168.1.1 50000 typ host', sdpMid: '0', sdpMLineIndex: 0 };
+      const candidateRes = await request(app)
+        .post('/api/v1/appointments/apt-room-video-1/webrtc/signal')
+        .set('Cookie', [`rt_auth_token=${user1ClientToken}`])
+        .send({ type: 'candidate', payload: candidatePayload });
+
+      expect(candidateRes.status).toBe(200);
+
+      // 7. Presence ping and leave
+      const pingRes = await request(app)
+        .post('/api/v1/appointments/apt-room-video-1/room-presence')
+        .set('Cookie', [`rt_auth_token=${user1ClientToken}`])
+        .send({ isScreenSharing: false, networkQuality: 'good' });
+
+      expect(pingRes.status).toBe(200);
+
+      const leaveRes = await request(app)
+        .post('/api/v1/appointments/apt-room-video-1/room-presence')
+        .set('Cookie', [`rt_auth_token=${user1ClientToken}`])
+        .send({ action: 'leave' });
+
+      expect(leaveRes.status).toBe(200);
+      expect(leaveRes.body.success).toBe(true);
+    });
+
+    it('Scenario 14: Valid participants can synchronize collaborative in-call notes', async () => {
+      const updateRes = await request(app)
+        .post('/api/v1/appointments/apt-room-video-1/in-call-notes')
+        .set('Cookie', [`rt_auth_token=${user2CounselorToken}`])
+        .send({ sharedContent: 'Rencana coping: Latihan pernapasan 4-7-8 setiap pagi.' });
+
+      expect(updateRes.status).toBe(200);
+      expect(updateRes.body.data.sharedContent).toContain('Latihan pernapasan 4-7-8');
+
+      const fetchRes = await request(app)
+        .get('/api/v1/appointments/apt-room-video-1/in-call-notes')
+        .set('Cookie', [`rt_auth_token=${user1ClientToken}`]);
+
+      expect(fetchRes.status).toBe(200);
+      expect(fetchRes.body.data.sharedContent).toContain('Latihan pernapasan 4-7-8');
     });
   });
 });

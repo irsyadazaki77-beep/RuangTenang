@@ -51,18 +51,10 @@ import workspaceArtifactsRouter from './server/routes/workspaceArtifacts.js';
 async function startServer() {
   const isProd = process.env.NODE_ENV === 'production';
 
-  try {
-    validateEnvironment();
-    validateStartupEnvironment();
-  } catch (envErr: any) {
-    console.warn('[STARTUP CONFIG] Environment validation notice:', envErr?.message || envErr);
-  }
-
-  try {
-    await ensureDatabaseReady();
-  } catch (dbErr: any) {
-    console.warn('[STARTUP DATABASE] Database readiness notice:', dbErr?.message || dbErr);
-  }
+  // Strict Fail-Closed Startup: Environment & Database readiness must pass or process halts
+  validateEnvironment();
+  validateStartupEnvironment();
+  await ensureDatabaseReady();
 
   const app = express();
   
@@ -224,8 +216,8 @@ async function startServer() {
 
   // Permissions-Policy & Privacy Headers Middleware
   app.use((_req, res, next) => {
-    // Restrict unnecessary browser hardware capabilities in a sensitive mental health context
-    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(), usb=(), display-capture=()');
+    // Enable camera, microphone, and screen sharing strictly on self origin; restrict unnecessary sensors
+    res.setHeader('Permissions-Policy', 'camera=(self), microphone=(self), display-capture=(self), geolocation=(), payment=(), usb=()');
     next();
   });
 

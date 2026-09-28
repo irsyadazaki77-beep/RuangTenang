@@ -46,6 +46,7 @@ backups/
 reports/
 *.xlsx
 *.pdf
+uploads/
 
 # Testing & Coverage Artifacts
 coverage/

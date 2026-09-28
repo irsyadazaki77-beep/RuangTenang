@@ -84,7 +84,7 @@ export function StudentWorkspace({
     handleDragLeave,
     handleDrop,
     removeAttachedFile
-  } = useWorkspaceFileIngestion();
+  } = useWorkspaceFileIngestion(chatId);
 
   // 5. Academic Distress Safety Hook
   const {
@@ -135,7 +135,7 @@ export function StudentWorkspace({
   });
 
   // User Actions
-  const handleExecuteSendMessage = useCallback((promptText: string, customSystemNote?: string) => {
+  const handleExecuteSendMessage = useCallback((promptText: string, customSystemNote?: string, attachments?: any[]) => {
     if (!promptText.trim() || isStreaming) return;
 
     const userMsgId = `user_${Date.now()}`;
@@ -143,11 +143,18 @@ export function StudentWorkspace({
       id: userMsgId,
       role: 'user',
       content: promptText.trim(),
-      createdAt: new Date()
+      createdAt: new Date(),
+      attachments: attachments && attachments.length > 0 ? attachments.map((a: any) => ({
+        id: a.id,
+        filename: a.filename || a.name,
+        mimeType: a.mimeType,
+        size: a.size,
+        url: a.url
+      })) : undefined
     };
 
     setMessages(prev => [...prev, newUserMessage]);
-    sendMessageStream(promptText.trim(), customSystemNote);
+    sendMessageStream(promptText.trim(), customSystemNote, attachments);
   }, [isStreaming, setMessages, sendMessageStream]);
 
   const handleRetryMessage = useCallback((lastUserPrompt: string, errorMsgId: string) => {
@@ -273,7 +280,7 @@ Mohon berikan hasil revisi lengkapnya yang dibungkus dalam tag:
             isDistressDismissed={isDistressDismissed}
             promptPills={ACADEMIC_PROMPT_PILLS}
             fileInputRef={fileInputRef}
-            onSendMessage={(prompt) => handleExecuteSendMessage(prompt)}
+            onSendMessage={(prompt, atts) => handleExecuteSendMessage(prompt, undefined, atts)}
             onAbortStream={abortStream}
             onOpenTemplateGallery={() => openTemplateModal()}
             onRemoveAttachedFile={removeAttachedFile}

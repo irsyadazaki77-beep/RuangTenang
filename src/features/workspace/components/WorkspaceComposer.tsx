@@ -1,5 +1,19 @@
 import React, { useRef, useEffect } from 'react';
-import { FileText, X, Paperclip, Sparkles, StopCircle, Send } from 'lucide-react';
+import { 
+  FileText, 
+  FileSpreadsheet, 
+  Presentation, 
+  FileCode, 
+  Image as ImageIcon, 
+  X, 
+  Paperclip, 
+  Sparkles, 
+  StopCircle, 
+  Send,
+  CheckCircle2,
+  AlertCircle,
+  Loader2
+} from 'lucide-react';
 import { WorkspaceFileAttachment, AcademicPromptPill } from '../types';
 import { DistressDetectionResult } from '../utils/distressDetector';
 import { AcademicDistressBanner } from './AcademicDistressBanner';
@@ -13,7 +27,7 @@ interface WorkspaceComposerProps {
   isDistressDismissed: boolean;
   promptPills: AcademicPromptPill[];
   fileInputRef: React.RefObject<HTMLInputElement | null>;
-  onSendMessage: (text: string) => void;
+  onSendMessage: (text: string, attachments?: any[]) => void;
   onAbortStream: () => void;
   onOpenTemplateGallery: () => void;
   onRemoveAttachedFile: () => void;
@@ -66,17 +80,40 @@ export const WorkspaceComposer: React.FC<WorkspaceComposerProps> = ({
   };
 
   const handleSend = () => {
-    let fullPrompt = inputText.trim();
-    if (attachedFile) {
-      fullPrompt = fullPrompt 
-        ? `${fullPrompt}\n\n[Lampiran Dokumen: ${attachedFile.name}]\n${attachedFile.content}`
-        : `[Lampiran Dokumen: ${attachedFile.name}]\n${attachedFile.content}`;
-      onRemoveAttachedFile();
+    let prompt = inputText.trim();
+    const currentAttachment = attachedFile;
+    if (!prompt && !currentAttachment) return;
+
+    if (!prompt && currentAttachment) {
+      prompt = `Mohon telaah dan analisis dokumen "${currentAttachment.name}" ini secara mendalam.`;
     }
-    if (fullPrompt) {
-      onSendMessage(fullPrompt);
-      setInputText('');
+
+    const attachmentsToSend = currentAttachment && currentAttachment.id ? [{
+      id: currentAttachment.id,
+      filename: currentAttachment.name,
+      mimeType: currentAttachment.mimeType,
+      size: currentAttachment.size
+    }] : undefined;
+
+    onSendMessage(prompt, attachmentsToSend);
+    onRemoveAttachedFile();
+    setInputText('');
+  };
+
+  const getFormatIcon = (kind?: string, mime?: string) => {
+    if (kind === 'xlsx' || mime?.includes('spreadsheet')) {
+      return <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />;
     }
+    if (kind === 'pptx' || mime?.includes('presentation')) {
+      return <Presentation className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />;
+    }
+    if (kind === 'code' || kind === 'json' || kind === 'csv') {
+      return <FileCode className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />;
+    }
+    if (kind === 'image' || mime?.startsWith('image/')) {
+      return <ImageIcon className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400 shrink-0" />;
+    }
+    return <FileText className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400 shrink-0" />;
   };
 
   return (
@@ -110,18 +147,56 @@ export const WorkspaceComposer: React.FC<WorkspaceComposerProps> = ({
 
       {/* Compact Floating Composer Container */}
       <div className="relative rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 focus-within:border-emerald-500/80 focus-within:ring-1 focus-within:ring-emerald-500/30 transition-all p-2">
-        {/* Attached File Chip */}
+        {/* Attached File Chip with Format-Aware Status */}
         {attachedFile && (
-          <div className="flex items-center gap-2 mb-1.5 px-2 py-1 bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 rounded-lg text-xs text-emerald-800 dark:text-emerald-200">
-            <FileText className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-            <span className="truncate flex-1 font-medium">{attachedFile.name}</span>
+          <div className="flex items-center gap-2 mb-1.5 px-2.5 py-1.5 bg-slate-100 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-800 dark:text-slate-200 animate-fade-in">
+            {getFormatIcon(attachedFile.fileKind, attachedFile.mimeType)}
+            <span className="truncate max-w-[200px] font-medium" title={attachedFile.name}>
+              {attachedFile.name}
+            </span>
+            
+            {/* Status indicator */}
+            {attachedFile.status === 'uploading' && (
+              <span className="flex items-center gap-1 text-[11px] text-amber-600 dark:text-amber-400 font-normal ml-auto">
+                <Loader2 className="w-3 h-3 animate-spin" />
+                <span>Mengunggah...</span>
+              </span>
+            )}
+            {attachedFile.status === 'processing' && (
+              <span className="flex items-center gap-1 text-[11px] text-blue-600 dark:text-blue-400 font-normal ml-auto">
+                <Loader2 className="w-3 h-3 animate-spin" />
+                <span>Memproses...</span>
+              </span>
+            )}
+            {attachedFile.status === 'ready' && (
+              <span className="flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-medium ml-auto">
+                <CheckCircle2 className="w-3 h-3" />
+                <span>
+                  {attachedFile.pageCount 
+                    ? `${attachedFile.pageCount} hal` 
+                    : attachedFile.slideCount 
+                      ? `${attachedFile.slideCount} slide` 
+                      : attachedFile.sheetCount 
+                        ? `${attachedFile.sheetCount} sheet` 
+                        : 'Siap'}
+                </span>
+              </span>
+            )}
+            {attachedFile.status === 'failed' && (
+              <span className="flex items-center gap-1 text-[11px] text-rose-600 dark:text-rose-400 font-medium ml-auto">
+                <AlertCircle className="w-3 h-3" />
+                <span>Gagal</span>
+              </span>
+            )}
+
             <button
               type="button"
               onClick={onRemoveAttachedFile}
-              className="p-0.5 hover:bg-emerald-100 dark:hover:bg-emerald-900 rounded text-emerald-700 dark:text-emerald-300 transition-colors cursor-pointer"
+              className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 transition-colors cursor-pointer ml-1"
               title="Hapus lampiran"
+              aria-label="Hapus lampiran dokumen"
             >
-              <X className="w-3 h-3" />
+              <X className="w-3.5 h-3.5" />
             </button>
           </div>
         )}

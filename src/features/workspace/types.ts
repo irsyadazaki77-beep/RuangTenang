@@ -49,14 +49,30 @@ export interface ParsedCitationItem {
 export type StreamingStatus = 'idle' | 'connecting' | 'streaming' | 'completed' | 'aborted' | 'error';
 
 export interface WorkspaceFileAttachment {
+  id?: string;
   name: string;
-  content: string;
+  content?: string;
   size?: number;
   mimeType?: string;
+  fileKind?: string;
   isText?: boolean;
+  status?: 'uploading' | 'processing' | 'ready' | 'failed' | 'error';
+  errorMessage?: string;
+  pageCount?: number;
+  slideCount?: number;
+  sheetCount?: number;
+  url?: string;
+  checksum?: string;
 }
 
-export type FileValidationErrorType = 'TOO_LARGE' | 'EMPTY_FILE' | 'UNSUPPORTED_TYPE' | 'READ_FAILED';
+export type FileValidationErrorType = 
+  | 'TOO_LARGE' 
+  | 'EMPTY_FILE' 
+  | 'UNSUPPORTED_TYPE' 
+  | 'READ_FAILED' 
+  | 'UPLOAD_FAILED' 
+  | 'PROCESSING_FAILED' 
+  | 'SECURITY_REJECTED';
 
 export interface FileValidationResult {
   valid: boolean;

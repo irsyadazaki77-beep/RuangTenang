@@ -1,4 +1,6 @@
 import crypto from 'crypto';
+import fs from 'fs';
+import path from 'path';
 import { prisma } from '../database.js';
 
 export interface RetentionCleanupResult {
@@ -163,6 +165,20 @@ export class RetentionService {
       const delBookmarks = await tx.messageBookmarks.deleteMany({ where: { userId } });
       count += delBookmarks.count;
 
+      const userAttachments = await tx.attachments.findMany({
+        where: { userId },
+        select: { id: true, data: true }
+      });
+      for (const att of userAttachments) {
+        try {
+          const fullPath = path.isAbsolute(att.data) ? att.data : path.join(process.cwd(), att.data);
+          if (fs.existsSync(fullPath)) {
+            await fs.promises.unlink(fullPath);
+          }
+        } catch (e) {}
+      }
+
+      await tx.documentChunks.deleteMany({ where: { userId } });
       const delAttachments = await tx.attachments.deleteMany({ where: { userId } });
       count += delAttachments.count;
 
@@ -285,6 +301,20 @@ export class RetentionService {
       const delBookmarks = await tx.messageBookmarks.deleteMany({ where: { userId } });
       count += delBookmarks.count;
 
+      const userAttachments = await tx.attachments.findMany({
+        where: { userId },
+        select: { id: true, data: true }
+      });
+      for (const att of userAttachments) {
+        try {
+          const fullPath = path.isAbsolute(att.data) ? att.data : path.join(process.cwd(), att.data);
+          if (fs.existsSync(fullPath)) {
+            await fs.promises.unlink(fullPath);
+          }
+        } catch (e) {}
+      }
+
+      await tx.documentChunks.deleteMany({ where: { userId } });
       const delAttachments = await tx.attachments.deleteMany({ where: { userId } });
       count += delAttachments.count;
 

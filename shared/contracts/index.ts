@@ -4,3 +4,4 @@ export * from './appointments.js';
 export * from './screening.js';
 export * from './emergency.js';
 export * from './chat.js';
+export * from './files.js';

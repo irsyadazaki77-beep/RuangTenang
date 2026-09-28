@@ -6,10 +6,12 @@ import { scanAndSanitizePII } from '../piiService.js';
 import { chatSummarizer, ChatMessageItem } from './chatSummarizer.js';
 import { aiMetricsService } from './aiMetricsService.js';
 import { detectPromptInjection } from '../../security.js';
+import { FileSourceReference } from '../../../shared/contracts/files.js';
 
 export interface AiContextParams {
   userId: string;
   chatId?: string;
+  attachmentIds?: string[];
   fullHistory?: ChatMessageItem[];
   currentMessage?: string;
   pluginResult?: string;
@@ -25,6 +27,7 @@ export interface BuiltContextResult {
   recentHistory: Array<{ role: 'user' | 'model'; parts: { text: string }[] }>;
   tokensSaved: number;
   totalContextTokens: number;
+  sourceReferences?: FileSourceReference[];
 }
 
 export const RUANG_KERJA_SYSTEM_PROMPT = `Kamu adalah Asisten RuangKerja Mahasiswa dengan motto 'Selesaikan Tugas Tanpa Cemas'. Peranmu adalah menjadi rekan belajar kritis dan mentor riset yang suportif.
@@ -231,6 +234,31 @@ ${memoryLines.join('\n')}
       }
     }
 
+    // 5b. Document Context Retrieval (Strict budget, format-aware chunks, untrusted data boundary)
+    let retrievedDocContext: any = null;
+    const isAcademicWorkspace = normalizedMode === 'workspace' || normalizedMode === 'ruangkerja';
+    const hasExplicitAttachments = params.attachmentIds && params.attachmentIds.length > 0;
+
+    if (isAcademicWorkspace || hasExplicitAttachments) {
+      try {
+        const { contextRetrievalService } = await import('../file-intelligence/contextRetrievalService.js');
+        retrievedDocContext = await contextRetrievalService.retrieveContext({
+          userId,
+          chatId: isAcademicWorkspace ? chatId : undefined,
+          attachmentIds: params.attachmentIds,
+          userQuery: currentMessage,
+          maxTokens: 2500,
+          maxChunks: 8
+        });
+
+        if (retrievedDocContext && retrievedDocContext.contextBlock) {
+          contextParts.push(retrievedDocContext.contextBlock);
+        }
+      } catch (err: any) {
+        console.warn('[AI_CONTEXT_DOC_WARN] Document retrieval failed:', err?.message || err);
+      }
+    }
+
     // 6. Format recent history for model prompt payload with PII scrubbing and prompt-injection sanitization
     const formattedRecentHistory = recentHistoryItems.map(h => {
       let text = (h.content || '').substring(0, 1000);
@@ -265,7 +293,8 @@ ${contextParts.join('\n\n')}
       summaryText: conversationSummary,
       recentHistory: formattedRecentHistory,
       tokensSaved: tokensSavedTotal,
-      totalContextTokens
+      totalContextTokens,
+      sourceReferences: retrievedDocContext?.sourceReferences || []
     };
   }
 };

@@ -453,20 +453,53 @@ model SelfCareTasks {
 
 
 model Attachments {
-  id        String   @id
-  messageId String?
-  chatId    String?
-  userId    String
-  filename  String
-  mimeType  String
-  size      Int
-  data      String   // base64 content for small files or extracted text
-  createdAt DateTime @default(now())
+  id              String   @id
+  messageId       String?
+  chatId          String?
+  userId          String
+  filename        String
+  mimeType        String
+  size            Int
+  data            String   // storage path to file on disk
+  checksum        String?  // SHA-256 hash of file content for deduplication
+  fileKind        String?  // 'text' | 'document' | 'spreadsheet' | 'presentation' | 'image' | 'code'
+  status          String   @default("pending") // 'pending' | 'processing' | 'ready' | 'failed' | 'unsupported'
+  processingError String?
+  extractedText   String?  // normalized extracted text summary or cache
+  metadata        String?  // JSON string: pageCount, slideCount, sheetCount, sections, etc.
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @default(now())
+  processedAt     DateTime?
 
-  message   ChatMessages? @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  message         ChatMessages? @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  chunks          DocumentChunks[]
 
   @@index([messageId])
   @@index([chatId])
+  @@index([userId])
+  @@index([checksum])
+  @@index([status])
+}
+
+model DocumentChunks {
+  id            String   @id
+  attachmentId  String
+  userId        String
+  chunkIndex    Int
+  content       String   // text content of the chunk
+  tokenCount    Int      @default(0)
+  pageStart     Int?
+  pageEnd       Int?
+  slideNumber   Int?
+  sheetName     String?
+  section       String?
+  sourceRef     String?
+  checksum      String?
+  createdAt     DateTime @default(now())
+
+  attachment    Attachments @relation(fields: [attachmentId], references: [id], onDelete: Cascade)
+
+  @@index([attachmentId])
   @@index([userId])
 }
 

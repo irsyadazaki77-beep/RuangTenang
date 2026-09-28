@@ -56,11 +56,24 @@ const MAGIC_BYTES_RULES: MagicBytesRule[] = [
     exts: ['.docx'],
     check: (buf: Buffer) => buf.length >= 4 &&
       buf[0] === 0x50 && buf[1] === 0x4B && buf[2] === 0x03 && buf[3] === 0x04
+  },
+  {
+    mime: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    exts: ['.pptx'],
+    check: (buf: Buffer) => buf.length >= 4 &&
+      buf[0] === 0x50 && buf[1] === 0x4B && buf[2] === 0x03 && buf[3] === 0x04
+  },
+  {
+    mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    exts: ['.xlsx'],
+    check: (buf: Buffer) => buf.length >= 4 &&
+      buf[0] === 0x50 && buf[1] === 0x4B && buf[2] === 0x03 && buf[3] === 0x04
   }
 ];
 
 export function isTextFile(buffer: Buffer, originalExt: string): boolean {
-  if (!['.txt', '.md'].includes(originalExt.toLowerCase())) {
+  const allowed = ['.txt', '.md', '.csv', '.json', '.py', '.js', '.ts', '.tsx', '.jsx', '.html', '.css', '.sql'];
+  if (!allowed.includes(originalExt.toLowerCase())) {
     return false;
   }
   // Check that there are no null bytes or executable headers
@@ -148,6 +161,10 @@ export function validateAndDetectFile(buffer: Buffer, originalFilename: string, 
   };
 }
 
+import { getAdapterForKind } from './file-intelligence/adapters/index.js';
+import { normalizationService } from './file-intelligence/normalizationService.js';
+import { chunkingService } from './file-intelligence/chunkingService.js';
+
 export const attachmentStorageService = {
   async saveAttachment({
     userId,
@@ -174,6 +191,7 @@ export const attachmentStorageService = {
       }
     }
 
+    const checksum = crypto.createHash('sha256').update(buffer).digest('hex');
     const attachmentId = `att_${Date.now()}_${crypto.randomBytes(6).toString('hex')}`;
     const storageFilename = `${attachmentId}.bin`;
     const storagePath = path.join(UPLOAD_DIR, storageFilename);
@@ -181,6 +199,18 @@ export const attachmentStorageService = {
 
     // Write file securely to disk
     await fs.promises.writeFile(storagePath, buffer, { mode: 0o600 });
+
+    // Determine file kind
+    const ext = path.extname(sanitizedName).toLowerCase().replace('.', '');
+    let fileKind: any = 'text';
+    if (verifiedMime === 'application/pdf') fileKind = 'pdf';
+    else if (verifiedMime.startsWith('image/')) fileKind = 'image';
+    else if (ext === 'docx') fileKind = 'docx';
+    else if (ext === 'pptx') fileKind = 'pptx';
+    else if (ext === 'xlsx') fileKind = 'xlsx';
+    else if (ext === 'csv') fileKind = 'csv';
+    else if (ext === 'json') fileKind = 'json';
+    else if (ext === 'md' || ext === 'markdown') fileKind = 'markdown';
 
     // Save metadata and relative storage reference in database (NO raw base64!)
     const record = await prisma.attachments.create({
@@ -192,9 +222,70 @@ export const attachmentStorageService = {
         filename: sanitizedName,
         mimeType: verifiedMime,
         size,
-        data: relativeStoragePath
+        data: relativeStoragePath,
+        checksum,
+        fileKind,
+        status: fileKind === 'image' ? 'ready' : 'processing'
       }
     });
+
+    if (fileKind !== 'image') {
+      try {
+        const adapter = getAdapterForKind(fileKind);
+        const extraction = await adapter.extract({
+          documentId: attachmentId,
+          filename: sanitizedName,
+          mimeType: verifiedMime,
+          kind: fileKind,
+          buffer,
+          checksum
+        });
+        const normalized = normalizationService.normalizeDocument(extraction);
+        const chunks = chunkingService.createChunks(normalized);
+
+        if (chunks.length > 0) {
+          await prisma.documentChunks.createMany({
+            data: chunks.map(c => ({
+              id: c.id,
+              attachmentId,
+              userId: userId || 'guest',
+              chunkIndex: c.index,
+              content: c.text,
+              tokenCount: c.tokenEstimate,
+              pageStart: c.pageStart ?? null,
+              pageEnd: c.pageEnd ?? null,
+              slideNumber: c.slideNumber ?? null,
+              sheetName: c.sheetName ?? null,
+              section: c.section ?? null,
+              checksum: c.checksum
+            }))
+          });
+        }
+
+        await prisma.attachments.update({
+          where: { id: attachmentId },
+          data: {
+            status: 'ready',
+            processedAt: new Date(),
+            extractedText: normalized.normalizedFullText.substring(0, 10_000),
+            metadata: JSON.stringify({
+              pageCount: extraction.pageCount,
+              slideCount: extraction.slideCount,
+              sheetCount: extraction.sheetCount,
+              chunkCount: chunks.length
+            })
+          }
+        });
+      } catch (procErr: any) {
+        await prisma.attachments.update({
+          where: { id: attachmentId },
+          data: {
+            status: 'failed',
+            processingError: procErr.message
+          }
+        }).catch(() => {});
+      }
+    }
 
     return record;
   },
@@ -258,6 +349,10 @@ export const attachmentStorageService = {
         console.error('Failed to unlink attachment file:', e);
       }
     }
+
+    await prisma.documentChunks.deleteMany({
+      where: { attachmentId }
+    });
 
     await prisma.attachments.delete({
       where: { id: attachmentId }

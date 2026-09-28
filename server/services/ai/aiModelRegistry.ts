@@ -13,6 +13,28 @@ export interface AiModelOption {
 
 export const AVAILABLE_AI_MODELS: AiModelOption[] = [
   {
+    id: 'deepseek-chat',
+    name: 'DeepSeek V3 (Chat)',
+    category: 'DeepSeek AI Series',
+    tag: 'Populer • Cerdas & Cepat',
+    description: 'Model percakapan unggulan DeepSeek-V3 dengan pemahaman bahasa alami yang sangat luwes, responsif, dan kaya empati.',
+    speed: 'Sangat Cepat',
+    reasoning: 'Tinggi',
+    recommendedFor: 'Percakapan konseling interaktif, active listening, refleksi emosi hangat, dan diskusi harian',
+    allowedTiers: ['Free', 'Pro', 'Premium']
+  },
+  {
+    id: 'deepseek-reasoner',
+    name: 'DeepSeek R1 (Reasoner)',
+    category: 'DeepSeek AI Series',
+    tag: 'R1 • Penalaran Mendalam',
+    description: 'Model reasoning canggih DeepSeek-R1 dengan proses berpikir bertahap (Chain-of-Thought) untuk analisis kognitif, CBT mendalam, dan pemecahan masalah kompleks.',
+    speed: 'Sedang',
+    reasoning: 'Sangat Tinggi',
+    recommendedFor: 'Restrukturisasi kognitif mendalam, analisis kasus skripsi/karya ilmiah, dan pemecahan masalah kompleks',
+    allowedTiers: ['Free', 'Pro', 'Premium']
+  },
+  {
     id: 'gemini-3.8-flash',
     name: 'Gemini 3.8 Flash',
     category: 'Gemini 3.x Series',
@@ -104,6 +126,10 @@ export const AVAILABLE_AI_MODELS: AiModelOption[] = [
 ];
 
 export const DEFAULT_AI_MODEL_ID = 'gemini-3.8-flash';
+
+export function isDeepSeekModel(modelId: string): boolean {
+  return modelId === 'deepseek-chat' || modelId === 'deepseek-reasoner' || modelId.startsWith('deepseek-');
+}
 
 export function getActualGeminiModel(modelId: string): string {
   const map: Record<string, string> = {

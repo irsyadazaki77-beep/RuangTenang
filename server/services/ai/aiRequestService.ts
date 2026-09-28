@@ -4,7 +4,8 @@ import { aiSafetyService } from './aiSafetyService.js';
 import { aiModelRouter } from './aiModelRouter.js';
 import { scanAndSanitizePII } from '../piiService.js';
 import { getLocalFallbackResponse } from '../../routes/fallbackAi.js';
-import { isModelAllowedForTier, getActualGeminiModel } from './aiModelRegistry.js';
+import { isModelAllowedForTier, getActualGeminiModel, isDeepSeekModel } from './aiModelRegistry.js';
+import { deepseekService } from './deepseekService.js';
 
 export interface AiRequestOptions {
   userId?: string;
@@ -115,6 +116,39 @@ Pedoman Interaksi:
        if (userContext.systemContext) {
          fullSystemInstruction += `\n\n${userContext.systemContext}`;
        }
+    }
+
+    const targetModelId = requestedModelId || DEFAULT_AI_MODEL;
+
+    // Check if user requested a DeepSeek AI Model
+    if (isDeepSeekModel(targetModelId) && deepseekService.isAvailable()) {
+      try {
+        console.info(`[AI_REQUEST_SERVICE] Routing non-streaming chat request to DeepSeek: ${targetModelId}`);
+        const deepseekRes = await deepseekService.generateResponse({
+          ...options,
+          systemInstruction: fullSystemInstruction
+        }, targetModelId);
+
+        clearTimeout(timeoutId);
+
+        const validation = aiSafetyService.validateOutput(deepseekRes.text);
+        if (!validation.isValid) {
+          console.warn(`[AI_REQUEST_SERVICE] Output validation failed for DeepSeek: ${validation.reason}`);
+          return {
+            text: 'Maaf, respons yang saya siapkan tidak dapat ditampilkan karena aturan keamanan. Jika Anda memerlukan bantuan khusus, mohon hubungi profesional medis atau konselor.',
+            modelUsed: 'safety-override',
+            isFallback: true
+          };
+        }
+
+        return {
+          text: deepseekRes.text,
+          modelUsed: deepseekRes.modelUsed,
+          isFallback: false
+        };
+      } catch (deepseekErr: any) {
+        console.warn(`[AI_REQUEST_SERVICE] DeepSeek execution failed (${deepseekErr?.message}), attempting Gemini fallback...`);
+      }
     }
 
     const aiClient = getGenAIClient();
@@ -252,6 +286,28 @@ Pedoman Interaksi:
        if (userContext.systemContext) {
          fullSystemInstruction += `\n\n${userContext.systemContext}`;
        }
+    }
+
+    const targetModelId = requestedModelId || DEFAULT_AI_MODEL;
+
+    // Check if user requested a DeepSeek AI Model stream
+    if (isDeepSeekModel(targetModelId) && deepseekService.isAvailable()) {
+      try {
+        console.info(`[AI_REQUEST_SERVICE] Routing streaming chat request to DeepSeek: ${targetModelId}`);
+        const deepseekStream = await deepseekService.generateStream({
+          ...options,
+          systemInstruction: fullSystemInstruction
+        }, targetModelId);
+
+        clearTimeout(timeoutId);
+        aiModelRouter.recordSuccess();
+        return {
+          stream: deepseekStream.stream,
+          modelUsed: deepseekStream.modelUsed
+        };
+      } catch (deepseekErr: any) {
+        console.warn(`[AI_REQUEST_SERVICE] DeepSeek streaming failed (${deepseekErr?.message}), falling back to Gemini...`);
+      }
     }
 
     const aiClient = getGenAIClient();

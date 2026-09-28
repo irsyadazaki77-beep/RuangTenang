@@ -81,11 +81,19 @@ router.post(
             chatId
           });
 
+          let meta: any = {};
+          try { if (saved.metadata) meta = JSON.parse(saved.metadata); } catch {}
+
           savedAttachments.push({
             id: saved.id,
             filename: saved.filename,
             mimeType: saved.mimeType,
+            fileKind: saved.fileKind || 'text',
             size: saved.size,
+            status: saved.status || 'ready',
+            pageCount: meta.pageCount,
+            slideCount: meta.slideCount,
+            sheetCount: meta.sheetCount,
             url: `/api/v1/chat/attachments/${saved.id}`
           });
         } catch (fileErr: any) {
@@ -110,6 +118,65 @@ router.post(
     }
   }
 );
+
+/**
+ * Status check endpoint for asynchronous / progressive file processing
+ */
+router.get('/chat/attachments/:id/status', optionalAuth, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.userId || 'guest';
+    const attachmentId = req.params.id;
+
+    if (!attachmentId) {
+      return sendAttachmentError(res, 'MISSING_ATTACHMENT_ID', 'ID Lampiran tidak ditemukan', 400);
+    }
+
+    const { documentIngestionService } = await import('../services/file-intelligence/documentIngestionService.js');
+    const statusDto = await documentIngestionService.getAttachmentStatus(attachmentId, userId);
+
+    if (!statusDto) {
+      return sendAttachmentError(res, 'NOT_FOUND', 'Berkas lampiran tidak ditemukan', 404);
+    }
+
+    return res.json({
+      success: true,
+      attachment: statusDto
+    });
+  } catch (err: any) {
+    if (err.message.includes('OWNERSHIP_ERROR') || err.message.includes('UNAUTHORIZED')) {
+      return sendAttachmentError(res, 'UNAUTHORIZED_ACCESS', 'Anda tidak memiliki akses ke status berkas ini', 403);
+    }
+    return sendAttachmentError(res, 'STATUS_CHECK_FAILED', 'Gagal memeriksa status pemrosesan berkas', 500);
+  }
+});
+
+/**
+ * Retry processing endpoint for failed documents
+ */
+router.post('/chat/attachments/:id/retry', optionalAuth, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.userId || 'guest';
+    const attachmentId = req.params.id;
+
+    if (!attachmentId) {
+      return sendAttachmentError(res, 'MISSING_ATTACHMENT_ID', 'ID Lampiran tidak ditemukan', 400);
+    }
+
+    const { documentIngestionService } = await import('../services/file-intelligence/documentIngestionService.js');
+    const retriedDto = await documentIngestionService.retryProcessing(attachmentId, userId);
+
+    return res.json({
+      success: true,
+      message: 'Pemrosesan ulang berkas berhasil',
+      attachment: retriedDto
+    });
+  } catch (err: any) {
+    if (err.message.includes('OWNERSHIP_ERROR')) {
+      return sendAttachmentError(res, 'UNAUTHORIZED_ACCESS', 'Anda tidak berhak memproses ulang berkas ini', 403);
+    }
+    return sendAttachmentError(res, 'RETRY_FAILED', err.message || 'Gagal memproses ulang berkas', 400);
+  }
+});
 
 /**
  * Download/view attachment file endpoint

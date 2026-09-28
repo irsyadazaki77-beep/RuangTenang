@@ -16,6 +16,8 @@ export interface CrisisDetectionResult {
   analysisDetails?: CrisisAnalysisResult;
 }
 
+import { FileSourceReference } from '../../../shared/contracts/files.js';
+
 export interface UnifiedPipelineInput {
   userId?: string;
   input: string;
@@ -33,6 +35,8 @@ export interface UnifiedPipelineInput {
   abortSignal?: AbortSignal;
   isTemporary?: boolean;
   workspaceMode?: boolean;
+  attachments?: any[];
+  attachmentIds?: string[];
 }
 
 export interface UnifiedPipelineOutput {
@@ -43,6 +47,7 @@ export interface UnifiedPipelineOutput {
   isPromptInjectionOverride: boolean;
   isConsentFallback: boolean;
   stream?: AsyncGenerator<any, any, unknown>;
+  sourceReferences?: FileSourceReference[];
 }
 
 export const aiSafetyService = {
@@ -660,15 +665,20 @@ Konteks Pengguna:
       })
     }));
 
+    let pipelineSourceReferences: FileSourceReference[] = [];
+
     if (userId) {
       const rawHistoryItems = (input.history || []).map(h => ({
         role: h.role as 'user' | 'model',
         content: h.parts[0]?.text || ''
       }));
 
+      const attachmentIds = input.attachmentIds || (input.attachments ? input.attachments.map((a: any) => typeof a === 'string' ? a : (a?.id || a?.serverAttachmentId)).filter(Boolean) : undefined);
+
       const builtContext = await aiContextBuilder.buildContext({
         userId,
         chatId: input.chatId,
+        attachmentIds,
         fullHistory: rawHistoryItems,
         currentMessage: redactedInput,
         pluginResult: sanitizedPluginResult,
@@ -682,6 +692,9 @@ Konteks Pengguna:
       }
       if (builtContext.recentHistory && builtContext.recentHistory.length > 0) {
         activeHistory = builtContext.recentHistory;
+      }
+      if (builtContext.sourceReferences) {
+        pipelineSourceReferences = builtContext.sourceReferences;
       }
     }
 
@@ -725,7 +738,8 @@ Konteks Pengguna:
           isFallback: modelRes.isFallback,
           isCrisisOverride: false,
           isPromptInjectionOverride: false,
-          isConsentFallback: false
+          isConsentFallback: false,
+          sourceReferences: pipelineSourceReferences
         };
       } catch (chatErr: any) {
         console.warn(`[SAFETY_PIPELINE] Non-streaming execution failed, falling back to local:`, chatErr?.message || chatErr);
@@ -761,7 +775,8 @@ Konteks Pengguna:
           isCrisisOverride: false,
           isPromptInjectionOverride: false,
           isConsentFallback: false,
-          stream: modelRes.stream
+          stream: modelRes.stream,
+          sourceReferences: pipelineSourceReferences
         };
       } catch (streamErr: any) {
         console.warn(`[SAFETY_PIPELINE] Streaming execution failed, falling back to local:`, streamErr?.message || streamErr);
