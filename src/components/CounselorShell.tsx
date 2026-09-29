@@ -1,10 +1,12 @@
-import React, { Suspense } from 'react';
+import React, { Suspense, useState } from 'react';
 import { UserSession } from '../types';
 import { lazyWithRetry } from '../lib/lazyWithRetry';
 import { GlobalOverlays } from './GlobalOverlays';
 import { useNavigate } from 'react-router-dom';
+import { LayoutDashboard, Stethoscope, Settings, LogOut } from 'lucide-react';
 
 const CounselorDashboard = lazyWithRetry(() => import('../features/counselors/CounselorDashboard').then(module => ({ default: module.CounselorDashboard })));
+const CounselorPortal = lazyWithRetry(() => import('../features/counselor-portal/CounselorPortal').then(module => ({ default: module.CounselorPortal })));
 const SettingsPage = lazyWithRetry(() => import('../features/settings/SettingsPage').then(module => ({ default: module.SettingsPage })));
 
 interface CounselorShellProps {
@@ -43,9 +45,84 @@ export const CounselorShell: React.FC<CounselorShellProps> = ({
   handleLogout
 }) => {
   const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'portal'>('dashboard');
 
   return (
-    <div className="flex min-h-[100dvh] w-full surface-page text-primary font-sans relative overflow-hidden">
+    <div className="flex flex-col min-h-[100dvh] w-full surface-page text-primary font-sans relative overflow-hidden">
+      {/* Top Counselor Navigation Bar */}
+      <header className="h-14 border-b border-default surface-card px-4 sm:px-6 flex items-center justify-between shrink-0 z-30 shadow-3xs">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-xl bg-teal-600 text-white flex items-center justify-center font-bold text-sm shadow-xs">
+            RT
+          </div>
+          <div>
+            <span className="text-sm font-bold text-primary block leading-none">RuangTenang Konselor</span>
+            <span className="text-[10px] text-teal-600 dark:text-teal-400 font-semibold uppercase tracking-wider">
+              {user.name} ({user.role})
+            </span>
+          </div>
+        </div>
+
+        {/* View Switcher Tabs */}
+        <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl border border-default">
+          <button
+            type="button"
+            onClick={() => setActiveTab('dashboard')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+              activeTab === 'dashboard'
+                ? 'bg-white dark:bg-slate-700 text-teal-700 dark:text-teal-300 shadow-3xs'
+                : 'text-secondary hover:text-primary'
+            }`}
+          >
+            <LayoutDashboard className="w-3.5 h-3.5" />
+            <span>Dashboard & Antrean</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('portal')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+              activeTab === 'portal'
+                ? 'bg-white dark:bg-slate-700 text-indigo-700 dark:text-indigo-300 shadow-3xs'
+                : 'text-secondary hover:text-primary'
+            }`}
+          >
+            <Stethoscope className="w-3.5 h-3.5" />
+            <span>Portal SOAP & Triase</span>
+          </button>
+        </div>
+
+        {/* Quick Actions */}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setIsSettingsOpen(true)}
+            className="p-2 rounded-xl border border-default hover:bg-slate-100 dark:hover:bg-slate-800 text-secondary hover:text-primary transition-colors cursor-pointer"
+            title="Pengaturan & Profil"
+            aria-label="Pengaturan"
+          >
+            <Settings className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="p-2 rounded-xl border border-rose-200 dark:border-rose-900/50 hover:bg-rose-50 dark:hover:bg-rose-950/30 text-rose-600 dark:text-rose-400 transition-colors cursor-pointer"
+            title="Keluar Akun"
+            aria-label="Keluar"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
+        </div>
+      </header>
+
+      <div className="flex-1 overflow-y-auto">
+        <Suspense fallback={
+          <div className="flex h-64 items-center justify-center surface-page">
+            <div className="w-8 h-8 border-4 border-teal-500 border-t-transparent rounded-full animate-spin"></div>
+          </div>
+        }>
+          {activeTab === 'dashboard' ? <CounselorDashboard /> : <CounselorPortal />}
+        </Suspense>
+      </div>
       {isSettingsOpen && (
         <div className="fixed inset-0 bg-slate-50 dark:bg-slate-900 z-50 flex flex-col overflow-hidden">
           <div className="p-4 border-b border-default flex items-center surface-card shadow-sm">
@@ -78,13 +155,8 @@ export const CounselorShell: React.FC<CounselorShellProps> = ({
           </div>
         </div>
       )}
-      <Suspense fallback={
-        <div className="flex h-[100dvh] items-center justify-center surface-page">
-          <div className="w-8 h-8 border-4 border-teal-500 border-t-transparent rounded-full animate-spin"></div>
-        </div>
-      }>
-        <CounselorDashboard />
-      </Suspense>
+
+      {/* Global Overlays */}
 
       <GlobalOverlays
         user={user}

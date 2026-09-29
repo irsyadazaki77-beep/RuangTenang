@@ -337,29 +337,37 @@ export const StudentShell: React.FC<StudentShellProps> = ({
                     <Route
                       path="/counselor-portal"
                       element={
-                        <WorkspaceLayout
-                          title="Portal Layanan Konselor & Rekam Medis SOAP"
-                          subtitle="Triase kasus klinis, catatan SOAP terenkripsi AES-256-GCM, dan analitik kampus"
-                          badge="Konselor"
-                          onOpenSidebar={() => setIsSidebarOpen(true)}
-                          onOpenChangelog={() => setIsChangelogOpen(true)}
-                        >
-                          <CounselorPortal />
-                        </WorkspaceLayout>
+                        user && (user.role === 'konselor' || user.role === 'admin' || (user.role as string) === 'peer_counselor') ? (
+                          <WorkspaceLayout
+                            title="Portal Layanan Konselor & Rekam Medis SOAP"
+                            subtitle="Triase kasus klinis, catatan SOAP terenkripsi AES-256-GCM, dan analitik kampus"
+                            badge="Konselor"
+                            onOpenSidebar={() => setIsSidebarOpen(true)}
+                            onOpenChangelog={() => setIsChangelogOpen(true)}
+                          >
+                            <CounselorPortal />
+                          </WorkspaceLayout>
+                        ) : (
+                          <Navigate to="/" replace />
+                        )
                       }
                     />
                     <Route
                       path="/counselordashboard"
                       element={
-                        <WorkspaceLayout
-                          title="Dashboard Konselor"
-                          subtitle="Kelola jadwal sesi dan antrean konsultasi mahasiswa"
-                          badge="Konselor"
-                          onOpenSidebar={() => setIsSidebarOpen(true)}
-                          onOpenChangelog={() => setIsChangelogOpen(true)}
-                        >
-                          <CounselorDashboard />
-                        </WorkspaceLayout>
+                        user && (user.role === 'konselor' || user.role === 'admin' || (user.role as string) === 'peer_counselor') ? (
+                          <WorkspaceLayout
+                            title="Dashboard Konselor"
+                            subtitle="Kelola jadwal sesi dan antrean konsultasi mahasiswa"
+                            badge="Konselor"
+                            onOpenSidebar={() => setIsSidebarOpen(true)}
+                            onOpenChangelog={() => setIsChangelogOpen(true)}
+                          >
+                            <CounselorDashboard />
+                          </WorkspaceLayout>
+                        ) : (
+                          <Navigate to="/" replace />
+                        )
                       }
                     />
                     <Route

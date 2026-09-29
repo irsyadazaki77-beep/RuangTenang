@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { WorkspaceFileAttachment } from '../types.js';
 import { processFileForWorkspace } from '../services/fileIngestionService.js';
 import { useToast } from '../../../components/Toast';
@@ -8,8 +8,33 @@ export function useWorkspaceFileIngestion(chatId?: string) {
   const [attachedFile, setAttachedFile] = useState<WorkspaceFileAttachment | null>(null);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      setAttachedFile(prev => {
+        if (prev?.url && prev.url.startsWith('blob:')) {
+          URL.revokeObjectURL(prev.url);
+        }
+        return null;
+      });
+    };
+  }, []);
 
   const handleProcessFile = useCallback(async (file: File) => {
+    // Cancel previous ongoing ingestion if any
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const ac = new AbortController();
+    abortControllerRef.current = ac;
+
     // Optimistic chip indicator during upload & server processing
     setAttachedFile({
       name: file.name,
@@ -18,7 +43,13 @@ export function useWorkspaceFileIngestion(chatId?: string) {
       status: 'uploading'
     });
 
-    const result = await processFileForWorkspace(file, chatId);
+    const result = await processFileForWorkspace(file, chatId, ac.signal);
+    
+    // Guard against unmounted state update
+    if (!isMountedRef.current || ac.signal.aborted) {
+      return;
+    }
+
     if (!result.valid) {
       setAttachedFile(null);
       showToast(result.message || 'Gagal memproses berkas.', 'error');
@@ -64,7 +95,12 @@ export function useWorkspaceFileIngestion(chatId?: string) {
   }, [handleProcessFile]);
 
   const removeAttachedFile = useCallback(() => {
-    setAttachedFile(null);
+    setAttachedFile(prev => {
+      if (prev?.url && prev.url.startsWith('blob:')) {
+        URL.revokeObjectURL(prev.url);
+      }
+      return null;
+    });
   }, []);
 
   const openFilePicker = useCallback(() => {

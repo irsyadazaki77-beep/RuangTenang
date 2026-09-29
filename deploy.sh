@@ -56,12 +56,12 @@ log_info "Step 1: Running pre-flight environment checks..."
 
 if [ ! -f "$ENV_FILE" ]; then
     log_error "Production environment file '${ENV_FILE}' not found!"
-    log_warn "Please create '${ENV_FILE}' from '.env.production.example' before deploying."
+    log_warn "Please create '${ENV_FILE}' from '.env.example' and inject production secrets securely."
     exit 1
 fi
 
 # Validate presence of critical secrets in .env.production
-REQUIRED_VARS=("JWT_SECRET" "ENCRYPTION_KEY" "BLIND_INDEX_SECRET" "POSTGRES_PASSWORD" "REDIS_PASSWORD")
+REQUIRED_VARS=("JWT_SECRET" "ENCRYPTION_KEY" "BLIND_INDEX_SECRET" "DATABASE_URL" "POSTGRES_PASSWORD" "REDIS_PASSWORD")
 for var in "${REQUIRED_VARS[@]}"; do
     if ! grep -q "^${var}=" "$ENV_FILE" || [ -z "$(grep "^${var}=" "$ENV_FILE" | cut -d '=' -f2-)" ]; then
         log_error "Required environment variable '${var}' is missing or empty in '${ENV_FILE}'."
@@ -88,10 +88,12 @@ if [ "$(docker ps -q -f name=${DB_CONTAINER_NAME})" ]; then
     POSTGRES_USER=$(grep "^POSTGRES_USER=" "$ENV_FILE" | cut -d '=' -f2- | tr -d ' "\047' || echo "ruangtenang_admin")
     POSTGRES_DB=$(grep "^POSTGRES_DB=" "$ENV_FILE" | cut -d '=' -f2- | tr -d ' "\047' || echo "ruangtenang_prod")
     
-    if docker exec -t "${DB_CONTAINER_NAME}" pg_dump -U "${POSTGRES_USER}" "${POSTGRES_DB}" | gzip > "${BACKUP_FILE}"; then
-        log_success "Database snapshot saved successfully (${BACKUP_FILE})."
+    if docker exec -t "${DB_CONTAINER_NAME}" pg_dump -U "${POSTGRES_USER}" "${POSTGRES_DB}" | gzip > "${BACKUP_FILE}" && [ -s "${BACKUP_FILE}" ]; then
+        BACKUP_SIZE=$(ls -lh "${BACKUP_FILE}" | awk '{print $5}')
+        log_success "Database snapshot saved successfully (${BACKUP_FILE}, size: ${BACKUP_SIZE})."
     else
-        log_warn "Database backup encountered an issue. Proceeding with caution..."
+        log_error "Database backup failed or created an empty file! Halting deployment to prevent data loss."
+        exit 1
     fi
     
     # Prune old backups keeping latest 10 snapshots
@@ -142,10 +144,11 @@ HEALTHY=false
 while [ $ATTEMPTS -lt $MAX_HEALTH_ATTEMPTS ]; do
     ATTEMPTS=$((ATTEMPTS+1))
     
-    # Probe internal app health via docker exec on the app container
+    # Probe internal app liveness and readiness via docker exec on the app container
     HEALTH_OUTPUT=$(docker exec ruangtenang_app_prod wget -q -O - http://127.0.0.1:3000/api/v1/health 2>/dev/null || true)
+    READY_OUTPUT=$(docker exec ruangtenang_app_prod wget -q -O - http://127.0.0.1:3000/api/v1/readiness 2>/dev/null || true)
     
-    if echo "$HEALTH_OUTPUT" | grep -q '"status":"healthy"'; then
+    if echo "$HEALTH_OUTPUT" | grep -q '"status":"healthy"' && echo "$READY_OUTPUT" | grep -q '"status":"ready"'; then
         HEALTHY=true
         break
     fi
@@ -156,7 +159,7 @@ done
 echo ""
 
 if [ "$HEALTHY" = true ]; then
-    log_success "System health check PASSED after ${ATTEMPTS} attempts."
+    log_success "System health and readiness check PASSED after ${ATTEMPTS} attempts."
 else
     log_error "System health check FAILED after ${MAX_HEALTH_ATTEMPTS} attempts!"
     log_warn "Displaying last 50 lines of application logs for diagnosis:"

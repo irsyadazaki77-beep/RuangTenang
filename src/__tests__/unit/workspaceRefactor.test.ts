@@ -30,26 +30,58 @@ describe('Workspace Refactor - Services & Hooks Domain Tests', () => {
       expect(validation.error).toBe('TOO_LARGE');
     });
 
-    it('processes text file safely', async () => {
+    it('processes text file safely via backend upload', async () => {
       const content = 'console.log("Hello RuangKerja");';
       const file = new File([content], 'test.js', { type: 'text/javascript' });
+
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          success: true,
+          attachment: {
+            id: 'att_test_123',
+            filename: 'test.js',
+            size: file.size,
+            mimeType: 'text/javascript',
+            fileKind: 'code',
+            status: 'ready'
+          }
+        })
+      } as any);
 
       const result = await processFileForWorkspace(file);
       expect(result.valid).toBe(true);
       expect(result.file?.name).toBe('test.js');
-      expect(result.file?.isText).toBe(true);
-      expect(result.file?.content).toBe(content);
+      expect(result.file?.fileKind).toBe('code');
+      expect(result.file?.status).toBe('ready');
     });
 
     it('handles non-plain text document boundary gracefully without reading raw binary garbage', async () => {
       const dummyBinary = new Uint8Array([0x25, 0x50, 0x44, 0x46]); // %PDF
       const file = new File([dummyBinary], 'skripsi.pdf', { type: 'application/pdf' });
 
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          success: true,
+          attachment: {
+            id: 'att_pdf_123',
+            filename: 'skripsi.pdf',
+            size: file.size,
+            mimeType: 'application/pdf',
+            fileKind: 'pdf',
+            status: 'ready',
+            pageCount: 3
+          }
+        })
+      } as any);
+
       const result = await processFileForWorkspace(file);
       expect(result.valid).toBe(true);
       expect(result.file?.name).toBe('skripsi.pdf');
-      expect(result.file?.isText).toBe(false);
-      expect(result.file?.content).toContain('[Berkas Dokumen: skripsi.pdf');
+      expect(result.file?.fileKind).toBe('pdf');
+      expect(result.file?.status).toBe('ready');
+      expect(result.file?.pageCount).toBe(3);
     });
   });
 

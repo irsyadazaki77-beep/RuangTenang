@@ -57,37 +57,12 @@ router.get('/triage-queue', generalApiLimiter, requireAuth, requireRole(counselo
             name: true,
             email: true,
             university: true,
-            consent: true
-          }
-        }
-      }
-    });
-
-    const appointmentWhere: any = {
-      status: { in: ['CONFIRMED', 'PENDING', 'SCHEDULED'] }
-    };
-    if (!isCampusAdmin) {
-      const counselorProfile = await prisma.counselors.findFirst({
-        where: { OR: [{ userId: counselorId }, { id: counselorId }] }
-      });
-      if (counselorProfile) {
-        appointmentWhere.counselorId = counselorProfile.id;
-      }
-      appointmentWhere.userId = { in: allowedStudentIds };
-    }
-
-    const appointments = await prisma.appointments.findMany({
-      where: appointmentWhere,
-      orderBy: { scheduledAt: 'asc' },
-      take: 30,
-      include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            university: true,
-            consent: true
+            consent: {
+              select: {
+                consentForCounselorSharing: true,
+                consentForCounselorSummary: true
+              }
+            }
           }
         }
       }
@@ -217,27 +192,36 @@ router.get('/soap-notes', generalApiLimiter, requireAuth, requireRole(counselorR
       }
     }
 
-    const notes = await prisma.clinicalSoapNotes.findMany({
-      where: whereClause,
-      orderBy: { updatedAt: 'desc' },
-      include: {
-        student: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            university: true
-          }
-        },
-        counselor: {
-          select: {
-            id: true,
-            name: true,
-            role: true
+    const page = Math.max(1, parseInt(String(req.query.page || '1'), 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit || '50'), 10) || 50));
+    const skip = (page - 1) * limit;
+
+    const [total, notes] = await Promise.all([
+      prisma.clinicalSoapNotes.count({ where: whereClause }),
+      prisma.clinicalSoapNotes.findMany({
+        where: whereClause,
+        orderBy: { updatedAt: 'desc' },
+        skip,
+        take: limit,
+        include: {
+          student: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              university: true
+            }
+          },
+          counselor: {
+            select: {
+              id: true,
+              name: true,
+              role: true
+            }
           }
         }
-      }
-    });
+      })
+    ]);
 
     const decryptedNotes = notes.map(note => ({
       id: note.id,
@@ -261,7 +245,13 @@ router.get('/soap-notes', generalApiLimiter, requireAuth, requireRole(counselorR
 
     res.json({
       success: true,
-      data: decryptedNotes
+      data: decryptedNotes,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit)
+      }
     });
   } catch (err: any) {
     console.error('Error fetching SOAP notes:', err);
@@ -562,6 +552,79 @@ router.get('/stats', generalApiLimiter, requireAuth, requireRole(counselorRoles)
     const appointmentWhere = !isCampusAdmin && counselorProfileId ? { counselorId: counselorProfileId } : {};
     const soapWhere = !isCampusAdmin ? { counselorUserId } : {};
 
+    // Response time calculation based on real timestamps:
+    // Defined as: elapsed time from student appointment request (createdAt) to counselor confirmation / completion action.
+    // For confirmed/completed appointments, the response event timestamp is tracked via clinicalSoapNotes (when consultation note was documented)
+    // or appointment status confirmation / slot update. If no appointments have reached confirmed/completed state with valid response times,
+    // response time is null (unavailable), never a fake 30-min or 0.5-hr fallback.
+    const respondedAppointments = await prisma.appointments.findMany({
+      where: {
+        ...appointmentWhere,
+        status: { in: ['CONFIRMED', 'COMPLETED', 'ATTENDED'] }
+      },
+      select: {
+        id: true,
+        createdAt: true,
+        slot: {
+          select: {
+            scheduledAt: true
+          }
+        }
+      },
+      take: 200
+    });
+
+    let avgResponseTimeMinutes: number | null = null;
+    let averageResponseTimeHours: number | null = null;
+
+    if (respondedAppointments.length > 0) {
+      // Find matching audit logs or SOAP note creation timestamps representing counselor action
+      const apptIds = respondedAppointments.map(a => a.id);
+      const [soapNotesForAppts, auditLogsForAppts] = await Promise.all([
+        prisma.clinicalSoapNotes.findMany({
+          where: { appointmentId: { in: apptIds } },
+          select: { appointmentId: true, createdAt: true }
+        }),
+        prisma.auditLogs.findMany({
+          where: {
+            action: { in: ['UPDATE_APPOINTMENT', 'CREATE_SOAP_NOTE', 'CONFIRM_APPOINTMENT'] }
+          },
+          select: { details: true, timestamp: true },
+          take: 500
+        })
+      ]);
+
+      const soapMap = new Map<string, Date>();
+      for (const note of soapNotesForAppts) {
+        if (note.appointmentId) soapMap.set(note.appointmentId, note.createdAt);
+      }
+
+      const diffsMinutes: number[] = [];
+      for (const appt of respondedAppointments) {
+        let actionTime: Date | null = soapMap.get(appt.id) || null;
+        if (!actionTime) {
+          // Check audit log for this appointment ID
+          const matchingAudit = auditLogsForAppts.find(l => l.details && l.details.includes(appt.id));
+          if (matchingAudit) {
+            actionTime = matchingAudit.timestamp;
+          }
+        }
+
+        if (actionTime && actionTime.getTime() >= appt.createdAt.getTime()) {
+          const diffMs = actionTime.getTime() - appt.createdAt.getTime();
+          diffsMinutes.push(Math.round(diffMs / 60000));
+        }
+      }
+
+      if (diffsMinutes.length > 0) {
+        const sum = diffsMinutes.reduce((a, b) => a + b, 0);
+        const avgMin = Math.round(sum / diffsMinutes.length);
+        avgResponseTimeMinutes = avgMin;
+        averageResponseTimeHours = parseFloat((avgMin / 60).toFixed(1));
+      }
+    }
+
+    // 1. Basic Counts using DB aggregations without take: 500 limits
     const [
       totalStudents,
       totalScreenings,
@@ -570,96 +633,167 @@ router.get('/stats', generalApiLimiter, requireAuth, requireRole(counselorRoles)
       resolvedScreenings,
       activeCases,
       totalAppointments,
-      totalSoapNotes,
-      allScreenings
+      totalSoapNotes
     ] = await Promise.all([
       prisma.users.count({
-        where: !isCampusAdmin ? { id: { in: assignedStudentIds } } : { role: { in: ['mahasiswa', 'student', 'STUDENT'] } }
+        where: !isCampusAdmin
+          ? { id: { in: assignedStudentIds.length > 0 ? assignedStudentIds : ['__nonexistent__'] } }
+          : { role: { in: ['mahasiswa', 'student', 'STUDENT'] } }
       }),
       prisma.screenings.count({ where: screeningWhere }),
+      // High-risk: PHQ-9 >= 20 OR hasSelfHarmRisk: true (Single mutually exclusive count to avoid double-counting)
       prisma.screenings.count({
         where: {
           ...screeningWhere,
           OR: [
             { hasSelfHarmRisk: true },
-            { phq9Score: { gte: 15 } }
+            { phq9Score: { gte: 20 } }
           ]
         }
       }),
-      prisma.screenings.count({ where: { ...screeningWhere, hasSelfHarmRisk: true } }),
+      // Emergency interventions: Real recorded crisis interventions (SOAP notes marked with CRISIS riskLevel or emergency SOS dispatches)
+      // Risk detection (hasSelfHarmRisk = true) alone does NOT equal intervention performed!
+      prisma.clinicalSoapNotes.count({
+        where: {
+          ...soapWhere,
+          riskLevel: { in: ['CRISIS', 'HIGH', 'Krisis', 'Tinggi'] }
+        }
+      }),
       prisma.screenings.count({
         where: {
           ...screeningWhere,
-          status: { in: ['Selesai', 'Ditangani', 'RESOLVED', 'REFERRED', 'COMPLETED'] }
+          status: { in: ['Selesai', 'Ditangani', 'RESOLVED', 'REFERRED', 'COMPLETED', 'Selesai Penanganan'] }
         }
       }),
       prisma.appointments.count({
         where: {
           ...appointmentWhere,
-          status: { in: ['CONFIRMED', 'PENDING', 'SCHEDULED'] }
+          status: { in: ['CONFIRMED', 'PENDING', 'SCHEDULED', 'IN_PROGRESS'] }
         }
       }),
       prisma.appointments.count({ where: appointmentWhere }),
-      prisma.clinicalSoapNotes.count({ where: soapWhere }),
-      prisma.screenings.findMany({
-        where: screeningWhere,
-        select: { phq9Score: true, gad7Score: true, hasSelfHarmRisk: true, timestamp: true },
-        orderBy: { timestamp: 'desc' },
-        take: 500
-      })
+      prisma.clinicalSoapNotes.count({ where: soapWhere })
     ]);
 
+    // Denominator & Numerator for triage resolution rate
     const resolutionRate = totalScreenings > 0
       ? `${((resolvedScreenings / totalScreenings) * 100).toFixed(1)}%`
       : '0%';
 
+    // 2. Full-database severity distribution (PHQ-9 + Self-Harm Flag) without take: 500 cap
+    // Mutually exclusive severity bands based on standard PHQ-9 clinical thresholds:
+    // Krisis / Suisiditas: hasSelfHarmRisk = true OR phq9Score >= 20
+    // Berat (Severe): phq9Score 15-19 without self-harm
+    // Sedang (Moderate): phq9Score 10-14 without self-harm
+    // Ringan (Mild): phq9Score 5-9 without self-harm
+    // Minimal / Normal: phq9Score 0-4 without self-harm
+    const [krisisCount, beratCount, sedangCount, ringanCount, minimalCount] = await Promise.all([
+      prisma.screenings.count({
+        where: {
+          ...screeningWhere,
+          OR: [
+            { hasSelfHarmRisk: true },
+            { phq9Score: { gte: 20 } }
+          ]
+        }
+      }),
+      prisma.screenings.count({
+        where: {
+          ...screeningWhere,
+          hasSelfHarmRisk: false,
+          phq9Score: { gte: 15, lt: 20 }
+        }
+      }),
+      prisma.screenings.count({
+        where: {
+          ...screeningWhere,
+          hasSelfHarmRisk: false,
+          phq9Score: { gte: 10, lt: 15 }
+        }
+      }),
+      prisma.screenings.count({
+        where: {
+          ...screeningWhere,
+          hasSelfHarmRisk: false,
+          phq9Score: { gte: 5, lt: 10 }
+        }
+      }),
+      prisma.screenings.count({
+        where: {
+          ...screeningWhere,
+          hasSelfHarmRisk: false,
+          phq9Score: { lt: 5 }
+        }
+      })
+    ]);
+
     const severityDistribution = [
-      { name: 'Minimal / Normal', count: 0, color: '#10B981' },
-      { name: 'Ringan (Mild)', count: 0, color: '#06B6D4' },
-      { name: 'Sedang (Moderate)', count: 0, color: '#F59E0B' },
-      { name: 'Berat (Severe)', count: 0, color: '#EF4444' },
-      { name: 'Krisis / Suisiditas', count: 0, color: '#881337' }
+      { name: 'Minimal / Normal', count: minimalCount, color: '#10B981' },
+      { name: 'Ringan (Mild)', count: ringanCount, color: '#06B6D4' },
+      { name: 'Sedang (Moderate)', count: sedangCount, color: '#F59E0B' },
+      { name: 'Berat (Severe)', count: beratCount, color: '#EF4444' },
+      { name: 'Krisis / Suisiditas', count: krisisCount, color: '#881337' }
     ];
 
-    for (const s of allScreenings) {
-      if (s.hasSelfHarmRisk || s.phq9Score >= 20) {
-        severityDistribution[4].count++;
-      } else if (s.phq9Score >= 15) {
-        severityDistribution[3].count++;
-      } else if (s.phq9Score >= 10) {
-        severityDistribution[2].count++;
-      } else if (s.phq9Score >= 5) {
-        severityDistribution[1].count++;
-      } else {
-        severityDistribution[0].count++;
-      }
-    }
-
-    // Monthly trend from current date backward (authoritative)
+    // 3. Genuine Monthly Trend across explicit UTC month boundaries (handles year boundaries seamlessly)
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
     const now = new Date();
-    const monthlyTrendMap: Record<string, { screening: number; counseling: number; emergency: number }> = {};
+    const trendBuckets: Array<{
+      monthLabel: string;
+      startDate: Date;
+      endDate: Date;
+    }> = [];
+
     for (let i = 5; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const key = monthNames[d.getMonth()];
-      monthlyTrendMap[key] = { screening: 0, counseling: 0, emergency: 0 };
+      const year = now.getFullYear();
+      const month = now.getMonth() - i;
+      // Start of month (UTC boundary)
+      const startDate = new Date(Date.UTC(year, month, 1, 0, 0, 0, 0));
+      // End of month (UTC boundary: first millisecond of next month)
+      const endDate = new Date(Date.UTC(year, month + 1, 1, 0, 0, 0, 0));
+      
+      const labelMonth = monthNames[startDate.getUTCMonth()];
+      const labelYear = String(startDate.getUTCFullYear()).slice(-2);
+      trendBuckets.push({
+        monthLabel: `${labelMonth} '${labelYear}`,
+        startDate,
+        endDate
+      });
     }
 
-    for (const s of allScreenings) {
-      const sDate = new Date(s.timestamp);
-      const mKey = monthNames[sDate.getMonth()];
-      if (monthlyTrendMap[mKey]) {
-        monthlyTrendMap[mKey].screening++;
-        if (s.hasSelfHarmRisk) monthlyTrendMap[mKey].emergency++;
-      }
-    }
+    const monthlyTrend = await Promise.all(
+      trendBuckets.map(async ({ monthLabel, startDate, endDate }) => {
+        const [screeningCount, apptCount, crisisInterventionCount] = await Promise.all([
+          prisma.screenings.count({
+            where: {
+              ...screeningWhere,
+              timestamp: { gte: startDate, lt: endDate }
+            }
+          }),
+          prisma.appointments.count({
+            where: {
+              ...appointmentWhere,
+              scheduledAt: { gte: startDate, lt: endDate },
+              status: { notIn: ['CANCELLED', 'REJECTED'] }
+            }
+          }),
+          prisma.clinicalSoapNotes.count({
+            where: {
+              ...soapWhere,
+              createdAt: { gte: startDate, lt: endDate },
+              riskLevel: { in: ['CRISIS', 'HIGH', 'Krisis', 'Tinggi'] }
+            }
+          })
+        ]);
 
-    const monthlyTrend = Object.entries(monthlyTrendMap).map(([month, counts]) => ({
-      month,
-      screening: counts.screening,
-      counseling: counts.counseling,
-      emergency: counts.emergency
-    }));
+        return {
+          month: monthLabel,
+          screening: screeningCount,
+          counseling: apptCount,
+          emergency: crisisInterventionCount
+        };
+      })
+    );
 
     res.json({
       success: true,
@@ -670,15 +804,15 @@ router.get('/stats', generalApiLimiter, requireAuth, requireRole(counselorRoles)
         totalAppointments,
         totalSoapNotes,
         triageResolutionRate: resolutionRate,
-        avgResponseTimeMinutes: totalAppointments > 0 ? 30 : 0,
-        activeCrisisAlerts: highRiskScreenings > 0 ? highRiskScreenings : 0,
+        avgResponseTimeMinutes,
+        activeCrisisAlerts: highRiskScreenings,
         // Aligned CounselorStats fields
         totalTriaged: totalScreenings,
         activeCases,
         emergencyInterventions,
         highRiskCount: highRiskScreenings,
         completedNotes: totalSoapNotes,
-        averageResponseTimeHours: totalAppointments > 0 ? 0.5 : 0,
+        averageResponseTimeHours,
         severityDistribution,
         monthlyTrend
       }

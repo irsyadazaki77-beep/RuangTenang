@@ -33,7 +33,6 @@ import {
 } from 'lucide-react';
 import { WorkspaceArtifact, ArtifactType, CitationStyle } from '../types';
 import { LazyMarkdown } from '../../../components/common/LazyMarkdown';
-import { exportToAcademicDocx } from '../utils/exportDocx';
 import { useToast } from '../../../components/Toast';
 
 const MermaidRenderer = React.lazy(() => import('./MermaidRenderer').then(m => ({ default: m.MermaidRenderer })));
@@ -269,6 +268,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
         ? 'paper IEEE / APA' 
         : 'makalah';
       showToast(`Menyusun naskah format ${typeLabel} (.docx)...`, 'info');
+      const { exportToAcademicDocx } = await import('../utils/exportDocx');
       await exportToAcademicDocx({
         title: artifact.title || 'Naskah Akademik',
         content: editableContent,

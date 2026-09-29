@@ -7,8 +7,11 @@ import { scanAndSanitizePII } from '../services/piiService.js';
 
 const REDACT_KEYS = new Set([
   'password',
+  'passwd',
   'passwordhash',
+  'api_key',
   'token',
+  'access_token',
   'refreshtoken',
   'sessiontoken',
   'authorization',
@@ -24,6 +27,35 @@ const REDACT_KEYS = new Set([
   'screeningscore',
   'secret',
   'jwtsecret',
+  'jwt_secret',
+  'encryptionkey',
+  'encryption_key',
+  'encryptionsecret',
+  'encryption_secret',
+  'blindindexsecret',
+  'blind_index_secret',
+  'turncredential',
+  'turn_credential',
+  'turnsharedsecret',
+  'turn_shared_secret',
+  'geminiapikey',
+  'gemini_api_key',
+  'deepseekapikey',
+  'deepseek_api_key',
+  'groqapikey',
+  'groq_api_key',
+  'openrouterapikey',
+  'openrouter_api_key',
+  'databaseurl',
+  'database_url',
+  'redisurl',
+  'redis_url',
+  'connectionstring',
+  'connection_string',
+  'privatekey',
+  'private_key',
+  'authorizationheader',
+  'set-cookie',
   'key',
   'apikey',
   'cookie',
@@ -53,6 +85,14 @@ const REDACT_KEYS = new Set([
   'cvv'
 ]);
 
+export function redactSensitiveText(value: string): string {
+  return value
+    .replace(/\b(?:postgres(?:ql)?|redis):\/\/[^\s@]+@[^\s]+/gi, '[REDACTED_CONNECTION_URL]')
+    .replace(/\bBearer\s+[A-Za-z0-9._~+\/-]+=*/gi, 'Bearer [REDACTED]')
+    .replace(/\b(password|passwd|secret|credential|authorization|api[_-]?key|token)\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi, '$1=[REDACTED]')
+    .replace(/\b(?:AIza[0-9A-Za-z_-]{20,}|sk-[A-Za-z0-9_-]{16,})\b/g, '[REDACTED_API_KEY]');
+}
+
 export function maskSensitivePayload(data: any): any {
   if (data === null || data === undefined) {
     return data;
@@ -79,10 +119,22 @@ export function maskSensitivePayload(data: any): any {
   }
 
   if (typeof data === 'string') {
-    return scanAndSanitizePII(data).sanitizedText;
+    return redactSensitiveText(scanAndSanitizePII(data).sanitizedText);
   }
 
   return data;
+}
+
+export function installProductionConsoleSanitizer(): void {
+  if (process.env.NODE_ENV !== 'production') return;
+
+  for (const method of ['log', 'warn', 'error', 'info'] as const) {
+    const original = console[method].bind(console);
+    console[method] = (...args: unknown[]) => original(...args.map((arg) => {
+      if (arg instanceof Error) return { name: arg.name, code: (arg as Error & { code?: string }).code };
+      return maskSensitivePayload(arg);
+    }));
+  }
 }
 
 function sanitize(obj: any): any {
@@ -109,11 +161,15 @@ export const logger = {
   },
 
   error(event: string, error?: any, meta: Record<string, any> = {}) {
+    const rawErrorMessage = error?.message || String(error);
+    const safeError = process.env.NODE_ENV === 'production'
+      ? { name: error?.name || 'Error', code: error?.code || undefined }
+      : redactSensitiveText(rawErrorMessage);
     console.error(JSON.stringify({
       timestamp: new Date().toISOString(),
       level: 'ERROR',
       event,
-      error: error?.message || String(error),
+      error: safeError,
       meta: sanitize(meta)
     }));
   }

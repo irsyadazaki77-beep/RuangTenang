@@ -144,9 +144,9 @@ export const CounselorAnalytics: React.FC<CounselorAnalyticsProps> = ({ stats })
           <div className="flex items-center justify-between">
             <h3 className="font-bold text-sm text-primary flex items-center gap-2">
               <Activity className="w-4 h-4 text-emerald-500" />
-              <span>Distribusi Tingkat Keparahan (PHQ-9 / GAD-7)</span>
+              <span>Distribusi Tingkat Keparahan Skrining (PHQ-9)</span>
             </h3>
-            <span className="text-[11px] text-secondary">N = {stats.totalTriaged ?? 0} Mahasiswa</span>
+            <span className="text-[11px] text-secondary">N = {stats.totalTriaged ?? 0} Skrining</span>
           </div>
 
           <div className="h-64 w-full">

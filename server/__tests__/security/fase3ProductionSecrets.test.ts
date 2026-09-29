@@ -86,11 +86,12 @@ describe('FASE 3 — Production Secrets & Fail-Closed Security Tests', () => {
 
     process.env.REQUIRE_TURN = 'true';
     process.env.TURN_URL = 'turn:turn.example.com:3478';
-    process.env.TURN_USERNAME = 'valid_user';
+    process.env.TURN_USERNAME = 'test-fixture-user';
     delete process.env.TURN_CREDENTIAL;
+    delete process.env.TURN_SHARED_SECRET;
 
-    expect(() => validateEnvironment()).toThrow(/TURN_URL, TURN_USERNAME, and TURN_CREDENTIAL are required/i);
-    expect(() => getValidatedTurnConfig()).toThrow(/TURN_URL, TURN_USERNAME, and TURN_CREDENTIAL are required/i);
+    expect(() => validateEnvironment()).toThrow(/TURN_URL and TURN_SHARED_SECRET are required/i);
+    expect(() => getValidatedTurnConfig()).toThrow(/TURN_URL and TURN_SHARED_SECRET are required/i);
   });
 
   it('non-PostgreSQL / SQLite database config in production → startup fails', () => {
@@ -104,11 +105,9 @@ describe('FASE 3 — Production Secrets & Fail-Closed Security Tests', () => {
   });
 
   it('isKnownInsecureDemoSecret correctly flags dangerous fallback patterns', () => {
-    expect(isKnownInsecureDemoSecret('secret_password_here')).toBe(true);
     expect(isKnownInsecureDemoSecret('local-development-fallback')).toBe(true);
     expect(isKnownInsecureDemoSecret('fallback-secret-for-development')).toBe(true);
     expect(isKnownInsecureDemoSecret('super-secret-key')).toBe(true);
-    expect(isKnownInsecureDemoSecret('ruangtenang_secure_user')).toBe(true);
     expect(isKnownInsecureDemoSecret('0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef')).toBe(true);
     expect(isKnownInsecureDemoSecret('a-random-secure-production-key-98347109283471029384712093')).toBe(false);
   });

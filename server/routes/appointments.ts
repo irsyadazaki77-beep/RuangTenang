@@ -5,6 +5,7 @@ import { requireAuth } from '../middleware/auth';
 import { sanitizeInput } from '../security';
 import { validatePagination, idempotencyMiddleware } from '../apiV1Helpers';
 import { EventEmitter } from 'events';
+import { getValidatedTurnConfig } from '../config/envValidation.js';
 import {
   CreateAppointmentSchema as createAppointmentSchema,
   UpdateAppointmentSchema as updateAppointmentSchema,
@@ -405,19 +406,16 @@ router.get(['/:id/room-access', '/db/appointments/:id/room-access'], requireAuth
 // GET /api/appointments/:id/ice-servers secured by verifyAppointmentAccess
 router.get(['/:id/ice-servers', '/db/appointments/:id/ice-servers'], requireAuth, verifyAppointmentAccess, async (req: Request, res: Response) => {
   try {
-    const turnUrl = process.env.TURN_URL || 'turn:turn.ruangtenang.ui.ac.id:3478';
-    const turnUsername = process.env.TURN_USERNAME || 'ruangtenang_secure_user';
-    const turnCredential = process.env.TURN_CREDENTIAL || 'turn_test_credential_2026';
-
     const iceServers: Array<{ urls: string; username?: string; credential?: string }> = [
       { urls: "stun:stun.l.google.com:19302" }
     ];
 
-    if (turnUrl && turnUsername && turnCredential) {
+    const turnConfig = getValidatedTurnConfig();
+    if (turnConfig?.url && turnConfig.username && turnConfig.credential) {
       iceServers.push({
-        urls: turnUrl,
-        username: turnUsername,
-        credential: turnCredential
+        urls: turnConfig.url,
+        username: turnConfig.username,
+        credential: turnConfig.credential
       });
     }
 
@@ -426,7 +424,7 @@ router.get(['/:id/ice-servers', '/db/appointments/:id/ice-servers'], requireAuth
       iceServers
     });
   } catch (err: any) {
-    console.error('Error fetching ice servers:', err);
+    console.error('Error fetching ICE server configuration');
     res.status(500).json({ success: false, error: 'INTERNAL_SERVER_ERROR', message: 'Gagal mengambil konfigurasi ICE/TURN.' });
   }
 });

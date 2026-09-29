@@ -19,9 +19,7 @@ export function resolveDatabaseConfiguration(): DatabaseConfiguration {
   const explicitProvider = (process.env.DB_PROVIDER || '').toLowerCase().trim();
 
   const isTest = process.env.VITEST === 'true' || process.env.NODE_ENV === 'test';
-  const isPreview = process.env.IS_AI_STUDIO_PREVIEW === 'true' || process.env.PREVIEW_MODE === 'true';
-
-  if (isProduction && !isPreview) {
+  if (isProduction) {
     if (!dbUrl) {
       throw new Error('Production database requires PostgreSQL');
     }

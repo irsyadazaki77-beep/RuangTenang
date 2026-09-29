@@ -33,19 +33,21 @@ describe('Workspace Lifecycle & Regression Suite', () => {
 
   describe('1. Fresh Workspace vs Existing Chat Lifecycle', () => {
     it('initializes fresh workspace with default welcome artifact and welcome message', () => {
-      const { result: persistenceResult } = renderHook(() => 
+      const { result: persistenceResult, unmount: unmountPersist } = renderHook(() => 
         useWorkspacePersistence({ userName: 'Ahmad' })
       );
       expect(persistenceResult.current.messages).toHaveLength(1);
       expect(persistenceResult.current.messages[0].role).toBe('assistant');
       expect(persistenceResult.current.messages[0].content).toContain('Halo Ahmad');
+      unmountPersist();
 
-      const { result: artifactResult } = renderHook(() => 
+      const { result: artifactResult, unmount: unmountArt } = renderHook(() => 
         useWorkspaceArtifacts({ persistedArtifacts: [] })
       );
       expect(artifactResult.current.artifacts).toHaveLength(1);
       expect(artifactResult.current.activeArtifactId).toBe(DEFAULT_WELCOME_ARTIFACT_ID);
       expect(artifactResult.current.activeArtifact?.title).toBe(DEFAULT_WELCOME_ARTIFACT.title);
+      unmountArt();
     });
 
     it('loads existing chat messages and artifacts without race conditions', async () => {
@@ -164,10 +166,10 @@ describe('Workspace Lifecycle & Regression Suite', () => {
       };
 
       // Call sync twice with same artifact
-      act(() => {
+      await act(async () => {
         result.current.syncParsedMessageArtifacts([parsed]);
       });
-      act(() => {
+      await act(async () => {
         result.current.syncParsedMessageArtifacts([parsed]);
       });
 

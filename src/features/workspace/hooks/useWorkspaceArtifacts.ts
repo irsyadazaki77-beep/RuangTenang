@@ -20,10 +20,24 @@ export function useWorkspaceArtifacts({
 
   // Track pending save IDs to prevent duplicate concurrent network calls
   const savingArtifactIdsRef = useRef<Set<string>>(new Set());
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  const lastPersistedSigRef = useRef<string>('');
 
   // Sync state when persistedArtifacts change from persistence hook
   useEffect(() => {
     if (persistedArtifacts.length > 0) {
+      const sig = JSON.stringify(persistedArtifacts.map(a => `${a.id}:${a.version}:${a.updatedAt}`));
+      if (sig === lastPersistedSigRef.current) return;
+      lastPersistedSigRef.current = sig;
+
       setArtifacts(prev => {
         // Keep DEFAULT_WELCOME_ARTIFACT at top
         const welcome = prev.find(a => a.id === DEFAULT_WELCOME_ARTIFACT_ID) || DEFAULT_WELCOME_ARTIFACT;
@@ -192,7 +206,7 @@ export function useWorkspaceArtifacts({
           content: newArt.content
         });
 
-        if (persisted) {
+        if (persisted && isMountedRef.current) {
           setArtifacts(prev => {
             const idx = prev.findIndex(a => a.id === persisted.id || a.title === persisted.title);
             if (idx !== -1) {

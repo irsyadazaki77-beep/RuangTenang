@@ -21,11 +21,40 @@ router.get(['/system-stats', '/stats'], optionalAuth, async (_req: Request, res:
       prisma.moodLogs.count()
     ]);
 
+    const [rendahCount, sedangCount, tinggiCount, krisisCount] = await Promise.all([
+      prisma.screenings.count({
+        where: {
+          hasSelfHarmRisk: false,
+          phq9Score: { lt: 10 }
+        }
+      }),
+      prisma.screenings.count({
+        where: {
+          hasSelfHarmRisk: false,
+          phq9Score: { gte: 10, lt: 15 }
+        }
+      }),
+      prisma.screenings.count({
+        where: {
+          hasSelfHarmRisk: false,
+          phq9Score: { gte: 15, lt: 20 }
+        }
+      }),
+      prisma.screenings.count({
+        where: {
+          OR: [
+            { hasSelfHarmRisk: true },
+            { phq9Score: { gte: 20 } }
+          ]
+        }
+      })
+    ]);
+
     const triageDistribution = {
-      rendah: Math.max(0, Math.floor(screeningCount * 0.58)),
-      sedang: Math.max(0, Math.floor(screeningCount * 0.28)),
-      tinggi: Math.max(0, Math.floor(screeningCount * 0.11)),
-      krisis: Math.max(0, Math.floor(screeningCount * 0.03))
+      rendah: rendahCount,
+      sedang: sedangCount,
+      tinggi: tinggiCount,
+      krisis: krisisCount
     };
 
     const uptimeSeconds = Math.floor(process.uptime());

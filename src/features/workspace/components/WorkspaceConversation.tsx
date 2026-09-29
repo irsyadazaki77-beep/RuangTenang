@@ -17,7 +17,7 @@ interface WorkspaceConversationProps {
   onOpenCanvas: () => void;
 }
 
-export const WorkspaceConversation: React.FC<WorkspaceConversationProps> = ({
+export const WorkspaceConversation: React.FC<WorkspaceConversationProps> = React.memo(({
   messages,
   activeStreamingMessage,
   isStreaming,
@@ -213,4 +213,4 @@ export const WorkspaceConversation: React.FC<WorkspaceConversationProps> = ({
       <div ref={messagesEndRef} />
     </div>
   );
-};
+});

@@ -10,7 +10,8 @@ import cors from 'cors';
 
 import crypto from 'crypto';
 
-import { serverDb, seedInitialDataIfNeeded, ensureDatabaseReady } from './server/database.js';
+import { serverDb, seedInitialDataIfNeeded, ensureDatabaseReady, prisma } from './server/database.js';
+import { redisService } from './server/services/redisService.js';
 import {
   validateStartupEnvironment,
   requestIdAndLoggerMiddleware,
@@ -30,6 +31,7 @@ import { rateLimit } from 'express-rate-limit';
 import { optionalAuth, requireAuth, requireRole } from './server/middleware/auth.js';
 import { clientTelemetryService, clientDebugSchema } from './server/services/clientTelemetryService.js';
 import { metricsService } from './server/services/metricsService.js';
+import { installProductionConsoleSanitizer } from './server/utils/logger.js';
 
 // Modular Route Handlers
 import authRouter from './server/routes/auth.js';
@@ -100,7 +102,7 @@ async function startServer() {
   }
 
   // Preview environment detection
-  const isPreviewMode = !isProd || process.env.IS_AI_STUDIO_PREVIEW === 'true' || process.env.PREVIEW_MODE === 'true';
+  const isPreviewMode = !isProd;
 
   app.use(cors({
     origin: (origin, callback) => {
@@ -318,11 +320,12 @@ async function startServer() {
        isHealthy = false;
     }
 
-    // In production without admin token, do not expose detailed service breakdowns or environment names.
-    // Always return a 200 OK status to let the container boot successfully, allowing users to configure secrets/Postgres.
+    // Liveness checks process health (/api/v1/health).
+    // Readiness checks that critical dependencies (Database, Core Secrets) are ready to accept traffic.
+    // If a critical dependency is down, readiness returns HTTP 503 Service Unavailable.
     if (isProd) {
-      return res.status(200).json({
-        status: isHealthy ? 'ready' : 'degraded',
+      return res.status(isHealthy ? 200 : 503).json({
+        status: isHealthy ? 'ready' : 'unready',
         database: isHealthy ? 'connected' : 'disconnected'
       });
     }
@@ -557,25 +560,51 @@ async function startServer() {
   });
 
   // Graceful Shutdown
+  let isShuttingDown = false;
   const shutdown = async (signal: string) => {
-    console.log(`
-[${signal}] Shutting down gracefully...`);
-    server.close(async () => {
-      console.log('HTTP server closed.');
-      // Add other cleanup here (e.g., Prisma disconnect, Redis quit)
-      process.exit(0);
-    });
-    
-    // Fallback timeout
-    setTimeout(() => {
-      console.error('Forcing shutdown after 10 seconds...');
+    if (isShuttingDown) return;
+    isShuttingDown = true;
+    console.log(`\n[${signal}] Initiating graceful shutdown...`);
+
+    // Fallback timeout to prevent hanging
+    const forceExitTimer = setTimeout(() => {
+      console.error('[SHUTDOWN] Forcing shutdown after 10 seconds timeout...');
       process.exit(1);
     }, 10000);
+    if (forceExitTimer.unref) forceExitTimer.unref();
+
+    server.close(async (err) => {
+      if (err) {
+        console.error('[SHUTDOWN] Error closing HTTP server:', err);
+      } else {
+        console.log('[SHUTDOWN] HTTP server closed. No longer accepting new connections.');
+      }
+
+      try {
+        await redisService.disconnect();
+        console.log('[SHUTDOWN] Redis connections closed.');
+      } catch (redisErr) {
+        console.warn('[SHUTDOWN] Redis disconnect warning:', redisErr);
+      }
+
+      try {
+        await prisma.$disconnect();
+        console.log('[SHUTDOWN] Prisma database connection closed.');
+      } catch (dbErr) {
+        console.warn('[SHUTDOWN] Database disconnect warning:', dbErr);
+      }
+
+      clearTimeout(forceExitTimer);
+      console.log('[SHUTDOWN] Graceful shutdown complete. Exiting process.');
+      process.exit(0);
+    });
   };
 
   process.on('SIGTERM', () => shutdown('SIGTERM'));
   process.on('SIGINT', () => shutdown('SIGINT'));
 }
+
+installProductionConsoleSanitizer();
 
 startServer().catch((err) => {
   console.error('FATAL STARTUP ERROR: RuangTenang server failed to initialize:', err?.message || err);

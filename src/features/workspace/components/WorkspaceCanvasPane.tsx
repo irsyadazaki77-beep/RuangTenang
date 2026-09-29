@@ -30,7 +30,7 @@ interface WorkspaceCanvasPaneProps {
   onSetMobileActiveTab: (tab: WorkspaceTab) => void;
 }
 
-export const WorkspaceCanvasPane: React.FC<WorkspaceCanvasPaneProps> = ({
+export const WorkspaceCanvasPane: React.FC<WorkspaceCanvasPaneProps> = React.memo(({
   artifacts,
   activeArtifact,
   activeArtifactId,
@@ -188,4 +188,4 @@ export const WorkspaceCanvasPane: React.FC<WorkspaceCanvasPaneProps> = ({
       </AnimatePresence>
     </>
   );
-};
+});

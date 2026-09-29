@@ -14,9 +14,14 @@ export interface ExtractedDocResult {
     [key: string]: any;
   };
   documentId?: string;
+  filename?: string;
+  mimeType?: string;
   kind?: SupportedFileKind;
   size?: number;
   checksum?: string;
+  pageCount?: number;
+  slideCount?: number;
+  sheetCount?: number;
   blocks?: DocumentBlock[];
 }
 

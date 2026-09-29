@@ -4,8 +4,10 @@ import { aiSafetyService } from './aiSafetyService.js';
 import { aiModelRouter } from './aiModelRouter.js';
 import { scanAndSanitizePII } from '../piiService.js';
 import { getLocalFallbackResponse } from '../../routes/fallbackAi.js';
-import { isModelAllowedForTier, getActualGeminiModel, isDeepSeekModel } from './aiModelRegistry.js';
+import { isModelAllowedForTier, getActualGeminiModel, isDeepSeekModel, isGroqModel, isOpenRouterModel } from './aiModelRegistry.js';
 import { deepseekService } from './deepseekService.js';
+import { groqService } from './groqService.js';
+import { openrouterService } from './openrouterService.js';
 
 export interface AiRequestOptions {
   userId?: string;
@@ -148,6 +150,68 @@ Pedoman Interaksi:
         };
       } catch (deepseekErr: any) {
         console.warn(`[AI_REQUEST_SERVICE] DeepSeek execution failed (${deepseekErr?.message}), attempting Gemini fallback...`);
+      }
+    }
+
+    // Check if user requested a Groq AI Model
+    if (isGroqModel(targetModelId) && groqService.isAvailable()) {
+      try {
+        console.info(`[AI_REQUEST_SERVICE] Routing non-streaming chat request to Groq: ${targetModelId}`);
+        const groqRes = await groqService.generateResponse({
+          ...options,
+          systemInstruction: fullSystemInstruction
+        }, targetModelId);
+
+        clearTimeout(timeoutId);
+
+        const validation = aiSafetyService.validateOutput(groqRes.text);
+        if (!validation.isValid) {
+          console.warn(`[AI_REQUEST_SERVICE] Output validation failed for Groq: ${validation.reason}`);
+          return {
+            text: 'Maaf, respons yang saya siapkan tidak dapat ditampilkan karena aturan keamanan. Jika Anda memerlukan bantuan khusus, mohon hubungi profesional medis atau konselor.',
+            modelUsed: 'safety-override',
+            isFallback: true
+          };
+        }
+
+        return {
+          text: groqRes.text,
+          modelUsed: groqRes.modelUsed,
+          isFallback: false
+        };
+      } catch (groqErr: any) {
+        console.warn(`[AI_REQUEST_SERVICE] Groq execution failed (${groqErr?.message}), attempting Gemini fallback...`);
+      }
+    }
+
+    // Check if user requested an OpenRouter AI Model
+    if (isOpenRouterModel(targetModelId) && openrouterService.isAvailable()) {
+      try {
+        console.info(`[AI_REQUEST_SERVICE] Routing non-streaming chat request to OpenRouter: ${targetModelId}`);
+        const openrouterRes = await openrouterService.generateResponse({
+          ...options,
+          systemInstruction: fullSystemInstruction
+        }, targetModelId);
+
+        clearTimeout(timeoutId);
+
+        const validation = aiSafetyService.validateOutput(openrouterRes.text);
+        if (!validation.isValid) {
+          console.warn(`[AI_REQUEST_SERVICE] Output validation failed for OpenRouter: ${validation.reason}`);
+          return {
+            text: 'Maaf, respons yang saya siapkan tidak dapat ditampilkan karena aturan keamanan. Jika Anda memerlukan bantuan khusus, mohon hubungi profesional medis atau konselor.',
+            modelUsed: 'safety-override',
+            isFallback: true
+          };
+        }
+
+        return {
+          text: openrouterRes.text,
+          modelUsed: openrouterRes.modelUsed,
+          isFallback: false
+        };
+      } catch (orErr: any) {
+        console.warn(`[AI_REQUEST_SERVICE] OpenRouter execution failed (${orErr?.message}), attempting Gemini fallback...`);
       }
     }
 
@@ -307,6 +371,46 @@ Pedoman Interaksi:
         };
       } catch (deepseekErr: any) {
         console.warn(`[AI_REQUEST_SERVICE] DeepSeek streaming failed (${deepseekErr?.message}), falling back to Gemini...`);
+      }
+    }
+
+    // Check if user requested a Groq AI Model stream
+    if (isGroqModel(targetModelId) && groqService.isAvailable()) {
+      try {
+        console.info(`[AI_REQUEST_SERVICE] Routing streaming chat request to Groq: ${targetModelId}`);
+        const groqStream = await groqService.generateStream({
+          ...options,
+          systemInstruction: fullSystemInstruction
+        }, targetModelId);
+
+        clearTimeout(timeoutId);
+        aiModelRouter.recordSuccess();
+        return {
+          stream: groqStream.stream,
+          modelUsed: groqStream.modelUsed
+        };
+      } catch (groqErr: any) {
+        console.warn(`[AI_REQUEST_SERVICE] Groq streaming failed (${groqErr?.message}), falling back to Gemini...`);
+      }
+    }
+
+    // Check if user requested an OpenRouter AI Model stream
+    if (isOpenRouterModel(targetModelId) && openrouterService.isAvailable()) {
+      try {
+        console.info(`[AI_REQUEST_SERVICE] Routing streaming chat request to OpenRouter: ${targetModelId}`);
+        const openrouterStream = await openrouterService.generateStream({
+          ...options,
+          systemInstruction: fullSystemInstruction
+        }, targetModelId);
+
+        clearTimeout(timeoutId);
+        aiModelRouter.recordSuccess();
+        return {
+          stream: openrouterStream.stream,
+          modelUsed: openrouterStream.modelUsed
+        };
+      } catch (orErr: any) {
+        console.warn(`[AI_REQUEST_SERVICE] OpenRouter streaming failed (${orErr?.message}), falling back to Gemini...`);
       }
     }
 

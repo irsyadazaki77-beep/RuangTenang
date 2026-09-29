@@ -1,5 +1,5 @@
 import { prisma } from '../../database.js';
-import { DocumentChunk, FileSourceReference } from '../../../../shared/contracts/files.js';
+import { DocumentChunk, FileSourceReference } from '../../../shared/contracts/files.js';
 import { scanAndSanitizePII } from '../piiService.js';
 import { detectPromptInjection } from '../../security.js';
 

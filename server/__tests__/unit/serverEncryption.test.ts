@@ -120,7 +120,7 @@ describe('Server Encryption Unit & Security Tests', () => {
 
         expect(() => {
           validateEnvironment();
-        }).toThrow(/FATAL SECURITY ERROR: ENCRYPTION_SECRET \/ ENCRYPTION_KEY must be at least 32 characters/i);
+        }).toThrow(/FATAL SECURITY ERROR: ENCRYPTION_KEY must be at least 32 characters/i);
       } finally {
         process.env = originalEnv;
       }

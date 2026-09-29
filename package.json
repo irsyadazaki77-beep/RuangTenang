@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "node scripts/prismaGenerate.js && tsx server.ts",
     "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
+    "build:production": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
     "start": "node dist/server.cjs",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
@@ -23,12 +24,14 @@
     "db:generate:postgres": "prisma generate --schema prisma/schema.postgres.prisma",
     "db:push:sqlite": "npx prisma db push --schema prisma/schema.sqlite.prisma",
     "db:migrate:postgres": "npx prisma migrate deploy --schema prisma/schema.postgres.prisma",
+    "db:deploy": "npx prisma migrate deploy --schema prisma/schema.postgres.prisma",
     "db:deploy:postgres": "npx prisma migrate deploy --schema prisma/schema.postgres.prisma",
     "db:encrypt": "tsx server/scripts/migrateEncryption.ts",
     "seed:demo": "tsx server/scripts/seedDemoData.ts",
     "admin:bootstrap": "tsx server/scripts/bootstrapAdmin.ts",
     "db:rehearse": "tsx server/scripts/rehearsePostgres.ts",
-    "maintenance:daily": "tsx server/scripts/dailyMaintenance.ts"
+    "maintenance:daily": "tsx server/scripts/dailyMaintenance.ts",
+    "test:smoke": "tsx scripts/smokeTest.ts"
   },
   "dependencies": {
     "@google/genai": "^2.15.0",

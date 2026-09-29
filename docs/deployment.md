@@ -6,6 +6,12 @@
 - **Frontend**: Vite + React + TailwindCSS (Client-side single page app fallback).
 - **State Terdistribusi**: Menggunakan *Lease-backed Lock* di PostgreSQL (tabel `DistributedLock`) untuk sinkronisasi Background Job dan membatasi rate limit seperti tombol Darurat SOS (`DistributedStateService`). Ini memastikan bahwa menjalankan beberapa container server tidak akan memicu race-conditions atau redundansi notifikasi yang fatal.
 
+## 1.1 Secret runtime produksi
+
+Inject `JWT_SECRET`, `ENCRYPTION_KEY`, `BLIND_INDEX_SECRET`, and `DATABASE_URL` from the deployment secret store at runtime. Production startup fails if one is missing or invalid; preview flags do not bypass these checks. `GEMINI_API_KEY` is optional because AI endpoints provide a local fallback when no provider key is configured. Never define server credentials with a `VITE_` prefix.
+
+TURN is optional. When enabled, configure `TURN_URL` and a private `TURN_SHARED_SECRET` for a TURN server using TURN REST credentials; the backend returns a one-hour HMAC credential to authorized call participants. Do not configure legacy static `TURN_CREDENTIAL` in production. Keep `.env.production` outside the image and inject values into the running container.
+
 ## 2. Proses Backup & Restore
 
 **Backup:**

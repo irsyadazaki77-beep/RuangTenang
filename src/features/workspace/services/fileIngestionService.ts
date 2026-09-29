@@ -1,4 +1,9 @@
-import { FileValidationResult, WorkspaceFileAttachment } from '../types.js';
+import { 
+  FileValidationResult, 
+  WorkspaceFileAttachment, 
+  WorkspaceFileKind, 
+  FileValidationErrorType 
+} from '../types.js';
 
 export const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
 
@@ -61,30 +66,116 @@ export function validateFileHeader(file: File): FileValidationResult {
   return { valid: true };
 }
 
+export interface AttachmentStatusResponseDTO {
+  id: string;
+  filename: string;
+  mimeType: string;
+  fileKind: WorkspaceFileKind;
+  size: number;
+  status: 'processing' | 'ready' | 'failed' | 'pending';
+  url: string;
+  checksum?: string;
+  pageCount?: number;
+  slideCount?: number;
+  sheetCount?: number;
+  errorMessage?: string;
+  errorCode?: string;
+}
+
+export interface PollResult {
+  success: boolean;
+  attachment?: AttachmentStatusResponseDTO;
+  timeout?: boolean;
+  errorMessage?: string;
+}
+
 /**
  * Polls backend status endpoint until document processing completes (or times out)
+ * Explicit timeout, timer cleanup, and cancellation support.
  */
-async function pollProcessingStatus(
+export async function pollProcessingStatus(
   attachmentId: string,
   maxAttempts = 15,
-  intervalMs = 800
-): Promise<any> {
+  intervalMs = 800,
+  signal?: AbortSignal
+): Promise<PollResult> {
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    if (signal?.aborted) {
+      return { success: false, timeout: false, errorMessage: 'Pemrosesan dibatalkan.' };
+    }
+
     try {
       const res = await fetch(`/api/v1/chat/attachments/${attachmentId}/status`, {
-        credentials: 'include'
+        credentials: 'include',
+        signal
       });
+
       if (res.ok) {
         const data = await res.json();
-        const att = data.attachment;
-        if (att && (att.status === 'ready' || att.status === 'failed')) {
-          return att;
+        const att = data.attachment as AttachmentStatusResponseDTO | undefined;
+        if (att) {
+          if (att.status === 'ready' || att.status === 'failed') {
+            return { success: true, attachment: att };
+          }
         }
       }
-    } catch {}
-    await new Promise(r => setTimeout(r, intervalMs));
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        return { success: false, timeout: false, errorMessage: 'Pemrosesan dibatalkan.' };
+      }
+    }
+
+    if (attempt < maxAttempts - 1) {
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => {
+          if (signal) signal.removeEventListener('abort', onAbort);
+          resolve();
+        }, intervalMs);
+
+        const onAbort = () => {
+          clearTimeout(timer);
+          reject(new Error('AbortError'));
+        };
+
+        if (signal) {
+          signal.addEventListener('abort', onAbort, { once: true });
+        }
+      }).catch(() => {});
+    }
   }
-  return null;
+
+  return { success: false, timeout: true };
+}
+
+function mapServerErrorCode(serverCode?: string): FileValidationErrorType {
+  switch (serverCode) {
+    case 'FILE_TOO_LARGE':
+      return 'TOO_LARGE';
+    case 'EMPTY_FILE':
+      return 'EMPTY_FILE';
+    case 'UNSUPPORTED_TYPE':
+    case 'UNSUPPORTED_FORMAT':
+      return 'UNSUPPORTED_TYPE';
+    case 'SIGNATURE_MISMATCH':
+      return 'SIGNATURE_MISMATCH';
+    case 'MIME_MISMATCH':
+      return 'MIME_MISMATCH';
+    case 'SECURITY_REJECTED':
+    case 'PROMPT_INJECTION':
+    case 'PROMPT_INJECTION_IN_ATTACHMENT':
+      return 'SECURITY_REJECTED';
+    case 'UNAUTHORIZED_ACCESS':
+    case 'OWNERSHIP_ERROR':
+      return 'UNAUTHORIZED_ACCESS';
+    case 'PROCESSING_TIMEOUT':
+      return 'PROCESSING_TIMEOUT';
+    case 'PROCESSING_FAILED':
+    case 'PARSER_ERROR':
+    case 'EXTRACTION_FAILED':
+      return 'PROCESSING_FAILED';
+    default:
+      return 'UPLOAD_FAILED';
+  }
 }
 
 /**
@@ -94,7 +185,8 @@ async function pollProcessingStatus(
  */
 export async function processFileForWorkspace(
   file: File,
-  chatId?: string
+  chatId?: string,
+  signal?: AbortSignal
 ): Promise<FileValidationResult> {
   const headerValidation = validateFileHeader(file);
   if (!headerValidation.valid) {
@@ -111,17 +203,18 @@ export async function processFileForWorkspace(
     const res = await fetch('/api/v1/chat/attachments/upload', {
       method: 'POST',
       credentials: 'include',
-      body: formData
+      body: formData,
+      signal
     });
 
     const data = await res.json();
 
     if (!res.ok || !data.success) {
       const errMsg = data.message || data.error?.message || 'Gagal mengunggah berkas.';
-      const errCode = data.code || data.error?.code || 'UPLOAD_FAILED';
+      const rawCode = data.code || data.error?.code || 'UPLOAD_FAILED';
       return {
         valid: false,
-        error: errCode === 'SECURITY_REJECTED' || errCode === 'PROMPT_INJECTION' ? 'SECURITY_REJECTED' : 'UPLOAD_FAILED',
+        error: mapServerErrorCode(rawCode),
         message: errMsg
       };
     }
@@ -135,11 +228,23 @@ export async function processFileForWorkspace(
       };
     }
 
-    // If still in processing status, poll until ready
+    // If still in processing status, poll until ready with strict timeout
     if (att.status === 'processing') {
-      const polled = await pollProcessingStatus(att.id);
-      if (polled) {
-        att = polled;
+      const pollResult = await pollProcessingStatus(att.id, 15, 800, signal);
+      if (pollResult.success && pollResult.attachment) {
+        att = pollResult.attachment;
+      } else if (pollResult.timeout) {
+        return {
+          valid: false,
+          error: 'PROCESSING_TIMEOUT',
+          message: 'Pemrosesan dokumen melebihi batas waktu tunggu. Silakan coba lagi.'
+        };
+      } else {
+        return {
+          valid: false,
+          error: 'PROCESSING_FAILED',
+          message: pollResult.errorMessage || 'Pemrosesan berkas terhenti.'
+        };
       }
     }
 
@@ -156,7 +261,7 @@ export async function processFileForWorkspace(
       name: att.filename || file.name,
       size: att.size || file.size,
       mimeType: att.mimeType || file.type || 'application/octet-stream',
-      fileKind: att.fileKind || 'text',
+      fileKind: (att.fileKind as WorkspaceFileKind) || 'text',
       status: att.status || 'ready',
       pageCount: att.pageCount,
       slideCount: att.slideCount,
@@ -166,12 +271,19 @@ export async function processFileForWorkspace(
     };
 
     return { valid: true, file: attachment };
-  } catch (err: any) {
-    console.error('[WORKSPACE_FILE_INGESTION_ERROR]', err);
+  } catch (err: unknown) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      return {
+        valid: false,
+        error: 'READ_FAILED',
+        message: 'Pengunggahan berkas dibatalkan.'
+      };
+    }
+    const errMessage = err instanceof Error ? err.message : 'Terjadi gangguan jaringan saat memproses berkas.';
     return {
       valid: false,
       error: 'READ_FAILED',
-      message: err.message || 'Terjadi gangguan jaringan saat memproses berkas.'
+      message: errMessage
     };
   }
 }

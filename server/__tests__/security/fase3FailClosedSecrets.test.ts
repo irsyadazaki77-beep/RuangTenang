@@ -84,10 +84,11 @@ describe('FASE 3: Production Secrets & Fail-Closed Security Tests', () => {
     process.env.BLIND_INDEX_SECRET = 'valid-production-blind-index-key-32-chars!!';
     process.env.DATABASE_URL = 'postgresql://user:pass@host:5432/db';
     process.env.TURN_URL = 'turn:turn.ruangtenang.ui.ac.id:3478';
-    process.env.TURN_USERNAME = 'ruangtenang_secure_user';
-    process.env.TURN_CREDENTIAL = 'secret_password_here'; // Hardcoded demo password
+    process.env.TURN_USERNAME = 'test-fixture-turn-user';
+    process.env.TURN_SHARED_SECRET = 'test-fixture-turn-shared-secret-not-production-2026';
+    process.env.TURN_CREDENTIAL = 'legacy-test-fixture-static-turn-credential';
 
-    expect(() => validateEnvironment()).toThrow(/Insecure demo TURN_CREDENTIAL/i);
+    expect(() => validateEnvironment()).toThrow(/Static or insecure TURN credentials/i);
   });
 
   it('6. Production database requiring SQLite file throws fatal startup error', () => {

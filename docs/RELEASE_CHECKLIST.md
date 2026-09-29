@@ -5,9 +5,11 @@ Comprehensive release checklist for SREs, QA Engineers, and DevOps to ensure zer
 ---
 
 ## 📅 Release Metadata
-- **Current Version:** `v0.9.0` (Semantic pre-production release)
-- **Target Environment:** Cloud Run (Monolith Container) + Cloud SQL (PostgreSQL)
-- **Date:** 2 September 2026
+> **Catatan Historis**: Dokumen ini merupakan checklist pre-production awal (`v0.9.0`). Untuk checklist rilis produksi versi aktif (`v3.3.1`), gunakan SSOT utama di `RELEASE_CHECKLIST.md`.
+- **Pre-production Baseline:** `v0.9.0`
+- **Active Production Release:** `v3.3.1` (Current)
+- **Target Environment:** Container / Docker Stack (PostgreSQL 16 + Redis + Express + Nginx) / Cloud Run
+- **Updated:** September 2026
 
 ---
 

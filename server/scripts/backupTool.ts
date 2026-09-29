@@ -37,7 +37,21 @@ export async function runBackup() {
       if (stderr) {
         console.warn(`[BACKUP] pg_dump warning:`, stderr);
       }
-      console.log(`[BACKUP] PostgreSQL Backup completed successfully at ${backupPath}`);
+
+      if (!fs.existsSync(backupPath)) {
+        throw new Error(`[BACKUP] PostgreSQL Backup failed: output file not found at ${backupPath}`);
+      }
+      const stat = fs.statSync(backupPath);
+      if (stat.size === 0) {
+        throw new Error(`[BACKUP] PostgreSQL Backup failed: backup file is empty (0 bytes)`);
+      }
+      console.log(`[BACKUP] PostgreSQL Backup completed successfully at ${backupPath} (${stat.size} bytes)`);
+      return {
+        provider: 'postgresql',
+        backupPath,
+        sizeBytes: stat.size,
+        timestamp
+      };
     } catch (err: any) {
       console.error(`[BACKUP] PostgreSQL Backup failed:`, err.message);
       throw err;
@@ -75,7 +89,11 @@ export async function runBackup() {
   }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+const isDirectCliExecution =
+  (typeof import.meta !== 'undefined' && import.meta.url === `file://${process.argv[1]}`) ||
+  (typeof require !== 'undefined' && typeof module !== 'undefined' && require.main === module);
+
+if (isDirectCliExecution) {
   runBackup().catch((e) => {
     console.error(e);
     process.exit(1);

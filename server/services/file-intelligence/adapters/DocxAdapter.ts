@@ -14,8 +14,9 @@ export class DocxAdapter implements DocumentExtractorAdapter {
 
     try {
       const mammoth = await import('mammoth');
-      const result = await mammoth.default.convertToMarkdown({ buffer: input.buffer });
-      const markdown = (result.value || '').trim();
+      const mammothAny: any = mammoth.default || mammoth;
+      const result = await mammothAny.convertToMarkdown({ buffer: input.buffer });
+      const markdown = (result?.value || '').trim();
 
       if (!markdown) {
         throw new DocumentProcessingException('PARSER_ERROR', 'Dokumen Word kosong atau tidak memuat teks.');

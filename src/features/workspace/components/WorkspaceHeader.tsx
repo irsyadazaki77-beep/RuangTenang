@@ -30,7 +30,7 @@ interface WorkspaceHeaderProps {
   onConfirmClearWorkspace: () => void;
 }
 
-export const WorkspaceHeader: React.FC<WorkspaceHeaderProps> = ({
+export const WorkspaceHeader: React.FC<WorkspaceHeaderProps> = React.memo(({
   activeArtifact,
   isCanvasOpen,
   mobileActiveTab,
@@ -291,4 +291,4 @@ export const WorkspaceHeader: React.FC<WorkspaceHeaderProps> = ({
       </div>
     </header>
   );
-};
+});

@@ -13,7 +13,7 @@ jobs:
         image: postgres:15
         env:
           POSTGRES_USER: ruangtenang
-          POSTGRES_PASSWORD: password123
+          POSTGRES_PASSWORD: ci-only-postgres-password
           POSTGRES_DB: ruangtenang_ci
         ports:
           - 5432:5432
@@ -24,10 +24,11 @@ jobs:
           --health-retries 5
     env:
       NODE_ENV: test
-      JWT_SECRET: "ci-pipeline-secure-test-jwt-secret-key-32chars"
+      JWT_SECRET: "ci-only-jwt-signing-key-not-for-production-32chars"
       ENCRYPTION_KEY: "0123456789abcdef0123456789abcdef"
+      BLIND_INDEX_SECRET: "ci-only-blind-index-key-not-for-production-32chars"
       DATABASE_URL: "file:./dev.db"
-      POSTGRES_URL: "postgresql://ruangtenang:password123@localhost:5432/ruangtenang_ci?schema=public"
+      POSTGRES_URL: "postgresql://ruangtenang:ci-only-postgres-password@localhost:5432/ruangtenang_ci?schema=public"
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4

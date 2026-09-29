@@ -251,7 +251,11 @@ export async function executeDailyMaintenance(): Promise<DailyMaintenanceReport>
 }
 
 // Standalone execution support
-if (import.meta.url === `file://${process.argv[1]}`) {
+const isDirectCliExecution =
+  (typeof import.meta !== 'undefined' && import.meta.url === `file://${process.argv[1]}`) ||
+  (typeof require !== 'undefined' && typeof module !== 'undefined' && require.main === module);
+
+if (isDirectCliExecution) {
   executeDailyMaintenance()
     .then(() => process.exit(0))
     .catch((err) => {

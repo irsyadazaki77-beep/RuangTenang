@@ -135,14 +135,19 @@ export function validateAndDetectFile(buffer: Buffer, originalFilename: string, 
   const ext = path.extname(originalFilename || '').toLowerCase();
   const sanitizedName = sanitizeFilename(originalFilename);
 
-  // Check magic bytes matching
-  let matchedRule = MAGIC_BYTES_RULES.find(rule => rule.check(buffer));
+  // Find matching rule considering the extension first if there are multiple rules with same signature (e.g. zip/ooxml)
+  let matchedRule = MAGIC_BYTES_RULES.find(rule => rule.exts.includes(ext) && rule.check(buffer))
+    || MAGIC_BYTES_RULES.find(rule => rule.check(buffer));
   let verifiedMime = matchedRule ? matchedRule.mime : '';
 
   if (!matchedRule) {
     if (isTextFile(buffer, ext)) {
       verifiedMime = ext === '.md' ? 'text/markdown' : 'text/plain';
     } else {
+      const allowedExts = ['.pdf', '.jpg', '.jpeg', '.png', '.webp', '.doc', '.docx', '.pptx', '.xlsx', '.txt', '.md', '.csv', '.json', '.py', '.js', '.ts', '.tsx', '.jsx', '.html', '.css', '.sql'];
+      if (!allowedExts.includes(ext)) {
+        throw new Error(`UNSUPPORTED_FORMAT: Format file .${ext || 'unknown'} tidak didukung.`);
+      }
       throw new Error('INVALID_FILE_SIGNATURE: Format file tidak didukung atau magic bytes tidak valid.');
     }
   }
@@ -195,7 +200,7 @@ export const attachmentStorageService = {
     const attachmentId = `att_${Date.now()}_${crypto.randomBytes(6).toString('hex')}`;
     const storageFilename = `${attachmentId}.bin`;
     const storagePath = path.join(UPLOAD_DIR, storageFilename);
-    const relativeStoragePath = path.join('uploads', 'attachments', storageFilename);
+    const relativeStoragePath = `uploads/attachments/${storageFilename}`;
 
     // Write file securely to disk
     await fs.promises.writeFile(storagePath, buffer, { mode: 0o600 });
@@ -262,7 +267,7 @@ export const attachmentStorageService = {
           });
         }
 
-        await prisma.attachments.update({
+        const updated = await prisma.attachments.update({
           where: { id: attachmentId },
           data: {
             status: 'ready',
@@ -276,14 +281,16 @@ export const attachmentStorageService = {
             })
           }
         });
+        return updated;
       } catch (procErr: any) {
-        await prisma.attachments.update({
+        const failedRecord = await prisma.attachments.update({
           where: { id: attachmentId },
           data: {
             status: 'failed',
             processingError: procErr.message
           }
-        }).catch(() => {});
+        }).catch(() => null);
+        return failedRecord || record;
       }
     }
 

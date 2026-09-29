@@ -301,7 +301,7 @@ export class AppointmentRepository {
 
       if (!counselorRecord) {
         // In test or explicit demo mode only, provision test fixture with isDemoData: true
-        if (process.env.NODE_ENV === 'test' || process.env.VITE_DEMO_MODE === 'true' || process.env.VITEST === 'true') {
+        if (process.env.NODE_ENV === 'test' || process.env.VITE_PUBLIC_DEMO_MODE === 'true' || process.env.VITEST === 'true') {
           counselorRecord = await tx.counselors.create({
             data: {
               id: resolvedCounselorId || ("cns-test-" + Date.now() + "-" + Math.floor(Math.random() * 1000)),

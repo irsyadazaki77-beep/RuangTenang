@@ -536,7 +536,10 @@ export class RetentionService {
     if (!email) {
       return 'anonymized';
     }
-    const secretKey = process.env.BLIND_INDEX_SECRET || process.env.JWT_SECRET || 'ruangtenang_secret_key_for_blind_index_2026';
+    const secretKey = process.env.BLIND_INDEX_SECRET;
+    if (!secretKey) {
+      throw new Error('BLIND_INDEX_SECRET is required to hash account identifiers');
+    }
     return crypto
       .createHmac('sha256', secretKey)
       .update(email.toLowerCase().trim().normalize('NFKC'))

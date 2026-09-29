@@ -48,15 +48,34 @@ export interface ParsedCitationItem {
 
 export type StreamingStatus = 'idle' | 'connecting' | 'streaming' | 'completed' | 'aborted' | 'error';
 
+export type WorkspaceFileKind = 
+  | 'text'
+  | 'markdown'
+  | 'csv'
+  | 'json'
+  | 'pdf'
+  | 'docx'
+  | 'pptx'
+  | 'xlsx'
+  | 'image'
+  | 'code';
+
+export type WorkspaceAttachmentStatus = 
+  | 'uploading' 
+  | 'processing' 
+  | 'ready' 
+  | 'failed' 
+  | 'error';
+
 export interface WorkspaceFileAttachment {
   id?: string;
   name: string;
   content?: string;
   size?: number;
   mimeType?: string;
-  fileKind?: string;
+  fileKind?: WorkspaceFileKind;
   isText?: boolean;
-  status?: 'uploading' | 'processing' | 'ready' | 'failed' | 'error';
+  status?: WorkspaceAttachmentStatus;
   errorMessage?: string;
   pageCount?: number;
   slideCount?: number;
@@ -69,10 +88,15 @@ export type FileValidationErrorType =
   | 'TOO_LARGE' 
   | 'EMPTY_FILE' 
   | 'UNSUPPORTED_TYPE' 
+  | 'INVALID_FILE'
+  | 'SIGNATURE_MISMATCH'
+  | 'MIME_MISMATCH'
   | 'READ_FAILED' 
   | 'UPLOAD_FAILED' 
   | 'PROCESSING_FAILED' 
-  | 'SECURITY_REJECTED';
+  | 'PROCESSING_TIMEOUT'
+  | 'SECURITY_REJECTED'
+  | 'UNAUTHORIZED_ACCESS';
 
 export interface FileValidationResult {
   valid: boolean;

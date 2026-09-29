@@ -9,8 +9,7 @@ import {
   RefreshCw, 
   Lock, 
   Plus, 
-  CheckCircle2,
-  GraduationCap
+  CheckCircle2
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { apiClient } from '../../lib/apiClient';
@@ -32,47 +31,70 @@ export const CounselorPortal: React.FC = () => {
     emergencyInterventions: 0,
     highRiskCount: 0,
     completedNotes: 0,
-    averageResponseTimeHours: 0,
+    averageResponseTimeHours: null,
   });
   const [loading, setLoading] = useState<boolean>(true);
   const [selectedStudentForSoap, setSelectedStudentForSoap] = useState<TriageItem | null>(null);
   const [activeNoteForEdit, setActiveNoteForEdit] = useState<SoapNote | null>(null);
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
-  const _isAuthorized = user && ((user.role as string) === 'konselor' || (user.role as string) === 'admin' || (user.role as string) === 'peer_counselor');
+  const isAuthorized = Boolean(user && ((user.role as string) === 'konselor' || (user.role as string) === 'admin' || (user.role as string) === 'peer_counselor'));
 
-  const fetchData = async () => {
+  const isMountedRef = React.useRef(true);
+  const activeAbortRef = React.useRef<AbortController | null>(null);
+
+  const fetchData = React.useCallback(async () => {
+    if (activeAbortRef.current) {
+      activeAbortRef.current.abort();
+    }
+    const ac = new AbortController();
+    activeAbortRef.current = ac;
+
     setLoading(true);
     try {
-      // Fetch Triage Queue
-      const queueRes = await apiClient.get<TriageItem[]>('/api/v1/counselor-portal/triage-queue');
-      if (queueRes.success && Array.isArray(queueRes.data)) {
-        setTriageItems(queueRes.data);
+      const [queueRes, statsRes, notesRes] = await Promise.allSettled([
+        apiClient.get<TriageItem[]>('/api/v1/counselor-portal/triage-queue', { signal: ac.signal }),
+        apiClient.get<CounselorStats>('/api/v1/counselor-portal/stats', { signal: ac.signal }),
+        apiClient.get<SoapNote[]>('/api/v1/counselor-portal/soap-notes', { signal: ac.signal })
+      ]);
+
+      if (!isMountedRef.current || ac.signal.aborted) return;
+
+      if (queueRes.status === 'fulfilled' && queueRes.value.success && Array.isArray(queueRes.value.data)) {
+        setTriageItems(queueRes.value.data);
       } else {
         setTriageItems([]);
       }
 
-      // Fetch Stats
-      const statsRes = await apiClient.get<CounselorStats>('/api/v1/counselor-portal/stats');
-      if (statsRes.success && statsRes.data) {
-        setStats(statsRes.data);
+      if (statsRes.status === 'fulfilled' && statsRes.value.success && statsRes.value.data) {
+        setStats(statsRes.value.data);
       }
 
-      // Fetch SOAP Notes History
-      const notesRes = await apiClient.get<SoapNote[]>('/api/v1/counselor-portal/soap-notes');
-      if (notesRes.success && notesRes.data) {
-        setSoapNotes(notesRes.data);
+      if (notesRes.status === 'fulfilled' && notesRes.value.success && notesRes.value.data) {
+        setSoapNotes(notesRes.value.data);
       }
-    } catch (err) {
-      console.error('Failed to load counselor portal data:', err);
+    } catch (err: any) {
+      if (err?.name !== 'AbortError') {
+        console.error('Failed to load counselor portal data:', err);
+      }
     } finally {
-      setLoading(false);
+      if (isMountedRef.current && !ac.signal.aborted) {
+        setLoading(false);
+      }
     }
-  };
+  }, []);
 
   useEffect(() => {
+    isMountedRef.current = true;
     fetchData();
-  }, []);
+
+    return () => {
+      isMountedRef.current = false;
+      if (activeAbortRef.current) {
+        activeAbortRef.current.abort();
+      }
+    };
+  }, [fetchData]);
 
   const handleCreateSoapNote = (item: TriageItem) => {
     setSelectedStudentForSoap(item);
@@ -115,6 +137,28 @@ export const CounselorPortal: React.FC = () => {
       setActiveTab('soap-history');
     }, 1500);
   };
+
+  if (!isAuthorized) {
+    return (
+      <div className="max-w-2xl mx-auto px-4 py-16 text-center space-y-4">
+        <div className="w-12 h-12 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 flex items-center justify-center mx-auto text-rose-600 dark:text-rose-400">
+          <Lock className="w-6 h-6" />
+        </div>
+        <h2 className="text-xl font-bold text-primary">Akses Dibatasi: Khusus Konselor & Tenaga Klinis</h2>
+        <p className="text-sm text-secondary leading-relaxed">
+          Halaman Portal Konselor berisi antrean triase skrining dan catatan medis SOAP terenkripsi yang hanya dapat diakses oleh konselor kampus dan psikolog terverifikasi sesuai kebijakan privasi UU PDP.
+        </p>
+        <div className="pt-2">
+          <a
+            href="/"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-semibold shadow-xs transition-colors"
+          >
+            Kembali ke Beranda
+          </a>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
@@ -219,7 +263,7 @@ export const CounselorPortal: React.FC = () => {
           }`}
         >
           <FileText className="w-4 h-4" />
-          <span>Riwayat SOAP Terenkripsi ({soapNotes.length || 3})</span>
+          <span>Riwayat SOAP Terenkripsi ({soapNotes.length})</span>
         </button>
 
         <button

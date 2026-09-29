@@ -45,37 +45,28 @@ export function useWorkspacePersistence({
       setIsLoadingMessages(true);
 
       try {
-        // Fetch persisted artifacts
-        let fetchedArtifacts: WorkspaceArtifact[] = [];
-        try {
-          fetchedArtifacts = await WorkspaceApiService.fetchArtifacts(chatId, signal);
-        } catch (err: any) {
-          if (err?.name !== 'AbortError') {
-            console.warn('[useWorkspacePersistence] Artifacts load error:', err);
-          }
-        }
+        const [artifactsResult, messagesResult] = await Promise.allSettled([
+          WorkspaceApiService.fetchArtifacts(chatId, signal),
+          chatId ? WorkspaceApiService.fetchMessages(chatId, signal) : Promise.resolve([])
+        ]);
 
         if (signal.aborted) return;
-        setPersistedArtifacts(fetchedArtifacts);
-        setIsLoadingArtifacts(false);
 
-        // Fetch messages if chatId is present
-        if (chatId) {
-          try {
-            const fetchedMsgs = await WorkspaceApiService.fetchMessages(chatId, signal);
-            if (!signal.aborted) {
-              if (fetchedMsgs.length > 0) {
-                setMessages(fetchedMsgs);
-              } else {
-                setMessages([createWelcomeMessage(userName)]);
-              }
-            }
-          } catch (err: any) {
-            if (err?.name !== 'AbortError') {
-              console.warn('[useWorkspacePersistence] Messages load error:', err);
-            }
+        if (artifactsResult.status === 'fulfilled') {
+          setPersistedArtifacts(artifactsResult.value || []);
+        } else if (artifactsResult.reason?.name !== 'AbortError') {
+          console.warn('[useWorkspacePersistence] Artifacts load error:', artifactsResult.reason);
+        }
+
+        if (messagesResult.status === 'fulfilled') {
+          const fetchedMsgs = messagesResult.value || [];
+          if (fetchedMsgs.length > 0) {
+            setMessages(fetchedMsgs);
+          } else {
+            setMessages([createWelcomeMessage(userName)]);
           }
-        } else {
+        } else if (messagesResult.reason?.name !== 'AbortError') {
+          console.warn('[useWorkspacePersistence] Messages load error:', messagesResult.reason);
           setMessages([createWelcomeMessage(userName)]);
         }
       } finally {

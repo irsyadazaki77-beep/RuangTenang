@@ -6,6 +6,8 @@ import { visualizer } from 'rollup-plugin-visualizer';
 
 export default defineConfig(() => {
   return {
+    // Only explicitly public settings are eligible for client-side exposure.
+    envPrefix: 'VITE_PUBLIC_',
     plugins: [
       react(),
       tailwindcss(),

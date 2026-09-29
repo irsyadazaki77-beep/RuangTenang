@@ -37,7 +37,7 @@ interface WorkspaceComposerProps {
   onDismissDistress: () => void;
 }
 
-export const WorkspaceComposer: React.FC<WorkspaceComposerProps> = ({
+export const WorkspaceComposer: React.FC<WorkspaceComposerProps> = React.memo(({
   inputText,
   setInputText,
   attachedFile,
@@ -84,7 +84,13 @@ export const WorkspaceComposer: React.FC<WorkspaceComposerProps> = ({
     const currentAttachment = attachedFile;
     if (!prompt && !currentAttachment) return;
 
+    // If there is an attachment but it's not ready, don't allow sending
+    if (currentAttachment && (currentAttachment.status === 'uploading' || currentAttachment.status === 'processing')) {
+      return;
+    }
+
     if (!prompt && currentAttachment) {
+      if (currentAttachment.status !== 'ready') return;
       prompt = `Mohon telaah dan analisis dokumen "${currentAttachment.name}" ini secara mendalam.`;
     }
 
@@ -269,9 +275,16 @@ export const WorkspaceComposer: React.FC<WorkspaceComposerProps> = ({
               <button
                 type="button"
                 onClick={handleSend}
-                disabled={!inputText.trim() && !attachedFile}
+                disabled={
+                  (!inputText.trim() && !attachedFile) ||
+                  (attachedFile?.status === 'uploading') ||
+                  (attachedFile?.status === 'processing') ||
+                  (attachedFile?.status === 'failed' && !inputText.trim())
+                }
                 className={`h-7 w-7 rounded-lg flex items-center justify-center transition-all cursor-pointer ${
-                  inputText.trim() || attachedFile
+                  (inputText.trim() || (attachedFile && attachedFile.status === 'ready')) &&
+                  attachedFile?.status !== 'uploading' &&
+                  attachedFile?.status !== 'processing'
                     ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs active:scale-95'
                     : 'bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
                 }`}
@@ -286,4 +299,4 @@ export const WorkspaceComposer: React.FC<WorkspaceComposerProps> = ({
       </div>
     </div>
   );
-};
+});

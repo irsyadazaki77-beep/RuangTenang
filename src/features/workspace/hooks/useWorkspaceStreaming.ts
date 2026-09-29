@@ -35,10 +35,10 @@ export function useWorkspaceStreaming({
   const abortStream = useCallback(() => {
     if (streamingClientRef.current) {
       streamingClientRef.current.abort();
-      setStreamingStatus('aborted');
-      setActiveStreamingMessage(null);
-      showToast('Respons dihentikan.', 'info');
     }
+    setStreamingStatus('aborted');
+    setActiveStreamingMessage(null);
+    showToast('Respons dihentikan.', 'info');
   }, [showToast]);
 
   const sendMessageStream = useCallback(async (

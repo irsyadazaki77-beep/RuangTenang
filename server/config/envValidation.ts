@@ -18,18 +18,13 @@ const KNOWN_INSECURE_DEMO_SECRETS = [
   'fallback-key-2026',
   'ruangtenang-prod-jwt-secret-key-32chars-minimum-fallback-key-2026',
   'local-development-fallback',
-  'secret_password_here',
-  'ruangtenang_secure_user',
   'local-dev-blind-index-hmac-secret-ruangtenang-32-chars',
   'local-dev-aes-encryption-key-ruangtenang-32-chars-long',
   'fallback-secret-for-development-ruangtenang-long-key-32',
   'ruangtenang-ai-studio-jwt-secret-long-secure-fallback-32',
   'ruangtenang-ai-studio-aes-encryption-key-fallback-32',
-  'sk-d0671b185a4c476b9ef52cf949034e35',
-  'turn_test_credential_2026',
   'supersecret_jwt_key_ruangtenang_2026',
   '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
-  'dev_turn_credential_2026',
   'postgrespassword'
 ];
 
@@ -50,7 +45,10 @@ export function isKnownInsecureDemoSecret(secret?: string): boolean {
     'fallback-secret-for-development',
     'ruangtenang-ai-studio-jwt-secret-long-secure-fallback',
     'ruangtenang-ai-studio-aes-encryption-key-fallback',
-    'secret_password_here',
+    'production-fixture-',
+    'fixture-shared-secret-',
+    'test-fixture-',
+    'ci-only-',
     'dummy_key',
     'postgrespassword'
   ];
@@ -60,13 +58,21 @@ export function isKnownInsecureDemoSecret(secret?: string): boolean {
 
 export function validateEnvironment(): void {
   const isProd = process.env.NODE_ENV === 'production';
-  const isPreview = process.env.IS_AI_STUDIO_PREVIEW === 'true' || process.env.PREVIEW_MODE === 'true';
 
   const jwtSecret = process.env.JWT_SECRET;
-  const encryptionKey = process.env.ENCRYPTION_SECRET || process.env.DATA_ENCRYPTION_KEY || process.env.ENCRYPTION_KEY;
+  const encryptionKey = process.env.ENCRYPTION_KEY || process.env.DATA_ENCRYPTION_KEY || process.env.ENCRYPTION_SECRET;
   const blindIndexSecret = process.env.BLIND_INDEX_SECRET;
 
-  if (isProd && !isPreview) {
+  if (isProd) {
+    const configuredOrigins = [process.env.APP_ORIGIN, process.env.CORS_ALLOWED_ORIGINS]
+      .filter(Boolean)
+      .join(',')
+      .split(',')
+      .map(origin => origin.trim());
+    if (configuredOrigins.includes('*')) {
+      throw new Error('FATAL SECURITY ERROR: Wildcard CORS origins are not allowed in production');
+    }
+
     if (!jwtSecret) {
       throw new Error('FATAL SECURITY ERROR: JWT_SECRET environment variable is missing');
     }
@@ -77,11 +83,11 @@ export function validateEnvironment(): void {
       throw new Error('FATAL SECURITY ERROR: Insecure demo JWT_SECRET detected in production');
     }
 
-    if (!encryptionKey) {
+    if (!encryptionKey || (!process.env.ENCRYPTION_KEY && !process.env.DATA_ENCRYPTION_KEY)) {
       throw new Error('FATAL SECURITY ERROR: ENCRYPTION_KEY environment variable is missing');
     }
     if (encryptionKey.length < 32) {
-      throw new Error('FATAL SECURITY ERROR: ENCRYPTION_SECRET / ENCRYPTION_KEY must be at least 32 characters long');
+      throw new Error('FATAL SECURITY ERROR: ENCRYPTION_KEY must be at least 32 characters long');
     }
     if (isKnownInsecureDemoSecret(encryptionKey)) {
       throw new Error('FATAL SECURITY ERROR: Insecure demo ENCRYPTION_KEY detected in production');
@@ -103,18 +109,18 @@ export function validateEnvironment(): void {
     // TURN Server Config validation in production
     const turnUrl = process.env.TURN_URL;
     const turnUser = process.env.TURN_USERNAME;
-    const turnCred = process.env.TURN_CREDENTIAL;
-    const isTurnRequired = process.env.REQUIRE_TURN === 'true' || Boolean(turnUrl || turnUser || turnCred);
+    const turnSecret = process.env.TURN_SHARED_SECRET;
+    const isTurnRequired = process.env.REQUIRE_TURN === 'true' || Boolean(turnUrl || turnUser || turnSecret || process.env.TURN_CREDENTIAL);
 
     if (isTurnRequired) {
-      if (!turnUrl || !turnUser || !turnCred) {
-        throw new Error('FATAL SECURITY ERROR: TURN_URL, TURN_USERNAME, and TURN_CREDENTIAL are required when TURN is enabled in production');
+      if (!turnUrl || !turnSecret) {
+        throw new Error('FATAL SECURITY ERROR: TURN_URL and TURN_SHARED_SECRET are required when TURN is enabled in production');
       }
-      if (turnCred.length < 8) {
-        throw new Error('FATAL SECURITY ERROR: TURN_CREDENTIAL must be at least 8 characters long');
+      if (turnSecret.length < 32) {
+        throw new Error('FATAL SECURITY ERROR: TURN_SHARED_SECRET must be at least 32 characters long');
       }
-      if (isKnownInsecureDemoSecret(turnCred) || isKnownInsecureDemoSecret(turnUser)) {
-        throw new Error('FATAL SECURITY ERROR: Insecure demo TURN_CREDENTIAL or TURN_USERNAME detected in production');
+      if (process.env.TURN_CREDENTIAL || isKnownInsecureDemoSecret(turnSecret) || isKnownInsecureDemoSecret(turnUser)) {
+        throw new Error('FATAL SECURITY ERROR: Static or insecure TURN credentials are not allowed in production; use TURN_SHARED_SECRET');
       }
     }
   } else {
@@ -138,10 +144,9 @@ export function validateEnvironment(): void {
 
 export function getValidatedJwtSecret(): string {
   const isProd = process.env.NODE_ENV === 'production';
-  const isPreview = process.env.IS_AI_STUDIO_PREVIEW === 'true' || process.env.PREVIEW_MODE === 'true';
 
   let secret = process.env.JWT_SECRET;
-  if (isProd && !isPreview) {
+  if (isProd) {
     if (!secret) {
       throw new Error('FATAL SECURITY ERROR: JWT_SECRET environment variable is missing in production');
     }
@@ -158,7 +163,6 @@ export function getValidatedJwtSecret(): string {
 
 export function getValidatedEncryptionKey(version: string = 'k1'): Buffer {
   const isProd = process.env.NODE_ENV === 'production';
-  const isPreview = process.env.IS_AI_STUDIO_PREVIEW === 'true' || process.env.PREVIEW_MODE === 'true';
 
   let rawKey: string | undefined;
   const upperVer = version.toUpperCase();
@@ -179,7 +183,7 @@ export function getValidatedEncryptionKey(version: string = 'k1'): Buffer {
              process.env.ENCRYPTION_KEY;
   }
 
-  if (isProd && !isPreview) {
+  if (isProd) {
     if (!rawKey) {
       throw new Error('FATAL SECURITY ERROR: Encryption key environment variable is missing in production');
     }
@@ -225,36 +229,39 @@ export interface TurnConfig {
 
 export function getValidatedTurnConfig(): TurnConfig | null {
   const isProd = process.env.NODE_ENV === 'production';
-  const isPreview = process.env.IS_AI_STUDIO_PREVIEW === 'true' || process.env.PREVIEW_MODE === 'true';
 
   const turnUrl = process.env.TURN_URL;
   const turnUser = process.env.TURN_USERNAME;
-  const turnCred = process.env.TURN_CREDENTIAL;
-  const isTurnRequired = process.env.REQUIRE_TURN === 'true' || Boolean(turnUrl || turnUser || turnCred);
+  const turnSecret = process.env.TURN_SHARED_SECRET;
+  const isTurnRequired = process.env.REQUIRE_TURN === 'true' || Boolean(turnUrl || turnUser || turnSecret || process.env.TURN_CREDENTIAL);
 
-  if (isProd && !isPreview) {
+  if (isProd) {
     if (isTurnRequired) {
-      if (!turnUrl || !turnUser || !turnCred) {
-        throw new Error('FATAL SECURITY ERROR: TURN_URL, TURN_USERNAME, and TURN_CREDENTIAL are required when TURN is enabled in production');
+      if (!turnUrl || !turnSecret) {
+        throw new Error('FATAL SECURITY ERROR: TURN_URL and TURN_SHARED_SECRET are required when TURN is enabled in production');
       }
-      if (turnCred.length < 8) {
-        throw new Error('FATAL SECURITY ERROR: TURN_CREDENTIAL must be at least 8 characters long');
+      if (turnSecret.length < 32) {
+        throw new Error('FATAL SECURITY ERROR: TURN_SHARED_SECRET must be at least 32 characters long');
       }
-      if (isKnownInsecureDemoSecret(turnCred) || isKnownInsecureDemoSecret(turnUser)) {
-        throw new Error('FATAL SECURITY ERROR: Insecure demo TURN_CREDENTIAL or TURN_USERNAME detected in production');
+      if (process.env.TURN_CREDENTIAL || isKnownInsecureDemoSecret(turnSecret) || isKnownInsecureDemoSecret(turnUser)) {
+        throw new Error('FATAL SECURITY ERROR: Static or insecure TURN credentials are not allowed in production; use TURN_SHARED_SECRET');
       }
-      return { url: turnUrl, username: turnUser, credential: turnCred };
+      return createEphemeralTurnConfig(turnUrl, turnSecret, turnUser);
     }
     return null;
   }
 
-  if (!turnUrl && !turnUser && !turnCred) {
+  if (!turnUrl && !turnUser && !turnSecret && !process.env.TURN_CREDENTIAL) {
     return null;
   }
 
-  return {
-    url: turnUrl || 'turn:turn.ruangtenang.ui.ac.id:3478',
-    username: turnUser || 'dev_turn_user',
-    credential: turnCred || 'dev_turn_credential_2026'
-  };
+  if (!turnUrl || !turnSecret) return null;
+  return createEphemeralTurnConfig(turnUrl, turnSecret, turnUser);
+}
+
+function createEphemeralTurnConfig(url: string, sharedSecret: string, usernamePrefix?: string): TurnConfig {
+  const expiresAt = Math.floor(Date.now() / 1000) + 60 * 60;
+  const username = `${expiresAt}:${usernamePrefix || 'ruangtenang'}`;
+  const credential = crypto.createHmac('sha1', sharedSecret).update(username).digest('base64');
+  return { url, username, credential };
 }

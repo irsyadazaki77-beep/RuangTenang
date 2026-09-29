@@ -127,14 +127,18 @@ export function ChatHeader({
                     onChange={e => setAiModel(e.target.value)}
                     className="w-full text-xs bg-stone-50 dark:bg-slate-800 border border-stone-200/70 dark:border-slate-700 rounded-lg px-2 py-1.5 text-stone-800 dark:text-slate-200 outline-none focus:border-teal-500 cursor-pointer"
                   >
-                    {AVAILABLE_AI_MODELS.map(m => {
-                      const isAllowed = m.allowedTiers.includes(user?.tier || 'Free');
-                      return (
-                        <option key={m.id} value={m.id} disabled={!isAllowed}>
-                          {m.name} {!isAllowed ? '(Pro Tier)' : ''}
-                        </option>
-                      );
-                    })}
+                    {Array.from(new Set(AVAILABLE_AI_MODELS.map(m => m.category))).map(category => (
+                      <optgroup key={category} label={category} className="font-semibold text-stone-500 dark:text-slate-400">
+                        {AVAILABLE_AI_MODELS.filter(m => m.category === category).map(m => {
+                          const isAllowed = m.allowedTiers.includes(user?.tier || 'Free');
+                          return (
+                            <option key={m.id} value={m.id} disabled={!isAllowed} className="font-normal text-stone-800 dark:text-slate-200">
+                              {m.name} {!isAllowed ? '(Pro Tier)' : ''}
+                            </option>
+                          );
+                        })}
+                      </optgroup>
+                    ))}
                   </select>
                 </div>
 

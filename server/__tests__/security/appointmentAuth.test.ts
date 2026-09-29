@@ -304,9 +304,18 @@ describe('Appointment Security & IDOR Prevention Tests', () => {
       expect(res.body.success).toBe(true);
       expect(Array.isArray(res.body.iceServers)).toBe(true);
       expect(res.body.iceServers[0].urls).toBe('stun:stun.l.google.com:19302');
-      expect(res.body.iceServers[1].urls).toBe(process.env.TURN_URL || 'turn:turn.ruangtenang.ui.ac.id:3478');
-      expect(res.body.iceServers[1].username).toBeDefined();
-      expect(res.body.iceServers[1].credential).toBeDefined();
+      const responseBody = JSON.stringify(res.body);
+      for (const name of ['JWT_SECRET', 'ENCRYPTION_KEY', 'BLIND_INDEX_SECRET', 'DATABASE_URL', 'GEMINI_API_KEY', 'TURN_SHARED_SECRET']) {
+        const value = process.env[name];
+        if (value) expect(responseBody).not.toContain(value);
+      }
+      if (process.env.TURN_URL && process.env.TURN_SHARED_SECRET) {
+        expect(res.body.iceServers[1].urls).toBe(process.env.TURN_URL);
+        expect(res.body.iceServers[1].username).toMatch(/^\d+:/);
+        expect(res.body.iceServers[1].credential).not.toBe(process.env.TURN_SHARED_SECRET);
+      } else {
+        expect(res.body.iceServers).toHaveLength(1);
+      }
     });
 
     it('Scenario 7: Authorized counselor (User 2) accessing /ice-servers MUST return HTTP 200 and dynamic iceServers config', async () => {

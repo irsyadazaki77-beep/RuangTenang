@@ -25,13 +25,21 @@
    - `npm run start`
 
 ## 3. Post-Deployment Verification
-- [ ] Check `/api/v1/health` endpoint returns `{ status: "healthy" }` (HTTP 200).
+- [ ] Check Liveness endpoint `/api/v1/health` returns `{ "status": "healthy" }` (HTTP 200).
+- [ ] Check Readiness endpoint `/api/v1/readiness` returns `{ "status": "ready", "database": "connected" }` (HTTP 200).
 - [ ] Verify HTTPS & CSP headers (`Cache-Control: no-store` on API responses).
 - [ ] Test guest chat streaming & AI proxy response.
 - [ ] Confirm emergency helpline contacts load correctly.
+- [ ] Run production smoke test (`npm run test:security`).
 
 ## 4. Rollback Plan
-- In case of critical failure:
-  1. Revert container image tag to previous stable build.
-  2. Restore database backup from `backups/` if schema changes occurred.
-  3. Restart production container instance.
+- In case of critical application failure:
+  1. Revert container image tag to previous stable image (`docker compose -f docker-compose.prod.yml down && docker compose -f docker-compose.prod.yml up -d`).
+  2. If database migration failed or schema became incompatible:
+     - Halt application container rollout immediately.
+     - Restore PostgreSQL snapshot:
+       ```bash
+       gunzip -c backups/db_backup_TIMESTAMP.sql.gz | docker exec -i ruangtenang_db_prod psql -U ruangtenang_admin -d ruangtenang_prod
+       ```
+     - Resolve failed migration marker: `npx prisma migrate resolve --rolled-back <MIGRATION_NAME> --schema prisma/schema.postgres.prisma`.
+  3. Verify recovery via `/api/v1/health` and `/api/v1/readiness`.

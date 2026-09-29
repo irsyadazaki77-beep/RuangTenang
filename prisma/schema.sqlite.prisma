@@ -523,6 +523,8 @@ model ClinicalSoapNotes {
 
   @@index([studentUserId])
   @@index([counselorUserId])
+  @@index([counselorUserId, createdAt])
+  @@index([riskLevel])
   @@index([createdAt])
 }
 

@@ -245,6 +245,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
   const [historyList, setHistoryList] = useState<ScreeningResult[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [errorHistory, setErrorHistory] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   // Safety check state for PHQ-9 Question #9
   const [showSafetyCheckModal, setShowSafetyCheckModal] = useState<boolean>(false);
@@ -362,6 +363,9 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
   };
 
   const calculateResultsWithAnswers = async (latestPhq: number[], latestGad: number[]) => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+
     const phqScore = latestPhq.reduce((a, b) => (b !== -1 ? a + b : a), 0);
     const gadScore = latestGad.reduce((a, b) => (b !== -1 ? a + b : a), 0);
     const item9Score = latestPhq[8] !== -1 ? latestPhq[8] : 0;
@@ -414,12 +418,14 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
     const isGuest = !user || user.role === 'guest';
     if (isGuest) {
       setPersistenceStatus('local-only');
+      setIsSubmitting(false);
       return;
     }
 
     if (!navigator.onLine) {
       setPersistenceStatus('failed');
       setPersistenceError('Perangkat sedang luring. Pengecekan selesai, tetapi penyimpanan ke server gagal.');
+      setIsSubmitting(false);
       return;
     }
 
@@ -447,6 +453,8 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
       setPersistenceStatus('failed');
       const errorMessage = err instanceof Error ? err.message : 'Pengecekan selesai, tetapi penyimpanan ke server gagal.';
       setPersistenceError(errorMessage);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -733,9 +741,9 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
               <div className="flex items-center gap-2">
                 <button
                   onClick={handleNextQuestion}
-                  disabled={!hasCurrentAnswer}
+                  disabled={!hasCurrentAnswer || isSubmitting}
                   className={`flex items-center justify-center gap-1.5 px-5 py-2 min-h-[44px] sm:min-h-[36px] rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer btn-tactile ${
-                    hasCurrentAnswer
+                    hasCurrentAnswer && !isSubmitting
                       ? 'bg-teal-600 text-white hover:bg-teal-700 shadow-3xs'
                       : 'bg-slate-100 dark:bg-slate-800 text-muted border border-default cursor-not-allowed opacity-60'
                   }`}

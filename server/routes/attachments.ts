@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import multer from 'multer';
+import { prisma } from '../database.js';
 import { optionalAuth, requireAuth } from '../middleware/auth.js';
 import { attachmentStorageService, MAX_FILE_SIZE, MAX_ATTACHMENTS_PER_MESSAGE } from '../services/attachmentStorageService.js';
 
@@ -14,7 +15,7 @@ const upload = multer({
   }
 });
 
-// Helper for sending structured error
+// Helper for sending structured error without leaking stack traces
 const sendAttachmentError = (res: Response, code: string, message: string, status = 400) => {
   return res.status(status).json({
     success: false,
@@ -40,7 +41,7 @@ router.post(
             return sendAttachmentError(res, 'FILE_TOO_LARGE', 'Ukuran berkas melebihi batas maksimum 5MB', 400);
           }
           if (err.code === 'LIMIT_FILE_COUNT') {
-            return sendAttachmentError(res, 'TOO_MANY_FILES', 'Maksimal 3 lampiran diperbolehkan', 400);
+            return sendAttachmentError(res, 'TOO_MANY_FILES', 'Maksimal 3 lampiran diperbolehkan per pesan', 400);
           }
           return sendAttachmentError(res, 'UPLOAD_ERROR', err.message, 400);
         }
@@ -55,6 +56,22 @@ router.post(
       const files = (req.files as Express.Multer.File[]) || [];
       const { chatId } = req.body;
 
+      // Validate chat ownership if chatId is provided
+      if (chatId) {
+        const chat = await prisma.chats.findUnique({
+          where: { id: chatId }
+        });
+        if (chat) {
+          // Check ownership: chat must belong to authenticated user (or both guest)
+          if (chat.userId !== userId) {
+            return sendAttachmentError(res, 'UNAUTHORIZED_ACCESS', 'Anda tidak memiliki akses ke percakapan ini.', 403);
+          }
+        } else if (userId !== 'guest') {
+          // If chatId specified for authenticated user doesn't exist yet, return 404
+          return sendAttachmentError(res, 'NOT_FOUND', 'Percakapan tujuan tidak ditemukan.', 404);
+        }
+      }
+
       // Handle raw buffer or single file fallback if uploaded as single file 'file'
       let fileList = files;
       if (!fileList.length && (req as any).file) {
@@ -62,7 +79,7 @@ router.post(
       }
 
       if (!fileList || fileList.length === 0) {
-        return sendAttachmentError(res, 'NO_FILES_PROVIDED', 'Tidak ada berkas yang diunggah', 400);
+        return sendAttachmentError(res, 'EMPTY_FILE', 'Tidak ada berkas yang diunggah', 400);
       }
 
       if (fileList.length > MAX_ATTACHMENTS_PER_MESSAGE) {
@@ -97,13 +114,23 @@ router.post(
             url: `/api/v1/chat/attachments/${saved.id}`
           });
         } catch (fileErr: any) {
-          console.warn(`[ATTACHMENT_UPLOAD_REJECTED] ${fileErr.message}`);
-          return sendAttachmentError(
-            res,
-            fileErr.message.split(':')[0] || 'INVALID_FILE',
-            fileErr.message.split(':').slice(1).join(':').trim() || fileErr.message,
-            400
-          );
+          const rawMessage = fileErr.message || '';
+          const parts = rawMessage.split(':');
+          const rawCode = parts[0] ? parts[0].trim() : 'INVALID_FILE';
+          const msg = parts.slice(1).join(':').trim() || fileErr.message || 'Berkas tidak valid.';
+
+          // Map error codes accurately
+          let code = 'INVALID_FILE';
+          if (rawCode === 'FILE_TOO_LARGE') code = 'FILE_TOO_LARGE';
+          else if (rawCode === 'EMPTY_FILE') code = 'EMPTY_FILE';
+          else if (rawCode === 'SECURITY_REJECTED' || rawCode.startsWith('PROMPT_INJECTION')) code = 'SECURITY_REJECTED';
+          else if (rawCode === 'SIGNATURE_MISMATCH' || rawCode === 'INVALID_FILE_SIGNATURE') code = 'SIGNATURE_MISMATCH';
+          else if (rawCode === 'MIME_MISMATCH' || rawCode === 'EXTENSION_MIMETYPE_MISMATCH') code = 'MIME_MISMATCH';
+          else if (rawCode === 'UNSUPPORTED_FORMAT') code = 'UNSUPPORTED_TYPE';
+
+          // Safe metadata log only
+          console.warn(`[ATTACHMENT_UPLOAD_REJECTED] code=${code} size=${file.size}`);
+          return sendAttachmentError(res, code, msg, 400);
         }
       }
 
@@ -113,8 +140,8 @@ router.post(
         attachment: savedAttachments[0]
       });
     } catch (err: any) {
-      console.error('[ATTACHMENT_UPLOAD_FATAL_ERROR]', err);
-      return sendAttachmentError(res, 'INTERNAL_UPLOAD_ERROR', 'Terjadi kesalahan saat menyimpan lampiran', 500);
+      console.error('[ATTACHMENT_UPLOAD_FATAL_ERROR]', err?.message || 'Unknown error');
+      return sendAttachmentError(res, 'UPLOAD_FAILED', 'Terjadi kesalahan saat memproses unggahan lampiran', 500);
     }
   }
 );
@@ -174,13 +201,16 @@ router.post('/chat/attachments/:id/retry', optionalAuth, async (req: Request, re
     if (err.message.includes('OWNERSHIP_ERROR')) {
       return sendAttachmentError(res, 'UNAUTHORIZED_ACCESS', 'Anda tidak berhak memproses ulang berkas ini', 403);
     }
-    return sendAttachmentError(res, 'RETRY_FAILED', err.message || 'Gagal memproses ulang berkas', 400);
+    if (err.message.includes('PROCESSING_IN_PROGRESS')) {
+      return sendAttachmentError(res, 'PROCESSING_IN_PROGRESS', 'Dokumen sedang diproses, mohon tunggu.', 409);
+    }
+    return sendAttachmentError(res, 'RETRY_FAILED', err.safeMessage || err.message || 'Gagal memproses ulang berkas', 400);
   }
 });
 
 /**
  * Download/view attachment file endpoint
- * Validates chat ownership / IDOR access control
+ * Validates ownership and sends secure HTTP headers with sanitized Content-Disposition
  */
 router.get('/chat/attachments/:id', optionalAuth, async (req: Request, res: Response) => {
   try {
@@ -199,8 +229,17 @@ router.get('/chat/attachments/:id', optionalAuth, async (req: Request, res: Resp
 
     const { attachment, buffer } = result;
 
+    // Sanitize filename to prevent HTTP Header Injection / Response Splitting
+    const safeAsciiFilename = (attachment.filename || 'attachment.bin')
+      .replace(/["\r\n\0\\]/g, '_')
+      .trim();
+    const encodedFilename = encodeURIComponent(attachment.filename || 'attachment.bin');
+
     res.setHeader('Content-Type', attachment.mimeType);
-    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(attachment.filename)}"`);
+    res.setHeader(
+      'Content-Disposition',
+      `inline; filename="${safeAsciiFilename}"; filename*=UTF-8''${encodedFilename}`
+    );
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Content-Security-Policy', "default-src 'none'");
     res.setHeader('Cache-Control', 'private, no-cache, no-store, must-revalidate');
@@ -220,10 +259,14 @@ router.get('/chat/attachments/:id', optionalAuth, async (req: Request, res: Resp
 /**
  * Delete attachment endpoint
  */
-router.delete('/chat/attachments/:id', requireAuth, async (req: Request, res: Response) => {
+router.delete('/chat/attachments/:id', optionalAuth, async (req: Request, res: Response) => {
   try {
-    const userId = req.user!.userId;
+    const userId = req.user?.userId || 'guest';
     const attachmentId = req.params.id;
+
+    if (!attachmentId) {
+      return sendAttachmentError(res, 'MISSING_ATTACHMENT_ID', 'ID Lampiran tidak ditemukan', 400);
+    }
 
     const success = await attachmentStorageService.deleteAttachment(attachmentId, userId);
     if (!success) {
@@ -232,7 +275,7 @@ router.delete('/chat/attachments/:id', requireAuth, async (req: Request, res: Re
 
     return res.json({ success: true, message: 'Berkas berhasil dihapus' });
   } catch (err: any) {
-    if (err.message.includes('UNAUTHORIZED_ACCESS')) {
+    if (err.message.includes('UNAUTHORIZED_ACCESS') || err.message.includes('OWNERSHIP_ERROR')) {
       return sendAttachmentError(res, 'UNAUTHORIZED_ACCESS', 'Anda tidak berhak menghapus berkas ini', 403);
     }
     return sendAttachmentError(res, 'DELETE_ATTACHMENT_FAILED', 'Gagal menghapus berkas lampiran', 500);

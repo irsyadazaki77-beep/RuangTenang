@@ -8,7 +8,7 @@ import { DocumentExtractor } from './documentExtractor.js';
 import { normalizationService } from './normalizationService.js';
 import { chunkingService } from './chunkingService.js';
 import { DocumentProcessingException, DEFAULT_FILE_LIMITS } from './fileTypes.js';
-import { AttachmentResponseDTO, SupportedFileKind } from '../../../../shared/contracts/files.js';
+import { AttachmentResponseDTO, SupportedFileKind } from '../../../shared/contracts/files.js';
 
 export const ATTACHMENTS_DIR = path.join(process.cwd(), 'uploads', 'attachments');
 
@@ -78,7 +78,7 @@ export const documentIngestionService = {
     const attachmentId = `att_${Date.now()}_${crypto.randomBytes(6).toString('hex')}`;
     const storageFilename = `${attachmentId}.bin`;
     const storagePath = path.join(ATTACHMENTS_DIR, storageFilename);
-    const relativeStoragePath = path.join('uploads', 'attachments', storageFilename);
+    const relativeStoragePath = `uploads/attachments/${storageFilename}`;
 
     await fs.promises.writeFile(storagePath, buffer, { mode: 0o600 });
 
@@ -230,6 +230,30 @@ export const documentIngestionService = {
 
     if (attachment.userId !== userId && !(attachment.userId === 'guest' && userId === 'guest')) {
       throw new DocumentProcessingException('OWNERSHIP_ERROR', 'Anda tidak memiliki hak akses ke dokumen ini.');
+    }
+
+    if (attachment.status === 'processing') {
+      throw new DocumentProcessingException('PROCESSING_IN_PROGRESS' as any, 'Dokumen sedang diproses, mohon tunggu.');
+    }
+
+    if (attachment.status === 'ready') {
+      let meta: any = {};
+      try { if (attachment.metadata) meta = JSON.parse(attachment.metadata); } catch {}
+      return {
+        id: attachment.id,
+        filename: attachment.filename,
+        mimeType: attachment.mimeType,
+        fileKind: (attachment.fileKind as SupportedFileKind) || 'text',
+        size: attachment.size,
+        status: 'ready',
+        url: `/api/v1/chat/attachments/${attachment.id}`,
+        checksum: attachment.checksum || undefined,
+        pageCount: meta.pageCount,
+        slideCount: meta.slideCount,
+        sheetCount: meta.sheetCount,
+        createdAt: attachment.createdAt.toISOString(),
+        processedAt: attachment.processedAt?.toISOString()
+      };
     }
 
     const fullPath = path.isAbsolute(attachment.data)

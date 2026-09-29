@@ -20,6 +20,7 @@ import {
 import { WorkspaceMode } from '../../../features/workspace/types';
 import { SidebarTooltip } from './SidebarTooltip';
 import { usePrivacyVault } from '../../../contexts/PrivacyVaultContext';
+import { useAuth } from '../../../contexts/AuthContext';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface SidebarNavLinksProps {
@@ -41,8 +42,13 @@ export const SidebarNavLinks: React.FC<SidebarNavLinksProps> = ({
 }) => {
   const location = useLocation();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const { isVaultConfigured, isVaultUnlocked, lockVault, triggerPanicScreen } = usePrivacyVault();
   
+  const canAccessCounselorPortal = Boolean(
+    user && (user.role === 'konselor' || user.role === 'admin' || (user.role as string) === 'peer_counselor')
+  );
+
   // Default expanded if currently on a secondary route
   const [isExpanded, setIsExpanded] = useState(() => location.pathname !== '/');
 
@@ -382,23 +388,25 @@ export const SidebarNavLinks: React.FC<SidebarNavLinksProps> = ({
                   </span>
                 </button>
 
-                <button 
-                  type="button"
-                  onClick={() => handleNavigate('/counselor-portal')} 
-                  className={`w-full flex items-center justify-between px-2 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-                    location.pathname === '/counselor-portal'
-                      ? 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 font-semibold'
-                      : 'text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50/70 dark:hover:bg-indigo-950/30'
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <Stethoscope className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
-                    <span>Portal Konselor</span>
-                  </div>
-                  <span className="text-[9px] bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 px-1 rounded font-bold">
-                    Klinis
-                  </span>
-                </button>
+                {canAccessCounselorPortal && (
+                  <button 
+                    type="button"
+                    onClick={() => handleNavigate('/counselor-portal')} 
+                    className={`w-full flex items-center justify-between px-2 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+                      location.pathname === '/counselor-portal'
+                        ? 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 font-semibold'
+                        : 'text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50/70 dark:hover:bg-indigo-950/30'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Stethoscope className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                      <span>Portal Konselor</span>
+                    </div>
+                    <span className="text-[9px] bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 px-1 rounded font-bold">
+                      Klinis
+                    </span>
+                  </button>
+                )}
               </>
             )}
           </motion.div>

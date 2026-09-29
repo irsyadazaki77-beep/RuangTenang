@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { DocumentChunk } from '../../../../shared/contracts/files.js';
+import { DocumentChunk } from '../../../shared/contracts/files.js';
 import { NormalizedDocument } from './normalizationService.js';
 import { DEFAULT_FILE_LIMITS } from './fileTypes.js';
 

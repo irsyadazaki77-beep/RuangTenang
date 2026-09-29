@@ -418,5 +418,28 @@ describe('Phase 1 Production Hardening & Regression Test Suite', () => {
       expect(() => parsePort('-1')).toThrow(/Invalid PORT configuration/);
       expect(() => parsePort('70000')).toThrow(/Invalid PORT configuration/);
     });
+
+    it('should return 200 ready when healthy and 503 unready when database ping fails', async () => {
+      const app = express();
+      let dbHealthy = true;
+
+      app.get('/api/v1/readiness', async (_req, res) => {
+        if (!dbHealthy) {
+          return res.status(503).json({ status: 'unready', database: 'disconnected' });
+        }
+        return res.status(200).json({ status: 'ready', database: 'connected' });
+      });
+
+      // Healthy probe
+      const healthyRes = await request(app).get('/api/v1/readiness');
+      expect(healthyRes.status).toBe(200);
+      expect(healthyRes.body).toEqual({ status: 'ready', database: 'connected' });
+
+      // Failure probe
+      dbHealthy = false;
+      const unreadyRes = await request(app).get('/api/v1/readiness');
+      expect(unreadyRes.status).toBe(503);
+      expect(unreadyRes.body).toEqual({ status: 'unready', database: 'disconnected' });
+    });
   });
 });

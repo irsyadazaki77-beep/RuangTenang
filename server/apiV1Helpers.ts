@@ -304,6 +304,7 @@ export async function idempotencyMiddleware(req: Request, res: Response, next: N
       if (res.statusCode >= 200 && res.statusCode < 300) {
         const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24-hour retention
         
+        // Asynchronously upsert record but also handle synchronous return if needed
         prisma.idempotencyRecord.upsert({
           where: { key: compositeKey },
           update: {
@@ -324,7 +325,13 @@ export async function idempotencyMiddleware(req: Request, res: Response, next: N
           }
         }).catch(err => {
           console.error('[IDEMPOTENCY_SAVE_ERROR] Failed to save idempotency:', err);
+        }).finally(() => {
+          // If response not yet finished/sent
+          if (!res.writableEnded) {
+            originalJson(body);
+          }
         });
+        return res;
       }
       return originalJson(body);
     };
@@ -829,8 +836,10 @@ export function centralizedErrorHandler(err: any, req: Request, res: Response, _
   }
 
   // 5. General Error Response (strictly generic in production to prevent stack/path leakage)
-  const safeMessage = (isProd && statusCode >= 500)
-    ? 'Terjadi kesalahan internal pada server. Silakan coba beberapa saat lagi.'
+  const safeMessage = isProd
+    ? (statusCode >= 500
+      ? 'Terjadi kesalahan internal pada server. Silakan coba beberapa saat lagi.'
+      : 'Permintaan tidak dapat diproses.')
     : (err.message || 'Terjadi kesalahan pada server.');
 
   const responseErrorCode = statusCode >= 500 ? 'INTERNAL_SERVER_ERROR' : (err.code || 'API_ERROR');

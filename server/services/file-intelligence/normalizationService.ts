@@ -1,4 +1,4 @@
-import { DocumentBlock, ExtractedDocument } from '../../../../shared/contracts/files.js';
+import { DocumentBlock, ExtractedDocument } from '../../../shared/contracts/files.js';
 
 export interface NormalizedDocument {
   documentId: string;
