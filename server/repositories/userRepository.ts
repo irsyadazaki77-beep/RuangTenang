@@ -1,7 +1,7 @@
 import { prisma } from "../database";
 import { UserRecord, ActiveSession, LoginHistoryEntry, SecurityNotification } from "../database";
 import { auditRepository } from "./auditRepository";
-import crypto from "crypto";
+import { hashIpAddress, maskIpAddress } from '../utils/ipPrivacy';
 
 const HARD_MAX_PAGE_SIZE = 100;
 
@@ -22,7 +22,8 @@ export async function migrateLegacyUserDataIfNeeded(user: any): Promise<void> {
                 id: session.sessionId,
                 userId: user.id,
                 device: session.device || "Unknown",
-                ip: session.ip || session.ipAddress || "127.0.0.1",
+                ip: maskIpAddress(session.ip || session.ipAddress || "127.0.0.1"),
+                ipHash: hashIpAddress(session.ip || session.ipAddress || "127.0.0.1"),
                 userAgent: session.userAgent || "Unknown",
                 createdAt: session.createdAt ? new Date(session.createdAt) : new Date(),
                 lastActive: session.lastActive ? new Date(session.lastActive) : new Date(),
@@ -52,7 +53,8 @@ export async function migrateLegacyUserDataIfNeeded(user: any): Promise<void> {
                 id: event.id,
                 userId: user.id,
                 timestamp: event.timestamp ? new Date(event.timestamp) : new Date(),
-                ip: event.ip || "127.0.0.1",
+                ip: maskIpAddress(event.ip || "127.0.0.1"),
+                ipHash: hashIpAddress(event.ip || "127.0.0.1"),
                 userAgent: event.userAgent || "Unknown",
                 status: event.status || "SUCCESS",
                 location: event.location || null,
@@ -166,7 +168,7 @@ export async function mapUserToRecord(u: any): Promise<UserRecord> {
     activeSessions: sessions.map(s => ({
       sessionId: s.id,
       device: s.device,
-      ip: s.ip,
+      ip: maskIpAddress(s.ip),
       userAgent: s.userAgent,
       createdAt: s.createdAt.toISOString(),
       lastActive: s.lastActive.toISOString(),
@@ -174,7 +176,7 @@ export async function mapUserToRecord(u: any): Promise<UserRecord> {
     loginHistory: loginEvents.map(e => ({
       id: e.id,
       timestamp: e.timestamp.toISOString(),
-      ip: e.ip,
+      ip: maskIpAddress(e.ip),
       userAgent: e.userAgent,
       status: e.status as any,
       location: e.location || undefined,

@@ -238,7 +238,7 @@ router.get('/soap-notes', generalApiLimiter, requireAuth, requireCounselorPortal
       riskLevel: note.riskLevel,
       createdAt: note.createdAt,
       updatedAt: note.updatedAt,
-      isEncryptedEndToEnd: true
+      isEncryptedAtRest: true
     }));
 
     if (notes.length > 0) {

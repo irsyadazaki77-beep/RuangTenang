@@ -9,6 +9,35 @@ interface MermaidRendererProps {
   onRequestFixDiagram?: (rawCode: string) => void;
 }
 
+const SVG_ELEMENTS = new Set(['svg', 'g', 'path', 'rect', 'circle', 'ellipse', 'line', 'polyline', 'polygon', 'text', 'tspan', 'title', 'desc', 'defs', 'marker', 'linearGradient', 'radialGradient', 'stop', 'clipPath', 'mask', 'pattern']);
+const SVG_ATTRIBUTES = new Set(['xmlns', 'viewBox', 'width', 'height', 'x', 'y', 'x1', 'x2', 'y1', 'y2', 'cx', 'cy', 'r', 'rx', 'ry', 'd', 'points', 'transform', 'fill', 'fill-rule', 'fill-opacity', 'stroke', 'stroke-width', 'stroke-dasharray', 'stroke-dashoffset', 'stroke-linecap', 'stroke-linejoin', 'stroke-opacity', 'opacity', 'font-family', 'font-size', 'font-weight', 'text-anchor', 'dominant-baseline', 'alignment-baseline', 'class', 'id', 'role', 'aria-roledescription', 'marker-start', 'marker-mid', 'marker-end', 'offset', 'stop-color', 'stop-opacity', 'clip-path', 'mask', 'style', 'preserveAspectRatio', 'xmlns:xlink']);
+
+/** Mermaid SVG is untrusted markup. Keep only static diagram primitives and local fragment references. */
+export function sanitizeMermaidSvg(svg: string): string {
+  const parsed = new DOMParser().parseFromString(svg, 'image/svg+xml');
+  const root = parsed.documentElement;
+  if (root.localName !== 'svg' || parsed.querySelector('parsererror')) return '';
+  const visit = (element: Element) => {
+    for (const child of Array.from(element.children)) {
+      if (!SVG_ELEMENTS.has(child.localName)) { child.remove(); continue; }
+      visit(child);
+    }
+    for (const attribute of Array.from(element.attributes)) {
+      const name = attribute.name;
+      const value = attribute.value.trim();
+      const isReference = name === 'href' || name === 'xlink:href';
+      const safeReference = isReference && value.startsWith('#') && !value.includes('\\');
+      const containsControl = Array.from(value).some(character => character.charCodeAt(0) < 0x20);
+      const safeStyle = name !== 'style' || (!/(?:url\s*\(|expression\s*\(|@import|javascript:|data:|behavior\s*:|-moz-binding)/i.test(value) && !value.includes('\\') && !containsControl);
+      if ((!SVG_ATTRIBUTES.has(name) && !safeReference) || /^on/i.test(name) || !safeStyle || /(?:javascript\s*:|data\s*:\s*text\/html)/i.test(value)) {
+        element.removeAttribute(name);
+      }
+    }
+  };
+  visit(root);
+  return root.outerHTML;
+}
+
 export const MermaidRenderer: React.FC<MermaidRendererProps> = ({ 
   chart, 
   title, 
@@ -37,7 +66,7 @@ export const MermaidRenderer: React.FC<MermaidRendererProps> = ({
         mermaid.initialize({
           startOnLoad: false,
           theme: isDarkMode ? 'dark' : 'neutral',
-          securityLevel: 'loose',
+          securityLevel: 'strict',
           fontFamily: 'system-ui, -apple-system, sans-serif',
           themeVariables: isDarkMode ? {
             primaryColor: '#059669',
@@ -59,7 +88,9 @@ export const MermaidRenderer: React.FC<MermaidRendererProps> = ({
         
         const { svg } = await mermaid.render(uniqueId, cleanChart);
         if (isMounted) {
-          setSvgContent(svg);
+          const safeSvg = sanitizeMermaidSvg(svg);
+          if (!safeSvg) throw new Error('SVG diagram tidak lolos sanitasi keamanan.');
+          setSvgContent(safeSvg);
           setLoading(false);
         }
       } catch (err: any) {

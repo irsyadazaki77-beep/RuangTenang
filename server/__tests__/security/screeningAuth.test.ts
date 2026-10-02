@@ -123,9 +123,9 @@ describe('Screening Authorization Security Tests', () => {
     expect(res.body[0].userId).toBe('student-1');
   });
 
-  it('Allows admin to fetch all data', async () => {
+  it('Denies admin access to all individual screening records', async () => {
     const res = await request(app).get('/api/screenings').set('Authorization', `Bearer ${adminToken}`);
-    expect(res.status).toBe(200);
-    expect(res.body.length).toBeGreaterThanOrEqual(2);
+    expect(res.status).toBe(403);
+    expect(res.body.error).toBe('CONSENT_DENIED');
   });
 });

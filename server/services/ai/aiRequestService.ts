@@ -32,6 +32,10 @@ export function selectReliableModelCandidates(options: AiRequestOptions, primary
   for (const modelId of options.fallbackCandidates || options.routingDecision.fallbackCandidates || []) {
     const model = getModelDefinition(modelId);
     if (!model || selected.includes(modelId) || !isModelAllowedForTier(modelId, options.userTier || 'Free')) continue;
+    const providerAvailable = model.provider === 'gemini'
+      ? Boolean(getGenAIClient())
+      : AI_PROVIDER_ADAPTERS[model.provider].isAvailable();
+    if (!providerAvailable) continue;
     if (!model.capabilities.includes(requirements.capability) || (requirements.hasAttachments && model.provider !== 'gemini')) continue;
     selected.push(modelId);
     if (selected.length === 3) break;
@@ -127,7 +131,7 @@ Pedoman Interaksi:
         let outputText = '';
         if (model.provider === 'gemini') {
           const client = getGenAIClient();
-          if (!client) throw new Error('PROVIDER_NOT_CONFIGURED');
+          if (!client) throw Object.assign(new Error('PROVIDER_NOT_CONFIGURED'), { category: 'PROVIDER_UNAVAILABLE', retryable: true });
           const response = await executeWithReliability(model.provider, signal => geminiAdapter.generate(client, {
             model: getActualGeminiModel(modelId),
             contents: [...sanitizedHistory, { role: 'user', parts: userParts }],
@@ -136,7 +140,7 @@ Pedoman Interaksi:
           outputText = response.text || '';
         } else {
           const adapter = AI_PROVIDER_ADAPTERS[model.provider];
-          if (!adapter.isAvailable()) throw new Error('PROVIDER_NOT_CONFIGURED');
+          if (!adapter.isAvailable()) throw Object.assign(new Error('PROVIDER_NOT_CONFIGURED'), { category: 'PROVIDER_UNAVAILABLE', retryable: true });
           const response = await executeWithReliability(model.provider, signal => adapter.generate({
             ...options,
             requestedModelId: modelId,
@@ -255,7 +259,7 @@ Pedoman Interaksi:
         let source: AsyncGenerator<any, any, unknown>;
         if (model.provider === 'gemini') {
           const client = getGenAIClient();
-          if (!client) throw new Error('PROVIDER_NOT_CONFIGURED');
+          if (!client) throw Object.assign(new Error('PROVIDER_NOT_CONFIGURED'), { category: 'PROVIDER_UNAVAILABLE', retryable: true });
           source = await executeWithReliability(model.provider, signal => {
             signal.addEventListener('abort', onParentAbort, { once: true });
             return geminiAdapter.generateStream(client, {
@@ -266,7 +270,7 @@ Pedoman Interaksi:
           }, streamController.signal, requestId);
         } else {
           const adapter = AI_PROVIDER_ADAPTERS[model.provider];
-          if (!adapter.isAvailable()) throw new Error('PROVIDER_NOT_CONFIGURED');
+          if (!adapter.isAvailable()) throw Object.assign(new Error('PROVIDER_NOT_CONFIGURED'), { category: 'PROVIDER_UNAVAILABLE', retryable: true });
           const result = await executeWithReliability(model.provider, signal => {
             signal.addEventListener('abort', onParentAbort, { once: true });
             return adapter.generateStream({

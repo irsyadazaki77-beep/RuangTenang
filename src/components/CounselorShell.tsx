@@ -1,12 +1,13 @@
-import React, { Suspense, useState } from 'react';
+import React, { Suspense } from 'react';
 import { UserSession } from '../types';
 import { lazyWithRetry } from '../lib/lazyWithRetry';
 import { GlobalOverlays } from './GlobalOverlays';
-import { useNavigate } from 'react-router-dom';
+import { NavLink, Route, Routes, useNavigate } from 'react-router-dom';
 import { LayoutDashboard, Stethoscope, Settings, LogOut } from 'lucide-react';
+import { counselorRoutes } from '../app/routes/counselorRoutes';
+import { LoadingState } from './ui/primitives/Surfaces';
+import { FeatureErrorBoundary } from './error/FeatureErrorBoundary';
 
-const CounselorDashboard = lazyWithRetry(() => import('../features/counselors/CounselorDashboard').then(module => ({ default: module.CounselorDashboard })));
-const CounselorPortal = lazyWithRetry(() => import('../features/counselor-portal/CounselorPortal').then(module => ({ default: module.CounselorPortal })));
 const SettingsPage = lazyWithRetry(() => import('../features/settings/SettingsPage').then(module => ({ default: module.SettingsPage })));
 
 interface CounselorShellProps {
@@ -45,7 +46,6 @@ export const CounselorShell: React.FC<CounselorShellProps> = ({
   handleLogout
 }) => {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'portal'>('dashboard');
 
   return (
     <div className="flex flex-col min-h-[100dvh] w-full surface-page text-primary font-sans relative overflow-hidden">
@@ -65,30 +65,14 @@ export const CounselorShell: React.FC<CounselorShellProps> = ({
 
         {/* View Switcher Tabs */}
         <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl border border-default">
-          <button
-            type="button"
-            onClick={() => setActiveTab('dashboard')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-              activeTab === 'dashboard'
-                ? 'bg-white dark:bg-slate-700 text-teal-700 dark:text-teal-300 shadow-3xs'
-                : 'text-secondary hover:text-primary'
-            }`}
-          >
+          <NavLink to="/counselor/dashboard" className={({ isActive }) => `flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${isActive ? 'bg-white dark:bg-slate-700 text-teal-700 dark:text-teal-300 shadow-3xs' : 'text-secondary hover:text-primary'}`}>
             <LayoutDashboard className="w-3.5 h-3.5" />
             <span>Dashboard & Antrean</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('portal')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-              activeTab === 'portal'
-                ? 'bg-white dark:bg-slate-700 text-indigo-700 dark:text-indigo-300 shadow-3xs'
-                : 'text-secondary hover:text-primary'
-            }`}
-          >
+          </NavLink>
+          <NavLink to="/counselor/portal" className={({ isActive }) => `flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${isActive ? 'bg-white dark:bg-slate-700 text-indigo-700 dark:text-indigo-300 shadow-3xs' : 'text-secondary hover:text-primary'}`}>
             <Stethoscope className="w-3.5 h-3.5" />
             <span>Portal SOAP & Triase</span>
-          </button>
+          </NavLink>
         </div>
 
         {/* Quick Actions */}
@@ -116,11 +100,15 @@ export const CounselorShell: React.FC<CounselorShellProps> = ({
 
       <div className="flex-1 overflow-y-auto">
         <Suspense fallback={
-          <div className="flex h-64 items-center justify-center surface-page">
-            <div className="w-8 h-8 border-4 border-teal-500 border-t-transparent rounded-full animate-spin"></div>
+          <div className="h-64 flex items-center justify-center surface-page" role="status">
+            <LoadingState message="Memuat layanan konselor" className="p-4" />
           </div>
         }>
-          {activeTab === 'dashboard' ? <CounselorDashboard /> : <CounselorPortal />}
+          <Routes>
+            {counselorRoutes.map(route => (
+              <Route key={route.path} path={route.path} element={<FeatureErrorBoundary featureName="Ruang konselor">{route.element}</FeatureErrorBoundary>} />
+            ))}
+          </Routes>
         </Suspense>
       </div>
       {isSettingsOpen && (

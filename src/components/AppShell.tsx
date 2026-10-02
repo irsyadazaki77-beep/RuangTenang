@@ -1,352 +1,121 @@
-import React, { Suspense, useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import React, { Suspense, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { apiClient } from '../lib/apiClient';
-import { clientDb } from '../lib/clientDb';
-import { safeLocalStorage } from '../lib/storage';
-import { Chat } from '../features/chat/types';
-import { useToast } from './Toast';
-import { Counselor } from '../types';
 import { WorkspaceMode } from '../features/workspace/types';
+import { getModeHomePath } from '../features/workspace/utils/workspaceRouting';
 import { lazyWithRetry } from '../lib/lazyWithRetry';
-import { getModeHomePath, getWorkspaceModeFromPath } from '../features/workspace/utils/workspaceRouting';
+import { useAppInitialization } from '../app/hooks/useAppInitialization';
+import { useAppModals } from '../app/hooks/useAppModals';
+import { useGlobalShortcuts } from '../app/hooks/useGlobalShortcuts';
+import { useChatLibrary } from '../features/chat/hooks/useChatLibrary';
+import { useOfflineSync } from '../features/offline/useOfflineSync';
+import { useToast } from './Toast';
+import { LoadingState } from './ui/primitives/Surfaces';
 
 const CounselorShell = lazyWithRetry(() => import('./CounselorShell').then(module => ({ default: module.CounselorShell })));
 const StudentShell = lazyWithRetry(() => import('./StudentShell').then(module => ({ default: module.StudentShell })));
 
+const ShellLoadingState: React.FC<{ label: string }> = ({ label }) => (
+  <div className="min-h-[100dvh] flex items-center justify-center surface-page" role="status" aria-label={label}>
+    <LoadingState message={label} className="p-4" />
+  </div>
+);
+
 export const AppShell: React.FC = () => {
   const { user, setUser, isOffline, logout } = useAuth();
   const { showToast } = useToast();
-  
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-  const [isLegalDocsOpen, setIsLegalDocsOpen] = useState(false);
-  const [isChangelogOpen, setIsChangelogOpen] = useState(false);
-  const [chats, setChats] = useState<Chat[]>([]);
-  const [isLoadingChats, setIsLoadingChats] = useState(true);
-  const [selectedCounselor, setSelectedCounselor] = useState<Counselor | null>(null);
-  const [showOnboarding, setShowOnboarding] = useState(false);
-  const [isNotificationOpen, setIsNotificationOpen] = useState(false);
-  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const navigate = useNavigate();
-  const location = useLocation();
-  const workspaceMode = getWorkspaceModeFromPath(location.pathname);
+  const modals = useAppModals();
+  const appState = useAppInitialization(user);
+  const chatLibrary = useChatLibrary(user, showToast);
+  const { setChats } = chatLibrary;
+  const { setIsCommandPaletteOpen } = modals;
 
-  const handleSwitchMode = (mode: WorkspaceMode) => {
+  const handleSwitchMode = useCallback((mode: WorkspaceMode) => {
     navigate(getModeHomePath(mode));
-  };
-
-  // Persist the last route-derived mode as a preference; never use it to choose the active screen.
-  useEffect(() => {
-    safeLocalStorage.setItem('ruangtenang_workspace_mode', workspaceMode);
-  }, [workspaceMode]);
-
-  // Check onboarding status
-  useEffect(() => {
-    let isCancelled = false;
-    const checkOnboardingStatus = async () => {
-      if (!user?.id || user.role === 'konselor') {
-        setShowOnboarding(false);
-        return;
-      }
-
-      // Check local cache first for instant UX
-      const localCompleted = safeLocalStorage.getItem(`rt_onboarding_completed_${user.id}`);
-      if (localCompleted === 'true') {
-        setShowOnboarding(false);
-        return;
-      }
-
-      // Check encrypted IndexedDB
-      try {
-        const encryptedRecord = await clientDb.getDecrypted(`onboarding_${user.id}`);
-        if (encryptedRecord) {
-          const parsed = JSON.parse(encryptedRecord);
-          if (parsed?.completed) {
-            safeLocalStorage.setItem(`rt_onboarding_completed_${user.id}`, 'true');
-            if (!isCancelled) setShowOnboarding(false);
-            return;
-          }
-        }
-      } catch {
-        // ignore
-      }
-
-      // Check backend
-      if (user.role !== 'guest') {
-        try {
-          const res = await apiClient.get<{ completed: boolean; goals?: string[] }>('/api/v1/user/onboarding');
-          if (!isCancelled && res.success && res.data) {
-            if (res.data.completed) {
-              safeLocalStorage.setItem(`rt_onboarding_completed_${user.id}`, 'true');
-              if (Array.isArray(res.data.goals) && res.data.goals.length > 0) {
-                safeLocalStorage.setItem(`rt_user_goals_${user.id}`, JSON.stringify(res.data.goals));
-              }
-              setShowOnboarding(false);
-              return;
-            }
-          }
-        } catch {
-          // ignore
-        }
-      }
-
-      if (!isCancelled) {
-        setShowOnboarding(true);
-      }
-    };
-
-    checkOnboardingStatus();
-    return () => { isCancelled = true; };
-  }, [user?.id, user?.role]);
-
-  // Read selected counselor from location state (for booking sessions)
-  useEffect(() => {
-    if (location.state && (location.state as any).selectedCounselor) {
-      setSelectedCounselor((location.state as any).selectedCounselor);
-    }
-  }, [location.state]);
-
-  const fetchChats = async () => {
-    if (!user || user.role === 'guest') {
-      setChats([]);
-      setIsLoadingChats(false);
-      return;
-    }
-    setIsLoadingChats(true);
-    try {
-      const res = await apiClient.get<Chat[]>('/api/v1/chat/history');
-      if (res.success && Array.isArray(res.data)) {
-        setChats(res.data);
-        try {
-          await clientDb.saveEncrypted(`chats_${user.id}`, JSON.stringify(res.data));
-        } catch {
-          // fallback
-        }
-      } else {
-        try {
-          const cachedJson = await clientDb.getDecrypted(`chats_${user.id}`);
-          if (cachedJson) {
-            setChats(JSON.parse(cachedJson));
-          } else {
-            setChats([]);
-          }
-        } catch {
-          setChats([]);
-        }
-        if (res.status !== 401) {
-          console.warn('Fetch chats failed:', res.error);
-        }
-      }
-    } catch (err) {
-      console.warn('Failed to fetch chat history:', err);
-      try {
-        const cachedJson = await clientDb.getDecrypted(`chats_${user.id}`);
-        if (cachedJson) {
-          setChats(JSON.parse(cachedJson));
-        } else {
-          setChats([]);
-        }
-      } catch {
-        setChats([]);
-      }
-    } finally {
-      setIsLoadingChats(false);
-    }
-  };
-
-  useEffect(() => {
-    if (user?.id) {
-      fetchChats();
-    }
-  }, [user?.id]);
-
-  // Automatic Offline Outbox Synchronization
-  useEffect(() => {
-    let isCancelled = false;
-    const handleOnlineSync = async () => {
-      try {
-        const synced = await clientDb.processOutboxQueue(apiClient);
-        if (synced > 0 && !isCancelled) {
-          showToast(`Berhasil menyinkronkan ${synced} data offline ke server`, 'success', 'Sinkronisasi Selesai');
-          fetchChats();
-        }
-      } catch (err) {
-        console.warn('Background sync error:', err);
-      }
-    };
-
-    window.addEventListener('online', handleOnlineSync);
-    if (navigator.onLine) {
-      handleOnlineSync();
-    }
-    return () => {
-      isCancelled = true;
-      window.removeEventListener('online', handleOnlineSync);
-    };
-  }, [user?.id]);
-
-  // Global hotkeys
-  useEffect(() => {
-    const handleKeydown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        setIsCommandPaletteOpen(prev => !prev);
-      } else if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'o') {
-        e.preventDefault();
-        navigate('/');
-      }
-    };
-    window.addEventListener('keydown', handleKeydown);
-    return () => window.removeEventListener('keydown', handleKeydown);
   }, [navigate]);
 
-  const handleDeleteChat = async (id: string) => {
-    const originalChats = [...chats];
-    try {
-      setChats(prev => prev.filter(c => c.id !== id));
-      if (location.pathname === `/c/${id}`) navigate('/');
-      const res = await apiClient.delete(`/api/v1/chat/${id}`);
-      if (!res.success) {
-        throw new Error(res.error || 'Failed to delete chat');
-      }
-    } catch (err: any) {
-      console.error('Failed to delete chat:', err);
-      showToast(err?.message || 'Gagal menghapus percakapan', 'error');
-      setChats(originalChats);
-      fetchChats();
-    }
-  };
-
-  const handleUpdateTitle = async (id: string, title: string) => {
-    const originalChats = [...chats];
-    try {
-      setChats(prev => prev.map(c => c.id === id ? { ...c, title } : c));
-      const res = await apiClient.put(`/api/v1/chat/${id}/title`, { title });
-      if (!res.success) {
-        throw new Error(res.error || 'Failed to update title');
-      }
-    } catch (err: any) {
-      console.error('Failed to update title:', err);
-      showToast(err?.message || 'Gagal mengubah judul percakapan', 'error');
-      setChats(originalChats);
-      fetchChats();
-    }
-  };
-
-  const handleTogglePin = async (id: string) => {
-    const originalChats = [...chats];
-    try {
-      setChats(prev => prev.map(c => c.id === id ? { ...c, isPinned: !c.isPinned } : c));
-      const res = await apiClient.put(`/api/v1/chat/${id}/pin`);
-      if (!res.success) {
-        throw new Error(res.error || 'Failed to toggle pin');
-      }
-    } catch (err: any) {
-      console.error('Failed to toggle pin:', err);
-      showToast(err?.message || 'Gagal menyematkan percakapan', 'error');
-      setChats(originalChats);
-      fetchChats();
-    }
-  };
-
-  const handleToggleArchive = async (id: string) => {
-    const chat = chats.find(c => c.id === id);
-    if (chat) {
-      const originalChats = [...chats];
-      try {
-        const nextState = !chat.isArchived;
-        setChats(prev => prev.map(c => c.id === id ? { ...c, isArchived: nextState } : c));
-        const res = await apiClient.put(`/api/v1/chat/${id}/archive`, { isArchived: nextState });
-        if (!res.success) {
-          throw new Error(res.error || 'Failed to toggle archive');
-        }
-      } catch (err: any) {
-        console.error('Failed to toggle archive:', err);
-        showToast(err?.message || 'Gagal mengarsip percakapan', 'error');
-        setChats(originalChats);
-        fetchChats();
-      }
-    }
-  };
-
-  const handleLogout = async () => {
+  const handleLogout = useCallback(async () => {
     try {
       await logout();
       setChats([]);
       navigate('/');
       showToast('Anda telah keluar dari akun.', 'info');
-    } catch (err: any) {
-      console.error('Logout error:', err);
-      showToast(err.message || 'Logout gagal.', 'error');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Logout gagal.';
+      console.error('Logout error:', error);
+      showToast(message, 'error');
     }
-  };
+  }, [logout, navigate, setChats, showToast]);
 
-  if (!user) {
-    return null; // Renders AuthGate at the App root level
-  }
+  const toggleCommandPalette = useCallback(() => {
+    setIsCommandPaletteOpen(open => !open);
+  }, [setIsCommandPaletteOpen]);
+  useGlobalShortcuts(toggleCommandPalette);
+  useOfflineSync(user?.id, chatLibrary.fetchChats, showToast);
+
+  if (!user) return null;
 
   if (user.role === 'konselor') {
     return (
-      <Suspense fallback={<div className="flex min-h-[100dvh] items-center justify-center surface-page" role="status" aria-label="Memuat ruang konselor"><span className="w-8 h-8 border-4 border-teal-500 border-t-transparent rounded-full animate-spin" /></div>}>
-      <CounselorShell
-        user={user}
-        setUser={setUser}
-        isSettingsOpen={isSettingsOpen}
-        setIsSettingsOpen={setIsSettingsOpen}
-        isAuthModalOpen={isAuthModalOpen}
-        setIsAuthModalOpen={setIsAuthModalOpen}
-        isLegalDocsOpen={isLegalDocsOpen}
-        setIsLegalDocsOpen={setIsLegalDocsOpen}
-        isChangelogOpen={isChangelogOpen}
-        setIsChangelogOpen={setIsChangelogOpen}
-        isNotificationOpen={isNotificationOpen}
-        setIsNotificationOpen={setIsNotificationOpen}
-        showOnboarding={showOnboarding}
-        setShowOnboarding={setShowOnboarding}
-        handleLogout={handleLogout}
-      />
+      <Suspense fallback={<ShellLoadingState label="Memuat ruang konselor" />}>
+        <CounselorShell
+          user={user}
+          setUser={setUser}
+          isSettingsOpen={modals.isSettingsOpen}
+          setIsSettingsOpen={modals.setIsSettingsOpen}
+          isAuthModalOpen={modals.isAuthModalOpen}
+          setIsAuthModalOpen={modals.setIsAuthModalOpen}
+          isLegalDocsOpen={modals.isLegalDocsOpen}
+          setIsLegalDocsOpen={modals.setIsLegalDocsOpen}
+          isChangelogOpen={modals.isChangelogOpen}
+          setIsChangelogOpen={modals.setIsChangelogOpen}
+          isNotificationOpen={modals.isNotificationOpen}
+          setIsNotificationOpen={modals.setIsNotificationOpen}
+          showOnboarding={appState.showOnboarding}
+          setShowOnboarding={appState.setShowOnboarding}
+          handleLogout={handleLogout}
+        />
       </Suspense>
     );
   }
 
   return (
-    <Suspense fallback={<div className="flex min-h-[100dvh] items-center justify-center surface-page" role="status" aria-label="Memuat ruang mahasiswa"><span className="w-8 h-8 border-4 border-teal-500 border-t-transparent rounded-full animate-spin" /></div>}>
-    <StudentShell
-      user={user}
-      setUser={setUser}
-      chats={chats}
-      setChats={setChats}
-      isLoadingChats={isLoadingChats}
-      isOffline={isOffline}
-      isSidebarOpen={isSidebarOpen}
-      setIsSidebarOpen={setIsSidebarOpen}
-      isSettingsOpen={isSettingsOpen}
-      setIsSettingsOpen={setIsSettingsOpen}
-      isAuthModalOpen={isAuthModalOpen}
-      setIsAuthModalOpen={setIsAuthModalOpen}
-      isLegalDocsOpen={isLegalDocsOpen}
-      setIsLegalDocsOpen={setIsLegalDocsOpen}
-      isChangelogOpen={isChangelogOpen}
-      setIsChangelogOpen={setIsChangelogOpen}
-      isNotificationOpen={isNotificationOpen}
-      setIsNotificationOpen={setIsNotificationOpen}
-      isCommandPaletteOpen={isCommandPaletteOpen}
-      setIsCommandPaletteOpen={setIsCommandPaletteOpen}
-      showOnboarding={showOnboarding}
-      setShowOnboarding={setShowOnboarding}
-      selectedCounselor={selectedCounselor}
-      setSelectedCounselor={setSelectedCounselor}
-      workspaceMode={workspaceMode}
-      handleSwitchMode={handleSwitchMode}
-      handleDeleteChat={handleDeleteChat}
-      handleUpdateTitle={handleUpdateTitle}
-      handleTogglePin={handleTogglePin}
-      handleToggleArchive={handleToggleArchive}
-      handleLogout={handleLogout}
-      showToast={showToast}
-    />
+    <Suspense fallback={<ShellLoadingState label="Memuat ruang mahasiswa" />}>
+      <StudentShell
+        user={user}
+        setUser={setUser}
+        chats={chatLibrary.chats}
+        setChats={chatLibrary.setChats}
+        isLoadingChats={chatLibrary.isLoadingChats}
+        isOffline={isOffline}
+        isSidebarOpen={modals.isSidebarOpen}
+        setIsSidebarOpen={modals.setIsSidebarOpen}
+        isSettingsOpen={modals.isSettingsOpen}
+        setIsSettingsOpen={modals.setIsSettingsOpen}
+        isAuthModalOpen={modals.isAuthModalOpen}
+        setIsAuthModalOpen={modals.setIsAuthModalOpen}
+        isLegalDocsOpen={modals.isLegalDocsOpen}
+        setIsLegalDocsOpen={modals.setIsLegalDocsOpen}
+        isChangelogOpen={modals.isChangelogOpen}
+        setIsChangelogOpen={modals.setIsChangelogOpen}
+        isNotificationOpen={modals.isNotificationOpen}
+        setIsNotificationOpen={modals.setIsNotificationOpen}
+        isCommandPaletteOpen={modals.isCommandPaletteOpen}
+        setIsCommandPaletteOpen={modals.setIsCommandPaletteOpen}
+        showOnboarding={appState.showOnboarding}
+        setShowOnboarding={appState.setShowOnboarding}
+        selectedCounselor={appState.selectedCounselor}
+        setSelectedCounselor={appState.setSelectedCounselor}
+        workspaceMode={appState.workspaceMode}
+        handleSwitchMode={handleSwitchMode}
+        handleDeleteChat={chatLibrary.handleDeleteChat}
+        handleUpdateTitle={chatLibrary.handleUpdateTitle}
+        handleTogglePin={chatLibrary.handleTogglePin}
+        handleToggleArchive={chatLibrary.handleToggleArchive}
+        handleLogout={handleLogout}
+        showToast={showToast}
+      />
     </Suspense>
   );
 };

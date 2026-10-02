@@ -313,12 +313,12 @@ describe('FASE 2: Health Data & SOAP Authorization Security Tests', () => {
     expect(withdrawnRes.status).toBe(404);
   });
 
-  it('8. Admin behavior stays according to policy (purpose bound access allowed)', async () => {
+  it('8. Admin cannot access individual screening records through the counselor flow', async () => {
     const res = await request(app)
       .get('/api/v1/screenings')
       .set('Authorization', `Bearer ${tokenAdmin}`);
 
-    expect(res.status).toBe(200);
-    expect(res.body.length).toBeGreaterThanOrEqual(2);
+    expect(res.status).toBe(403);
+    expect(res.body.error).toBe('CONSENT_DENIED');
   });
 });

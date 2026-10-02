@@ -67,6 +67,9 @@ describe('AI reliability policy', () => {
   });
 
   it('keeps Comparison and manual requests on the selected model, and filters auto fallbacks by tier and capability', () => {
+    const previousKeys = Object.fromEntries(['GEMINI_API_KEY', 'GROQ_API_KEY'].map(key => [key, process.env[key]]));
+    process.env.GEMINI_API_KEY = 'fixture-gemini-key';
+    process.env.GROQ_API_KEY = `gsk_${'x'.repeat(32)}`;
     const base = {
       requestedModelId: 'deepseek-chat', prompt: 'hello', userTier: 'Free',
       fallbackCandidates: ['gemini-3.1-pro-preview', 'groq-qwen-27b', 'gemini-3.8-flash'],
@@ -76,5 +79,9 @@ describe('AI reliability policy', () => {
     expect(selectReliableModelCandidates({ ...base, comparisonMode: true }, 'deepseek-chat', { capability: 'streaming' })).toEqual(['deepseek-chat']);
     expect(selectReliableModelCandidates({ ...base, routingDecision: { ...base.routingDecision!, routingMode: 'manual' } }, 'deepseek-chat', { capability: 'streaming' })).toEqual(['deepseek-chat']);
     expect(selectReliableModelCandidates(base, 'deepseek-chat', { capability: 'streaming', hasAttachments: true })).toEqual(['deepseek-chat', 'gemini-3.8-flash']);
+    for (const [key, value] of Object.entries(previousKeys)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
   });
 });

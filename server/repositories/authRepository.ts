@@ -3,6 +3,7 @@ import { ActiveSession, LoginHistoryEntry, SecurityNotification, UserRecord } fr
 import { mapUserToRecord, migrateLegacyUserDataIfNeeded } from "./userRepository";
 import { auditRepository } from "./auditRepository";
 import crypto from "crypto";
+import { hashIpAddress, maskIpAddress } from '../utils/ipPrivacy';
 
 export const authRepository = {
   // Active Sessions & Revocation
@@ -13,7 +14,8 @@ export const authRepository = {
       where: { id: hashedSessionId },
       update: {
         device: session.device,
-        ip: session.ip,
+        ip: maskIpAddress(session.ip),
+        ipHash: hashIpAddress(session.ip),
         userAgent: session.userAgent,
         lastActive: new Date(),
       },
@@ -21,7 +23,8 @@ export const authRepository = {
         id: hashedSessionId,
         userId,
         device: session.device,
-        ip: session.ip,
+        ip: maskIpAddress(session.ip),
+        ipHash: hashIpAddress(session.ip),
         userAgent: session.userAgent,
         createdAt: session.createdAt ? new Date(session.createdAt) : new Date(),
         lastActive: new Date(),
@@ -62,7 +65,7 @@ export const authRepository = {
     return sessions.map(s => ({
       sessionId: s.id,
       device: s.device,
-      ip: s.ip,
+      ip: maskIpAddress(s.ip),
       userAgent: s.userAgent,
       createdAt: s.createdAt.toISOString(),
       lastActive: s.lastActive.toISOString(),
@@ -143,7 +146,8 @@ export const authRepository = {
         id,
         userId,
         timestamp,
-        ip: entry.ip,
+        ip: maskIpAddress(entry.ip),
+        ipHash: hashIpAddress(entry.ip),
         userAgent: entry.userAgent,
         status: entry.status,
         location: entry.location || null,
@@ -196,7 +200,7 @@ export const authRepository = {
     return list.map(e => ({
       id: e.id,
       timestamp: e.timestamp.toISOString(),
-      ip: e.ip,
+      ip: maskIpAddress(e.ip),
       userAgent: e.userAgent,
       status: e.status as any,
       location: e.location || undefined,

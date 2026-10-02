@@ -12,6 +12,7 @@ interface ModalShellProps {
   maxWidth?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl' | '4xl' | '5xl';
   headerRight?: React.ReactNode;
   footer?: React.ReactNode;
+  closeOnBackdropClick?: boolean;
 }
 
 const MAX_WIDTH_MAP = {
@@ -34,6 +35,7 @@ export function ModalShell({
   maxWidth = '2xl',
   headerRight,
   footer,
+  closeOnBackdropClick = true,
 }: ModalShellProps) {
   const modalRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
@@ -113,7 +115,7 @@ export function ModalShell({
           variants={shouldReduceMotion ? reducedMotionVariants : modalBackdropVariants}
           className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/60 backdrop-blur-xs pt-safe pb-safe"
           onClick={(e) => {
-            if (e.target === e.currentTarget) {
+            if (closeOnBackdropClick && e.target === e.currentTarget) {
               onClose();
             }
           }}

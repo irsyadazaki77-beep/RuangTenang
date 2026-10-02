@@ -253,7 +253,7 @@ export const VideoConsultationRoom: React.FC<VideoConsultationRoomProps> = ({
 
       if (state === 'connected') {
         setIsReconnecting(false);
-        setRoomPresenceText('Konsultasi Video Terhubung (Enkripsi End-to-End)');
+        setRoomPresenceText('Konsultasi Video Terhubung');
       } else if (state === 'connecting') {
         setRoomPresenceText('Menghubungkan sesi peer-to-peer...');
       } else if (state === 'disconnected') {

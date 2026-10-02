@@ -473,12 +473,13 @@ describe('FASE 11: Analytics Integrity & Authoritative Metrics Test Suite', () =
 
     expect(resB.body.data.totalStudents).toBe(0);
 
-    // Admin does not acquire clinical student data solely from its global role.
+    // Admins are denied access to counselor clinical statistics entirely.
     const resAdmin = await request(app)
       .get('/api/v1/counselor-portal/stats')
       .set('Authorization', `Bearer ${tokenAdmin}`);
 
-    expect(resAdmin.body.data.totalStudents).toBe(0);
+    expect(resAdmin.status).toBe(403);
+    expect(resAdmin.body.error).toBe('ACCESS_DENIED');
   });
 
   // 5: >500 screening records count accuracy (Verifies removal of arbitrary take: 500 cap)

@@ -70,16 +70,17 @@ test.describe('Responsive Layout & Density E2E Pass', () => {
 
       if (vp.isMobile) {
         test('Mobile navigation & sidebar toggle usability', async ({ page }) => {
+          await page.addInitScript(() => localStorage.setItem('rt_onboarding_completed_guest', 'true'));
           await page.goto('/?__test__=true');
           await page.waitForLoadState('domcontentloaded');
 
           // Check if there is a menu button
-          const menuBtn = page.locator('button[aria-label="Buka Menu Sidebar"]').first();
+          const menuBtn = page.locator('button[aria-label="Buka Menu Sidebar"], button[aria-label="Buka Menu Samping"]').first();
           await expect(menuBtn).toBeVisible({ timeout: 10000 });
           await menuBtn.click();
           
           // Sidebar should become visible
-          const sidebar = page.locator('aside');
+          const sidebar = page.locator('#ruangtenang-main-sidebar');
           await expect(sidebar).toBeVisible({ timeout: 5000 });
           
           // Close sidebar using the explicit mobile close button

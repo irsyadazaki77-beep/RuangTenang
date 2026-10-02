@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import { prisma } from '../database.js';
 import { aiSafetyService } from './ai/aiSafetyService.js';
 import { resolveExistingStoredAttachmentFilePath } from './attachmentFileService.js';
+import { encryptionService } from './encryptionService.js';
 
 export const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB limit
 export const MAX_ATTACHMENTS_PER_MESSAGE = 3;
@@ -260,7 +261,7 @@ export const attachmentStorageService = {
     }
   },
 
-  async getAttachmentForUser(attachmentId: string, userId: string) {
+  async getAttachmentForUser(attachmentId: string, userId: string, includeBase64 = true): Promise<{ attachment: NonNullable<Awaited<ReturnType<typeof prisma.attachments.findUnique>>>; buffer: Buffer; base64?: string } | null> {
     const attachment = await prisma.attachments.findUnique({
       where: { id: attachmentId }
     });
@@ -281,18 +282,18 @@ export const attachmentStorageService = {
       throw new Error('FILE_NOT_FOUND_ON_DISK: Berkas lampiran tidak ditemukan pada penyimpanan server.');
     }
 
-    const buffer = await fs.promises.readFile(fullPath);
+    const storedBuffer = await fs.promises.readFile(fullPath);
+    const buffer = attachment.isEncrypted
+      ? Buffer.from(encryptionService.decryptSensitive(storedBuffer.toString('utf8')) || '', 'base64')
+      : storedBuffer;
+    if (attachment.isEncrypted) storedBuffer.fill(0);
     
     // Integrity check
     if (buffer.length !== attachment.size) {
       console.warn(`[ATTACHMENT_INTEGRITY_WARNING] Buffer length (${buffer.length}) does not match DB record size (${attachment.size})`);
     }
 
-    return {
-      attachment,
-      buffer,
-      base64: buffer.toString('base64')
-    };
+    return includeBase64 ? { attachment, buffer, base64: buffer.toString('base64') } : { attachment, buffer };
   },
 
   async deleteAttachment(attachmentId: string, userId: string): Promise<boolean> {

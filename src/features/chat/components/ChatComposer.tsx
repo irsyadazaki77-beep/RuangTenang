@@ -8,8 +8,8 @@ import {
   FileText, 
   ShieldCheck, 
   Command,
-  Mic,
   MicOff,
+  Mic,
   LucideIcon
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
@@ -17,9 +17,10 @@ import { safeLocalStorage } from '../../../lib/storage';
 import { CHAT_COMMANDS, CHAT_PLUGINS } from '../constants/commands';
 import { Attachment } from '../types';
 import { useToast } from '../../../components/Toast';
+import { useComposerVoiceInput } from '../hooks/useComposerVoiceInput';
 
 interface Props {
-  onSend: (msg: string, plugin?: string, attachments?: any[]) => void;
+  onSend: (msg: string, plugin?: string, attachments?: Attachment[]) => void;
   isTyping: boolean;
   onStop: () => void;
   chatId?: string;
@@ -43,78 +44,11 @@ export function ChatComposer({
   const [showActionMenu, setShowActionMenu] = useState(false);
   const [showCommands, setShowCommands] = useState(false);
   const [selectedCmdIndex, setSelectedCmdIndex] = useState(0);
-  const [isListening, setIsListening] = useState(false);
+  const { isListening, toggleListening } = useComposerVoiceInput(input, setInput);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const composerContainerRef = useRef<HTMLDivElement>(null);
-  const recognitionRef = useRef<any>(null);
-
-  // Toggle Voice Input Speech-to-Text (id-ID)
-  const toggleListening = () => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      showToast('Browser Anda tidak mendukung fitur perekaman suara (Speech Recognition).', 'info');
-      return;
-    }
-
-    if (isListening) {
-      if (recognitionRef.current) {
-        recognitionRef.current.stop();
-      }
-      setIsListening(false);
-    } else {
-      try {
-        const recognition = new SpeechRecognition();
-        recognition.lang = 'id-ID';
-        recognition.continuous = false;
-        recognition.interimResults = true;
-
-        const initialInput = input;
-
-        recognition.onresult = (event: any) => {
-          let transcript = '';
-          for (let i = event.resultIndex; i < event.results.length; i++) {
-            transcript += event.results[i][0].transcript;
-          }
-          if (transcript) {
-            const prefix = initialInput ? (initialInput.endsWith(' ') ? initialInput : initialInput + ' ') : '';
-            setInput(prefix + transcript);
-          }
-        };
-
-        recognition.onerror = (event: any) => {
-          console.warn('[STT] Error:', event.error);
-          setIsListening(false);
-          if (event.error === 'not-allowed') {
-            showToast('Izin mikrofon ditolak oleh browser.', 'error');
-          }
-        };
-
-        recognition.onend = () => {
-          setIsListening(false);
-        };
-
-        recognition.start();
-        recognitionRef.current = recognition;
-        setIsListening(true);
-        showToast('Mendengarkan suara (Bahasa Indonesia)...', 'info');
-      } catch (err) {
-        console.error('[STT] Failed to start:', err);
-        setIsListening(false);
-      }
-    }
-  };
-
-  // Clean up recognition on unmount
-  useEffect(() => {
-    return () => {
-      if (recognitionRef.current) {
-        recognitionRef.current.stop();
-      }
-    };
-  }, []);
-
   // Load and persist draft per chat session
   useEffect(() => {
     const draft = safeLocalStorage.getItem(`draft_${chatId || 'new'}`);
@@ -482,7 +416,7 @@ export function ChatComposer({
               {/* Privacy Footer Reassurance */}
               <div className="mt-1.5 pt-1.5 border-t border-stone-100 dark:border-slate-800/80 flex items-center gap-1.5 px-2 text-[10.5px] text-stone-500 dark:text-slate-400">
                 <ShieldCheck className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 shrink-0" />
-                <span>Enkripsi End-to-End aktif.</span>
+                <span>Percakapan dilindungi dengan kontrol keamanan dan enkripsi penyimpanan.</span>
               </div>
             </motion.div>
           )}
@@ -569,6 +503,7 @@ export function ChatComposer({
                 }`}
                 aria-label={isListening ? "Hentikan rekam suara" : "Input suara (Speech-to-Text)"}
                 title={isListening ? "Hentikan rekam suara (Sedang mendengarkan...)" : "Bicara (Input Suara Speech-to-Text)"}
+                aria-pressed={isListening}
               >
                 {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
               </motion.button>
@@ -645,7 +580,7 @@ export function ChatComposer({
         
         {/* Reassurance Caption */}
         <p className="text-[11px] text-stone-400 dark:text-slate-500 text-center mt-1.5 select-none">
-          Ruang aman tanpa penghakiman <span className="opacity-40">·</span> Rahasia & Terenkripsi
+          Ruang aman tanpa penghakiman <span className="opacity-40">·</span> Data dilindungi dengan kontrol keamanan
         </p>
       </div>
     </div>

@@ -1,6 +1,6 @@
 import { aiProviderConfig } from '../../config/aiProviderConfig.js';
 import { getProviderHealth } from './aiReliabilityService.js';
-import { DEFAULT_AI_MODEL_ID, ModelCapability, ProviderId, ModelTier } from '../../../shared/aiModelContract.js';
+import { AUTO_ROUTING_MODEL_ID, DEFAULT_AI_MODEL_ID, ModelCapability, ProviderId, ModelTier } from '../../../shared/aiModelContract.js';
 
 export { DEFAULT_AI_MODEL_ID };
 export type { ModelCapability, ModelTier, ProviderId };
@@ -268,16 +268,18 @@ export function getConfiguredDefaultAiModelId(tier = 'Free'): string {
     ...AI_MODEL_REGISTRY
   ].filter((model): model is AiModelDefinition => Boolean(model));
   return candidates.find(model => isTierAllowed(model, tier) && aiProviderConfig.isConfigured(model.provider))?.id
-    || DEFAULT_AI_MODEL_ID;
+    || AUTO_ROUTING_MODEL_ID;
 }
 
 export function getPublicModelCatalog(tier = 'Free') {
-  return AI_MODEL_REGISTRY.map(({ id, name, category, tag, speed, reasoning, allowedTiers, provider, capabilities, isDefault }) => {
+  return AI_MODEL_REGISTRY.map(({ id, name, category, tag, description, recommendedFor, speed, reasoning, allowedTiers, provider, capabilities, isDefault }) => {
     const configured = isProviderConfigured(provider);
     const availability = !configured ? 'provider_not_configured' as const : getProviderHealth(provider) === 'unavailable' ? 'temporarily_unavailable' as const : 'configured' as const;
     return {
-      id, name, category, tag, speed, reasoning, allowedTiers, provider, capabilities: [...capabilities], isDefault: Boolean(isDefault),
+      id, name, category, tag, description, recommendedFor, speed, reasoning, allowedTiers, provider, capabilities: [...capabilities], isDefault: Boolean(isDefault),
       availability,
+      available: configured && availability !== 'temporarily_unavailable',
+      providerAvailable: configured && availability !== 'temporarily_unavailable',
       selectable: configured && availability !== 'temporarily_unavailable' && isTierAllowed({ allowedTiers }, tier)
     };
   });

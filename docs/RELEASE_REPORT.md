@@ -1,44 +1,37 @@
-# Final Release Report: RuangTenang
+# Fase 1 Release Readiness Report
 
-## Final Release Verdict: PRODUCTION READY
+## Verdict: NOT VERIFIED — NOT A PRODUCTION CANDIDATE
 
-### 1. Before/After Architecture
-**Before:**
-- SQLite explicitly referenced in standard `schema.prisma` causing deployment conflicts with PostgreSQL.
-- Heavy React re-renders during chat streaming caused by full array mapping on every chunk.
-- Inconsistent API error formatting and HTTP statuses.
-- E2E tests skipping features implicitly if elements weren't found.
+Fase 1 changes are implemented, but the full required quality gate has not passed. Do not label this revision production ready.
 
-**After:**
-- **Database Strategy:** Dual-schema architecture implemented (`db:generate:sqlite`, `db:generate:postgres`) explicitly separating local development from Cloud SQL production. Added required compound indexes (`[userId, isArchived, updatedAt]`).
-- **Frontend Performance:** Optimized chat streaming by introducing a separate `streamingMessage` state, bypassing massive re-renders of the `MessageBubble` array. Heavy plugins are lazily loaded.
-- **Backend Refactoring:** Extracted heavy memory processing from `chat.ts` into a dedicated `MemoryController`. 
-- **Observability:** Centralized AI telemetry logging (`logAiTelemetry`) stripping all PII and sensitive data. Added strict health check endpoints (`/api/v1/health`) for readiness/liveness probes.
-- **API Consistency:** Standardized error contracts across all endpoints to `{ success: false, error: { code, message } }` with backward compatibility.
-- **E2E Testing:** Refactored `app.spec.ts` to follow concrete User Journeys (Guest, Screening, Counselor Directory) ensuring strict UI assertions without silent skipping.
+## Findings and changes
 
-### 2. UX & Accessibility Changes
-- Improved Touch Targets: Ensured core components (buttons, links) are at least 44x44 px for mobile users.
-- Dialog / Modals: Enforced `role="dialog"`, `aria-modal="true"`, focus management, and Escape key functionality.
-- Semantic HTML and ARIA: Added `aria-live` for dynamic changes (like AI stream states).
-- Keyboard Navigation: Entire platform can be navigated efficiently via Tab and Arrow keys without keyboard traps.
+- Groq and OpenRouter adapters are present in the working tree; API-key gating, normalized provider errors, invalid-response handling, timeout/abort behavior, and safe logging are covered by the adapters and focused tests.
+- The server AI model registry now supplies runtime availability to `/api/v1/chat/models`; the frontend filters unavailable and tier-disallowed models and falls back when a saved model disappears.
+- Citation results come only from validated Crossref metadata. No curated paper list or fabricated fallback remains; unverified references cannot be inserted as verified.
+- Paraphrasing now reports locally measurable text characteristics and carries a similarity-check disclaimer; no plagiarism reduction percentage is shown.
+- Mermaid uses strict mode and sanitized SVG output. Chat and counselor UI/API metadata no longer claim end-to-end encryption.
+- New extracted text, document chunks, and uploaded files are encrypted at rest with the configured AES-GCM service; legacy plaintext rows remain readable for compatibility. Existing on-disk files and legacy rows are not automatically re-encrypted by this code change.
+- Session/login IP values are masked for user-facing history and keyed hashes support correlation. Existing retention behavior remains bounded by the existing cleanup policy.
+- Local deterministic crisis severity cannot be downgraded by the AI classifier for an active local crisis.
 
-### 3. Test Numbers
-- **Typecheck**: PASS (0 Errors)
-- **Lint**: PASS (0 Errors)
-- **E2E (Playwright) / Integration**: PASS (Strict User Journeys)
-- **Security Check**: PASS (Encrypted PII, Idempotency keys used, no health data leaked to observability)
+## Required quality gate (2026-10-02)
 
-### 4. Performance Metrics
-- **Streaming UI Latency**: Substantially reduced CPU overhead during LLM streaming.
-- **API Latencies**: Chat and memory injection requests overhead reduced.
-- **Database**: Reduced query times with `[userId, isArchived, updatedAt]` compound index.
-- React optimization completed with chunked lazy loading via Vite and `Suspense`.
+| Gate | Result |
+|---|---|
+| Clean install (`npm ci`) | FAILED: Windows `EPERM` while replacing locked native binaries under `node_modules`. A later `npm install --ignore-scripts --no-audit --no-fund` restored tools, but does not count as a clean install. |
+| Typecheck | BLOCKED/FAILED: Prisma Client generation could not fetch `schema-engine.exe.gz.sha256` from `binaries.prisma.sh`; `tsc` then reported missing generated Prisma exports and a dependent inferred type error. |
+| Lint | PASS: exit 0, 284 warnings, 0 errors. |
+| Unit | BLOCKED: `npm run test:unit` stopped before Vitest because Prisma Client generation could not reach `binaries.prisma.sh`. Focused direct Vitest regression run passed: 18 tests across 6 files. |
+| Integration | BLOCKED: Prisma generation failed before Vitest started. |
+| Security | BLOCKED: Prisma generation failed before the full security suite. The focused direct regression run included security tests. |
+| Production build | PASS: `npm run build:production` completed; frontend and server bundle emitted. Mermaid remains a large chunk warning. |
+| E2E | FAIL: 77 passed, 25 failed. Failures include route/status expectation mismatches, navigation timeouts, an injection expectation, and onboarding overlay interactions. |
 
-### 5. Unresolved Issues
-- None (0 P0 / P1 issues).
+## Remaining release checks
 
-### 6. Deployment Notes
-- Production deployments MUST use `npm run db:generate:postgres`.
-- Ensure all environment variables (especially `JWT_SECRET`) are set before starting to pass the readiness probe.
-- Run `node dist/server.mjs` after a full `npm run build`.
+- Restore access to the Prisma engine host, regenerate both clients, then rerun clean install, typecheck, unit, integration, and security gates.
+- Resolve the 25 E2E failures and rerun the full E2E suite.
+- Apply and rehearse migration `20261002000000_encrypt_document_storage` against isolated PostgreSQL; verify legacy data and encryption-key rotation/recovery.
+- Existing plaintext attachment files and plaintext database records require an explicit migration/retention plan; compatibility reads do not encrypt historical data automatically.
+- Complete the production, privacy, clinical, backup/restore, and manual accessibility checks in [`RELEASE_CHECKLIST.md`](../RELEASE_CHECKLIST.md).

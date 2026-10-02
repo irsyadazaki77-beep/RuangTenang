@@ -117,10 +117,10 @@ Topik / Ide Penelitian:`
   {
     id: 'parafrase-akademik',
     title: 'Parafrase Akademik',
-    description: 'Tulis ulang kalimat atau draf agar bernada ilmiah, baku (KBBI), dan lolos uji orisinalitas.',
+    description: 'Tulis ulang kalimat atau draf dengan gaya ilmiah dan bahasa baku (KBBI).',
     icon: 'Pencil',
     targetArtifact: 'DOCUMENT',
-    prompt: `Parafrase teks berikut agar memiliki gaya bahasa ilmiah yang baku, formal, kohesif, dan terhindar dari indikasi kemiripan teks/plagiarisme, tanpa mengubah substansi maknanya. Berikan beberapa alternatif redaksi:
+    prompt: `Parafrase teks berikut agar memiliki gaya bahasa ilmiah yang baku, formal, dan kohesif tanpa mengubah substansi maknanya. Berikan beberapa alternatif redaksi. Hasil ini tidak menjamin lolos pemeriksaan similarity/plagiarisme:
 <artifact type="document" title="Hasil Parafrase Akademik">
 ...konten hasil parafrase...
 </artifact>

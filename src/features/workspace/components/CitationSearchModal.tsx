@@ -1,28 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import {
   Search,
-  BookOpen,
   Quote,
   Copy,
   Check,
   Plus,
   ExternalLink,
-  Sparkles,
   X,
-  FileText,
-  Bookmark,
-  Layers
 } from 'lucide-react';
 import {
   AcademicPaper,
   CitationFormat,
   searchAcademicPapers,
-  resolveDOI,
   formatAPA7,
   formatIEEE,
   formatHarvard,
   formatBibTeX,
-  CURATED_PAPERS_DATABASE
 } from '../utils/citationEngine';
 
 interface CitationSearchModalProps {
@@ -37,23 +30,29 @@ export const CitationSearchModal: React.FC<CitationSearchModalProps> = ({
   onInsertCitation
 }) => {
   const [query, setQuery] = useState('');
-  const [papers, setPapers] = useState<AcademicPaper[]>(CURATED_PAPERS_DATABASE);
-  const [selectedPaper, setSelectedPaper] = useState<AcademicPaper | null>(CURATED_PAPERS_DATABASE[0] || null);
+  const [papers, setPapers] = useState<AcademicPaper[]>([]);
+  const [selectedPaper, setSelectedPaper] = useState<AcademicPaper | null>(null);
   const [format, setFormat] = useState<CitationFormat>('APA7');
   const [copied, setCopied] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
+  const [searchError, setSearchError] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
 
     const timer = setTimeout(async () => {
+      if (!query.trim()) { setPapers([]); setSelectedPaper(null); setSearchError(false); setIsSearching(false); return; }
       setIsSearching(true);
+      setSearchError(false);
       try {
         const results = await searchAcademicPapers(query);
         setPapers(results);
-        if (results.length > 0 && !results.some(p => p.id === selectedPaper?.id)) {
-          setSelectedPaper(results[0]);
-        }
+        setSearchError(results.length === 0);
+        setSelectedPaper(previous => results.find(paper => paper.id === previous?.id) || results[0] || null);
+      } catch {
+        setPapers([]);
+        setSelectedPaper(null);
+        setSearchError(true);
       } finally {
         setIsSearching(false);
       }
@@ -83,7 +82,7 @@ export const CitationSearchModal: React.FC<CitationSearchModalProps> = ({
   };
 
   const handleInsert = () => {
-    if (!selectedPaper || !onInsertCitation) return;
+    if (!selectedPaper?.verified || !onInsertCitation) return;
     onInsertCitation(currentCitationText, selectedPaper);
     onClose();
   };
@@ -148,7 +147,7 @@ export const CitationSearchModal: React.FC<CitationSearchModalProps> = ({
 
             {papers.length === 0 ? (
               <div className="text-center py-8 px-4 text-slate-400 text-xs">
-                Tidak ada artikel ditemukan. Coba gunakan kata kunci lain atau masukkan kode DOI langsung.
+                {!query.trim() ? 'Masukkan judul, penulis, kata kunci, atau DOI untuk mencari metadata Crossref.' : searchError ? 'Referensi tidak dapat diverifikasi. Periksa kembali DOI atau coba pencarian lain.' : 'Tidak ada metadata terverifikasi yang cocok. Coba kata kunci lain.'}
               </div>
             ) : (
               papers.map(paper => {
@@ -173,7 +172,8 @@ export const CitationSearchModal: React.FC<CitationSearchModalProps> = ({
                       <span className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 truncate max-w-[160px]">
                         {paper.journal}
                       </span>
-                      {paper.doi && (
+                  {paper.verified && <span className="text-[9.5px] font-semibold text-emerald-700 dark:text-emerald-300">Crossref terverifikasi</span>}
+                  {paper.doi && (
                         <span className="text-[9.5px] font-mono text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-1.5 py-0.5 rounded">
                           DOI
                         </span>
@@ -187,7 +187,7 @@ export const CitationSearchModal: React.FC<CitationSearchModalProps> = ({
 
           {/* Right Column: Selected Paper Details & Citation Generator (7 cols) */}
           <div className="md:col-span-7 flex flex-col justify-between overflow-y-auto p-4 sm:p-5 space-y-4 custom-scrollbar">
-            {selectedPaper ? (
+            {selectedPaper?.verified ? (
               <div className="space-y-4">
                 {/* Selected Paper Meta */}
                 <div className="space-y-2">

@@ -2,6 +2,7 @@ import { prisma } from '../../database.js';
 import { DocumentChunk, FileSourceReference } from '../../../shared/contracts/files.js';
 import { scanAndSanitizePII } from '../piiService.js';
 import { detectPromptInjection } from '../../security.js';
+import { encryptionService } from '../encryptionService.js';
 
 export interface RetrievedDocumentContext {
   contextBlock: string;
@@ -127,7 +128,12 @@ export const contextRetrievalService = {
       .split(/\s+/)
       .filter(t => t.length > 2 && !STOP_WORDS.has(t));
 
-    const scored = rawChunks.map(chunk => ({
+    // Decrypt old plaintext and new encrypted rows only in memory for ranking and retrieval.
+    const plaintextChunks = rawChunks.map(chunk => ({
+      ...chunk,
+      content: chunk.isEncrypted ? (encryptionService.decryptSensitive(chunk.content) || '') : chunk.content
+    }));
+    const scored = plaintextChunks.map(chunk => ({
       chunk,
       score: scoreChunk(chunk.content, queryTerms, chunk.section || undefined)
     }));

@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 
 test.describe('Chat 5 New Features E2E', () => {
   test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem('rt_onboarding_completed_guest', 'true'));
     await page.goto('/?__test__=true');
     await expect(page.locator('textarea').first().or(page.locator('button[type="submit"]'))).toBeVisible({ timeout: 15000 });
   });
@@ -22,22 +23,20 @@ test.describe('Chat 5 New Features E2E', () => {
     if (await summaryBtn.isVisible()) {
       await summaryBtn.click();
       await expect(page.locator('text=Ringkasan Sesi Obrolan')).toBeVisible();
-      const closeBtn = page.locator('button[aria-label="Tutup dialog"]').first();
-      await closeBtn.click();
+      await page.keyboard.press('Escape');
     }
   });
 
   test('Bookmarks and Memory modals open cleanly', async ({ page }) => {
     // Open more menu if on desktop/mobile
-    const moreMenuBtn = page.locator('button[aria-label*="Menu"], button[title*="Opsi"]').first();
+    const moreMenuBtn = page.getByRole('button', { name: 'Menu & Opsi Tambahan' });
     if (await moreMenuBtn.isVisible()) {
       await moreMenuBtn.click();
       const bookmarkOption = page.locator('text=Pesan Tersimpan').first();
       if (await bookmarkOption.isVisible()) {
         await bookmarkOption.click();
-        await expect(page.locator('text=Pesan Tersimpan')).toBeVisible();
-        const closeBtn = page.locator('button[aria-label="Tutup dialog"]').first();
-        await closeBtn.click();
+        await expect(page.getByRole('heading', { name: 'Pesan Tersimpan' })).toBeVisible();
+        await page.keyboard.press('Escape');
       }
     }
   });

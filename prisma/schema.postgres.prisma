@@ -375,6 +375,7 @@ model UserSession {
   userId     String
   device     String
   ip         String
+  ipHash     String?
   userAgent  String
   createdAt  DateTime @default(now())
   lastActive DateTime @default(now())
@@ -382,6 +383,7 @@ model UserSession {
 
   @@index([userId])
   @@index([userId, lastActive])
+  @@index([ipHash])
 }
 
 model LoginEvent {
@@ -389,6 +391,7 @@ model LoginEvent {
   userId     String
   timestamp  DateTime @default(now())
   ip         String
+  ipHash     String?
   userAgent  String
   status     String
   location   String?
@@ -397,6 +400,7 @@ model LoginEvent {
   @@index([userId])
   @@index([userId, timestamp])
   @@index([ip, timestamp])
+  @@index([ipHash, timestamp])
 }
 
 model SecurityNotification {
@@ -466,6 +470,8 @@ model Attachments {
   status          String   @default("pending") // 'pending' | 'processing' | 'ready' | 'failed' | 'unsupported'
   processingError String?
   extractedText   String?  // normalized extracted text summary or cache
+  isEncrypted     Boolean  @default(false)
+  encryptionVersion String?
   metadata        String?  // JSON string: pageCount, slideCount, sheetCount, sections, etc.
   createdAt       DateTime @default(now())
   updatedAt       DateTime @default(now())
@@ -487,6 +493,8 @@ model DocumentChunks {
   userId        String
   chunkIndex    Int
   content       String   // text content of the chunk
+  isEncrypted   Boolean  @default(false)
+  encryptionVersion String?
   tokenCount    Int      @default(0)
   pageStart     Int?
   pageEnd       Int?

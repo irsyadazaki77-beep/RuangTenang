@@ -77,7 +77,7 @@ export const WORKSPACE_TOOL_DEFINITIONS: WorkspaceToolDefinition[] = [
   {
     id: 'academic_paraphrase',
     name: 'Parafrase Akademik Beretika',
-    description: 'Mengubah struktur kalimat secara etis untuk meningkatkan orisinalitas naskah skripsi.',
+    description: 'Membantu menyunting struktur dan diksi naskah akademik tanpa menjamin hasil pemeriksaan similarity.',
     icon: 'Pencil',
     category: 'Writing',
     executionMode: 'client_utility',

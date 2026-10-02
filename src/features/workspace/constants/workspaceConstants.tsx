@@ -87,7 +87,7 @@ export const ACADEMIC_PROMPT_PILLS: AcademicPromptPill[] = [
   },
   {
     label: "Parafrase Akademik PUEBI",
-    prompt: "Tolong parafrase paragraf berikut dengan gaya penulisan ilmiah formal, sesuai kaidah PUEBI dan KBBI, serta pertahankan makna aslinya agar lolos uji orisinalitas/Turnitin:\n\n[Tempelkan draf teks di sini]"
+    prompt: "Tolong parafrase paragraf berikut dengan gaya penulisan ilmiah formal, sesuai kaidah PUEBI dan KBBI, serta pertahankan makna aslinya. Hasil tidak menjamin lolos pemeriksaan similarity atau plagiarisme:\n\n[Tempelkan draf teks di sini]"
   },
   {
     label: "Bedah Metodologi Jurnal",

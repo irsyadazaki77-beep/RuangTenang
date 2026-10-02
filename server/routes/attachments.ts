@@ -1,4 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
+import { Readable } from 'stream';
 import multer from 'multer';
 import { prisma } from '../database.js';
 import { optionalAuth, requireAuth } from '../middleware/auth.js';
@@ -274,7 +275,7 @@ router.get('/chat/attachments/:id', optionalAuth, async (req: Request, res: Resp
       return sendAttachmentError(res, 'MISSING_ATTACHMENT_ID', 'ID Lampiran tidak ditemukan', 400);
     }
 
-    const result = await attachmentStorageService.getAttachmentForUser(attachmentId, userId);
+    const result = await attachmentStorageService.getAttachmentForUser(attachmentId, userId, false);
 
     if (!result) {
       return sendAttachmentError(res, 'NOT_FOUND', 'Berkas lampiran tidak ditemukan', 404);
@@ -297,7 +298,10 @@ router.get('/chat/attachments/:id', optionalAuth, async (req: Request, res: Resp
     res.setHeader('Content-Security-Policy', "default-src 'none'");
     res.setHeader('Cache-Control', 'private, no-cache, no-store, must-revalidate');
 
-    return res.send(buffer);
+    res.once('finish', () => buffer.fill(0));
+    res.once('close', () => buffer.fill(0));
+    Readable.from([buffer]).pipe(res);
+    return;
   } catch (err: any) {
     if (err.message.includes('UNAUTHORIZED_ACCESS')) {
       return sendAttachmentError(res, 'UNAUTHORIZED_ACCESS', 'Anda tidak memiliki akses ke berkas ini', 403);

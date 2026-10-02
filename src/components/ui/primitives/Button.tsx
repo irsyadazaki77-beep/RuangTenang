@@ -54,6 +54,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       <button
         ref={ref}
         disabled={isDisabled}
+        aria-busy={isLoading || undefined}
         className={`
           inline-flex items-center justify-center font-medium select-none
           whitespace-nowrap transition-all duration-150 ease-out cursor-pointer
@@ -123,6 +124,7 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
         aria-label={ariaLabel}
         title={ariaLabel}
         disabled={isDisabled}
+        aria-busy={isLoading || undefined}
         className={`
           inline-flex items-center justify-center transition-all duration-150 ease-out cursor-pointer
           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2

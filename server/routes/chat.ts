@@ -22,7 +22,7 @@ import { attachmentStorageService } from '../services/attachmentStorageService.j
 import { documentIngestionService } from '../services/file-intelligence/documentIngestionService.js';
 import { DocumentProcessingException } from '../services/file-intelligence/fileTypes.js';
 import { getVerifiedEmergencyContacts } from '../config/emergencyRegistry.js';
-import { AiModelError, getConfiguredDefaultAiModelId, resolveAiModel } from '../services/ai/aiModelRegistry.js';
+import { AiModelError, getConfiguredDefaultAiModelId, getModelDefinition, resolveAiModel } from '../services/ai/aiModelRegistry.js';
 import { AUTO_ROUTING_MODEL_ID } from '../../shared/aiModelContract.js';
 import { smartModelRouter } from '../services/ai/smartModelRouter.js';
 
@@ -282,6 +282,8 @@ router.post(['/chat', '/api/chat'], optionalAuth, aiChatLimiter, aiAbuseLimiter,
       message: pipelineRes.text,
       isCrisis: pipelineRes.isCrisisOverride,
       modelUsed: pipelineRes.modelUsed,
+      modelRequested: routingDecision.selectedModelId,
+      providerUsed: getModelDefinition(pipelineRes.modelUsed)?.provider || 'local',
       isFallback: pipelineRes.isFallback,
       fallbackFrom: pipelineRes.isFallback && pipelineRes.modelUsed !== routingDecision.selectedModelId ? routingDecision.selectedModelId : undefined,
       routingMode: routingDecision.routingMode,
@@ -542,7 +544,7 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
                     } else {
                       parts.push({
                         inlineData: {
-                          data: res.base64,
+                          data: res.base64!,
                           mimeType: att.mimeType
                         }
                       });
@@ -576,7 +578,7 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
                   } else {
                     parts.push({
                       inlineData: {
-                        data: res.base64,
+                        data: res.base64!,
                         mimeType: res.attachment.mimeType
                       }
                     });
@@ -625,7 +627,7 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
                 } else {
                   parts.push({
                     inlineData: {
-                      data: res.base64,
+                      data: res.base64!,
                       mimeType: res.attachment.mimeType
                     }
                   });
@@ -865,6 +867,8 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
         res.write(`data: ${JSON.stringify({
           type: 'routing',
           modelUsed: pipelineRes.modelUsed || pipelineRes.routingDecision.selectedModelId,
+          modelRequested: pipelineRes.routingDecision.selectedModelId,
+          providerUsed: getModelDefinition(pipelineRes.modelUsed)?.provider || 'local',
           isFallback: Boolean(pipelineRes.isFallback),
           fallbackFrom: pipelineRes.isFallback ? pipelineRes.routingDecision.selectedModelId : undefined,
           routingMode: pipelineRes.routingDecision.routingMode,

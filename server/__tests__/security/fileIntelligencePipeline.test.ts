@@ -358,6 +358,7 @@ describe('FASE 8 — File Intelligence & Document Ingestion Pipeline Security Te
       chatId: testChatId
     });
     createdAttachmentIds.push(first.id);
+    expect(content.toString('utf8')).toBe('Konten artikel ilmiah unik untuk tes deduplikasi.');
 
     const second = await documentIngestionService.ingestFile({
       userId: userA,

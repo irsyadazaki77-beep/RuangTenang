@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { User,
-  ShieldCheck,
+import { ShieldCheck,
   CreditCard,
   Check,
   Sparkles,
@@ -8,12 +7,19 @@ import { User,
   RotateCcw,
   ShieldAlert,
   UserCheck,
-  ChevronRight,
   ChevronLeft,
-  Lock
+  Brain,
+  MessageSquare,
+  Gauge,
+  Cpu,
+  CheckCircle2,
+  History,
+  Calendar,
+  Bell,
+  Terminal,
+  Volume2
 } from 'lucide-react';
 import { UserSession, SubscriptionTier } from '../../types';
-import { Brain, MessageSquare, Gauge, Cpu, CheckCircle2, History, Calendar, Bell, Terminal, Volume2 } from 'lucide-react';
 import { DEFAULT_AI_MODEL_ID } from '../../lib/aiModels';
 import { useAiModelCatalog } from '../../lib/aiModelCatalog';
 import { safeLocalStorage } from '../../lib/storage';
@@ -24,7 +30,7 @@ import { apiClient } from '../../lib/apiClient';
 import { CURRENT_APP_VERSION, LAST_UPDATED_DATE, APP_CHANGELOG, CATEGORY_METADATA } from '../../data/changelogData';
 import { ErrorState } from '../../components/common/ErrorState';
 import { EmptyState } from '../../components/common/EmptyState';
-import { BrandLogo } from '../../components/ui/BrandLogo';
+import { SettingsSectionNav, type SettingsTab } from './components/SettingsSectionNav';
 import { playCompletionChime } from '../../lib/soundEffects';
 
 interface SettingsPageProps {
@@ -261,55 +267,20 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
     }
   };
 
-  const [activeTab, setActiveTab] = useState<'akun'|'ai'|'privasi'|'memory'|'keamanan'|'langganan'|'versi'|'notifikasi'>('akun');
+  const [activeTab, setActiveTab] = useState<SettingsTab>('akun');
   const [showMobileDetail, setShowMobileDetail] = useState(false);
-  
-  const TABS = [
-    { id: 'akun', label: 'Akun', icon: User },
-    { id: 'ai', label: 'Preferensi AI', icon: Brain },
-    { id: 'notifikasi', label: 'Notifikasi', icon: Bell },
-    { id: 'privasi', label: 'Privasi', icon: ShieldCheck },
-    { id: 'memory', label: 'Memory', icon: RotateCcw },
-    { id: 'keamanan', label: 'Keamanan', icon: Lock },
-    { id: 'langganan', label: 'Langganan', icon: CreditCard },
-    { id: 'versi', label: 'Versi & Pembaruan', icon: Sparkles }
-  ] as const;
 
   return (
     <div className="w-full max-w-5xl mx-auto px-4 sm:px-6 lg:px-6 py-4 sm:py-6 min-w-0 flex flex-col md:flex-row gap-4 lg:gap-6 h-full">
       
-      {/* Sidebar Tabs for Desktop & Menu List for Mobile */}
-      <div className={`w-full md:w-64 shrink-0 flex flex-col gap-2 ${showMobileDetail ? 'hidden md:flex' : 'flex'}`}>
-        <div className="hidden md:flex items-center gap-2 mb-2 px-2">
-          <BrandLogo size="xs" iconOnly />
-          <h2 className="text-lg font-bold text-primary">Pengaturan</h2>
-        </div>
-        <div className="flex flex-col gap-1.5 md:gap-1">
-          {TABS.map(tab => {
-            const Icon = tab.icon;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => {
-                  setActiveTab(tab.id);
-                  setShowMobileDetail(true);
-                }}
-                className={`flex items-center justify-between md:justify-start gap-3 px-4 py-3 sm:py-3.5 md:py-2.5 rounded-xl text-sm font-medium transition-all duration-150 btn-press-compact border border-transparent cursor-pointer ${
-                  activeTab === tab.id 
-                    ? 'bg-teal-50 text-teal-700 md:bg-teal-50 md:text-teal-700' 
-                    : 'text-secondary hover:surface-muted surface-muted/50 md:bg-transparent'
-                }`}
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <Icon className={`w-5 h-5 shrink-0 ${activeTab === tab.id ? 'text-teal-600' : 'text-muted'}`} />
-                  <span className="truncate">{tab.label}</span>
-                </div>
-                <ChevronRight className="w-4 h-4 text-muted md:hidden shrink-0" />
-              </button>
-            )
-          })}
-        </div>
-      </div>
+      <SettingsSectionNav
+        activeTab={activeTab}
+        showMobileDetail={showMobileDetail}
+        onSelect={tab => {
+          setActiveTab(tab);
+          setShowMobileDetail(true);
+        }}
+      />
 
       {/* Main Content Area */}
       <div className={`flex-1 min-w-0 space-y-4 pb-20 ${!showMobileDetail ? 'hidden md:block' : 'block'}`}>

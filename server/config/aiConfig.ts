@@ -13,26 +13,6 @@ export { DEEPSEEK_API_KEY, GROQ_API_KEY, OPENROUTER_API_KEY };
 
 export const CALMING_FALLBACK_MESSAGE = 'Aku sedang menyimak ceritamu, namun koneksi kita sempat terhenti sejenak 🌿. Tarik napas perlahan ya, kamu bisa mengirim ulang ceritamu atau beristirahat sejenak 🤍.';
 
-export const AI_MODELS = {
-  DEFAULT_FAST: 'gemini-2.5-flash',
-  LATEST_FLASH_38: 'gemini-3.8-flash',
-  LATEST_FLASH: 'gemini-3.7-flash',
-  DYNAMIC_FLASH: 'gemini-flash-latest',
-  PRO_REASONING: 'gemini-3.1-pro-preview',
-  BALANCED: 'gemini-2.5-flash',
-  PRO_LEGACY: 'gemini-2.5-pro',
-  LITE_FAST: 'gemini-2.5-flash-lite',
-  LITE_LEGACY: 'gemini-3.1-flash-lite',
-  FALLBACK: 'gemini-2.5-flash-lite',
-  CRISIS_CLASSIFIER: 'gemini-2.5-flash',
-  COUNSELOR_SIMULATION: 'gemini-2.5-flash',
-  DEEPSEEK_CHAT: 'deepseek-chat',
-  DEEPSEEK_REASONER: 'deepseek-reasoner',
-  GROQ_QWEN: 'qwen/qwen3.8-27b',
-  GROQ_GPT_120B: 'openai/gpt-oss-120b',
-  GROQ_GPT_20B: 'openai/gpt-oss-20b',
-} as const;
-
 export const AI_CONFIG = {
   // Timeout in milliseconds
   DEFAULT_TIMEOUT_MS: 15000,

@@ -4,11 +4,6 @@ import {
   Pencil,
   Copy,
   Check,
-  RotateCcw,
-  ArrowRight,
-  Sliders,
-  ShieldCheck,
-  TrendingUp,
   FileCheck2,
   X
 } from 'lucide-react';
@@ -81,9 +76,9 @@ export const AcademicParaphraseModal: React.FC<AcademicParaphraseModalProps> = (
             </div>
             <div>
               <h2 className="font-bold text-base sm:text-lg text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                <span>Alat Parafrase Akademik Beretika</span>
+                <span>Academic Rewriting Assistant</span>
                 <span className="text-[10.5px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-200 border border-emerald-300 dark:border-emerald-800">
-                  Anti-Plagiarisme
+                  Bantuan Penulisan
                 </span>
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400">
@@ -200,15 +195,8 @@ export const AcademicParaphraseModal: React.FC<AcademicParaphraseModalProps> = (
 
             {/* Metrics Bar */}
             {result && result.paraphrasedText && (
-              <div className="grid grid-cols-3 gap-2 pt-1">
-                <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 text-center">
-                  <div className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-300">
-                    Penurunan Plagiarisme
-                  </div>
-                  <div className="text-base font-extrabold text-emerald-600 dark:text-emerald-400">
-                    ~{result.plagiarismRiskReduction}%
-                  </div>
-                </div>
+              <div className="space-y-2 pt-1">
+              <div className="grid grid-cols-3 gap-2">
 
                 <div className="p-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800/60 text-center">
                   <div className="text-[10px] font-semibold text-indigo-700 dark:text-indigo-300">
@@ -227,6 +215,16 @@ export const AcademicParaphraseModal: React.FC<AcademicParaphraseModalProps> = (
                     {result.readabilityScore}/100
                   </div>
                 </div>
+                <div className="p-2.5 rounded-xl bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800/60 text-center">
+                  <div className="text-[10px] font-semibold text-sky-700 dark:text-sky-300">Perubahan Jumlah Kata</div>
+                  <div className="text-base font-extrabold text-sky-600 dark:text-sky-400">
+                    {result.wordCountChange > 0 ? '+' : ''}{result.wordCountChange}
+                  </div>
+                </div>
+              </div>
+              <p className="text-[10px] leading-relaxed text-slate-500 dark:text-slate-400">
+                Hasil parafrase tidak menjamin lolos pemeriksaan similarity/plagiarisme. Verifikasi tetap diperlukan menggunakan alat pemeriksaan yang sesuai.
+              </p>
               </div>
             )}
           </div>

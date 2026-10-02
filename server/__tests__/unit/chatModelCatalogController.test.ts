@@ -10,6 +10,8 @@ describe('GET /chat/models controller contract', () => {
 
     expect(new Set(ids).size).toBe(ids.length);
     expect(payload.defaultModel).toBeTruthy();
+    expect(payload.models.every(model => typeof model.available === 'boolean' && typeof model.providerAvailable === 'boolean')).toBe(true);
+    expect(payload.models.every(model => model.available || model.selectable === false)).toBe(true);
     expect(payload.models.find(model => model.id === 'gemini-3.1-pro-preview')?.selectable).toBe(false);
     expect(payload.models.every(model => !('providerModelId' in model) && !('apiKey' in model))).toBe(true);
   });

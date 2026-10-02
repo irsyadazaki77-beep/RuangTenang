@@ -12,6 +12,7 @@ import { AttachmentResponseDTO, SupportedFileKind } from '../../../shared/contra
 
 import { aiSafetyService } from '../ai/aiSafetyService.js';
 import { deleteStoredAttachmentFile, resolveExistingStoredAttachmentFilePath } from '../attachmentFileService.js';
+import { encryptionService } from '../encryptionService.js';
 
 export const ATTACHMENTS_DIR = path.join(process.cwd(), 'uploads', 'attachments');
 
@@ -94,7 +95,8 @@ export const documentIngestionService = {
     const storagePath = path.join(ATTACHMENTS_DIR, storageFilename);
     const relativeStoragePath = `uploads/attachments/${storageFilename}`;
 
-    await fs.promises.writeFile(storagePath, buffer, { mode: 0o600 });
+    const encryptedFile = encryptionService.encryptRequiredSensitive(buffer.toString('base64'));
+    await fs.promises.writeFile(storagePath, encryptedFile, { mode: 0o600 });
 
     // 4. PERSIST METADATA: Initial pending record
     let record;
@@ -111,7 +113,9 @@ export const documentIngestionService = {
           data: relativeStoragePath,
           checksum: verified.checksum,
           fileKind: verified.fileKind,
-          status: 'processing'
+          status: 'processing',
+          isEncrypted: true,
+          encryptionVersion: encryptionService.getCurrentKeyVersion()
         }
       });
     } catch (dbErr: any) {
@@ -150,13 +154,14 @@ export const documentIngestionService = {
     }
 
     // 5. PROCESS: Execute format-aware extraction adapter
+    const processingBuffer = Buffer.from(buffer);
     try {
       const extraction = await DocumentExtractor.extractDocument({
-        buffer,
+        buffer: processingBuffer,
         filename: verified.sanitizedName,
         mimeType: verified.verifiedMime,
         abortSignal
-      });
+      }).finally(() => processingBuffer.fill(0));
 
       if (abortSignal?.aborted) {
         throw new DocumentProcessingException('PROCESSING_ABORTED', 'Proses ekstraksi dibatalkan.');
@@ -176,7 +181,9 @@ export const documentIngestionService = {
             attachmentId,
             userId: userId || 'guest',
             chunkIndex: c.index,
-            content: c.text,
+            content: encryptionService.encryptRequiredSensitive(c.text),
+            isEncrypted: true,
+            encryptionVersion: encryptionService.getCurrentKeyVersion(),
             tokenCount: c.tokenEstimate,
             pageStart: c.pageStart ?? null,
             pageEnd: c.pageEnd ?? null,
@@ -202,7 +209,9 @@ export const documentIngestionService = {
         data: {
           status: 'ready',
           processedAt: new Date(),
-          extractedText: normalized.normalizedFullText.substring(0, 10_000), // Preview cache
+          extractedText: encryptionService.encryptRequiredSensitive(normalized.normalizedFullText.substring(0, 10_000)),
+          isEncrypted: true,
+          encryptionVersion: encryptionService.getCurrentKeyVersion(),
           metadata: JSON.stringify(metadataObj)
         }
       });
@@ -294,7 +303,12 @@ export const documentIngestionService = {
       throw new DocumentProcessingException('STORAGE_ERROR', 'Berkas fisik tidak ditemukan pada server.');
     }
 
-    const buffer = await fs.promises.readFile(fullPath);
+    const storedBuffer = await fs.promises.readFile(fullPath);
+    const buffer = attachment.isEncrypted
+      ? Buffer.from(encryptionService.decryptSensitive(storedBuffer.toString('utf8')) || '', 'base64')
+      : storedBuffer;
+    if (attachment.isEncrypted) storedBuffer.fill(0);
+    if (buffer.length !== attachment.size) throw new DocumentProcessingException('STORAGE_ERROR', 'Berkas terenkripsi tidak dapat diverifikasi.');
 
     // Transition failed -> processing
     await prisma.attachments.update({
@@ -315,7 +329,7 @@ export const documentIngestionService = {
         buffer,
         filename: attachment.filename,
         mimeType: attachment.mimeType,
-      });
+      }).finally(() => buffer.fill(0));
 
       const normalized = normalizationService.normalizeDocument(extraction as any);
       const chunks = chunkingService.createChunks(normalized);
@@ -327,7 +341,9 @@ export const documentIngestionService = {
             attachmentId,
             userId: userId || 'guest',
             chunkIndex: c.index,
-            content: c.text,
+            content: encryptionService.encryptRequiredSensitive(c.text),
+            isEncrypted: true,
+            encryptionVersion: encryptionService.getCurrentKeyVersion(),
             tokenCount: c.tokenEstimate,
             pageStart: c.pageStart ?? null,
             pageEnd: c.pageEnd ?? null,
@@ -353,7 +369,9 @@ export const documentIngestionService = {
         data: {
           status: 'ready',
           processedAt: new Date(),
-          extractedText: normalized.normalizedFullText.substring(0, 10_000),
+          extractedText: encryptionService.encryptRequiredSensitive(normalized.normalizedFullText.substring(0, 10_000)),
+          isEncrypted: true,
+          encryptionVersion: encryptionService.getCurrentKeyVersion(),
           metadata: JSON.stringify(metadataObj)
         }
       });

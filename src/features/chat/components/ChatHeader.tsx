@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   Menu, 
   Moon, 
@@ -67,10 +67,17 @@ export function ChatHeader({
 }: ChatHeaderProps) {
   const { actualTheme, toggleTheme } = useTheme();
   const { isIncognitoMode, toggleIncognito, triggerPanicScreen } = usePrivacyVault();
-  const { models: availableModels, loading: modelsLoading } = useAiModelCatalog();
+  const { models: catalogModels, loading: modelsLoading, error: modelsError, defaultModel } = useAiModelCatalog();
+  const availableModels = catalogModels.filter(model => model.available && model.selectable);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const currentModel = availableModels.find(m => m.id === aiModel);
   const isSettingsOpen = activePlugin === 'chat_settings';
+
+  useEffect(() => {
+    if (!modelsLoading && !modelsError && aiModel !== 'auto' && !availableModels.some(model => model.id === aiModel)) {
+      setAiModel(defaultModel);
+    }
+  }, [aiModel, availableModels, defaultModel, modelsError, modelsLoading, setAiModel]);
 
   return (
     <header className="sticky top-0 z-20 w-full shrink-0 flex items-center justify-between px-2.5 sm:px-4 pt-safe pt-[env(safe-area-inset-top,0px)] min-h-[calc(3rem+env(safe-area-inset-top,0px))] bg-stone-50/80 dark:bg-slate-950/70 backdrop-blur-2xl border-b border-stone-200/40 dark:border-slate-800/40 transition-colors">
@@ -98,7 +105,7 @@ export function ChatHeader({
               RuangTenang
             </span>
             <span className="hidden md:inline-flex text-[11px] text-stone-400 dark:text-slate-500 font-normal truncate">
-              · {aiModel === 'auto' ? 'Auto (Pilih otomatis)' : (currentModel?.tag || (modelsLoading ? 'Memuat model…' : 'Gemini'))}
+              · {aiModel === 'auto' ? 'Auto (Pilih otomatis)' : (currentModel?.tag || (modelsLoading ? 'Memuat model…' : 'Model otomatis'))}
             </span>
             <ChevronDown className={`w-3 h-3 text-stone-400 transition-transform duration-150 shrink-0 ${isSettingsOpen ? 'rotate-180 text-teal-600 dark:text-teal-400' : 'group-hover:text-stone-600 dark:group-hover:text-slate-300'}`} />
           </button>
@@ -138,13 +145,15 @@ export function ChatHeader({
                           const isAllowed = m.allowedTiers.includes(tier === 'Free' ? 'Free' : 'Pro');
                           return (
                             <option key={m.id} value={m.id} disabled={!isAllowed || !m.selectable} className="font-normal text-stone-800 dark:text-slate-200">
-                              {m.name} {!isAllowed ? '(Pro Tier)' : !m.selectable ? '(Penyedia tidak tersedia)' : ''}
+                              {m.name} {!isAllowed ? '(Tier tidak tersedia)' : ''}
                             </option>
                           );
                         })}
                       </optgroup>
                     ))}
                     {modelsLoading && <option disabled>Memuat model...</option>}
+                    {modelsError && <option disabled>Daftar model belum tersedia; menggunakan rute default server.</option>}
+                    {!modelsLoading && !modelsError && availableModels.length === 0 && <option disabled>{defaultModel} (rute default server)</option>}
                   </select>
                 </div>
 

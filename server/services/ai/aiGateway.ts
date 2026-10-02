@@ -8,6 +8,8 @@ import { getVerifiedEmergencyContacts } from '../../config/emergencyRegistry.js'
 import { validateAndSanitizeToolCall } from './aiToolSchemas.js';
 import { analyzeMessageSentiment } from '../../../src/lib/crisisDetector.js';
 import { z } from 'zod';
+import { fuseCrisisSeverity } from './crisisSeverityFusion.js';
+export { fuseCrisisSeverity } from './crisisSeverityFusion.js';
 
 export interface ChatStreamGatewayParams {
   userId?: string;
@@ -305,7 +307,7 @@ Berikan analisis dalam format JSON murni:
       isNegated: localResult.isNegated,
       requiresDirectSafetyQuestion: localResult.requiresDirectSafetyQuestion,
       reasoning: localResult.reasoning,
-      isCrisis: localResult.severity === 'crisis',
+      isCrisis: localResult.isCrisis,
       triggers: localResult.detectedTriggers,
       recommendedAction: localResult.recommendedAction,
       source: 'local_deterministic' as const,
@@ -373,21 +375,27 @@ KLASIFIKASIKAN sesuai kriteria klinis berikut:
 
       const parsedAi = JSON.parse(response.text || '{}');
       if (parsedAi.severity) {
+        const localSeverity = localResult.severity;
+        const aiSeverity = ['normal', 'distress', 'crisis'].includes(parsedAi.severity) ? parsedAi.severity as 'normal' | 'distress' | 'crisis' : localSeverity;
+        // Deterministic acute-risk classification is the safety floor. Only local negation
+        // rules may clear that floor; an LLM cannot downgrade an active crisis.
+        const fused = fuseCrisisSeverity(localSeverity, aiSeverity, localResult.isCrisis, localResult.isNegated);
+        const fusedNegated = fused.isNegated;
         return {
-          severity: parsedAi.severity,
+          severity: fused.severity,
           confidenceScore: typeof parsedAi.confidenceScore === 'number' ? parsedAi.confidenceScore : localResult.confidenceScore,
-          isNegated: Boolean(parsedAi.isNegated),
-          requiresDirectSafetyQuestion: Boolean(parsedAi.requiresDirectSafetyQuestion),
+          isNegated: fusedNegated,
+          requiresDirectSafetyQuestion: fused.preserveLocalCrisis || (!fused.thirdPartyOnly && Boolean(parsedAi.requiresDirectSafetyQuestion)),
           reasoning: parsedAi.reasoning || localResult.reasoning,
-          isCrisis: parsedAi.severity === 'crisis' && !parsedAi.isNegated,
+          isCrisis: fused.isCrisis,
           triggers: localResult.detectedTriggers,
-          recommendedAction: parsedAi.severity === 'crisis' ? 'Tawarkan rujukan ke Hotline Kemenkes 119 ext 8 atau kontak darurat' : localResult.recommendedAction,
+          recommendedAction: fused.severity === 'crisis' ? 'Tawarkan rujukan ke Hotline Kemenkes 119 ext 8 atau kontak darurat' : localResult.recommendedAction,
           source: 'ai_enhanced',
           hotlines: getVerifiedEmergencyContacts().map(c => ({ name: c.name, phone: c.phone, type: c.type }))
         };
       }
-    } catch (err) {
-      console.warn('[AI_GATEWAY] AI crisis classifier failed, using local result:', err);
+    } catch {
+      console.warn('[AI_GATEWAY] AI crisis classifier failed; local deterministic result used.');
     }
 
     return baseResponse;

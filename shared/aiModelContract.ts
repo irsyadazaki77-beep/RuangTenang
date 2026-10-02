@@ -62,12 +62,16 @@ export interface AiModelOption {
   name: string;
   category: string;
   tag: string;
+  description: string;
+  recommendedFor: string;
   speed: 'Sangat Cepat' | 'Cepat' | 'Sedang';
   reasoning: 'Tinggi' | 'Sangat Tinggi' | 'Standar';
   provider: ProviderId;
   capabilities: ModelCapability[];
   allowedTiers: ModelTier[];
   availability: ModelAvailability;
+  available: boolean;
+  providerAvailable: boolean;
   selectable: boolean;
   isDefault: boolean;
 }

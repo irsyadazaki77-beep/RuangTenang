@@ -1,7 +1,7 @@
 import { aiProviderConfig } from '../../config/aiProviderConfig.js';
 import { AiRequestOptions } from './aiRequestService.js';
 import { getModelDefinition } from './aiModelRegistry.js';
-import { AI_RELIABILITY_POLICY } from './aiReliabilityService.js';
+import { AI_RELIABILITY_POLICY, classifyAiError } from './aiReliabilityService.js';
 
 export interface OpenRouterChatMessage {
   role: 'system' | 'user' | 'assistant';
@@ -100,8 +100,6 @@ export const openrouterService = {
         signal: controller.signal
       });
 
-      clearTimeout(timeoutId);
-
       if (!response.ok) {
         const errorText = await response.text().catch(() => '');
         const quota = /quota|billing|resource_exhausted/i.test(errorText);
@@ -112,17 +110,20 @@ export const openrouterService = {
 
       const data = await response.json();
       const choice = data.choices?.[0];
-      const outputText = choice?.message?.content || '';
+      const outputText = typeof choice?.message?.content === 'string' ? choice.message.content.trim() : '';
+      if (!outputText) throw Object.assign(new Error('AI_PROVIDER_CONTENT_ERROR_INVALID_RESPONSE'), { category: 'CONTENT_ERROR', retryable: false });
+      clearTimeout(timeoutId);
 
       return {
         text: outputText,
         modelUsed: targetModel,
         isFallback: false
       };
-    } catch (err: any) {
+    } catch (err: unknown) {
       clearTimeout(timeoutId);
-      console.error('[OPENROUTER] Execution error:', err?.message || err);
-      throw err;
+      const normalized = classifyAiError(err);
+      console.warn(`[OPENROUTER] Request failed category=${normalized.category}`);
+      throw normalized;
     }
   },
 

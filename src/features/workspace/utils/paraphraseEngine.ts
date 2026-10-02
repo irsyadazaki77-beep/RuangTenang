@@ -14,8 +14,9 @@ export interface ParaphraseResult {
   wordCountParaphrased: number;
   readabilityScore: number; // 0 to 100
   lexicalDiversity: number; // %
-  plagiarismRiskReduction: number; // %
   changesCount: number;
+  wordCountChange: number;
+  sentenceStructureChange: number;
 }
 
 // Academic synonym dictionary conforming to KBBI & formal academic Indonesian
@@ -54,13 +55,14 @@ export function paraphraseAcademicText(text: string, style: ParaphraseStyle = 'K
       wordCountParaphrased: 0,
       readabilityScore: 0,
       lexicalDiversity: 0,
-      plagiarismRiskReduction: 0,
-      changesCount: 0
+      changesCount: 0,
+      wordCountChange: 0,
+      sentenceStructureChange: 0
     };
   }
 
   const sentences = cleanInput.split(/(?<=[.?!])\s+/);
-  let transformedSentences: string[] = [];
+  let transformedSentences: string[];
   let changesCount = 0;
 
   if (style === 'KONSERVATIF') {
@@ -117,15 +119,6 @@ export function paraphraseAcademicText(text: string, style: ParaphraseStyle = 'K
     });
   } else {
     // Mode SINTESIS: Dense executive summary of core argument
-    const combined = sentences.map(s => {
-      let transformed = s;
-      Object.entries(ACADEMIC_SYNONYMS).forEach(([key, synonyms]) => {
-        const regex = new RegExp(`\\b${key}\\b`, 'gi');
-        transformed = transformed.replace(regex, synonyms[0]);
-      });
-      return transformed;
-    }).join(' ');
-
     const coreKeywords = cleanInput.split(/\s+/).filter(w => w.length > 5).slice(0, 5).join(', ');
     transformedSentences = [
       `Secara substansial, sintesis atas argumen tersebut mengafirmasi bahwa dinamika ${coreKeywords || 'variabel penelitian'} memiliki determinasi krusial terhadap keberlanjutan hasil evaluasi secara terstruktur dan komprehensif.`
@@ -145,12 +138,6 @@ export function paraphraseAcademicText(text: string, style: ParaphraseStyle = 'K
   const avgWordsPerSentence = paraWords.length / Math.max(1, transformedSentences.length);
   const readabilityScore = Math.max(40, Math.min(95, Math.round(100 - (avgWordsPerSentence * 1.8))));
 
-  // Estimated Turnitin Plagiarism Risk Reduction
-  let plagiarismReduction = 45;
-  if (style === 'KONSERVATIF') plagiarismReduction = 35 + Math.min(25, changesCount * 4);
-  if (style === 'RESTRUKTURISASI') plagiarismReduction = 65 + Math.min(25, changesCount * 3);
-  if (style === 'SINTESIS') plagiarismReduction = 88;
-
   return {
     originalText: cleanInput,
     paraphrasedText,
@@ -159,7 +146,8 @@ export function paraphraseAcademicText(text: string, style: ParaphraseStyle = 'K
     wordCountParaphrased: paraWords.length,
     readabilityScore,
     lexicalDiversity,
-    plagiarismRiskReduction: Math.min(95, plagiarismReduction),
-    changesCount
+    changesCount,
+    wordCountChange: paraWords.length - origWords.length,
+    sentenceStructureChange: Math.abs(transformedSentences.length - sentences.length)
   };
 }

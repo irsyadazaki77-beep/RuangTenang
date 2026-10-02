@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { MessageBubble } from './MessageBubble';
 import { StreamingBubble } from './StreamingBubble';
 import { ChatComposer } from './ChatComposer';
-import { Message, ChatMode, ResponseStyle, Chat } from '../types';
+import { Attachment, Message, ChatMode, ResponseStyle, Chat } from '../types';
 import { UserSession } from '../../../types';
 import { ChatModalContainer } from './ChatModalContainer';
 import { RefreshCw, ChevronDown, Sparkles, Clock, Wind, Calendar, ArrowDown, Shield, Eye, X, Video } from 'lucide-react';
@@ -30,6 +30,7 @@ import { useChatSearch } from '../hooks/useChatSearch';
 import { useChatBookmarks } from '../hooks/useChatBookmarks';
 import { useChatMemory } from '../hooks/useChatMemory';
 import { useChatPlugins } from '../hooks/useChatPlugins';
+import { useChatScroll } from '../hooks/useChatScroll';
 
 interface MainChatProps {
   user: UserSession | null;
@@ -104,41 +105,18 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
     );
   }, [isTyping]);
 
-  const bottomRef = useRef<HTMLDivElement>(null);
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const [showScrollBottom, setShowScrollBottom] = useState(false);
-  const [isAtBottom, setIsAtBottom] = useState(true);
+  const {
+    bottomRef,
+    scrollContainerRef,
+    showScrollBottom,
+    viewportHeight,
+    scrollToBottom
+  } = useChatScroll(messages, isTyping, streamingMessage?.content);
   const [quotaExceededInfo, setQuotaExceededInfo] = useState<{
     isExceeded: boolean;
     message?: string;
     resetAt?: string;
   } | null>(null);
-  const [viewportHeight, setViewportHeight] = useState<number | null>(null);
-
-  // Dynamic visualViewport management for mobile virtual keyboards (iOS / Android)
-  useEffect(() => {
-    if (typeof window === 'undefined' || !window.visualViewport) return;
-
-    const updateViewportHeight = () => {
-      if (window.visualViewport) {
-        if (window.innerWidth < 768) {
-          setViewportHeight(window.visualViewport.height);
-        } else {
-          setViewportHeight(null);
-        }
-      }
-    };
-
-    updateViewportHeight();
-    const vv = window.visualViewport;
-    vv.addEventListener('resize', updateViewportHeight);
-    vv.addEventListener('scroll', updateViewportHeight, { passive: true });
-
-    return () => {
-      vv.removeEventListener('resize', updateViewportHeight);
-      vv.removeEventListener('scroll', updateViewportHeight);
-    };
-  }, []);
 
   useEffect(() => {
     if (chatId !== loadedChatIdRef.current) {
@@ -156,70 +134,6 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
       fetchMessages(nextCursor);
     }
   };
-
-  const handleScroll = () => {
-    if (scrollContainerRef.current) {
-      const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
-      const nearBottom = scrollHeight - scrollTop - clientHeight <= 120;
-      setIsAtBottom(nearBottom);
-      setShowScrollBottom(!nearBottom);
-    } else {
-      const nearBottom = document.documentElement.scrollHeight - window.scrollY - window.innerHeight <= 120;
-      setIsAtBottom(nearBottom);
-      setShowScrollBottom(!nearBottom);
-    }
-  };
-
-  useEffect(() => {
-    const el = scrollContainerRef.current;
-    if (el) el.addEventListener('scroll', handleScroll, { passive: true });
-    return () => {
-      if (el) el.removeEventListener('scroll', handleScroll);
-    };
-  }, []);
-
-  const scrollToBottom = useCallback((smooth = true) => {
-    if (scrollContainerRef.current) {
-      if (smooth && typeof scrollContainerRef.current.scrollTo === 'function') {
-        scrollContainerRef.current.scrollTo({
-          top: scrollContainerRef.current.scrollHeight,
-          behavior: 'smooth'
-        });
-      } else {
-        scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
-      }
-    }
-    setIsAtBottom(true);
-    setShowScrollBottom(false);
-  }, []);
-
-  // Smart Auto-Scroll: Smoothly auto-scroll during stream with RAF dampener
-  const scrollRafRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    if (!isAtBottom || !scrollContainerRef.current) return;
-    
-    if (scrollRafRef.current) {
-      cancelAnimationFrame(scrollRafRef.current);
-    }
-
-    scrollRafRef.current = requestAnimationFrame(() => {
-      const el = scrollContainerRef.current;
-      if (!el) return;
-      const target = el.scrollHeight;
-      const distance = target - (el.scrollTop + el.clientHeight);
-      if (distance > 2) {
-        el.scrollTo({
-          top: target,
-          behavior: distance > 240 ? 'smooth' : 'auto'
-        });
-      }
-    });
-
-    return () => {
-      if (scrollRafRef.current) cancelAnimationFrame(scrollRafRef.current);
-    };
-  }, [messages, isTyping, streamingMessage?.content, isAtBottom]);
 
   // Global hotkeys listener
   useEffect(() => {
@@ -250,7 +164,7 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
     navigate(`/c/${newChat.id}`);
   };
 
-  const handleSend = useCallback(async (content: string, pluginResult?: string, attachments?: any[]) => {
+  const handleSend = useCallback(async (content: string, pluginResult?: string, attachments?: Attachment[]) => {
     if (!content.trim() && !pluginResult && (!attachments || attachments.length === 0)) return;
     
     const tempId = `msg_${Date.now()}`;

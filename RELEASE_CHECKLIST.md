@@ -1,5 +1,15 @@
 # Production Release Checklist - RuangTenang Kampus 🌿
 
+## Fase 1 gate status — 2026-10-02
+- [ ] **Not a production candidate.** The final revision has not completed the full required quality gate.
+- [ ] `npm ci` failed with Windows `EPERM` while replacing locked native binaries. `npm install --ignore-scripts --no-audit --no-fund` restored enough tooling for local checks, but Prisma Client generation is blocked because `binaries.prisma.sh` is unreachable. Typecheck fails on missing generated Prisma exports; unit/integration/security scripts stop before Vitest for the same reason.
+- [x] `npm run lint` exits 0 with 284 warnings and no errors.
+- [x] Focused regression suite: 18 tests pass across citation, Mermaid sanitizer, AI adapters, IP privacy, document encryption, and crisis fusion.
+- [ ] E2E: 77 passed and 25 failed. Failures include stale route expectations, navigation timeouts, prompt injection expectation, and onboarding overlay interactions; see the recorded run for details.
+- [x] Production build completed successfully once; rerun after final edits remains blocked by native binary/file-lock instability if applicable.
+- [ ] Apply and rehearse migration `20261002000000_encrypt_document_storage` against an isolated PostgreSQL database; regenerate the SQLite and PostgreSQL Prisma clients.
+- See [`docs/RELEASE_REPORT.md`](docs/RELEASE_REPORT.md) for current results and the precise environment blockers.
+
 ## 1. Pre-Deployment Verification
 
 ### Local validation — 2026-10-01

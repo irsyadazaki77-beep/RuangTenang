@@ -47,6 +47,19 @@ describe('AI model registry', () => {
     }
   });
 
+  it('uses automatic safe routing when no provider is configured', () => {
+    const keys = ['GEMINI_API_KEY', 'DEEPSEEK_API_KEY', 'GROQ_API_KEY', 'OPENROUTER_API_KEY'].map(key => [key, process.env[key]] as const);
+    try {
+      for (const [key] of keys) delete process.env[key];
+      expect(getConfiguredDefaultAiModelId('Free')).toBe('auto');
+    } finally {
+      for (const [key, value] of keys) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
+  });
+
   it('returns a public catalog without provider credentials or provider model slugs', () => {
     const catalog = getPublicModelCatalog();
     expect(catalog.length).toBe(AI_MODEL_REGISTRY.length);
