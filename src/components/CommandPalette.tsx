@@ -115,7 +115,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       {
         id: 'nav-counselors',
         title: 'Jadwal & Direktori Konselor Kampus',
-        subtitle: 'Temui konselor dan psikolog berlisensi untuk bimbingan profesional',
+        subtitle: 'Lihat profil konselor kampus dan ajukan sesi pendampingan',
         category: 'Mode & Ruang',
         icon: HeartHandshake,
         badge: 'Bebas Biaya',
@@ -126,8 +126,8 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       },
       {
         id: 'nav-emergency',
-        title: 'Pusat Bantuan Krisis & SOS 24 Jam',
-        subtitle: 'Tele-konseling darurat dan hotline tanggap cepat kampus',
+        title: 'Pusat Bantuan Krisis & SOS',
+        subtitle: 'Healing119, bantuan medis darurat, dan kontak darurat pribadi',
         category: 'Mode & Ruang',
         icon: AlertOctagon,
         badge: 'Krisis',

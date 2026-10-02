@@ -3,6 +3,7 @@ import { scanAndSanitizePII } from './piiService.js';
 import { consentService } from './consentService.js';
 
 export const clientDebugSchema = z.object({
+  type: z.enum(['onerror', 'unhandledrejection']).optional(),
   message: z.string().min(1).max(500),
   stack: z.string().max(2000).optional(),
   source: z.string().max(300).optional(),

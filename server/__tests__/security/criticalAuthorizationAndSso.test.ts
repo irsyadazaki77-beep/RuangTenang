@@ -493,8 +493,8 @@ describe('FASE 1 — CRITICAL AUTHORIZATION & SSO HARDENING TEST SUITE', () => {
           plan: 'Latihan teknik pernapasan 4-7-8'
         });
 
-      expect(res.status).toBe(403);
-      expect(res.body.code).toBe('ACCESS_DENIED');
+      expect(res.status).toBe(404);
+      expect(res.body.error).toBe('Data tidak ditemukan atau akses tidak tersedia.');
     });
 
     it('should allow assigned Counselor 1 to create SOAP note for assigned Student A', async () => {
@@ -534,8 +534,8 @@ describe('FASE 1 — CRITICAL AUTHORIZATION & SSO HARDENING TEST SUITE', () => {
           plan: 'Plan'
         });
 
-      expect(res.status).toBe(403);
-      expect(res.body.code).toBe('ACCESS_DENIED');
+      expect(res.status).toBe(404);
+      expect(res.body.error).toBe('Data tidak ditemukan atau akses tidak tersedia.');
     });
   });
 

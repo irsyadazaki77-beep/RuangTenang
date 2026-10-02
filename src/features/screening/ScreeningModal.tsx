@@ -192,23 +192,30 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
 
   useEffect(() => {
     if (isPageMode || !isOpen) return;
+    const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const getFocusableElements = () => Array.from(modalRef.current?.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    ) || []).filter((element) => element.getClientRects().length > 0);
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Tab') {
-        const focusableElements = modalRef.current?.querySelectorAll(
-          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-        );
-        if (!focusableElements || focusableElements.length === 0) return;
-        const firstElement = focusableElements[0] as HTMLElement;
-        const lastElement = focusableElements[focusableElements.length - 1] as HTMLElement;
+        const focusableElements = getFocusableElements();
+        if (focusableElements.length === 0) {
+          modalRef.current?.focus();
+          e.preventDefault();
+          return;
+        }
+        const firstElement = focusableElements[0];
+        const lastElement = focusableElements[focusableElements.length - 1];
+        const focusIsInside = Boolean(modalRef.current?.contains(document.activeElement));
 
         if (e.shiftKey) {
-          if (document.activeElement === firstElement) {
+          if (document.activeElement === firstElement || !focusIsInside) {
             lastElement.focus();
             e.preventDefault();
           }
         } else {
-          if (document.activeElement === lastElement) {
+          if (document.activeElement === lastElement || !focusIsInside) {
             firstElement.focus();
             e.preventDefault();
           }
@@ -216,16 +223,13 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
       }
     };
     
-    const focusable = modalRef.current?.querySelectorAll(
-      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-    );
-    if (focusable && focusable.length > 0) {
-      (focusable[0] as HTMLElement).focus();
-    }
+    const focusable = getFocusableElements();
+    (focusable[0] || modalRef.current)?.focus();
 
     document.addEventListener('keydown', handleKeyDown);
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
+      previouslyFocused?.focus();
     };
   }, [onClose, isPageMode, isOpen]);
 
@@ -378,9 +382,9 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
     const riskIndicators = {
       item9Score,
       hasSelfHarmRisk,
-      immediateDanger: safetyAssessment.immediateDanger ?? false,
-      planOrIntent: safetyAssessment.planOrIntent ?? false,
-      contactedTrustedPerson: safetyAssessment.wantsTrustedContact ?? false,
+      immediateDanger: safetyAssessment.immediateDanger,
+      planOrIntent: safetyAssessment.planOrIntent,
+      wantsTrustedContact: safetyAssessment.wantsTrustedContact,
       riskCategory,
       flaggedAt: new Date().toISOString()
     };
@@ -687,7 +691,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
                     <span className="w-7 h-7 shrink-0 rounded-lg bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300 font-extrabold text-xs flex items-center justify-center border border-teal-200/70 dark:border-teal-800/70">
                       {currentQ.numberDisplay}
                     </span>
-                    <h3 className="text-sm sm:text-base font-medium text-primary leading-snug pt-0.5">
+                    <h3 aria-live="polite" aria-atomic="true" className="text-sm sm:text-base font-medium text-primary leading-snug pt-0.5">
                       {currentQ.questionText}
                     </h3>
                   </div>
@@ -700,6 +704,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
                         <button
                           key={opt.value}
                           onClick={() => handleSelectOption(opt.value)}
+                          aria-pressed={isSelected}
                           className={`p-3.5 sm:p-4 min-h-[52px] rounded-xl text-xs sm:text-sm font-medium border text-left transition-all focus:outline-none focus:ring-2 focus:ring-teal-500/30 cursor-pointer flex items-center justify-between group chip-tactile ${
                             isSelected
                               ? 'bg-teal-600 text-white border-teal-600 shadow-md scale-[1.01]'
@@ -1007,6 +1012,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
             role="dialog"
             aria-modal="true"
             aria-labelledby="screening-modal-title"
+            tabIndex={-1}
             className="surface-card border border-default text-primary rounded-2xl max-w-2xl w-full p-4 sm:p-6 shadow-xl relative max-h-[88dvh] max-sm:max-h-[92dvh] max-sm:rounded-b-none max-sm:w-full overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >

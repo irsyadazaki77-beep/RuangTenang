@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useId, useRef } from 'react';
 import { X } from 'lucide-react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { modalBackdropVariants, modalPanelVariants, reducedMotionVariants } from '../../lib/motionTokens';
@@ -37,33 +37,70 @@ export function ModalShell({
 }: ModalShellProps) {
   const modalRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
+  const onCloseRef = useRef(onClose);
+  const titleId = useId();
+  const subtitleId = useId();
   const shouldReduceMotion = useReducedMotion();
+  onCloseRef.current = onClose;
 
   useEffect(() => {
-    if (isOpen) {
-      previousFocusRef.current = document.activeElement as HTMLElement;
-      // Focus modal container or first button
-      const timer = setTimeout(() => {
-        const focusable = modalRef.current?.querySelector<HTMLElement>(
-          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-        );
-        focusable?.focus();
-      }, 50);
+    if (!isOpen) return;
 
-      const handleKeyDown = (e: KeyboardEvent) => {
-        if (e.key === 'Escape') {
-          e.preventDefault();
-          onClose();
-        }
-      };
-      window.addEventListener('keydown', handleKeyDown);
-      return () => {
-        clearTimeout(timer);
-        window.removeEventListener('keydown', handleKeyDown);
-        previousFocusRef.current?.focus?.();
-      };
-    }
-  }, [isOpen, onClose]);
+    previousFocusRef.current = document.activeElement as HTMLElement;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const getFocusableElements = () => Array.from(
+      modalRef.current?.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      ) || []
+    ).filter((element) =>
+      !element.hasAttribute('hidden') &&
+      element.getAttribute('aria-hidden') !== 'true' &&
+      !element.closest('[hidden], [aria-hidden="true"]') &&
+      element.getClientRects().length > 0
+    );
+
+    const timer = setTimeout(() => {
+      const firstFocusable = getFocusableElements()[0];
+      (firstFocusable || modalRef.current)?.focus();
+    }, 0);
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onCloseRef.current();
+        return;
+      }
+
+      if (event.key !== 'Tab') return;
+      const focusable = getFocusableElements();
+      if (focusable.length === 0) {
+        event.preventDefault();
+        modalRef.current?.focus();
+        return;
+      }
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement;
+      if (event.shiftKey && (active === first || !modalRef.current?.contains(active))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (active === last || !modalRef.current?.contains(active))) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+      previousFocusRef.current?.focus?.();
+    };
+  }, [isOpen]);
 
   return (
     <AnimatePresence>
@@ -80,9 +117,6 @@ export function ModalShell({
               onClose();
             }
           }}
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="modal-title"
         >
           <motion.div
             key="modal-panel"
@@ -93,6 +127,10 @@ export function ModalShell({
             variants={shouldReduceMotion ? reducedMotionVariants : modalPanelVariants}
             className={`w-full ${MAX_WIDTH_MAP[maxWidth]} surface-card border-t sm:border border-slate-200/90 dark:border-slate-800 rounded-t-3xl sm:rounded-2xl shadow-2xl flex flex-col max-h-[85dvh] sm:max-h-[90vh] overflow-hidden focus:outline-none will-change-transform`}
             tabIndex={-1}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={titleId}
+            aria-describedby={subtitle ? subtitleId : undefined}
           >
             {/* Mobile Bottom Sheet Drag Handle Indicator */}
             <div className="w-12 h-1.5 bg-slate-300 dark:bg-slate-600 rounded-full mx-auto my-2.5 sm:hidden shrink-0" />
@@ -100,11 +138,11 @@ export function ModalShell({
             {/* Header */}
             <div className="flex items-center justify-between px-4 sm:px-6 py-2 sm:py-3.5 border-b border-slate-100 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xs shrink-0">
               <div className="min-w-0 pr-3">
-                <h2 id="modal-title" className="font-semibold text-primary text-sm sm:text-base tracking-tight truncate">
+                <h2 id={titleId} className="font-semibold text-primary text-sm sm:text-base tracking-tight truncate">
                   {title}
                 </h2>
                 {subtitle && (
-                  <p className="text-[12px] text-secondary truncate mt-0.5">
+                  <p id={subtitleId} className="text-[12px] text-secondary truncate mt-0.5">
                     {subtitle}
                   </p>
                 )}

@@ -160,6 +160,93 @@ export function useWorkspaceArtifacts({
     showToast('Draf baru dibuka di Canvas', 'success');
   }, [chatId, showToast]);
 
+  const createArtifactFromContent = useCallback(async (content: string, title: string) => {
+    const id = `art_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const draft: WorkspaceArtifact = {
+      id, chatId: chatId || undefined, title: title.slice(0, 120), type: 'DOCUMENT',
+      content, version: 1, updatedAt: new Date().toISOString()
+    };
+    setArtifacts(current => [draft, ...current.filter(item => item.id !== id)]);
+    setActiveArtifactId(id);
+    setHasUnreadArtifact(true);
+    try {
+      const persisted = await WorkspaceApiService.createArtifact({ id, chatId: chatId || undefined, title: draft.title, type: draft.type, content });
+      if (persisted) setArtifacts(current => current.map(item => item.id === id ? persisted : item));
+    } catch (error) {
+      console.warn('[useWorkspaceArtifacts] Failed to save comparison result to Canvas:', error);
+    }
+    showToast('Jawaban dikirim ke Canvas', 'success');
+  }, [chatId, showToast]);
+
+  const duplicateArtifact = useCallback(async (id: string) => {
+    const target = artifacts.find(a => a.id === id);
+    if (!target) return;
+
+    const newId = `art_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const clonedArt: WorkspaceArtifact = {
+      ...target,
+      id: newId,
+      title: `${target.title} (Salinan)`,
+      version: 1,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      versions: []
+    };
+
+    setArtifacts(prev => [clonedArt, ...prev]);
+    setActiveArtifactId(clonedArt.id);
+
+    try {
+      const persisted = await WorkspaceApiService.createArtifact({
+        id: clonedArt.id,
+        chatId: chatId || undefined,
+        title: clonedArt.title,
+        type: clonedArt.type,
+        language: clonedArt.language,
+        content: clonedArt.content
+      });
+
+      if (persisted) {
+        setArtifacts(prev => prev.map(a => a.id === clonedArt.id ? persisted : a));
+      }
+    } catch (err) {
+      console.warn('[useWorkspaceArtifacts] Failed to persist duplicated artifact:', err);
+    }
+
+    showToast(`Dokumen berhasil diduplikasi: "${clonedArt.title}"`, 'success');
+  }, [artifacts, chatId, showToast]);
+
+  const deleteArtifact = useCallback(async (id: string) => {
+    if (id === DEFAULT_WELCOME_ARTIFACT_ID) {
+      showToast('Artefak default selamat datang tidak dapat dihapus', 'info');
+      return;
+    }
+
+    const target = artifacts.find(a => a.id === id);
+    const targetTitle = target?.title || 'Dokumen';
+
+    try {
+      await WorkspaceApiService.deleteArtifact(id);
+    } catch (err) {
+      console.warn('[useWorkspaceArtifacts] Backend delete error:', err);
+    }
+
+    setArtifacts(prev => {
+      const filtered = prev.filter(a => a.id !== id);
+      return filtered.length > 0 ? filtered : [DEFAULT_WELCOME_ARTIFACT];
+    });
+
+    setActiveArtifactId(prevId => {
+      if (prevId === id) {
+        const remaining = artifacts.filter(a => a.id !== id);
+        return remaining.length > 0 ? remaining[0].id : DEFAULT_WELCOME_ARTIFACT_ID;
+      }
+      return prevId;
+    });
+
+    showToast(`"${targetTitle}" berhasil dihapus`, 'success');
+  }, [artifacts, showToast]);
+
   /**
    * Syncs artifacts parsed from messages into the local state and triggers background persistence
    * with strict idempotency (no duplicate server posts for identical artifacts).
@@ -237,6 +324,9 @@ export function useWorkspaceArtifacts({
     saveArtifact,
     rollbackArtifact,
     createNewArtifact,
+    createArtifactFromContent,
+    duplicateArtifact,
+    deleteArtifact,
     syncParsedMessageArtifacts
   };
 }

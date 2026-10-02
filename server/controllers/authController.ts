@@ -33,7 +33,7 @@ export class AuthController {
         passwordHash,
         role: assignedRole,
         tier: 'Free',
-        university: university || 'Universitas Indonesia',
+        university: university || '',
         emailVerified: false,
         mfaEnabled: false
       });

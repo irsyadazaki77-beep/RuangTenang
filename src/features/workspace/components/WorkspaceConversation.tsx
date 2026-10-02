@@ -5,9 +5,12 @@ import { Message } from '../../chat/types';
 import { StarterTaskItem, WorkspaceArtifact } from '../types';
 import { LazyMarkdown } from '../../../components/common/LazyMarkdown';
 import { RhythmicTypingIndicator } from '../../../components/ui/RhythmicTypingIndicator';
+import { WorkspaceComparisonPanel } from './WorkspaceComparisonPanel';
+import type { WorkspaceComparisonCandidate, WorkspaceComparisonRun } from '../types';
 
 interface WorkspaceConversationProps {
   messages: Message[];
+  isLoading?: boolean;
   activeStreamingMessage: Message | null;
   isStreaming: boolean;
   artifacts: WorkspaceArtifact[];
@@ -15,17 +18,26 @@ interface WorkspaceConversationProps {
   onSelectStarterTask: (prompt: string) => void;
   onRetryMessage: (lastUserPrompt: string, errorMsgId: string) => void;
   onOpenCanvas: () => void;
+  comparisonRun?: WorkspaceComparisonRun | null;
+  onUseComparisonResponse?: (run: WorkspaceComparisonRun, candidate: WorkspaceComparisonCandidate) => void;
+  onComparisonSendToCanvas?: (candidate: WorkspaceComparisonCandidate) => void;
+  onCompareAgain?: (run: WorkspaceComparisonRun) => void;
 }
 
 export const WorkspaceConversation: React.FC<WorkspaceConversationProps> = React.memo(({
   messages,
+  isLoading = false,
   activeStreamingMessage,
   isStreaming,
   artifacts,
   starterTasks,
   onSelectStarterTask,
   onRetryMessage,
-  onOpenCanvas
+  onOpenCanvas,
+  comparisonRun = null,
+  onUseComparisonResponse = () => undefined,
+  onComparisonSendToCanvas = () => undefined,
+  onCompareAgain = () => undefined
 }) => {
   const shouldReduceMotion = useReducedMotion();
   const scrollRafRef = useRef<number | null>(null);
@@ -33,15 +45,19 @@ export const WorkspaceConversation: React.FC<WorkspaceConversationProps> = React
 
   const hasUserSentMessage = messages.some(m => m.role === 'user') || isStreaming || messages.length > 1;
 
-  // Auto scroll to latest chat message
+  // Follow new messages only while the reader is already near the bottom.
   useEffect(() => {
     if (scrollRafRef.current) {
       cancelAnimationFrame(scrollRafRef.current);
     }
 
     scrollRafRef.current = requestAnimationFrame(() => {
-      if (!messagesEndRef.current) return;
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+      const end = messagesEndRef.current;
+      const scroller = end?.parentElement;
+      if (!end || !scroller) return;
+      const isNearBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 120;
+      if (!isNearBottom) return;
+      scroller.scrollTo({ top: scroller.scrollHeight, behavior: 'auto' });
     });
 
     return () => {
@@ -58,8 +74,14 @@ export const WorkspaceConversation: React.FC<WorkspaceConversationProps> = React
   };
 
   return (
-    <div className="flex-1 overflow-y-auto p-3.5 sm:p-5 space-y-4 custom-scrollbar flex flex-col min-h-0">
-      {!hasUserSentMessage && !activeStreamingMessage ? (
+    <div role="log" aria-label="Percakapan RuangKerja" aria-live={isStreaming ? 'off' : 'polite'} className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-3.5 sm:p-5 space-y-4 custom-scrollbar flex flex-col">
+      {isLoading ? (
+        <div role="status" aria-label="Memuat percakapan" className="my-auto w-full max-w-lg mx-auto space-y-3 px-2">
+          <div className="h-3 w-28 rounded bg-slate-200 dark:bg-slate-800 animate-pulse" />
+          <div className="h-16 rounded-xl bg-slate-100 dark:bg-slate-900 animate-pulse" />
+          <div className="h-12 w-4/5 ml-auto rounded-xl bg-slate-100 dark:bg-slate-900 animate-pulse" />
+        </div>
+      ) : !hasUserSentMessage && !activeStreamingMessage ? (
         /* FRESH WORKSPACE STATE: Compact Intro & Starter Tasks */
         <div className="my-auto py-6 px-2 space-y-6 animate-fade-in max-w-lg mx-auto w-full">
           {/* Compact Workspace Introduction */}
@@ -116,9 +138,17 @@ export const WorkspaceConversation: React.FC<WorkspaceConversationProps> = React
             >
               {/* Assistant Message Header */}
               {msg.role === 'assistant' && (
-                <div className="flex items-center gap-1.5 mb-1 px-1 select-none text-xs text-slate-500 dark:text-slate-400">
+                <div className="flex items-center gap-1.5 mb-1 px-1 select-none text-xs text-slate-500 dark:text-slate-400 flex-wrap">
                   <Sparkles className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
                   <span className="font-semibold text-slate-700 dark:text-slate-300">Asisten RuangKerja</span>
+                  {msg.modelUsed && (
+                    <span 
+                      className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[10px] font-medium bg-emerald-100/70 dark:bg-emerald-950/70 text-emerald-800 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/60"
+                      title={msg.isFallback ? `${msg.fallbackFrom || 'Model utama'} gagal; respons diselesaikan dengan ${msg.modelUsed}.` : msg.routingReason || `Model yang digunakan: ${msg.modelUsed}`}
+                    >
+                      {msg.isFallback ? 'Fallback · ' : msg.routingMode === 'auto' ? 'Auto: ' : ''}{msg.modelUsed}
+                    </span>
+                  )}
                   <span>·</span>
                   <span className="font-mono text-[10.5px] opacity-75">{formatMessageTime(msg.createdAt)}</span>
                 </div>
@@ -209,6 +239,8 @@ export const WorkspaceConversation: React.FC<WorkspaceConversationProps> = React
           )}
         </>
       )}
+
+      <WorkspaceComparisonPanel run={comparisonRun} onUseResponse={onUseComparisonResponse} onSendToCanvas={onComparisonSendToCanvas} onCompareAgain={onCompareAgain} />
 
       <div ref={messagesEndRef} />
     </div>

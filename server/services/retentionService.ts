@@ -1,7 +1,6 @@
 import crypto from 'crypto';
-import fs from 'fs';
-import path from 'path';
 import { prisma } from '../database.js';
+import { deleteStoredAttachmentFile } from './attachmentFileService.js';
 
 export interface RetentionCleanupResult {
   success: boolean;
@@ -11,7 +10,27 @@ export interface RetentionCleanupResult {
   appointmentsDeleted: number;
   chatsDeleted: number;
   temporaryChatsDeleted: number;
+  attachmentsDeleted: number;
   timestamp: string;
+}
+
+async function deleteAttachmentRecords(records: Array<{ id: string; data: string; chatId?: string | null }>): Promise<{ deleted: number; blockedChatIds: Set<string> }> {
+  let deleted = 0;
+  const blockedChatIds = new Set<string>();
+  for (const record of records) {
+    try {
+      await deleteStoredAttachmentFile(record.data);
+    } catch {
+      console.warn(`[RETENTION] Could not safely remove attachment ${record.id}; keeping its database record for retry.`);
+      if (record.chatId) blockedChatIds.add(record.chatId);
+      continue;
+    }
+
+    await prisma.documentChunks.deleteMany({ where: { attachmentId: record.id } });
+    await prisma.attachments.deleteMany({ where: { id: record.id } });
+    deleted++;
+  }
+  return { deleted, blockedChatIds };
 }
 
 import { encryptionService } from './encryptionService.js';
@@ -26,6 +45,7 @@ export class RetentionService {
     let screeningsDeleted = 0;
     let appointmentsDeleted = 0;
     let chatsDeleted = 0;
+    let attachmentsDeleted = 0;
 
     for (const c of allConsents) {
       const retentionDays = c.retentionDays;
@@ -76,14 +96,46 @@ export class RetentionService {
 
       if (oldChats.length > 0) {
         const oldChatIds = oldChats.map((ch) => ch.id);
+        const oldChatMessages = await prisma.chatMessages.findMany({
+          where: { chatId: { in: oldChatIds } },
+          select: { id: true, chatId: true }
+        });
+        const messageChatIds = new Map(oldChatMessages.map((message) => [message.id, message.chatId]));
+        const oldChatAttachments = await prisma.attachments.findMany({
+          where: {
+            userId,
+            OR: [
+              { chatId: { in: oldChatIds } },
+              { messageId: { in: oldChatMessages.map((message) => message.id) } }
+            ]
+          },
+          select: { id: true, data: true, chatId: true, messageId: true }
+        });
+        const attachmentCleanup = await deleteAttachmentRecords(oldChatAttachments.map((attachment) => ({
+          ...attachment,
+          chatId: attachment.chatId || (attachment.messageId ? messageChatIds.get(attachment.messageId) : null)
+        })));
+        attachmentsDeleted += attachmentCleanup.deleted;
+        const erasableChatIds = oldChatIds.filter((id) => !attachmentCleanup.blockedChatIds.has(id));
         await prisma.chatMessages.deleteMany({
-          where: { chatId: { in: oldChatIds } }
+          where: { chatId: { in: erasableChatIds } }
         });
         const deletedCh = await prisma.chats.deleteMany({
-          where: { id: { in: oldChatIds } }
+          where: { id: { in: erasableChatIds } }
         });
         chatsDeleted += deletedCh.count;
       }
+
+      const oldUnlinkedAttachments = await prisma.attachments.findMany({
+        where: {
+          userId,
+          chatId: null,
+          messageId: null,
+          createdAt: { lt: cutoff }
+        },
+        select: { id: true, data: true }
+      });
+      attachmentsDeleted += (await deleteAttachmentRecords(oldUnlinkedAttachments)).deleted;
     }
 
     // 5. Cleanup temporary / guest chats older than 24 hours
@@ -95,17 +147,43 @@ export class RetentionService {
       },
       select: { id: true }
     });
+    const oldGuestChatIds = oldGuestChats.map((chat) => chat.id);
+    const oldGuestMessages = oldGuestChatIds.length > 0
+      ? await prisma.chatMessages.findMany({
+        where: { chatId: { in: oldGuestChatIds } },
+        select: { id: true, chatId: true }
+      })
+      : [];
+    const guestMessageChatIds = new Map(oldGuestMessages.map((message) => [message.id, message.chatId]));
+    const oldGuestAttachments = await prisma.attachments.findMany({
+      where: {
+        userId: 'guest',
+        OR: [
+          { chatId: { in: oldGuestChatIds } },
+          { messageId: { in: oldGuestMessages.map((message) => message.id) } },
+          { chatId: null, messageId: null, createdAt: { lt: guestCutoff } }
+        ]
+      },
+      select: { id: true, data: true, chatId: true, messageId: true }
+    });
+    const guestAttachmentCleanup = await deleteAttachmentRecords(oldGuestAttachments.map((attachment) => ({
+      ...attachment,
+      chatId: attachment.chatId || (attachment.messageId ? guestMessageChatIds.get(attachment.messageId) : null)
+    })));
+    attachmentsDeleted += guestAttachmentCleanup.deleted;
 
     let temporaryChatsDeleted = 0;
     if (oldGuestChats.length > 0) {
-      const guestIds = oldGuestChats.map((g) => g.id);
-      await prisma.chatMessages.deleteMany({
-        where: { chatId: { in: guestIds } }
-      });
-      const delGuest = await prisma.chats.deleteMany({
-        where: { id: { in: guestIds } }
-      });
-      temporaryChatsDeleted = delGuest.count;
+      const guestIds = oldGuestChats.map((g) => g.id).filter((id) => !guestAttachmentCleanup.blockedChatIds.has(id));
+      if (guestIds.length > 0) {
+        await prisma.chatMessages.deleteMany({
+          where: { chatId: { in: guestIds } }
+        });
+        const delGuest = await prisma.chats.deleteMany({
+          where: { id: { in: guestIds } }
+        });
+        temporaryChatsDeleted = delGuest.count;
+      }
     }
 
     // 6. Cleanup expired password reset & MFA codes from user records
@@ -134,7 +212,7 @@ export class RetentionService {
       // Non-blocking
     }
 
-    const totalCleaned = moodLogsDeleted + screeningsDeleted + appointmentsDeleted + chatsDeleted + temporaryChatsDeleted;
+    const totalCleaned = moodLogsDeleted + screeningsDeleted + appointmentsDeleted + chatsDeleted + temporaryChatsDeleted + attachmentsDeleted;
 
     return {
       success: true,
@@ -144,6 +222,7 @@ export class RetentionService {
       appointmentsDeleted,
       chatsDeleted,
       temporaryChatsDeleted,
+      attachmentsDeleted,
       timestamp: new Date().toISOString()
     };
   }
@@ -169,14 +248,7 @@ export class RetentionService {
         where: { userId },
         select: { id: true, data: true }
       });
-      for (const att of userAttachments) {
-        try {
-          const fullPath = path.isAbsolute(att.data) ? att.data : path.join(process.cwd(), att.data);
-          if (fs.existsSync(fullPath)) {
-            await fs.promises.unlink(fullPath);
-          }
-        } catch (e) {}
-      }
+      for (const att of userAttachments) await deleteStoredAttachmentFile(att.data);
 
       await tx.documentChunks.deleteMany({ where: { userId } });
       const delAttachments = await tx.attachments.deleteMany({ where: { userId } });
@@ -305,14 +377,7 @@ export class RetentionService {
         where: { userId },
         select: { id: true, data: true }
       });
-      for (const att of userAttachments) {
-        try {
-          const fullPath = path.isAbsolute(att.data) ? att.data : path.join(process.cwd(), att.data);
-          if (fs.existsSync(fullPath)) {
-            await fs.promises.unlink(fullPath);
-          }
-        } catch (e) {}
-      }
+      for (const att of userAttachments) await deleteStoredAttachmentFile(att.data);
 
       await tx.documentChunks.deleteMany({ where: { userId } });
       const delAttachments = await tx.attachments.deleteMany({ where: { userId } });

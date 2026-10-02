@@ -91,14 +91,16 @@ export const optionalAuth = async (req: Request, res: Response, next: NextFuncti
   next();
 };
 
-export const normalizeRole = (role: string | undefined): string => {
+export type CanonicalRole = 'guest' | 'mahasiswa' | 'konselor' | 'peer_counselor' | 'admin' | 'unknown';
+
+export const normalizeRole = (role: string | undefined): CanonicalRole => {
   if (!role) return 'guest';
   const r = role.toLowerCase().trim();
   if (r === 'student' || r === 'mahasiswa') return 'mahasiswa';
   if (r === 'peer_counselor' || r === 'peer-counselor') return 'peer_counselor';
   if (r === 'konselor' || r === 'counselor' || r === 'licensed_psychologist' || r === 'clinical_counselor') return 'konselor';
   if (r === 'admin' || r === 'campus_admin' || r === 'campus-admin') return 'admin';
-  return r;
+  return 'unknown';
 };
 
 export const requireRole = (allowedRoles: (string)[]) => {
@@ -122,4 +124,3 @@ export const requireRole = (allowedRoles: (string)[]) => {
     next();
   };
 };
-

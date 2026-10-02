@@ -7,7 +7,6 @@ export function useChatStreaming() {
   const [streamingError, setStreamingError] = useState<string | null>(null);
   const clientRef = useRef<ChatStreamingClient | null>(null);
   const currentTokenRef = useRef(0);
-  const timeoutRef = useRef<any>(null);
   const rafRef = useRef<number | null>(null);
   const chunkBufferRef = useRef<string>('');
 
@@ -18,10 +17,6 @@ export function useChatStreaming() {
       rafRef.current = null;
     }
     chunkBufferRef.current = '';
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-      timeoutRef.current = null;
-    }
     if (clientRef.current) {
       clientRef.current.abort();
       clientRef.current = null;
@@ -33,9 +28,6 @@ export function useChatStreaming() {
     return () => {
       if (rafRef.current) {
         cancelAnimationFrame(rafRef.current);
-      }
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
       }
       if (clientRef.current) {
         clientRef.current.abort();
@@ -55,6 +47,7 @@ export function useChatStreaming() {
       onFollowUps?: (followUps: string[]) => void;
       onChatCreated?: (chatId: string) => void;
       onQuotaExceeded?: (data: { message: string; resetAt?: string; suggestedActions?: string[] }) => void;
+      onRoutingMetadata?: (data: { modelUsed: string; routingMode: 'manual' | 'auto'; routingReason: string; isFallback?: boolean; fallbackFrom?: string }) => void;
     }
   ) => {
     const token = ++currentTokenRef.current;
@@ -67,10 +60,6 @@ export function useChatStreaming() {
     }
     chunkBufferRef.current = '';
 
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-      timeoutRef.current = null;
-    }
 
     // Ensure previous active stream is aborted
     if (clientRef.current) {
@@ -79,23 +68,6 @@ export function useChatStreaming() {
     const client = new ChatStreamingClient();
     clientRef.current = client;
     setIsTyping(true);
-
-    let hasReceivedFirstChunk = false;
-
-    // 12-second initial connection / hang timeout guard
-    timeoutRef.current = setTimeout(() => {
-      if (token === currentTokenRef.current && !hasReceivedFirstChunk) {
-        console.warn('[STREAM_TIMEOUT] Connection hung for 12s without response. Aborting...');
-        if (clientRef.current) {
-          clientRef.current.abort();
-          clientRef.current = null;
-        }
-        setIsTyping(false);
-        const timeoutMsg = 'Waktu respon melebihi 12 detik. Silakan coba kirim ulang pesanmu.';
-        setStreamingError(timeoutMsg);
-        callbacks.onError(timeoutMsg);
-      }
-    }, 12000);
 
     const flushChunkBuffer = () => {
       if (token === currentTokenRef.current && chunkBufferRef.current) {
@@ -115,11 +87,6 @@ export function useChatStreaming() {
         },
         onChunk: (text) => {
           if (token !== currentTokenRef.current) return;
-          hasReceivedFirstChunk = true;
-          if (timeoutRef.current) {
-            clearTimeout(timeoutRef.current);
-            timeoutRef.current = null;
-          }
           // Batch fast token emissions into 60 FPS rAF frames to prevent main thread choke
           const isTest = 
             (typeof process !== 'undefined' && (process.env?.NODE_ENV === 'test' || process.env?.VITEST === 'true')) ||
@@ -137,11 +104,6 @@ export function useChatStreaming() {
         },
         onPluginSwitch: (pluginName) => {
           if (token !== currentTokenRef.current) return;
-          hasReceivedFirstChunk = true;
-          if (timeoutRef.current) {
-            clearTimeout(timeoutRef.current);
-            timeoutRef.current = null;
-          }
           flushChunkBuffer();
           callbacks.onPluginSwitch(pluginName);
         },
@@ -152,10 +114,6 @@ export function useChatStreaming() {
             rafRef.current = null;
           }
           flushChunkBuffer();
-          if (timeoutRef.current) {
-            clearTimeout(timeoutRef.current);
-            timeoutRef.current = null;
-          }
           setIsTyping(false);
           setStreamingError(null);
           if (text && text.length > 150) {
@@ -170,10 +128,6 @@ export function useChatStreaming() {
             rafRef.current = null;
           }
           chunkBufferRef.current = '';
-          if (timeoutRef.current) {
-            clearTimeout(timeoutRef.current);
-            timeoutRef.current = null;
-          }
           setIsTyping(false);
           setStreamingError(err);
           callbacks.onError(err);
@@ -189,16 +143,16 @@ export function useChatStreaming() {
         onQuotaExceeded: (data) => {
           if (token !== currentTokenRef.current) return;
           callbacks.onQuotaExceeded?.(data);
+        },
+        onRoutingMetadata: (data) => {
+          if (token !== currentTokenRef.current) return;
+          callbacks.onRoutingMetadata?.(data);
         }
       });
     } finally {
       if (rafRef.current) {
         cancelAnimationFrame(rafRef.current);
         rafRef.current = null;
-      }
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-        timeoutRef.current = null;
       }
       if (token === currentTokenRef.current) {
         setIsTyping(false);
@@ -208,4 +162,3 @@ export function useChatStreaming() {
 
   return { isTyping, streamingError, streamMessage, abortStream };
 }
-

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { Suspense, useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { apiClient } from '../lib/apiClient';
@@ -8,9 +8,11 @@ import { Chat } from '../features/chat/types';
 import { useToast } from './Toast';
 import { Counselor } from '../types';
 import { WorkspaceMode } from '../features/workspace/types';
-import { AuthGate } from './AuthGate';
-import { CounselorShell } from './CounselorShell';
-import { StudentShell } from './StudentShell';
+import { lazyWithRetry } from '../lib/lazyWithRetry';
+import { getModeHomePath, getWorkspaceModeFromPath } from '../features/workspace/utils/workspaceRouting';
+
+const CounselorShell = lazyWithRetry(() => import('./CounselorShell').then(module => ({ default: module.CounselorShell })));
+const StudentShell = lazyWithRetry(() => import('./StudentShell').then(module => ({ default: module.StudentShell })));
 
 export const AppShell: React.FC = () => {
   const { user, setUser, isOffline, logout } = useAuth();
@@ -27,33 +29,18 @@ export const AppShell: React.FC = () => {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
-  const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>(() => {
-    const saved = safeLocalStorage.getItem('ruangtenang_workspace_mode') as WorkspaceMode;
-    return saved === 'RUANG_KERJA' ? 'RUANG_KERJA' : 'RUANG_TENANG';
-  });
-
   const navigate = useNavigate();
   const location = useLocation();
+  const workspaceMode = getWorkspaceModeFromPath(location.pathname);
 
   const handleSwitchMode = (mode: WorkspaceMode) => {
-    setWorkspaceMode(mode);
-    safeLocalStorage.setItem('ruangtenang_workspace_mode', mode);
-    if (mode === 'RUANG_KERJA') {
-      navigate('/workspace');
-    } else {
-      navigate('/');
-    }
+    navigate(getModeHomePath(mode));
   };
 
-  // Sync workspace mode state on route change
+  // Persist the last route-derived mode as a preference; never use it to choose the active screen.
   useEffect(() => {
-    if (location.pathname.startsWith('/workspace')) {
-      if (workspaceMode !== 'RUANG_KERJA') {
-        setWorkspaceMode('RUANG_KERJA');
-        safeLocalStorage.setItem('ruangtenang_workspace_mode', 'RUANG_KERJA');
-      }
-    }
-  }, [location.pathname, workspaceMode]);
+    safeLocalStorage.setItem('ruangtenang_workspace_mode', workspaceMode);
+  }, [workspaceMode]);
 
   // Check onboarding status
   useEffect(() => {
@@ -302,6 +289,7 @@ export const AppShell: React.FC = () => {
 
   if (user.role === 'konselor') {
     return (
+      <Suspense fallback={<div className="flex min-h-[100dvh] items-center justify-center surface-page" role="status" aria-label="Memuat ruang konselor"><span className="w-8 h-8 border-4 border-teal-500 border-t-transparent rounded-full animate-spin" /></div>}>
       <CounselorShell
         user={user}
         setUser={setUser}
@@ -319,10 +307,12 @@ export const AppShell: React.FC = () => {
         setShowOnboarding={setShowOnboarding}
         handleLogout={handleLogout}
       />
+      </Suspense>
     );
   }
 
   return (
+    <Suspense fallback={<div className="flex min-h-[100dvh] items-center justify-center surface-page" role="status" aria-label="Memuat ruang mahasiswa"><span className="w-8 h-8 border-4 border-teal-500 border-t-transparent rounded-full animate-spin" /></div>}>
     <StudentShell
       user={user}
       setUser={setUser}
@@ -357,5 +347,6 @@ export const AppShell: React.FC = () => {
       handleLogout={handleLogout}
       showToast={showToast}
     />
+    </Suspense>
   );
 };

@@ -100,8 +100,9 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ userId, onComple
   const [step, setStep] = useState(1);
   const [selectedMood, setSelectedMood] = useState<string>('anxious');
   const [selectedNeeds, setSelectedNeeds] = useState<string[]>(['listen']);
-  const [consentForAI, setConsentForAI] = useState<boolean>(true);
-  const [consentForAIMemory, setConsentForAIMemory] = useState<boolean>(true);
+  const [consentForAI, setConsentForAI] = useState<boolean>(false);
+  const [consentForAIMemory, setConsentForAIMemory] = useState<boolean>(false);
+  const [consentTouched, setConsentTouched] = useState(false);
 
   const handleToggleNeed = (id: string) => {
     if (selectedNeeds.includes(id)) {
@@ -139,18 +140,15 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ userId, onComple
           mood: selectedMood, 
           goals: selectedNeeds 
         });
-        await apiClient.post('/api/v1/privacy/consent', {
-          consentForAI,
-          consentForAIMood: consentForAI,
-          consentForAIScreening: consentForAI,
-          consentForAIMemory: consentForAI && consentForAIMemory,
-          consentForAIJournal: consentForAI,
-          consentForEmergencySOS: false,
-          consentForCounselorSharing: false,
-          consentForCounselorSummary: false,
-          consentForTelemetry: false,
-          consentForAnalytics: false
-        }).catch(() => {});
+        if (consentTouched) {
+          await apiClient.post('/api/v1/privacy/consent', {
+            consentForAI,
+            consentForAIMood: false,
+            consentForAIScreening: false,
+            consentForAIMemory: consentForAI && consentForAIMemory,
+            consentForAIJournal: false
+          }).catch(() => {});
+        }
       } catch (err) {
         console.warn('Failed to sync onboarding to server:', err);
       }
@@ -162,13 +160,13 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ userId, onComple
       setStep(prev => prev + 1);
     } else {
       await persistOnboarding();
-      onComplete(getStarterPrompt());
+      onComplete(consentForAI ? getStarterPrompt() : undefined);
     }
   };
 
   const handleFinishWithPrompt = async (prompt?: string) => {
     await persistOnboarding();
-    onComplete(prompt || getStarterPrompt());
+    onComplete(consentForAI ? (prompt || getStarterPrompt()) : undefined);
   };
 
   const handleSkip = async () => {
@@ -209,7 +207,7 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ userId, onComple
         <div className="flex-1 flex flex-col justify-center min-h-[280px]">
           <AnimatePresence mode="wait">
             
-            {/* STEP 1: Grounding & Safe Space Welcome */}
+            {/* STEP 1: Welcome and explicit privacy choices */}
             {step === 1 && (
               <motion.div
                 key="step1"
@@ -226,11 +224,10 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ userId, onComple
 
                 <div>
                   <h3 className="text-lg sm:text-xl font-bold text-stone-900 dark:text-stone-100 tracking-tight leading-snug">
-                    Tarik napas sejenak... <br />
-                    Kamu ada di ruang yang aman.
+                    Tarik napas sejenak. Kenali RuangTenang.
                   </h3>
                   <p className="text-stone-600 dark:text-stone-300 text-[13.5px] mt-1.5 leading-relaxed">
-                    Perkuliahan dan kehidupan kadang terasa berat. RuangTenang hadir sebagai teman bercerita dan refleksi yang siap mendengarkan tanpa menghakimi.
+                    RuangTenang menyediakan pendamping refleksi berbasis AI, latihan mandiri, dan akses ke direktori konselor. AI bukan konselor atau layanan darurat, dan percakapan tidak dipantau langsung.
                   </p>
                 </div>
 
@@ -238,7 +235,7 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ userId, onComple
                   <div className="flex items-start gap-2.5">
                     <ShieldCheck className="w-4 h-4 text-teal-600 dark:text-teal-400 shrink-0 mt-0.5" />
                     <p className="text-xs text-stone-600 dark:text-stone-300 leading-normal">
-                      <strong>Privat & Terlindungi:</strong> Setiap refleksi dan ceritamu diproses aman sesuai prinsip UU PDP (Kerahasiaan Data Pribadi).
+                      <strong>Ketahui sebelum berbagi:</strong> Jika kamu memberi izin, pesan diproses oleh provider AI sesuai model yang digunakan dan kebijakan provider tersebut. Hindari mengirim data sensitif yang tidak perlu.
                     </p>
                   </div>
 
@@ -247,12 +244,16 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ userId, onComple
                       <input
                         type="checkbox"
                         checked={consentForAI}
-                        onChange={(e) => setConsentForAI(e.target.checked)}
+                        onChange={(e) => {
+                          setConsentTouched(true);
+                          setConsentForAI(e.target.checked);
+                          if (!e.target.checked) setConsentForAIMemory(false);
+                        }}
                         className="mt-0.5 w-3.5 h-3.5 rounded text-teal-600 focus:ring-teal-500 border-stone-300 dark:border-slate-700"
                       />
                       <div className="text-[11.5px] leading-tight">
                         <span className="font-semibold text-stone-800 dark:text-stone-200">Izin Pendampingan Teman Bicara AI</span>
-                        <p className="text-stone-500 dark:text-stone-400 text-[10.5px]">Pemrosesan refleksi via proxy Google Gemini (Data efemeral & tidak digunakan melatih model).</p>
+                        <p className="text-stone-500 dark:text-stone-400 text-[10.5px]">Izin ini diperlukan untuk mengirim pesan ke AI. Pemrosesan dan retensi mengikuti kebijakan provider yang dipilih.</p>
                       </div>
                     </label>
 
@@ -261,7 +262,10 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ userId, onComple
                         <input
                           type="checkbox"
                           checked={consentForAIMemory}
-                          onChange={(e) => setConsentForAIMemory(e.target.checked)}
+                          onChange={(e) => {
+                            setConsentTouched(true);
+                            setConsentForAIMemory(e.target.checked);
+                          }}
                           className="mt-0.5 w-3.5 h-3.5 rounded text-teal-600 focus:ring-teal-500 border-stone-300 dark:border-slate-700"
                         />
                         <div className="text-[11px] leading-tight">
@@ -399,15 +403,17 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ userId, onComple
 
                 <div>
                   <h3 className="text-lg sm:text-xl font-bold text-stone-900 dark:text-stone-100 tracking-tight">
-                    Ruang ceritamu sudah siap.
+                    {consentForAI ? 'Ruang ceritamu sudah siap.' : 'Pengenalan selesai.'}
                   </h3>
                   <p className="text-stone-600 dark:text-stone-300 text-[13px] mt-1 leading-relaxed">
-                    Tidak perlu bingung mau mulai dari mana. Kamu bisa langsung mengirim kalimat pembuka ini atau mengetik sesuai kenyamananmu:
+                    {consentForAI
+                      ? 'Kamu bisa mengirim kalimat pembuka ini atau mengetik sesuai kenyamananmu.'
+                      : 'Izin AI belum aktif, jadi pesan belum dapat dikirim ke pendamping AI. Kamu dapat mengubah pilihan ini kapan saja di Pusat Privasi.'}
                   </p>
                 </div>
 
                 {/* Suggested Starter Card */}
-                <div className="p-3.5 rounded-xl bg-stone-50 dark:bg-slate-800/80 border border-stone-200 dark:border-slate-700/80 space-y-2">
+                {consentForAI && <div className="p-3.5 rounded-xl bg-stone-50 dark:bg-slate-800/80 border border-stone-200 dark:border-slate-700/80 space-y-2">
                   <div className="flex items-center justify-between text-xs text-stone-500 dark:text-stone-400 font-medium">
                     <span>Saran Kalimat Pertama</span>
                     <span>{MOODS.find(m => m.id === selectedMood)?.emoji}</span>
@@ -423,11 +429,11 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ userId, onComple
                     <span>Kirim Pesan Ini Sekarang</span>
                     <ArrowRight className="w-3.5 h-3.5" />
                   </button>
-                </div>
+                </div>}
 
-                <p className="text-[11px] text-center text-stone-400 dark:text-slate-500">
+                {consentForAI && <p className="text-[11px] text-center text-stone-400 dark:text-slate-500">
                   Atau klik tombol <strong>"Buka Ruang Obrolan"</strong> di bawah untuk mulai dengan kata-katamu sendiri.
-                </p>
+                </p>}
               </motion.div>
             )}
 
@@ -451,7 +457,7 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ userId, onComple
             onClick={handleNext}
             className="px-4 py-2 bg-teal-600 hover:bg-teal-700 active:scale-[0.98] text-white text-xs sm:text-[13px] font-semibold rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer min-h-[38px]"
           >
-            <span>{step === 4 ? 'Buka Ruang Obrolan' : 'Lanjut'}</span>
+            <span>{step === 4 ? (consentForAI ? 'Buka Ruang Obrolan' : 'Selesaikan') : 'Lanjut'}</span>
             <ChevronRight className="w-3.5 h-3.5" />
           </button>
         </div>

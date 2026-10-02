@@ -1,8 +1,10 @@
 import { prisma } from '../database.js';
 import { consentService } from './consentService.js';
+import { normalizeRole } from '../middleware/auth.js';
 
 export interface CanAccessHealthDataOptions {
   appointmentId?: string;
+  requireCounselorAssignment?: boolean;
 }
 
 export async function canAccessHealthData(
@@ -11,10 +13,9 @@ export async function canAccessHealthData(
   purpose = 'GENERAL_HEALTH_ACCESS',
   options?: CanAccessHealthDataOptions
 ): Promise<boolean> {
-  const role = String(requestingUser?.role || '').toLowerCase();
-  const isAdmin = ['admin', 'campus_admin'].includes(role);
-  const isStudent = ['mahasiswa', 'student'].includes(role);
-  const isCounselor = ['konselor', 'clinical_counselor', 'licensed_psychologist', 'peer_counselor'].includes(role);
+  const role = normalizeRole(requestingUser?.role);
+  const isStudent = role === 'mahasiswa';
+  const isStaff = role === 'konselor' || role === 'peer_counselor';
 
   let resolvedTargetUserId = targetUserId;
   if (!resolvedTargetUserId && isStudent) {
@@ -23,48 +24,35 @@ export async function canAccessHealthData(
 
   if (!resolvedTargetUserId) {
     // Deny-by-default if no specific target is provided
-    if (isAdmin) {
-      return Boolean(purpose && purpose.trim() !== '');
-    }
     return false;
-  }
-
-  if (isAdmin) {
-    // Admin access must be purpose-bound
-    if (!purpose || purpose.trim() === '') {
-      return false;
-    }
-    return true;
   }
 
   if (isStudent) {
     return requestingUser.userId === resolvedTargetUserId;
   }
 
-  if (isCounselor) {
-    // 1. Check student sharing/summary consent (Strict Default-Deny)
-    const canShare = await consentService.canShareWithCounselor(resolvedTargetUserId);
+  if (isStaff) {
+    // Clinical details require the student's explicit sharing consent. Summary consent
+    // does not authorize access to screening scores, risk indicators, or SOAP content.
+    const consent = await consentService.getUserConsents(resolvedTargetUserId);
+    const canShare = consent.consentForCounselorSharing;
     if (!canShare) {
       return false;
     }
 
     // 2. Check Active Counselor Profile
     const counselor = await prisma.counselors.findFirst({
-      where: {
-        OR: [
-          { userId: requestingUser.userId },
-          { id: requestingUser.userId }
-        ]
-      }
+      where: { userId: requestingUser.userId }
     });
     if (!counselor) {
       return false;
     }
 
     // 3. Check Active Counselor Assignment / Care Relationship (appointment exists)
-    const apptWhere: any = {
+    const apptWhere: { counselorId: string; userId: string; id?: string; status: { notIn: string[] } } = {
       counselorId: counselor.id,
-      userId: resolvedTargetUserId
+      userId: resolvedTargetUserId,
+      status: { notIn: ['CANCELLED', 'REJECTED'] }
     };
     if (options?.appointmentId) {
       apptWhere.id = options.appointmentId;
@@ -103,18 +91,23 @@ export async function canAccessHealthData(
  * Returns list of student userIds assigned to the counselor who have granted consent for health data sharing.
  */
 export async function getAssignedStudentUserIds(counselorUserId: string): Promise<string[]> {
+  const account = await prisma.users.findUnique({
+    where: { id: counselorUserId },
+    select: { role: true }
+  });
+  const role = normalizeRole(account?.role);
+  if (role !== 'konselor' && role !== 'peer_counselor') return [];
+
   const counselor = await prisma.counselors.findFirst({
-    where: {
-      OR: [
-        { userId: counselorUserId },
-        { id: counselorUserId }
-      ]
-    }
+    where: { userId: counselorUserId }
   });
   if (!counselor) return [];
 
   const appointments = await prisma.appointments.findMany({
-    where: { counselorId: counselor.id },
+    where: {
+      counselorId: counselor.id,
+      status: { notIn: ['CANCELLED', 'REJECTED'] }
+    },
     select: { userId: true }
   });
 
@@ -122,12 +115,11 @@ export async function getAssignedStudentUserIds(counselorUserId: string): Promis
   const validUserIds: string[] = [];
 
   for (const sId of rawUserIds) {
-    const canShare = await consentService.canShareWithCounselor(sId);
-    if (canShare) {
+    const consent = await consentService.getUserConsents(sId);
+    if (consent.consentForCounselorSharing) {
       validUserIds.push(sId);
     }
   }
 
   return validUserIds;
 }
-

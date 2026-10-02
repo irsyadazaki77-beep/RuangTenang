@@ -62,18 +62,29 @@ export const WorkspaceHeader: React.FC<WorkspaceHeaderProps> = React.memo(({
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setShowMoreMenu(false);
+        setShowDeleteConfirm(false);
+        setShowNewArtifactMenu(false);
+      }
+    };
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
+    };
   }, []);
 
   return (
-    <header className="h-13 px-3 sm:px-4 lg:px-6 bg-white dark:bg-[#0F172A] border-b border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-3 z-30 shrink-0">
+    <header className="h-13 px-2.5 sm:px-4 lg:px-6 bg-white dark:bg-[#0F172A] border-b border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-2 sm:gap-3 z-30 shrink-0 min-w-0">
       {/* Left Zone: Workspace Identity & Mobile Navigation Toggle */}
       <div className="flex items-center gap-2 sm:gap-3 min-w-0">
         {onOpenSidebar && (
           <button
             type="button"
             onClick={onOpenSidebar}
-            className="lg:hidden p-1.5 rounded-lg text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+            className="xl:hidden p-1.5 rounded-lg text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
             aria-label="Buka Sidebar Menu"
           >
             <Layers className="w-4 h-4" />
@@ -82,15 +93,15 @@ export const WorkspaceHeader: React.FC<WorkspaceHeaderProps> = React.memo(({
 
         <div className="flex items-center gap-2 min-w-0">
           <BrandLogo mode="RUANG_KERJA" size="sm" />
-          <span className="font-bold text-sm sm:text-base text-slate-900 dark:text-slate-100 tracking-tight leading-none">
+          <span className="hidden xs:inline font-bold text-sm sm:text-base text-slate-900 dark:text-slate-100 tracking-tight leading-none">
             RuangKerja
           </span>
         </div>
 
         {/* Active Document Kicker (Desktop) */}
         {activeArtifact && (
-          <div className="hidden xl:flex items-center gap-1.5 text-xs text-slate-400 pl-3 border-l border-slate-200 dark:border-slate-800 min-w-0">
-            <span className="truncate max-w-[200px] text-slate-600 dark:text-slate-300 font-medium">
+          <div className="hidden md:flex items-center gap-1.5 text-xs text-slate-400 pl-2 lg:pl-3 border-l border-slate-200 dark:border-slate-800 min-w-0 max-w-[180px] lg:max-w-[240px]">
+            <span className="truncate text-slate-600 dark:text-slate-300 font-medium">
               {activeArtifact.title}
             </span>
             <span className="text-[10px] font-mono opacity-60">
@@ -103,10 +114,11 @@ export const WorkspaceHeader: React.FC<WorkspaceHeaderProps> = React.memo(({
       {/* Center / Right Zone: Segmented Switcher & Workspace Actions */}
       <div className="flex items-center gap-2 shrink-0">
         {/* Mobile/Tablet Tab Switcher */}
-        <div className="lg:hidden flex items-center p-0.5 bg-slate-100/90 dark:bg-slate-800/90 rounded-lg border border-slate-200/60 dark:border-slate-700/60">
+        <div className="xl:hidden flex items-center p-0.5 bg-slate-100/90 dark:bg-slate-800/90 rounded-lg border border-slate-200/60 dark:border-slate-700/60">
           <button
             type="button"
             onClick={() => onSetMobileActiveTab('chat')}
+            aria-pressed={mobileActiveTab === 'chat'}
             className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer ${
               mobileActiveTab === 'chat'
                 ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-semibold shadow-2xs'
@@ -118,6 +130,7 @@ export const WorkspaceHeader: React.FC<WorkspaceHeaderProps> = React.memo(({
           <button
             type="button"
             onClick={() => onSetMobileActiveTab('canvas')}
+            aria-pressed={mobileActiveTab === 'canvas'}
             className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer relative ${
               mobileActiveTab === 'canvas'
                 ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-semibold shadow-2xs'
@@ -138,6 +151,9 @@ export const WorkspaceHeader: React.FC<WorkspaceHeaderProps> = React.memo(({
             onClick={() => setShowNewArtifactMenu(!showNewArtifactMenu)}
             className="h-8 px-2.5 sm:px-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs active:scale-95"
             title="Buat Berkas / Draf Baru"
+            aria-label="Buat draf baru"
+            aria-expanded={showNewArtifactMenu}
+            aria-haspopup="true"
           >
             <FilePlus className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Draf Baru</span>
@@ -145,7 +161,7 @@ export const WorkspaceHeader: React.FC<WorkspaceHeaderProps> = React.memo(({
           </button>
 
           {showNewArtifactMenu && (
-            <div className="absolute right-0 top-full mt-1.5 w-48 p-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl z-50 animate-scale-up space-y-0.5">
+            <div role="group" aria-label="Jenis draf baru" className="absolute right-0 top-full mt-1.5 w-48 p-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl z-50 animate-scale-up space-y-0.5">
               <button
                 type="button"
                 onClick={() => {
@@ -187,7 +203,7 @@ export const WorkspaceHeader: React.FC<WorkspaceHeaderProps> = React.memo(({
         <button
           type="button"
           onClick={onToggleCanvas}
-          className="hidden lg:flex h-8 px-2.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200/80 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-medium items-center gap-1.5 transition-colors cursor-pointer"
+          className="hidden xl:flex h-8 px-2.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200/80 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-medium items-center gap-1.5 transition-colors cursor-pointer"
           title={isCanvasOpen ? 'Sembunyikan Panel Canvas' : 'Tampilkan Panel Canvas'}
         >
           {isCanvasOpen ? (
@@ -214,12 +230,14 @@ export const WorkspaceHeader: React.FC<WorkspaceHeaderProps> = React.memo(({
             className="h-8 w-8 flex items-center justify-center rounded-lg text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
             title="Menu Opsi Workspace"
             aria-label="Opsi Lebih Lanjut"
+            aria-expanded={showMoreMenu}
+            aria-haspopup="true"
           >
             <MoreVertical className="w-4 h-4" />
           </button>
 
           {showMoreMenu && (
-            <div className="absolute right-0 top-full mt-1.5 w-52 p-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl z-50 animate-scale-up space-y-0.5">
+            <div role="group" aria-label="Opsi workspace" className="absolute right-0 top-full mt-1.5 w-[min(13rem,calc(100vw-1.5rem))] p-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl z-50 animate-scale-up space-y-0.5">
               {onSwitchMode && (
                 <button
                   type="button"

@@ -10,9 +10,10 @@ export const ScreeningSubmissionSchema = z.object({
   riskIndicators: z.object({
     item9Score: z.number().int().min(0).max(3),
     hasSelfHarmRisk: z.boolean(),
-    immediateDanger: z.boolean().optional(),
-    planOrIntent: z.boolean().optional(),
-    contactedTrustedPerson: z.boolean().optional(),
+    immediateDanger: z.boolean().nullable().optional(),
+    planOrIntent: z.boolean().nullable().optional(),
+    wantsTrustedContact: z.boolean().nullable().optional(),
+    contactedTrustedPerson: z.boolean().nullable().optional(), // Legacy field from earlier clients.
     riskCategory: z.string().optional(),
     flaggedAt: z.string().optional(),
   }).optional(),
@@ -27,4 +28,3 @@ export const UpdateScreeningStatusSchema = z.object({
 export type UpdateScreeningStatusInput = z.infer<typeof UpdateScreeningStatusSchema>;
 
 export type ScreeningPersistenceStatus = 'idle' | 'pending' | 'saved' | 'local-only' | 'failed';
-

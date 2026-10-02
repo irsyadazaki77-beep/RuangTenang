@@ -98,6 +98,20 @@ export const aiChatLimiter = rateLimit({
   }
 });
 
+// Bound memory- and CPU-intensive document parsing before Multer buffers request bodies.
+export const attachmentUploadLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: () => isTestEnv(),
+  message: {
+    success: false,
+    code: 'ATTACHMENT_UPLOAD_RATE_LIMIT_EXCEEDED',
+    error: 'Batas unggah lampiran tercapai. Silakan coba lagi nanti.'
+  }
+});
+
 // AI Counselor Simulation Rate Limiter
 export const counselorAiLimiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 min
@@ -207,4 +221,3 @@ export const clientTelemetryLimiter = rateLimit({
     error: 'Terlalu banyak laporan telemetry (maksimal 10x per 15 menit). Silakan tunggu.'
   }
 });
-

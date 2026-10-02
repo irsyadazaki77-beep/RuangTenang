@@ -1,7 +1,10 @@
-import { DEEPSEEK_API_KEY, AI_CONFIG } from '../../config/aiConfig.js';
+import { AI_CONFIG } from '../../config/aiConfig.js';
+import { aiProviderConfig } from '../../config/aiProviderConfig.js';
 import { scanAndSanitizePII } from '../piiService.js';
 import { aiSafetyService } from './aiSafetyService.js';
 import { AiRequestOptions } from './aiRequestService.js';
+import { getModelDefinition } from './aiModelRegistry.js';
+import { AI_RELIABILITY_POLICY } from './aiReliabilityService.js';
 
 export interface DeepSeekChatMessage {
   role: 'system' | 'user' | 'assistant';
@@ -10,7 +13,7 @@ export interface DeepSeekChatMessage {
 
 export const deepseekService = {
   getApiKey(): string {
-    const envKey = (process.env.DEEPSEEK_API_KEY || '').trim();
+    const envKey = aiProviderConfig.getApiKey('deepseek');
     if (envKey && envKey.startsWith('sk-') && !envKey.includes('n123') && envKey.length >= 30) {
       return envKey;
     }
@@ -22,10 +25,9 @@ export const deepseekService = {
   },
 
   mapModelName(modelId: string): string {
-    if (modelId === 'deepseek-reasoner' || modelId === 'deepseek-r1') {
-      return 'deepseek-reasoner';
-    }
-    return 'deepseek-chat';
+    const model = getModelDefinition(modelId);
+    if (!model || model.provider !== 'deepseek') throw new Error('MODEL_NOT_FOUND');
+    return model.providerModelId;
   },
 
   buildMessages(options: AiRequestOptions): DeepSeekChatMessage[] {
@@ -75,7 +77,7 @@ export const deepseekService = {
     const maxTokens = isAnonymous ? 500 : (AI_CONFIG.MAX_OUTPUT_TOKENS || 1000);
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), AI_CONFIG.DEFAULT_TIMEOUT_MS || 25000);
+    const timeoutId = setTimeout(() => controller.abort(), AI_RELIABILITY_POLICY.connectTimeoutMs);
 
     if (options.abortSignal) {
       options.abortSignal.addEventListener('abort', () => controller.abort(), { once: true });
@@ -102,9 +104,11 @@ export const deepseekService = {
       clearTimeout(timeoutId);
 
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`[DEEPSEEK] API Error (${response.status}):`, errorText);
-        throw new Error(`DEEPSEEK_API_ERROR_${response.status}: ${errorText}`);
+        const errorText = await response.text().catch(() => '');
+        const quota = /quota|billing|resource_exhausted/i.test(errorText);
+        const retryAfter = response.headers.get('retry-after');
+        const retryAfterMs = retryAfter ? (Number.isFinite(Number(retryAfter)) ? Number(retryAfter) * 1000 : Date.parse(retryAfter) - Date.now()) : undefined;
+        throw Object.assign(new Error(`DEEPSEEK_API_ERROR_${response.status}${quota ? '_QUOTA_EXHAUSTED' : ''}`), { statusCode: response.status, retryAfterMs: retryAfterMs && retryAfterMs > 0 ? retryAfterMs : undefined });
       }
 
       const data = await response.json();
@@ -137,7 +141,7 @@ export const deepseekService = {
     const maxTokens = isAnonymous ? 600 : 1500;
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 60000);
+    const timeoutId = setTimeout(() => controller.abort(), AI_RELIABILITY_POLICY.totalRequestTimeoutMs);
 
     if (options.abortSignal) {
       options.abortSignal.addEventListener('abort', () => controller.abort(), { once: true });
@@ -163,9 +167,11 @@ export const deepseekService = {
 
     if (!response.ok || !response.body) {
       clearTimeout(timeoutId);
-      const errorText = await response.text().catch(() => 'Unknown stream error');
-      console.error(`[DEEPSEEK] Stream API Error (${response.status}):`, errorText);
-      throw new Error(`DEEPSEEK_STREAM_ERROR_${response.status}: ${errorText}`);
+      const errorText = await response.text().catch(() => '');
+      const quota = /quota|billing|resource_exhausted/i.test(errorText);
+      const retryAfter = response.headers.get('retry-after');
+      const retryAfterMs = retryAfter ? (Number.isFinite(Number(retryAfter)) ? Number(retryAfter) * 1000 : Date.parse(retryAfter) - Date.now()) : undefined;
+      throw Object.assign(new Error(`DEEPSEEK_STREAM_ERROR_${response.status}${quota ? '_QUOTA_EXHAUSTED' : ''}`), { statusCode: response.status, retryAfterMs: retryAfterMs && retryAfterMs > 0 ? retryAfterMs : undefined });
     }
 
     const reader = response.body.getReader();
@@ -201,8 +207,8 @@ export const deepseekService = {
                 if (textContent) {
                   yield { text: textContent };
                 }
-              } catch (parseErr) {
-                // Ignore chunk parse error and proceed
+              } catch {
+                throw new Error('AI_STREAM_CONTENT_ERROR');
               }
             }
           }
@@ -218,7 +224,7 @@ export const deepseekService = {
             if (textContent) {
               yield { text: textContent };
             }
-          } catch {}
+          } catch { throw new Error('AI_STREAM_CONTENT_ERROR'); }
         }
       } finally {
         clearTimeout(timeoutId);

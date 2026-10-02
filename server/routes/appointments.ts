@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { serverDb, prisma } from '../database';
-import { requireAuth } from '../middleware/auth';
+import { requireAuth, requireRole, normalizeRole } from '../middleware/auth';
 import { sanitizeInput } from '../security';
 import { validatePagination, idempotencyMiddleware } from '../apiV1Helpers';
 import { EventEmitter } from 'events';
@@ -30,9 +30,10 @@ router.get('/stream', requireAuth, (req: Request, res: Response) => {
   const sendEvent = (data: any) => {
     // Only send if the update belongs to the user or if user is admin, etc.
     // Basic filter: Check if user is involved (as counselor or student)
-    const isStudentMatch = req.user?.role === 'mahasiswa' && data.userId === req.user.userId;
-    const isCounselorMatch = req.user?.role === 'konselor' && data.counselorUserId === req.user.userId; 
-    const isAdmin = req.user?.role === 'admin';
+    const role = normalizeRole(req.user?.role);
+    const isStudentMatch = role === 'mahasiswa' && data.userId === req.user?.userId;
+    const isCounselorMatch = role === 'konselor' && data.counselorUserId === req.user?.userId;
+    const isAdmin = role === 'admin';
 
     if (isStudentMatch || isCounselorMatch || isAdmin) {
       res.write(`data: ${JSON.stringify(data)}\n\n`);
@@ -136,13 +137,14 @@ export const verifyAppointmentAccess = async (req: Request, res: Response, next:
     }
 
     // Admin has unrestricted access
-    if (user.role === 'admin') {
+    const role = normalizeRole(user.role);
+    if (role === 'admin') {
       (req as any).appointment = appt;
       return next();
     }
 
     // Mahasiswa must be the owner
-    if (user.role === 'mahasiswa') {
+    if (role === 'mahasiswa') {
       if (appt.userId !== user.userId) {
         return res.status(403).json({
           success: false,
@@ -155,7 +157,7 @@ export const verifyAppointmentAccess = async (req: Request, res: Response, next:
     }
 
     // Counselor must be assigned to this appointment
-    if (user.role === 'konselor') {
+    if (role === 'konselor') {
       const counselor = await prisma.counselors.findFirst({
         where: { userId: user.userId }
       });
@@ -204,7 +206,7 @@ router.get(['/availability', '/appointments/availability'], async (req: Request,
 });
 
 // List Appointments
-router.get(['/', '/db/appointments'], requireAuth, async (req: Request, res: Response) => {
+router.get(['/', '/db/appointments'], requireAuth, requireRole(['mahasiswa', 'konselor', 'admin']), async (req: Request, res: Response) => {
   try {
     await serverDb.logAudit(
       'READ_APPOINTMENTS',
@@ -217,9 +219,10 @@ router.get(['/', '/db/appointments'], requireAuth, async (req: Request, res: Res
     const andConditions: any[] = [];
 
     // Role-based data isolation with canonical mapping
-    if (req.user!.role === 'mahasiswa') {
+    const role = normalizeRole(req.user!.role);
+    if (role === 'mahasiswa') {
       andConditions.push({ userId: req.user!.userId });
-    } else if (req.user!.role === 'konselor') {
+    } else if (role === 'konselor') {
       const counselor = await prisma.counselors.findFirst({
         where: { userId: req.user!.userId }
       });
@@ -239,7 +242,7 @@ router.get(['/', '/db/appointments'], requireAuth, async (req: Request, res: Res
       }
       
       andConditions.push({ counselorId: counselor.id });
-    } else if (req.user!.role === 'admin') {
+    } else if (role === 'admin') {
       const counselorFilter = req.query.counselorId as string;
       if (counselorFilter && counselorFilter !== 'Semua') {
         andConditions.push({ counselorId: counselorFilter });
@@ -430,7 +433,7 @@ router.get(['/:id/ice-servers', '/db/appointments/:id/ice-servers'], requireAuth
 });
 
 // Create Appointment
-router.post(['/', '/db/appointments'], requireAuth, idempotencyMiddleware, async (req: Request, res: Response) => {
+router.post(['/', '/db/appointments'], requireAuth, requireRole(['mahasiswa', 'konselor', 'admin']), idempotencyMiddleware, async (req: Request, res: Response) => {
   try {
     const parsed = createAppointmentSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -441,7 +444,15 @@ router.post(['/', '/db/appointments'], requireAuth, idempotencyMiddleware, async
     }
 
     const validated = parsed.data;
-    const isMahasiswa = req.user!.role === 'mahasiswa';
+    const role = normalizeRole(req.user!.role);
+    if (role === 'konselor') {
+      return res.status(403).json({
+        success: false,
+        error: 'ACCESS_DENIED',
+        message: 'Janji temu harus diajukan mahasiswa atau dibuat oleh administrator; konselor tidak dapat membuat penugasan untuk dirinya sendiri.'
+      });
+    }
+    const isMahasiswa = role === 'mahasiswa';
     const finalUserId = isMahasiswa ? req.user!.userId : (validated.userId || req.user!.userId);
     const finalStudentName = isMahasiswa ? req.user!.name : (validated.studentName || 'Mahasiswa');
     const finalStudentEmail = isMahasiswa ? req.user!.email : (validated.studentEmail || '');
@@ -478,7 +489,7 @@ router.post(['/', '/db/appointments'], requireAuth, idempotencyMiddleware, async
 });
 
 // Update Appointment
-router.put(['/:id', '/db/appointments/:id'], requireAuth, async (req: Request, res: Response) => {
+router.put(['/:id', '/db/appointments/:id'], requireAuth, verifyAppointmentAccess, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const appt = await serverDb.findAppointmentById(id);
@@ -486,14 +497,15 @@ router.put(['/:id', '/db/appointments/:id'], requireAuth, async (req: Request, r
       return res.status(404).json({ error: 'Jadwal tidak ditemukan.' });
     }
 
-    if (req.user!.role === 'mahasiswa') {
+    const role = normalizeRole(req.user!.role);
+    if (role === 'mahasiswa') {
       if (appt.userId !== req.user!.userId) {
         return res.status(403).json({
           error: 'ACCESS_DENIED',
           message: 'Akses ditolak. Anda hanya diperbolehkan mengubah jadwal milik Anda sendiri.'
         });
       }
-    } else if (req.user!.role === 'konselor') {
+    } else if (role === 'konselor') {
       const counselor = await prisma.counselors.findFirst({
         where: { userId: req.user!.userId }
       });
@@ -517,7 +529,7 @@ router.put(['/:id', '/db/appointments/:id'], requireAuth, async (req: Request, r
     const updates: any = {};
 
     // FIELD-LEVEL AUTHORIZATION ENFORCEMENT
-    if (req.user!.role === 'mahasiswa') {
+    if (role === 'mahasiswa') {
       // Mahasiswa can cancel or update notes/mode while still pending
       if (validated.status !== undefined) {
         const s = validated.status.toUpperCase();
@@ -530,7 +542,7 @@ router.put(['/:id', '/db/appointments/:id'], requireAuth, async (req: Request, r
         if (validated.notes !== undefined) updates.notes = sanitizeInput(validated.notes, 300);
         if (validated.mode !== undefined) updates.mode = validated.mode;
       }
-    } else if (req.user!.role === 'konselor') {
+    } else if (role === 'konselor') {
       // Counselor can update status, approvalStatus, attendanceStatus, meetingLink, notes
       // REASSIGNMENT (counselorId/counselorName), changing student details, or rescheduling date/time is FORBIDDEN for counselor
       if (validated.status !== undefined) {
@@ -548,7 +560,7 @@ router.put(['/:id', '/db/appointments/:id'], requireAuth, async (req: Request, r
       if (validated.meetingLink !== undefined) updates.meetingLink = validated.meetingLink;
       if (validated.notes !== undefined) updates.notes = sanitizeInput(validated.notes, 300);
       if (validated.mode !== undefined) updates.mode = validated.mode;
-    } else if (req.user!.role === 'admin') {
+    } else if (role === 'admin') {
       // Admin has unrestricted update authority including reassignment and rescheduling
       if (validated.counselorId !== undefined) updates.counselorId = validated.counselorId;
       if (validated.counselorName !== undefined) updates.counselorName = validated.counselorName;
@@ -602,7 +614,7 @@ router.put(['/:id', '/db/appointments/:id'], requireAuth, async (req: Request, r
 });
 
 // Delete Appointment
-router.delete(['/:id', '/db/appointments/:id'], requireAuth, async (req: Request, res: Response) => {
+router.delete(['/:id', '/db/appointments/:id'], requireAuth, verifyAppointmentAccess, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const appt = await serverDb.findAppointmentById(id);
@@ -610,14 +622,15 @@ router.delete(['/:id', '/db/appointments/:id'], requireAuth, async (req: Request
       return res.status(404).json({ error: 'Jadwal tidak ditemukan.' });
     }
 
-    if (req.user!.role === 'mahasiswa') {
+    const role = normalizeRole(req.user!.role);
+    if (role === 'mahasiswa') {
       if (appt.userId !== req.user!.userId) {
         return res.status(403).json({
           error: 'ACCESS_DENIED',
           message: 'Akses ditolak. Anda hanya diperbolehkan membatalkan jadwal milik Anda sendiri.'
         });
       }
-    } else if (req.user!.role === 'konselor') {
+    } else if (role === 'konselor') {
       const counselor = await prisma.counselors.findFirst({
         where: { userId: req.user!.userId }
       });
@@ -638,7 +651,7 @@ router.delete(['/:id', '/db/appointments/:id'], requireAuth, async (req: Request
 });
 
 // Reschedule Appointment
-router.post(['/:id/reschedule', '/db/appointments/:id/reschedule'], requireAuth, async (req: Request, res: Response) => {
+router.post(['/:id/reschedule', '/db/appointments/:id/reschedule'], requireAuth, verifyAppointmentAccess, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const appt = await serverDb.findAppointmentById(id);
@@ -647,7 +660,8 @@ router.post(['/:id/reschedule', '/db/appointments/:id/reschedule'], requireAuth,
     }
 
     // Role-based authorization
-    if (req.user!.role === 'mahasiswa') {
+    const role = normalizeRole(req.user!.role);
+    if (role === 'mahasiswa') {
       if (appt.userId !== req.user!.userId) {
         return res.status(403).json({
           success: false,
@@ -660,7 +674,7 @@ router.post(['/:id/reschedule', '/db/appointments/:id/reschedule'], requireAuth,
           error: 'Jadwal yang sudah dibatalkan atau selesai tidak dapat dijadwalkan ulang.'
         });
       }
-    } else if (req.user!.role === 'konselor') {
+    } else if (role === 'konselor') {
       const counselor = await prisma.counselors.findFirst({
         where: { userId: req.user!.userId }
       });

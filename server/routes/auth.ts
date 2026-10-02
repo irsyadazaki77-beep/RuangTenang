@@ -141,7 +141,7 @@ router.post('/sso/campus-login', loginLimiter, async (req: Request, res: Respons
         passwordHash: passHash,
         role: 'mahasiswa',
         tier: 'Free',
-        university: university || 'Universitas Indonesia',
+        university: university || '',
         emailVerified: true,
         mfaEnabled: false
       });

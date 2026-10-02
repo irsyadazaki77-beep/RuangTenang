@@ -259,6 +259,16 @@ export const MessageBubble = memo(function MessageBubble({
               </div>
             ) : (
               <div className="prose prose-stone dark:prose-invert max-w-none break-words text-[14.5px] sm:text-[15px] leading-[1.65] text-stone-800 dark:text-stone-200 space-y-2.5 font-normal">
+                {msg.modelUsed && (
+                  <div className="not-prose mb-1.5 flex items-center gap-1.5 text-[11px] text-stone-400 dark:text-slate-500">
+                    <span 
+                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-stone-100 dark:bg-slate-800 text-stone-600 dark:text-slate-400 font-medium text-[10.5px]"
+                      title={msg.isFallback ? `${msg.fallbackFrom || 'Model utama'} gagal; respons diselesaikan dengan ${msg.modelUsed}.` : msg.routingReason || `Model: ${msg.modelUsed}`}
+                    >
+                      {msg.isFallback ? 'Fallback · ' : msg.routingMode === 'auto' ? 'Auto: ' : ''}{msg.modelUsed}
+                    </span>
+                  </div>
+                )}
                 <LazyMarkdown content={msg.content} />
                 {isTyping && (
                   <motion.span
@@ -407,6 +417,4 @@ export const MessageBubble = memo(function MessageBubble({
 
   return true;
 });
-
-
 

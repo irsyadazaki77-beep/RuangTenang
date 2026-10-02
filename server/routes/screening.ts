@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { serverDb } from '../database.js';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAuth, normalizeRole } from '../middleware/auth.js';
 import { consentService } from '../services/consentService.js';
 import { canAccessHealthData } from '../services/healthDataAuth.js';
 import { validatePagination } from '../apiV1Helpers.js';
@@ -70,10 +70,11 @@ router.get(['/', '/db/screenings'], requireAuth, async (req: Request, res: Respo
     );
 
     const targetUserId = req.query.userId as string;
+    const role = normalizeRole(req.user!.role);
 
     const hasAccess = await canAccessHealthData(req.user!, targetUserId, 'VIEW_SCREENING');
     if (!hasAccess) {
-      if (req.user!.role === 'konselor' && !targetUserId) {
+      if (role === 'konselor' && !targetUserId) {
         return res.status(403).json({
           error: 'ACCESS_DENIED',
           message: 'Konselor tidak diizinkan mengambil seluruh data skrining.'
@@ -88,7 +89,7 @@ router.get(['/', '/db/screenings'], requireAuth, async (req: Request, res: Respo
     let queryUserId: string | undefined = undefined;
     if (targetUserId) {
       queryUserId = targetUserId;
-    } else if (req.user!.role === 'mahasiswa') {
+    } else if (role === 'mahasiswa') {
       queryUserId = req.user!.userId;
     }
 
@@ -99,14 +100,14 @@ router.get(['/', '/db/screenings'], requireAuth, async (req: Request, res: Respo
       serverDb.countScreenings(queryUserId)
     ]);
 
-    if (req.user!.role === 'konselor' || req.user!.role === 'admin') {
+    if (role === 'konselor' || role === 'admin') {
       await serverDb.addStaffAccessLog({
         staffUserId: req.user!.userId,
         staffName: req.user!.name,
         staffRole: req.user!.role,
         targetUserId: targetUserId || 'semua_mahasiswa',
         accessType: 'VIEW_SCREENING',
-        purpose: req.user!.role === 'konselor' ? 'Evaluasi Kesehatan Mental' : 'Audit Administratif Platform'
+        purpose: role === 'konselor' ? 'Evaluasi Kesehatan Mental' : 'Audit Administratif Platform'
       });
     }
 
@@ -143,7 +144,8 @@ router.put(['/:id', '/db/screenings/:id'], requireAuth, async (req: Request, res
     }
     const { status } = parsed.data;
     
-    if (req.user!.role !== 'admin' && req.user!.role !== 'konselor') {
+    const role = normalizeRole(req.user!.role);
+    if (role !== 'admin' && role !== 'konselor') {
       return res.status(403).json({ error: 'Akses ditolak.' });
     }
 
@@ -153,7 +155,7 @@ router.put(['/:id', '/db/screenings/:id'], requireAuth, async (req: Request, res
     }
 
     const targetUserId = screening.userId;
-    const hasAccess = await canAccessHealthData(req.user!, targetUserId, 'VIEW_SCREENING');
+    const hasAccess = await canAccessHealthData(req.user!, targetUserId, 'UPDATE_SCREENING');
     
     if (!hasAccess) {
       return res.status(403).json({ error: 'Akses ditolak. Tidak ada izin.' });

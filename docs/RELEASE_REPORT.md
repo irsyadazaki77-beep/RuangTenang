@@ -41,4 +41,4 @@
 ### 6. Deployment Notes
 - Production deployments MUST use `npm run db:generate:postgres`.
 - Ensure all environment variables (especially `JWT_SECRET`) are set before starting to pass the readiness probe.
-- Run `node dist/server.cjs` after a full `npm run build`.
+- Run `node dist/server.mjs` after a full `npm run build`.

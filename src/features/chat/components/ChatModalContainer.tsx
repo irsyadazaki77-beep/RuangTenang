@@ -127,7 +127,7 @@ export const ChatModalContainer: React.FC<ChatModalContainerProps> = ({
       case 'emergency':
         return {
           title: 'Pusat Bantuan Darurat SOS',
-          subtitle: 'Layanan krisis 24 jam & nomor darurat langsung',
+          subtitle: 'Healing119, bantuan medis darurat, dan kontak darurat pribadi',
           component: <EmergencyCenter onTriggerSOS={onTriggerSOS} />,
         };
       default:

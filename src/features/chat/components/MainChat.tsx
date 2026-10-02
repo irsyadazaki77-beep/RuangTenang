@@ -8,7 +8,7 @@ import { UserSession } from '../../../types';
 import { ChatModalContainer } from './ChatModalContainer';
 import { RefreshCw, ChevronDown, Sparkles, Clock, Wind, Calendar, ArrowDown, Shield, Eye, X, Video } from 'lucide-react';
 import { useToast } from '../../../components/Toast';
-import { DEFAULT_AI_MODEL_ID } from '../../../lib/aiModels';
+import { useAiModelCatalog } from '../../../lib/aiModelCatalog';
 import { safeLocalStorage } from '../../../lib/storage';
 
 import { useChatHistory } from '../hooks/useChatHistory';
@@ -54,12 +54,16 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
   // Persistence of preferences
   const [chatMode, setChatMode] = useState<ChatMode>(() => safeLocalStorage.getItem('chatMode') as ChatMode || 'Teman Cerita');
   const [responseStyle, setResponseStyle] = useState<ResponseStyle>(() => safeLocalStorage.getItem('responseStyle') as ResponseStyle || 'Seimbang');
-  const [aiModel, setAiModel] = useState(() => safeLocalStorage.getItem('aiModel') || DEFAULT_AI_MODEL_ID);
+  const [aiModel, setAiModel] = useState(() => safeLocalStorage.getItem('aiModel') || '');
+  const { models: modelCatalog, defaultModel } = useAiModelCatalog();
   const [isTemporary, setIsTemporary] = useState(() => !user || user?.role === 'guest');
 
   useEffect(() => { safeLocalStorage.setItem('chatMode', chatMode); }, [chatMode]);
   useEffect(() => { safeLocalStorage.setItem('responseStyle', responseStyle); }, [responseStyle]);
-  useEffect(() => { safeLocalStorage.setItem('aiModel', aiModel); }, [aiModel]);
+  useEffect(() => { if (aiModel) safeLocalStorage.setItem('aiModel', aiModel); }, [aiModel]);
+  useEffect(() => {
+    if (modelCatalog.length && (!aiModel || !modelCatalog.some(model => model.id === aiModel && model.selectable))) setAiModel(defaultModel);
+  }, [modelCatalog, defaultModel, aiModel]);
 
   const [followUps, setFollowUps] = useState<string[]>([]);
   const [streamingMessage, setStreamingMessage] = useState<Message | null>(null);
@@ -269,6 +273,7 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
     
     setFollowUps([]);
     let assistantMsgId = `assistant_${Date.now()}`;
+    let routingMeta: { modelUsed?: string; routingMode?: 'manual' | 'auto'; routingReason?: string } = {};
     setStreamingMessage({ id: assistantMsgId, role: 'assistant', content: '' });
 
     await streamMessage(
@@ -289,6 +294,9 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
         })) : undefined
       },
       {
+        onRoutingMetadata: (data) => {
+          routingMeta = data;
+        },
         onMessageStart: (msgId) => {
           assistantMsgId = msgId;
           setStreamingMessage(prev => ({ id: msgId, role: 'assistant', content: prev?.content || '' }));
@@ -307,6 +315,7 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
                 id: assistantMsgId,
                 role: 'assistant',
                 content: text,
+                ...routingMeta,
                 plugin: distressCheck?.isDistressed ? 'burnout' : undefined,
                 pluginResult: distressCheck?.isDistressed
                   ? {

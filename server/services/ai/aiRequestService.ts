@@ -1,13 +1,15 @@
-import { getGenAIClient, DEFAULT_AI_MODEL, RESILIENT_FALLBACK_AI_MODEL, CALMING_FALLBACK_MESSAGE } from '../../config/aiConfig.js';
+import { getGenAIClient, DEFAULT_AI_MODEL, CALMING_FALLBACK_MESSAGE } from '../../config/aiConfig.js';
 import { aiContextBuilder } from './aiContextBuilder.js';
 import { aiSafetyService } from './aiSafetyService.js';
-import { aiModelRouter } from './aiModelRouter.js';
 import { scanAndSanitizePII } from '../piiService.js';
 import { getLocalFallbackResponse } from '../../routes/fallbackAi.js';
-import { isModelAllowedForTier, getActualGeminiModel, isDeepSeekModel, isGroqModel, isOpenRouterModel } from './aiModelRegistry.js';
-import { deepseekService } from './deepseekService.js';
-import { groqService } from './groqService.js';
-import { openrouterService } from './openrouterService.js';
+import { getActualGeminiModel, resolveAiModel, getModelDefinition, isModelAllowedForTier } from './aiModelRegistry.js';
+import { AI_PROVIDER_ADAPTERS } from './aiProviderAdapters.js';
+import { geminiAdapter } from './geminiAdapter.js';
+import { AI_RELIABILITY_POLICY, executeWithReliability, guardAiStream, recordProviderStreamFailure } from './aiReliabilityService.js';
+
+import type { RoutingDecision } from '../../../shared/aiModelContract.js';
+import type { ModelCapability } from '../../../shared/aiModelContract.js';
 
 export interface AiRequestOptions {
   userId?: string;
@@ -18,21 +20,23 @@ export interface AiRequestOptions {
   attachments?: any[];
   systemInstruction?: string;
   abortSignal?: AbortSignal;
+  routingDecision?: RoutingDecision;
+  fallbackCandidates?: string[];
+  /** Preserve the requested candidate identity and report provider failures as-is. */
+  comparisonMode?: boolean;
 }
 
-/**
- * Creates an empathetic, smooth-streaming async generator when all AI models fail or are rate-limited.
- */
-async function* createCalmingFallbackStream(fallbackText: string) {
-  const words = fallbackText.split(' ');
-  for (let i = 0; i < words.length; i++) {
-    const chunk = (i === 0 ? '' : ' ') + words[i];
-    yield {
-      text: chunk,
-      candidates: [{ content: { parts: [{ text: chunk }] } }]
-    };
-    await new Promise(resolve => setTimeout(resolve, 25));
+export function selectReliableModelCandidates(options: AiRequestOptions, primaryModelId: string, requirements: { capability: ModelCapability; hasAttachments?: boolean }): string[] {
+  const selected = [primaryModelId];
+  if (options.comparisonMode || options.routingDecision?.routingMode !== 'auto' || !AI_RELIABILITY_POLICY.fallbackEnabled) return selected;
+  for (const modelId of options.fallbackCandidates || options.routingDecision.fallbackCandidates || []) {
+    const model = getModelDefinition(modelId);
+    if (!model || selected.includes(modelId) || !isModelAllowedForTier(modelId, options.userTier || 'Free')) continue;
+    if (!model.capabilities.includes(requirements.capability) || (requirements.hasAttachments && model.provider !== 'gemini')) continue;
+    selected.push(modelId);
+    if (selected.length === 3) break;
   }
+  return selected;
 }
 
 export const aiRequestService = {
@@ -42,6 +46,8 @@ export const aiRequestService = {
     if (aiSafetyService.detectPromptInjection(prompt)) {
       throw new Error('PROMPT_INJECTION_DETECTED');
     }
+    const resolvedModel = resolveAiModel(requestedModelId || DEFAULT_AI_MODEL, userTier);
+    const requestId = globalThis.crypto?.randomUUID?.() || `ai-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
     const sanitizedPrompt = scanAndSanitizePII(prompt).sanitizedText;
     const sanitizedHistory = history.slice(-10).map(h => ({
@@ -83,15 +89,6 @@ export const aiRequestService = {
     const isAnonymous = !userId || userId === 'guest';
     const outputTokens = isAnonymous ? 300 : 800;
     
-    const abortController = new AbortController();
-    if (abortSignal) {
-      if (abortSignal.aborted) {
-        abortController.abort();
-      } else {
-        abortSignal.addEventListener('abort', () => abortController.abort(), { once: true });
-      }
-    }
-    const timeoutId = setTimeout(() => abortController.abort(), 15000);
 
     let fullSystemInstruction = systemInstruction || `Kamu adalah 'RuangTenang Companion', pendamping reflektif dan suportif untuk mahasiswa Indonesia.
 Prinsip utamamu: "Dengarkan untuk memahami, bukan terburu-buru memperbaiki."
@@ -120,163 +117,63 @@ Pedoman Interaksi:
        }
     }
 
-    const targetModelId = requestedModelId || DEFAULT_AI_MODEL;
-
-    // Check if user requested a DeepSeek AI Model
-    if (isDeepSeekModel(targetModelId) && deepseekService.isAvailable()) {
+    const candidates = selectReliableModelCandidates(options, resolvedModel.id, { capability: 'chat', hasAttachments: attachments.length > 0 });
+    let lastError: unknown;
+    let failedProvider: string | undefined;
+    for (const [index, modelId] of candidates.entries()) {
+      const model = resolveAiModel(modelId, userTier);
+      if (index > 0 && failedProvider === model.provider && ['NETWORK_ERROR', 'PROVIDER_UNAVAILABLE'].includes((lastError as any)?.category)) continue;
       try {
-        console.info(`[AI_REQUEST_SERVICE] Routing non-streaming chat request to DeepSeek: ${targetModelId}`);
-        const deepseekRes = await deepseekService.generateResponse({
-          ...options,
-          systemInstruction: fullSystemInstruction
-        }, targetModelId);
-
-        clearTimeout(timeoutId);
-
-        const validation = aiSafetyService.validateOutput(deepseekRes.text);
-        if (!validation.isValid) {
-          console.warn(`[AI_REQUEST_SERVICE] Output validation failed for DeepSeek: ${validation.reason}`);
-          return {
-            text: 'Maaf, respons yang saya siapkan tidak dapat ditampilkan karena aturan keamanan. Jika Anda memerlukan bantuan khusus, mohon hubungi profesional medis atau konselor.',
-            modelUsed: 'safety-override',
-            isFallback: true
-          };
+        let outputText = '';
+        if (model.provider === 'gemini') {
+          const client = getGenAIClient();
+          if (!client) throw new Error('PROVIDER_NOT_CONFIGURED');
+          const response = await executeWithReliability(model.provider, signal => geminiAdapter.generate(client, {
+            model: getActualGeminiModel(modelId),
+            contents: [...sanitizedHistory, { role: 'user', parts: userParts }],
+            config: { systemInstruction: fullSystemInstruction, temperature: 0.6, maxOutputTokens: outputTokens, abortSignal: signal }
+          }), abortSignal, requestId);
+          outputText = response.text || '';
+        } else {
+          const adapter = AI_PROVIDER_ADAPTERS[model.provider];
+          if (!adapter.isAvailable()) throw new Error('PROVIDER_NOT_CONFIGURED');
+          const response = await executeWithReliability(model.provider, signal => adapter.generate({
+            ...options,
+            requestedModelId: modelId,
+            prompt: sanitizedPrompt,
+            history: sanitizedHistory,
+            // Non-Gemini adapters do not have the same attachment handling path.
+            // Never forward raw inline data to them by spreading the original options.
+            attachments: [],
+            systemInstruction: fullSystemInstruction,
+            abortSignal: signal
+          }, modelId), abortSignal, requestId);
+          outputText = response.text;
         }
-
-        return {
-          text: deepseekRes.text,
-          modelUsed: deepseekRes.modelUsed,
-          isFallback: false
-        };
-      } catch (deepseekErr: any) {
-        console.warn(`[AI_REQUEST_SERVICE] DeepSeek execution failed (${deepseekErr?.message}), attempting Gemini fallback...`);
+        const validation = aiSafetyService.validateOutput(outputText);
+        if (!validation.isValid) return { text: 'Maaf, respons yang saya siapkan tidak dapat ditampilkan karena aturan keamanan. Jika Anda memerlukan bantuan khusus, mohon hubungi profesional medis atau konselor.', modelUsed: 'safety-override', isFallback: true };
+        return { text: outputText, modelUsed: modelId, isFallback: index > 0 };
+      } catch (error) {
+        lastError = error;
+        failedProvider = model.provider;
+        if (abortSignal?.aborted) throw error;
+        console.warn(`[AI_REQUEST] requestId=${requestId} attempt=${index + 1} model=${modelId} failed category=${(error as any)?.category || 'INTERNAL_ERROR'}`);
+        if (index + 1 >= candidates.length || !(error as any)?.retryable) break;
       }
     }
-
-    // Check if user requested a Groq AI Model
-    if (isGroqModel(targetModelId) && groqService.isAvailable()) {
-      try {
-        console.info(`[AI_REQUEST_SERVICE] Routing non-streaming chat request to Groq: ${targetModelId}`);
-        const groqRes = await groqService.generateResponse({
-          ...options,
-          systemInstruction: fullSystemInstruction
-        }, targetModelId);
-
-        clearTimeout(timeoutId);
-
-        const validation = aiSafetyService.validateOutput(groqRes.text);
-        if (!validation.isValid) {
-          console.warn(`[AI_REQUEST_SERVICE] Output validation failed for Groq: ${validation.reason}`);
-          return {
-            text: 'Maaf, respons yang saya siapkan tidak dapat ditampilkan karena aturan keamanan. Jika Anda memerlukan bantuan khusus, mohon hubungi profesional medis atau konselor.',
-            modelUsed: 'safety-override',
-            isFallback: true
-          };
-        }
-
-        return {
-          text: groqRes.text,
-          modelUsed: groqRes.modelUsed,
-          isFallback: false
-        };
-      } catch (groqErr: any) {
-        console.warn(`[AI_REQUEST_SERVICE] Groq execution failed (${groqErr?.message}), attempting Gemini fallback...`);
-      }
-    }
-
-    // Check if user requested an OpenRouter AI Model
-    if (isOpenRouterModel(targetModelId) && openrouterService.isAvailable()) {
-      try {
-        console.info(`[AI_REQUEST_SERVICE] Routing non-streaming chat request to OpenRouter: ${targetModelId}`);
-        const openrouterRes = await openrouterService.generateResponse({
-          ...options,
-          systemInstruction: fullSystemInstruction
-        }, targetModelId);
-
-        clearTimeout(timeoutId);
-
-        const validation = aiSafetyService.validateOutput(openrouterRes.text);
-        if (!validation.isValid) {
-          console.warn(`[AI_REQUEST_SERVICE] Output validation failed for OpenRouter: ${validation.reason}`);
-          return {
-            text: 'Maaf, respons yang saya siapkan tidak dapat ditampilkan karena aturan keamanan. Jika Anda memerlukan bantuan khusus, mohon hubungi profesional medis atau konselor.',
-            modelUsed: 'safety-override',
-            isFallback: true
-          };
-        }
-
-        return {
-          text: openrouterRes.text,
-          modelUsed: openrouterRes.modelUsed,
-          isFallback: false
-        };
-      } catch (orErr: any) {
-        console.warn(`[AI_REQUEST_SERVICE] OpenRouter execution failed (${orErr?.message}), attempting Gemini fallback...`);
-      }
-    }
-
-    const aiClient = getGenAIClient();
-    if (!aiClient) {
-      clearTimeout(timeoutId);
-      console.warn('[AI_RESILIENCE] Gemini client unavailable (missing GEMINI_API_KEY). Using empathetic fallback.');
-      const localFallback = getLocalFallbackResponse(prompt);
-      return {
-        text: localFallback.text || CALMING_FALLBACK_MESSAGE,
-        modelUsed: 'local-empathetic-fallback',
-        isFallback: true
-      };
-    }
-
-    try {
-      const { response, modelUsed, isFallback } = await aiModelRouter.executeWithFallback(
-        requestedModelId || DEFAULT_AI_MODEL, 
-        userTier, 
-        async (modelName) => {
-          return await aiClient.models.generateContent({
-             model: modelName,
-             contents: [...sanitizedHistory, { role: 'user', parts: userParts }],
-             config: {
-               systemInstruction: fullSystemInstruction,
-               temperature: 0.6,
-               maxOutputTokens: outputTokens,
-             }
-          });
-        }, 
-        { allowFallback: true, timeoutMs: 15000 }
-      );
-      clearTimeout(timeoutId);
-
-      const outputText = response.text || '';
-      
-      const validation = aiSafetyService.validateOutput(outputText);
-      if (!validation.isValid) {
-        console.warn(`[AI_REQUEST_SERVICE] Output validation failed: ${validation.reason}`);
-        return {
-          text: 'Maaf, respons yang saya siapkan tidak dapat ditampilkan karena aturan keamanan. Jika Anda memerlukan bantuan khusus, mohon hubungi profesional medis atau konselor.',
-          modelUsed: 'safety-override',
-          isFallback: true
-        };
-      }
-
-      return { text: outputText, modelUsed, isFallback };
-    } catch (err: any) {
-      clearTimeout(timeoutId);
-      console.warn(`[AI_RESILIENCE] Both AI models failed for chat response (${err?.message}). Returning empathetic fallback.`);
-      const localFallback = getLocalFallbackResponse(prompt);
-      return {
-        text: localFallback.text || CALMING_FALLBACK_MESSAGE,
-        modelUsed: 'local-empathetic-fallback',
-        isFallback: true
-      };
-    }
+    const errCategory = (lastError as any)?.category;
+    if (errCategory === 'ABORTED') throw lastError;
+    const localFallback = getLocalFallbackResponse(prompt);
+    return { text: localFallback.text || CALMING_FALLBACK_MESSAGE, modelUsed: 'local-empathetic-fallback', isFallback: true };
   },
 
-  async generateStreamResponse(options: AiRequestOptions): Promise<{ stream: AsyncGenerator<any, any, unknown>, modelUsed: string }> {
-    const { userId, userTier = 'Free', requestedModelId, prompt, history = [], systemInstruction, abortSignal, attachments = [] } = options;
+  async generateStreamResponse(options: AiRequestOptions): Promise<{ stream: AsyncGenerator<any, any, unknown>, modelUsed: string, isFallback: boolean, requestId: string }> {
+    const { userId, userTier = 'Free', requestedModelId, prompt, history = [], systemInstruction, abortSignal, attachments = [], comparisonMode = false } = options;
 
     if (aiSafetyService.detectPromptInjection(prompt)) {
       throw new Error('PROMPT_INJECTION_DETECTED');
     }
+    const resolvedModel = resolveAiModel(requestedModelId || DEFAULT_AI_MODEL, userTier);
 
     const sanitizedPrompt = scanAndSanitizePII(prompt).sanitizedText;
     
@@ -315,15 +212,7 @@ Pedoman Interaksi:
     const isAnonymous = !userId || userId === 'guest';
     const outputTokens = isAnonymous ? 400 : 1000;
     
-    const abortController = new AbortController();
-    if (abortSignal) {
-      if (abortSignal.aborted) {
-        abortController.abort();
-      } else {
-        abortSignal.addEventListener('abort', () => abortController.abort(), { once: true });
-      }
-    }
-    const timeoutId = setTimeout(() => abortController.abort(), 60000);
+    const requestId = globalThis.crypto?.randomUUID?.() || `ai-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
     let fullSystemInstruction = systemInstruction || `Kamu adalah 'RuangTenang Companion', pendamping reflektif dan suportif untuk mahasiswa Indonesia.
 Prinsip utamamu: "Dengarkan untuk memahami, bukan terburu-buru memperbaiki."
@@ -345,189 +234,70 @@ Pedoman Interaksi:
    - Dilarang meresepkan suplemen/obat.
    - Jika terdeteksi tanda-tanda keputusasaan akut atau ingin melukai diri, prioritaskan keselamatan dengan tenang dan hangat sesuai protokol krisis.`;
 
-    if (userId && !isAnonymous && !fullSystemInstruction.includes('[CONTEXT_BOUNDARIES]')) {
+    if (userId && !isAnonymous && !comparisonMode && !fullSystemInstruction.includes('[CONTEXT_BOUNDARIES]')) {
        const userContext = await aiContextBuilder.buildContext({ userId, abortSignal });
        if (userContext.systemContext) {
          fullSystemInstruction += `\n\n${userContext.systemContext}`;
        }
     }
 
-    const targetModelId = requestedModelId || DEFAULT_AI_MODEL;
-
-    // Check if user requested a DeepSeek AI Model stream
-    if (isDeepSeekModel(targetModelId) && deepseekService.isAvailable()) {
+    const candidates = selectReliableModelCandidates(options, resolvedModel.id, { capability: 'streaming', hasAttachments: attachments.length > 0 });
+    let lastError: unknown;
+    let failedProvider: string | undefined;
+    for (const [index, modelId] of candidates.entries()) {
+      const model = resolveAiModel(modelId, userTier);
+      if (index > 0 && failedProvider === model.provider && ['NETWORK_ERROR', 'PROVIDER_UNAVAILABLE'].includes((lastError as any)?.category)) continue;
+      const streamController = new AbortController();
+      const onParentAbort = () => streamController.abort();
+      if (abortSignal?.aborted) streamController.abort();
+      else abortSignal?.addEventListener('abort', onParentAbort, { once: true });
       try {
-        console.info(`[AI_REQUEST_SERVICE] Routing streaming chat request to DeepSeek: ${targetModelId}`);
-        const deepseekStream = await deepseekService.generateStream({
-          ...options,
-          systemInstruction: fullSystemInstruction
-        }, targetModelId);
-
-        clearTimeout(timeoutId);
-        aiModelRouter.recordSuccess();
-        return {
-          stream: deepseekStream.stream,
-          modelUsed: deepseekStream.modelUsed
+        let source: AsyncGenerator<any, any, unknown>;
+        if (model.provider === 'gemini') {
+          const client = getGenAIClient();
+          if (!client) throw new Error('PROVIDER_NOT_CONFIGURED');
+          source = await executeWithReliability(model.provider, signal => {
+            signal.addEventListener('abort', onParentAbort, { once: true });
+            return geminiAdapter.generateStream(client, {
+            model: getActualGeminiModel(modelId),
+            contents: [...sanitizedHistory, { role: 'user', parts: userParts }],
+            config: { systemInstruction: fullSystemInstruction, temperature: 0.6, maxOutputTokens: outputTokens, abortSignal: streamController.signal }
+            });
+          }, streamController.signal, requestId);
+        } else {
+          const adapter = AI_PROVIDER_ADAPTERS[model.provider];
+          if (!adapter.isAvailable()) throw new Error('PROVIDER_NOT_CONFIGURED');
+          const result = await executeWithReliability(model.provider, signal => {
+            signal.addEventListener('abort', onParentAbort, { once: true });
+            return adapter.generateStream({
+              ...options,
+              requestedModelId: modelId,
+              prompt: sanitizedPrompt,
+              history: sanitizedHistory,
+              // Non-Gemini adapters do not have the same attachment handling path.
+              // Never forward raw inline data to them by spreading the original options.
+              attachments: [],
+              systemInstruction: fullSystemInstruction,
+              abortSignal: streamController.signal
+            }, modelId);
+          }, streamController.signal, requestId);
+          source = result.stream;
+        }
+        const guardedStream = async function* () {
+          try { yield* guardAiStream(source, streamController.signal, () => streamController.abort()); }
+          catch (error) { recordProviderStreamFailure(model.provider, error); throw error; }
+          finally { abortSignal?.removeEventListener('abort', onParentAbort); }
         };
-      } catch (deepseekErr: any) {
-        console.warn(`[AI_REQUEST_SERVICE] DeepSeek streaming failed (${deepseekErr?.message}), falling back to Gemini...`);
+        return { stream: guardedStream(), modelUsed: modelId, isFallback: index > 0, requestId };
+      } catch (error) {
+        abortSignal?.removeEventListener('abort', onParentAbort);
+        streamController.abort();
+        lastError = error;
+        failedProvider = model.provider;
+        console.warn(`[AI_REQUEST] requestId=${requestId} attempt=${index + 1} model=${modelId} failed category=${(error as any)?.category || 'INTERNAL_ERROR'}`);
+        if (abortSignal?.aborted || !(error as any)?.retryable || index + 1 >= candidates.length) throw error;
       }
     }
-
-    // Check if user requested a Groq AI Model stream
-    if (isGroqModel(targetModelId) && groqService.isAvailable()) {
-      try {
-        console.info(`[AI_REQUEST_SERVICE] Routing streaming chat request to Groq: ${targetModelId}`);
-        const groqStream = await groqService.generateStream({
-          ...options,
-          systemInstruction: fullSystemInstruction
-        }, targetModelId);
-
-        clearTimeout(timeoutId);
-        aiModelRouter.recordSuccess();
-        return {
-          stream: groqStream.stream,
-          modelUsed: groqStream.modelUsed
-        };
-      } catch (groqErr: any) {
-        console.warn(`[AI_REQUEST_SERVICE] Groq streaming failed (${groqErr?.message}), falling back to Gemini...`);
-      }
-    }
-
-    // Check if user requested an OpenRouter AI Model stream
-    if (isOpenRouterModel(targetModelId) && openrouterService.isAvailable()) {
-      try {
-        console.info(`[AI_REQUEST_SERVICE] Routing streaming chat request to OpenRouter: ${targetModelId}`);
-        const openrouterStream = await openrouterService.generateStream({
-          ...options,
-          systemInstruction: fullSystemInstruction
-        }, targetModelId);
-
-        clearTimeout(timeoutId);
-        aiModelRouter.recordSuccess();
-        return {
-          stream: openrouterStream.stream,
-          modelUsed: openrouterStream.modelUsed
-        };
-      } catch (orErr: any) {
-        console.warn(`[AI_REQUEST_SERVICE] OpenRouter streaming failed (${orErr?.message}), falling back to Gemini...`);
-      }
-    }
-
-    const aiClient = getGenAIClient();
-    if (!aiClient) {
-      clearTimeout(timeoutId);
-      console.warn('[AI_RESILIENCE] Gemini client unavailable for streaming. Activating calming text stream.');
-      const localFallback = getLocalFallbackResponse(prompt);
-      const fallbackText = localFallback.text || CALMING_FALLBACK_MESSAGE;
-      return {
-        stream: createCalmingFallbackStream(fallbackText),
-        modelUsed: 'local-empathetic-fallback'
-      };
-    }
-
-    let primaryModel = requestedModelId || DEFAULT_AI_MODEL;
-    if (!isModelAllowedForTier(requestedModelId, userTier)) {
-      primaryModel = DEFAULT_AI_MODEL;
-    }
-
-    const actualPrimary = getActualGeminiModel(primaryModel);
-
-    // 1. Attempt Primary Model Stream with Retry
-    let primaryError: any = null;
-    const maxRetries = 2;
-
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      try {
-        console.info(`[AI_RESILIENCE] Streaming with primary model "${primaryModel}" (${actualPrimary}) - Attempt ${attempt + 1}/${maxRetries + 1}...`);
-        const primaryStream = await aiClient.models.generateContentStream({
-          model: actualPrimary,
-          contents: [...sanitizedHistory, { role: 'user', parts: userParts }],
-          config: {
-            systemInstruction: fullSystemInstruction,
-            temperature: 0.6,
-            maxOutputTokens: outputTokens,
-          }
-        });
-        clearTimeout(timeoutId);
-        aiModelRouter.recordSuccess();
-        return { stream: primaryStream, modelUsed: primaryModel };
-      } catch (err: any) {
-        primaryError = err;
-        const errMsg = (err?.message || String(err)).toLowerCase();
-        const isRateLimit = 
-          errMsg.includes('429') || 
-          errMsg.includes('quota') || 
-          errMsg.includes('resource_exhausted') || 
-          errMsg.includes('rate limit') || 
-          errMsg.includes('too many requests') ||
-          (err.status && Number(err.status) === 429) ||
-          (err.code && Number(err.code) === 429);
-
-        console.warn(`[AI_RESILIENCE] Primary stream attempt ${attempt + 1} failed: ${err?.message || err}`);
-        if (isRateLimit) {
-          console.warn(`[AI_RESILIENCE] Primary model "${primaryModel}" quota exhausted (429). Fast-switching to fallback stream model.`);
-          break;
-        }
-        if (attempt < maxRetries) {
-          await new Promise(resolve => setTimeout(resolve, (attempt + 1) * 400));
-        }
-      }
-    }
-
-    // 2. Switch to Internal Fallback Model Stream (lighter / faster)
-    const fallbackModel = RESILIENT_FALLBACK_AI_MODEL;
-    const actualFallback = getActualGeminiModel(fallbackModel);
-    console.warn(`[AI_RESILIENCE] Primary stream model exhausted (${primaryError?.message}). Switching to internal fallback stream model "${fallbackModel}" (${actualFallback})...`);
-
-    for (let fallbackAttempt = 0; fallbackAttempt <= 1; fallbackAttempt++) {
-      try {
-        console.info(`[AI_RESILIENCE] Streaming with fallback model "${fallbackModel}" - Attempt ${fallbackAttempt + 1}/2...`);
-        const fallbackStream = await aiClient.models.generateContentStream({
-          model: actualFallback,
-          contents: [...sanitizedHistory, { role: 'user', parts: userParts }],
-          config: {
-            systemInstruction: fullSystemInstruction,
-            temperature: 0.6,
-            maxOutputTokens: Math.min(outputTokens, 600),
-          }
-        });
-        clearTimeout(timeoutId);
-        aiModelRouter.recordSuccess();
-        return { stream: fallbackStream, modelUsed: fallbackModel };
-      } catch (fallbackErr: any) {
-        const errMsg = (fallbackErr?.message || String(fallbackErr)).toLowerCase();
-        const isRateLimit = 
-          errMsg.includes('429') || 
-          errMsg.includes('quota') || 
-          errMsg.includes('resource_exhausted') || 
-          errMsg.includes('rate limit') || 
-          errMsg.includes('too many requests') ||
-          (fallbackErr.status && Number(fallbackErr.status) === 429) ||
-          (fallbackErr.code && Number(fallbackErr.code) === 429);
-
-        console.warn(`[AI_RESILIENCE] Fallback stream attempt ${fallbackAttempt + 1} failed: ${fallbackErr?.message || fallbackErr}`);
-        if (isRateLimit) {
-          console.warn(`[AI_RESILIENCE] Fallback stream model quota exhausted (429). Fast-switching to local calming stream.`);
-          break;
-        }
-        if (fallbackAttempt === 0) {
-          await new Promise(resolve => setTimeout(resolve, 500));
-        }
-      }
-    }
-
-    // 3. Empathetic Fallback Text Stream (If both models fail, gracefully stream reassuring message)
-    clearTimeout(timeoutId);
-    aiModelRouter.recordFailure();
-    console.error('[AI_RESILIENCE] Both primary and fallback Gemini models failed or timed out. Activating calming empathetic stream.');
-
-    const localFallback = getLocalFallbackResponse(prompt);
-    const fallbackText = localFallback.text || CALMING_FALLBACK_MESSAGE;
-
-    return {
-      stream: createCalmingFallbackStream(fallbackText),
-      modelUsed: 'local-empathetic-fallback'
-    };
+    throw lastError;
   }
 };

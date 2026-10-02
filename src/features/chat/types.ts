@@ -31,6 +31,12 @@ export interface Message {
   error?: boolean;
   createdAt?: string | Date;
   attachments?: StoredAttachment[];
+  modelUsed?: string;
+  isFallback?: boolean;
+  fallbackFrom?: string;
+  routingMode?: 'manual' | 'auto';
+  routingReason?: string;
+  presetId?: string;
 }
 
 export interface Chat {
@@ -78,5 +84,3 @@ export interface StructuredSessionSummary {
 
 export type ChatMode = 'Teman Cerita' | 'Refleksi Diri' | 'Fokus Solusi' | 'Produktivitas' | 'Persiapan Konseling';
 export type ResponseStyle = 'Singkat' | 'Seimbang' | 'Mendalam' | 'Fokus mendengarkan' | 'Fokus solusi';
-
-

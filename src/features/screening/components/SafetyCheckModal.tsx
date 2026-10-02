@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { ShieldAlert, PhoneCall, Phone } from 'lucide-react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { EMERGENCY_CONTACTS } from '../../../lib/emergencyResources';
@@ -26,6 +26,44 @@ export const SafetyCheckModal: React.FC<SafetyCheckModalProps> = ({
   setSafetyAssessment,
 }) => {
   const shouldReduceMotion = useReducedMotion();
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const getFocusableElements = () => Array.from(panelRef.current?.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'
+    ) || []).filter((element) => element.getClientRects().length > 0);
+
+    const focusable = getFocusableElements();
+    (focusable[0] || panelRef.current)?.focus();
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Tab') return;
+      const items = getFocusableElements();
+      if (items.length === 0) {
+        panelRef.current?.focus();
+        event.preventDefault();
+        return;
+      }
+      const first = items[0];
+      const last = items[items.length - 1];
+      const focusIsInside = Boolean(panelRef.current?.contains(document.activeElement));
+      if (event.shiftKey && (document.activeElement === first || !focusIsInside)) {
+        last.focus();
+        event.preventDefault();
+      } else if (!event.shiftKey && (document.activeElement === last || !focusIsInside)) {
+        first.focus();
+        event.preventDefault();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      previouslyFocused?.focus();
+    };
+  }, [isOpen]);
 
   return (
     <AnimatePresence>
@@ -40,24 +78,33 @@ export const SafetyCheckModal: React.FC<SafetyCheckModalProps> = ({
         >
           <motion.div 
             key="safety-panel"
+            ref={panelRef}
             initial="hidden"
             animate="visible"
             exit="exit"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="safety-check-title"
+            aria-describedby="safety-check-description"
+            tabIndex={-1}
             variants={shouldReduceMotion ? reducedMotionVariants : modalPanelVariants}
             className="bg-white dark:bg-slate-800 border border-rose-300 dark:border-rose-900 text-primary rounded-xl max-w-lg w-full p-4 sm:p-5 shadow-xl space-y-3.5 font-sans"
           >
         <div className="flex items-start gap-2.5 bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900 p-3 rounded-lg text-rose-950 dark:text-rose-200">
           <ShieldAlert className="w-5 h-5 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
           <div>
-            <h3 className="font-semibold text-xs sm:text-sm text-rose-900 dark:text-rose-300">Prosedur Keselamatan (Safety Check)</h3>
-            <p className="text-[11px] text-rose-800 dark:text-rose-400 leading-relaxed mt-0.5">
+            <h3 id="safety-check-title" className="font-semibold text-xs sm:text-sm text-rose-900 dark:text-rose-300">Prosedur Keselamatan (Safety Check)</h3>
+            <p id="safety-check-description" className="text-[11px] text-rose-800 dark:text-rose-400 leading-relaxed mt-0.5">
               Jawaban pada pertanyaan ke-9 menunjukkan adanya pikiran menyakiti diri. Keselamatan dan kesehatan emosionalmu adalah prioritas utama kami.
             </p>
           </div>
         </div>
 
         <div className="space-y-2.5">
-          <h4 className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Penilaian Risiko Keselamatan Langsung</h4>
+          <h4 className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Pertanyaan tambahan tentang keselamatan</h4>
+          <p className="text-[11px] text-secondary leading-relaxed">
+            Pertanyaan ini bukan asesmen klinis dan tidak dipantau konselor secara langsung. Hasil skrining tidak dapat memastikan bahwa Anda aman. Jika Anda dalam bahaya sekarang atau merasa mungkin bertindak, hubungi 119 atau minta orang tepercaya menemani Anda ke IGD/fasilitas kesehatan terdekat.
+          </p>
 
           {/* Question 1: Immediate Danger */}
           <div className="p-2.5 sm:p-3 surface-muted border border-default rounded-lg space-y-1.5">
@@ -65,6 +112,7 @@ export const SafetyCheckModal: React.FC<SafetyCheckModalProps> = ({
             <div className="flex gap-2">
               <button
                 onClick={() => setSafetyAssessment(prev => ({ ...prev, immediateDanger: true }))}
+                aria-pressed={safetyAssessment.immediateDanger === true}
                 className={`flex-1 py-1 px-2.5 min-h-[44px] sm:min-h-[36px] rounded-lg text-xs font-medium border transition-all active:scale-95 cursor-pointer flex items-center justify-center text-center ${
                   safetyAssessment.immediateDanger === true
                     ? 'bg-rose-600 text-white border-rose-600 shadow-3xs'
@@ -75,6 +123,7 @@ export const SafetyCheckModal: React.FC<SafetyCheckModalProps> = ({
               </button>
               <button
                 onClick={() => setSafetyAssessment(prev => ({ ...prev, immediateDanger: false }))}
+                aria-pressed={safetyAssessment.immediateDanger === false}
                 className={`flex-1 py-1 px-2.5 min-h-[44px] sm:min-h-[36px] rounded-lg text-xs font-medium border transition-all active:scale-95 cursor-pointer flex items-center justify-center text-center ${
                   safetyAssessment.immediateDanger === false
                     ? 'bg-teal-700 text-white border-teal-700 shadow-3xs'
@@ -92,6 +141,7 @@ export const SafetyCheckModal: React.FC<SafetyCheckModalProps> = ({
             <div className="flex gap-2">
               <button
                 onClick={() => setSafetyAssessment(prev => ({ ...prev, planOrIntent: true }))}
+                aria-pressed={safetyAssessment.planOrIntent === true}
                 className={`flex-1 py-1 px-2.5 min-h-[44px] sm:min-h-[36px] rounded-lg text-xs font-medium border transition-all cursor-pointer flex items-center justify-center text-center ${
                   safetyAssessment.planOrIntent === true
                     ? 'bg-rose-600 text-white border-rose-600 shadow-3xs'
@@ -102,6 +152,7 @@ export const SafetyCheckModal: React.FC<SafetyCheckModalProps> = ({
               </button>
               <button
                 onClick={() => setSafetyAssessment(prev => ({ ...prev, planOrIntent: false }))}
+                aria-pressed={safetyAssessment.planOrIntent === false}
                 className={`flex-1 py-1 px-2.5 min-h-[44px] sm:min-h-[36px] rounded-lg text-xs font-medium border transition-all cursor-pointer flex items-center justify-center text-center ${
                   safetyAssessment.planOrIntent === false
                     ? 'bg-teal-700 text-white border-teal-700 shadow-3xs'
@@ -119,6 +170,7 @@ export const SafetyCheckModal: React.FC<SafetyCheckModalProps> = ({
             <div className="flex gap-2">
               <button
                 onClick={() => setSafetyAssessment(prev => ({ ...prev, wantsTrustedContact: true }))}
+                aria-pressed={safetyAssessment.wantsTrustedContact === true}
                 className={`flex-1 py-1 px-2.5 min-h-[44px] sm:min-h-[36px] rounded-lg text-xs font-medium border transition-all cursor-pointer flex items-center justify-center text-center ${
                   safetyAssessment.wantsTrustedContact === true
                     ? 'bg-slate-800 text-white border-slate-800 shadow-3xs'
@@ -129,6 +181,7 @@ export const SafetyCheckModal: React.FC<SafetyCheckModalProps> = ({
               </button>
               <button
                 onClick={() => setSafetyAssessment(prev => ({ ...prev, wantsTrustedContact: false }))}
+                aria-pressed={safetyAssessment.wantsTrustedContact === false}
                 className={`flex-1 py-1 px-2.5 min-h-[44px] sm:min-h-[36px] rounded-lg text-xs font-medium border transition-all cursor-pointer flex items-center justify-center text-center ${
                   safetyAssessment.wantsTrustedContact === false
                     ? 'bg-slate-800 text-white border-slate-800 shadow-3xs'
@@ -144,13 +197,15 @@ export const SafetyCheckModal: React.FC<SafetyCheckModalProps> = ({
           <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 p-3 rounded-lg space-y-2">
             <div className="flex items-center gap-1.5 font-medium text-amber-900 dark:text-amber-200 text-xs">
               <PhoneCall className="w-3.5 h-3.5 text-amber-600" />
-              <span>Kontak Bantuan Krisis Cepat (Aktif 24 Jam):</span>
+              <span>Dukungan psikologis awal (24 jam; antrean dapat penuh):</span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-              {EMERGENCY_CONTACTS.slice(0, 2).map((contact) => (
+              {EMERGENCY_CONTACTS.filter(contact => contact.availabilityStatus === 'ACTIVE').map((contact) => (
                 <a
                   key={contact.id}
                   href={contact.url}
+                  target={contact.url.startsWith('http') ? '_blank' : undefined}
+                  rel={contact.url.startsWith('http') ? 'noopener noreferrer' : undefined}
                   className="p-2.5 min-h-[44px] bg-white dark:bg-slate-800 border border-amber-200 dark:border-amber-900 rounded-lg flex items-center justify-between hover:bg-amber-100/50 dark:hover:bg-amber-900/40 transition-colors"
                 >
                   <div>
@@ -170,13 +225,13 @@ export const SafetyCheckModal: React.FC<SafetyCheckModalProps> = ({
             className="px-3.5 py-2 min-h-[44px] sm:min-h-[36px] bg-rose-600 hover:bg-rose-700 text-white text-xs font-medium rounded-lg flex items-center justify-center gap-1.5 transition-colors cursor-pointer btn-press"
           >
             <Phone className="w-3.5 h-3.5" />
-            <span>Hubungi Hotline 119</span>
+            <span>Hubungi 119 (darurat medis)</span>
           </a>
           <button
             onClick={onClose}
             className="px-4 py-2 min-h-[44px] sm:min-h-[36px] bg-slate-800 hover:bg-slate-900 text-white text-xs font-medium rounded-lg transition-all cursor-pointer flex items-center justify-center btn-press"
           >
-            Saya Aman, Lanjutkan
+            Lanjutkan skrining
           </button>
         </div>
           </motion.div>

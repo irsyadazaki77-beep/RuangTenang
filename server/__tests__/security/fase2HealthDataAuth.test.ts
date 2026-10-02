@@ -194,7 +194,7 @@ describe('FASE 2: Health Data & SOAP Authorization Security Tests', () => {
     expect(res.status).toBe(403);
   });
 
-  it('2. Counselor A creating SOAP for Student B → 403 Forbidden', async () => {
+  it('2. Counselor A creating SOAP for Student B → generic not found', async () => {
     const res = await request(app)
       .post('/api/v1/counselor-portal/soap-notes')
       .set('Authorization', `Bearer ${tokenCounselorA}`)
@@ -206,8 +206,8 @@ describe('FASE 2: Health Data & SOAP Authorization Security Tests', () => {
         plan: 'Plan text'
       });
 
-    expect(res.status).toBe(403);
-    expect(res.body.code).toBe('ACCESS_DENIED');
+    expect(res.status).toBe(404);
+    expect(res.body.error).toBe('Data tidak ditemukan atau akses tidak tersedia.');
   });
 
   it('3. Counselor A accessing appointment of Counselor B → 403 Forbidden', async () => {
@@ -231,7 +231,7 @@ describe('FASE 2: Health Data & SOAP Authorization Security Tests', () => {
         plan: 'Plan'
       });
 
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(404);
   });
 
   it('5. Forged counselorId parameter attempt is ignored and bound to requesting counselor', async () => {
@@ -267,11 +267,27 @@ describe('FASE 2: Health Data & SOAP Authorization Security Tests', () => {
     expect(getRes.body.data[0].subjective).toBe('Keluhan kecemasan skripsi');
   });
 
-  it('7. Consent dicabut → akses sensitif ditolak (403)', async () => {
-    // Revoke consent for Student A
+  it('6a. assigned student appears in triage with truthful missing-university value', async () => {
+    await prisma.users.update({
+      where: { id: studentAUser.userId },
+      data: { university: '' }
+    });
+
+    const res = await request(app)
+      .get('/api/v1/counselor-portal/triage-queue')
+      .set('Authorization', `Bearer ${tokenCounselorA}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toHaveLength(1);
+    expect(res.body.data[0].userId).toBe(studentAUser.userId);
+    expect(res.body.data[0].university).toBe('Tidak tersedia');
+  });
+
+  it('7. Consent dicabut → akses sensitif ditolak tanpa enumerasi record', async () => {
+    // Summary consent alone cannot authorize access to scores or clinical SOAP content.
     await consentService.updateConsents(studentAUser.userId, {
       consentForCounselorSharing: false,
-      consentForCounselorSummary: false
+      consentForCounselorSummary: true
     });
 
     const screeningRes = await request(app)
@@ -284,7 +300,17 @@ describe('FASE 2: Health Data & SOAP Authorization Security Tests', () => {
       .get(`/api/v1/counselor-portal/soap-notes?studentUserId=${studentAUser.userId}`)
       .set('Authorization', `Bearer ${tokenCounselorA}`);
 
-    expect(soapRes.status).toBe(403);
+    expect(soapRes.status).toBe(404);
+
+    // Full withdrawal remains default-deny as well.
+    await consentService.updateConsents(studentAUser.userId, {
+      consentForCounselorSharing: false,
+      consentForCounselorSummary: false
+    });
+    const withdrawnRes = await request(app)
+      .get(`/api/v1/counselor-portal/soap-notes?studentUserId=${studentAUser.userId}`)
+      .set('Authorization', `Bearer ${tokenCounselorA}`);
+    expect(withdrawnRes.status).toBe(404);
   });
 
   it('8. Admin behavior stays according to policy (purpose bound access allowed)', async () => {

@@ -20,11 +20,11 @@ export function computeScreeningSummary(phqScore: number, gadScore: number) {
   const phqSeverity = calculatePhq9Severity(phqScore);
   const gadSeverity = calculateGad7Severity(gadScore);
 
-  let recommendation = 'Kondisi kesehatan emosional dalam rentang wajar. Tetap jaga pola tidur dan manajemen waktu.';
+  let recommendation = 'Skor skrining berada di rentang rendah. Ini bukan diagnosis atau jaminan bahwa tidak ada masalah; cari bantuan profesional bila keluhan mengganggu atau Anda merasa khawatir.';
   if (phqSeverity === 'Berat' || gadSeverity === 'Berat') {
-    recommendation = 'Disarankan untuk berkonsultasi dengan konselor/psikolog kampus atau mengakses hotline krisis 24 jam.';
+    recommendation = 'Skor skrining menunjukkan gejala yang perlu segera dibicarakan dengan konselor atau tenaga kesehatan. Jika Anda berada dalam bahaya langsung, hubungi 119 atau pergi ke IGD; untuk dukungan psikologis awal, hubungi Healing119 melalui 119 ekstensi 8 atau healing119.id.';
   } else if (phqSeverity === 'Sedang' || gadSeverity === 'Sedang') {
-    recommendation = 'Disarankan menjadwalkan sesi konseling ringan atau mengikuti kelas manajemen kecemasan.';
+    recommendation = 'Pertimbangkan membicarakan hasil skrining ini dengan konselor atau tenaga kesehatan, terutama bila gejala mengganggu aktivitas. Hasil ini bukan diagnosis.';
   }
 
   return {

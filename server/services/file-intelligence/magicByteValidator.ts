@@ -284,5 +284,10 @@ export async function validateAndInspectFile(
     };
   }
 
+  const KNOWN_BINARY_DOC_EXTS = new Set(['pdf', 'docx', 'pptx', 'xlsx', 'doc', 'png', 'jpg', 'jpeg', 'webp']);
+  if (KNOWN_BINARY_DOC_EXTS.has(ext)) {
+    throw new DocumentProcessingException('SIGNATURE_MISMATCH', `Format berkas .${ext} tidak valid atau magic byte tidak cocok.`);
+  }
+
   throw new DocumentProcessingException('UNSUPPORTED_FORMAT', `Format berkas .${ext || 'unknown'} belum didukung.`);
 }

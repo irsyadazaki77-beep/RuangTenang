@@ -28,7 +28,7 @@ export const CounselorPortal: React.FC = () => {
   const [stats, setStats] = useState<CounselorStats>({
     totalTriaged: 0,
     activeCases: 0,
-    emergencyInterventions: 0,
+    highRiskSoapNotes: 0,
     highRiskCount: 0,
     completedNotes: 0,
     averageResponseTimeHours: null,

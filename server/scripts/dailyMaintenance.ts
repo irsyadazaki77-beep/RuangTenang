@@ -141,6 +141,7 @@ export async function executeDailyMaintenance(): Promise<DailyMaintenanceReport>
     appointmentsDeleted: 0,
     chatsDeleted: 0,
     temporaryChatsDeleted: 0,
+    attachmentsDeleted: 0,
     timestamp: reportTimestamp
   };
 
@@ -150,7 +151,8 @@ export async function executeDailyMaintenance(): Promise<DailyMaintenanceReport>
     console.log(
       `[4/6 DATA RETENTION] Selesai: ${retentionResult.totalCleaned} rekaman dibersihkan ` +
       `(Mood: ${retentionResult.moodLogsDeleted}, Skrining: ${retentionResult.screeningsDeleted}, ` +
-      `Janji Temu: ${retentionResult.appointmentsDeleted}, Chat Tamu: ${retentionResult.temporaryChatsDeleted}).`
+      `Janji Temu: ${retentionResult.appointmentsDeleted}, Chat Tamu: ${retentionResult.temporaryChatsDeleted}, ` +
+      `Lampiran: ${retentionResult.attachmentsDeleted}).`
     );
   } catch (retErr: any) {
     console.error(`[4/6 DATA RETENTION FAIL] Pembersihan retensi data gagal:`, retErr.message);

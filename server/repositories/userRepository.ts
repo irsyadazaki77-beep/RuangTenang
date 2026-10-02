@@ -312,7 +312,7 @@ export const userRepository = {
         passwordHash: user.passwordHash,
         role: user.role,
         tier: user.tier || "Free",
-        university: user.university || "Universitas Indonesia",
+        university: user.university || "",
         emailVerified: user.emailVerified ?? false,
         mfaEnabled: user.mfaEnabled ?? false,
       },

@@ -1,4 +1,11 @@
-export interface AiModelOption {
+import { aiProviderConfig } from '../../config/aiProviderConfig.js';
+import { getProviderHealth } from './aiReliabilityService.js';
+import { DEFAULT_AI_MODEL_ID, ModelCapability, ProviderId, ModelTier } from '../../../shared/aiModelContract.js';
+
+export { DEFAULT_AI_MODEL_ID };
+export type { ModelCapability, ModelTier, ProviderId };
+
+export interface AiModelMetadata {
   id: string;
   name: string;
   category: string;
@@ -8,10 +15,15 @@ export interface AiModelOption {
   speed: 'Sangat Cepat' | 'Cepat' | 'Sedang';
   reasoning: 'Tinggi' | 'Sangat Tinggi' | 'Standar';
   recommendedFor: string;
-  allowedTiers: string[];
+  allowedTiers: ModelTier[];
+}
+export interface AiModelDefinition extends AiModelMetadata {
+  provider: ProviderId;
+  providerModelId: string;
+  capabilities: readonly ModelCapability[];
 }
 
-export const AVAILABLE_AI_MODELS: AiModelOption[] = [
+const MODEL_METADATA: AiModelMetadata[] = [
   // --- 1. FRONTIER & DEEP REASONING TIER (Sangat Tinggi) ---
   {
     id: 'deepseek-reasoner',
@@ -196,43 +208,113 @@ export const AVAILABLE_AI_MODELS: AiModelOption[] = [
   }
 ];
 
-export const DEFAULT_AI_MODEL_ID = 'gemini-3.8-flash';
+export const RESILIENT_FALLBACK_AI_MODEL_ID = 'gemini-3.1-flash-lite';
+
+const providerModels: Record<string, { provider: ProviderId; providerModelId: string }> = {
+  'deepseek-reasoner': { provider: 'deepseek', providerModelId: 'deepseek-reasoner' },
+  'deepseek-chat': { provider: 'deepseek', providerModelId: 'deepseek-chat' },
+  'openrouter-nemotron-550b': { provider: 'openrouter', providerModelId: 'nvidia/nemotron-3-ultra-550b-a55b:free' },
+  'openrouter-nemotron-super-120b': { provider: 'openrouter', providerModelId: 'nvidia/nemotron-3-super-120b-a12b:free' },
+  'openrouter-nemotron-lightning': { provider: 'openrouter', providerModelId: 'nvidia/nemotron-3.5-lightning:free' },
+  'groq-gpt-120b': { provider: 'groq', providerModelId: 'openai/gpt-oss-120b' },
+  'groq-gpt-20b': { provider: 'groq', providerModelId: 'openai/gpt-oss-20b' },
+  'groq-qwen-27b': { provider: 'groq', providerModelId: 'qwen/qwen3.8-27b' },
+};
+
+export const AI_MODEL_REGISTRY: readonly AiModelDefinition[] = MODEL_METADATA.map(model => ({
+  ...model,
+  ...(providerModels[model.id] ?? { provider: 'gemini' as const, providerModelId: model.id }),
+  capabilities: ['chat', 'streaming']
+}));
+export const AVAILABLE_AI_MODELS = AI_MODEL_REGISTRY;
+
+/** Only IDs observed in existing callers/preferences are accepted as aliases. */
+export const LEGACY_AI_MODEL_ALIASES: Readonly<Record<string, string>> = Object.freeze({
+  'deepseek-r1': 'deepseek-reasoner',
+  'qwen/qwen3.8-27b': 'groq-qwen-27b',
+  'openai/gpt-oss-120b': 'groq-gpt-120b',
+  'openai/gpt-oss-20b': 'groq-gpt-20b',
+  'nvidia/nemotron-3-ultra-550b-a55b:free': 'openrouter-nemotron-550b',
+  'nvidia/nemotron-3-super-120b-a12b:free': 'openrouter-nemotron-super-120b',
+  'nvidia/nemotron-3.5-lightning:free': 'openrouter-nemotron-lightning',
+  'gemini-2.0-flash': 'gemini-2.5-flash',
+  'gemini-2.5-pro': 'gemini-3.1-pro-preview',
+  'gemini-2.5-flash-lite': 'gemini-3.1-flash-lite',
+  'gemini-flash-latest': 'gemini-2.5-flash'
+});
+
+export function getModelDefinition(modelId: string): AiModelDefinition | undefined {
+  const canonicalId = LEGACY_AI_MODEL_ALIASES[modelId] || modelId;
+  return AI_MODEL_REGISTRY.find(model => model.id === canonicalId);
+}
+
+export type AiModelErrorCode = 'MODEL_NOT_FOUND' | 'MODEL_NOT_ALLOWED' | 'MODEL_UNAVAILABLE' | 'PROVIDER_NOT_CONFIGURED';
+export class AiModelError extends Error {
+  constructor(public readonly code: AiModelErrorCode) { super(code); this.name = 'AiModelError'; }
+}
+
+export function resolveAiModel(modelId: string, tier = 'Free'): AiModelDefinition {
+  const model = getModelDefinition(modelId);
+  if (!model) throw new AiModelError('MODEL_NOT_FOUND');
+  if (!isTierAllowed(model, tier)) throw new AiModelError('MODEL_NOT_ALLOWED');
+  if (!model.providerModelId) throw new AiModelError('MODEL_UNAVAILABLE');
+  return model;
+}
+
+export function getConfiguredDefaultAiModelId(tier = 'Free'): string {
+  const candidates = [
+    ...AI_MODEL_REGISTRY.filter(model => model.id === DEFAULT_AI_MODEL_ID),
+    AI_MODEL_REGISTRY.find(model => model.id === RESILIENT_FALLBACK_AI_MODEL_ID),
+    ...AI_MODEL_REGISTRY
+  ].filter((model): model is AiModelDefinition => Boolean(model));
+  return candidates.find(model => isTierAllowed(model, tier) && aiProviderConfig.isConfigured(model.provider))?.id
+    || DEFAULT_AI_MODEL_ID;
+}
+
+export function getPublicModelCatalog(tier = 'Free') {
+  return AI_MODEL_REGISTRY.map(({ id, name, category, tag, speed, reasoning, allowedTiers, provider, capabilities, isDefault }) => {
+    const configured = isProviderConfigured(provider);
+    const availability = !configured ? 'provider_not_configured' as const : getProviderHealth(provider) === 'unavailable' ? 'temporarily_unavailable' as const : 'configured' as const;
+    return {
+      id, name, category, tag, speed, reasoning, allowedTiers, provider, capabilities: [...capabilities], isDefault: Boolean(isDefault),
+      availability,
+      selectable: configured && availability !== 'temporarily_unavailable' && isTierAllowed({ allowedTiers }, tier)
+    };
+  });
+}
+
+function isProviderConfigured(provider: ProviderId): boolean {
+  return aiProviderConfig.isConfigured(provider);
+}
 
 export function isDeepSeekModel(modelId: string): boolean {
-  return modelId === 'deepseek-chat' || modelId === 'deepseek-reasoner' || modelId.startsWith('deepseek-');
+  return getModelDefinition(modelId)?.provider === 'deepseek';
 }
 
 export function isGroqModel(modelId: string): boolean {
-  return modelId.startsWith('groq-') || modelId.startsWith('qwen/') || modelId.startsWith('openai/gpt-oss');
+  return getModelDefinition(modelId)?.provider === 'groq';
 }
 
 export function isOpenRouterModel(modelId: string): boolean {
-  return modelId.startsWith('openrouter-') || modelId.startsWith('nvidia/');
+  return getModelDefinition(modelId)?.provider === 'openrouter';
 }
 
 export function getActualGeminiModel(modelId: string): string {
-  const map: Record<string, string> = {
-    'gemini-3.8-flash': 'gemini-3.8-flash',
-    'gemini-3.1-flash-lite': 'gemini-3.1-flash-lite',
-    'gemini-3.7-flash': 'gemini-3.7-flash',
-    'gemini-3.1-pro-preview': 'gemini-3.1-pro-preview',
-    'gemini-flash-latest': 'gemini-flash-latest',
-    'gemini-2.5-flash': 'gemini-2.5-flash',
-    'gemini-2.5-pro': 'gemini-2.5-pro',
-    'gemini-2.5-flash-lite': 'gemini-2.5-flash-lite',
-    'gemini-3.5-flash-lite': 'gemini-3.5-flash-lite',
-    'gemini-3.5-flash': 'gemini-3.5-flash',
-    'gemini-3.6-flash': 'gemini-3.6-flash'
-  };
-  return map[modelId] || 'gemini-2.5-flash';
+  const model = getModelDefinition(modelId);
+  return model?.provider === 'gemini' ? model.providerModelId : 'gemini-2.5-flash';
 }
 
-export function getModelInfo(modelId: string): AiModelOption {
-  return AVAILABLE_AI_MODELS.find(m => m.id === modelId) || AVAILABLE_AI_MODELS[0];
+export function getModelInfo(modelId: string): AiModelDefinition {
+  return (getModelDefinition(modelId) || AI_MODEL_REGISTRY[0]);
 }
 
 export function isModelAllowedForTier(modelId: string, tier: string = 'Free'): boolean {
-  const model = AVAILABLE_AI_MODELS.find(m => m.id === modelId);
+  const model = getModelDefinition(modelId);
   if (!model) return false;
-  return model.allowedTiers.includes(tier);
+  return isTierAllowed(model, tier);
+}
+
+function isTierAllowed(model: Pick<AiModelDefinition, 'allowedTiers'>, tier: string): boolean {
+  const normalizedTier = tier === 'Developer' ? 'Pro' : tier;
+  return model.allowedTiers.some(allowedTier => allowedTier === normalizedTier);
 }

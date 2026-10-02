@@ -2,6 +2,8 @@ import { Router, Request, Response } from 'express';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 import { prisma } from '../database.js';
 import { consentService } from '../services/consentService.js';
+import { normalizeRole } from '../middleware/auth.js';
+import { getAssignedStudentUserIds } from '../services/healthDataAuth.js';
 import { redisService } from '../services/redisService.js';
 
 const router = Router();
@@ -174,7 +176,7 @@ const INITIAL_RISK_ALERTS = [
 ];
 
 router.get(['/', '/counselors', '/api/counselors', '/api/v1/counselors'], async (req: Request, res: Response) => {
-  if (process.env.VITE_DEMO_MODE === 'true') {
+  if (process.env.SERVER_DEMO_MODE === 'true') {
     return res.json(MOCK_COUNSELORS.map(m => ({
       ...m,
       isDemoData: true,
@@ -204,8 +206,9 @@ router.get(['/', '/counselors', '/api/counselors', '/api/v1/counselors'], async 
     res.setHeader('X-Cache', 'MISS');
 
     const [total, dbCounselors] = await Promise.all([
-      prisma.counselors.count(),
+      prisma.counselors.count({ where: { isDemoData: false } }),
       prisma.counselors.findMany({
+        where: { isDemoData: false },
         take: limit,
         skip: offset,
         orderBy: { name: 'asc' }
@@ -302,17 +305,22 @@ router.get(
   requireAuth,
   requireRole(['admin', 'konselor']),
   async (req: Request, res: Response) => {
-    if (process.env.VITE_DEMO_MODE === 'true') {
+    if (process.env.SERVER_DEMO_MODE === 'true') {
       return res.json({ ...INITIAL_ANALYTICS, isDemoData: true });
     }
 
     try {
+      const scopedStudentIds = await getAssignedStudentUserIds(req.user!.userId);
+      const counselor = await prisma.counselors.findFirst({ where: { userId: req.user!.userId }, select: { id: true } });
+      const scopedScreening = { userId: { in: scopedStudentIds } };
+      const scopedAppointment = { counselorId: counselor?.id || '__none__' };
       const [totalSessions, userCount, allScreenings, highRiskScreenings, appointments] = await Promise.all([
-        prisma.appointments.count(),
-        prisma.users.count({ where: { role: 'mahasiswa' } }),
-        prisma.screenings.findMany({ select: { phq9Score: true, gad7Score: true, phq9Severity: true, timestamp: true } }),
+        prisma.appointments.count({ where: scopedAppointment }),
+        prisma.users.count({ where: { id: { in: scopedStudentIds } } }),
+        prisma.screenings.findMany({ where: scopedScreening, select: { phq9Score: true, gad7Score: true, phq9Severity: true, timestamp: true } }),
         prisma.screenings.count({
           where: {
+            ...scopedScreening,
             OR: [
               { hasSelfHarmRisk: true },
               { item9Score: { gt: 0 } },
@@ -320,7 +328,7 @@ router.get(
             ]
           }
         }),
-        prisma.appointments.findMany({ select: { notes: true, scheduledAt: true, status: true } })
+        prisma.appointments.findMany({ where: scopedAppointment, select: { notes: true, scheduledAt: true, status: true } })
       ]);
 
       const dist = { minimal: 0, mild: 0, moderate: 0, severe: 0 };
@@ -395,14 +403,15 @@ router.get(
   requireAuth,
   requireRole(['admin', 'konselor']),
   async (req: Request, res: Response) => {
-    if (process.env.VITE_DEMO_MODE === 'true') {
+    if (process.env.SERVER_DEMO_MODE === 'true') {
       return res.json(INITIAL_RISK_ALERTS);
     }
 
     try {
-      let highRiskScreenings: any[] = [];
+      let highRiskScreenings: Array<{ id: string; userId: string | null; riskIndicators: string | null; hasSelfHarmRisk: boolean; timestamp: Date; status: string; phq9Score: number; gad7Score: number }> = [];
 
-      if (req.user!.role === 'konselor') {
+      const normalizedRole = normalizeRole(req.user!.role);
+      if (normalizedRole === 'konselor' || normalizedRole === 'peer_counselor') {
         // 1. Canonical counselor lookup
         const counselor = await prisma.counselors.findFirst({
           where: { userId: req.user!.userId }
@@ -435,7 +444,7 @@ router.get(
         const batchConsents = await consentService.getBatchUserConsents(candidateUserIds);
         const authorizedStudentUserIds = candidateUserIds.filter(sUserId => {
           const c = batchConsents.get(sUserId);
-          return c && (c.consentForCounselorSharing || c.consentForCounselorSummary);
+          return c?.consentForCounselorSharing === true;
         });
 
         if (authorizedStudentUserIds.length === 0) {
@@ -468,33 +477,9 @@ router.get(
             purpose: 'Triase & Intervensi Mahasiswa Risiko Tinggi'
           }
         });
-      } else if (req.user!.role === 'admin') {
-        // Admin access is strictly purpose-bound and logged
-        const purpose = (req.query.purpose as string) || 'Audit Kepatuhan & Triage Krisis Kampus';
-
-        highRiskScreenings = await prisma.screenings.findMany({
-          where: {
-            OR: [
-              { hasSelfHarmRisk: true },
-              { item9Score: { gt: 0 } },
-              { phq9Score: { gte: 15 } }
-            ]
-          },
-          orderBy: { timestamp: 'desc' },
-          take: 20
-        });
-
-        await prisma.staffAccessLogs.create({
-          data: {
-            id: 'staff-log-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
-            staffUserId: req.user!.userId,
-            staffName: req.user!.name,
-            staffRole: req.user!.role,
-            targetUserId: 'all_high_risk_screenings',
-            accessType: 'VIEW_RISK_ALERTS',
-            purpose
-          }
-        });
+      } else if (normalizedRole === 'admin') {
+        // Campus administrators have no implicit right to read clinical risk records.
+        return res.json([]);
       }
 
       const alerts = highRiskScreenings.map((s, idx) => {
@@ -514,7 +499,7 @@ router.get(
           id: s.id || `risk-${idx}`,
           sessionId: `sess-${s.id.slice(0, 6)}`,
           studentAlias: `Mahasiswa-${s.userId ? s.userId.slice(-3).toUpperCase() : 'Anonim'}`,
-          university: 'Universitas Indonesia',
+          university: 'Tidak tersedia',
           riskLevel: s.phq9Score >= 20 || s.hasSelfHarmRisk ? 'Tinggi' : 'Sedang',
           triggers,
           detectedAt: new Date(s.timestamp).toLocaleString('id-ID'),

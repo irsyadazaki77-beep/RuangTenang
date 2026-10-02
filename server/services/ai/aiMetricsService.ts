@@ -11,6 +11,8 @@ export interface RequestMetric {
   modelUsed: string;
   isFallback: boolean;
   aborted: boolean;
+  routingMode?: 'manual' | 'auto';
+  routeReason?: string;
 }
 
 export interface MetricsSummary {
@@ -52,6 +54,8 @@ export const aiMetricsService = {
       ttfbMs: fullMetric.ttfbMs,
       totalLatencyMs: fullMetric.totalLatencyMs,
       modelUsed: fullMetric.modelUsed,
+      routingMode: fullMetric.routingMode,
+      routeReason: fullMetric.routeReason,
       aborted: fullMetric.aborted,
       isFallback: fullMetric.isFallback,
       inputTokens: fullMetric.estimatedInputTokens,

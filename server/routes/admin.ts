@@ -237,7 +237,7 @@ router.post(
         passwordHash,
         role,
         tier: 'Pro',
-        university: university ? sanitizeInput(university.trim(), 100) : 'Universitas Indonesia',
+        university: university ? sanitizeInput(university.trim(), 100) : '',
         emailVerified: true,
         mfaEnabled: true
       });

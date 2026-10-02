@@ -18,7 +18,7 @@ model Users {
   passwordHash              String
   role                      String    @default("mahasiswa")
   tier                      String    @default("Free")
-  university                String    @default("Universitas Indonesia")
+  university                String    @default("")
   createdAt                 DateTime  @default(now())
   emailVerified             Boolean   @default(false)
   emailVerificationCode     String?
@@ -562,4 +562,3 @@ model ArtifactVersions {
 
   @@index([artifactId])
 }
-

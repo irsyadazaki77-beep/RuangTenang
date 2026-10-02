@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { loginSchema, registerSchema, provisionUserSchema, changePasswordSchema } from './validators/authSchemas.js';
-import { requireAuth, requireRole } from './middleware/auth.js';
+import { normalizeRole, requireAuth, requireRole } from './middleware/auth.js';
 import { authService } from './services/authService.js';
 import { AuthController } from './controllers/authController.js';
 import { serverDb } from './database.js';
@@ -89,6 +89,15 @@ describe('Registration Privilege Escalation Prevention', () => {
 });
 
 describe('Role-Based Access Control (RBAC) & Middleware Security', () => {
+  it('normalizes supported legacy counselor and admin roles and rejects unknown values', () => {
+    expect(normalizeRole('licensed_psychologist')).toBe('konselor');
+    expect(normalizeRole('CLINICAL_COUNSELOR')).toBe('konselor');
+    expect(normalizeRole('PEER_COUNSELOR')).toBe('peer_counselor');
+    expect(normalizeRole('campus-admin')).toBe('admin');
+    expect(normalizeRole('student')).toBe('mahasiswa');
+    expect(normalizeRole('counsellorr')).toBe('unknown');
+  });
+
   it('requireAuth rejects unauthenticated requests with 401', () => {
     let status = 200;
     let json: any = {};
@@ -187,4 +196,3 @@ describe('Token & Session Integrity', () => {
     expect(sanitized.mfaSecret).toBeUndefined();
   });
 });
-

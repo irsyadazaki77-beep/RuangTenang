@@ -126,7 +126,7 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
       if (data.status === 'SENT') {
         showToast("Sinyal SOS darurat berhasil dikirim via SMS/WA!", "success");
       } else if (data.status === 'SIMULATED') {
-        showToast("Sinyal SOS dicatat di server (Mode Simulasi). Hubungi hotline 119 bila mendesak.", "info");
+        showToast("Sinyal SOS hanya dicatat dalam mode simulasi. Untuk dukungan psikologis buka Healing119; untuk darurat medis hubungi 119.", "info");
       } else {
         showToast("Sinyal SOS gagal terkirim. Segera hubungi hotline darurat 119.", "error");
       }
@@ -138,9 +138,9 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
         timestamp: new Date().toISOString(),
         hasUserConsent: contact.hasConsent,
         message:
-          "Tidak dapat terhubung ke server. Hubungi nomor " + EMERGENCY_CONTACTS[0].phone + " atau hotline 119 secara langsung.",
+          "Tidak dapat terhubung ke server. Untuk dukungan psikologis buka healing119.id atau hubungi 119 ekstensi 8. Untuk darurat medis, hubungi 119 atau pergi ke fasilitas kesehatan terdekat.",
       });
-      showToast("Panggilan SOS gagal karena masalah jaringan. Silakan hubungi darurat manual.", "error");
+      showToast("Sinyal SOS tidak terkirim. Gunakan Healing119 untuk dukungan psikologis; untuk darurat medis hubungi 119 atau pergi ke IGD.", "error");
     } finally {
       setIsTriggeringSOS(false);
     }
@@ -171,7 +171,7 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
         </div>
         <div className="text-center sm:text-left space-y-0.5 flex-1 min-w-0">
           <h2 className="font-bold text-primary text-base sm:text-lg tracking-tight">
-            Pusat Krisis (24 Jam)
+            Bantuan Krisis Kesehatan Mental
           </h2>
           <p className="text-xs sm:text-sm text-secondary leading-relaxed max-w-2xl">
             Jika Anda atau kerabat berada dalam situasi krisis atau memerlukan pertolongan segera, hubungi kontak di bawah ini.
@@ -196,7 +196,7 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
             className="w-full py-2.5 px-3.5 bg-rose-50 dark:bg-rose-950/60 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 rounded-lg font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 transition-colors border border-rose-200 dark:border-rose-900 cursor-pointer min-h-[44px] sm:min-h-[36px]"
           >
             <Phone className="w-3.5 h-3.5" />
-            <span>Telepon Langsung {EMERGENCY_CONTACTS[0].phone}</span>
+            <span>Buka Situs Healing119</span>
           </a>
         </div>
 
@@ -289,7 +289,7 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
               Direktori Bantuan Khusus & Kampus
             </h2>
             <p className="text-xs text-secondary">
-              Temukan nomor darurat krisis internal berbagai universitas dan hotline psikologis tepercaya.
+              Kanal bantuan resmi yang telah diperiksa. Untuk Healing119, panggil 119 ekstensi 8 atau buka situsnya untuk memulai layanan suara/chat.
             </p>
           </div>
 
@@ -297,7 +297,7 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
             <Search className="w-3.5 h-3.5 text-muted absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
-              placeholder="Cari nama kampus atau layanan (UI, ITB, UGM, LISA)..."
+              placeholder="Cari nama kampus atau layanan bantuan..."
               value={hotlineQuery}
               onChange={(e) => setHotlineQuery(e.target.value)}
               className="w-full surface-muted border border-slate-200 dark:border-slate-700 rounded-lg pl-9 pr-3.5 py-1.5 text-base sm:text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-teal-600 transition-all min-h-[44px] sm:min-h-[36px]"
@@ -333,11 +333,13 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
                     </p>
                   </div>
                   <a
-                    href={`tel:${item.number.replace(/\D/g, "")}`}
+                    href={item.url || `tel:${item.number.replace(/\D/g, "")}`}
+                    target={item.url ? "_blank" : undefined}
+                    rel={item.url ? "noopener noreferrer" : undefined}
                     className="w-full sm:w-auto px-3 py-2 bg-rose-50 dark:bg-rose-950/60 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 font-semibold text-xs rounded-lg transition-all flex items-center justify-center gap-1 cursor-pointer min-h-[44px] sm:min-h-[34px] border border-rose-200 dark:border-rose-900 shrink-0"
                   >
                     <PhoneCall className="w-3.5 h-3.5" />
-                    <span>Telepon ({item.number})</span>
+                    <span>{item.url ? `Buka layanan (${item.number})` : `Telepon (${item.number})`}</span>
                   </a>
                 </div>
               ))

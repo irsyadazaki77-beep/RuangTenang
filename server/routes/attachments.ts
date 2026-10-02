@@ -1,17 +1,27 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import multer from 'multer';
 import { prisma } from '../database.js';
 import { optionalAuth, requireAuth } from '../middleware/auth.js';
 import { attachmentStorageService, MAX_FILE_SIZE, MAX_ATTACHMENTS_PER_MESSAGE } from '../services/attachmentStorageService.js';
+import { documentIngestionService } from '../services/file-intelligence/documentIngestionService.js';
+import { DocumentProcessingException } from '../services/file-intelligence/fileTypes.js';
+import { attachmentUploadLimiter } from '../middleware/rateLimiters.js';
 
 const router = Router();
+const MAX_CONCURRENT_ATTACHMENT_UPLOADS = 4;
+let activeAttachmentUploads = 0;
 
 // Configure Multer in-memory storage with strict size and file count limits
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
     fileSize: MAX_FILE_SIZE,
-    files: MAX_ATTACHMENTS_PER_MESSAGE
+    files: MAX_ATTACHMENTS_PER_MESSAGE,
+    fieldNameSize: 100,
+    fieldSize: 4 * 1024,
+    fields: 2,
+    parts: MAX_ATTACHMENTS_PER_MESSAGE + 2,
+    headerPairs: 100
   }
 });
 
@@ -25,12 +35,32 @@ const sendAttachmentError = (res: Response, code: string, message: string, statu
   });
 };
 
+const limitConcurrentAttachmentUploads = (_req: Request, res: Response, next: NextFunction) => {
+  if (activeAttachmentUploads >= MAX_CONCURRENT_ATTACHMENT_UPLOADS) {
+    res.setHeader('Retry-After', '5');
+    return sendAttachmentError(res, 'UPLOAD_CAPACITY', 'Server sedang memproses unggahan lain. Coba lagi sebentar.', 503);
+  }
+
+  activeAttachmentUploads += 1;
+  let released = false;
+  const releaseSlot = () => {
+    if (released) return;
+    released = true;
+    activeAttachmentUploads = Math.max(0, activeAttachmentUploads - 1);
+  };
+  res.once('finish', releaseSlot);
+  res.once('close', releaseSlot);
+  next();
+};
+
 /**
  * Upload attachments endpoint (multipart/form-data)
  */
 router.post(
   '/chat/attachments/upload',
   optionalAuth,
+  attachmentUploadLimiter,
+  limitConcurrentAttachmentUploads,
   (req: Request, res: Response, next) => {
     // Multer upload middleware handler with limit error catching
     const uploadHandler = upload.array('files', MAX_ATTACHMENTS_PER_MESSAGE);
@@ -43,9 +73,21 @@ router.post(
           if (err.code === 'LIMIT_FILE_COUNT') {
             return sendAttachmentError(res, 'TOO_MANY_FILES', 'Maksimal 3 lampiran diperbolehkan per pesan', 400);
           }
-          return sendAttachmentError(res, 'UPLOAD_ERROR', err.message, 400);
+          if (err.code === 'LIMIT_FIELD_COUNT' || err.code === 'LIMIT_PART_COUNT') {
+            return sendAttachmentError(res, 'TOO_MANY_FORM_FIELDS', 'Data formulir unggahan melebihi batas.', 400);
+          }
+          if (err.code === 'LIMIT_FIELD_VALUE') {
+            return sendAttachmentError(res, 'FORM_FIELD_TOO_LARGE', 'Nilai formulir unggahan terlalu besar.', 400);
+          }
+          if (err.code === 'LIMIT_FIELD_KEY') {
+            return sendAttachmentError(res, 'FORM_FIELD_NAME_TOO_LONG', 'Nama kolom formulir terlalu panjang.', 400);
+          }
+          if (err.code === 'LIMIT_UNEXPECTED_FILE') {
+            return sendAttachmentError(res, 'INVALID_FILE_FIELD', 'Kolom lampiran tidak valid atau jumlah lampiran melebihi batas.', 400);
+          }
+          return sendAttachmentError(res, 'UPLOAD_ERROR', 'Permintaan unggahan tidak valid.', 400);
         }
-        return sendAttachmentError(res, 'UPLOAD_FAILED', err.message || 'Gagal memproses unggahan', 400);
+        return sendAttachmentError(res, 'UPLOAD_FAILED', 'Gagal memproses unggahan.', 400);
       }
       next();
     });
@@ -90,16 +132,13 @@ router.post(
 
       for (const file of fileList) {
         try {
-          const saved = await attachmentStorageService.saveAttachment({
+          const saved = await documentIngestionService.ingestFile({
             userId,
             buffer: file.buffer,
             originalFilename: file.originalname,
             clientMime: file.mimetype,
             chatId
           });
-
-          let meta: any = {};
-          try { if (saved.metadata) meta = JSON.parse(saved.metadata); } catch {}
 
           savedAttachments.push({
             id: saved.id,
@@ -108,25 +147,39 @@ router.post(
             fileKind: saved.fileKind || 'text',
             size: saved.size,
             status: saved.status || 'ready',
-            pageCount: meta.pageCount,
-            slideCount: meta.slideCount,
-            sheetCount: meta.sheetCount,
-            url: `/api/v1/chat/attachments/${saved.id}`
+            pageCount: saved.pageCount,
+            slideCount: saved.slideCount,
+            sheetCount: saved.sheetCount,
+            url: saved.url || `/api/v1/chat/attachments/${saved.id}`
           });
         } catch (fileErr: any) {
-          const rawMessage = fileErr.message || '';
-          const parts = rawMessage.split(':');
-          const rawCode = parts[0] ? parts[0].trim() : 'INVALID_FILE';
-          const msg = parts.slice(1).join(':').trim() || fileErr.message || 'Berkas tidak valid.';
-
-          // Map error codes accurately
           let code = 'INVALID_FILE';
-          if (rawCode === 'FILE_TOO_LARGE') code = 'FILE_TOO_LARGE';
-          else if (rawCode === 'EMPTY_FILE') code = 'EMPTY_FILE';
-          else if (rawCode === 'SECURITY_REJECTED' || rawCode.startsWith('PROMPT_INJECTION')) code = 'SECURITY_REJECTED';
-          else if (rawCode === 'SIGNATURE_MISMATCH' || rawCode === 'INVALID_FILE_SIGNATURE') code = 'SIGNATURE_MISMATCH';
-          else if (rawCode === 'MIME_MISMATCH' || rawCode === 'EXTENSION_MIMETYPE_MISMATCH') code = 'MIME_MISMATCH';
-          else if (rawCode === 'UNSUPPORTED_FORMAT') code = 'UNSUPPORTED_TYPE';
+          let msg = fileErr.safeMessage || fileErr.message || 'Berkas tidak valid.';
+
+          if (fileErr instanceof DocumentProcessingException) {
+            if (fileErr.code === 'FILE_TOO_LARGE') code = 'FILE_TOO_LARGE';
+            else if (fileErr.code === 'EMPTY_FILE') code = 'EMPTY_FILE';
+            else if (fileErr.code === 'SECURITY_REJECTED') code = 'SECURITY_REJECTED';
+            else if (fileErr.code === 'SIGNATURE_MISMATCH') code = 'SIGNATURE_MISMATCH';
+            else if (fileErr.code === 'MIME_MISMATCH') code = 'MIME_MISMATCH';
+            else if (fileErr.code === 'UNSUPPORTED_FORMAT') code = 'UNSUPPORTED_TYPE';
+            else if (fileErr.code === 'ARCHIVE_TOO_LARGE') code = 'ARCHIVE_TOO_LARGE';
+            else if (fileErr.code === 'PROCESSING_ABORTED') code = 'PROCESSING_ABORTED';
+            else if (fileErr.code === 'OWNERSHIP_ERROR') code = 'UNAUTHORIZED_ACCESS';
+            else code = fileErr.code;
+          } else {
+            const rawMessage = fileErr.message || '';
+            const parts = rawMessage.split(':');
+            const rawCode = parts[0] ? parts[0].trim() : 'INVALID_FILE';
+            msg = parts.slice(1).join(':').trim() || fileErr.message || 'Berkas tidak valid.';
+
+            if (rawCode === 'FILE_TOO_LARGE') code = 'FILE_TOO_LARGE';
+            else if (rawCode === 'EMPTY_FILE') code = 'EMPTY_FILE';
+            else if (rawCode === 'SECURITY_REJECTED' || rawCode.startsWith('PROMPT_INJECTION')) code = 'SECURITY_REJECTED';
+            else if (rawCode === 'SIGNATURE_MISMATCH' || rawCode === 'INVALID_FILE_SIGNATURE') code = 'SIGNATURE_MISMATCH';
+            else if (rawCode === 'MIME_MISMATCH' || rawCode === 'EXTENSION_MIMETYPE_MISMATCH') code = 'MIME_MISMATCH';
+            else if (rawCode === 'UNSUPPORTED_FORMAT') code = 'UNSUPPORTED_TYPE';
+          }
 
           // Safe metadata log only
           console.warn(`[ATTACHMENT_UPLOAD_REJECTED] code=${code} size=${file.size}`);

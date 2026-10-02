@@ -10,6 +10,9 @@ import { chunkingService } from './chunkingService.js';
 import { DocumentProcessingException, DEFAULT_FILE_LIMITS } from './fileTypes.js';
 import { AttachmentResponseDTO, SupportedFileKind } from '../../../shared/contracts/files.js';
 
+import { aiSafetyService } from '../ai/aiSafetyService.js';
+import { deleteStoredAttachmentFile, resolveExistingStoredAttachmentFilePath } from '../attachmentFileService.js';
+
 export const ATTACHMENTS_DIR = path.join(process.cwd(), 'uploads', 'attachments');
 
 if (!fs.existsSync(ATTACHMENTS_DIR)) {
@@ -40,6 +43,17 @@ export const documentIngestionService = {
 
     // 1. VALIDATE: Magic Byte, extension, and limits validation
     const verified: VerifiedFileInfo = await validateAndInspectFile(buffer, originalFilename, clientMime);
+
+    // AI Safety Prompt Injection defense for plain text / markdown files
+    if (verified.fileKind === 'text' || verified.fileKind === 'markdown') {
+      const textContent = buffer.toString('utf8');
+      if (aiSafetyService.detectPromptInjection(textContent)) {
+        throw new DocumentProcessingException(
+          'SECURITY_REJECTED',
+          'Terdeteksi upaya prompt injection dalam isi berkas.'
+        );
+      }
+    }
 
     // 2. IDEMPOTENCY / DEDUPLICATION: Check if identical file already exists for this user in this chat
     const existing = await prisma.attachments.findFirst({
@@ -83,21 +97,32 @@ export const documentIngestionService = {
     await fs.promises.writeFile(storagePath, buffer, { mode: 0o600 });
 
     // 4. PERSIST METADATA: Initial pending record
-    const record = await prisma.attachments.create({
-      data: {
-        id: attachmentId,
-        messageId: messageId || null,
-        chatId: chatId || null,
-        userId: userId || 'guest',
-        filename: verified.sanitizedName,
-        mimeType: verified.verifiedMime,
-        size: verified.size,
-        data: relativeStoragePath,
-        checksum: verified.checksum,
-        fileKind: verified.fileKind,
-        status: 'processing'
-      }
-    });
+    let record;
+    try {
+      record = await prisma.attachments.create({
+        data: {
+          id: attachmentId,
+          messageId: messageId || null,
+          chatId: chatId || null,
+          userId: userId || 'guest',
+          filename: verified.sanitizedName,
+          mimeType: verified.verifiedMime,
+          size: verified.size,
+          data: relativeStoragePath,
+          checksum: verified.checksum,
+          fileKind: verified.fileKind,
+          status: 'processing'
+        }
+      });
+    } catch (dbErr: any) {
+      // Compensation: remove orphan physical file if DB create fails
+      try {
+        if (fs.existsSync(storagePath)) {
+          await fs.promises.unlink(storagePath);
+        }
+      } catch {}
+      throw dbErr;
+    }
 
     // If image kind, mark ready immediately (preview_only) without text extraction
     if (verified.fileKind === 'image') {
@@ -198,6 +223,13 @@ export const documentIngestionService = {
         processedAt: updated.processedAt ? updated.processedAt.toISOString() : undefined
       };
     } catch (procErr: any) {
+      // Partial failure compensation: purge any orphan chunks created during partial failure
+      try {
+        await prisma.documentChunks.deleteMany({
+          where: { attachmentId }
+        });
+      } catch {}
+
       // Mark as failed in DB
       const errorCode = procErr instanceof DocumentProcessingException ? procErr.code : 'PARSER_ERROR';
       const errorMessage = procErr.safeMessage || procErr.message || 'Gagal mengekstrak isi dokumen.';
@@ -256,11 +288,9 @@ export const documentIngestionService = {
       };
     }
 
-    const fullPath = path.isAbsolute(attachment.data)
-      ? attachment.data
-      : path.join(process.cwd(), attachment.data);
+    const fullPath = await resolveExistingStoredAttachmentFilePath(attachment.data);
 
-    if (!fs.existsSync(fullPath)) {
+    if (!fullPath || !fs.existsSync(fullPath)) {
       throw new DocumentProcessingException('STORAGE_ERROR', 'Berkas fisik tidak ditemukan pada server.');
     }
 
@@ -370,16 +400,10 @@ export const documentIngestionService = {
     }
 
     // Unlink physical file from disk
-    const fullPath = path.isAbsolute(attachment.data)
-      ? attachment.data
-      : path.join(process.cwd(), attachment.data);
-
-    if (fs.existsSync(fullPath)) {
-      try {
-        await fs.promises.unlink(fullPath);
-      } catch (e) {
-        console.warn('Failed to delete physical file:', e);
-      }
+    try {
+      await deleteStoredAttachmentFile(attachment.data);
+    } catch {
+      throw new DocumentProcessingException('STORAGE_ERROR', 'Berkas fisik tidak dapat dihapus dengan aman.');
     }
 
     // Cascade delete in Prisma deletes chunks and attachment record

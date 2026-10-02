@@ -66,15 +66,15 @@ export const ConsentTab: React.FC<ConsentTabProps> = ({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs text-secondary pt-1">
           <div className="p-2.5 surface-card border border-default rounded-xl">
             <strong className="text-primary block mb-0.5 font-semibold">Data Yang Dikirim:</strong>
-            Teks percakapan konseling, hasil tes PHQ-9/GAD-7. Data sensitif PII (NIM, Nama) di-anonymize otomatis sebelum diproses.
+            Teks percakapan dan lampiran yang Anda kirim; konteks mood/skrining hanya jika izin terkait aktif. Penyaring pola teks dapat melewatkan identitas atau informasi sensitif, terutama di gambar dan dokumen.
           </div>
           <div className="p-2.5 surface-card border border-default rounded-xl">
             <strong className="text-primary block mb-0.5 font-semibold">Vendor Pemroses AI:</strong>
-            Google Gemini API via Server-Side Proxy Enclave (Tanpa Key Client-Side).
+            Provider sesuai model yang dipilih atau dirutekan (Gemini, DeepSeek, Groq, atau OpenRouter), melalui server RuangTenang.
           </div>
           <div className="p-2.5 surface-card border border-default rounded-xl">
             <strong className="text-primary block mb-0.5 font-semibold">Kebijakan Penyimpanan Vendor:</strong>
-            Efemeral (Transient in RAM during request execution). Data tidak disimpan oleh Google untuk pelatihan model umum.
+            Permintaan diteruskan ke provider model untuk diproses. Retensi dan penggunaan data mengikuti kebijakan provider; jangan kirim data yang tidak ingin dibagikan.
           </div>
           <div className="p-2.5 surface-card border border-default rounded-xl">
             <strong className="text-primary block mb-0.5 font-semibold">Versi & Timestamp:</strong>
@@ -98,7 +98,7 @@ export const ConsentTab: React.FC<ConsentTabProps> = ({
           />
           <div>
             <span className="text-xs font-bold text-primary block">
-              Izin Pemrosesan AI Teman Bicara (Google Gemini API)
+              Izin Pemrosesan AI Teman Bicara (provider sesuai model)
             </span>
             <span className="text-[11px] text-secondary block mt-0.5">
               Master switch untuk mengaktifkan pendampingan AI, refleksi emosi, dan analisis jurnal interaktif.

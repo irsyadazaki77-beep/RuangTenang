@@ -43,6 +43,7 @@ import emergencyRouter from './server/routes/emergency.js';
 import usabilityRouter from './server/routes/usability.js';
 import counselorChatRouter from './server/routes/counselorChat.js';
 import chatRouter from './server/routes/chat.js';
+import workspaceComparisonRouter from './server/routes/workspaceComparison.js';
 import attachmentsRouter from './server/routes/attachments.js';
 import userDataRouter from './server/routes/userData.js';
 import counselorsRouter from './server/routes/counselors.js';
@@ -292,7 +293,8 @@ async function startServer() {
   });
 
   // Observability & System Operational Metrics (Prometheus / JSON)
-  app.get(['/api/v1/metrics', '/metrics'], optionalAuth, (req, res) => {
+  app.get(['/api/v1/metrics', '/metrics'], requireAuth, requireRole(['admin']), (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
     const isPrometheus = req.headers.accept?.includes('text/plain');
     if (isPrometheus) {
       res.setHeader('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
@@ -441,6 +443,8 @@ async function startServer() {
 
   app.use('/api/v1', chatRouter);
   app.use('/api', chatRouter);
+  app.use('/api/v1', workspaceComparisonRouter);
+  app.use('/api', workspaceComparisonRouter);
 
   app.use('/api/v1', attachmentsRouter);
   app.use('/api', attachmentsRouter);

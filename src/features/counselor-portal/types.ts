@@ -41,11 +41,11 @@ export interface SoapNote {
 export interface CounselorStats {
   totalTriaged: number;
   activeCases: number;
-  emergencyInterventions: number;
+  highRiskSoapNotes: number;
   highRiskCount: number;
   completedNotes: number;
   averageResponseTimeHours: number | null;
   avgResponseTimeMinutes?: number | null;
   severityDistribution?: Array<{ name: string; count: number; color?: string }>;
-  monthlyTrend?: Array<{ month: string; screening: number; counseling: number; emergency: number }>;
+  monthlyTrend?: Array<{ month: string; screening: number; counseling: number; highRiskSoapNotes: number }>;
 }

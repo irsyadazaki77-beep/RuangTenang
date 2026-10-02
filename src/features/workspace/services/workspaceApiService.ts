@@ -82,4 +82,13 @@ export class WorkspaceApiService {
     }
     throw new Error(res.message || 'Gagal memulihkan versi artefak');
   }
+
+  /**
+   * Delete an artifact by ID
+   */
+  static async deleteArtifact(id: string, signal?: AbortSignal): Promise<boolean> {
+    const res = await apiClient.delete<any>(`/api/v1/workspace/artifacts/${encodeURIComponent(id)}`, { signal });
+    return Boolean(res.success);
+  }
 }
+

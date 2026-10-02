@@ -15,6 +15,11 @@ export interface OutboxItem {
   createdAt: string;
 }
 
+interface EncryptedOutboxPayload {
+  __ruangtenangEncrypted: true;
+  ciphertext: string;
+}
+
 // Volatile memory stores for current tab/session
 // memoryCipherStore: retains valid AES-GCM ciphertext in memory
 const memoryCipherStore = new Map<string, string>();
@@ -131,10 +136,14 @@ class ClientIndexedDB {
   async addToOutbox(type: OutboxItem['type'], url: string, payload: any): Promise<void> {
     if (this.outboxQueue) {
       try {
+        const encryptedPayload: EncryptedOutboxPayload = {
+          __ruangtenangEncrypted: true,
+          ciphertext: await encryptData(JSON.stringify(payload))
+        };
         await this.outboxQueue.add({
           type,
           url,
-          payload,
+          payload: encryptedPayload,
           createdAt: new Date().toISOString()
         });
       } catch (err) {
@@ -168,7 +177,16 @@ class ClientIndexedDB {
       for (const item of items) {
         if (!item.id) continue;
         try {
-          const res = await apiClientInstance.post(item.url, item.payload);
+          let payload = item.payload;
+          if (payload && payload.__ruangtenangEncrypted === true && typeof payload.ciphertext === 'string') {
+            const plaintext = await decryptData(payload.ciphertext);
+            payload = JSON.parse(plaintext);
+          } else {
+            // Migrate records queued by older app versions before they leave the device.
+            const ciphertext = await encryptData(JSON.stringify(payload));
+            await this.outboxQueue.update(item.id, { payload: { __ruangtenangEncrypted: true, ciphertext } });
+          }
+          const res = await apiClientInstance.post(item.url, payload);
           if (res && (res.success || res.status < 400)) {
             await this.outboxQueue.delete(item.id);
             syncedCount++;
@@ -190,6 +208,27 @@ class ClientIndexedDB {
   clearAllMemory(): void {
     memoryCipherStore.clear();
     memoryVolatilePlaintextStore.clear();
+  }
+
+  async clearAllPersistentData(): Promise<void> {
+    this.clearAllMemory();
+    if (!this.db) return;
+    try {
+      await Promise.all(this.db.tables.map(table => table.clear()));
+    } catch (err) {
+      console.warn('[CLIENT_DB] Failed to clear all local records:', err);
+      throw err;
+    }
+  }
+
+  async clearOutboxTypes(types: OutboxItem['type'][]): Promise<void> {
+    if (!this.outboxQueue || types.length === 0) return;
+    try {
+      await this.outboxQueue.where('type').anyOf(types).delete();
+    } catch (err) {
+      console.warn('[CLIENT_DB] Failed to clear selected offline records:', err);
+      throw err;
+    }
   }
 }
 

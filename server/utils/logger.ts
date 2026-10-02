@@ -82,8 +82,36 @@ const REDACT_KEYS = new Set([
   'otp',
   'pin',
   'payload',
-  'cvv'
+  'cvv',
+  'userid',
+  'studentid',
+  'counselorid',
+  'appointmentid',
+  'recordid',
+  'primaryconcern',
+  'symptoms',
+  'symptom',
+  'risklevel',
+  'triage',
+  'clinicalnotes',
+  'soapnotes',
+  'moodlog',
+  'reflection',
+  'screeningresult',
+  'screeningscore',
+  'medicalhistory',
+  'healthdata'
 ]);
+
+const NORMALIZED_REDACT_KEYS = new Set(
+  [...REDACT_KEYS].map((key) => key.toLowerCase().replace(/[^a-z0-9]/g, ''))
+);
+
+function isSensitiveKey(key: string): boolean {
+  const normalizedKey = key.toLowerCase().replace(/[^a-z0-9]/g, '');
+  return NORMALIZED_REDACT_KEYS.has(normalizedKey) ||
+    /(?:clinical|screening|diagnos|journal|reflect|counselor|mentalhealth|healthdata|symptom|concern|transcript|soapnote|moodlog|crisis|risk|triage|phq|gad)/.test(normalizedKey);
+}
 
 export function redactSensitiveText(value: string): string {
   return value
@@ -105,7 +133,7 @@ export function maskSensitivePayload(data: any): any {
   if (typeof data === 'object') {
     const masked: Record<string, any> = {};
     for (const [key, val] of Object.entries(data)) {
-      if (REDACT_KEYS.has(key.toLowerCase())) {
+      if (isSensitiveKey(key)) {
         masked[key] = '[REDACTED]';
       } else if (typeof val === 'object' && val !== null) {
         masked[key] = maskSensitivePayload(val);

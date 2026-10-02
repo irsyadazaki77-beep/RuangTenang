@@ -1,12 +1,13 @@
 import { Request, Response } from 'express';
 import { ChatService } from '../services/chatService.js';
-import { DEFAULT_AI_MODEL, AVAILABLE_AI_MODELS } from '../config/aiConfig.js';
+import { getConfiguredDefaultAiModelId, getPublicModelCatalog } from '../services/ai/aiModelRegistry.js';
 
 export class ChatController {
-  static getModels(_req: Request, res: Response) {
+  static getModels(req: Request, res: Response) {
+    const tier = req.user?.tier || 'Free';
     return res.json({
-      defaultModel: DEFAULT_AI_MODEL,
-      models: AVAILABLE_AI_MODELS
+      defaultModel: getConfiguredDefaultAiModelId(tier),
+      models: getPublicModelCatalog(tier)
     });
   }
 

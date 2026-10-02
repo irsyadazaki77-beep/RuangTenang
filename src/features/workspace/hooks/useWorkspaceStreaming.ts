@@ -4,6 +4,8 @@ import { Message } from '../../chat/types';
 import { parseArtifactsFromText } from '../utils/artifactParser';
 import { useToast } from '../../../components/Toast';
 import { StreamingStatus, WorkspaceArtifact } from '../types';
+import { WorkspaceComposerConfig } from '../types';
+import { StoredAttachment } from '../../chat/types';
 
 interface UseWorkspaceStreamingOptions {
   chatId?: string;
@@ -44,7 +46,8 @@ export function useWorkspaceStreaming({
   const sendMessageStream = useCallback(async (
     userPrompt: string,
     customSystemNote?: string,
-    attachments?: any[]
+    attachments?: StoredAttachment[],
+    config?: WorkspaceComposerConfig
   ) => {
     if (!userPrompt.trim() || streamingStatus === 'streaming' || streamingStatus === 'connecting') {
       return;
@@ -58,6 +61,7 @@ export function useWorkspaceStreaming({
     setStreamingStatus('connecting');
     const assistantMsgId = `asst_${Date.now()}`;
     let accumulatedText = '';
+    let routingMeta: { modelUsed?: string; routingMode?: 'manual' | 'auto'; routingReason?: string } = {};
 
     streamingClientRef.current = new ChatStreamingClient();
 
@@ -71,10 +75,20 @@ export function useWorkspaceStreaming({
           message: formattedPrompt,
           chatId: chatId || undefined,
           chatMode: 'RuangKerja',
-          responseStyle: 'Mendalam',
-          attachments: attachments && attachments.length > 0 ? attachments : undefined
+          responseStyle: config?.responseStyle && config.responseStyle !== 'Default'
+            ? `${config.responseMode}; ${config.responseStyle}`
+            : config?.responseMode ?? 'Seimbang',
+          aiModel: config?.aiModel,
+          attachments: attachments && attachments.length > 0 ? attachments : undefined,
+          presetId: config?.presetId,
+          taskCategory: config?.taskCategory,
+          latencyPreference: config?.latencyPreference,
+          qualityPreference: config?.qualityPreference
         },
         {
+          onRoutingMetadata: (data) => {
+            routingMeta = data;
+          },
           onMessageStart: () => {
             setStreamingStatus('streaming');
             setActiveStreamingMessage({
@@ -90,7 +104,8 @@ export function useWorkspaceStreaming({
               id: assistantMsgId,
               role: 'assistant',
               content: accumulatedText,
-              createdAt: new Date()
+              createdAt: new Date(),
+              ...routingMeta
             });
 
             // Parse live artifacts during stream
@@ -112,20 +127,21 @@ export function useWorkspaceStreaming({
               id: assistantMsgId,
               role: 'assistant',
               content: cleanedText || finalText,
-              createdAt: new Date()
+              createdAt: new Date(),
+              ...routingMeta
             };
 
             onStreamCompleted?.(finalAssistantMessage, extracted);
           },
-          onError: (errMsg: string) => {
+          onError: (_errMsg: string) => {
             setStreamingStatus('error');
             setActiveStreamingMessage(null);
-            showToast(`Kesalahan komunikasi: ${errMsg}`, 'error');
+            // Keep transport details out of the user-facing conversation.
 
             const errorMessage: Message = {
               id: `err_${Date.now()}`,
               role: 'assistant',
-              content: `⚠️ Terjadi kendala komunikasi: ${errMsg}. Silakan coba kirim ulang.`,
+              content: 'Respons belum berhasil dibuat karena koneksi atau layanan terputus. Silakan kirim ulang pesan Anda.',
               error: true,
               createdAt: new Date()
             };
@@ -134,12 +150,18 @@ export function useWorkspaceStreaming({
           }
         }
       );
-    } catch (_err: any) {
+    } catch (_err: unknown) {
       setStreamingStatus('error');
       setActiveStreamingMessage(null);
-      showToast('Gagal memproses permintaan AI.', 'error');
+      onStreamCompleted?.({
+        id: `err_${Date.now()}`,
+        role: 'assistant',
+        content: 'Respons belum berhasil dibuat karena koneksi atau layanan terputus. Silakan kirim ulang pesan Anda.',
+        error: true,
+        createdAt: new Date()
+      }, []);
     }
-  }, [chatId, streamingStatus, onStreamArtifactExtracted, onStreamCompleted, showToast]);
+  }, [chatId, streamingStatus, onStreamArtifactExtracted, onStreamCompleted]);
 
   return {
     streamingStatus,

@@ -1,5 +1,44 @@
 export type WorkspaceMode = 'RUANG_TENANG' | 'RUANG_KERJA';
 
+export type WorkspaceResponseMode = 'Ringkas' | 'Seimbang' | 'Mendalam';
+export type WorkspaceResponseStyle = 'Default' | 'Akademik' | 'Langkah demi langkah' | 'Formal';
+
+export interface WorkspaceComposerConfig {
+  aiModel: string;
+  responseMode: WorkspaceResponseMode;
+  responseStyle: WorkspaceResponseStyle;
+  presetId?: string;
+  taskCategory?: string;
+  latencyPreference?: string;
+  qualityPreference?: string;
+  comparisonModelIds?: string[];
+}
+
+export interface WorkspaceComparisonRun {
+  comparisonId: string;
+  chatId?: string;
+  prompt: string;
+  selectedModelIds: string[];
+  responseStyle: string;
+  presetId?: string;
+  taskCategory?: string;
+  latencyPreference?: string;
+  qualityPreference?: string;
+  activeContext?: { title: string; content: string };
+}
+
+export type WorkspaceComparisonCandidateStatus = 'queued' | 'streaming' | 'completed' | 'failed' | 'cancelled';
+
+export interface WorkspaceComparisonCandidate {
+  candidateId: string;
+  modelId: string;
+  modelName: string;
+  status: WorkspaceComparisonCandidateStatus;
+  output: string;
+  latencyMs?: number;
+  error?: string;
+}
+
 export type ArtifactType = 'DOCUMENT' | 'CODE' | 'CITATION' | 'OUTLINE';
 
 export interface ArtifactVersionRecord {
@@ -137,4 +176,3 @@ export interface AcademicPromptPill {
   label: string;
   prompt: string;
 }
-

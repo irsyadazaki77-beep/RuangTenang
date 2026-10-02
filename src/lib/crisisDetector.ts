@@ -331,21 +331,21 @@ export const CLINICAL_RESPONSE_PROTOCOLS = {
     principles: [
       "Prioritaskan keselamatan fisik siswa tanpa menghakimi.",
       "Gunakan bahasa yang tenang, jelas, langsung, dan hangat.",
-      "Tampilkan hotline darurat 24 jam terverifikasi (Layanan Kemenkes / LISA Helpline) secara mencolok.",
+      "Tampilkan kanal resmi Healing119 (119 ekstensi 8 atau healing119.id). Jelaskan bahwa antrean dapat penuh; untuk bahaya langsung arahkan ke 119 atau fasilitas kesehatan terdekat.",
       "Hindari kalimat bernada menyalahkan, menasihati berlebihan, atau membandingkan nasib.",
       "Fasilitasi pelacakan kontak darurat / SOS dengan persetujuan."
     ],
-    approvedTemplate: "Saya mendengar betapa beratnya beban yang kamu pikul saat ini, dan saya sangat peduli dengan keselamatanmu. Kamu tidak harus menghadapi ini sendirian. Mari hubungi layanan bantuan darurat 24 jam yang aman dan terverifikasi berikut..."
+    approvedTemplate: "Saya mendengar betapa beratnya beban yang kamu pikul saat ini, dan saya peduli dengan keselamatanmu. Kamu tidak harus menghadapi ini sendirian. Jika ada bahaya langsung, hubungi 119 atau minta seseorang menemani ke fasilitas kesehatan terdekat. Untuk dukungan psikologis awal, kamu bisa menghubungi Healing119 di 119 ekstensi 8 atau membuka healing119.id; antrean layanan dapat penuh."
   },
   CRISIS_NEGATED: {
     title: "Protokol Penolakan Niat/Negasi (Negated Intent Protocol)",
     principles: [
-      "Apresiasi komitmen keselamatan yang disampaikan siswa.",
-      "Gunakan penegasan positif yang tulus atas keputusan mereka untuk tetap aman.",
+      "Akui jawaban pengguna tanpa menyimpulkan bahwa mereka aman.",
+      "Jangan menganggap penyangkalan menghapus kebutuhan untuk memahami keadaan saat ini.",
       "Jangan abaikan pemicu stres asli yang membuat mereka membicarakan topik ini.",
       "Tawarkan ruang aman untuk berbagi tanpa memaksakan intervensi darurat."
     ],
-    approvedTemplate: "Terima kasih banyak telah menegaskan bahwa kamu berkomitmen untuk tetap aman hari ini. Itu adalah kekuatan yang luar biasa. Meskipun kamu aman, saya tahu situasi ini pasti tidak mudah bagimu. Apakah ada yang ingin kamu ceritakan lebih lanjut?"
+    approvedTemplate: "Terima kasih sudah menjelaskan keadaanmu. Aku tidak akan menganggap semuanya sudah aman hanya dari satu jawaban. Apa kamu merasa berada dalam bahaya sekarang? Jika iya atau kamu merasa mungkin bertindak, hubungi 119 atau minta orang tepercaya menemanimu ke IGD. Untuk dukungan psikologis awal, Healing119 dapat dihubungi lewat 119 ekstensi 8 atau healing119.id; antrean dapat penuh."
   },
   CRISIS_PAST_IDEATION: {
     title: "Protokol Riwayat Ideasi Masa Lalu (Past Ideation History Protocol)",
@@ -439,7 +439,7 @@ export function analyzeMessageSentiment(text: string): CrisisAnalysisResult {
       escalationPath: 'bot_support',
       confidenceScore: 0.90,
       reasoning: 'Krisis terdeteksi pada pihak ketiga (teman/orang lain), bukan krisis personal akut pengguna.',
-      recommendedAction: 'Validasi kepedulian pengguna terhadap temannya. Berikan instruksi pendampingan aktif dan bagikan kontak hotline LISA Helpline / Hotline Kemenkes 119 untuk dibagikan kepada temannya.'
+      recommendedAction: 'Validasi kepedulian pengguna terhadap temannya. Sarankan agar ia menemani temannya mencari bantuan langsung bila ada bahaya, dan bagikan Healing119 (119 ekstensi 8 atau healing119.id). Jika layanan tidak tersambung atau situasinya darurat, arahkan ke fasilitas kesehatan terdekat atau 119.'
     };
   }
 
@@ -493,7 +493,7 @@ export function analyzeMessageSentiment(text: string): CrisisAnalysisResult {
       escalationPath: 'human_escalation',
       confidenceScore: 0.98,
       reasoning: 'Indikasi krisis aktif/akut terdeteksi secara langsung.',
-      recommendedAction: 'Aktifkan Protokol Penanganan Krisis Darurat 24 Jam segera. Tampilkan hotline darurat terverifikasi (Layanan Darurat Nasional / LISA) dan berikan opsi sinyal SOS/eskalasi konselor.'
+      recommendedAction: 'Tanggapi dengan empati dan tanyakan keselamatan saat ini secara langsung; jangan menyatakan ada eskalasi manusia kecuali benar-benar terjadi. Tampilkan Healing119 (119 ekstensi 8 atau healing119.id). Untuk bahaya langsung, sarankan menghubungi 119 atau pergi ke fasilitas kesehatan terdekat.'
     };
   }
 
@@ -612,7 +612,7 @@ export function analyzeMultiTurnSentiment(
       escalationPath: 'human_escalation',
       confidenceScore: 0.95,
       reasoning: 'Eskalasi krisis terdeteksi melalui kueri multi-turn. Pengguna menunjukkan tanda distres persisten diikuti keinginan sub-akut untuk mengakhiri situasi/hidup.',
-      recommendedAction: 'Aktifkan Protokol Penanganan Krisis Darurat 24 Jam segera. Tampilkan hotline darurat terverifikasi.'
+      recommendedAction: 'Tanggapi dengan empati, periksa keadaan saat ini tanpa menyimpulkan risiko klinis dari model saja, dan tampilkan Healing119 (119 ekstensi 8 atau healing119.id). Untuk bahaya langsung, arahkan ke 119 atau fasilitas kesehatan terdekat.'
     };
   }
 
@@ -665,4 +665,3 @@ export function isAcuteCrisis(text: string): boolean {
 }
 
 export const EMERGENCY_HELPLINES = VERIFIED_HELPLINES;
-

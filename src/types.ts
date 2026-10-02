@@ -72,9 +72,10 @@ export interface Counselor {
 
 export interface VerifiedHelpline {
   id: string;
-  name: string;
-  number: string;
-  desc: string;
+    name: string;
+    number: string;
+    url?: string;
+    desc: string;
   type: string;
   badge: string;
   jamOperasional: string;
@@ -182,9 +183,10 @@ export interface ScreeningResult {
   riskIndicators?: {
     item9Score: number;
     hasSelfHarmRisk: boolean;
-    immediateDanger?: boolean;
-    planOrIntent?: boolean;
-    contactedTrustedPerson?: boolean;
+    immediateDanger?: boolean | null;
+    planOrIntent?: boolean | null;
+    wantsTrustedContact?: boolean | null;
+    contactedTrustedPerson?: boolean | null;
     riskCategory: "KRISIS_SANGAT_TINGGI" | "RISIKO_MENYAKITI_DIRI" | "STANDAR";
     flaggedAt: string;
   };

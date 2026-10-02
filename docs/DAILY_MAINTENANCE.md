@@ -116,4 +116,4 @@ Multi-instance guard memastikan hanya 1 instance yang mengeksekusi tugas pada sa
 - **Unit Test Suite**: 15 berkas, 45 pengujian passed (100%).
 - **Integration Test Suite**: 17 berkas, 109 pengujian passed (100%).
 - **Linting Codebase**: 0 error.
-- **Vite & Server Compilation**: Berhasil dikompilasi ke `dist/server.cjs`.
+- **Vite & Server Compilation**: Berhasil dikompilasi ke `dist/server.mjs` (ES module).

@@ -37,7 +37,7 @@ export const CounselorAnalytics: React.FC<CounselorAnalyticsProps> = ({ stats })
 
   const monthlyTrendData = stats.monthlyTrend || [];
   const hasSeverityData = severityData.some(d => d.count > 0);
-  const hasTrendData = monthlyTrendData.some(d => d.screening > 0 || d.counseling > 0 || d.emergency > 0);
+  const hasTrendData = monthlyTrendData.some(d => d.screening > 0 || d.counseling > 0 || d.highRiskSoapNotes > 0);
 
   return (
     <div className="space-y-6">
@@ -71,14 +71,14 @@ export const CounselorAnalytics: React.FC<CounselorAnalyticsProps> = ({ stats })
 
         <div className="surface-card p-4 rounded-2xl border border-default shadow-xs space-y-1">
           <div className="flex items-center justify-between text-secondary">
-            <span className="text-xs font-semibold">Intervensi Krisis &amp; Darurat</span>
+            <span className="text-xs font-semibold">Catatan SOAP Berisiko Tinggi</span>
             <ShieldAlert className="w-4 h-4 text-rose-500" />
           </div>
           <div className="text-xl sm:text-2xl font-bold text-rose-600 dark:text-rose-400">
-            {stats.emergencyInterventions ?? 0}
+            {stats.highRiskSoapNotes ?? 0}
           </div>
           <p className="text-[11px] text-secondary">
-            Kasus risiko melukai diri / skor krisis
+            Catatan SOAP dengan klasifikasi risiko tinggi atau krisis
           </p>
         </div>
 
@@ -132,7 +132,7 @@ export const CounselorAnalytics: React.FC<CounselorAnalyticsProps> = ({ stats })
                   />
                   <Line type="monotone" dataKey="screening" stroke="#6366f1" strokeWidth={2.5} name="Skrining Mahasiswa" />
                   <Line type="monotone" dataKey="counseling" stroke="#06b6d4" strokeWidth={2.5} name="Sesi Konseling" />
-                  <Line type="monotone" dataKey="emergency" stroke="#ef4444" strokeWidth={2} name="Kasus Krisis" />
+                  <Line type="monotone" dataKey="highRiskSoapNotes" stroke="#ef4444" strokeWidth={2} name="Catatan SOAP risiko tinggi" />
                 </LineChart>
               </ResponsiveContainer>
             )}

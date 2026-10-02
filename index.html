@@ -3,10 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover" />
-    <title>RuangTenang - Konseling Mental & RuangKerja Mahasiswa</title>
-    <meta name="description" content="Ekosistem ganda mahasiswa: Mode RuangTenang untuk kesehatan mental & relaksasi, dan Mode RuangKerja untuk asisten akademik dengan Live Interactive Artifact Canvas." />
-    <meta property="og:title" content="RuangTenang - Konseling Mental & RuangKerja Mahasiswa" />
-    <meta property="og:description" content="Ekosistem ganda mahasiswa: Mode RuangTenang untuk kesehatan mental & relaksasi, dan Mode RuangKerja untuk asisten akademik dengan Live Interactive Artifact Canvas." />
+    <title>RuangTenang - Pendamping Refleksi & Ruang Kerja Mahasiswa</title>
+    <meta name="description" content="Pendamping refleksi berbasis AI, latihan mandiri, direktori konselor kampus, dan ruang kerja akademik mahasiswa." />
+    <meta property="og:title" content="RuangTenang - Pendamping Refleksi & Ruang Kerja Mahasiswa" />
+    <meta property="og:description" content="Pendamping refleksi berbasis AI, latihan mandiri, direktori konselor kampus, dan ruang kerja akademik mahasiswa." />
     <meta name="theme-color" content="#080d14" />
     <meta name="theme-color" content="#f8fafc" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#080d14" media="(prefers-color-scheme: dark)" />
@@ -53,7 +53,7 @@
             lineno: lineno,
             colno: colno,
             stack: error ? error.stack : null,
-            href: window.location.href
+            url: window.location.href
           });
         };
         window.addEventListener('unhandledrejection', function(event) {
@@ -62,7 +62,7 @@
             type: 'unhandledrejection',
             message: reason ? (reason.message || String(reason)) : 'Unknown rejection',
             stack: reason && reason.stack ? reason.stack : null,
-            href: window.location.href
+            url: window.location.href
           });
         });
       })();
@@ -96,4 +96,3 @@
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
-

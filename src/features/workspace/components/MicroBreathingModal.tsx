@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Wind, X, CheckCircle2, RotateCcw, HeartHandshake } from 'lucide-react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { playCompletionChime } from '../../../lib/soundEffects';
@@ -18,11 +18,44 @@ export const MicroBreathingModal: React.FC<MicroBreathingModalProps> = ({
   reason
 }) => {
   const shouldReduceMotion = useReducedMotion();
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
   const [secondsRemaining, setSecondsRemaining] = useState<number>(60);
   const [isActive, setIsActive] = useState<boolean>(true);
   const [phase, setPhase] = useState<BreathingPhase>('inhale');
   const [phaseSeconds, setPhaseSeconds] = useState<number>(4);
   const [isCompleted, setIsCompleted] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    closeButtonRef.current?.focus();
+    const handleDialogKeys = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.stopPropagation();
+        onClose();
+      }
+      if (event.key !== 'Tab' || !dialogRef.current) return;
+      const focusable = Array.from(dialogRef.current.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      ));
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener('keydown', handleDialogKeys);
+    return () => {
+      document.removeEventListener('keydown', handleDialogKeys);
+      previousFocus?.focus();
+    };
+  }, [isOpen, onClose]);
 
   // Box Breathing cycle (4s Inhale, 4s Hold, 4s Exhale, 4s Hold)
   useEffect(() => {
@@ -92,8 +125,14 @@ export const MicroBreathingModal: React.FC<MicroBreathingModalProps> = ({
           animate="visible"
           exit="exit"
           onClick={onClose}
+          role="presentation"
         >
           <motion.div 
+            ref={dialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="micro-breathing-title"
+            tabIndex={-1}
             className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl relative flex flex-col items-center text-center overflow-hidden"
             variants={modalPanelVariants}
             initial="hidden"
@@ -103,6 +142,7 @@ export const MicroBreathingModal: React.FC<MicroBreathingModalProps> = ({
           >
             {/* Close Button */}
             <button
+              ref={closeButtonRef}
               type="button"
               onClick={onClose}
               className="absolute top-4 right-4 text-slate-400 hover:text-white p-2 rounded-full hover:bg-slate-800 transition-colors btn-press-compact cursor-pointer"
@@ -115,7 +155,7 @@ export const MicroBreathingModal: React.FC<MicroBreathingModalProps> = ({
             {/* Header */}
             <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-teal-500/10 border border-teal-500/20 text-teal-400 text-xs font-semibold mb-4">
               <Wind className="w-3.5 h-3.5 animate-pulse" />
-              <span>Jeda Regulasi Napas 1 Menit</span>
+              <span id="micro-breathing-title">Jeda Regulasi Napas 1 Menit</span>
             </div>
 
             {reason && (

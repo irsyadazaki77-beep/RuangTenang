@@ -288,7 +288,7 @@ router.post(['/erasure-request', '/db/data-erasure'], requireAuth, accountDeleti
 
     res.json({
       success: true,
-      message: 'Seluruh rekam jejak, akun, riwayat penggunaan, audit log, dan data lokal telah berhasil dibersihkan secara permanen (Right to be Forgotten).',
+      message: 'Akun dan catatan pengguna terkait telah dihapus dari database aktif. Catatan audit penghapusan tetap disimpan.',
       ...result
     });
   } catch (err: any) {

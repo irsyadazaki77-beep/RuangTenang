@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Sparkles, BookOpen, Quote, Code2, FileText, Pencil, Search, X, ChevronRight } from 'lucide-react';
 import { AcademicTaskTemplate } from '../types';
 import { ACADEMIC_TEMPLATES } from './AcademicToolsBar';
@@ -18,6 +18,8 @@ export const WorkspaceTemplateModal: React.FC<WorkspaceTemplateModalProps> = ({
   onClose,
   onSubmit
 }) => {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
   const [selectedTemplate, setSelectedTemplate] = useState<AcademicTaskTemplate | null>(template);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState<string>('ALL');
@@ -36,6 +38,37 @@ export const WorkspaceTemplateModal: React.FC<WorkspaceTemplateModalProps> = ({
       setSelectedTemplate(template);
     }
   }, [template]);
+
+  useEffect(() => {
+    if (!template) return;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    searchRef.current?.focus();
+    const handleDialogKeys = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.stopPropagation();
+        onClose();
+      }
+      if (event.key !== 'Tab' || !dialogRef.current) return;
+      const focusable = Array.from(dialogRef.current.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      ));
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener('keydown', handleDialogKeys);
+    return () => {
+      document.removeEventListener('keydown', handleDialogKeys);
+      previousFocus?.focus();
+    };
+  }, [template, onClose]);
 
   const filteredTemplates = useMemo(() => {
     return ACADEMIC_TEMPLATES.filter(tpl => {
@@ -76,6 +109,11 @@ export const WorkspaceTemplateModal: React.FC<WorkspaceTemplateModalProps> = ({
       onClick={onClose}
     >
       <div 
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="workspace-template-title"
+        tabIndex={-1}
         className="w-full max-w-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[88vh] animate-scale-up"
         onClick={e => e.stopPropagation()}
       >
@@ -86,7 +124,7 @@ export const WorkspaceTemplateModal: React.FC<WorkspaceTemplateModalProps> = ({
               <Sparkles className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm sm:text-base leading-snug">
+              <h3 id="workspace-template-title" className="font-bold text-slate-900 dark:text-slate-100 text-sm sm:text-base leading-snug">
                 Galeri Template Akademik
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
@@ -109,6 +147,7 @@ export const WorkspaceTemplateModal: React.FC<WorkspaceTemplateModalProps> = ({
           <div className="relative">
             <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
+              ref={searchRef}
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}

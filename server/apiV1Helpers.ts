@@ -6,6 +6,7 @@ import { validateEnvironment } from './config/envValidation.js';
 import { parsePort } from './config/port.js';
 import { logger } from './utils/logger.js';
 import { metricsService } from './services/metricsService.js';
+import { isAiAvailable } from './config/aiConfig.js';
 
 declare global {
   namespace Express {
@@ -17,6 +18,7 @@ declare global {
         role: 'mahasiswa' | 'konselor' | 'admin';
         name: string;
         email: string;
+        tier?: string;
         sessionId?: string;
       };
     }
@@ -93,9 +95,8 @@ export function validateStartupEnvironment(): {
   const env = process.env.NODE_ENV || 'development';
   const port = parsePort(process.env.PORT, 3000).toString();
   const jwtSecret = process.env.JWT_SECRET;
-  const geminiKey = process.env.GEMINI_API_KEY;
-
-  if (!geminiKey) {
+  const geminiKeyConfigured = isAiAvailable();
+  if (!geminiKeyConfigured) {
     warnings.push('GEMINI_API_KEY tidak terkonfigurasi. Fitur obrolan AI akan menggunakan panduan reflektif lokal.');
   }
 
@@ -104,7 +105,7 @@ export function validateStartupEnvironment(): {
   console.log(`- NODE_ENV        : ${env}`);
   console.log(`- PORT            : ${port}`);
   console.log(`- JWT_SECRET      : ${jwtSecret ? 'TERSEDIA' : 'NOT SET'}`);
-  console.log(`- GEMINI_API_KEY  : ${geminiKey ? 'TERSEDIA' : 'TIDAK ADA (FALLBACK COMPANION)'}`);
+  console.log(`- GEMINI_API_KEY  : ${geminiKeyConfigured ? 'TERSEDIA' : 'TIDAK ADA (FALLBACK COMPANION)'}`);
   if (warnings.length > 0) {
     warnings.forEach(w => console.warn(`  ⚠️  [PERINGATAN STARTUP]: ${w}`));
   }
@@ -117,7 +118,7 @@ export function validateStartupEnvironment(): {
       NODE_ENV: env,
       PORT: port,
       JWT_SECRET_SET: jwtSecret ? 'true' : 'false',
-      GEMINI_API_KEY_SET: geminiKey ? 'true' : 'false'
+      GEMINI_API_KEY_SET: geminiKeyConfigured ? 'true' : 'false'
     }
   };
 }

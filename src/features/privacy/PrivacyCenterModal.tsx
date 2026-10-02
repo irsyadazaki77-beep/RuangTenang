@@ -23,6 +23,7 @@ import { ErrorState } from '../../components/common/ErrorState';
 import { EmptyState } from '../../components/common/EmptyState';
 import { ConsentTab } from './components/ConsentTab';
 import { ErasureTab } from './components/ErasureTab';
+import { clientDb } from '../../lib/clientDb';
 
 interface PrivacyCenterModalProps {
   isOpen: boolean;
@@ -42,25 +43,31 @@ export const PrivacyCenterModal: React.FC<PrivacyCenterModalProps> = ({
   const modalRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    if (!isOpen) return;
+    const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const getFocusableElements = () => Array.from(modalRef.current?.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    ) || []).filter((element) => element.getClientRects().length > 0);
+
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
       if (e.key === 'Tab') {
-        const focusableElements = modalRef.current?.querySelectorAll(
-          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-        );
-        if (!focusableElements || focusableElements.length === 0) return;
-        const firstElement = focusableElements[0] as HTMLElement;
-        const lastElement = focusableElements[focusableElements.length - 1] as HTMLElement;
+        const focusableElements = getFocusableElements();
+        if (focusableElements.length === 0) {
+          modalRef.current?.focus();
+          e.preventDefault();
+          return;
+        }
+        const firstElement = focusableElements[0];
+        const lastElement = focusableElements[focusableElements.length - 1];
+        const focusIsInside = Boolean(modalRef.current?.contains(document.activeElement));
 
         if (e.shiftKey) {
-          if (document.activeElement === firstElement) {
+          if (document.activeElement === firstElement || !focusIsInside) {
             lastElement.focus();
             e.preventDefault();
           }
         } else {
-          if (document.activeElement === lastElement) {
+          if (document.activeElement === lastElement || !focusIsInside) {
             firstElement.focus();
             e.preventDefault();
           }
@@ -69,18 +76,15 @@ export const PrivacyCenterModal: React.FC<PrivacyCenterModalProps> = ({
     };
     
     // Set initial focus
-    const focusable = modalRef.current?.querySelectorAll(
-      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-    );
-    if (focusable && focusable.length > 0) {
-      (focusable[0] as HTMLElement).focus();
-    }
+    const focusable = getFocusableElements();
+    (focusable[0] || modalRef.current)?.focus();
 
     document.addEventListener('keydown', handleKeyDown);
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
+      previouslyFocused?.focus();
     };
-  }, [onClose]);
+  }, [isOpen]);
 
   const [showMobileDetail, setShowMobileDetail] = useState(false);
   const [activeTab, setActiveTab] = useState<
@@ -119,6 +123,8 @@ export const PrivacyCenterModal: React.FC<PrivacyCenterModalProps> = ({
   const [initError, setInitError] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [deleteConfirmInput, setDeleteConfirmInput] = useState('');
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deleteMfaCode, setDeleteMfaCode] = useState('');
 
   // Fetch current consent & privacy info
   const fetchPrivacyData = async () => {
@@ -251,6 +257,7 @@ export const PrivacyCenterModal: React.FC<PrivacyCenterModalProps> = ({
     try {
       const res = await apiClient.delete<any>('/api/v1/privacy/activity');
       if (res.success) {
+        await clientDb.clearOutboxTypes(['mood_log', 'journal_entry', 'screening_result']);
         setMsg({ type: 'success', text: 'Riwayat percakapan, catatan mood, dan skrining berhasil dibersihkan.' });
       } else {
         setMsg({ type: 'error', text: res.error || 'Gagal membersihkan data aktivitas.' });
@@ -342,20 +349,25 @@ export const PrivacyCenterModal: React.FC<PrivacyCenterModalProps> = ({
 
   // Execute Right to be Forgotten (Full Data Erasure)
   const handleExecuteErasure = async () => {
-    if (deleteConfirmInput.trim() !== 'HAPUS SEMUA DATA SAYA') {
-      setMsg({ type: 'error', text: 'Kalimat konfirmasi belum sesuai. Ketik "HAPUS SEMUA DATA SAYA".' });
+    if (deleteConfirmInput.trim() !== 'HAPUS AKUN SAYA' || !deletePassword) {
+      setMsg({ type: 'error', text: 'Masukkan frasa konfirmasi dan kata sandi akun.' });
       return;
     }
 
     setLoading(true);
     setMsg(null);
     try {
-      const res = await apiClient.post<any>('/api/v1/privacy/erasure-request', { userId: userSession.id });
+      const res = await apiClient.post<any>('/api/v1/privacy/erasure-request', {
+        confirmText: deleteConfirmInput.trim(),
+        confirmPassword: deletePassword,
+        ...(deleteMfaCode.trim() ? { mfaCode: deleteMfaCode.trim() } : {})
+      });
       if (res.success) {
-        // Clear client local storage
+        // Remove this app's local records and offline queue as part of account erasure.
+        try { await clientDb.clearAllPersistentData(); } catch { /* Server-side erasure succeeded; continue signing out. */ }
         try { localStorage.clear(); } catch {}
         try { sessionStorage.clear(); } catch {}
-        setMsg({ type: 'success', text: 'Seluruh data Anda telah berhasil dibersihkan secara permanen (Hak untuk Dilupakan). Memuat ulang sesi...' });
+        setMsg({ type: 'success', text: 'Akun dan catatan pengguna di database aktif telah dihapus. Catatan audit penghapusan tetap disimpan. Memuat ulang sesi...' });
         setTimeout(() => {
           window.location.reload();
         }, 2000);
@@ -383,6 +395,7 @@ export const PrivacyCenterModal: React.FC<PrivacyCenterModalProps> = ({
     <div className="fixed inset-0 z-50 flex items-center justify-center max-sm:items-start bg-slate-900/60 backdrop-blur-xs p-2 sm:p-4 max-sm:p-0 animate-fade-in font-sans">
       <div
         ref={modalRef}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-labelledby="privacy-modal-title"
@@ -768,6 +781,10 @@ export const PrivacyCenterModal: React.FC<PrivacyCenterModalProps> = ({
                 erasureStatus={erasureStatus}
                 deleteConfirmInput={deleteConfirmInput}
                 setDeleteConfirmInput={setDeleteConfirmInput}
+                deletePassword={deletePassword}
+                setDeletePassword={setDeletePassword}
+                deleteMfaCode={deleteMfaCode}
+                setDeleteMfaCode={setDeleteMfaCode}
                 handleClearActivityData={handleClearActivityData}
                 handleExecuteErasure={handleExecuteErasure}
               />

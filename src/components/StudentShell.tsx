@@ -14,6 +14,7 @@ import { PrivacyGuard } from '../features/privacy/PrivacyGuard';
 import { GlobalOverlays } from './GlobalOverlays';
 import MainChat from '../features/chat/components/MainChat';
 import { safeLocalStorage } from '../lib/storage';
+import { getChatIdFromPath, getModeChatPath, getModeHomePath, getWorkspaceModeFromPath } from '../features/workspace/utils/workspaceRouting';
 
 const UserProgressTracker = lazyWithRetry(() => import('../features/mood/UserProgressTracker').then(module => ({ default: module.UserProgressTracker })));
 const MindfulnessWorkshop = lazyWithRetry(() => import('../features/mood/MindfulnessWorkshop').then(module => ({ default: module.MindfulnessWorkshop })));
@@ -97,6 +98,7 @@ export const StudentShell: React.FC<StudentShellProps> = ({
 }) => {
   const navigate = useNavigate();
   const location = useLocation();
+  const currentMode = getWorkspaceModeFromPath(location.pathname);
   const shouldReduceMotion = useReducedMotion();
 
   return (
@@ -106,28 +108,14 @@ export const StudentShell: React.FC<StudentShellProps> = ({
         isOpen={isSidebarOpen} 
         setIsOpen={setIsSidebarOpen} 
         onNewChat={() => {
-          if (workspaceMode === 'RUANG_KERJA') {
-            navigate('/workspace');
-          } else {
-            navigate('/');
-          }
+          navigate(getModeHomePath(currentMode));
         }}
         chats={chats}
-        currentChatId={
-          location.pathname.startsWith('/c/') 
-            ? location.pathname.split('/c/')[1] 
-            : (location.pathname.startsWith('/workspace/c/') 
-              ? location.pathname.split('/workspace/c/')[1] 
-              : undefined)
-        }
-        currentMode={workspaceMode}
+        currentChatId={getChatIdFromPath(location.pathname)}
+        currentMode={currentMode}
         onSwitchMode={handleSwitchMode}
         onSelectChat={(id) => {
-          if (workspaceMode === 'RUANG_KERJA') {
-            navigate(`/workspace/c/${id}`);
-          } else {
-            navigate(`/c/${id}`);
-          }
+          navigate(getModeChatPath(currentMode, id));
         }}
         onDeleteChat={handleDeleteChat}
         onUpdateTitle={handleUpdateTitle}
@@ -180,7 +168,7 @@ export const StudentShell: React.FC<StudentShellProps> = ({
               <AnimatePresence mode="wait" initial={false}>
                 <motion.div
                   key={
-                    location.pathname.startsWith('/workspace')
+                    currentMode === 'RUANG_KERJA'
                       ? 'workspace-mode'
                       : (location.pathname === '/' || location.pathname.startsWith('/c/'))
                       ? 'tenang-mode'
@@ -291,8 +279,8 @@ export const StudentShell: React.FC<StudentShellProps> = ({
                       element={
                         <WorkspaceLayout
                           title="Jadwal & Direktori Konselor"
-                          subtitle="Temui konselor atau psikolog berlisensi untuk pendampingan rahasia & aman."
-                          badge="Terverifikasi"
+                          subtitle="Lihat profil konselor yang tersedia dan ajukan sesi pendampingan. Kebijakan privasi mengikuti layanan kampus dan RuangTenang."
+                          badge="Direktori"
                           onOpenSidebar={() => setIsSidebarOpen(true)}
                           onOpenChangelog={() => setIsChangelogOpen(true)}
                         >
@@ -375,8 +363,8 @@ export const StudentShell: React.FC<StudentShellProps> = ({
                       element={
                         <WorkspaceLayout
                           title="Pusat Bantuan Krisis & Darurat"
-                          subtitle="Layanan tanggap cepat, tele-konseling krisis, dan tombol darurat SOS 24 jam"
-                          badge="24 Jam"
+                          subtitle="Healing119, bantuan medis darurat, dan sinyal SOS ke kontak pilihan Anda"
+                          badge="Bantuan"
                           onOpenSidebar={() => setIsSidebarOpen(true)}
                           onOpenChangelog={() => setIsChangelogOpen(true)}
                         >

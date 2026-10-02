@@ -384,7 +384,7 @@ export const SidebarNavLinks: React.FC<SidebarNavLinksProps> = ({
                     <span>Pusat Bantuan Krisis</span>
                   </div>
                   <span className="text-[9px] bg-rose-100 dark:bg-rose-900/50 text-rose-700 dark:text-rose-300 px-1 rounded font-bold">
-                    24 Jam
+                    SOS
                   </span>
                 </button>
 
@@ -457,5 +457,4 @@ export const SidebarNavLinks: React.FC<SidebarNavLinksProps> = ({
     </div>
   );
 };
-
 

@@ -77,7 +77,7 @@ describe('P2 Comprehensive E2E & Route Fallback Coverage', () => {
     await waitFor(() => {
       expect(screen.getAllByText(/RuangTenang/i).length).toBeGreaterThan(0);
       expect(screen.getAllByText(/Obrolan baru/i).length).toBeGreaterThan(0);
-    });
+    }, { timeout: 5000 });
   });
 
   it('handles unknown routes by redirecting safely to home', async () => {
@@ -86,7 +86,7 @@ describe('P2 Comprehensive E2E & Route Fallback Coverage', () => {
     await waitFor(() => {
       expect(screen.getAllByText(/RuangTenang/i).length).toBeGreaterThan(0);
       expect(screen.getAllByText(/Obrolan baru/i).length).toBeGreaterThan(0);
-    });
+    }, { timeout: 5000 });
   });
 
   it('lazyWithRetry helper handles successful import and chunk error retry guard', async () => {

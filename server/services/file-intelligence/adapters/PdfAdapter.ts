@@ -18,6 +18,13 @@ export class PdfAdapter implements DocumentExtractorAdapter {
 
       let textResult: any;
       try {
+        const documentInfo = await parser.getInfo();
+        if (documentInfo.total > DEFAULT_FILE_LIMITS.maxPdfPages) {
+          throw new DocumentProcessingException(
+            'EXTRACTION_LIMIT',
+            `Jumlah halaman PDF (${documentInfo.total}) melebihi batas maksimal ${DEFAULT_FILE_LIMITS.maxPdfPages} halaman.`
+          );
+        }
         textResult = await parser.getText();
       } finally {
         await parser.destroy();

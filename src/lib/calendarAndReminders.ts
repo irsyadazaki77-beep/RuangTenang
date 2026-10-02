@@ -180,7 +180,7 @@ export function generateGoogleCalendarUrl(apt: Appointment): string {
 
   const title = encodeURIComponent(`Sesi Konseling Psikolog: ${apt.counselorName}`);
   const details = encodeURIComponent(
-    `Sesi Konseling Mental Mahasiswa (${apt.mode})\nTopik: ${apt.primaryConcern}\nLink Video Call: ${apt.meetingLink || 'Akan dikonfirmasi oleh konselor'}\nKerahasiaan sesi terjamin.`
+    `Sesi Konseling Mahasiswa (${apt.mode})\nTopik: ${apt.primaryConcern}\nLink Video Call: ${apt.meetingLink || 'Akan dikonfirmasi oleh konselor'}\nPenanganan data mengikuti kebijakan layanan kampus dan RuangTenang.`
   );
   const location = encodeURIComponent(
     apt.mode === 'video_call' ? (apt.meetingLink || 'Sesi Video Daring RuangTenang') : 'Pusat Bimbingan & Konseling Kampus'

@@ -1,60 +1,49 @@
-# RuangTenang - Deployment & Hardening Documentation (FASE 9)
+# Deployment and recovery runbook
 
-## 1. Skema Infrastruktur
-- **Database**: PostgreSQL (Via Prisma ORM) sebagai single source of truth yang tangguh untuk multi-instance scaling. (Fallback ke SQLite diizinkan di dev).
-- **Backend**: Express Server yang berjalan pada Node.js, dibundel menggunakan Esbuild ke dalam `dist/server.cjs`.
-- **Frontend**: Vite + React + TailwindCSS (Client-side single page app fallback).
-- **State Terdistribusi**: Menggunakan *Lease-backed Lock* di PostgreSQL (tabel `DistributedLock`) untuk sinkronisasi Background Job dan membatasi rate limit seperti tombol Darurat SOS (`DistributedStateService`). Ini memastikan bahwa menjalankan beberapa container server tidak akan memicu race-conditions atau redundansi notifikasi yang fatal.
+This runbook describes the checked-in Docker Compose and Node deployment paths. It does not certify that a specific production environment is configured, monitored, backed up, or ready to receive traffic. The active release gates are tracked in [`../RELEASE_CHECKLIST.md`](../RELEASE_CHECKLIST.md).
 
-## 1.1 Secret runtime produksi
+## Runtime requirements
 
-Inject `JWT_SECRET`, `ENCRYPTION_KEY`, `BLIND_INDEX_SECRET`, and `DATABASE_URL` from the deployment secret store at runtime. Production startup fails if one is missing or invalid; preview flags do not bypass these checks. `GEMINI_API_KEY` is optional because AI endpoints provide a local fallback when no provider key is configured. Never define server credentials with a `VITE_` prefix.
+- Production requires PostgreSQL. Startup rejects SQLite in production.
+- Inject `JWT_SECRET`, `ENCRYPTION_KEY`, `BLIND_INDEX_SECRET`, and `DATABASE_URL` from the deployment secret store. Do not bake credentials into an image or use `VITE_` names for server secrets.
+- Configure credentials only for AI providers enabled in that environment. AI provider availability and consent are separate from application liveness/readiness.
+- The checked-in Compose production stack includes PostgreSQL, Redis, the app, and Nginx. Review and replace example origins and TLS mounts before deployment.
+- `GET /api/v1/health` is a process liveness check. `GET /api/v1/readiness` checks the database and required startup configuration. Neither proves that AI providers, email/SMS, counselor availability, or all application flows work.
 
-TURN is optional. When enabled, configure `TURN_URL` and a private `TURN_SHARED_SECRET` for a TURN server using TURN REST credentials; the backend returns a one-hour HMAC credential to authorized call participants. Do not configure legacy static `TURN_CREDENTIAL` in production. Keep `.env.production` outside the image and inject values into the running container.
+## Release sequence
 
-## 2. Proses Backup & Restore
+1. Review code, Prisma migrations, environment values, and the open gates in the active release checklist.
+2. Build the production artifact with `npm run build` and retain its immutable image identifier.
+3. Take a pre-migration PostgreSQL backup and confirm it is non-empty and archive-readable.
+4. Apply migrations with `npm run db:deploy` (or the deployment job's equivalent) before routing new traffic.
+5. Start the new app image and check `/api/v1/health` and `/api/v1/readiness`.
+6. Run `npm run test:smoke` with `SMOKE_TARGET_URL` set to the deployed HTTPS origin. This smoke check does not test authenticated workflows, AI providers, clinical correctness, or restore capability.
+7. Keep the previous immutable image available until the release is accepted.
 
-**Backup:**
-Sistem dilengkapi dengan skrip Node khusus untuk backup aman yang tersentralisasi di `/server/scripts/backupTool.ts`. Skrip ini secara otomatis mendeteksi provider database yang digunakan (PostgreSQL/SQLite) melalui string koneksi.
+The repository's `deploy.sh` is a Compose rollout helper. Review its environment parsing, migration behavior, and host-specific configuration before using it in a production environment; a successful container health check is not a complete release sign-off.
+
+## PostgreSQL backup
+
+Run `npm run db:backup` from an operator environment with `DATABASE_URL`, `pg_dump`, and `pg_restore` configured. The utility writes a PostgreSQL custom-format archive under `backups/`, validates its archive table of contents with `pg_restore --list`, uses a temporary file until validation passes, and applies restrictive local permissions where the operating system supports them.
+
+The dump contains sensitive application data and is **not encrypted by this utility**. Store it only in access-controlled, encrypted storage, keep an off-host copy, and apply the approved retention schedule. Do not commit backup files or leave them on a shared deployment host.
+
+## Restore rehearsal and recovery
+
+Practice restores against a new, isolated, empty PostgreSQL database. Do not restore over production as a routine rollback step.
+
 ```bash
-# Menjalankan backup manual
-npx tsx server/scripts/backupTool.ts
-```
-Hasil backup akan diletakkan di dalam folder `/backups` (format `postgres-backup-*.sql` atau `sqlite-backup-*.db`).
-*Catatan: Pastikan command `pg_dump` tersedia di mesin tempat script dijalankan jika menggunakan PostgreSQL.*
-
-**Restore:**
-- **PostgreSQL**: Gunakan `pg_restore` ke database.
-```bash
-pg_restore -d <DATABASE_URL> -1 backups/postgres-backup-TIMESTAMP.sql
-```
-- **SQLite**: Copy dan timpa file ke `prisma/ruangtenang.db`.
-```bash
-cp backups/sqlite-backup-TIMESTAMP.db prisma/ruangtenang.db
+pg_restore --exit-on-error --no-owner --dbname="$RESTORE_DATABASE_URL" backups/postgres-backup-TIMESTAMP.dump
 ```
 
-## 3. CI/CD Workflow Untuk Update Schema yang Aman
-Pengelolaan schema dilakukan melalui Prisma Migrate, memastikan integritas dan safe state.
+After restore, validate migration state, representative application records, and app startup before considering a controlled endpoint or traffic switch. Record the snapshot time, restore duration, and any lost-write window. Restore can discard all writes newer than the snapshot.
 
-1. **Pull Request Validation**: 
-   - CI memeriksa *Type-checking* dan *Linting*.
-   - CI memicu tes dengan SQLite in-memory / temporary DB.
-2. **Schema Diff & CI Check**:
-   Jika terdapat perubahan model di `schema.prisma`, developer harus membuat file migrasi secara lokal (`npx prisma migrate dev --name <nama-migrasi>`) yang kemudian direview melalui PR.
-3. **Deployment**:
-   Saat code digabung ke branch `main`:
-   - Proses Build: `npm run build`
-   - Migrasi Database (*PRE-LAUNCH*): Sebelum server `server.cjs` dinyalakan, proses CI/CD harus menjalankan command migrasi *non-interaktif*:
-     ```bash
-     npx prisma migrate deploy
-     ```
-   - Server Startup: `npm run start`
+For an application-only failure, route traffic to the retained previous image and inspect schema compatibility. Do not roll back the database just because the app image was reverted. For a failed migration, stop rollout and assess the migration state before using `prisma migrate resolve` or applying a corrective migration. Database restore is a separate incident-recovery action requiring an explicit recovery point and incident-owner decision.
 
-## 4. Perkiraan Maximum Scaling Dengan Container Saat Ini
-Berdasarkan optimasi yang telah dilakukan:
-- **Stateless HTTP Server**: Instance dapat ditingkatkan hingga puluhan node secara horizontal berkat *DistributedStateService* yang mengatasi collision Cron Job & SOS Cooldown.
-- **Connection Pooling**: PostgreSQL dengan Prisma Connection Pooler menjadi bottleneck pertama. Prisma default menyokong maksimal `(num_physical_cpus * 2 + 1)` koneksi per instance. Untuk 10 instances Cloud Run, bisa memakan ~50-100 koneksi bersamaan ke Postgres.
-- **Max Throughput**: 
-  - API biasa dan view pagination (dibantu oleh index optimal) mampu menangani +1,000 requests/second.
-  - Telemetri & Log massal ditangani dengan insert performant dan rotasi periodik otomatis oleh *Retention Job* (aman berjalan di 1 instance berkat distributed lock).
-  - Skala aman optimal dengan *database instance kelas menengah (seperti 2-4 vCPU Cloud SQL)* adalah ~10-20 App Container (sekitar 500 - 1000 Concurent Users). Jika butuh lebih besar disarankan menggunakan alat sinkronisasi in-memory mandiri seperti Redis / Memorystore untuk *rate limiting* dan pindah dari database lock.
+## SQLite development backup
+
+SQLite is for local development only. Its backup path currently copies the database file; stop the application and any writer before backing up or restoring so the copy is consistent. Production uses PostgreSQL and must not use this fallback.
+
+## Capacity and service-level limits
+
+No throughput, concurrency, availability, or recovery-time target has been established by this repository review. Measure these in the target environment before publishing capacity claims or committing an operational SLA.

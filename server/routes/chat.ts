@@ -1,7 +1,7 @@
 import { prisma } from '../database.js';
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
-import { requireAuth, optionalAuth } from '../middleware/auth.js';
+import { requireAuth, requireRole, optionalAuth } from '../middleware/auth.js';
 import { aiAbuseLimiter } from '../middleware/aiAbuseLimiter.js';
 import { aiChatLimiter, aiSummaryLimiter } from '../middleware/rateLimiters.js';
 import { sanitizeInput } from '../security.js';
@@ -12,21 +12,25 @@ import { consentService } from '../services/consentService.js';
 import { encryptionService } from '../services/encryptionService.js';
 import { getLocalFallbackResponse, getLocalFallbackSummary, getLocalFallbackFollowups } from './fallbackAi.js';
 import { withRetry } from '../apiV1Helpers.js';
-import { AVAILABLE_AI_MODELS } from '../services/ai/aiModelRegistry.js';
 import { aiRequestService } from '../services/ai/aiRequestService.js';
 import { aiSafetyService } from '../services/ai/aiSafetyService.js';
 import { aiGateway } from '../services/ai/aiGateway.js';
 import { validateAndSanitizeToolCall } from '../services/ai/aiToolSchemas.js';
 import { ChatController } from '../controllers/chatController.js';
-import { DEFAULT_AI_MODEL } from '../config/aiConfig.js';
 import { aiMetricsService } from '../services/ai/aiMetricsService.js';
 import { attachmentStorageService } from '../services/attachmentStorageService.js';
+import { documentIngestionService } from '../services/file-intelligence/documentIngestionService.js';
+import { DocumentProcessingException } from '../services/file-intelligence/fileTypes.js';
 import { getVerifiedEmergencyContacts } from '../config/emergencyRegistry.js';
+import { AiModelError, getConfiguredDefaultAiModelId, resolveAiModel } from '../services/ai/aiModelRegistry.js';
+import { AUTO_ROUTING_MODEL_ID } from '../../shared/aiModelContract.js';
+import { smartModelRouter } from '../services/ai/smartModelRouter.js';
 
 const router = Router();
 
 // Endpoint for inspecting non-sensitive AI performance metrics
-router.get('/ai/metrics', optionalAuth, (req: Request, res: Response) => {
+router.get('/ai/metrics', requireAuth, requireRole(['admin']), (req: Request, res: Response) => {
+  res.setHeader('Cache-Control', 'no-store');
   const summary = aiMetricsService.getMetricsSummary();
   res.json({ success: true, metrics: summary });
 });
@@ -39,6 +43,19 @@ const sendError = (res: Response, code: string, message: string, status = 500) =
     message,
     error: { code, message }
   });
+};
+
+const sendModelSelectionError = (res: Response, error: unknown) => {
+  if (!(error instanceof AiModelError)) return false;
+  const status = error.code === 'MODEL_NOT_ALLOWED' ? 403 : 400;
+  const messages: Record<AiModelError['code'], string> = {
+    MODEL_NOT_FOUND: 'Model AI tidak dikenal.',
+    MODEL_NOT_ALLOWED: 'Model ini tidak tersedia untuk paket akun Anda.',
+    MODEL_UNAVAILABLE: 'Model AI sedang tidak tersedia.',
+    PROVIDER_NOT_CONFIGURED: 'Penyedia model AI sedang tidak tersedia.'
+  };
+  sendError(res, error.code, messages[error.code], status);
+  return true;
 };
 
 // Middleware to check ownership for a specific chat ID
@@ -58,7 +75,7 @@ const checkChatOwnership = async (req: Request, res: Response, next: NextFunctio
 };
 
 // Routes delegation to ChatController
-router.get('/chat/models', ChatController.getModels);
+router.get('/chat/models', optionalAuth, ChatController.getModels);
 router.get('/chat/history', requireAuth, ChatController.getHistory);
 router.get('/chat/search', requireAuth, ChatController.search);
 
@@ -198,8 +215,11 @@ router.post(['/chat', '/api/chat'], optionalAuth, aiChatLimiter, aiAbuseLimiter,
       isTemporary, 
       chatMode, 
       responseStyle, 
-      aiModel = DEFAULT_AI_MODEL 
+      aiModel: requestedAiModel
     } = req.body;
+
+    const isAutoRouting = !requestedAiModel || requestedAiModel === AUTO_ROUTING_MODEL_ID;
+    const userTier = req.user?.tier || 'Free';
 
     const isAnonymous = !req.user || req.user.userId === 'guest';
     const maxLength = isAnonymous ? 500 : 2000;
@@ -222,6 +242,23 @@ router.post(['/chat', '/api/chat'], optionalAuth, aiChatLimiter, aiAbuseLimiter,
       });
     }
 
+    // If manual mode, validate the requested model
+    if (!isAutoRouting) {
+      try { resolveAiModel(requestedAiModel, userTier); }
+      catch (error) { if (sendModelSelectionError(res, error)) return; throw error; }
+    }
+
+    const routingContext = {
+      manualModelId: isAutoRouting ? AUTO_ROUTING_MODEL_ID : requestedAiModel,
+      workspaceMode: Boolean(mode && mode.toLowerCase().includes('ruang_kerja')),
+      chatMode,
+      responseStyle,
+      streamingRequired: false,
+      userTier: userTier as any
+    };
+
+    const routingDecision = smartModelRouter.routeModel(routingContext, cleanMessage);
+
     const pipelineRes = await aiSafetyService.runUnifiedPipeline({
       userId: req.user?.userId,
       input: cleanMessage,
@@ -229,12 +266,14 @@ router.post(['/chat', '/api/chat'], optionalAuth, aiChatLimiter, aiAbuseLimiter,
       mode,
       chatMode,
       responseStyle,
-      aiModel,
+      aiModel: routingDecision.selectedModelId,
       userTier: (req.user as any)?.tier,
       userRole: req.user?.role,
       history: [],
       isStreaming: false,
-      isTemporary
+      isTemporary,
+      routingDecision,
+      routingContext
     });
 
     return res.status(200).json({
@@ -242,7 +281,11 @@ router.post(['/chat', '/api/chat'], optionalAuth, aiChatLimiter, aiAbuseLimiter,
       text: pipelineRes.text,
       message: pipelineRes.text,
       isCrisis: pipelineRes.isCrisisOverride,
-      modelUsed: pipelineRes.modelUsed
+      modelUsed: pipelineRes.modelUsed,
+      isFallback: pipelineRes.isFallback,
+      fallbackFrom: pipelineRes.isFallback && pipelineRes.modelUsed !== routingDecision.selectedModelId ? routingDecision.selectedModelId : undefined,
+      routingMode: routingDecision.routingMode,
+      routingReason: routingDecision.routingReason
     });
   } catch (err: any) {
     console.error('Chat endpoint error:', err);
@@ -261,9 +304,13 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
       pluginResult, 
       chatMode, 
       responseStyle, 
-      aiModel = DEFAULT_AI_MODEL,
+      aiModel: requestedAiModel,
       attachments,
-      workspaceMode
+      workspaceMode,
+      taskCategory,
+      latencyPreference,
+      qualityPreference,
+      presetId
     } = req.body;
     
     const isAnonymous = !req.user || req.user.userId === 'guest';
@@ -283,6 +330,40 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
         userRole = dbUser.role;
       }
     }
+
+    const isAutoRouting = !requestedAiModel || requestedAiModel === AUTO_ROUTING_MODEL_ID;
+
+    if (!isAutoRouting) {
+      try { resolveAiModel(requestedAiModel, userTier || 'Free'); }
+      catch (error) { if (sendModelSelectionError(res, error)) return; throw error; }
+    }
+
+    const isWorkspace = Boolean(workspaceMode) || (mode || '').toLowerCase().includes('ruang_kerja') || (chatMode || '').toLowerCase().includes('ruangkerja');
+
+    const validTaskCategories = ['general_chat', 'academic_writing', 'research', 'coding', 'document_analysis', 'summarization', 'brainstorming', 'structured_reasoning', 'translation'];
+    const validLatencyPreferences = ['fast', 'balanced', 'deep'];
+    const validQualityPreferences = ['standard', 'high', 'very_high'];
+
+    const routingContext = {
+      manualModelId: isAutoRouting ? AUTO_ROUTING_MODEL_ID : requestedAiModel,
+      workspaceMode: isWorkspace,
+      chatMode,
+      responseStyle,
+      taskCategory: typeof taskCategory === 'string' && validTaskCategories.includes(taskCategory) ? (taskCategory as any) : undefined,
+      latencyPreference: typeof latencyPreference === 'string' && validLatencyPreferences.includes(latencyPreference) ? (latencyPreference as any) : undefined,
+      qualityPreference: typeof qualityPreference === 'string' && validQualityPreferences.includes(qualityPreference) ? (qualityPreference as any) : undefined,
+      presetId: typeof presetId === 'string' && presetId.trim() ? sanitizeInput(presetId.trim(), 50) : undefined,
+      streamingRequired: true,
+      userTier: (userTier as any) || 'Free',
+      attachments: (attachments || []).map((a: any) => ({
+        filename: a?.filename || a?.name,
+        mimeType: a?.mimeType || a?.type,
+        size: a?.size
+      }))
+    };
+
+    const routingDecision = smartModelRouter.routeModel(routingContext, cleanMessage);
+    const aiModel = routingDecision.selectedModelId;
 
     // Enforce atomic daily usage limit check to prevent API key exhaustion and parallel race conditions
     const usageCheck = await checkUserAiUsageLimit(userId, clientIp, userTier, userRole);
@@ -368,10 +449,10 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
                     });
                   }
                 } else if (att.base64) {
-                  // Backward compatibility for direct base64 uploads (validates mime, magic bytes, size & saves to disk)
+                  // Backward compatibility for direct base64 uploads (validates mime, magic bytes, size & saves to disk via canonical pipeline)
                   const base64Clean = att.base64.includes(',') ? att.base64.split(',')[1] : att.base64;
                   const buffer = Buffer.from(base64Clean, 'base64');
-                  await attachmentStorageService.saveAttachment({
+                  await documentIngestionService.ingestFile({
                     userId: userId || 'guest',
                     buffer,
                     originalFilename: att.filename || 'attachment.bin',
@@ -382,17 +463,23 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
                 }
               } catch (e: any) {
                 console.error('[ATTACHMENT_PROCESS_ERROR]', e.message);
-                if (e.message.includes('UNAUTHORIZED_ACCESS')) {
+                const safeMsg = e instanceof DocumentProcessingException ? e.safeMessage : e.message;
+                const errCode = e instanceof DocumentProcessingException ? e.code : '';
+
+                if (errCode === 'OWNERSHIP_ERROR' || e.message.includes('UNAUTHORIZED_ACCESS')) {
                   await rollbackUserAiQuota(userId, clientIp);
                   return sendError(res, 'UNAUTHORIZED_ACCESS', 'Anda tidak memiliki akses ke berkas lampiran ini', 403);
                 }
-                if (e.message.includes('PROMPT_INJECTION')) {
+                if (errCode === 'SECURITY_REJECTED' || e.message.includes('PROMPT_INJECTION')) {
                   await rollbackUserAiQuota(userId, clientIp);
                   return sendError(res, 'PROMPT_INJECTION_IN_ATTACHMENT', 'Terdeteksi upaya prompt injection dalam lampiran', 400);
                 }
-                if (e.message.includes('FILE_TOO_LARGE') || e.message.includes('INVALID_FILE') || e.message.includes('EXTENSION_MIMETYPE_MISMATCH')) {
+                if (
+                  ['FILE_TOO_LARGE', 'EMPTY_FILE', 'SIGNATURE_MISMATCH', 'MIME_MISMATCH', 'UNSUPPORTED_FORMAT', 'ARCHIVE_TOO_LARGE', 'PARSER_ERROR'].includes(errCode) ||
+                  e.message.includes('FILE_TOO_LARGE') || e.message.includes('INVALID_FILE') || e.message.includes('EXTENSION_MIMETYPE_MISMATCH')
+                ) {
                   await rollbackUserAiQuota(userId, clientIp);
-                  return sendError(res, 'INVALID_ATTACHMENT', e.message, 400);
+                  return sendError(res, 'INVALID_ATTACHMENT', safeMsg || e.message, 400);
                 }
               }
             }
@@ -595,6 +682,16 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
     const runLocalFallback = async () => {
       console.warn('Executing Local Fallback AI stream response');
       const fallbackResponse = getLocalFallbackResponse(cleanMessage || pluginResult || '', chatMode, responseStyle);
+      if (!res.writableEnded) {
+        res.write(`data: ${JSON.stringify({
+          type: 'routing',
+          modelUsed: 'local-empathetic-fallback',
+          isFallback: true,
+          fallbackFrom: aiModel,
+          routingMode: routingDecision.routingMode,
+          routingReason: 'Model penyedia tidak menyelesaikan respons; jawaban lokal digunakan.'
+        })}\n\n`);
+      }
       
       if (fallbackResponse.tool_call) {
         res.write(`data: ${JSON.stringify({ tool_call: fallbackResponse.tool_call, parameters: { reason: fallbackResponse.text } })}\n\n`);
@@ -664,6 +761,7 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
     let firstTokenTime = 0;
 
     let responseStream: any = null;
+    let fullResponseText = '';
     let pipelineRes: any = null;
     
     try {
@@ -684,7 +782,9 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
         attachments,
         isStreaming: true,
         isTemporary: activeIsTemporary,
-        abortSignal: reqAbortController.signal
+        abortSignal: reqAbortController.signal,
+        routingDecision,
+        routingContext
       });
     } catch (err: any) {
       console.warn('[CHAT_STREAM] Unified safety pipeline threw error, switching to fallback:', err?.message || err);
@@ -695,7 +795,7 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
       return await runLocalFallback();
     }
 
-    if (pipelineRes.isConsentFallback || pipelineRes.isFallback) {
+    if (pipelineRes.isConsentFallback || pipelineRes.modelUsed?.startsWith('local-')) {
       console.log('Fallback triggered from pipeline result!');
       return await runLocalFallback();
     }
@@ -755,10 +855,23 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
     }
 
     try {
-      let fullResponseText = '';
+      fullResponseText = '';
       let isToolCall = false;
       let validToolCallParsed: any = null;
       let hasStreamedAnyText = false;
+
+      // Emit routing decision event so client can display which model was actually routed
+      if (pipelineRes.routingDecision && !res.writableEnded) {
+        res.write(`data: ${JSON.stringify({
+          type: 'routing',
+          modelUsed: pipelineRes.modelUsed || pipelineRes.routingDecision.selectedModelId,
+          isFallback: Boolean(pipelineRes.isFallback),
+          fallbackFrom: pipelineRes.isFallback ? pipelineRes.routingDecision.selectedModelId : undefined,
+          routingMode: pipelineRes.routingDecision.routingMode,
+          routingReason: pipelineRes.routingDecision.routingReason,
+          presetId: routingContext.presetId
+        })}\n\n`);
+      }
 
       if (pipelineRes.sourceReferences && pipelineRes.sourceReferences.length > 0 && !res.writableEnded) {
         res.write(`data: ${JSON.stringify({ sources: pipelineRes.sourceReferences })}\n\n`);
@@ -792,7 +905,7 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
       const ttfb = firstTokenTime ? (firstTokenTime - requestStartTime) : (requestEndTime - requestStartTime);
       
       aiMetricsService.recordRequestMetric({
-        requestId: `req_${Date.now()}`,
+        requestId: pipelineRes.requestId || `req_${Date.now()}`,
         ttfbMs: ttfb,
         totalLatencyMs: requestEndTime - requestStartTime,
         inputChars: (cleanMessage || pluginResult || '').length,
@@ -801,8 +914,10 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
         estimatedOutputTokens: aiMetricsService.estimateTokens(fullResponseText),
         contextSavedTokens: 0,
         modelUsed: pipelineRes.modelUsed || aiModel,
-        isFallback: false,
-        aborted: clientDisconnected || reqAbortController.signal.aborted
+        isFallback: Boolean(pipelineRes.isFallback),
+        aborted: clientDisconnected || reqAbortController.signal.aborted,
+        routingMode: pipelineRes.routingDecision?.routingMode,
+        routeReason: pipelineRes.routingDecision?.routingReason
       });
 
       if (clientDisconnected || reqAbortController.signal.aborted) {
@@ -927,9 +1042,32 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
         res.end();
       }
     } catch (e: any) {
-      console.warn('Gemini stream execution error:', e);
+      console.warn(`[CHAT_STREAM] requestId=${(pipelineRes as any).requestId || 'unknown'} stream interrupted category=${e?.category || 'INTERNAL_ERROR'}`);
       if (!res.writableEnded) {
-        res.write(`data: ${JSON.stringify({ text: "\n\n*(Koneksi AI dialihkan ke pendampingan lokal)*\nAku tetap di sini mendengarkanmu. Ada hal lain yang ingin kamu luapkan atau ceritakan?" })}\n\n`);
+        if (fullResponseText.trim()) {
+          const interruptedMarker = '\n\n*(Respons terputus sebelum selesai. Kamu bisa mencoba ulang.)*';
+          fullResponseText += interruptedMarker;
+          res.write(`data: ${JSON.stringify({ text: interruptedMarker })}\n\n`);
+          if (!activeIsTemporary && userId && currentChatId) {
+            try {
+              await prisma.chatMessages.create({
+                data: {
+                  id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+                  chatId: currentChatId,
+                  role: 'assistant',
+                  content: encryptionService.encryptSensitive(fullResponseText) || fullResponseText
+                }
+              });
+            } catch {}
+          }
+        } else {
+          const safeMessage = e?.category === 'TIMEOUT'
+            ? 'Model membutuhkan waktu terlalu lama untuk merespons.'
+            : e?.category === 'RATE_LIMIT'
+              ? 'Model sedang menerima terlalu banyak permintaan.'
+              : 'Model sedang tidak tersedia.';
+          res.write(`data: ${JSON.stringify({ error: true, code: e?.category || 'PROVIDER_UNAVAILABLE', message: safeMessage })}\n\n`);
+        }
         res.write(`data: ${JSON.stringify({ done: true, chatId: currentChatId })}\n\n`);
         res.write('data: [DONE]\n\n');
         res.end();

@@ -180,9 +180,10 @@ export interface ScreeningRecord {
   riskIndicators?: {
     item9Score: number;
     hasSelfHarmRisk: boolean;
-    immediateDanger?: boolean;
-    planOrIntent?: boolean;
-    contactedTrustedPerson?: boolean;
+    immediateDanger?: boolean | null;
+    planOrIntent?: boolean | null;
+    wantsTrustedContact?: boolean | null;
+    contactedTrustedPerson?: boolean | null;
     riskCategory?: string;
     flaggedAt?: string;
   };

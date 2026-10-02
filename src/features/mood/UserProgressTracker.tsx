@@ -186,7 +186,11 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
             phq9: d.phq9Score || 0,
             gad7: d.gad7Score || 0,
             label: 'Screening Mandiri',
-            triage: (d.hasSelfHarmRisk || (d.item9Score !== undefined && d.item9Score > 0) || d.riskLevel === 'Tinggi' || d.riskCategory === 'KRISIS_SANGAT_TINGGI' || d.riskCategory === 'RISIKO_MENYAKITI_DIRI') ? 'Krisis' : (d.phq9Score >= 15 || d.gad7Score >= 15 ? 'Prioritas' : 'Ringan')
+            triage: (d.riskLevel === 'Tinggi' || d.riskCategory === 'KRISIS_SANGAT_TINGGI')
+              ? 'Krisis'
+              : (d.hasSelfHarmRisk || (d.item9Score !== undefined && d.item9Score > 0) || d.riskCategory === 'RISIKO_MENYAKITI_DIRI' || d.phq9Score >= 15 || d.gad7Score >= 15)
+                ? 'Prioritas'
+                : 'Ringan'
           };
         });
         setScreenHistory(parsedScreenings);
@@ -245,8 +249,8 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
 
   const getTriageBadge = (triage: TriageCategory) => {
     switch(triage) {
-      case 'Krisis': return { bg: 'bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800', dot: 'bg-rose-500', desc: 'Membutuhkan intervensi segera' };
-      case 'Prioritas': return { bg: 'bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800', dot: 'bg-amber-500', desc: 'Direkomendasikan konseling' };
+      case 'Krisis': return { bg: 'bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800', dot: 'bg-rose-500', desc: 'Jawaban menunjukkan bahaya langsung; cari bantuan sekarang' };
+      case 'Prioritas': return { bg: 'bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800', dot: 'bg-amber-500', desc: 'Skrining positif atau skor tinggi; perlu tindak lanjut profesional' };
       default: return { bg: 'bg-teal-50 dark:bg-teal-950/50 text-teal-700 dark:text-teal-300 border-teal-200 dark:border-teal-800', dot: 'bg-teal-500', desc: 'Kondisi relatif stabil' };
     }
   };

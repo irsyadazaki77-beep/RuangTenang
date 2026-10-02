@@ -39,7 +39,7 @@ export const CHAT_COMMANDS: ChatCommand[] = [
   { cmd: '/clear', label: 'Bersihkan Percakapan', desc: 'Reset & bersihkan riwayat obrolan sesi saat ini', icon: Trash2, actionType: 'system' },
   { cmd: '/new', label: 'Chat Baru', desc: 'Mulai sesi percakapan segar', icon: PlusCircle, actionType: 'system' },
   { cmd: '/counselor', label: 'Direktori Konselor', desc: 'Jadwalkan pendampingan konselor', icon: Users, actionType: 'plugin', pluginId: 'counselors' },
-  { cmd: '/emergency', label: 'Bantuan Darurat SOS', desc: 'Hotline krisis & kontak darurat 24 jam', icon: AlertCircle, actionType: 'plugin', pluginId: 'emergency' },
+  { cmd: '/emergency', label: 'Bantuan Darurat SOS', desc: 'Healing119, bantuan medis darurat, dan kontak darurat pribadi', icon: AlertCircle, actionType: 'plugin', pluginId: 'emergency' },
   { cmd: '/summary', label: 'Ringkas Percakapan', desc: 'Rangkum obrolan sesi saat ini', icon: Sparkles, actionType: 'system' },
   { cmd: '/export', label: 'Ekspor Chat', desc: 'Unduh riwayat percakapan (.md)', icon: Download, actionType: 'system' },
   { cmd: '/articles', label: 'Artikel Edukasi', desc: 'Baca panduan & tips psikologis', icon: BookOpen, actionType: 'plugin', pluginId: 'articles' },
@@ -85,7 +85,7 @@ export const CHAT_PLUGINS: ChatPluginOption[] = [
     id: 'emergency', 
     icon: AlertCircle, 
     label: 'Bantuan Darurat SOS', 
-    desc: 'Hotline bantuan krisis 24 jam',
+    desc: 'Akses Healing119 dan bantuan medis darurat',
     color: 'text-rose-600 bg-rose-100 dark:bg-rose-900/60' 
   },
 ];

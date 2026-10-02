@@ -171,9 +171,9 @@ export const ScreeningTrend: React.FC<ScreeningTrendProps> = ({
           <div className="space-y-1">
             <div className="text-sm sm:text-base font-bold text-primary">
               {currentTriage === 'Krisis'
-                ? 'SOS & Layanan Krisis 24 Jam'
+                ? 'Bantuan krisis dan darurat'
                 : currentTriage === 'Prioritas'
-                ? 'Sesi Konseling & Terapi CBT'
+                ? 'Tindak lanjut konseling'
                 : 'Program Mandiri & Relaksasi'}
             </div>
             <p className="text-xs text-secondary leading-relaxed line-clamp-2">
@@ -495,10 +495,10 @@ export const ScreeningTrend: React.FC<ScreeningTrendProps> = ({
           </h4>
           <p className="text-xs sm:text-sm text-secondary leading-relaxed">
             {currentTriage === 'Krisis'
-              ? 'Kondisi emosional Anda memerlukan pendampingan segera. Silakan hubungi tim hotline krisis 24 jam atau jadwalkan janji darurat melalui direktori kami.'
+              ? 'Jawaban Anda menunjukkan kemungkinan bahaya langsung. Jika ini masih terjadi, hubungi 119 atau pergi ke IGD/fasilitas kesehatan terdekat. Untuk dukungan psikologis awal, gunakan Healing119 di 119 ekstensi 8 atau healing119.id; antrean dapat penuh.'
               : currentTriage === 'Prioritas'
-              ? 'Skor skrining menunjukkan perlunya intervensi sedang. Kami sarankan untuk memesan sesi konseling dengan salah satu psikolog kampus kami.'
-              : 'Skor Anda stabil dan berada pada batas aman. Tetap latih teknik manajemen stres mandiri untuk menjaga ketahanan emosional Anda.'}
+              ? 'Hasil skrining menunjukkan perlunya tindak lanjut profesional, tetapi bukan diagnosis. Pertimbangkan untuk berbicara dengan konselor atau tenaga kesehatan.'
+              : 'Skor skrining berada pada rentang rendah. Ini bukan jaminan bahwa tidak ada masalah; hubungi konselor atau tenaga kesehatan bila Anda tetap merasa khawatir.'}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2.5 shrink-0 w-full md:w-auto">

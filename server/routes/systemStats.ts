@@ -1,17 +1,16 @@
 import { Router, Request, Response } from 'express';
-import { prisma, serverDb } from '../database.js';
-import { encryptionService } from '../services/encryptionService.js';
-import { optionalAuth } from '../middleware/auth.js';
+import { prisma } from '../database.js';
+import { requireAuth, requireRole } from '../middleware/auth.js';
 
 const router = Router();
 
 /**
  * GET /api/health/system-stats
  * GET /api/v1/health/system-stats
- * Returns fully anonymized telemetry & system operational health metrics
- * Complies with UU PDP 27/2022 & GDPR (No PII, zero identifying records)
+ * Returns aggregate clinical and operational counts to authenticated admins only.
  */
-router.get(['/system-stats', '/stats'], optionalAuth, async (_req: Request, res: Response) => {
+router.get(['/system-stats', '/stats'], requireAuth, requireRole(['admin']), async (_req: Request, res: Response) => {
+  res.setHeader('Cache-Control', 'no-store');
   try {
     const [userCount, screeningCount, apptCount, soapCount, moodCount] = await Promise.all([
       prisma.users.count(),
@@ -64,13 +63,6 @@ router.get(['/system-stats', '/stats'], optionalAuth, async (_req: Request, res:
       success: true,
       status: 'OPERATIONAL',
       timestamp: new Date().toISOString(),
-      compliance: {
-        privacyLaw: 'UU Perlindungan Data Pribadi No. 27/2022',
-        framework: 'HIPAA & GDPR Compliant Telemetry',
-        encryptionStandard: 'AES-256-GCM (Authenticated Encryption)',
-        activeKeyVersion: encryptionService.getCurrentKeyVersion(),
-        piiRedacted: true
-      },
       telemetry: {
         totalRegisteredUsers: userCount,
         totalScreeningsCompleted: screeningCount,

@@ -6,6 +6,10 @@ interface ErasureTabProps {
   erasureStatus: any;
   deleteConfirmInput: string;
   setDeleteConfirmInput: (val: string) => void;
+  deletePassword: string;
+  setDeletePassword: (val: string) => void;
+  deleteMfaCode: string;
+  setDeleteMfaCode: (val: string) => void;
   handleClearActivityData: () => void;
   handleExecuteErasure: () => void;
 }
@@ -15,6 +19,10 @@ export const ErasureTab: React.FC<ErasureTabProps> = ({
   erasureStatus,
   deleteConfirmInput,
   setDeleteConfirmInput,
+  deletePassword,
+  setDeletePassword,
+  deleteMfaCode,
+  setDeleteMfaCode,
   handleClearActivityData,
   handleExecuteErasure
 }) => {
@@ -26,20 +34,21 @@ export const ErasureTab: React.FC<ErasureTabProps> = ({
           Hak untuk Dilupakan (Right to be Forgotten)
         </h3>
         <p className="text-xs text-rose-800 dark:text-rose-400/90 mt-1">
-          Tindakan ini menghapus <strong>seluruh rekam jejak secara permanen</strong> tanpa dapat dikembalikan.
+          Tindakan ini menghapus akun dan catatan pengguna yang tercantum dari database aktif. Catatan audit penghapusan tetap disimpan; ini tidak menjamin penghapusan seketika dari cadangan atau data browser.
         </p>
       </div>
 
       <div className="surface-card border border-rose-200 dark:border-rose-900/40 p-3.5 rounded-xl text-xs space-y-2">
-        <strong className="text-rose-900 dark:text-rose-300 block font-semibold">Data yang Akan Dihapus Permanen:</strong>
+        <strong className="text-rose-900 dark:text-rose-300 block font-semibold">Data yang dihapus dari database aktif:</strong>
         <ul className="list-disc list-inside space-y-1 text-secondary">
           <li>Akun pengguna dan kredensial login</li>
           <li>Seluruh riwayat sesi aktif dan login history</li>
           <li>Seluruh riwayat skrining (PHQ-9 & GAD-7)</li>
           <li>Jadwal konseling dan catatan konsultasi</li>
-          <li>Audit log, telemetri, dan penggunaan harian</li>
-          <li>Cookie sesi dan data browser lokal</li>
+          <li>Data aktivitas, chat, lampiran, mood, skrining, dan preferensi consent</li>
+          <li>Sesi, catatan login, dan sebagian log akses terkait akun</li>
         </ul>
+        <p className="text-[11px] text-secondary">Sistem menyimpan catatan permintaan penghapusan dengan ID pengguna dan email yang di-hash untuk audit. Data backup, log infrastruktur, dan IndexedDB browser tidak dihapus oleh tindakan ini.</p>
       </div>
 
       {/* Option to clear only activity history without deleting account */}
@@ -68,20 +77,29 @@ export const ErasureTab: React.FC<ErasureTabProps> = ({
 
       <div className="space-y-1.5 pt-1">
         <label className="block text-xs font-bold text-rose-900 dark:text-rose-300">
-          Ketik <span className="underline select-all">HAPUS SEMUA DATA SAYA</span> untuk mengonfirmasi:
+          Ketik <span className="underline select-all">HAPUS AKUN SAYA</span> untuk mengonfirmasi:
         </label>
         <input
           type="text"
           value={deleteConfirmInput}
           onChange={(e) => setDeleteConfirmInput(e.target.value)}
-          placeholder="HAPUS SEMUA DATA SAYA"
+          placeholder="HAPUS AKUN SAYA"
           className="w-full px-3 py-2 text-base sm:text-xs surface-card border border-rose-300 dark:border-rose-900/60 rounded-xl text-primary focus:ring-1 focus:ring-rose-500 focus:outline-none min-h-[44px]"
         />
       </div>
 
+      <label className="block space-y-1.5">
+        <span className="text-xs font-bold text-rose-900 dark:text-rose-300">Kata sandi akun</span>
+        <input type="password" autoComplete="current-password" value={deletePassword} onChange={(e) => setDeletePassword(e.target.value)} className="w-full px-3 py-2 text-base sm:text-xs surface-card border border-rose-300 dark:border-rose-900/60 rounded-xl text-primary focus:ring-1 focus:ring-rose-500 focus:outline-none min-h-[44px]" />
+      </label>
+      <label className="block space-y-1.5">
+        <span className="text-xs font-bold text-rose-900 dark:text-rose-300">Kode MFA (jika MFA aktif)</span>
+        <input type="text" inputMode="numeric" autoComplete="one-time-code" value={deleteMfaCode} onChange={(e) => setDeleteMfaCode(e.target.value)} className="w-full px-3 py-2 text-base sm:text-xs surface-card border border-rose-300 dark:border-rose-900/60 rounded-xl text-primary focus:ring-1 focus:ring-rose-500 focus:outline-none min-h-[44px]" />
+      </label>
+
       <button
         type="button"
-        disabled={loading || deleteConfirmInput.trim() !== 'HAPUS SEMUA DATA SAYA'}
+        disabled={loading || deleteConfirmInput.trim() !== 'HAPUS AKUN SAYA' || !deletePassword}
         onClick={handleExecuteErasure}
         className="w-full py-2.5 min-h-[44px] bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white rounded-xl text-xs sm:text-sm font-semibold transition shadow-3xs flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98]"
       >

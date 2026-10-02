@@ -14,8 +14,11 @@ import { User,
 } from 'lucide-react';
 import { UserSession, SubscriptionTier } from '../../types';
 import { Brain, MessageSquare, Gauge, Cpu, CheckCircle2, History, Calendar, Bell, Terminal, Volume2 } from 'lucide-react';
-import { DEFAULT_AI_MODEL_ID, AVAILABLE_AI_MODELS } from '../../lib/aiModels';
+import { DEFAULT_AI_MODEL_ID } from '../../lib/aiModels';
+import { useAiModelCatalog } from '../../lib/aiModelCatalog';
 import { safeLocalStorage } from '../../lib/storage';
+import { BUILT_IN_PRESETS, DEFAULT_PRESET_ID } from '../workspace/constants/presetConstants';
+import { loadUserPersonalization, saveUserPersonalization, loadUserCustomPresets } from '../workspace/utils/workspacePresetManager';
 import { AiQuotaBadge } from '../../components/AiQuotaBadge';
 import { apiClient } from '../../lib/apiClient';
 import { CURRENT_APP_VERSION, LAST_UPDATED_DATE, APP_CHANGELOG, CATEGORY_METADATA } from '../../data/changelogData';
@@ -53,6 +56,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   onOpenChangelog,
 }) => {
   const safeUser = userSession || DEFAULT_GUEST_USER;
+  const { models: availableModels, defaultModel, loading: modelsLoading, error: modelsError } = useAiModelCatalog();
   const [loading, setLoading] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -65,6 +69,12 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   const [prefNewsletter, setPrefNewsletter] = useState(() => safeLocalStorage.getItem('pref_newsletter') === 'true');
   const [prefAiCompletionChime, setPrefAiCompletionChime] = useState(() => safeLocalStorage.getItem('pref_ai_completion_chime') !== 'false');
 
+  useEffect(() => {
+    if (availableModels.length && !availableModels.some(model => model.id === aiModel && model.selectable)) {
+      setAiModel(defaultModel);
+    }
+  }, [availableModels, aiModel, defaultModel]);
+
   const triggerNotificationSaved = () => {
     setSuccessMsg('Preferensi notifikasi berhasil diperbarui.');
     setTimeout(() => setSuccessMsg(null), 3000);
@@ -73,7 +83,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   const handleSelectAiModel = (modelId: string) => {
     setAiModel(modelId);
     safeLocalStorage.setItem('aiModel', modelId);
-    setSuccessMsg(`Model AI berhasil diubah ke ${AVAILABLE_AI_MODELS.find(m => m.id === modelId)?.name || modelId}.`);
+    setSuccessMsg(`Model AI berhasil diubah ke ${availableModels.find(m => m.id === modelId)?.name || modelId}.`);
     setTimeout(() => setSuccessMsg(null), 3000);
   };
 
@@ -380,7 +390,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                 </p>
               </div>
               <span className="text-xs font-medium text-teal-700 dark:text-teal-400 bg-teal-50/70 dark:bg-teal-950/50 px-2.5 py-1 rounded-md border border-teal-200/80 dark:border-teal-800 self-start sm:self-auto">
-                Default Aktif: {AVAILABLE_AI_MODELS.find(m => m.id === aiModel)?.name || 'Gemini 3.1 Flash Lite'}
+                Default Aktif: {availableModels.find(m => m.id === aiModel)?.name || 'Gemini 3.8 Flash'}
               </span>
             </div>
 
@@ -391,13 +401,14 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
               </label>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                {AVAILABLE_AI_MODELS.map((model) => {
+                {availableModels.map((model) => {
                   const isSelected = aiModel === model.id;
                   return (
                     <div
                       key={model.id}
-                      onClick={() => handleSelectAiModel(model.id)}
-                      className={`relative p-4 rounded-xl border transition-all cursor-pointer flex flex-col justify-between ${
+                      onClick={() => model.selectable && handleSelectAiModel(model.id)}
+                      aria-disabled={!model.selectable}
+                      className={`relative p-4 rounded-xl border transition-all ${model.selectable ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'} flex flex-col justify-between ${
                         isSelected
                           ? 'border-teal-600 bg-teal-50/40 shadow-xs ring-1 ring-teal-500'
                           : 'border-default hover:border-default hover:surface-muted surface-card'
@@ -425,7 +436,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                         </div>
 
                         <p className="text-xs text-secondary leading-relaxed">
-                          {model.description}
+                          {model.provider} · {model.capabilities.join(' · ')} · {model.availability === 'configured' ? 'Terkonfigurasi' : model.availability === 'temporarily_unavailable' ? 'Sementara tidak tersedia' : 'Penyedia belum dikonfigurasi'}
                         </p>
 
                         <div className="p-2 surface-muted/80 rounded-lg border border-default text-[11px] text-secondary space-y-1">
@@ -445,15 +456,16 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                       </div>
 
                       <div className="pt-2.5 mt-2 border-t border-slate-150/70 flex items-center justify-between text-[11px]">
-                        <span className="text-muted text-[10px] truncate max-w-[200px]" title={model.recommendedFor}>
-                          🎯 {model.recommendedFor}
+                        <span className="text-muted text-[10px] truncate max-w-[200px]">
+                          {model.allowedTiers.join(' · ')}
                         </span>
                         <button
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleSelectAiModel(model.id);
+                            if (model.selectable) handleSelectAiModel(model.id);
                           }}
+                          disabled={!model.selectable}
                           className={`text-xs font-semibold px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
                             isSelected
                               ? 'bg-teal-600 text-white shadow-xs'
@@ -467,6 +479,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                   );
                 })}
               </div>
+              {modelsLoading && <p className="text-xs text-muted">Memuat model...</p>}
+              {modelsError && <p className="text-xs text-rose-600">Daftar model tidak dapat dimuat.</p>}
             </div>
 
             {/* Default Response Style Option */}
@@ -501,6 +515,47 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                     <span className="text-[10px] text-muted leading-tight">{style.desc}</span>
                   </button>
                 ))}
+              </div>
+            </div>
+
+            {/* Default Workspace AI Preset */}
+            <div className="space-y-3 pt-4 border-t border-default">
+              <label className="text-xs font-bold text-secondary uppercase tracking-wide flex items-center gap-1.5">
+                <Sparkles className="w-4 h-4 text-emerald-600" />
+                Preset Default RuangKerja
+              </label>
+              <p className="text-xs text-muted">
+                Pilih preset yang otomatis aktif setiap kali membuka RuangKerja baru.
+              </p>
+              
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
+                {[...BUILT_IN_PRESETS, ...loadUserCustomPresets(safeUser.id)].map(preset => {
+                  const currentPersonalization = loadUserPersonalization(safeUser.id);
+                  const isDefault = (currentPersonalization.defaultPresetId || DEFAULT_PRESET_ID) === preset.id;
+                  return (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      onClick={() => {
+                        const updated = { ...currentPersonalization, defaultPresetId: preset.id };
+                        saveUserPersonalization(safeUser.id, updated);
+                        setSuccessMsg(`Preset default RuangKerja diubah ke "${preset.name}".`);
+                        setTimeout(() => setSuccessMsg(null), 3000);
+                      }}
+                      className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
+                        isDefault
+                          ? 'border-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-100 ring-1 ring-emerald-500'
+                          : 'border-default hover:border-default surface-card text-secondary hover:surface-muted'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-bold truncate">{preset.name}</span>
+                        {isDefault && <Check className="w-3 h-3 text-emerald-600 shrink-0" />}
+                      </div>
+                      <span className="text-[10px] text-muted line-clamp-2 leading-tight">{preset.description}</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 

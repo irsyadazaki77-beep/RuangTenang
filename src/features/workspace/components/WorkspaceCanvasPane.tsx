@@ -1,11 +1,13 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   FileText, 
   FileCode, 
   Quote, 
   ListTree, 
   FilePlus, 
-  X 
+  X,
+  Search,
+  ChevronDown
 } from 'lucide-react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { WorkspaceArtifact, ArtifactType, WorkspaceTab } from '../types';
@@ -28,6 +30,8 @@ interface WorkspaceCanvasPaneProps {
   onRequestRevision: (revisionPrompt: string, currentArtifact: WorkspaceArtifact) => void;
   onCreateNewArtifact: (type: ArtifactType) => void;
   onSetMobileActiveTab: (tab: WorkspaceTab) => void;
+  onDuplicateArtifact?: (id: string) => Promise<void> | void;
+  onDeleteArtifact?: (id: string) => Promise<void> | void;
 }
 
 export const WorkspaceCanvasPane: React.FC<WorkspaceCanvasPaneProps> = React.memo(({
@@ -46,9 +50,14 @@ export const WorkspaceCanvasPane: React.FC<WorkspaceCanvasPaneProps> = React.mem
   onRollbackVersion,
   onRequestRevision,
   onCreateNewArtifact,
-  onSetMobileActiveTab
+  onSetMobileActiveTab,
+  onDuplicateArtifact,
+  onDeleteArtifact
 }) => {
   const shouldReduceMotion = useReducedMotion();
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterType, setFilterType] = useState<ArtifactType | 'ALL'>('ALL');
+  const [showFilterDropdown, setShowFilterDropdown] = useState(false);
 
   const getArtifactTabIcon = (type: ArtifactType) => {
     switch (type) {
@@ -59,36 +68,107 @@ export const WorkspaceCanvasPane: React.FC<WorkspaceCanvasPaneProps> = React.mem
     }
   };
 
+  // Filter artifacts by search query & type filter
+  const filteredArtifacts = useMemo(() => {
+    return artifacts.filter(art => {
+      const matchType = filterType === 'ALL' || art.type === filterType;
+      const matchQuery = !searchQuery.trim() || 
+        art.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        art.type.toLowerCase().includes(searchQuery.toLowerCase());
+      return matchType && matchQuery;
+    });
+  }, [artifacts, filterType, searchQuery]);
+
   return (
     <>
       {/* DESKTOP RIGHT PANE: LIVE ARTIFACT CANVAS */}
       {isCanvasOpen && (
         <section 
-          className="hidden lg:flex flex-1 flex-col h-full overflow-hidden transition-all duration-200"
+          className="hidden xl:flex flex-1 min-h-0 min-w-0 flex-col h-full overflow-hidden transition-all duration-200"
         >
-          {/* Multi-Artifact Tab Strip (when > 1 artifacts exist) */}
+          {/* Multi-Artifact Tab & Filter Strip (when > 1 artifacts exist) */}
           {artifacts.length > 1 && (
-            <div className="h-9 px-3 bg-white dark:bg-[#0F172A] border-b border-slate-200/80 dark:border-slate-800 flex items-center gap-1 overflow-x-auto no-scrollbar shrink-0 z-10">
-              {artifacts.map((art) => {
-                const isActive = art.id === activeArtifactId;
-                return (
-                  <button
-                    key={art.id}
-                    type="button"
-                    onClick={() => onSelectArtifact(art.id)}
-                    className={`h-6.5 px-2.5 rounded-md text-xs font-medium flex items-center gap-1.5 whitespace-nowrap transition-colors cursor-pointer shrink-0 ${
-                      isActive
-                        ? 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-semibold'
-                        : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
-                    }`}
-                    title={art.title}
-                  >
-                    {getArtifactTabIcon(art.type)}
-                    <span className="truncate max-w-[130px]">{art.title}</span>
-                    <span className="text-[9.5px] font-mono opacity-60">v{art.version || 1}</span>
-                  </button>
-                );
-              })}
+            <div className="h-9 px-3 bg-white dark:bg-[#0F172A] border-b border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-1 shrink-0 z-10">
+              {/* Tab Strip with Horizontal Scroll */}
+              <div className="flex items-center gap-1 overflow-x-auto no-scrollbar flex-1 min-w-0 py-1">
+                {filteredArtifacts.map((art) => {
+                  const isActive = art.id === activeArtifactId;
+                  return (
+                    <button
+                      key={art.id}
+                      aria-selected={isActive}
+                      type="button"
+                      onClick={() => onSelectArtifact(art.id)}
+                      className={`h-6.5 px-2.5 rounded-md text-xs font-medium flex items-center gap-1.5 whitespace-nowrap transition-colors cursor-pointer shrink-0 ${
+                        isActive
+                          ? 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-semibold ring-1 ring-slate-200 dark:ring-slate-700'
+                          : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+                      }`}
+                      title={art.title}
+                    >
+                      {getArtifactTabIcon(art.type)}
+                      <span className="truncate max-w-[130px]">{art.title}</span>
+                      <span className="text-[9.5px] font-mono opacity-60">v{art.version || 1}</span>
+                    </button>
+                  );
+                })}
+
+                {filteredArtifacts.length === 0 && (
+                  <span className="text-[11px] text-slate-400 px-2 italic">
+                    Tidak ada artefak yang cocok
+                  </span>
+                )}
+              </div>
+
+              {/* Quick Tab Search / Type Selector for Scalability (> 3 artifacts) */}
+              {artifacts.length > 3 && (
+                <div className="flex items-center gap-1 shrink-0 pl-1 border-l border-slate-200 dark:border-slate-800">
+                  <div className="relative flex items-center">
+                    <input
+                      type="text"
+                      placeholder="Cari..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="h-6 w-20 sm:w-28 text-[11px] pl-5 pr-1.5 bg-slate-100 dark:bg-slate-800 border-none rounded-md text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    />
+                    <Search className="w-3 h-3 text-slate-400 absolute left-1.5 pointer-events-none" />
+                  </div>
+
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setShowFilterDropdown(!showFilterDropdown)}
+                      className="h-6 px-1.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[10.5px] font-medium flex items-center gap-1 cursor-pointer"
+                      title="Filter tipe artefak"
+                    >
+                      <span>{filterType === 'ALL' ? 'Semua' : filterType}</span>
+                      <ChevronDown className="w-2.5 h-2.5 text-slate-400" />
+                    </button>
+
+                    {showFilterDropdown && (
+                      <div className="absolute right-0 top-full mt-1 w-28 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-lg p-1 z-30 space-y-0.5">
+                        {(['ALL', 'DOCUMENT', 'CODE', 'CITATION', 'OUTLINE'] as const).map(t => (
+                          <button
+                            key={t}
+                            type="button"
+                            onClick={() => {
+                              setFilterType(t);
+                              setShowFilterDropdown(false);
+                            }}
+                            className={`w-full text-left px-2 py-1 rounded-lg text-[10.5px] cursor-pointer ${
+                              filterType === t 
+                                ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 font-semibold' 
+                                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                            }`}
+                          >
+                            {t === 'ALL' ? 'Semua Tipe' : t}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -100,25 +180,53 @@ export const WorkspaceCanvasPane: React.FC<WorkspaceCanvasPaneProps> = React.mem
               onRollbackVersion={onRollbackVersion}
               onClose={onCloseCanvas}
               onRequestRevision={onRequestRevision}
+              onDuplicateArtifact={onDuplicateArtifact}
+              onDeleteArtifact={onDeleteArtifact}
               isStreaming={isStreaming}
               isExpanded={isCanvasExpanded}
               onToggleExpand={onToggleExpand}
             />
           ) : (
-            <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-slate-400">
+            <div className="flex-1 min-h-0 flex flex-col items-center justify-center p-6 sm:p-8 text-center text-slate-400">
               <FileText className="w-10 h-10 text-slate-300 dark:text-slate-700 mb-2" />
-              <h3 className="font-semibold text-slate-700 dark:text-slate-300 text-sm">Belum Ada Artefak Aktif</h3>
-              <p className="text-xs max-w-xs mt-1 mb-3">
-                Kirim pertanyaan di kolom obrolan atau buat draf dokumen/kode baru untuk ditampilkan di Canvas.
+              <h3 className="font-semibold text-slate-800 dark:text-slate-200 text-sm">Canvas siap digunakan</h3>
+              <p className="text-xs max-w-xs mt-1 mb-3 leading-relaxed">
+                Buat outline, tulis dokumen, susun sitasi, atau mulai kode. Hasil kerja Anda tersimpan sebagai artefak di sini.
               </p>
-              <button
-                type="button"
-                onClick={() => onCreateNewArtifact('DOCUMENT')}
-                className="h-8 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-2xs transition-all cursor-pointer flex items-center gap-1.5"
-              >
-                <FilePlus className="w-3.5 h-3.5" />
-                <span>+ Buat Draf Baru</span>
-              </button>
+              <div className="flex flex-wrap items-center justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => onCreateNewArtifact('DOCUMENT')}
+                  className="h-8 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-2xs transition-all cursor-pointer flex items-center gap-1.5"
+                >
+                  <FilePlus className="w-3.5 h-3.5" />
+                  <span>+ Buat Draf Baru</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onCreateNewArtifact('CODE')}
+                  className="h-8 px-2.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold shadow-3xs transition-all cursor-pointer flex items-center gap-1"
+                >
+                  <FileCode className="w-3.5 h-3.5 text-emerald-500" />
+                  <span>+ Kode</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onCreateNewArtifact('CITATION')}
+                  className="h-8 px-2.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold shadow-3xs transition-all cursor-pointer flex items-center gap-1"
+                >
+                  <Quote className="w-3.5 h-3.5 text-amber-500" />
+                  <span>+ Sitasi</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onCreateNewArtifact('OUTLINE')}
+                  className="h-8 px-2.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold shadow-3xs transition-all cursor-pointer flex items-center gap-1"
+                >
+                  <ListTree className="w-3.5 h-3.5 text-teal-500" />
+                  <span>+ Outline</span>
+                </button>
+              </div>
             </div>
           )}
         </section>
@@ -133,7 +241,7 @@ export const WorkspaceCanvasPane: React.FC<WorkspaceCanvasPaneProps> = React.mem
             animate={{ x: 0 }}
             exit={shouldReduceMotion ? { opacity: 0 } : { x: '100%' }}
             transition={{ duration: 0.18 }}
-            className="lg:hidden fixed inset-0 z-40 bg-white dark:bg-[#0F172A] flex flex-col shadow-2xl"
+            className="xl:hidden fixed inset-0 z-40 bg-white dark:bg-[#0F172A] flex flex-col shadow-2xl pt-safe pb-safe"
           >
             {/* Mobile Drawer Top Bar */}
             <div className="flex items-center justify-between px-3 py-2 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 shrink-0">
@@ -164,6 +272,8 @@ export const WorkspaceCanvasPane: React.FC<WorkspaceCanvasPaneProps> = React.mem
                   onRollbackVersion={onRollbackVersion}
                   onClose={() => onSetMobileActiveTab('chat')}
                   onRequestRevision={onRequestRevision}
+                  onDuplicateArtifact={onDuplicateArtifact}
+                  onDeleteArtifact={onDeleteArtifact}
                   isStreaming={isStreaming}
                   isExpanded={false}
                   onToggleExpand={() => {}}

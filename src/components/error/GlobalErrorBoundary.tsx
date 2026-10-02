@@ -1,5 +1,5 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
-import { RefreshCw, Home, HeartHandshake, ShieldCheck } from 'lucide-react';
+import { RefreshCw, Home, HeartHandshake } from 'lucide-react';
 
 export interface GlobalErrorBoundaryProps {
   children: ReactNode;
@@ -25,8 +25,8 @@ export class GlobalErrorBoundary extends Component<GlobalErrorBoundaryProps, Glo
     };
   }
 
-  public componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
-    console.error('[GlobalErrorBoundary] Uncaught application error:', error, errorInfo);
+  public componentDidCatch(error: Error, _errorInfo: ErrorInfo): void {
+    console.error('[GlobalErrorBoundary] UI_RENDER_ERROR', { name: error.name });
   }
 
   public handleResetSession = (): void => {
@@ -69,20 +69,14 @@ export class GlobalErrorBoundary extends Component<GlobalErrorBoundaryProps, Glo
               <HeartHandshake className="w-7 h-7" />
             </div>
 
-            {/* Empathetic Safe Message */}
+            {/* Clear recovery guidance */}
             <div className="space-y-2">
               <h1 className="text-lg sm:text-xl font-bold text-slate-800 dark:text-slate-100">
-                Sesi Anda Tetap Aman 🌿
+                Tampilan mengalami kendala
               </h1>
               <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
-                Terjadi kendala teknis ringan saat merender tampilan. Jangan khawatir, seluruh data dan percakapan Anda tersimpan dengan aman.
+                Coba muat ulang halaman. Perubahan terakhir mungkin belum tersimpan. Jika masalah berulang, hubungi admin kampus.
               </p>
-            </div>
-
-            {/* Security Assurance Badge */}
-            <div className="flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/60 dark:border-slate-700/60 text-[11px] text-slate-500 dark:text-slate-400 font-medium">
-              <ShieldCheck className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 shrink-0" />
-              <span>Sesi terenkripsi & privat</span>
             </div>
 
             {/* Action Buttons */}

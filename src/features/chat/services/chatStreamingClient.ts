@@ -1,9 +1,20 @@
+import { StoredAttachment } from '../types';
+
 export type StreamState = 'idle' | 'connecting' | 'streaming' | 'completed' | 'aborted' | 'failed';
 
 export interface QuotaExceededData {
   message: string;
   resetAt?: string;
   suggestedActions?: string[];
+}
+
+export interface RoutingEventData {
+  modelUsed: string;
+  routingMode: 'manual' | 'auto';
+  routingReason: string;
+  presetId?: string;
+  isFallback?: boolean;
+  fallbackFrom?: string;
 }
 
 export interface StreamCallbacks {
@@ -16,6 +27,7 @@ export interface StreamCallbacks {
   onFollowUps?: (followUps: string[]) => void;
   onChatCreated?: (chatId: string) => void;
   onQuotaExceeded?: (data: QuotaExceededData) => void;
+  onRoutingMetadata?: (data: RoutingEventData) => void;
 }
 
 export interface StreamPayload {
@@ -26,7 +38,11 @@ export interface StreamPayload {
   chatMode?: string;
   responseStyle?: string;
   aiModel?: string;
-  attachments?: any[];
+  attachments?: StoredAttachment[];
+  taskCategory?: string;
+  latencyPreference?: string;
+  qualityPreference?: string;
+  presetId?: string;
 }
 
 function getCookie(name: string): string | null {
@@ -84,37 +100,14 @@ export class ChatStreamingClient {
         headers['X-CSRF-Token'] = csrfToken;
       }
 
-      let response: Response | null = null;
-      let lastFetchErr: any = null;
-      const MAX_RETRIES = 2;
-
-      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-        if (token !== this.activeToken || abortController.signal.aborted) return;
-        try {
-          response = await fetch('/api/v1/chat/stream', {
-            method: 'POST',
-            headers,
-            credentials: 'include',
-            body: JSON.stringify(payload),
-            signal: abortController.signal
-          });
-          lastFetchErr = null;
-          break;
-        } catch (fetchErr: any) {
-          lastFetchErr = fetchErr;
-          if (abortController.signal.aborted || fetchErr.name === 'AbortError') {
-            throw fetchErr;
-          }
-          if (attempt < MAX_RETRIES) {
-            console.warn(`[CHAT_STREAM] Percobaan koneksi ${attempt + 1} gagal (${fetchErr.message}), mencoba ulang...`);
-            await new Promise((r) => setTimeout(r, (attempt + 1) * 700));
-          }
-        }
-      }
-
-      if (lastFetchErr || !response) {
-        throw lastFetchErr || new Error('Koneksi ke server terputus.');
-      }
+      if (token !== this.activeToken || abortController.signal.aborted) return;
+      let response: Response | null = await fetch('/api/v1/chat/stream', {
+        method: 'POST',
+        headers,
+        credentials: 'include',
+        body: JSON.stringify(payload),
+        signal: abortController.signal
+      });
 
       // If 403 occurs due to CSRF token mismatch/expiry, attempt fresh token refresh once
       if (response.status === 403 && token === this.activeToken && !abortController.signal.aborted) {
@@ -160,8 +153,6 @@ export class ChatStreamingClient {
       const decoder = new TextDecoder();
       let buffer = '';
       let done = false;
-      const READ_TIMEOUT_MS = 25000; // 25s read timeout
-
       const readLoop = async () => {
         while (!done) {
           if (token !== this.activeToken) {
@@ -169,18 +160,7 @@ export class ChatStreamingClient {
             return;
           }
 
-          let timerId: any = null;
-          const timeoutPromise = new Promise<never>((_, reject) => {
-            timerId = setTimeout(() => reject(new Error('Read timeout')), READ_TIMEOUT_MS);
-          });
-
-          try {
-            const result = await Promise.race([
-              reader.read(),
-              timeoutPromise
-            ]);
-
-            if (timerId) clearTimeout(timerId);
+          const result = await reader.read();
 
             if (token !== this.activeToken) {
               try { reader.cancel(); } catch {}
@@ -229,6 +209,16 @@ export class ChatStreamingClient {
                       if (token === this.activeToken && callbacks.onPluginSwitch) {
                         callbacks.onPluginSwitch(pluginName);
                       }
+                    } else if (parsed.type === 'routing') {
+                      if (token === this.activeToken && callbacks.onRoutingMetadata) {
+                        callbacks.onRoutingMetadata({
+                          modelUsed: parsed.modelUsed,
+                          routingMode: parsed.routingMode,
+                          routingReason: parsed.routingReason,
+                          isFallback: Boolean(parsed.isFallback),
+                          fallbackFrom: parsed.fallbackFrom
+                        });
+                      }
                     } else if (parsed.text || (parsed.type === 'text' && parsed.content)) {
                       const content = parsed.text || parsed.content;
                       currentText += content;
@@ -252,10 +242,6 @@ export class ChatStreamingClient {
                 }
               }
             }
-          } catch (loopErr) {
-            if (timerId) clearTimeout(timerId);
-            throw loopErr;
-          }
         }
 
         // Flush remaining buffer

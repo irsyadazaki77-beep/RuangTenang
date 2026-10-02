@@ -3,6 +3,7 @@ import path from 'path';
 import crypto from 'crypto';
 import { prisma } from '../database.js';
 import { aiSafetyService } from './ai/aiSafetyService.js';
+import { resolveExistingStoredAttachmentFilePath } from './attachmentFileService.js';
 
 export const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB limit
 export const MAX_ATTACHMENTS_PER_MESSAGE = 3;
@@ -166,11 +167,14 @@ export function validateAndDetectFile(buffer: Buffer, originalFilename: string, 
   };
 }
 
-import { getAdapterForKind } from './file-intelligence/adapters/index.js';
-import { normalizationService } from './file-intelligence/normalizationService.js';
-import { chunkingService } from './file-intelligence/chunkingService.js';
+import { documentIngestionService } from './file-intelligence/documentIngestionService.js';
+import { DocumentProcessingException } from './file-intelligence/fileTypes.js';
 
 export const attachmentStorageService = {
+  /**
+   * Save and process attachment by delegating to canonical documentIngestionService pipeline.
+   * Eliminates duplicate extraction, normalization, and chunking logic.
+   */
   async saveAttachment({
     userId,
     buffer,
@@ -186,115 +190,74 @@ export const attachmentStorageService = {
     chatId?: string;
     messageId?: string;
   }) {
-    const { verifiedMime, sanitizedName, size } = validateAndDetectFile(buffer, originalFilename, clientMime);
-
-    // Prompt injection check for text files
-    if (verifiedMime === 'text/plain' || verifiedMime === 'text/markdown') {
+    // Check Prompt injection for text files before ingestion for explicit compatibility
+    if (clientMime === 'text/plain' || clientMime === 'text/markdown' || originalFilename.endsWith('.txt') || originalFilename.endsWith('.md')) {
       const textContent = buffer.toString('utf8');
       if (aiSafetyService.detectPromptInjection(textContent)) {
         throw new Error('PROMPT_INJECTION_IN_ATTACHMENT: Terdeteksi upaya prompt injection dalam isi berkas.');
       }
     }
 
-    const checksum = crypto.createHash('sha256').update(buffer).digest('hex');
-    const attachmentId = `att_${Date.now()}_${crypto.randomBytes(6).toString('hex')}`;
-    const storageFilename = `${attachmentId}.bin`;
-    const storagePath = path.join(UPLOAD_DIR, storageFilename);
-    const relativeStoragePath = `uploads/attachments/${storageFilename}`;
+    try {
+      const responseDto = await documentIngestionService.ingestFile({
+        userId,
+        buffer,
+        originalFilename,
+        clientMime,
+        chatId,
+        messageId
+      });
 
-    // Write file securely to disk
-    await fs.promises.writeFile(storagePath, buffer, { mode: 0o600 });
+      // Fetch the full DB record so callers expecting the Prisma record receive it
+      const record = await prisma.attachments.findUnique({
+        where: { id: responseDto.id }
+      });
 
-    // Determine file kind
-    const ext = path.extname(sanitizedName).toLowerCase().replace('.', '');
-    let fileKind: any = 'text';
-    if (verifiedMime === 'application/pdf') fileKind = 'pdf';
-    else if (verifiedMime.startsWith('image/')) fileKind = 'image';
-    else if (ext === 'docx') fileKind = 'docx';
-    else if (ext === 'pptx') fileKind = 'pptx';
-    else if (ext === 'xlsx') fileKind = 'xlsx';
-    else if (ext === 'csv') fileKind = 'csv';
-    else if (ext === 'json') fileKind = 'json';
-    else if (ext === 'md' || ext === 'markdown') fileKind = 'markdown';
-
-    // Save metadata and relative storage reference in database (NO raw base64!)
-    const record = await prisma.attachments.create({
-      data: {
-        id: attachmentId,
-        messageId: messageId || null,
+      return record || {
+        id: responseDto.id,
+        filename: responseDto.filename,
+        mimeType: responseDto.mimeType,
+        fileKind: responseDto.fileKind,
+        size: responseDto.size,
+        status: responseDto.status,
+        checksum: responseDto.checksum || null,
+        data: `uploads/attachments/${responseDto.id}.bin`,
         chatId: chatId || null,
+        messageId: messageId || null,
         userId: userId || 'guest',
-        filename: sanitizedName,
-        mimeType: verifiedMime,
-        size,
-        data: relativeStoragePath,
-        checksum,
-        fileKind,
-        status: fileKind === 'image' ? 'ready' : 'processing'
-      }
-    });
-
-    if (fileKind !== 'image') {
-      try {
-        const adapter = getAdapterForKind(fileKind);
-        const extraction = await adapter.extract({
-          documentId: attachmentId,
-          filename: sanitizedName,
-          mimeType: verifiedMime,
-          kind: fileKind,
-          buffer,
-          checksum
-        });
-        const normalized = normalizationService.normalizeDocument(extraction);
-        const chunks = chunkingService.createChunks(normalized);
-
-        if (chunks.length > 0) {
-          await prisma.documentChunks.createMany({
-            data: chunks.map(c => ({
-              id: c.id,
-              attachmentId,
-              userId: userId || 'guest',
-              chunkIndex: c.index,
-              content: c.text,
-              tokenCount: c.tokenEstimate,
-              pageStart: c.pageStart ?? null,
-              pageEnd: c.pageEnd ?? null,
-              slideNumber: c.slideNumber ?? null,
-              sheetName: c.sheetName ?? null,
-              section: c.section ?? null,
-              checksum: c.checksum
-            }))
-          });
+        metadata: JSON.stringify({
+          pageCount: responseDto.pageCount,
+          slideCount: responseDto.slideCount,
+          sheetCount: responseDto.sheetCount
+        }),
+        createdAt: new Date(responseDto.createdAt),
+        processedAt: responseDto.processedAt ? new Date(responseDto.processedAt) : null,
+        extractedText: null,
+        processingError: null
+      };
+    } catch (err: any) {
+      if (err instanceof DocumentProcessingException) {
+        if (err.code === 'SECURITY_REJECTED') {
+          throw new Error('PROMPT_INJECTION_IN_ATTACHMENT: Terdeteksi upaya prompt injection dalam isi berkas.');
         }
-
-        const updated = await prisma.attachments.update({
-          where: { id: attachmentId },
-          data: {
-            status: 'ready',
-            processedAt: new Date(),
-            extractedText: normalized.normalizedFullText.substring(0, 10_000),
-            metadata: JSON.stringify({
-              pageCount: extraction.pageCount,
-              slideCount: extraction.slideCount,
-              sheetCount: extraction.sheetCount,
-              chunkCount: chunks.length
-            })
+        // If file was stored and DB record created, but extraction failed (PARSER_ERROR, EXTRACTION_FAILED),
+        // return the failed record for backward compatibility with callers expecting a saved record
+        if (err.code === 'PARSER_ERROR' || err.code === 'EXTRACTION_LIMIT' || err.code === 'EXTRACTION_FAILED') {
+          const failedRecord = await prisma.attachments.findFirst({
+            where: {
+              userId,
+              filename: originalFilename
+            },
+            orderBy: { createdAt: 'desc' }
+          });
+          if (failedRecord) {
+            return failedRecord;
           }
-        });
-        return updated;
-      } catch (procErr: any) {
-        const failedRecord = await prisma.attachments.update({
-          where: { id: attachmentId },
-          data: {
-            status: 'failed',
-            processingError: procErr.message
-          }
-        }).catch(() => null);
-        return failedRecord || record;
+        }
+        throw new Error(`${err.code}: ${err.safeMessage || err.message}`);
       }
+      throw err;
     }
-
-    return record;
   },
 
   async getAttachmentForUser(attachmentId: string, userId: string) {
@@ -312,11 +275,9 @@ export const attachmentStorageService = {
     }
 
     // Resolve full disk path from relative storage path
-    const fullPath = path.isAbsolute(attachment.data)
-      ? attachment.data
-      : path.join(process.cwd(), attachment.data);
+    const fullPath = await resolveExistingStoredAttachmentFilePath(attachment.data);
 
-    if (!fs.existsSync(fullPath)) {
+    if (!fullPath || !fs.existsSync(fullPath)) {
       throw new Error('FILE_NOT_FOUND_ON_DISK: Berkas lampiran tidak ditemukan pada penyimpanan server.');
     }
 
@@ -334,37 +295,14 @@ export const attachmentStorageService = {
     };
   },
 
-  async deleteAttachment(attachmentId: string, userId: string) {
-    const attachment = await prisma.attachments.findUnique({
-      where: { id: attachmentId }
-    });
-
-    if (!attachment) return false;
-
-    if (attachment.userId !== userId && !(attachment.userId === 'guest' && userId === 'guest')) {
-      throw new Error('UNAUTHORIZED_ACCESS: Anda tidak berhak menghapus berkas ini.');
-    }
-
-    const fullPath = path.isAbsolute(attachment.data)
-      ? attachment.data
-      : path.join(process.cwd(), attachment.data);
-
-    if (fs.existsSync(fullPath)) {
-      try {
-        await fs.promises.unlink(fullPath);
-      } catch (e) {
-        console.error('Failed to unlink attachment file:', e);
+  async deleteAttachment(attachmentId: string, userId: string): Promise<boolean> {
+    try {
+      return await documentIngestionService.deleteAttachment(attachmentId, userId);
+    } catch (err: any) {
+      if (err instanceof DocumentProcessingException && err.code === 'OWNERSHIP_ERROR') {
+        throw new Error('UNAUTHORIZED_ACCESS: Anda tidak berhak menghapus berkas ini.');
       }
+      throw err;
     }
-
-    await prisma.documentChunks.deleteMany({
-      where: { attachmentId }
-    });
-
-    await prisma.attachments.delete({
-      where: { id: attachmentId }
-    });
-
-    return true;
   }
 };

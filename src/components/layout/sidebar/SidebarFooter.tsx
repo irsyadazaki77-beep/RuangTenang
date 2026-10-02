@@ -90,7 +90,7 @@ export const SidebarFooter: React.FC<SidebarFooterProps> = ({
     return (
       <div className="mt-auto border-t border-slate-200/60 dark:border-slate-800/80 p-2 space-y-1.5 flex flex-col items-center shrink-0">
         {/* Urgent Crisis SOS */}
-        <SidebarTooltip content="Bantuan Darurat (SOS 24 Jam)" show={true} position="right">
+        <SidebarTooltip content="Bantuan krisis dan SOS" show={true} position="right">
           <button
             type="button"
             onClick={handleOpenEmergency}
@@ -163,7 +163,7 @@ export const SidebarFooter: React.FC<SidebarFooterProps> = ({
         type="button"
         onClick={handleOpenEmergency} 
         className="w-full flex items-center justify-between px-2.5 py-1.2 rounded-lg text-xs font-semibold text-rose-700 dark:text-rose-300 bg-rose-50/80 dark:bg-rose-950/40 hover:bg-rose-100/90 dark:hover:bg-rose-900/40 border border-rose-200/80 dark:border-rose-900/60 transition-colors cursor-pointer"
-        title="Layanan Tanggap Krisis & Telepon Darurat 24 Jam"
+        title="Bantuan krisis psikologis dan darurat medis"
       >
         <div className="flex items-center gap-1.5">
           <div className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
@@ -171,7 +171,7 @@ export const SidebarFooter: React.FC<SidebarFooterProps> = ({
           <span>Bantuan Darurat (SOS)</span>
         </div>
         <span className="text-[10px] text-rose-600/80 dark:text-rose-400 font-medium">
-          24 Jam
+          SOS
         </span>
       </button>
 
@@ -346,4 +346,3 @@ export const SidebarFooter: React.FC<SidebarFooterProps> = ({
     </div>
   );
 };
-

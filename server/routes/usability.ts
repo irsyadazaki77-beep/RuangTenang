@@ -87,6 +87,9 @@ router.post(['/usability', '/api/usability'], requireAuth, async (req: Request, 
 // Program Progress
 router.get(['/program-progress/:userId', '/api/program-progress/:userId'], requireAuth, async (req: Request, res: Response) => {
   try {
+    if (!['mahasiswa', 'admin'].includes(req.user!.role)) {
+      return res.status(403).json({ error: 'Akses ditolak.' });
+    }
     if (req.user!.role === 'mahasiswa' && req.params.userId !== req.user!.userId) {
       return res.status(403).json({ error: 'Akses ditolak.' });
     }

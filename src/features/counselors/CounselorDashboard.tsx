@@ -200,7 +200,7 @@ export const CounselorDashboard: React.FC = () => {
             <span>Status Krisis:</span>
             <span className="font-medium text-teal-600 flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-teal-600 animate-ping"></span>
-              Siaga 24 Jam
+              Pantau antrean
             </span>
           </div>
         </div>

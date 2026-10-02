@@ -18,12 +18,6 @@ export function useWorkspaceFileIngestion(chatId?: string) {
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
-      setAttachedFile(prev => {
-        if (prev?.url && prev.url.startsWith('blob:')) {
-          URL.revokeObjectURL(prev.url);
-        }
-        return null;
-      });
     };
   }, []);
 
@@ -51,7 +45,13 @@ export function useWorkspaceFileIngestion(chatId?: string) {
     }
 
     if (!result.valid) {
-      setAttachedFile(null);
+      setAttachedFile({
+        name: file.name,
+        size: file.size,
+        mimeType: file.type,
+        status: 'failed',
+        errorMessage: result.message || 'Dokumen belum selesai diproses. Coba pilih file lagi.'
+      });
       showToast(result.message || 'Gagal memproses berkas.', 'error');
       return;
     }
@@ -95,6 +95,8 @@ export function useWorkspaceFileIngestion(chatId?: string) {
   }, [handleProcessFile]);
 
   const removeAttachedFile = useCallback(() => {
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
     setAttachedFile(prev => {
       if (prev?.url && prev.url.startsWith('blob:')) {
         URL.revokeObjectURL(prev.url);

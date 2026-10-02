@@ -171,7 +171,7 @@ export const TriageQueue: React.FC<TriageQueueProps> = ({
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-secondary">
                     <span>{item.studentEmail}</span>
                     <span>•</span>
-                    <span>{item.university || 'Universitas Indonesia'}</span>
+                    <span>{item.university || 'Tidak tersedia'}</span>
                     <span>•</span>
                     <span className="flex items-center gap-1">
                       <Clock className="w-3 h-3 text-slate-400" />

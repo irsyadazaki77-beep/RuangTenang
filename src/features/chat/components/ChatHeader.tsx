@@ -21,7 +21,7 @@ import { ChatMode, ResponseStyle } from '../types';
 import { UserSession } from '../../../types';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { usePrivacyVault } from '../../../contexts/PrivacyVaultContext';
-import { AVAILABLE_AI_MODELS } from '../../../lib/aiModels';
+import { useAiModelCatalog } from '../../../lib/aiModelCatalog';
 import { BrandLogo } from '../../../components/ui/BrandLogo';
 
 interface ChatHeaderProps {
@@ -67,8 +67,9 @@ export function ChatHeader({
 }: ChatHeaderProps) {
   const { actualTheme, toggleTheme } = useTheme();
   const { isIncognitoMode, toggleIncognito, triggerPanicScreen } = usePrivacyVault();
+  const { models: availableModels, loading: modelsLoading } = useAiModelCatalog();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const currentModel = AVAILABLE_AI_MODELS.find(m => m.id === aiModel) || AVAILABLE_AI_MODELS[0];
+  const currentModel = availableModels.find(m => m.id === aiModel);
   const isSettingsOpen = activePlugin === 'chat_settings';
 
   return (
@@ -97,7 +98,7 @@ export function ChatHeader({
               RuangTenang
             </span>
             <span className="hidden md:inline-flex text-[11px] text-stone-400 dark:text-slate-500 font-normal truncate">
-              · {currentModel?.tag || 'Gemini'}
+              · {aiModel === 'auto' ? 'Auto (Pilih otomatis)' : (currentModel?.tag || (modelsLoading ? 'Memuat model…' : 'Gemini'))}
             </span>
             <ChevronDown className={`w-3 h-3 text-stone-400 transition-transform duration-150 shrink-0 ${isSettingsOpen ? 'rotate-180 text-teal-600 dark:text-teal-400' : 'group-hover:text-stone-600 dark:group-hover:text-slate-300'}`} />
           </button>
@@ -127,18 +128,23 @@ export function ChatHeader({
                     onChange={e => setAiModel(e.target.value)}
                     className="w-full text-xs bg-stone-50 dark:bg-slate-800 border border-stone-200/70 dark:border-slate-700 rounded-lg px-2 py-1.5 text-stone-800 dark:text-slate-200 outline-none focus:border-teal-500 cursor-pointer"
                   >
-                    {Array.from(new Set(AVAILABLE_AI_MODELS.map(m => m.category))).map(category => (
+                    <option value="auto" className="font-semibold text-teal-700 dark:text-teal-400">
+                      Auto — Pilih otomatis (Rekomendasi)
+                    </option>
+                    {Array.from(new Set(availableModels.map(m => m.category))).map(category => (
                       <optgroup key={category} label={category} className="font-semibold text-stone-500 dark:text-slate-400">
-                        {AVAILABLE_AI_MODELS.filter(m => m.category === category).map(m => {
-                          const isAllowed = m.allowedTiers.includes(user?.tier || 'Free');
+                        {availableModels.filter(m => m.category === category).map(m => {
+                          const tier = user?.tier;
+                          const isAllowed = m.allowedTiers.includes(tier === 'Free' ? 'Free' : 'Pro');
                           return (
-                            <option key={m.id} value={m.id} disabled={!isAllowed} className="font-normal text-stone-800 dark:text-slate-200">
-                              {m.name} {!isAllowed ? '(Pro Tier)' : ''}
+                            <option key={m.id} value={m.id} disabled={!isAllowed || !m.selectable} className="font-normal text-stone-800 dark:text-slate-200">
+                              {m.name} {!isAllowed ? '(Pro Tier)' : !m.selectable ? '(Penyedia tidak tersedia)' : ''}
                             </option>
                           );
                         })}
                       </optgroup>
                     ))}
+                    {modelsLoading && <option disabled>Memuat model...</option>}
                   </select>
                 </div>
 

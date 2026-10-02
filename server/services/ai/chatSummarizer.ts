@@ -1,5 +1,7 @@
 import { getGenAIClient } from '../../config/aiConfig.js';
 import { getActualGeminiModel } from './aiModelRegistry.js';
+import { geminiAdapter } from './geminiAdapter.js';
+import { executeWithReliability } from './aiReliabilityService.js';
 import { scanAndSanitizePII } from '../piiService.js';
 import { aiMetricsService } from './aiMetricsService.js';
 import { getLocalFallbackSummary } from '../../routes/fallbackAi.js';
@@ -100,14 +102,11 @@ export const chatSummarizer = {
           ? `${previousSummaryContext}\n${sanitizedInput}\n\nBuat ringkasan gabungan yang sangat ringkas (maksimal 3 poin singkat dalam Bahasa Indonesia) mencakup poin penting dan emosi utama.`
           : `Buat ringkasan percakapan berikut secara sangat ringkas (maksimal 3 poin singkat dalam Bahasa Indonesia):\n${sanitizedInput}`;
 
-        const response = await aiClient.models.generateContent({
+        const response = await executeWithReliability('gemini', signal => geminiAdapter.generate(aiClient, {
           model: getActualGeminiModel('gemini-2.5-flash-lite'),
           contents: [{ role: 'user', parts: [{ text: prompt }] }],
-          config: {
-            temperature: 0.3,
-            maxOutputTokens: 250
-          }
-        });
+          config: { temperature: 0.3, maxOutputTokens: 250, abortSignal: signal }
+        }));
 
         if (response.text) {
           generatedSummary = response.text.trim();

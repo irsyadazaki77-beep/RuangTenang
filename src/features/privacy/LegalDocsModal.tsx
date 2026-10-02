@@ -214,19 +214,15 @@ export const LegalDocsModal: React.FC<LegalDocsModalProps> = ({
                 <div className="space-y-3">
                   <div className="p-4 bg-slate-50 rounded-xl">
                     <strong className="text-slate-900 block mb-1">
-                      Penyimpanan Lokal & Privat:
+                      Pemrosesan dan Penyimpanan:
                     </strong>
-                    Seluruh riwayat obrolan dan catatan pribadi disimpan di
-                    memori lokal perangkat Anda.
+                    Percakapan akun, skrining, mood, dan data layanan tertentu disimpan di server RuangTenang. Sebagian preferensi disimpan di perangkat. Data AI dikirim ke provider sesuai model yang dipakai.
                   </div>
                   <div className="p-4 bg-slate-50 rounded-xl">
                     <strong className="text-slate-900 block mb-1">
                       Retensi & Penghapusan Otomatis:
                     </strong>
-                    Sesuai kebijakan data retention policy, data sesi
-                    kedaluwarsa secara otomatis dalam 90 hari. Pengguna dapat
-                    mengeksekusi hak penghapusan permanen (Right to be
-                    Forgotten) kapan saja melalui menu vault privasi.
+                    Masa simpan dapat diatur di Pusat Privasi. Pembersihan otomatis mencakup chat, mood, skrining, serta janji temu yang selesai/dibatalkan sesuai masa simpan. Permintaan hapus akun juga menyimpan catatan audit penghapusan. Mekanisme aplikasi tidak membuktikan penghapusan dari cadangan atau log infrastruktur.
                   </div>
                 </div>
               </section>
@@ -273,9 +269,7 @@ export const LegalDocsModal: React.FC<LegalDocsModalProps> = ({
                     Anonimisasi Otomatis
                   </div>
                   <p className="text-slate-600">
-                    Nama, NIM, email, dan nomor telepon tidak pernah dikirimkan
-                    ke model AI eksternal. Semua data identitas disaring dan
-                    dianonimkan secara otomatis sebelum pemrosesan.
+                    Pesan teks diperiksa dengan penyaring pola untuk beberapa jenis identitas. Penyaring ini tidak menjamin anonimisasi; nama, detail yang tidak dikenali, dan identitas dalam gambar/lampiran dapat tetap terkirim ke provider AI. Tinjau dan samarkan lampiran sebelum mengirim.
                   </p>
                 </div>
               </section>
@@ -300,9 +294,13 @@ export const LegalDocsModal: React.FC<LegalDocsModalProps> = ({
                     terapi medis formal.
                   </p>
                   <p>
-                    Jika Anda mengalami krisis mental atau pikiran menyakiti
-                    diri, harap langsung menghubungi layanan darurat 119 Ext 8
-                    atau tim konselor kampus terdekat.
+                    Jika ada bahaya langsung, hubungi 119 atau minta orang
+                    tepercaya menemani Anda ke IGD/fasilitas kesehatan terdekat.
+                    Untuk dukungan psikologis awal, gunakan{" "}
+                    <a href="https://www.healing119.id/" target="_blank" rel="noopener noreferrer" className="underline font-semibold">
+                      Healing119 (119 ekstensi 8)
+                    </a>
+                    . Layanan ini bukan terapi jangka panjang dan antrean dapat penuh.
                   </p>
                 </div>
               </section>
