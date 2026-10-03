@@ -7,15 +7,19 @@ import { useWorkspaceFileIngestion } from '../../features/workspace/hooks/useWor
 import { DEFAULT_WELCOME_ARTIFACT, DEFAULT_WELCOME_ARTIFACT_ID } from '../../features/workspace/constants/workspaceConstants';
 import { WorkspaceApiService } from '../../features/workspace/services/workspaceApiService';
 import { WorkspaceArtifact } from '../../features/workspace/types';
+import { Message } from '../../features/chat/types';
 
 // Mock the WorkspaceApiService
 vi.mock('../../features/workspace/services/workspaceApiService', () => ({
   WorkspaceApiService: {
     fetchArtifacts: vi.fn(),
     fetchMessages: vi.fn(),
+    clearMessages: vi.fn(),
     createArtifact: vi.fn(),
     updateArtifact: vi.fn(),
-    rollbackArtifact: vi.fn()
+    rollbackArtifact: vi.fn(),
+    fetchChatAttachments: vi.fn().mockResolvedValue([]),
+    deleteAttachment: vi.fn().mockResolvedValue(undefined)
   }
 }));
 
@@ -244,28 +248,24 @@ describe('Workspace Lifecycle & Regression Suite', () => {
   });
 
   describe('3. File Ingestion & Boundary Safety', () => {
-    it('manages attached file state and handles removal', () => {
+    it('manages multiple independent attachments and removes only the selected one', async () => {
       const { result } = renderHook(() => useWorkspaceFileIngestion());
 
-      expect(result.current.attachedFile).toBeNull();
-
-      act(() => {
-        result.current.setAttachedFile({
-          name: 'notes.txt',
-          content: 'My research notes',
-          size: 100,
-          mimeType: 'text/plain',
-          isText: true
-        });
-      });
-
-      expect(result.current.attachedFile?.name).toBe('notes.txt');
-
-      act(() => {
-        result.current.removeAttachedFile();
-      });
-
-      expect(result.current.attachedFile).toBeNull();
+      vi.mocked(WorkspaceApiService.deleteAttachment).mockResolvedValue(undefined);
+      vi.mocked(WorkspaceApiService.fetchChatAttachments).mockResolvedValue([]);
+      vi.stubGlobal('fetch', vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+        const uploadedFile = (init?.body as FormData).get('files') as File;
+        return { ok: true, json: async () => ({ success: true, attachment: {
+          id: `server-${uploadedFile.name}`, filename: uploadedFile.name, mimeType: 'text/plain', fileKind: 'text', size: uploadedFile.size, status: 'ready', url: '/file'
+        } }) } as Response;
+      }));
+      const files = ['a.txt', 'b.txt', 'c.txt'].map(name => new File(['text'], name, { type: 'text/plain' }));
+      await act(async () => result.current.handleDrop({ preventDefault: vi.fn(), dataTransfer: { files } } as unknown as React.DragEvent));
+      expect(result.current.attachments).toHaveLength(3);
+      const middle = result.current.attachments[1];
+      await act(async () => result.current.removeAttachment(middle));
+      expect(result.current.attachments.map(item => item.name)).toEqual(['a.txt', 'c.txt']);
+      vi.unstubAllGlobals();
     });
 
     it('tracks drag over and drag leave correctly', () => {
@@ -298,20 +298,80 @@ describe('Workspace Lifecycle & Regression Suite', () => {
 
       expect(result.current.streamingStatus).toBe('aborted');
     });
+
+    it('does not commit a late stream callback after clear aborts the stream', async () => {
+      const onStreamCompleted = vi.fn();
+      vi.stubGlobal('fetch', vi.fn((_input: RequestInfo | URL, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true });
+      })));
+      const { result } = renderHook(() => useWorkspaceStreaming({ chatId: 'chat-race', onStreamCompleted }));
+
+      await act(async () => {
+        const pendingStream = result.current.sendMessageStream('Pertanyaan');
+        result.current.abortStream(true);
+        await pendingStream;
+      });
+
+      expect(onStreamCompleted).not.toHaveBeenCalled();
+      vi.unstubAllGlobals();
+    });
   });
 
   describe('5. Clear Chat Session', () => {
-    it('clears messages and resets conversation state while keeping artifacts intact', () => {
-      const { result } = renderHook(() => 
-        useWorkspacePersistence({ userName: 'Test User' })
-      );
+    it('deletes persisted messages before resetting local state and stays empty after reload', async () => {
+      vi.mocked(WorkspaceApiService.fetchArtifacts).mockResolvedValue([]);
+      vi.mocked(WorkspaceApiService.fetchMessages).mockResolvedValue([
+        { id: 'old-msg', role: 'user', content: 'Pesan lama', createdAt: new Date() }
+      ]);
+      vi.mocked(WorkspaceApiService.clearMessages).mockResolvedValue();
+      const { result, unmount } = renderHook(() => useWorkspacePersistence({ chatId: 'chat-clear', userName: 'Test User' }));
+      await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+      expect(result.current.messages.map(message => message.content)).toContain('Pesan lama');
 
-      act(() => {
-        result.current.clearMessages();
+      await act(async () => {
+        expect(await result.current.clearWorkspaceConversation()).toBe(true);
       });
-
+      expect(WorkspaceApiService.clearMessages).toHaveBeenCalledWith('chat-clear');
       expect(result.current.messages).toHaveLength(1);
-      expect(result.current.messages[0].content).toContain('Obrolan telah dibersihkan');
+      expect(result.current.messages[0].content).toContain('Halo');
+
+      unmount();
+      vi.mocked(WorkspaceApiService.fetchMessages).mockResolvedValueOnce([]);
+      const reloaded = renderHook(() => useWorkspacePersistence({ chatId: 'chat-clear', userName: 'Test User' }));
+      await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+      expect(reloaded.result.current.messages).toHaveLength(1);
+      expect(reloaded.result.current.messages[0].content).toContain('Halo');
+      expect(reloaded.result.current.messages.some(message => message.content.includes('Pesan lama'))).toBe(false);
+      reloaded.unmount();
+    });
+
+    it('keeps visible messages if the persistent clear request fails', async () => {
+      vi.mocked(WorkspaceApiService.fetchArtifacts).mockResolvedValue([]);
+      vi.mocked(WorkspaceApiService.fetchMessages).mockResolvedValue([
+        { id: 'kept-msg', role: 'user', content: 'Riwayat tetap terlihat', createdAt: new Date() }
+      ]);
+      const { result } = renderHook(() => useWorkspacePersistence({ chatId: 'chat-fail-clear' }));
+      await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+      vi.mocked(WorkspaceApiService.clearMessages).mockRejectedValueOnce(new Error('offline'));
+
+      await act(async () => {
+        expect(await result.current.clearWorkspaceConversation()).toBe(false);
+      });
+      expect(result.current.messages.some(message => message.content.includes('Riwayat tetap terlihat'))).toBe(true);
+    });
+
+    it('ignores an initial message response that arrives after a successful clear', async () => {
+      let resolveFetch: (messages: Message[]) => void = () => undefined;
+      vi.mocked(WorkspaceApiService.fetchArtifacts).mockResolvedValue([]);
+      vi.mocked(WorkspaceApiService.fetchMessages).mockImplementationOnce(() => new Promise(resolve => { resolveFetch = resolve; }));
+      vi.mocked(WorkspaceApiService.clearMessages).mockResolvedValue();
+      const { result } = renderHook(() => useWorkspacePersistence({ chatId: 'chat-race', userName: 'Test User' }));
+      await act(async () => { await result.current.clearWorkspaceConversation(); });
+      await act(async () => {
+        resolveFetch([{ id: 'late-msg', role: 'user', content: 'Respons fetch lama', createdAt: new Date() }]);
+        await new Promise(resolve => setTimeout(resolve, 0));
+      });
+      expect(result.current.messages.some(message => message.content.includes('Respons fetch lama'))).toBe(false);
     });
   });
 });

@@ -1,4 +1,5 @@
 import { SupportedFileKind, FileErrorCode, ProcessingStatus } from '../../../shared/contracts/files.js';
+import { MAX_UPLOAD_FILE_SIZE_BYTES } from '../../../shared/contracts/files.js';
 
 export interface FileProcessingLimits {
   maxFileSize: number;
@@ -18,7 +19,7 @@ export interface FileProcessingLimits {
 }
 
 export const DEFAULT_FILE_LIMITS: FileProcessingLimits = {
-  maxFileSize: 5 * 1024 * 1024, // 5MB
+  maxFileSize: MAX_UPLOAD_FILE_SIZE_BYTES,
   maxFilesPerRequest: 3,
   maxExtractedChars: 500_000,
   maxPdfPages: 50,

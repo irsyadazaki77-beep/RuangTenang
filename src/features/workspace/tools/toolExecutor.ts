@@ -8,7 +8,10 @@ export class WorkspaceToolExecutor {
    * Validasi payload tool sebelum dieksekusi
    */
   static validate(payload: WorkspaceToolExecutionPayload): { valid: boolean; error?: string; tool?: WorkspaceToolDefinition } {
-    const { toolId, context } = payload;
+    if (!payload || typeof payload !== 'object' || !payload.context || !payload.input || typeof payload.input !== 'object' || Array.isArray(payload.input)) {
+      return { valid: false, error: 'Data konfigurasi tool tidak valid' };
+    }
+    const { toolId, context, input } = payload;
     const tool = WorkspaceToolRegistry.getTool(toolId);
 
     if (!tool) {
@@ -17,6 +20,25 @@ export class WorkspaceToolExecutor {
 
     if (tool.requiresArtifact && !context.activeArtifact) {
       return { valid: false, error: `Tool "${tool.name}" memerlukan artefak dokumen yang aktif` };
+    }
+
+    for (const field of tool.inputSchema ?? []) {
+      const value = input[field.name];
+      if (value === undefined || value === null || value === '') {
+        if (field.required) return { valid: false, error: `Input "${field.label}" wajib diisi` };
+        continue;
+      }
+      if (field.type === 'string' && typeof value !== 'string') return { valid: false, error: `Input "${field.label}" harus berupa teks` };
+      if (field.type === 'number' && (typeof value !== 'number' || !Number.isFinite(value))) return { valid: false, error: `Input "${field.label}" harus berupa angka yang valid` };
+      if (field.type === 'boolean' && typeof value !== 'boolean') return { valid: false, error: `Input "${field.label}" harus berupa ya/tidak` };
+      if (field.type === 'enum' && (typeof value !== 'string' || !field.options?.some(option => option.value === value))) {
+        return { valid: false, error: `Pilihan "${field.label}" tidak valid` };
+      }
+    }
+
+    const allowedFields = new Set((tool.inputSchema ?? []).map(field => field.name));
+    if (Object.keys(input).some(key => !allowedFields.has(key))) {
+      return { valid: false, error: 'Payload berisi parameter yang tidak dikenali tool ini' };
     }
 
     if (tool.requiresSelection && !context.selectedText?.trim()) {

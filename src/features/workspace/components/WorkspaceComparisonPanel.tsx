@@ -15,7 +15,7 @@ function csrfHeaders(): Record<string, string> {
   return { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest', ...(match ? { 'X-CSRF-Token': decodeURIComponent(match[1]) } : {}) };
 }
 
-const CandidateCard = React.memo(function CandidateCard({ candidate, run, selected, selectionLocked, onUse, onCanvas, onCancel }: {
+const CandidateCard = React.memo(function CandidateCard({ candidate, run, selected, selectionLocked, onUse, onCanvas, onCancel, onRetry }: {
   candidate: WorkspaceComparisonCandidate;
   run: WorkspaceComparisonRun;
   selected: boolean;
@@ -23,19 +23,51 @@ const CandidateCard = React.memo(function CandidateCard({ candidate, run, select
   onUse: Props['onUseResponse'];
   onCanvas: Props['onSendToCanvas'];
   onCancel: (candidateId: string) => void;
+  onRetry: (candidateId: string) => void;
 }) {
   const [copied, setCopied] = useState(false);
-  const label = candidate.status === 'queued' ? 'Menunggu' : candidate.status === 'streaming' ? 'Menjawab' : candidate.status === 'completed' ? 'Selesai' : candidate.status === 'failed' ? 'Gagal' : 'Dihentikan';
+  const statusDisplay = candidate.status === 'queued'
+    ? { text: 'Thinking…', color: 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800' }
+    : candidate.status === 'streaming'
+    ? { text: 'Generating…', color: 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 border-blue-200 dark:border-blue-800' }
+    : candidate.status === 'completed'
+    ? { text: 'Selesai', color: 'text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800' }
+    : candidate.status === 'cancelled'
+    ? { text: 'Dihentikan', color: 'text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700' }
+    : { text: 'Gagal', color: 'text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800' };
+
   const copy = async () => {
     try { await navigator.clipboard.writeText(candidate.output); setCopied(true); window.setTimeout(() => setCopied(false), 1500); }
     catch { setCopied(false); }
   };
-  return <article id={`comparison-candidate-${candidate.candidateId}`} aria-labelledby={`comparison-tab-${candidate.candidateId}`} className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950">
+
+  return <article id={`comparison-candidate-${candidate.candidateId}`} aria-labelledby={`comparison-tab-${candidate.candidateId}`} className="min-w-0 flex flex-col justify-between overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xs dark:border-slate-800 dark:bg-slate-950 transition-all">
     <header className="flex min-h-11 items-center justify-between gap-2 border-b border-slate-100 px-3 py-2 dark:border-slate-800">
-      <div className="min-w-0"><div className="truncate text-xs font-semibold text-slate-800 dark:text-slate-100">{candidate.modelName}</div><div role="status" aria-live="polite" className="text-[10px] text-slate-500">{label}{candidate.latencyMs !== undefined ? ` · ${(candidate.latencyMs / 1000).toFixed(1)} dtk` : ''}</div></div>
-      {candidate.status === 'streaming' && <button type="button" onClick={() => onCancel(candidate.candidateId)} className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md px-2 text-[10px] text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500" aria-label={`Hentikan ${candidate.modelName}`}><Square className="h-3 w-3" />Stop</button>}
+      <div className="min-w-0">
+        <div className="truncate text-xs font-semibold text-slate-800 dark:text-slate-100">{candidate.modelName}</div>
+        <div className="flex items-center gap-1.5 mt-0.5">
+          <span className={`inline-block px-1.5 py-0.2 rounded-full border text-[9px] font-medium ${statusDisplay.color}`}>
+            {statusDisplay.text}
+          </span>
+          {candidate.latencyMs !== undefined && (
+            <span role="status" aria-live="polite" className="text-[10px] text-slate-400">
+              {(candidate.latencyMs / 1000).toFixed(1)}s
+            </span>
+          )}
+        </div>
+      </div>
+      <div className="flex items-center gap-1">
+        {candidate.status === 'streaming' && (
+          <button type="button" onClick={() => onCancel(candidate.candidateId)} className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md px-2 text-[10px] font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500" aria-label={`Hentikan ${candidate.modelName}`}><Square className="h-3 w-3" />Stop</button>
+        )}
+        {(candidate.status === 'failed' || candidate.status === 'cancelled') && (
+          <button type="button" onClick={() => onRetry(candidate.candidateId)} className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md px-2 text-[10px] font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500" aria-label={`Coba lagi ${candidate.modelName}`}>Retry</button>
+        )}
+      </div>
     </header>
-    <div className="min-h-28 max-h-[55vh] overflow-y-auto p-3 text-xs leading-relaxed text-slate-700 dark:text-slate-200 whitespace-pre-wrap">{candidate.error || candidate.output || (candidate.status === 'streaming' ? 'Menulis…' : candidate.status === 'failed' ? 'Respons model ini gagal dibuat. Kandidat lain tetap berjalan.' : candidate.status === 'cancelled' ? 'Respons dihentikan.' : 'Menunggu model…')}</div>
+    <div className="flex-1 min-h-28 max-h-[55vh] overflow-y-auto p-3 text-xs leading-relaxed text-slate-700 dark:text-slate-200 whitespace-pre-wrap select-text">
+      {candidate.error || candidate.output || (candidate.status === 'streaming' ? 'Menulis…' : candidate.status === 'failed' ? 'Respons model ini gagal dibuat. Kandidat lain tetap berjalan.' : candidate.status === 'cancelled' ? 'Respons dihentikan.' : 'Menunggu respons…')}
+    </div>
     <footer className="flex flex-wrap items-center gap-1 border-t border-slate-100 px-2 py-2 dark:border-slate-800">
       <button type="button" disabled={candidate.status !== 'completed' || !candidate.output || selectionLocked} onClick={() => onUse(run, candidate)} className="h-7 rounded-md bg-emerald-700 px-2.5 text-[10px] font-medium text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"><Check className="mr-1 inline h-3 w-3" />{selected ? 'Dipakai di percakapan' : 'Gunakan jawaban ini'}</button>
       <button type="button" disabled={!candidate.output} onClick={copy} className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-[10px] text-slate-500 hover:bg-slate-100 disabled:opacity-40 dark:hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"><Copy className="h-3 w-3" />{copied ? 'Tersalin' : 'Salin'}</button>
@@ -144,6 +176,61 @@ export const WorkspaceComparisonPanel = React.memo(function WorkspaceComparisonP
     setIsRunning(false);
   }, [run]);
 
+  const retryOne = useCallback(async (candidateId: string) => {
+    if (!run) return;
+    updateCandidate(candidateId, { status: 'queued', output: '', error: undefined, latencyMs: undefined });
+    try {
+      const singleCandidateRun = {
+        ...run,
+        comparisonId: crypto.randomUUID(),
+        selectedModelIds: [candidateId]
+      };
+      const response = await fetch('/api/v1/chat/compare/stream', {
+        method: 'POST',
+        credentials: 'include',
+        headers: csrfHeaders(),
+        body: JSON.stringify(singleCandidateRun)
+      });
+      if (!response.ok || !response.body) {
+        updateCandidate(candidateId, { status: 'failed', error: 'Gagal mencoba ulang model ini.' });
+        return;
+      }
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const event = JSON.parse(line.slice(6)) as { type: string; candidateId?: string; text?: string; latencyMs?: number; errorCode?: string };
+          if (event.type === 'candidate_started') updateCandidate(candidateId, { status: 'streaming' });
+          else if (event.type === 'candidate_chunk' && event.text) {
+            updateCandidate(candidateId, {
+              status: 'streaming',
+              output: (candidatesRef.current.find(c => c.candidateId === candidateId)?.output || '') + event.text
+            });
+          } else if (event.type === 'candidate_completed') {
+            updateCandidate(candidateId, { status: 'completed', latencyMs: event.latencyMs });
+          } else if (event.type === 'candidate_failed') {
+            updateCandidate(candidateId, {
+              status: 'failed',
+              latencyMs: event.latencyMs,
+              ...(event.errorCode === 'OUTPUT_REJECTED' ? { output: '', error: 'Respons ditahan oleh pemeriksaan keamanan.' } : {})
+            });
+          } else if (event.type === 'candidate_cancelled') {
+            updateCandidate(candidateId, { status: 'cancelled', latencyMs: event.latencyMs });
+          }
+        }
+      }
+    } catch {
+      updateCandidate(candidateId, { status: 'failed', error: 'Gagal menghubungi model.' });
+    }
+  }, [run, updateCandidate]);
+
   const useCandidateResponse = useCallback((selectedRun: WorkspaceComparisonRun, selectedCandidate: WorkspaceComparisonCandidate) => {
     setSelectedCandidateId(selectedCandidate.candidateId);
     onUseResponse(selectedRun, selectedCandidate);
@@ -166,8 +253,8 @@ export const WorkspaceComparisonPanel = React.memo(function WorkspaceComparisonP
         mobileTabRefs.current.get(nextId)?.focus();
       }} className="min-h-9 shrink-0 rounded-lg border border-slate-200 px-3 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:border-slate-700">{candidate.modelName} · {candidate.status === 'completed' ? 'Selesai' : candidate.status === 'failed' ? 'Gagal' : candidate.status === 'cancelled' ? 'Stop' : candidate.status === 'streaming' ? 'Menjawab' : 'Menunggu'}</button>)}
     </div>
-    <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
-      {candidates.map(candidate => <div key={candidate.candidateId} className={candidate.candidateId === activeMobileId ? '' : 'hidden md:block'}><CandidateCard candidate={candidate} run={run} selected={candidate.candidateId === selectedCandidateId} selectionLocked={selectedCandidateId !== null} onUse={useCandidateResponse} onCanvas={onSendToCanvas} onCancel={cancelOne} /></div>)}
+    <div className="grid grid-cols-1 gap-2 md:grid-cols-2 2xl:grid-cols-3">
+      {candidates.map(candidate => <div key={candidate.candidateId} className={candidate.candidateId === activeMobileId ? '' : 'hidden md:block'}><CandidateCard candidate={candidate} run={run} selected={candidate.candidateId === selectedCandidateId} selectionLocked={selectedCandidateId !== null} onUse={useCandidateResponse} onCanvas={onSendToCanvas} onCancel={cancelOne} onRetry={retryOne} /></div>)}
     </div>
   </section>;
 });

@@ -2,7 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { Readable } from 'stream';
 import multer from 'multer';
 import { prisma } from '../database.js';
-import { optionalAuth, requireAuth } from '../middleware/auth.js';
+import { optionalAuth } from '../middleware/auth.js';
 import { attachmentStorageService, MAX_FILE_SIZE, MAX_ATTACHMENTS_PER_MESSAGE } from '../services/attachmentStorageService.js';
 import { documentIngestionService } from '../services/file-intelligence/documentIngestionService.js';
 import { DocumentProcessingException } from '../services/file-intelligence/fileTypes.js';
@@ -130,6 +130,11 @@ router.post(
       }
 
       const savedAttachments = [];
+      const processingController = new AbortController();
+      const abortProcessingOnDisconnect = () => {
+        if (!res.writableEnded) processingController.abort();
+      };
+      res.once('close', abortProcessingOnDisconnect);
 
       for (const file of fileList) {
         try {
@@ -138,7 +143,8 @@ router.post(
             buffer: file.buffer,
             originalFilename: file.originalname,
             clientMime: file.mimetype,
-            chatId
+            chatId,
+            abortSignal: processingController.signal
           });
 
           savedAttachments.push({
@@ -199,6 +205,50 @@ router.post(
     }
   }
 );
+
+/** List metadata for documents in an owned Workspace conversation. */
+router.get('/chat/:chatId/attachments', optionalAuth, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.userId || 'guest';
+    const chatId = req.params.chatId;
+    const chat = await prisma.chats.findFirst({ where: { id: chatId, userId } });
+    if (!chat) return sendAttachmentError(res, 'NOT_FOUND', 'Ruang Kerja tidak ditemukan.', 404);
+
+    const attachments = await prisma.attachments.findMany({
+      where: { chatId, userId },
+      select: {
+        id: true, filename: true, mimeType: true, fileKind: true, size: true,
+        status: true, checksum: true, metadata: true, processingError: true, createdAt: true
+      },
+      orderBy: { createdAt: 'asc' }
+    });
+    return res.json({
+      success: true,
+      attachments: attachments.map(attachment => {
+        let metadata: Record<string, unknown> = {};
+        try { metadata = attachment.metadata ? JSON.parse(attachment.metadata) as Record<string, unknown> : {}; } catch { /* ignore malformed optional metadata */ }
+        return {
+          id: attachment.id,
+          filename: attachment.filename,
+          mimeType: attachment.mimeType,
+          fileKind: attachment.fileKind || 'text',
+          size: attachment.size,
+          status: attachment.status,
+          checksum: attachment.checksum || undefined,
+          pageCount: metadata.pageCount,
+          slideCount: metadata.slideCount,
+          sheetCount: metadata.sheetCount,
+          errorMessage: attachment.processingError || undefined,
+          url: `/api/v1/chat/attachments/${attachment.id}`,
+          createdAt: attachment.createdAt.toISOString()
+        };
+      })
+    });
+  } catch (error) {
+    console.error('[WORKSPACE_ATTACHMENT_LIST_FAILED]', error);
+    return sendAttachmentError(res, 'ATTACHMENT_LIST_FAILED', 'Gagal memuat dokumen Workspace.', 500);
+  }
+});
 
 /**
  * Status check endpoint for asynchronous / progressive file processing

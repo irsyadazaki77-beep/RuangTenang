@@ -26,7 +26,7 @@ const comparisonSchema = z.object({
   comparisonId: z.string().uuid(),
   chatId: z.string().max(100).optional(),
   prompt: z.string().trim().min(1).max(2000),
-  selectedModelIds: z.array(z.string().min(1).max(100)).min(2).max(MAX_CANDIDATES),
+  selectedModelIds: z.array(z.string().min(1).max(100)).min(1).max(MAX_CANDIDATES),
   attachments: z.array(z.object({ id: z.string().min(1).max(100) })).max(3).optional(),
   activeContext: z.object({ title: z.string().max(120), content: z.string().max(50000) }).optional(),
   responseStyle: z.string().max(80).optional(),
@@ -42,7 +42,7 @@ function writeEvent(res: Response, event: Record<string, unknown>) {
 
 router.post('/chat/compare/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (req: Request, res: Response) => {
   const parsed = comparisonSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ success: false, code: 'INVALID_COMPARISON', message: 'Pilih 2–3 model unik dan kirim prompt yang valid.' });
+  if (!parsed.success) return res.status(400).json({ success: false, code: 'INVALID_COMPARISON', message: 'Pilih model unik dan kirim prompt yang valid.' });
   const request = parsed.data;
   if (new Set(request.selectedModelIds).size !== request.selectedModelIds.length) {
     return res.status(400).json({ success: false, code: 'DUPLICATE_MODELS', message: 'Model yang sama hanya dapat dipilih satu kali.' });
@@ -59,7 +59,7 @@ router.post('/chat/compare/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter,
 
   let models: AiModelDefinition[];
   try {
-    models = validateComparisonCandidates(request.selectedModelIds, userTier, Boolean(request.attachments?.length));
+    models = validateComparisonCandidates(request.selectedModelIds, userTier, Boolean(request.attachments?.length), { allowSingleCandidate: request.selectedModelIds.length === 1 });
   } catch (error) {
     const code = error instanceof ComparisonValidationError ? error.code : 'MODEL_NOT_FOUND';
     const status = code === 'MODEL_NOT_ALLOWED' ? 403 : code === 'MODEL_NOT_FOUND' ? 400 : 422;
@@ -81,6 +81,7 @@ router.post('/chat/compare/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter,
   // Build document retrieval, workspace context, and recent history once for all candidates.
   const history: Array<{ role: 'user' | 'model'; parts: { text: string }[] }> = [];
   let context: Awaited<ReturnType<typeof aiContextBuilder.buildContext>> | null = null;
+  const attachmentIds = request.attachments?.map(a => a.id).filter(Boolean);
   if (request.chatId && userId !== 'guest') {
     const rows = await prisma.chatMessages.findMany({ where: { chatId: request.chatId }, orderBy: { createdAt: 'desc' }, take: 50 });
     rows.reverse().forEach(row => {
@@ -91,12 +92,12 @@ router.post('/chat/compare/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter,
     });
     context = await aiContextBuilder.buildContext({
       userId, chatId: request.chatId, fullHistory: history.map(item => ({ role: item.role, content: item.parts.map(part => part.text).join('\n') })),
-      currentMessage: prompt, chatMode: 'workspace'
+      currentMessage: prompt, chatMode: 'workspace', attachmentIds
     });
     history.splice(0, history.length, ...context.recentHistory);
   }
   if (userId !== 'guest' && !context) {
-    context = await aiContextBuilder.buildContext({ userId, currentMessage: prompt, chatMode: 'workspace', isTemporary: true });
+    context = await aiContextBuilder.buildContext({ userId, currentMessage: prompt, chatMode: 'workspace', isTemporary: true, attachmentIds });
   }
   if (request.activeContext?.content) {
     const title = sanitizeInput(request.activeContext.title, 120);

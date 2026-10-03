@@ -132,7 +132,7 @@ export function parseTagAttributes(attrString: string): ParsedTagAttributes {
  * 4. Streaming Token Engine: Smoothly extracts in-progress streaming artifacts without flickering or broken UI rendering.
  * 5. Clean Replacement Spans: Replaces artifact blocks in chat text with accessible visual indicator quotes.
  */
-export function parseArtifactsFromText(text: string, isStreaming = false): ExtractedArtifactResult {
+export function parseArtifactsFromText(text: string, isStreaming = false, generationId?: string): ExtractedArtifactResult {
   if (!text || typeof text !== 'string') {
     return { cleanedText: '', artifacts: [], activeStreamingArtifact: null };
   }
@@ -149,7 +149,13 @@ export function parseArtifactsFromText(text: string, isStreaming = false): Extra
 
   let index = 0;
   const len = text.length;
-  let artifactCount = 0;
+  const fallbackGenerationId = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `g${Date.now()}${Math.random().toString(36).slice(2, 8)}`;
+  const stableId = (position: number) => {
+    const namespace = generationId || fallbackGenerationId;
+    return `art_${namespace}_${position}`.replace(/[^a-zA-Z0-9_-]/g, '_');
+  };
 
   // Track outer code block state
   let inCodeBlock = false;
@@ -231,7 +237,7 @@ export function parseArtifactsFromText(text: string, isStreaming = false): Extra
             const rawHeader = text.substring(index + tagPrefixLen);
             const attrs = parseTagAttributes(rawHeader);
             activeStreamingArtifact = {
-              id: attrs.id || `art_streaming_${Date.now()}`,
+              id: attrs.id || stableId(tagStartIndex),
               title: attrs.title || 'Dokumen Akademik (Live)',
               type: attrs.type,
               language: attrs.language,
@@ -332,10 +338,13 @@ export function parseArtifactsFromText(text: string, isStreaming = false): Extra
 
         if (foundClosingTag) {
           const rawContent = text.substring(bodyStartIndex, bodyEndIndex);
-          artifactCount++;
+          if (!rawContent.trim()) {
+            index = tagEndIndex;
+            continue;
+          }
 
           const artifact: WorkspaceArtifact = {
-            id: attrs.id || `art_${Date.now()}_${artifactCount}`,
+            id: attrs.id || stableId(tagStartIndex),
             title: attrs.title,
             type: attrs.type,
             language: attrs.language,
@@ -361,7 +370,7 @@ export function parseArtifactsFromText(text: string, isStreaming = false): Extra
 
           if (isStreaming) {
             activeStreamingArtifact = {
-              id: attrs.id || `art_streaming_${Date.now()}`,
+              id: attrs.id || stableId(tagStartIndex),
               title: attrs.title || 'Dokumen Akademik (Live)',
               type: attrs.type,
               language: attrs.language,
@@ -377,9 +386,8 @@ export function parseArtifactsFromText(text: string, isStreaming = false): Extra
           } else {
             // Completed message with unclosed artifact -> recover gracefully
             if (streamingBody.trim().length > 0) {
-              artifactCount++;
               const recoveredArtifact: WorkspaceArtifact = {
-                id: attrs.id || `art_${Date.now()}_${artifactCount}`,
+                id: attrs.id || stableId(tagStartIndex),
                 title: attrs.title,
                 type: attrs.type,
                 language: attrs.language,

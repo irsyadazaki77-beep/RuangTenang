@@ -13,8 +13,10 @@ import { processFileForWorkspace } from '../../features/workspace/services/fileI
 import { AcademicPromptPill, AcademicTaskTemplate, StarterTaskItem, WorkspaceArtifact } from '../../features/workspace/types';
 import { readWorkspaceModelPreference, saveWorkspaceModelPreference } from '../../features/workspace/utils/workspaceModelPreference';
 
-vi.mock('../../features/workspace/services/fileIngestionService', () => ({
-  processFileForWorkspace: vi.fn()
+vi.mock('../../features/workspace/services/fileIngestionService', async importOriginal => ({
+  ...await importOriginal<typeof import('../../features/workspace/services/fileIngestionService')>(),
+  processFileForWorkspace: vi.fn(),
+  retryWorkspaceFile: vi.fn()
 }));
 
 vi.mock('../../lib/apiClient', () => ({
@@ -64,7 +66,7 @@ describe('RuangKerja UX foundation', () => {
   it('shows a useful empty conversation and starter task', () => {
     render(<WorkspaceConversation messages={[]} activeStreamingMessage={null} isStreaming={false} artifacts={[]}
       starterTasks={starterTasks} onSelectStarterTask={noop} onRetryMessage={noop} onOpenCanvas={noop} />);
-    expect(screen.getByText('Asisten Akademik')).toBeInTheDocument();
+    expect(screen.getByText('Mulai sesuatu')).toBeInTheDocument();
     fireEvent.click(screen.getByText('Buat outline'));
   });
 
@@ -101,17 +103,28 @@ describe('RuangKerja UX foundation', () => {
     expect(screen.getByRole('button', { name: 'Kirim Pesan' })).toBeDisabled();
   });
 
-  it('sends a ready attachment and removes it after submission', () => {
+  it('sends ready attachments while keeping them active as document context', () => {
     const { props } = renderComposer({ attachedFile: {
       id: 'att-1', name: 'paper.pdf', size: 2048, mimeType: 'application/pdf', status: 'ready'
     } });
     fireEvent.click(screen.getByRole('button', { name: 'Kirim Pesan' }));
     expect(props.onSendMessage).toHaveBeenCalledWith(
-      'Mohon telaah dan analisis dokumen "paper.pdf" ini secara mendalam.',
+      'Mohon telaah dan analisis dokumen berikut secara mendalam: "paper.pdf".',
       [expect.objectContaining({ id: 'att-1', filename: 'paper.pdf', mimeType: 'application/pdf', size: 2048 })],
       expect.objectContaining({ responseMode: 'Seimbang' })
     );
-    expect(props.onRemoveAttachedFile).toHaveBeenCalledOnce();
+    expect(props.onRemoveAttachedFile).not.toHaveBeenCalled();
+  });
+
+  it('sends multiple active documents together', () => {
+    const { props } = renderComposer({ attachments: [
+      { id: 'att-a', name: 'jurnal-agile.pdf', mimeType: 'application/pdf', status: 'ready' },
+      { id: 'att-b', name: 'rubrik.docx', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', status: 'ready' }
+    ], inputText: 'Bandingkan sumber ini.' });
+    fireEvent.click(screen.getByRole('button', { name: 'Kirim Pesan' }));
+    expect(props.onSendMessage).toHaveBeenCalledWith('Bandingkan sumber ini.', expect.arrayContaining([
+      expect.objectContaining({ id: 'att-a' }), expect.objectContaining({ id: 'att-b' })
+    ]), expect.objectContaining({ responseMode: 'Seimbang' }));
   });
 
   it('blocks a ready attachment that cannot be referenced by the stream request', () => {
@@ -157,7 +170,8 @@ describe('RuangKerja UX foundation', () => {
 
   it('passes selected model and response preferences when sending', () => {
     const { props } = renderComposer({ inputText: 'Tolong jelaskan' });
-    fireEvent.click(screen.getByRole('button', { name: 'Mode · Gaya' }));
+    fireEvent.click(screen.getByRole('button', { name: /Opsi/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Respons' }));
     fireEvent.change(screen.getByLabelText('Mode respons'), { target: { value: 'Ringkas' } });
     fireEvent.change(screen.getByLabelText('Gaya (opsional)'), { target: { value: 'Akademik' } });
     fireEvent.click(screen.getByRole('button', { name: 'Kirim Pesan' }));
@@ -168,17 +182,27 @@ describe('RuangKerja UX foundation', () => {
 
   it('closes the response menu with Escape', () => {
     renderComposer();
-    fireEvent.click(screen.getByRole('button', { name: 'Mode · Gaya' }));
+    fireEvent.click(screen.getByRole('button', { name: /Opsi/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Respons' }));
     expect(screen.getByRole('dialog', { name: 'Pengaturan respons dan konteks' })).toBeInTheDocument();
     fireEvent.keyDown(screen.getByLabelText('Mode respons'), { key: 'Escape' });
     expect(screen.queryByRole('dialog', { name: 'Pengaturan respons dan konteks' })).not.toBeInTheDocument();
   });
 
+  it('keeps secondary composer controls hidden until requested', () => {
+    renderComposer();
+    expect(screen.queryByRole('button', { name: 'Respons' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Template' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Opsi Workspace' }));
+    expect(screen.getByRole('button', { name: 'Respons' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Template' })).toBeInTheDocument();
+  });
+
   it('exposes attachment status and removal action', () => {
     const { props } = renderComposer({ attachedFile: { name: 'paper.pdf', size: 2048, status: 'processing' } });
     expect(screen.getByText('paper.pdf')).toBeInTheDocument();
-    expect(screen.getByText('Memproses...')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Hapus lampiran dokumen' }));
+    expect(screen.getByText('Proses')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Hapus paper.pdf' }));
     expect(props.onRemoveAttachedFile).toHaveBeenCalledOnce();
   });
 
@@ -235,7 +259,8 @@ describe('RuangKerja UX foundation', () => {
     expect(onOpenTemplateGallery).toHaveBeenCalledOnce();
     fireEvent.click(screen.getByRole('button', { name: 'Opsi Lebih Lanjut' }));
     fireEvent.click(screen.getByText('Bersihkan Obrolan'));
-    fireEvent.click(screen.getByRole('button', { name: 'Ya, Bersihkan' }));
+    expect(screen.getByText('Semua pesan di RuangKerja ini akan dihapus. Dokumen dan artefak Canvas tetap tersimpan.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Bersihkan' }));
     expect(onConfirmClearWorkspace).toHaveBeenCalledOnce();
   });
 
@@ -277,8 +302,35 @@ describe('RuangKerja UX foundation', () => {
     await act(async () => {
       result.current.handleDrop({ preventDefault: noop, dataTransfer: { files: [file] } } as unknown as React.DragEvent);
     });
-    expect(result.current.attachedFile?.status).toBe('failed');
-    expect(result.current.attachedFile?.errorMessage).toContain('Coba lagi');
+    expect(result.current.attachments[0]?.status).toBe('failed');
+    expect(result.current.attachments[0]?.errorMessage).toContain('Coba lagi');
+  });
+
+  it('offers a send-to-canvas action on assistant responses', () => {
+    const onSendToCanvas = vi.fn();
+    render(<WorkspaceConversation messages={[{ id: 'u1', role: 'user', content: 'Ringkas hasilnya.' }, { id: 'a1', role: 'assistant', content: 'Ringkasan hasil penelitian.' }]}
+      activeStreamingMessage={null} isStreaming={false} artifacts={[]} starterTasks={[]}
+      onSelectStarterTask={noop} onRetryMessage={noop} onOpenCanvas={noop} onSendToCanvas={onSendToCanvas} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Kirim ke Canvas' }));
+    expect(onSendToCanvas).toHaveBeenCalledWith('Ringkasan hasil penelitian.');
+  });
+
+  it('rejects unsupported file types without starting an upload', () => {
+    vi.mocked(processFileForWorkspace).mockClear();
+    const { result } = renderHook(() => useWorkspaceFileIngestion());
+    const unsupported = new File(['binary'], 'payload.exe', { type: 'application/octet-stream' });
+    act(() => result.current.handleDrop({ preventDefault: noop, dataTransfer: { files: [unsupported] } } as unknown as React.DragEvent));
+    expect(result.current.attachments[0]?.status).toBe('failed');
+    expect(result.current.attachments[0]?.errorMessage).toContain('belum didukung');
+    expect(processFileForWorkspace).not.toHaveBeenCalled();
+  });
+
+  it('caps active documents at the configured Workspace limit', () => {
+    vi.mocked(processFileForWorkspace).mockImplementation(() => new Promise(() => undefined));
+    const { result } = renderHook(() => useWorkspaceFileIngestion());
+    const files = Array.from({ length: 9 }, (_, index) => new File([String(index)], `doc-${index}.txt`, { type: 'text/plain' }));
+    act(() => result.current.handleDrop({ preventDefault: noop, dataTransfer: { files } } as unknown as React.DragEvent));
+    expect(result.current.attachments).toHaveLength(8);
   });
 
   it('does not restore an attachment after the user removes it during processing', async () => {
@@ -289,13 +341,33 @@ describe('RuangKerja UX foundation', () => {
     act(() => {
       result.current.handleDrop({ preventDefault: noop, dataTransfer: { files: [file] } } as unknown as React.DragEvent);
     });
-    expect(result.current.attachedFile?.status).toBe('uploading');
-    act(() => result.current.removeAttachedFile());
+    expect(result.current.attachments[0]?.status).toBe('uploading');
+    await act(async () => result.current.removeAttachment(result.current.attachments[0]));
     await act(async () => {
       resolveProcess({ valid: true, file: { ...artifact, name: file.name, size: file.size, status: 'ready' } });
       await Promise.resolve();
     });
-    expect(result.current.attachedFile).toBeNull();
+    expect(result.current.attachments).toHaveLength(0);
+  });
+
+  it('cancels one upload without stopping the other attachment', async () => {
+    const pending = new Map<string, { signal?: AbortSignal; resolve: (value: { valid: true; file: { id: string; name: string; size: number; status: 'ready' } }) => void }>();
+    vi.mocked(processFileForWorkspace).mockImplementation((file, _chatId, signal) => new Promise(resolve => {
+      pending.set(file.name, { signal, resolve: resolve as (value: { valid: true; file: { id: string; name: string; size: number; status: 'ready' } }) => void });
+    }));
+    const { result } = renderHook(() => useWorkspaceFileIngestion());
+    const fileA = new File(['a'], 'a.txt', { type: 'text/plain' });
+    const fileB = new File(['b'], 'b.txt', { type: 'text/plain' });
+    act(() => result.current.handleDrop({ preventDefault: vi.fn(), dataTransfer: { files: [fileA, fileB] } } as unknown as React.DragEvent));
+    expect(result.current.attachments).toHaveLength(2);
+    const attachmentA = result.current.attachments.find(attachment => attachment.name === 'a.txt')!;
+    await act(async () => result.current.removeAttachment(attachmentA));
+    expect(pending.get('a.txt')?.signal?.aborted).toBe(true);
+    await act(async () => {
+      pending.get('b.txt')?.resolve({ valid: true, file: { id: 'server-b', name: 'b.txt', size: fileB.size, status: 'ready' } });
+      await Promise.resolve();
+    });
+    expect(result.current.attachments.map(attachment => [attachment.name, attachment.status])).toEqual([['b.txt', 'ready']]);
   });
 
   it('renders canvas empty state and creates a document from its action', () => {
@@ -341,6 +413,8 @@ describe('RuangKerja UX foundation', () => {
       onDeletePreset: vi.fn()
     });
 
+    expect(screen.queryByRole('button', { name: /Preset AI: Seimbang/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Opsi/ }));
     const trigger = screen.getByRole('button', { name: /Preset AI: Seimbang/ });
     expect(trigger).toBeInTheDocument();
     fireEvent.click(trigger);

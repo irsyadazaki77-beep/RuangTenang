@@ -56,6 +56,7 @@ const TOOL_ICONS: Record<string, React.ReactNode> = {
 
 export const WorkspaceToolSelector: React.FC<WorkspaceToolSelectorProps> = ({
   artifactType,
+  hasArtifact,
   disabled = false,
   onSelectTool,
   className = '',
@@ -78,17 +79,19 @@ export const WorkspaceToolSelector: React.FC<WorkspaceToolSelectorProps> = ({
 
   // Filter tools based on active artifact context and category
   const availableTools = useMemo(() => {
-    const contextTools = WorkspaceToolRegistry.getToolsForArtifact(artifactType);
-    if (selectedCategory === 'ALL') return contextTools;
-    return contextTools.filter(t => t.category === selectedCategory);
-  }, [artifactType, selectedCategory]);
+  const contextTools = WorkspaceToolRegistry.getToolsForArtifact(artifactType);
+    const artifactAwareTools = hasArtifact === false ? contextTools.filter(tool => !tool.requiresArtifact) : contextTools;
+    if (selectedCategory === 'ALL') return artifactAwareTools;
+    return artifactAwareTools.filter(t => t.category === selectedCategory);
+  }, [artifactType, hasArtifact, selectedCategory]);
 
   const categories = useMemo(() => {
-    const contextTools = WorkspaceToolRegistry.getToolsForArtifact(artifactType);
+    const contextTools = WorkspaceToolRegistry.getToolsForArtifact(artifactType)
+      .filter(tool => hasArtifact !== false || !tool.requiresArtifact);
     const catSet = new Set<WorkspaceToolCategory>();
     contextTools.forEach(t => catSet.add(t.category));
     return Array.from(catSet);
-  }, [artifactType]);
+  }, [artifactType, hasArtifact]);
 
   return (
     <div className={`relative ${className}`} ref={dropdownRef}>

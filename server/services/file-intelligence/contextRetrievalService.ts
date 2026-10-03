@@ -1,14 +1,16 @@
 import { prisma } from '../../database.js';
-import { DocumentChunk, FileSourceReference } from '../../../shared/contracts/files.js';
+import { DocumentChunk, FileSourceReference, WorkspaceContextSnapshot } from '../../../shared/contracts/files.js';
 import { scanAndSanitizePII } from '../piiService.js';
 import { detectPromptInjection } from '../../security.js';
 import { encryptionService } from '../encryptionService.js';
+import { randomUUID } from 'crypto';
 
 export interface RetrievedDocumentContext {
   contextBlock: string;
   sourceReferences: FileSourceReference[];
   chunksSelected: DocumentChunk[];
   totalTokensUsed: number;
+  snapshot: WorkspaceContextSnapshot;
 }
 
 export interface ContextRetrievalOptions {
@@ -64,23 +66,39 @@ export const contextRetrievalService = {
       maxChunks = 8
     } = options;
 
+    const emptyResult = (): RetrievedDocumentContext => ({
+      contextBlock: '',
+      sourceReferences: [],
+      chunksSelected: [],
+      totalTokensUsed: 0,
+      snapshot: {
+        id: randomUUID(),
+        query: userQuery,
+        createdAt: new Date().toISOString(),
+        selectedAttachmentIds: [],
+        selectedChunks: [],
+        sourceReferences: [],
+        tokenBudget: maxTokens,
+        totalTokensUsed: 0
+      }
+    });
+    if (maxTokens <= 0 || maxChunks <= 0) return emptyResult();
+
     // 1. Find matching attachments scoped strictly by user (IDOR prevention)
-    const attachmentWhere: any = {
+    const attachmentWhere: Record<string, unknown> = {
       userId,
       status: 'ready'
     };
 
-    if (attachmentIds && attachmentIds.length > 0) {
+    if (Array.isArray(attachmentIds)) {
+      if (attachmentIds.length === 0) return emptyResult();
       attachmentWhere.id = { in: attachmentIds };
+      // Explicit attachment IDs are valid only inside their active conversation.
+      if (chatId) attachmentWhere.chatId = chatId;
     } else if (chatId) {
       attachmentWhere.chatId = chatId;
     } else {
-      return {
-        contextBlock: '',
-        sourceReferences: [],
-        chunksSelected: [],
-        totalTokensUsed: 0
-      };
+      return emptyResult();
     }
 
     const readyAttachments = await prisma.attachments.findMany({
@@ -89,12 +107,7 @@ export const contextRetrievalService = {
     });
 
     if (readyAttachments.length === 0) {
-      return {
-        contextBlock: '',
-        sourceReferences: [],
-        chunksSelected: [],
-        totalTokensUsed: 0
-      };
+      return emptyResult();
     }
 
     const targetAttachmentIds = readyAttachments.map(a => a.id);
@@ -113,12 +126,7 @@ export const contextRetrievalService = {
     });
 
     if (rawChunks.length === 0) {
-      return {
-        contextBlock: '',
-        sourceReferences: [],
-        chunksSelected: [],
-        totalTokensUsed: 0
-      };
+      return emptyResult();
     }
 
     // 3. Score chunks against user query terms
@@ -157,7 +165,7 @@ export const contextRetrievalService = {
       if (currentTokens + tokenEst > maxTokens) {
         if (selectedChunks.length === 0) {
           // If even the first chunk exceeds maxTokens, truncate to fit budget
-          const maxChars = Math.max(100, maxTokens * 4);
+          const maxChars = Math.max(0, maxTokens * 4 - 3);
           textContent = textContent.substring(0, maxChars) + '...';
           tokenEst = Math.ceil(textContent.length / 4);
         } else {
@@ -203,12 +211,7 @@ export const contextRetrievalService = {
     }
 
     if (selectedChunks.length === 0) {
-      return {
-        contextBlock: '',
-        sourceReferences: [],
-        chunksSelected: [],
-        totalTokensUsed: 0
-      };
+      return emptyResult();
     }
 
     // 5. Build untrusted context block with strict isolation & prompt injection boundary tags
@@ -232,7 +235,17 @@ ${chunkBlocks.join('\n---\n\n')}
       contextBlock,
       sourceReferences: sourceRefs,
       chunksSelected: selectedChunks,
-      totalTokensUsed: currentTokens
+      totalTokensUsed: currentTokens,
+      snapshot: {
+        id: randomUUID(),
+        query: userQuery,
+        createdAt: new Date().toISOString(),
+        selectedAttachmentIds: [...new Set(selectedChunks.map(chunk => chunk.documentId))],
+        selectedChunks,
+        sourceReferences: sourceRefs,
+        tokenBudget: maxTokens,
+        totalTokensUsed: currentTokens
+      }
     };
   }
 };

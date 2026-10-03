@@ -1,20 +1,14 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { 
-  FileText, 
-  FileSpreadsheet, 
-  Presentation, 
-  FileCode, 
-  Image as ImageIcon, 
-  X, 
+import {
   Paperclip, 
   Sparkles, 
   StopCircle, 
   Send,
-  CheckCircle2,
-  AlertCircle,
-  Loader2
+  SlidersHorizontal
 } from 'lucide-react';
 import { WorkspaceFileAttachment, AcademicPromptPill, WorkspaceComposerConfig, WorkspaceResponseMode, WorkspaceResponseStyle } from '../types';
+import { WorkspaceAttachmentList } from './WorkspaceAttachmentList';
+import { MAX_WORKSPACE_ACTIVE_ATTACHMENTS, SUPPORTED_WORKSPACE_FILE_EXTENSIONS } from '../../../../shared/contracts/files';
 import { DistressDetectionResult } from '../utils/distressDetector';
 import { AcademicDistressBanner } from './AcademicDistressBanner';
 import { WorkspaceModelSelector } from './WorkspaceModelSelector';
@@ -28,11 +22,15 @@ import { ArtifactType } from '../types';
 
 interface WorkspaceComposerProps {
   activeArtifactType?: ArtifactType | null;
+  activeArtifactTitle?: string | null;
+  selectedText?: string;
   onSelectTool?: (tool: WorkspaceToolDefinition) => void;
   inputText: string;
   setInputText: (text: string) => void;
-  attachedFile: WorkspaceFileAttachment | null;
+  attachments?: WorkspaceFileAttachment[];
+  attachedFile?: WorkspaceFileAttachment | null;
   isStreaming: boolean;
+  isDisabled?: boolean;
   distressResult: DistressDetectionResult;
   isDistressDismissed: boolean;
   promptPills: AcademicPromptPill[];
@@ -49,6 +47,8 @@ interface WorkspaceComposerProps {
   onAbortStream: () => void;
   onOpenTemplateGallery: () => void;
   onRemoveAttachedFile: () => void;
+  onRemoveAttachment?: (attachment: WorkspaceFileAttachment) => void;
+  onRetryAttachment?: (attachment: WorkspaceFileAttachment) => void;
   onFileUploadChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onOpenBreathing: () => void;
   onSwitchToRuangTenang: () => void;
@@ -69,11 +69,15 @@ interface WorkspaceComposerProps {
 
 export const WorkspaceComposer: React.FC<WorkspaceComposerProps> = React.memo(({
   activeArtifactType,
+  activeArtifactTitle,
+  selectedText = '',
   onSelectTool,
   inputText,
   setInputText,
   attachedFile,
+  attachments,
   isStreaming,
+  isDisabled = false,
   distressResult,
   isDistressDismissed,
   promptPills,
@@ -90,6 +94,8 @@ export const WorkspaceComposer: React.FC<WorkspaceComposerProps> = React.memo(({
   onAbortStream,
   onOpenTemplateGallery,
   onRemoveAttachedFile,
+  onRemoveAttachment,
+  onRetryAttachment = () => undefined,
   onFileUploadChange,
   onOpenBreathing,
   onSwitchToRuangTenang,
@@ -106,6 +112,11 @@ export const WorkspaceComposer: React.FC<WorkspaceComposerProps> = React.memo(({
   onDeletePreset,
   onResetPersonalization
 }) => {
+  const activeAttachments = attachments ?? (attachedFile ? [attachedFile] : []);
+  const hasAttachments = activeAttachments.length > 0;
+  const hasPendingAttachment = activeAttachments.some(attachment => attachment.status === 'uploading' || attachment.status === 'processing');
+  const hasFailedAttachment = activeAttachments.some(attachment => attachment.status === 'failed' || attachment.status === 'error');
+  const readyAttachments = activeAttachments.filter((attachment): attachment is WorkspaceFileAttachment & { id: string } => attachment.status === 'ready' && Boolean(attachment.id));
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [responseMode, setResponseMode] = useState<WorkspaceResponseMode>(activePreset?.responseMode || 'Seimbang');
   const [responseStyle, setResponseStyle] = useState<WorkspaceResponseStyle>(activePreset?.responseStyle || 'Default');
@@ -116,6 +127,7 @@ export const WorkspaceComposer: React.FC<WorkspaceComposerProps> = React.memo(({
     if (activePreset?.responseStyle) setResponseStyle(activePreset.responseStyle);
   }, [activePreset?.id, activePreset?.responseMode, activePreset?.responseStyle]);
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [optionsOpen, setOptionsOpen] = useState(false);
   const [inputFocused, setInputFocused] = useState(false);
   const advancedTriggerRef = useRef<HTMLButtonElement>(null);
 
@@ -148,29 +160,21 @@ export const WorkspaceComposer: React.FC<WorkspaceComposerProps> = React.memo(({
 
   const handleSend = () => {
     let prompt = inputText.trim();
-    const currentAttachment = attachedFile;
-    if (!prompt && !currentAttachment) return;
-
-    // If there is an attachment but it's not ready, don't allow sending
-    if (currentAttachment && (currentAttachment.status === 'uploading' || currentAttachment.status === 'processing')) {
-      return;
+    if (!prompt && !hasAttachments) return;
+    if (hasPendingAttachment || hasFailedAttachment || readyAttachments.length !== activeAttachments.length) return;
+    if (!prompt && readyAttachments.length) {
+      prompt = `Mohon telaah dan analisis dokumen berikut secara mendalam: ${readyAttachments.map(attachment => `"${attachment.name}"`).join(', ')}.`;
     }
 
-    if (!prompt && currentAttachment) {
-      if (currentAttachment.status !== 'ready' || !currentAttachment.id) return;
-      prompt = `Mohon telaah dan analisis dokumen "${currentAttachment.name}" ini secara mendalam.`;
-    }
-
-    const attachmentsToSend: StoredAttachment[] | undefined = currentAttachment && currentAttachment.id ? [{
-      id: currentAttachment.id,
-      filename: currentAttachment.name,
-      mimeType: currentAttachment.mimeType,
-      size: currentAttachment.size ?? 0,
-      url: currentAttachment.url
-    }] : undefined;
+    const attachmentsToSend: StoredAttachment[] | undefined = readyAttachments.length ? readyAttachments.map(attachment => ({
+      id: attachment.id,
+      filename: attachment.name,
+      mimeType: attachment.mimeType || 'application/octet-stream',
+      size: attachment.size ?? 0,
+      url: attachment.url
+    })) : undefined;
 
     if (compareMode && selectedCompareModels.length < 2) return;
-    if (compareMode && attachmentsToSend?.length) return;
 
     onSendMessage(prompt, attachmentsToSend, {
       aiModel: selectedModel,
@@ -182,24 +186,7 @@ export const WorkspaceComposer: React.FC<WorkspaceComposerProps> = React.memo(({
       qualityPreference: activePreset?.qualityPreference,
       comparisonModelIds: compareMode ? [...selectedCompareModels] : undefined
     });
-    onRemoveAttachedFile();
     setInputText('');
-  };
-
-  const getFormatIcon = (kind?: string, mime?: string) => {
-    if (kind === 'xlsx' || mime?.includes('spreadsheet')) {
-      return <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />;
-    }
-    if (kind === 'pptx' || mime?.includes('presentation')) {
-      return <Presentation className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />;
-    }
-    if (kind === 'code' || kind === 'json' || kind === 'csv') {
-      return <FileCode className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />;
-    }
-    if (kind === 'image' || mime?.startsWith('image/')) {
-      return <ImageIcon className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400 shrink-0" />;
-    }
-    return <FileText className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400 shrink-0" />;
   };
 
   return (
@@ -215,10 +202,29 @@ export const WorkspaceComposer: React.FC<WorkspaceComposerProps> = React.memo(({
       )}
 
       {/* Quiet Contextual Suggestions Strip */}
-      <div className="relative w-full mb-1.5 overflow-hidden">
+      {(activeAttachments.some(item => item.status === 'ready') || activeArtifactTitle || selectedText.trim()) && (
+        <details className="group mb-1.5 text-[11px] text-slate-500 dark:text-slate-400">
+          <summary className="w-fit max-w-full cursor-pointer list-none rounded-md px-1.5 py-1 hover:bg-slate-100 dark:hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
+            <span className="font-medium">Konteks:</span>{' '}
+            {[
+              activeAttachments.filter(item => item.status === 'ready').length ? `${activeAttachments.filter(item => item.status === 'ready').length} sumber` : '',
+              activeArtifactTitle || '',
+              selectedText.trim() ? 'pilihan teks' : ''
+            ].filter(Boolean).join(' · ')}
+            <span className="ml-1 text-slate-400 group-open:hidden">Detail</span>
+          </summary>
+          <div className="mt-1 max-w-xl space-y-0.5 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-[11px] dark:border-slate-700 dark:bg-slate-900">
+            {activeAttachments.filter(item => item.status === 'ready').map(file => <div key={file.id || file.clientId}>Sumber: {file.name}</div>)}
+            {activeArtifactTitle && <div>Canvas: {activeArtifactTitle}</div>}
+            {selectedText.trim() && <div>Teks terpilih diprioritaskan ({selectedText.length.toLocaleString('id-ID')} karakter)</div>}
+            <div>Percakapan aktif digunakan sebagai konteks pendukung.</div>
+          </div>
+        </details>
+      )}
+      <div className={`relative w-full mb-1.5 overflow-hidden ${inputText.trim() ? 'hidden' : ''}`}>
         <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5 text-xs text-slate-500">
-          <span className="shrink-0 font-medium select-none pr-1 text-[11px]">Coba:</span>
-          {promptPills.slice(0, 5).map((pill, idx) => (
+          <span className="shrink-0 font-medium select-none pr-1 text-[11px]">Mulai:</span>
+          {promptPills.slice(0, 3).map((pill, idx) => (
             <button
               key={idx}
               type="button"
@@ -234,67 +240,12 @@ export const WorkspaceComposer: React.FC<WorkspaceComposerProps> = React.memo(({
       {/* Compact Floating Composer Container */}
       <div className="relative rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 focus-within:border-emerald-500/80 focus-within:ring-1 focus-within:ring-emerald-500/30 transition-all p-2">
         {modelPreferenceNotice && <p role="status" className="mb-1 px-1 text-[11px] text-amber-700 dark:text-amber-300">{modelPreferenceNotice}</p>}
-        {/* Attached File Chip with Format-Aware Status */}
-        {attachedFile && (
-          <div aria-live="polite" className="flex items-center gap-2 mb-1.5 px-2.5 py-1.5 bg-slate-100 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-800 dark:text-slate-200 animate-fade-in min-w-0 max-w-full overflow-hidden">
-            {getFormatIcon(attachedFile.fileKind, attachedFile.mimeType)}
-            <span className="truncate min-w-0 max-w-[200px] font-medium" title={attachedFile.name}>
-              {attachedFile.name}
-            </span>
-            {typeof attachedFile.size === 'number' && (
-              <span className="shrink-0 text-[10px] text-slate-400">
-                {attachedFile.size < 1024 * 1024
-                  ? `${Math.max(1, Math.round(attachedFile.size / 1024))} KB`
-                  : `${(attachedFile.size / (1024 * 1024)).toFixed(1)} MB`}
-              </span>
-            )}
-            
-            {/* Status indicator */}
-            {attachedFile.status === 'uploading' && (
-              <span className="flex items-center gap-1 text-[11px] text-amber-600 dark:text-amber-400 font-normal ml-auto">
-                <Loader2 className="w-3 h-3 animate-spin" />
-                <span>Mengunggah...</span>
-              </span>
-            )}
-            {attachedFile.status === 'processing' && (
-              <span className="flex items-center gap-1 text-[11px] text-blue-600 dark:text-blue-400 font-normal ml-auto">
-                <Loader2 className="w-3 h-3 animate-spin" />
-                <span>Memproses...</span>
-              </span>
-            )}
-            {attachedFile.status === 'ready' && (
-              <span className="flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-medium ml-auto">
-                <CheckCircle2 className="w-3 h-3" />
-                <span>
-                  {attachedFile.pageCount 
-                    ? `${attachedFile.pageCount} hal` 
-                    : attachedFile.slideCount 
-                      ? `${attachedFile.slideCount} slide` 
-                      : attachedFile.sheetCount 
-                        ? `${attachedFile.sheetCount} sheet` 
-                        : 'Siap'}
-                </span>
-              </span>
-            )}
-            {(attachedFile.status === 'failed' || attachedFile.status === 'error') && (
-              <span className="flex items-center gap-1 text-[11px] text-rose-600 dark:text-rose-400 font-medium ml-auto">
-                <AlertCircle className="w-3 h-3" />
-                <span title={attachedFile.errorMessage || 'Dokumen belum selesai diproses. Coba pilih file lagi.'}>Gagal</span>
-              </span>
-            )}
-
-            <button
-              type="button"
-              onClick={onRemoveAttachedFile}
-              disabled={isStreaming}
-              className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 transition-colors cursor-pointer ml-1"
-              title="Hapus lampiran"
-              aria-label="Hapus lampiran dokumen"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        )}
+        <WorkspaceAttachmentList
+          attachments={activeAttachments}
+          disabled={isStreaming || isDisabled}
+          onRemove={attachment => onRemoveAttachment ? onRemoveAttachment(attachment) : onRemoveAttachedFile()}
+          onRetry={onRetryAttachment}
+        />
 
         {/* Textarea */}
         <textarea
@@ -313,6 +264,7 @@ export const WorkspaceComposer: React.FC<WorkspaceComposerProps> = React.memo(({
           aria-label="Pesan untuk Asisten RuangKerja"
           aria-describedby="workspace-composer-hint"
           rows={1}
+          disabled={isDisabled}
           maxLength={maxInputLength}
           className="w-full max-h-40 overflow-y-auto text-xs sm:text-sm px-1 py-1 bg-transparent text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none resize-none leading-relaxed min-h-[40px]"
         />
@@ -321,93 +273,62 @@ export const WorkspaceComposer: React.FC<WorkspaceComposerProps> = React.memo(({
         )}
 
         {/* Action Bar Inside Composer */}
-        <div className="flex items-center justify-between pt-1 border-t border-slate-200/60 dark:border-slate-800">
-          {/* Left Controls: Preset, Model, Mode/Style, Attach, Template */}
-          <div className="flex min-w-0 items-center gap-1 overflow-x-auto no-scrollbar">
-            {allPresets && activePreset && onSelectPreset && onCreatePreset && onUpdatePreset && onDuplicatePreset && onDeletePreset && (
-              <WorkspacePresetSelector
-                allPresets={allPresets}
-                activePreset={activePreset}
-                activePresetId={activePresetId || activePreset.id}
-                summary={presetSummary || activePreset.name}
-                isManualOverride={isManualModelOverride}
-                disabled={isStreaming}
-                onSelectPreset={onSelectPreset}
-                onCreatePreset={onCreatePreset}
-                onUpdatePreset={onUpdatePreset}
-                onDuplicatePreset={onDuplicatePreset}
-                onDeletePreset={onDeletePreset}
-                onResetPersonalization={onResetPersonalization}
-              />
-            )}
-            {compareMode ? (
-              <WorkspaceCompareModelSelector selectedModelIds={selectedCompareModels} onChange={onCompareModelsChange} disabled={isStreaming} hasAttachment={Boolean(attachedFile)} />
-            ) : <WorkspaceModelSelector value={selectedModel} onChange={onModelChange} disabled={isStreaming} />}
-            <button type="button" disabled={isStreaming} aria-pressed={compareMode} onClick={() => onCompareModeChange(!compareMode)} className={`h-8 rounded-lg px-2 text-xs font-medium transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${compareMode ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' : 'text-slate-500 hover:bg-slate-200/70 dark:hover:bg-slate-800'}`} title={compareMode ? 'Kembali ke mode Normal' : 'Aktifkan mode Compare'} aria-label={compareMode ? 'Nonaktifkan mode Compare' : 'Aktifkan mode Compare'}>{compareMode ? 'Keluar' : 'Normal'}</button>
-            <div className="relative shrink-0">
-              <button ref={advancedTriggerRef} type="button" aria-expanded={advancedOpen} aria-haspopup="dialog" onClick={() => setAdvancedOpen(value => !value)} className="h-9 rounded-lg px-2 text-xs text-slate-500 hover:bg-slate-200/70 dark:hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">Mode · Gaya</button>
-              {advancedOpen && <>
-                <button type="button" className="fixed inset-0 z-30 cursor-default" aria-label="Tutup pengaturan respons" onClick={closeAdvanced} />
-                <div role="dialog" aria-label="Pengaturan respons dan konteks" onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); closeAdvanced(); } }} className="fixed inset-x-2 bottom-20 z-40 w-auto rounded-xl border border-slate-200 bg-white p-3 shadow-xl dark:border-slate-700 dark:bg-slate-900 md:absolute md:inset-x-auto md:bottom-full md:left-0 md:mb-2 md:w-[min(18rem,calc(100vw-2rem))]">
-                  <label className="block text-xs font-medium">Mode respons
-                    <select value={responseMode} onChange={event => setResponseMode(event.target.value as WorkspaceResponseMode)} className="mt-1 h-9 w-full rounded-lg border border-slate-200 bg-transparent px-2 dark:border-slate-700">
-                      <option>Ringkas</option><option>Seimbang</option><option>Mendalam</option>
-                    </select>
-                  </label>
-                  <label className="mt-3 block text-xs font-medium">Gaya (opsional)
-                    <select value={responseStyle} onChange={event => setResponseStyle(event.target.value as WorkspaceResponseStyle)} className="mt-1 h-9 w-full rounded-lg border border-slate-200 bg-transparent px-2 dark:border-slate-700">
-                      <option value="Default">Default</option><option>Akademik</option><option>Langkah demi langkah</option><option>Formal</option>
-                    </select>
-                  </label>
-                  <div className="mt-3 border-t border-slate-100 pt-2 text-[11px] text-slate-500 dark:border-slate-800">
-                    <div className="font-medium text-slate-600 dark:text-slate-300">Konteks sesi</div>
-                    <div>{attachedFile ? `1 lampiran · ${attachedFile.name}` : 'Tanpa lampiran'}</div>
-                    <div>Percakapan ini · riwayat percakapan aktif</div>
-                  </div>
-                </div>
-              </>}
-            </div>
+        <div className="flex items-center justify-between gap-1 pt-1 border-t border-slate-200/60 dark:border-slate-800">
+          <div className="flex min-w-0 items-center gap-1">
             <input
               type="file"
               ref={fileInputRef}
               onChange={onFileUploadChange}
-              disabled={isStreaming}
-              accept=".txt,.md,.pdf,.docx,.py,.js,.ts,.java,.cpp,.c,.json,.csv,.sql"
+              multiple
+              disabled={isStreaming || isDisabled}
+              accept={SUPPORTED_WORKSPACE_FILE_EXTENSIONS.map(extension => `.${extension}`).join(',')}
               className="hidden"
             />
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              disabled={isStreaming}
-              className="h-7 px-2 rounded-md text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-800 transition-colors cursor-pointer text-xs font-medium flex items-center gap-1"
-              title="Lampirkan dokumen atau kode"
+              disabled={isStreaming || isDisabled}
+              className="h-8 w-8 shrink-0 rounded-lg text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-800 transition-colors cursor-pointer flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+              title={`Lampirkan dokumen atau kode (maksimal ${MAX_WORKSPACE_ACTIVE_ATTACHMENTS})`}
               aria-label="Lampirkan dokumen atau kode"
             >
-              <Paperclip className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Lampirkan</span>
+              <Paperclip className="w-4 h-4" />
             </button>
-
-            <button
-              type="button"
-              onClick={onOpenTemplateGallery}
-              className="h-7 px-2 rounded-md text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-800 transition-colors text-xs font-medium cursor-pointer flex items-center gap-1"
-              title="Buka Galeri Template"
-              aria-label="Template"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-              <span className="hidden sm:inline">Template</span>
-            </button>
-
-            {/* Workspace Tool Selector Shortcut */}
-            {onSelectTool && (
-              <WorkspaceToolSelector
-                artifactType={activeArtifactType}
-                hasArtifact={Boolean(activeArtifactType)}
-                disabled={isStreaming || compareMode}
-                onSelectTool={onSelectTool}
-                triggerVariant="composer"
-              />
-            )}
+            {compareMode ? (
+              <WorkspaceCompareModelSelector selectedModelIds={selectedCompareModels} onChange={onCompareModelsChange} disabled={isStreaming} hasAttachment={hasAttachments} />
+            ) : <WorkspaceModelSelector value={selectedModel} onChange={onModelChange} disabled={isStreaming} />}
+            <div className="relative shrink-0">
+              <button type="button" disabled={isStreaming || isDisabled} aria-label="Opsi Workspace" aria-expanded={optionsOpen} aria-haspopup="dialog" aria-controls="workspace-composer-options" onClick={() => setOptionsOpen(value => !value)} className={`inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${optionsOpen ? 'relative z-50 bg-slate-200 text-slate-800 dark:bg-slate-800 dark:text-slate-100' : 'text-slate-500 hover:bg-slate-200/70 dark:hover:bg-slate-800'}`}>
+                <SlidersHorizontal className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Opsi</span>
+              </button>
+              {optionsOpen && <>
+                <button type="button" className="fixed inset-0 z-30 cursor-default" aria-label="Tutup opsi composer" onClick={() => { setOptionsOpen(false); setAdvancedOpen(false); }} />
+                <div id="workspace-composer-options" role="dialog" aria-label="Opsi Workspace" onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); setOptionsOpen(false); setAdvancedOpen(false); } }} className="absolute bottom-full left-0 z-40 mb-2 w-[min(22rem,calc(100vw-2rem))] max-h-[min(65dvh,32rem)] overflow-y-auto rounded-xl border border-slate-200 bg-white p-2 shadow-xl dark:border-slate-700 dark:bg-slate-900">
+                  <div className="flex flex-wrap items-center gap-1 border-b border-slate-100 pb-2 dark:border-slate-800">
+                    {allPresets && activePreset && onSelectPreset && onCreatePreset && onUpdatePreset && onDuplicatePreset && onDeletePreset && (
+                      <WorkspacePresetSelector allPresets={allPresets} activePreset={activePreset} activePresetId={activePresetId || activePreset.id} summary={presetSummary || activePreset.name} isManualOverride={isManualModelOverride} disabled={isStreaming} onSelectPreset={onSelectPreset} onCreatePreset={onCreatePreset} onUpdatePreset={onUpdatePreset} onDuplicatePreset={onDuplicatePreset} onDeletePreset={onDeletePreset} onResetPersonalization={onResetPersonalization} />
+                    )}
+                    <button type="button" disabled={isStreaming} aria-pressed={compareMode} onClick={() => onCompareModeChange(!compareMode)} className={`h-8 rounded-lg px-2 text-xs font-medium transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${compareMode ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'}`} title={compareMode ? 'Kembali ke mode Normal' : 'Bandingkan jawaban dari beberapa model'}>{compareMode ? 'Compare aktif' : 'Compare'}</button>
+                    <div className="relative shrink-0">
+                      <button ref={advancedTriggerRef} type="button" aria-expanded={advancedOpen} aria-haspopup="dialog" onClick={() => setAdvancedOpen(value => !value)} className="h-8 rounded-lg px-2 text-xs text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">Respons</button>
+                      {advancedOpen && <>
+                        <button type="button" className="fixed inset-0 z-30 cursor-default" aria-label="Tutup pengaturan respons" onClick={closeAdvanced} />
+                        <div role="dialog" aria-label="Pengaturan respons dan konteks" onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); closeAdvanced(); } }} className="fixed inset-x-2 bottom-20 z-40 w-auto rounded-xl border border-slate-200 bg-white p-3 shadow-xl dark:border-slate-700 dark:bg-slate-900 md:absolute md:inset-x-auto md:bottom-full md:left-0 md:mb-2 md:w-[min(18rem,calc(100vw-2rem))]">
+                          <label className="block text-xs font-medium">Mode respons<select value={responseMode} onChange={event => setResponseMode(event.target.value as WorkspaceResponseMode)} className="mt-1 h-9 w-full rounded-lg border border-slate-200 bg-transparent px-2 dark:border-slate-700"><option>Ringkas</option><option>Seimbang</option><option>Mendalam</option></select></label>
+                          <label className="mt-3 block text-xs font-medium">Gaya (opsional)<select value={responseStyle} onChange={event => setResponseStyle(event.target.value as WorkspaceResponseStyle)} className="mt-1 h-9 w-full rounded-lg border border-slate-200 bg-transparent px-2 dark:border-slate-700"><option value="Default">Default</option><option>Akademik</option><option>Langkah demi langkah</option><option>Formal</option></select></label>
+                          <div className="mt-3 border-t border-slate-100 pt-2 text-[11px] text-slate-500 dark:border-slate-800"><div className="font-medium text-slate-600 dark:text-slate-300">Konteks sesi</div><div>{hasAttachments ? `${activeAttachments.length} dokumen · ${activeAttachments.slice(0, 2).map(attachment => attachment.name).join(', ')}${activeAttachments.length > 2 ? ', …' : ''}` : 'Tanpa dokumen'}</div><div>Percakapan ini · riwayat percakapan aktif</div></div>
+                        </div>
+                      </>}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1 pt-2">
+                    <button type="button" onClick={onOpenTemplateGallery} disabled={isDisabled} className="h-8 rounded-lg px-2 text-xs text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"><Sparkles className="mr-1 inline h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />Template</button>
+                    {onSelectTool && <WorkspaceToolSelector artifactType={activeArtifactType} hasArtifact={Boolean(activeArtifactType)} disabled={isStreaming || isDisabled || compareMode} onSelectTool={tool => { setOptionsOpen(false); onSelectTool(tool); }} triggerVariant="composer" />}
+                  </div>
+                </div>
+              </>}
+            </div>
           </div>
 
           {/* Right Controls: Enter Hint & Send */}
@@ -431,18 +352,16 @@ export const WorkspaceComposer: React.FC<WorkspaceComposerProps> = React.memo(({
                 type="button"
                 onClick={handleSend}
                 disabled={
-                  (!inputText.trim() && !attachedFile) ||
-                  (attachedFile?.status === 'uploading') ||
-                  (attachedFile?.status === 'processing') ||
-                  (attachedFile?.status === 'ready' && !attachedFile.id) ||
-                  (attachedFile?.status === 'failed' && !inputText.trim()) ||
-                  (compareMode && (selectedCompareModels.length < 2 || Boolean(attachedFile)))
+                  isDisabled ||
+                  (!inputText.trim() && !hasAttachments) ||
+                  hasPendingAttachment || hasFailedAttachment ||
+                  (hasAttachments && readyAttachments.length !== activeAttachments.length) ||
+                  (compareMode && selectedCompareModels.length < 2)
                 }
                 className={`h-7 w-7 rounded-lg flex items-center justify-center transition-all cursor-pointer ${
-                  (inputText.trim() || (attachedFile && attachedFile.status === 'ready')) &&
-                  attachedFile?.status !== 'uploading' &&
-                  attachedFile?.status !== 'processing' &&
-                  !(attachedFile?.status === 'ready' && !attachedFile.id)
+                  (inputText.trim() || readyAttachments.length > 0) &&
+                  !hasPendingAttachment && !hasFailedAttachment &&
+                  (!hasAttachments || readyAttachments.length === activeAttachments.length)
                     ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs active:scale-95'
                     : 'bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
                 }`}

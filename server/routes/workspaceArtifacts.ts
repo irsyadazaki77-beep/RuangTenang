@@ -24,7 +24,8 @@ const autoSaveArtifactSchema = z.object({
   type: artifactTypeSchema.optional(),
   language: z.string().nullable().optional(),
   content: z.string().optional(),
-  createNewVersion: z.boolean().optional()
+  createNewVersion: z.boolean().optional(),
+  expectedUpdatedAt: z.string().datetime().optional()
 });
 
 const rollbackArtifactSchema = z.object({
@@ -242,6 +243,15 @@ router.put('/:id', requireAuth, async (req: Request, res: Response) => {
         success: false,
         code: 'NOT_FOUND',
         message: 'Artefak tidak ditemukan atau bukan milik Anda'
+      });
+    }
+
+    const { expectedUpdatedAt: _expectedUpdatedAt } = parsed.data;
+    if (_expectedUpdatedAt && existing.updatedAt.toISOString() !== _expectedUpdatedAt) {
+      return res.status(409).json({
+        success: false,
+        code: 'ARTIFACT_CONFLICT',
+        message: 'Dokumen berubah sejak revisi dimulai. Coba ulang revisi.'
       });
     }
 

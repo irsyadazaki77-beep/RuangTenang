@@ -1,8 +1,9 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Message } from '../../chat/types';
 import { WorkspaceArtifact } from '../types';
 import { WorkspaceApiService } from '../services/workspaceApiService';
 import { createWelcomeMessage } from '../constants/workspaceConstants';
+import { useToast } from '../../../components/Toast';
 
 interface UseWorkspacePersistenceOptions {
   chatId?: string;
@@ -15,20 +16,28 @@ interface UseWorkspacePersistenceReturn {
   persistedArtifacts: WorkspaceArtifact[];
   isLoadingMessages: boolean;
   isLoadingArtifacts: boolean;
-  clearMessages: () => void;
-  resetToWelcome: () => void;
+  clearWorkspaceConversation: (targetChatId?: string) => Promise<boolean>;
+  isClearingConversation: boolean;
 }
 
 export function useWorkspacePersistence({
   chatId,
   userName
 }: UseWorkspacePersistenceOptions): UseWorkspacePersistenceReturn {
+  const { showToast } = useToast();
+  const showToastRef = useRef(showToast);
+  showToastRef.current = showToast;
   const [messages, setMessages] = useState<Message[]>([createWelcomeMessage(userName)]);
   const [persistedArtifacts, setPersistedArtifacts] = useState<WorkspaceArtifact[]>([]);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [isLoadingArtifacts, setIsLoadingArtifacts] = useState(false);
+  const [isClearingConversation, setIsClearingConversation] = useState(false);
 
   const activeAbortControllerRef = useRef<AbortController | null>(null);
+  const activeChatIdRef = useRef(chatId);
+  const messageLoadGenerationRef = useRef(0);
+  const clearPromiseRef = useRef<Promise<boolean> | null>(null);
+  activeChatIdRef.current = chatId;
 
   useEffect(() => {
     // Abort previous pending requests on chatId change
@@ -39,6 +48,9 @@ export function useWorkspacePersistence({
     const abortController = new AbortController();
     activeAbortControllerRef.current = abortController;
     const { signal } = abortController;
+    const loadGeneration = ++messageLoadGenerationRef.current;
+    setMessages([createWelcomeMessage(userName)]);
+    setPersistedArtifacts([]);
 
     const loadWorkspaceData = async () => {
       setIsLoadingArtifacts(true);
@@ -58,16 +70,17 @@ export function useWorkspacePersistence({
           console.warn('[useWorkspacePersistence] Artifacts load error:', artifactsResult.reason);
         }
 
-        if (messagesResult.status === 'fulfilled') {
+        if (messagesResult.status === 'fulfilled' && messageLoadGenerationRef.current === loadGeneration) {
           const fetchedMsgs = messagesResult.value || [];
           if (fetchedMsgs.length > 0) {
             setMessages(fetchedMsgs);
           } else {
             setMessages([createWelcomeMessage(userName)]);
           }
-        } else if (messagesResult.reason?.name !== 'AbortError') {
+        } else if (messagesResult.status === 'rejected' && messagesResult.reason?.name !== 'AbortError' && messageLoadGenerationRef.current === loadGeneration) {
           console.warn('[useWorkspacePersistence] Messages load error:', messagesResult.reason);
           setMessages([createWelcomeMessage(userName)]);
+          showToastRef.current('Riwayat Workspace gagal dimuat. Periksa koneksi lalu coba lagi.', 'error');
         }
       } finally {
         if (!signal.aborted) {
@@ -84,20 +97,31 @@ export function useWorkspacePersistence({
     };
   }, [chatId, userName]);
 
-  const clearMessages = () => {
-    setMessages([
-      {
-        id: `msg_clear_${Date.now()}`,
-        role: 'assistant',
-        content: 'Obrolan telah dibersihkan. Siap memulai sesi pekerjaan akademik baru.',
-        createdAt: new Date()
+  const clearWorkspaceConversation = useCallback((targetChatId?: string): Promise<boolean> => {
+    if (clearPromiseRef.current) return clearPromiseRef.current;
+    const conversationId = targetChatId ?? chatId;
+    const clearOperation = (async () => {
+      setIsClearingConversation(true);
+      // Invalidate any initial-load response started before this clear request.
+      messageLoadGenerationRef.current += 1;
+      try {
+        if (conversationId) await WorkspaceApiService.clearMessages(conversationId);
+        if ((conversationId ?? undefined) === (activeChatIdRef.current ?? undefined)) {
+          setMessages([createWelcomeMessage(userName)]);
+        }
+        return true;
+      } catch (error) {
+        console.warn('[useWorkspacePersistence] Conversation clear failed:', error);
+        showToastRef.current('Percakapan gagal dibersihkan. Riwayat tetap ditampilkan.', 'error');
+        return false;
+      } finally {
+        setIsClearingConversation(false);
+        clearPromiseRef.current = null;
       }
-    ]);
-  };
-
-  const resetToWelcome = () => {
-    setMessages([createWelcomeMessage(userName)]);
-  };
+    })();
+    clearPromiseRef.current = clearOperation;
+    return clearOperation;
+  }, [chatId, userName]);
 
   return {
     messages,
@@ -105,7 +129,7 @@ export function useWorkspacePersistence({
     persistedArtifacts,
     isLoadingMessages,
     isLoadingArtifacts,
-    clearMessages,
-    resetToWelcome
+    clearWorkspaceConversation,
+    isClearingConversation
   };
 }

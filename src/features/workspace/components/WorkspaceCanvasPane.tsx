@@ -10,8 +10,9 @@ import {
   ChevronDown
 } from 'lucide-react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
-import { WorkspaceArtifact, ArtifactType, WorkspaceTab } from '../types';
+import { WorkspaceArtifact, ArtifactType, WorkspaceTab, WorkspaceArtifactSelection, ArtifactPatch } from '../types';
 import { ArtifactCanvas } from './ArtifactCanvas';
+import { WorkspaceToolDefinition } from '../tools/toolTypes';
 
 interface WorkspaceCanvasPaneProps {
   artifacts: WorkspaceArtifact[];
@@ -20,18 +21,27 @@ interface WorkspaceCanvasPaneProps {
   isCanvasOpen: boolean;
   isCanvasExpanded: boolean;
   isStreaming: boolean;
+  isCreatingArtifact?: boolean;
   mobileActiveTab: WorkspaceTab;
   onSelectArtifact: (id: string) => void;
   onCloseCanvas: () => void;
   onToggleExpand: () => void;
   onUpdateActiveArtifact: (updated: Partial<WorkspaceArtifact>) => void;
-  onSaveArtifact: (content: string, title?: string) => Promise<void> | void;
+  onSaveArtifact: (content: string, title?: string, createVersionSnapshot?: boolean, expectedUpdatedAt?: string) => Promise<unknown> | unknown;
   onRollbackVersion: (targetVersion: number) => Promise<void> | void;
   onRequestRevision: (revisionPrompt: string, currentArtifact: WorkspaceArtifact) => void;
+  onSelectTool?: (tool: WorkspaceToolDefinition, currentArtifact: WorkspaceArtifact) => void;
   onCreateNewArtifact: (type: ArtifactType) => void;
   onSetMobileActiveTab: (tab: WorkspaceTab) => void;
   onDuplicateArtifact?: (id: string) => Promise<void> | void;
   onDeleteArtifact?: (id: string) => Promise<void> | void;
+  onSelectedTextChange?: (text: string) => void;
+  onSelectionChange?: (selection: WorkspaceArtifactSelection | null) => void;
+  onRequestInlineEdit?: (selection: WorkspaceArtifactSelection, instruction: string, currentArtifact: WorkspaceArtifact) => void;
+  inlineEditPatch?: ArtifactPatch | null;
+  onDismissInlineEdit?: () => void;
+  onDraftContentChange?: (artifactId: string, content: string) => void;
+  revisionCommit?: { artifactId: string; content: string; version: number } | null;
 }
 
 export const WorkspaceCanvasPane: React.FC<WorkspaceCanvasPaneProps> = React.memo(({
@@ -41,6 +51,7 @@ export const WorkspaceCanvasPane: React.FC<WorkspaceCanvasPaneProps> = React.mem
   isCanvasOpen,
   isCanvasExpanded,
   isStreaming,
+  isCreatingArtifact = false,
   mobileActiveTab,
   onSelectArtifact,
   onCloseCanvas,
@@ -49,10 +60,18 @@ export const WorkspaceCanvasPane: React.FC<WorkspaceCanvasPaneProps> = React.mem
   onSaveArtifact,
   onRollbackVersion,
   onRequestRevision,
+  onSelectTool,
   onCreateNewArtifact,
   onSetMobileActiveTab,
   onDuplicateArtifact,
-  onDeleteArtifact
+  onDeleteArtifact,
+  onSelectedTextChange,
+  onSelectionChange,
+  onRequestInlineEdit,
+  inlineEditPatch,
+  onDismissInlineEdit,
+  onDraftContentChange,
+  revisionCommit
 }) => {
   const shouldReduceMotion = useReducedMotion();
   const [searchQuery, setSearchQuery] = useState('');
@@ -84,8 +103,9 @@ export const WorkspaceCanvasPane: React.FC<WorkspaceCanvasPaneProps> = React.mem
       {/* DESKTOP RIGHT PANE: LIVE ARTIFACT CANVAS */}
       {isCanvasOpen && (
         <section 
-          className="hidden xl:flex flex-1 min-h-0 min-w-0 flex-col h-full overflow-hidden transition-all duration-200"
+        className="hidden xl:flex flex-1 min-h-0 min-w-0 flex-col h-full overflow-hidden transition-all duration-200"
         >
+          {isCreatingArtifact && <div role="status" className="flex h-8 shrink-0 items-center gap-2 border-b border-emerald-100 bg-emerald-50/70 px-3 text-xs font-medium text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-300"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />Membuat dokumen di Canvas…</div>}
           {/* Multi-Artifact Tab & Filter Strip (when > 1 artifacts exist) */}
           {artifacts.length > 1 && (
             <div className="h-9 px-3 bg-white dark:bg-[#0F172A] border-b border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-1 shrink-0 z-10">
@@ -180,8 +200,16 @@ export const WorkspaceCanvasPane: React.FC<WorkspaceCanvasPaneProps> = React.mem
               onRollbackVersion={onRollbackVersion}
               onClose={onCloseCanvas}
               onRequestRevision={onRequestRevision}
+              onSelectTool={onSelectTool}
               onDuplicateArtifact={onDuplicateArtifact}
               onDeleteArtifact={onDeleteArtifact}
+              onSelectedTextChange={onSelectedTextChange}
+              onSelectionChange={onSelectionChange}
+              onRequestInlineEdit={onRequestInlineEdit}
+              inlineEditPatch={inlineEditPatch}
+              onDismissInlineEdit={onDismissInlineEdit}
+              onDraftContentChange={onDraftContentChange}
+              revisionCommit={revisionCommit}
               isStreaming={isStreaming}
               isExpanded={isCanvasExpanded}
               onToggleExpand={onToggleExpand}
@@ -272,8 +300,16 @@ export const WorkspaceCanvasPane: React.FC<WorkspaceCanvasPaneProps> = React.mem
                   onRollbackVersion={onRollbackVersion}
                   onClose={() => onSetMobileActiveTab('chat')}
                   onRequestRevision={onRequestRevision}
+                  onSelectTool={onSelectTool}
                   onDuplicateArtifact={onDuplicateArtifact}
-                  onDeleteArtifact={onDeleteArtifact}
+              onDeleteArtifact={onDeleteArtifact}
+              onSelectedTextChange={onSelectedTextChange}
+              onSelectionChange={onSelectionChange}
+              onRequestInlineEdit={onRequestInlineEdit}
+              inlineEditPatch={inlineEditPatch}
+              onDismissInlineEdit={onDismissInlineEdit}
+              onDraftContentChange={onDraftContentChange}
+              revisionCommit={revisionCommit}
                   isStreaming={isStreaming}
                   isExpanded={false}
                   onToggleExpand={() => {}}

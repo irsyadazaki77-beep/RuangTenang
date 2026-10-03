@@ -96,4 +96,38 @@ describe('Workspace AI comparison panel', () => {
     await waitFor(() => expect(fetchMock.mock.calls.some(call => String(call[0]).endsWith(`/cancel`))).toBe(true));
     fetchMock.mockRestore();
   });
+
+  it('retries an individual failed candidate with identical snapshot', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(streamResponse([
+        { type: 'candidate_started', comparisonId: run.comparisonId, candidateId: 'gemini-3.8-flash', modelName: 'Gemini Flash' },
+        { type: 'candidate_chunk', comparisonId: run.comparisonId, candidateId: 'gemini-3.8-flash', text: 'Hasil Gemini' },
+        { type: 'candidate_completed', comparisonId: run.comparisonId, candidateId: 'gemini-3.8-flash', latencyMs: 800 },
+        { type: 'candidate_started', comparisonId: run.comparisonId, candidateId: 'deepseek-chat', modelName: 'DeepSeek Chat' },
+        { type: 'candidate_failed', comparisonId: run.comparisonId, candidateId: 'deepseek-chat' },
+        { type: 'comparison_completed', comparisonId: run.comparisonId }
+      ]))
+      .mockResolvedValueOnce(streamResponse([
+        { type: 'candidate_started', candidateId: 'deepseek-chat', modelName: 'DeepSeek Chat' },
+        { type: 'candidate_chunk', candidateId: 'deepseek-chat', text: 'Hasil DeepSeek setelah retry' },
+        { type: 'candidate_completed', candidateId: 'deepseek-chat', latencyMs: 650 }
+      ]));
+
+    render(<WorkspaceComparisonPanel run={run} onUseResponse={vi.fn()} onSendToCanvas={vi.fn()} onCompareAgain={vi.fn()} />);
+
+    expect(await screen.findByText('Hasil Gemini')).toBeInTheDocument();
+    const retryBtn = await screen.findByRole('button', { name: 'Coba lagi DeepSeek Chat' });
+    fireEvent.click(retryBtn);
+
+    expect(await screen.findByText('Hasil DeepSeek setelah retry')).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    // Verifying retry sent the exact prompt and active context
+    const retryBody = JSON.parse(String(fetchMock.mock.calls[1][1]?.body));
+    expect(retryBody).toMatchObject({
+      prompt: run.prompt,
+      activeContext: run.activeContext,
+      selectedModelIds: ['deepseek-chat']
+    });
+    fetchMock.mockRestore();
+  });
 });

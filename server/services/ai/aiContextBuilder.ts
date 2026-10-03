@@ -6,7 +6,7 @@ import { scanAndSanitizePII } from '../piiService.js';
 import { chatSummarizer, ChatMessageItem } from './chatSummarizer.js';
 import { aiMetricsService } from './aiMetricsService.js';
 import { detectPromptInjection } from '../../security.js';
-import { FileSourceReference } from '../../../shared/contracts/files.js';
+import { FileSourceReference, WorkspaceContextSnapshot, MAX_DOCUMENT_CONTEXT_CHUNKS, MAX_DOCUMENT_CONTEXT_TOKENS } from '../../../shared/contracts/files.js';
 
 export interface AiContextParams {
   userId: string;
@@ -28,6 +28,7 @@ export interface BuiltContextResult {
   tokensSaved: number;
   totalContextTokens: number;
   sourceReferences?: FileSourceReference[];
+  documentContextSnapshot?: WorkspaceContextSnapshot;
 }
 
 export const RUANG_KERJA_SYSTEM_PROMPT = `Kamu adalah Asisten RuangKerja Mahasiswa dengan motto 'Selesaikan Tugas Tanpa Cemas'. Peranmu adalah menjadi rekan belajar kritis dan mentor riset yang suportif.
@@ -247,8 +248,8 @@ ${memoryLines.join('\n')}
           chatId: isAcademicWorkspace ? chatId : undefined,
           attachmentIds: params.attachmentIds,
           userQuery: currentMessage,
-          maxTokens: 2500,
-          maxChunks: 8
+          maxTokens: MAX_DOCUMENT_CONTEXT_TOKENS,
+          maxChunks: MAX_DOCUMENT_CONTEXT_CHUNKS
         });
 
         if (retrievedDocContext && retrievedDocContext.contextBlock) {
@@ -294,7 +295,8 @@ ${contextParts.join('\n\n')}
       recentHistory: formattedRecentHistory,
       tokensSaved: tokensSavedTotal,
       totalContextTokens,
-      sourceReferences: retrievedDocContext?.sourceReferences || []
+      sourceReferences: retrievedDocContext?.sourceReferences || [],
+      documentContextSnapshot: retrievedDocContext?.snapshot
     };
   }
 };

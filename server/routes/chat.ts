@@ -1,4 +1,5 @@
 import { prisma } from '../database.js';
+import { MAX_WORKSPACE_ACTIVE_ATTACHMENTS } from '../../shared/contracts/files.js';
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { requireAuth, requireRole, optionalAuth } from '../middleware/auth.js';
@@ -341,6 +342,10 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
     }
 
     const isWorkspace = Boolean(workspaceMode) || (mode || '').toLowerCase().includes('ruang_kerja') || (chatMode || '').toLowerCase().includes('ruangkerja');
+    const attachmentLimit = isWorkspace ? MAX_WORKSPACE_ACTIVE_ATTACHMENTS : 3;
+    if (Array.isArray(attachments) && attachments.length > attachmentLimit) {
+      return sendError(res, 'TOO_MANY_FILES', `Maksimal ${attachmentLimit} lampiran aktif diperbolehkan`, 400);
+    }
 
     const validTaskCategories = ['general_chat', 'academic_writing', 'research', 'coding', 'document_analysis', 'summarization', 'brainstorming', 'structured_reasoning', 'translation'];
     const validLatencyPreferences = ['fast', 'balanced', 'deep'];
@@ -417,6 +422,37 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
           currentChatId = newChat.id;
         }
 
+        if (Array.isArray(attachments)) {
+          const maxAttachmentCount = isWorkspace ? MAX_WORKSPACE_ACTIVE_ATTACHMENTS : 3;
+          if (attachments.length > maxAttachmentCount) {
+            await rollbackUserAiQuota(userId, clientIp);
+            return sendError(res, 'TOO_MANY_FILES', `Maksimal ${maxAttachmentCount} lampiran aktif diperbolehkan`, 400);
+          }
+
+          if (isWorkspace) {
+            for (const attachment of attachments) {
+              const attachmentId = typeof attachment === 'string' ? attachment : attachment?.id;
+              if (!attachmentId) {
+                await rollbackUserAiQuota(userId, clientIp);
+                return sendError(res, 'INVALID_ATTACHMENT', 'Lampiran Workspace tidak valid.', 400);
+              }
+              const record = await prisma.attachments.findUnique({ where: { id: attachmentId } });
+              if (!record || record.userId !== userId) {
+                await rollbackUserAiQuota(userId, clientIp);
+                return sendError(res, 'UNAUTHORIZED_ACCESS', 'Anda tidak memiliki akses ke dokumen ini.', 403);
+              }
+              if (record.status !== 'ready') {
+                await rollbackUserAiQuota(userId, clientIp);
+                return sendError(res, 'ATTACHMENT_NOT_READY', 'Tunggu sampai semua dokumen selesai diproses.', 409);
+              }
+              if (record.chatId && record.chatId !== currentChatId) {
+                await rollbackUserAiQuota(userId, clientIp);
+                return sendError(res, 'ATTACHMENT_WORKSPACE_MISMATCH', 'Dokumen ini terhubung ke Ruang Kerja lain.', 403);
+              }
+            }
+          }
+        }
+
         if (!pluginResult) {
           const msgResult = await prisma.chatMessages.create({
 
@@ -430,11 +466,6 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
           
           
           if (attachments && Array.isArray(attachments) && attachments.length > 0) {
-            if (attachments.length > 3) {
-              await rollbackUserAiQuota(userId, clientIp);
-              return sendError(res, 'TOO_MANY_FILES', 'Maksimal 3 lampiran diperbolehkan per pesan', 400);
-            }
-
             for (const att of attachments) {
               try {
                 const attId = typeof att === 'string' ? att : att?.id;
@@ -509,6 +540,11 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
     }
 
     const messagesToSend = [];
+    const currentWorkspaceAttachmentIds = new Set<string>(
+      isWorkspace && Array.isArray(attachments)
+        ? attachments.map((attachment: any) => typeof attachment === 'string' ? attachment : attachment?.id).filter((id: unknown): id is string => typeof id === 'string')
+        : []
+    );
     
     if (!activeIsTemporary && userId && currentChatId) {
       try {
@@ -531,6 +567,7 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
             const parts: any[] = [{ text: decryptedContent }];
             if (msg.attachments && msg.attachments.length > 0) {
               for (const att of msg.attachments) {
+                if (isWorkspace && (!currentWorkspaceAttachmentIds.has(att.id) || (att.fileKind !== 'image' && !att.mimeType?.startsWith('image/')))) continue;
                 try {
                   const res = await attachmentStorageService.getAttachmentForUser(att.id, userId || 'guest');
                   if (res) {
@@ -565,6 +602,7 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
           for (const att of attachments) {
             try {
               const attId = typeof att === 'string' ? att : att?.id;
+              if (isWorkspace && (!attId || !currentWorkspaceAttachmentIds.has(attId) || !att.mimeType?.startsWith('image/'))) continue;
               if (attId) {
                 const res = await attachmentStorageService.getAttachmentForUser(attId, userId || 'guest');
                 if (res) {
@@ -614,6 +652,7 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
         for (const att of attachments) {
           try {
             const attId = typeof att === 'string' ? att : att?.id;
+            if (isWorkspace && (!attId || !currentWorkspaceAttachmentIds.has(attId) || !att.mimeType?.startsWith('image/'))) continue;
             if (attId) {
               const res = await attachmentStorageService.getAttachmentForUser(attId, userId || 'guest');
               if (res) {
@@ -663,6 +702,11 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('X-Accel-Buffering', 'no');
     res.flushHeaders();
+    // Let RuangKerja bind its newly-created conversation immediately so a
+    // clear request during generation can still target the persisted messages.
+    if (isWorkspace && isNewChat && currentChatId) {
+      res.write(`data: ${JSON.stringify({ chatId: currentChatId })}\n\n`);
+    }
 
     // Periodically send SSE keepalive heartbeat every 15 seconds to prevent Cloud Run / Nginx / reverse proxy timeouts
     const keepAliveTimer = setInterval(() => {
@@ -682,6 +726,10 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
     res.on('close', cleanupKeepAlive);
 
     const runLocalFallback = async () => {
+      if (isWorkspace && (clientDisconnected || reqAbortController.signal.aborted)) {
+        if (!res.writableEnded) res.end();
+        return;
+      }
       console.warn('Executing Local Fallback AI stream response');
       const fallbackResponse = getLocalFallbackResponse(cleanMessage || pluginResult || '', chatMode, responseStyle);
       if (!res.writableEnded) {
@@ -698,7 +746,7 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
       if (fallbackResponse.tool_call) {
         res.write(`data: ${JSON.stringify({ tool_call: fallbackResponse.tool_call, parameters: { reason: fallbackResponse.text } })}\n\n`);
         
-        if (!activeIsTemporary && userId && currentChatId) {
+        if (!activeIsTemporary && userId && currentChatId && !(isWorkspace && (clientDisconnected || reqAbortController.signal.aborted))) {
           try {
             await prisma.chatMessages.create({
               data: {
@@ -715,13 +763,14 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
         const words = fallbackResponse.text.split(' ');
         let currentFullText = '';
         for (const word of words) {
+          if (isWorkspace && (clientDisconnected || reqAbortController.signal.aborted)) break;
           const chunk = word + ' ';
           currentFullText += chunk;
           res.write(`data: ${JSON.stringify({ text: chunk })}\n\n`);
           await new Promise(resolve => setTimeout(resolve, 30));
         }
         
-        if (!activeIsTemporary && userId && currentChatId) {
+        if (!activeIsTemporary && userId && currentChatId && !(isWorkspace && (clientDisconnected || reqAbortController.signal.aborted))) {
           try {
             await prisma.chatMessages.create({
               data: {
@@ -757,6 +806,12 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
     req.on('aborted', () => {
       clientDisconnected = true;
       reqAbortController.abort();
+    });
+    res.on('close', () => {
+      if (!res.writableEnded) {
+        clientDisconnected = true;
+        reqAbortController.abort();
+      }
     });
 
     const requestStartTime = Date.now();
@@ -1047,6 +1102,10 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
       }
     } catch (e: any) {
       console.warn(`[CHAT_STREAM] requestId=${(pipelineRes as any).requestId || 'unknown'} stream interrupted category=${e?.category || 'INTERNAL_ERROR'}`);
+      if (isWorkspace && (clientDisconnected || reqAbortController.signal.aborted)) {
+        if (!res.writableEnded) res.end();
+        return;
+      }
       if (!res.writableEnded) {
         if (fullResponseText.trim()) {
           const interruptedMarker = '\n\n*(Respons terputus sebelum selesai. Kamu bisa mencoba ulang.)*';

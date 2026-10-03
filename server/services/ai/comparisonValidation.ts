@@ -28,10 +28,11 @@ export async function reserveComparisonQuota(
 export function validateComparisonCandidates(
   selectedModelIds: string[],
   userTier: string,
-  hasAttachments = false,
-  dependencies: { registry?: readonly AiModelDefinition[]; providerConfigured?: (model: AiModelDefinition) => boolean } = {}
+  _hasAttachments = false,
+  dependencies: { registry?: readonly AiModelDefinition[]; providerConfigured?: (model: AiModelDefinition) => boolean; allowSingleCandidate?: boolean } = {}
 ): AiModelDefinition[] {
-  if (selectedModelIds.length < 2 || selectedModelIds.length > 3) throw new ComparisonValidationError('INVALID_COUNT');
+  const minCount = dependencies.allowSingleCandidate ? 1 : 2;
+  if (selectedModelIds.length < minCount || selectedModelIds.length > 3) throw new ComparisonValidationError('INVALID_COUNT');
   if (new Set(selectedModelIds).size !== selectedModelIds.length) throw new ComparisonValidationError('DUPLICATE_MODELS');
   const registry = dependencies.registry || AI_MODEL_REGISTRY;
   const providerConfigured = dependencies.providerConfigured || (model => aiProviderConfig.isConfigured(model.provider) && (model.provider === 'gemini' || AI_PROVIDER_ADAPTERS[model.provider].isAvailable()));
@@ -41,7 +42,6 @@ export function validateComparisonCandidates(
     if (!isModelAllowedForTier(model.id, userTier)) throw new ComparisonValidationError('MODEL_NOT_ALLOWED');
     if (!model.capabilities.includes('chat') || !model.capabilities.includes('streaming')) throw new ComparisonValidationError('MODEL_CAPABILITY_UNSUPPORTED');
     if (!providerConfigured(model)) throw new ComparisonValidationError('PROVIDER_NOT_CONFIGURED');
-    if (hasAttachments) throw new ComparisonValidationError('ATTACHMENT_UNSUPPORTED');
     return model;
   });
   return models;

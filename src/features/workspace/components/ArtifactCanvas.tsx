@@ -31,10 +31,10 @@ import {
   Trash2,
   AlertTriangle
 } from 'lucide-react';
-import { WorkspaceArtifact, ArtifactType, CitationStyle, ArtifactVersionRecord } from '../types';
+import { WorkspaceArtifact, ArtifactType, CitationStyle, ArtifactVersionRecord, ArtifactPatch, WorkspaceArtifactSelection } from '../types';
+import { applyArtifactPatch } from '../utils/artifactPatch';
 import { WorkspaceToolSelector } from './WorkspaceToolSelector';
 import { WorkspaceToolRegistry } from '../tools/toolRegistry';
-import { WorkspaceToolExecutor } from '../tools/toolExecutor';
 import { WorkspaceToolDefinition } from '../tools/toolTypes';
 import { LazyMarkdown } from '../../../components/common/LazyMarkdown';
 import { useToast } from '../../../components/Toast';
@@ -60,10 +60,18 @@ export interface ArtifactCanvasProps {
   onUpdateArtifact?: (updated: Partial<WorkspaceArtifact>) => void;
   onClose?: () => void;
   onRequestRevision?: (revisionPrompt: string, currentArtifact: WorkspaceArtifact) => void;
+  onSelectTool?: (tool: WorkspaceToolDefinition, currentArtifact: WorkspaceArtifact) => void;
   onRollbackVersion?: (targetVersion: number) => Promise<void> | void;
-  onSaveArtifact?: (content: string, title?: string) => Promise<void> | void;
+  onSaveArtifact?: (content: string, title?: string, createVersionSnapshot?: boolean, expectedUpdatedAt?: string) => Promise<unknown> | unknown;
   onDuplicateArtifact?: (id: string) => Promise<void> | void;
   onDeleteArtifact?: (id: string) => Promise<void> | void;
+  onSelectedTextChange?: (text: string) => void;
+  onSelectionChange?: (selection: WorkspaceArtifactSelection | null) => void;
+  onRequestInlineEdit?: (selection: WorkspaceArtifactSelection, instruction: string, currentArtifact: WorkspaceArtifact) => void;
+  inlineEditPatch?: ArtifactPatch | null;
+  onDismissInlineEdit?: () => void;
+  onDraftContentChange?: (artifactId: string, content: string) => void;
+  revisionCommit?: { artifactId: string; content: string; version: number } | null;
   isStreaming?: boolean;
   isExpanded?: boolean;
   onToggleExpand?: () => void;
@@ -77,10 +85,18 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
   onUpdateArtifact,
   onClose,
   onRequestRevision,
+  onSelectTool,
   onRollbackVersion,
   onSaveArtifact,
   onDuplicateArtifact,
   onDeleteArtifact,
+  onSelectedTextChange,
+  onSelectionChange,
+  onRequestInlineEdit,
+  inlineEditPatch,
+  onDismissInlineEdit,
+  onDraftContentChange,
+  revisionCommit,
   isStreaming = false,
   isExpanded: controlledExpanded,
   onToggleExpand: controlledToggleExpand
@@ -97,6 +113,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
   const [editableContent, setEditableContent] = useState(artifact.content);
   const [isDirty, setIsDirty] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveState>('saved');
+  const [saveFailureMessage, setSaveFailureMessage] = useState('Gagal simpan');
 
   // Conflict handling states
   const [hasExternalConflict, setHasExternalConflict] = useState(false);
@@ -118,6 +135,11 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
   const [showCitationModal, setShowCitationModal] = useState(false);
   const [showParaphraseModal, setShowParaphraseModal] = useState(false);
   const [paraphraseInitialText, setParaphraseInitialText] = useState('');
+  const [selection, setSelection] = useState<WorkspaceArtifactSelection | null>(null);
+  const [showInlineAsk, setShowInlineAsk] = useState(false);
+  const [inlineInstruction, setInlineInstruction] = useState('');
+  const [inlinePatchError, setInlinePatchError] = useState('');
+  const visibleInlineEditPatch = inlineEditPatch?.artifactId === artifact.id ? inlineEditPatch : null;
 
   // Refs for timers & concurrency guards
   const editorRef = useRef<HTMLTextAreaElement>(null);
@@ -127,9 +149,11 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
   const lastSavedContentRef = useRef<string>(artifact.content);
   const lastKnownVersionRef = useRef<number>(artifact.version || 1);
   const saveSeqRef = useRef<number>(0);
+  const isApplyingInlinePatchRef = useRef(false);
 
   // Sync state when active artifact changes (or changes from server)
   useEffect(() => {
+    if (isApplyingInlinePatchRef.current) return;
     // If switching to another artifact, reset all local session states
     setTitleInput(artifact.title || '');
     setSimulationOutput(null);
@@ -150,6 +174,31 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
       setConflictServerContent(null);
     }
   }, [artifact.id, artifact.title, artifact.version, artifact.content, isDirty, editableContent]);
+
+  useEffect(() => {
+    onSelectedTextChange?.('');
+    setSelection(null);
+    onSelectionChange?.(null);
+    setShowInlineAsk(false);
+    setInlinePatchError('');
+  }, [artifact.id, onSelectedTextChange, onSelectionChange]);
+
+  useEffect(() => {
+    onDraftContentChange?.(artifact.id, artifact.content);
+    // Initialize the parent draft only when switching artifacts; content updates are conflict-checked below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [artifact.id, onDraftContentChange]);
+
+  useEffect(() => {
+    if (!revisionCommit || revisionCommit.artifactId !== artifact.id || revisionCommit.version !== artifact.version || revisionCommit.content !== artifact.content) return;
+    setEditableContent(revisionCommit.content);
+    lastSavedContentRef.current = revisionCommit.content;
+    lastKnownVersionRef.current = revisionCommit.version;
+    setIsDirty(false);
+    setSaveStatus('saved');
+    setHasExternalConflict(false);
+    setConflictServerContent(null);
+  }, [artifact.content, artifact.id, artifact.version, revisionCommit]);
 
   // Handle saving inline title
   const handleSaveTitle = () => {
@@ -184,12 +233,14 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
       // Concurrency guard: Only set 'saved' if this was the latest save request
       if (currentSeq === saveSeqRef.current) {
         lastSavedContentRef.current = contentToSave;
+        setSaveFailureMessage('Gagal simpan');
         setIsDirty(false);
         setSaveStatus('saved');
       }
     } catch (err) {
       console.warn('[ArtifactCanvas] Save failed:', err);
       if (currentSeq === saveSeqRef.current) {
+        setSaveFailureMessage(err instanceof Error ? err.message : 'Gagal simpan. Coba lagi.');
         setSaveStatus('failed');
       }
     }
@@ -226,6 +277,83 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
     }
     performSave(editableContent, artifact.title);
   }, [editableContent, artifact.title, performSave]);
+
+  const captureSelection = (target: HTMLTextAreaElement) => {
+    const start = target.selectionStart;
+    const end = target.selectionEnd;
+    const text = target.value.slice(start, end);
+    const nextSelection = text.trim() ? { artifactId: artifact.id, start, end, text } : null;
+    setSelection(nextSelection);
+    onSelectedTextChange?.(nextSelection?.text || '');
+    onSelectionChange?.(nextSelection);
+  };
+
+  const inlineActions = artifact.type === 'CODE' ? [
+    ['Explain', 'Jelaskan kode terpilih dengan ringkas.'],
+    ['Refactor', 'Refactor kode terpilih tanpa mengubah perilaku yang diharapkan.'],
+    ['Fix bug', 'Cari dan perbaiki bug pada kode terpilih.'],
+    ['Add comments', 'Tambahkan komentar yang membantu pada kode terpilih.']
+  ] : [
+    ['Improve', 'Perbaiki teks terpilih agar lebih jelas dan efektif.'],
+    ['Shorten', 'Ringkas teks terpilih tanpa menghilangkan makna utama.'],
+    ['Expand', 'Kembangkan teks terpilih dengan detail yang relevan.'],
+    ['Rewrite', 'Tulis ulang teks terpilih dengan makna yang tetap sama.']
+  ];
+
+  const requestInlineEdit = (instruction: string) => {
+    if (!selection || !onRequestInlineEdit || isStreaming) return;
+    onRequestInlineEdit(selection, instruction, artifact);
+    setShowInlineAsk(false);
+    setInlineInstruction('');
+  };
+
+  const acceptInlinePatch = async () => {
+    if (!visibleInlineEditPatch) return;
+    const result = applyArtifactPatch({
+      patch: visibleInlineEditPatch,
+      artifactId: artifact.id,
+      currentVersion: artifact.version,
+      currentContent: editableContent
+    });
+    if (!result.valid) {
+      setInlinePatchError('Dokumen telah berubah sejak revisi dibuat. Buat usulan baru sebelum menerapkan.');
+      return;
+    }
+    if (!onSaveArtifact) {
+      setInlinePatchError('Penyimpanan Canvas tidak tersedia. Perubahan belum diterapkan.');
+      return;
+    }
+    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    saveSeqRef.current += 1;
+    isApplyingInlinePatchRef.current = true;
+    setSaveStatus('saving');
+    setInlinePatchError('');
+    try {
+      let expectedUpdatedAt = artifact.updatedAt;
+      if (visibleInlineEditPatch.baseContent !== artifact.content) {
+        const savedBase = await onSaveArtifact(visibleInlineEditPatch.baseContent, artifact.title, true, expectedUpdatedAt);
+        if (!savedBase || typeof savedBase !== 'object' || !('updatedAt' in savedBase) || typeof savedBase.updatedAt !== 'string') throw new Error('Dokumen dasar gagal disimpan');
+        expectedUpdatedAt = savedBase.updatedAt;
+      }
+      const saved = await onSaveArtifact(result.content, artifact.title, true, expectedUpdatedAt);
+      if (!saved) throw new Error('Revisi gagal disimpan');
+      setEditableContent(result.content);
+      lastSavedContentRef.current = result.content;
+      setIsDirty(false);
+      setSaveStatus('saved');
+      setSaveFailureMessage('Gagal simpan');
+      onDraftContentChange?.(artifact.id, result.content);
+      onDismissInlineEdit?.();
+      requestAnimationFrame(() => editorRef.current?.focus());
+      showToast('Perubahan diterapkan dan versi baru tersimpan.', 'success');
+    } catch {
+      setSaveStatus('failed');
+      setSaveFailureMessage('Revisi gagal disimpan. Coba simpan lagi.');
+      setInlinePatchError('Revisi gagal disimpan. Draf Anda tetap aman; coba lagi.');
+    } finally {
+      isApplyingInlinePatchRef.current = false;
+    }
+  };
 
   // Keyboard shortcut listener (Ctrl/Cmd + S to save, Esc to close menus)
   useEffect(() => {
@@ -407,6 +535,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
 
   const handleContentChange = (newVal: string) => {
     setEditableContent(newVal);
+    onDraftContentChange?.(artifact.id, newVal);
     if (newVal !== lastSavedContentRef.current) {
       setIsDirty(true);
       setSaveStatus('unsaved');
@@ -453,57 +582,10 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
     setShowParaphraseModal(true);
   };
 
-  const handleExecuteTool = useCallback(async (tool: WorkspaceToolDefinition, customInput: Record<string, any> = {}) => {
+  const handleExecuteTool = useCallback((tool: WorkspaceToolDefinition) => {
     if (isStreaming) return;
-
-    if (tool.executionMode === 'client_utility' || tool.executionMode === 'export') {
-      const payload = {
-        toolId: tool.id,
-        input: customInput,
-        context: {
-          activeArtifact: {
-            id: artifact.id,
-            title: artifact.title,
-            type: artifact.type,
-            language: artifact.language,
-            content: editableContent,
-            version: artifact.version
-          }
-        }
-      };
-
-      const result = await WorkspaceToolExecutor.executeClientUtility(tool, payload);
-      if (result.success) {
-        if (result.downloadData) {
-          const blob = new Blob([result.downloadData.content], { type: `${result.downloadData.mimeType};charset=utf-8` });
-          const url = URL.createObjectURL(blob);
-          const link = document.createElement('a');
-          link.href = url;
-          link.download = result.downloadData.filename;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          URL.revokeObjectURL(url);
-          showToast(`Berkas ${result.downloadData.filename} berhasil diunduh.`, 'success');
-        } else if (result.proposedContent) {
-          handleContentChange(result.proposedContent);
-          performSave(result.proposedContent, artifact.title);
-          showToast(`Aksi "${tool.name}" berhasil diterapkan.`, 'success');
-        }
-      } else {
-        showToast(result.error?.message || 'Gagal menjalankan tool.', 'error');
-      }
-      return;
-    }
-
-    if (onRequestRevision) {
-      const promptInstruction = tool.promptTemplate 
-        ? tool.promptTemplate(customInput, editableContent)
-        : tool.description;
-      const fullInstruction = `Tolong revisi artefak "${artifact.title}" (${artifact.type}) dengan instruksi berikut: ${promptInstruction}`;
-      onRequestRevision(fullInstruction, { ...artifact, content: editableContent });
-    }
-  }, [isStreaming, artifact, editableContent, onRequestRevision, performSave, showToast]);
+    onSelectTool?.(tool, { ...artifact, content: editableContent });
+  }, [isStreaming, artifact, editableContent, onSelectTool]);
 
   const handleRunSimulation = () => {
     setIsSimulating(true);
@@ -617,12 +699,12 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
       }`}
     >
       {/* 1. CANVAS HEADER (CLEAN HIERARCHY: Identity & Save State -> View Modes -> Primary Action -> Secondary) */}
-      <header className="h-14 px-3 sm:px-4 py-2 border-b border-slate-200/80 dark:border-slate-800 bg-white/95 dark:bg-[#0F172A]/95 flex items-center justify-between gap-2 shrink-0 z-20">
+      <header className="h-12 px-3 sm:px-4 py-1.5 border-b border-slate-200/70 dark:border-slate-800/80 bg-white dark:bg-[#0F172A] flex items-center justify-between gap-2 shrink-0 z-20">
         
         {/* Sisi Kiri: Ikon Tipe + Judul (Editable) + Badge Versi + Indikator Save State */}
-        <div className="flex items-center gap-2 min-w-0 flex-1 max-w-[45%] sm:max-w-[40%]">
+        <div className="flex items-center gap-2 min-w-0 flex-1 max-w-[36%] 2xl:max-w-[40%]">
           <div 
-            className="p-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200/70 dark:border-emerald-800/70 text-emerald-700 dark:text-emerald-400 shrink-0"
+            className="text-slate-500 dark:text-slate-400 shrink-0"
             title={`Tipe Dokumen: ${artifact.type}`}
           >
             {getArtifactIcon(artifact.type)}
@@ -664,7 +746,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
             <button
               type="button"
               onClick={() => setShowVersionHistoryModal(true)}
-              className="px-1.5 py-0.5 rounded-md text-[10.5px] font-mono font-medium text-emerald-800 dark:text-emerald-300 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/70 dark:hover:bg-emerald-900/80 border border-emerald-200/80 dark:border-emerald-800/80 shrink-0 transition-colors cursor-pointer"
+              className="px-1.5 py-0.5 rounded-md text-[10px] font-mono font-medium text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 shrink-0 transition-colors cursor-pointer"
               title="Riwayat Versi & Snapshot"
             >
               v{artifact.version || 1}
@@ -685,7 +767,8 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
               ) : saveStatus === 'failed' ? (
                 <span className="flex items-center gap-1 text-[11px] font-semibold text-rose-600 dark:text-rose-400">
                   <AlertTriangle className="w-3 h-3" />
-                  <span>Gagal simpan</span>
+                  <span>{saveFailureMessage}</span>
+                  <button type="button" onClick={handleManualSave} className="ml-1 underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500">Coba lagi</button>
                 </span>
               ) : (
                 <span className="flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
@@ -717,7 +800,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
               />
             )}
             <Eye className="w-3 h-3" />
-            <span className="hidden sm:inline">Pratinjau</span>
+            <span className="hidden 2xl:inline">Pratinjau</span>
           </button>
 
           <button
@@ -741,7 +824,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
               />
             )}
             <Edit3 className="w-3 h-3" />
-            <span className="hidden sm:inline">Edit</span>
+            <span className="hidden 2xl:inline">Edit</span>
           </button>
 
           <button
@@ -762,7 +845,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
               />
             )}
             <Code2 className="w-3 h-3" />
-            <span className="hidden sm:inline">Kode</span>
+            <span className="hidden 2xl:inline">Kode</span>
           </button>
 
           <button
@@ -783,7 +866,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
               />
             )}
             <GitCompare className="w-3 h-3" />
-            <span className="hidden sm:inline">Diff</span>
+            <span className="hidden 2xl:inline">Diff</span>
           </button>
         </div>
 
@@ -792,7 +875,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
           {/* Workspace Tools Dropdown */}
           <WorkspaceToolSelector
             artifactType={artifact.type}
-            hasArtifact={true}
+            hasArtifact={artifact.id !== 'art_welcome'}
             disabled={isStreaming}
             onSelectTool={handleExecuteTool}
             triggerVariant="header"
@@ -821,7 +904,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
               title="Mulai Edit Dokumen Ini"
             >
               <Edit3 className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Edit Dokumen</span>
+              <span className="hidden 2xl:inline">Edit Dokumen</span>
             </button>
           ) : null}
 
@@ -1097,10 +1180,48 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
               </div>
             </div>
 
+            {selection && (
+              <div role="toolbar" aria-label="Aksi AI untuk teks terpilih" className="flex flex-wrap items-center gap-1.5 rounded-xl border border-emerald-200/80 bg-emerald-50/70 px-2.5 py-2 dark:border-emerald-900/60 dark:bg-emerald-950/25">
+                <span className="mr-1 flex items-center gap-1 text-[11px] font-medium text-emerald-800 dark:text-emerald-300"><Sparkles className="h-3.5 w-3.5" />Teks dipilih</span>
+                {inlineActions.map(([label, instruction]) => (
+                  <button key={label} type="button" disabled={isStreaming} onClick={() => requestInlineEdit(instruction)} className="rounded-lg border border-emerald-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 hover:border-emerald-400 hover:text-emerald-800 disabled:opacity-50 dark:border-emerald-900 dark:bg-slate-900 dark:text-slate-200" aria-label={`${label} teks terpilih`}>{label}</button>
+                ))}
+                <button type="button" disabled={isStreaming} onClick={() => setShowInlineAsk(value => !value)} className="rounded-lg px-2 py-1 text-[11px] font-semibold text-emerald-800 hover:bg-emerald-100 disabled:opacity-50 dark:text-emerald-300 dark:hover:bg-emerald-900/50" aria-expanded={showInlineAsk}>Ask AI</button>
+                {showInlineAsk && <form className="flex w-full gap-1.5 pt-1" onSubmit={event => { event.preventDefault(); if (inlineInstruction.trim()) requestInlineEdit(inlineInstruction.trim()); }}>
+                  <input autoFocus value={inlineInstruction} onChange={event => setInlineInstruction(event.target.value)} placeholder="Instruksi untuk teks ini…" aria-label="Instruksi revisi teks terpilih" className="min-w-0 flex-1 rounded-lg border border-emerald-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 outline-none focus:border-emerald-500 dark:border-emerald-900 dark:bg-slate-950 dark:text-slate-100" />
+                  <button type="submit" disabled={!inlineInstruction.trim() || isStreaming} className="rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-semibold text-white disabled:opacity-50">Buat usulan</button>
+                </form>}
+              </div>
+            )}
+
+            {visibleInlineEditPatch && (
+              <section aria-label="Usulan perubahan AI" className="rounded-xl border border-violet-200 bg-white p-3 dark:border-violet-900/70 dark:bg-slate-950">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <h3 className="flex items-center gap-1.5 text-xs font-semibold text-slate-800 dark:text-slate-100"><Sparkles className="h-3.5 w-3.5 text-violet-600" />Usulan perubahan</h3>
+                  <span className="text-[10px] text-slate-500">Hanya bagian terpilih</span>
+                </div>
+                <div className="space-y-1.5 text-xs">
+                  <div className="rounded-lg border-l-2 border-rose-400 bg-rose-50 px-2.5 py-2 text-rose-900 dark:bg-rose-950/30 dark:text-rose-200"><span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide">Dihapus</span><pre className="whitespace-pre-wrap font-sans">{visibleInlineEditPatch.originalText || '(kosong)'}</pre></div>
+                  <div className="rounded-lg border-l-2 border-emerald-500 bg-emerald-50 px-2.5 py-2 text-emerald-950 dark:bg-emerald-950/30 dark:text-emerald-200"><span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide">Ditambahkan</span><pre className="whitespace-pre-wrap font-sans">{visibleInlineEditPatch.replacementText || '(kosong)'}</pre></div>
+                </div>
+                {inlinePatchError && <p role="alert" className="mt-2 text-xs text-rose-700 dark:text-rose-300">{inlinePatchError}</p>}
+                <div className="mt-2.5 flex justify-end gap-2">
+                  <button type="button" onClick={() => { onDismissInlineEdit?.(); setInlinePatchError(''); }} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">Tolak</button>
+                  <button type="button" onClick={() => void acceptInlinePatch()} disabled={saveStatus === 'saving'} className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50">{saveStatus === 'saving' ? 'Menyimpan…' : 'Terapkan'}</button>
+                </div>
+              </section>
+            )}
+
             <textarea
               ref={editorRef}
               value={editableContent}
               onChange={(e) => handleContentChange(e.target.value)}
+              onSelect={(e) => {
+                const target = e.currentTarget;
+                captureSelection(target);
+              }}
+              onMouseUp={(e) => captureSelection(e.currentTarget)}
+              onKeyUp={(e) => captureSelection(e.currentTarget)}
               placeholder="Ketik atau sesuaikan draf dokumen Anda di sini..."
               className="w-full flex-1 min-h-[500px] p-3 bg-transparent resize-none focus:outline-none font-mono text-xs sm:text-sm leading-relaxed text-slate-900 dark:text-slate-100 selection:bg-emerald-500/20"
             />

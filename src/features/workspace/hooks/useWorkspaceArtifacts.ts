@@ -30,6 +30,16 @@ export function useWorkspaceArtifacts({
   }, []);
 
   const lastPersistedSigRef = useRef<string>('');
+  const lastChatIdRef = useRef(chatId);
+
+  useEffect(() => {
+    if (lastChatIdRef.current === chatId) return;
+    lastChatIdRef.current = chatId;
+    lastPersistedSigRef.current = '';
+    setArtifacts([DEFAULT_WELCOME_ARTIFACT]);
+    setActiveArtifactId(DEFAULT_WELCOME_ARTIFACT_ID);
+    setHasUnreadArtifact(false);
+  }, [chatId]);
 
   // Sync state when persistedArtifacts change from persistence hook
   useEffect(() => {
@@ -77,15 +87,16 @@ export function useWorkspaceArtifacts({
         return {
           ...a,
           ...updated,
-          updatedAt: new Date().toISOString()
+          // Keep the last server timestamp so optimistic edits cannot mask a remote conflict.
+          updatedAt: a.updatedAt
         };
       }
       return a;
     }));
   }, [activeArtifact]);
 
-  const saveArtifact = useCallback(async (content: string, title?: string) => {
-    if (!activeArtifact || activeArtifact.id === DEFAULT_WELCOME_ARTIFACT_ID) return;
+  const saveArtifact = useCallback(async (content: string, title?: string, createVersionSnapshot = false, expectedUpdatedAt?: string): Promise<WorkspaceArtifact | undefined> => {
+    if (!activeArtifact || activeArtifact.id === DEFAULT_WELCOME_ARTIFACT_ID) return undefined;
 
     try {
       const saved = await WorkspaceApiService.updateArtifact(activeArtifact.id, {
@@ -94,16 +105,31 @@ export function useWorkspaceArtifacts({
         language: activeArtifact.language,
         type: activeArtifact.type,
         chatId: chatId || activeArtifact.chatId,
-        createVersionSnapshot: false
+        createNewVersion: createVersionSnapshot,
+        expectedUpdatedAt: expectedUpdatedAt || activeArtifact.updatedAt
       });
 
       if (saved) {
         setArtifacts(prev => prev.map(a => a.id === activeArtifact.id ? { ...a, ...saved } : a));
+        return saved;
+      } else {
+        throw new Error('Server tidak mengembalikan artefak yang tersimpan');
       }
     } catch (err: any) {
       console.warn('[useWorkspaceArtifacts] Save error:', err);
+      if (err instanceof Error && err.message.includes('berubah') && chatId) {
+        try {
+          const latestArtifacts = await WorkspaceApiService.fetchArtifacts(chatId);
+          const latest = latestArtifacts.find(item => item.id === activeArtifact.id);
+          if (latest) setArtifacts(prev => prev.map(item => item.id === latest.id ? latest : item));
+        } catch (refreshError) {
+          console.warn('[useWorkspaceArtifacts] Could not refresh conflicting artifact:', refreshError);
+        }
+      }
+      showToast('Gagal menyimpan perubahan artefak.', 'error');
+      throw err;
     }
-  }, [activeArtifact, chatId]);
+  }, [activeArtifact, chatId, showToast]);
 
   const rollbackArtifact = useCallback(async (targetVersion: number) => {
     if (!activeArtifact || activeArtifact.id === DEFAULT_WELCOME_ARTIFACT_ID) return;
@@ -160,7 +186,7 @@ export function useWorkspaceArtifacts({
     showToast('Draf baru dibuka di Canvas', 'success');
   }, [chatId, showToast]);
 
-  const createArtifactFromContent = useCallback(async (content: string, title: string) => {
+  const createArtifactFromContent = useCallback(async (content: string, title: string): Promise<boolean> => {
     const id = `art_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     const draft: WorkspaceArtifact = {
       id, chatId: chatId || undefined, title: title.slice(0, 120), type: 'DOCUMENT',
@@ -171,11 +197,17 @@ export function useWorkspaceArtifacts({
     setHasUnreadArtifact(true);
     try {
       const persisted = await WorkspaceApiService.createArtifact({ id, chatId: chatId || undefined, title: draft.title, type: draft.type, content });
-      if (persisted) setArtifacts(current => current.map(item => item.id === id ? persisted : item));
+      if (!persisted) throw new Error('Server tidak mengembalikan artefak yang tersimpan');
+      setArtifacts(current => current.map(item => item.id === id ? persisted : item));
+      showToast('Jawaban dikirim ke Canvas', 'success');
+      return true;
     } catch (error) {
       console.warn('[useWorkspaceArtifacts] Failed to save comparison result to Canvas:', error);
+      setArtifacts(current => current.filter(item => item.id !== id));
+      setActiveArtifactId(current => current === id ? DEFAULT_WELCOME_ARTIFACT_ID : current);
+      showToast('Gagal menyimpan ke Canvas. Coba kirim lagi.', 'error');
+      return false;
     }
-    showToast('Jawaban dikirim ke Canvas', 'success');
   }, [chatId, showToast]);
 
   const duplicateArtifact = useCallback(async (id: string) => {
@@ -251,8 +283,8 @@ export function useWorkspaceArtifacts({
    * Syncs artifacts parsed from messages into the local state and triggers background persistence
    * with strict idempotency (no duplicate server posts for identical artifacts).
    */
-  const syncParsedMessageArtifacts = useCallback((extracted: WorkspaceArtifact[]) => {
-    if (!extracted || extracted.length === 0) return;
+  const syncParsedMessageArtifacts = useCallback(async (extracted: WorkspaceArtifact[], targetChatId?: string): Promise<boolean> => {
+    if (!extracted || extracted.length === 0) return true;
 
     setArtifacts(prev => {
       let updated = [...prev];
@@ -260,7 +292,7 @@ export function useWorkspaceArtifacts({
         // Skip DEFAULT_WELCOME_ARTIFACT
         if (newArt.id === DEFAULT_WELCOME_ARTIFACT_ID) return;
 
-        const idx = updated.findIndex(a => a.id === newArt.id || a.title === newArt.title);
+        const idx = updated.findIndex(a => a.id === newArt.id);
         if (idx !== -1) {
           updated[idx] = {
             ...updated[idx],
@@ -277,25 +309,23 @@ export function useWorkspaceArtifacts({
       return updated;
     });
 
-    // Idempotent background persistence for newly parsed artifacts
-    extracted.forEach(async (newArt) => {
-      if (newArt.id === DEFAULT_WELCOME_ARTIFACT_ID) return;
-      if (savingArtifactIdsRef.current.has(newArt.id)) return;
-
+    const results = await Promise.all(extracted.filter(artifact => artifact.id !== DEFAULT_WELCOME_ARTIFACT_ID && artifact.content.trim()).map(async (newArt) => {
+      if (savingArtifactIdsRef.current.has(newArt.id)) return true;
       savingArtifactIdsRef.current.add(newArt.id);
       try {
         const persisted = await WorkspaceApiService.createArtifact({
           id: newArt.id,
-          chatId: chatId || undefined,
+          chatId: targetChatId || chatId || undefined,
           title: newArt.title,
           type: newArt.type,
           language: newArt.language,
           content: newArt.content
         });
 
-        if (persisted && isMountedRef.current) {
+        if (!persisted) throw new Error('Server tidak mengembalikan artefak yang tersimpan');
+        if (isMountedRef.current) {
           setArtifacts(prev => {
-            const idx = prev.findIndex(a => a.id === persisted.id || a.title === persisted.title);
+            const idx = prev.findIndex(a => a.id === persisted.id);
             if (idx !== -1) {
               const copy = [...prev];
               copy[idx] = persisted;
@@ -304,13 +334,18 @@ export function useWorkspaceArtifacts({
             return [persisted, ...prev];
           });
         }
+        return true;
       } catch (err) {
         console.warn('[useWorkspaceArtifacts] Failed to persist extracted artifact:', err);
+        return false;
       } finally {
         savingArtifactIdsRef.current.delete(newArt.id);
       }
-    });
-  }, [chatId]);
+    }));
+    const allSaved = results.every(Boolean);
+    if (!allSaved) showToast('Dokumen dibuat, tetapi belum tersimpan. Canvas mempertahankan draf lokal; coba simpan lagi.', 'error');
+    return allSaved;
+  }, [chatId, showToast]);
 
   return {
     artifacts,

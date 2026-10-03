@@ -44,6 +44,9 @@ export const documentIngestionService = {
 
     // 1. VALIDATE: Magic Byte, extension, and limits validation
     const verified: VerifiedFileInfo = await validateAndInspectFile(buffer, originalFilename, clientMime);
+    if (abortSignal?.aborted) {
+      throw new DocumentProcessingException('PROCESSING_ABORTED', 'Proses unggah berkas dibatalkan.');
+    }
 
     // AI Safety Prompt Injection defense for plain text / markdown files
     if (verified.fileKind === 'text' || verified.fileKind === 'markdown') {
@@ -238,6 +241,12 @@ export const documentIngestionService = {
           where: { attachmentId }
         });
       } catch {}
+
+      if (abortSignal?.aborted || (procErr instanceof DocumentProcessingException && procErr.code === 'PROCESSING_ABORTED')) {
+        await prisma.attachments.deleteMany({ where: { id: attachmentId } }).catch(() => {});
+        await deleteStoredAttachmentFile(relativeStoragePath).catch(() => {});
+        throw procErr;
+      }
 
       // Mark as failed in DB
       const errorCode = procErr instanceof DocumentProcessingException ? procErr.code : 'PARSER_ERROR';

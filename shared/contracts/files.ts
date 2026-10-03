@@ -1,5 +1,15 @@
 import { z } from 'zod';
 
+export const MAX_WORKSPACE_ACTIVE_ATTACHMENTS = 8;
+export const MAX_UPLOAD_FILE_SIZE_BYTES = 5 * 1024 * 1024;
+export const MAX_DOCUMENT_CONTEXT_TOKENS = 2500;
+export const MAX_DOCUMENT_CONTEXT_CHUNKS = 8;
+export const SUPPORTED_WORKSPACE_FILE_EXTENSIONS = [
+  'txt', 'md', 'markdown', 'csv', 'json', 'bib', 'ris',
+  'py', 'js', 'jsx', 'ts', 'tsx', 'java', 'cpp', 'c', 'h', 'sql', 'html', 'css', 'xml', 'yaml', 'yml', 'sh', 'r',
+  'pdf', 'docx', 'pptx', 'xlsx', 'png', 'jpg', 'jpeg', 'webp'
+] as const;
+
 export type SupportedFileKind = 
   | 'text'
   | 'markdown'
@@ -99,6 +109,18 @@ export interface FileSourceReference {
   section?: string;
   sourceRef: string;
   snippet?: string;
+}
+
+/** Immutable document context selected for one Workspace model request. */
+export interface WorkspaceContextSnapshot {
+  id: string;
+  query: string;
+  createdAt: string;
+  selectedAttachmentIds: string[];
+  selectedChunks: DocumentChunk[];
+  sourceReferences: FileSourceReference[];
+  tokenBudget: number;
+  totalTokensUsed: number;
 }
 
 export interface AttachmentResponseDTO {

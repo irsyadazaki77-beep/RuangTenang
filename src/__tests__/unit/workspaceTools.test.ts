@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { WorkspaceToolRegistry } from '../../features/workspace/tools/toolRegistry';
 import { WorkspaceToolExecutor } from '../../features/workspace/tools/toolExecutor';
 import { WorkspaceToolExecutionPayload } from '../../features/workspace/tools/toolTypes';
+import { paraphraseAcademicText } from '../../features/workspace/utils/paraphraseEngine';
 
 describe('FASE 23 — Workspace Tool System', () => {
   describe('1. WorkspaceToolRegistry', () => {
@@ -116,6 +117,16 @@ describe('FASE 23 — Workspace Tool System', () => {
       expect(validation.valid).toBe(true);
       expect(validation.tool).toBeDefined();
     });
+
+    it('should reject an invalid value for a schema parameter', () => {
+      const validation = WorkspaceToolExecutor.validate({
+        toolId: 'academic_paraphrase',
+        input: { style: 'UNSUPPORTED' },
+        context: { activeArtifact: { id: 'doc', title: 'Draft', type: 'DOCUMENT', content: 'Text' } }
+      });
+      expect(validation.valid).toBe(false);
+      expect(validation.error).toContain('tidak valid');
+    });
   });
 
   describe('3. WorkspaceToolExecutor — Client Utility Execution', () => {
@@ -192,6 +203,18 @@ describe('FASE 23 — Workspace Tool System', () => {
       expect(result.proposedContent).toBeDefined();
       expect(result.metadata?.changesCount).toBeDefined();
     });
+
+    it('should pass the selected synthesis style to the academic paraphrase utility', async () => {
+      const tool = WorkspaceToolRegistry.getTool('academic_paraphrase')!;
+      const payload: WorkspaceToolExecutionPayload = {
+        toolId: tool.id,
+        input: { style: 'SINTESIS' },
+        context: { activeArtifact: { id: 'doc-style', title: 'Draft', type: 'DOCUMENT', content: 'Klaim utama ditunjukkan dalam penelitian. Hasilnya meningkat sebesar 12,5%. Kalimat tambahan menjelaskan konteks.' } }
+      };
+      const result = await WorkspaceToolExecutor.executeClientUtility(tool, payload);
+      expect(result.success).toBe(true);
+      expect(result.proposedContent).toBe('Klaim utama ditunjukkan dalam penelitian. Hasilnya meningkat sebesar 12,5%.');
+    });
   });
 
   describe('4. WorkspaceToolExecutor — AI Prompt Preparation', () => {
@@ -212,7 +235,7 @@ describe('FASE 23 — Workspace Tool System', () => {
       };
 
       const prompt = WorkspaceToolExecutor.prepareAiPrompt(tool, payload);
-      expect(prompt).toContain('Perbaiki tata bahasa');
+      expect(prompt).toContain('Fokus pada struktur SPOK');
       expect(prompt).toContain('SPOK');
       expect(prompt).toContain('saya makan nasi kemarin sore di kantin kampus');
     });
@@ -239,5 +262,39 @@ describe('FASE 23 — Workspace Tool System', () => {
       expect(prompt).toContain('const res = await fetch("/api/data");');
       expect(prompt).not.toContain('// Full 1000 lines code...');
     });
+  });
+});
+
+describe('Academic paraphrase safety', () => {
+  it('preserves claim wording and does not add scientific claims', () => {
+    const result = paraphraseAcademicText('Variabel X berpengaruh terhadap variabel Y.');
+    expect(result.paraphrasedText).not.toMatch(/positif|signifikan|terbukti|empiris/i);
+    expect(result.paraphrasedText).toBe('Variabel X berpengaruh terhadap variabel Y.');
+  });
+
+  it('does not convert an unspecified quantity into a majority', () => {
+    const result = paraphraseAcademicText('Banyak responden menggunakan aplikasi tersebut.');
+    expect(result.paraphrasedText).not.toMatch(/mayoritas/i);
+    expect(result.paraphrasedText).toBe('Banyak responden menggunakan aplikasi tersebut.');
+  });
+
+  it('preserves percentages and author citations', () => {
+    expect(paraphraseAcademicText('Hasil penelitian menunjukkan peningkatan sebesar 12,5%.').paraphrasedText).toContain('12,5%');
+    expect(paraphraseAcademicText('Menurut Putra (2025), hasil penelitian perlu dikaji.').paraphrasedText).toContain('Menurut Putra (2025)');
+  });
+
+  it('keeps source sentences containing protected numbers, citations, URLs, and DOI in synthesis', () => {
+    const result = paraphraseAcademicText('Klaim utama penelitian ini dijelaskan. Menurut Putra (2025), sampel berjumlah 45 orang. Data tersedia di https://example.org/data. DOI: 10.1234/abc. Detail tambahan tidak memuat angka.', 'SINTESIS');
+    expect(result.paraphrasedText).toContain('Menurut Putra (2025), sampel berjumlah 45 orang.');
+    expect(result.paraphrasedText).toContain('https://example.org/data.');
+    expect(result.paraphrasedText).toContain('10.1234/abc.');
+  });
+
+  it('is deterministic for every style', () => {
+    const input = 'Penelitian ini menemukan hasil tertentu. Temuan tersebut mendukung tujuan yang dinyatakan. Bagian lain menjelaskan konteks.';
+    for (const style of ['KONSERVATIF', 'RESTRUKTURISASI', 'SINTESIS'] as const) {
+      const outputs = Array.from({ length: 5 }, () => paraphraseAcademicText(input, style).paraphrasedText);
+      expect(new Set(outputs).size).toBe(1);
+    }
   });
 });

@@ -22,9 +22,9 @@ describe('workspace comparison model validation', () => {
     expect(() => validateComparisonCandidates(['gemini-3.8-flash', 'deepseek-chat'], 'Free', false, { registry, providerConfigured: available })).toThrowError(expect.objectContaining({ code: 'MODEL_CAPABILITY_UNSUPPORTED' }));
   });
 
-  it('rejects models whose provider is unavailable and attachments without provider capability support', () => {
+  it('rejects models whose provider is unavailable and accepts valid candidates with attachments', () => {
     expect(() => validateComparisonCandidates(['gemini-3.8-flash', 'deepseek-chat'], 'Free', false, { providerConfigured: model => model.provider === 'gemini' })).toThrowError(ComparisonValidationError);
-    expect(() => validateComparisonCandidates(['gemini-3.8-flash', 'deepseek-chat'], 'Free', true, { providerConfigured: available })).toThrowError(expect.objectContaining({ code: 'ATTACHMENT_UNSUPPORTED' }));
+    expect(validateComparisonCandidates(['gemini-3.8-flash', 'deepseek-chat'], 'Free', true, { providerConfigured: available })).toHaveLength(2);
   });
 
   it('reserves quota for each candidate and releases earlier reservations when quota is exhausted', async () => {

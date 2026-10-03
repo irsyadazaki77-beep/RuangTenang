@@ -4,23 +4,11 @@ import {
   WorkspaceFileKind, 
   FileValidationErrorType 
 } from '../types.js';
+import { MAX_UPLOAD_FILE_SIZE_BYTES, SUPPORTED_WORKSPACE_FILE_EXTENSIONS } from '../../../../shared/contracts/files.js';
 
-export const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
+export const MAX_FILE_SIZE_BYTES = MAX_UPLOAD_FILE_SIZE_BYTES;
 
-export const SUPPORTED_EXTENSIONS = new Set([
-  // Text
-  'txt', 'md', 'markdown', 'csv', 'json',
-  // Code
-  'py', 'js', 'jsx', 'ts', 'tsx', 'java', 'cpp', 'c', 'h', 'sql', 'html', 'css', 'xml', 'yaml', 'yml', 'sh', 'r',
-  // Documents
-  'pdf', 'docx',
-  // Presentations
-  'pptx',
-  // Spreadsheets
-  'xlsx',
-  // Images (preview only)
-  'png', 'jpg', 'jpeg', 'webp'
-]);
+export const SUPPORTED_EXTENSIONS = new Set<string>(SUPPORTED_WORKSPACE_FILE_EXTENSIONS);
 
 export const TEXT_EXTENSIONS = new Set([
   'txt', 'md', 'markdown', 'csv', 'json',
@@ -59,7 +47,7 @@ export function validateFileHeader(file: File): FileValidationResult {
     return {
       valid: false,
       error: 'UNSUPPORTED_TYPE',
-      message: `Format berkas .${ext} belum didukung. Format didukung: PDF, DOCX, PPTX, XLSX, TXT, MD, CSV, JSON, PNG, JPG.`
+      message: `Format berkas .${ext} belum didukung. Format didukung: ${SUPPORTED_WORKSPACE_FILE_EXTENSIONS.join(', ').toUpperCase()}.`
     };
   }
 
@@ -186,7 +174,8 @@ function mapServerErrorCode(serverCode?: string): FileValidationErrorType {
 export async function processFileForWorkspace(
   file: File,
   chatId?: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  onProcessing?: () => void
 ): Promise<FileValidationResult> {
   const headerValidation = validateFileHeader(file);
   if (!headerValidation.valid) {
@@ -229,7 +218,8 @@ export async function processFileForWorkspace(
     }
 
     // If still in processing status, poll until ready with strict timeout
-    if (att.status === 'processing') {
+    if (att.status === 'processing' || att.status === 'pending') {
+      onProcessing?.();
       const pollResult = await pollProcessingStatus(att.id, 15, 800, signal);
       if (pollResult.success && pollResult.attachment) {
         att = pollResult.attachment;
@@ -237,7 +227,16 @@ export async function processFileForWorkspace(
         return {
           valid: false,
           error: 'PROCESSING_TIMEOUT',
-          message: 'Pemrosesan dokumen melebihi batas waktu tunggu. Silakan coba lagi.'
+          message: 'Pemrosesan dokumen melebihi batas waktu tunggu. Silakan coba lagi.',
+          file: {
+            id: att.id,
+            name: att.filename || file.name,
+            size: att.size || file.size,
+            mimeType: att.mimeType || file.type || 'application/octet-stream',
+            fileKind: (att.fileKind as WorkspaceFileKind) || 'text',
+            status: 'failed',
+            url: att.url || `/api/v1/chat/attachments/${att.id}`
+          }
         };
       } else {
         return {
@@ -252,7 +251,17 @@ export async function processFileForWorkspace(
       return {
         valid: false,
         error: 'PROCESSING_FAILED',
-        message: att.errorMessage || 'Gagal mengekstrak struktur berkas dokumen.'
+        message: att.errorMessage || 'Gagal mengekstrak struktur berkas dokumen.',
+        file: {
+          id: att.id,
+          name: att.filename || file.name,
+          size: att.size || file.size,
+          mimeType: att.mimeType || file.type || 'application/octet-stream',
+          fileKind: (att.fileKind as WorkspaceFileKind) || 'text',
+          status: 'failed',
+          url: att.url || `/api/v1/chat/attachments/${att.id}`,
+          errorMessage: att.errorMessage
+        }
       };
     }
 
@@ -285,5 +294,47 @@ export async function processFileForWorkspace(
       error: 'READ_FAILED',
       message: errMessage
     };
+  }
+}
+
+export async function retryWorkspaceFile(attachmentId: string, signal?: AbortSignal): Promise<FileValidationResult> {
+  try {
+    const response = await fetch(`/api/v1/chat/attachments/${encodeURIComponent(attachmentId)}/retry`, {
+      method: 'POST', credentials: 'include', signal
+    });
+    const payload = await response.json();
+    if (!response.ok || !payload.success) {
+      return { valid: false, error: 'PROCESSING_FAILED', message: payload.message || 'Gagal mencoba ulang pemrosesan dokumen.' };
+    }
+    let attachment = payload.attachment as AttachmentStatusResponseDTO | undefined;
+    if (attachment?.status === 'processing' || attachment?.status === 'pending') {
+      const polled = await pollProcessingStatus(attachmentId, 15, 800, signal);
+      if (!polled.success || !polled.attachment) {
+        return { valid: false, error: 'PROCESSING_TIMEOUT', message: polled.errorMessage || 'Pemrosesan dokumen belum selesai. Coba lagi.' };
+      }
+      attachment = polled.attachment;
+    }
+    if (!attachment || attachment.status !== 'ready') {
+      return { valid: false, error: 'PROCESSING_FAILED', message: attachment?.errorMessage || 'Dokumen belum dapat diproses.' };
+    }
+    return {
+      valid: true,
+      file: {
+        id: attachment.id,
+        name: attachment.filename,
+        mimeType: attachment.mimeType,
+        size: attachment.size,
+        fileKind: attachment.fileKind,
+        status: 'ready',
+        url: attachment.url,
+        checksum: attachment.checksum,
+        pageCount: attachment.pageCount,
+        slideCount: attachment.slideCount,
+        sheetCount: attachment.sheetCount
+      }
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Gagal mencoba ulang pemrosesan dokumen.';
+    return { valid: false, error: 'PROCESSING_FAILED', message };
   }
 }

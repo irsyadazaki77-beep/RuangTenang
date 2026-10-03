@@ -14,8 +14,30 @@ export interface WorkspaceComposerConfig {
   comparisonModelIds?: string[];
 }
 
+export interface WorkspaceActiveContext {
+  workspaceId?: string;
+  activeFiles: Array<{ id?: string; name: string }>;
+  activeArtifact?: { id: string; title: string; type: ArtifactType; version: number; content: string };
+  selectedText?: string;
+  presetId?: string;
+  taskCategory?: string;
+}
+
+export interface WorkspaceRequestSnapshot {
+  requestId: string;
+  workspaceId?: string;
+  userMessage: string;
+  model: string;
+  presetId?: string;
+  taskCategory?: string;
+  context: WorkspaceActiveContext;
+  config: WorkspaceComposerConfig;
+  createdAt: string;
+}
+
 export interface WorkspaceComparisonRun {
   comparisonId: string;
+  snapshotId?: string;
   chatId?: string;
   prompt: string;
   selectedModelIds: string[];
@@ -25,6 +47,8 @@ export interface WorkspaceComparisonRun {
   latencyPreference?: string;
   qualityPreference?: string;
   activeContext?: { title: string; content: string };
+  attachments?: Array<{ id: string; filename: string; mimeType?: string; size?: number; url?: string }>;
+  createdAt?: string;
 }
 
 export type WorkspaceComparisonCandidateStatus = 'queued' | 'streaming' | 'completed' | 'failed' | 'cancelled';
@@ -36,6 +60,10 @@ export interface WorkspaceComparisonCandidate {
   status: WorkspaceComparisonCandidateStatus;
   output: string;
   latencyMs?: number;
+  tokensUsed?: {
+    input?: number;
+    output?: number;
+  };
   error?: string;
 }
 
@@ -62,6 +90,25 @@ export interface WorkspaceArtifact {
   createdAt?: string;
   updatedAt: string;
   versions?: ArtifactVersionRecord[];
+}
+
+/** A text selection captured from the active Canvas editor. Offsets are UTF-16, matching textarea selection APIs. */
+export interface WorkspaceArtifactSelection {
+  artifactId: string;
+  start: number;
+  end: number;
+  text: string;
+}
+
+/** A proposed, version-scoped edit. The base content is retained for local-draft conflict detection. */
+export interface ArtifactPatch {
+  artifactId: string;
+  baseVersion: number;
+  baseContent: string;
+  start: number;
+  end: number;
+  originalText: string;
+  replacementText: string;
 }
 
 export interface AcademicTaskTemplate {
@@ -108,7 +155,9 @@ export type WorkspaceAttachmentStatus =
 
 export interface WorkspaceFileAttachment {
   id?: string;
+  clientId?: string;
   name: string;
+  createdAt?: string;
   content?: string;
   size?: number;
   mimeType?: string;

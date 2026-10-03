@@ -37,15 +37,13 @@ export const WorkspaceCompareModelSelector = React.memo(function WorkspaceCompar
       <button type="button" className="fixed inset-0 z-40 cursor-default" aria-label="Tutup pilihan model comparison" onClick={close} />
       <div role="dialog" aria-label="Pilih model comparison" onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); close(); } }} className="fixed inset-x-2 bottom-3 z-50 max-h-[min(70dvh,34rem)] overflow-y-auto rounded-xl border border-slate-200 bg-white p-3 shadow-2xl dark:border-slate-700 dark:bg-slate-900 md:absolute md:inset-x-auto md:bottom-full md:left-0 md:mb-2 md:w-80">
         <div className="text-sm font-semibold">Model yang dibandingkan</div>
-        <p className="mt-1 text-[11px] text-slate-500">Pilih 2–3 model. Model dengan akses akun yang tidak tersedia dinonaktifkan.</p>
-        {hasAttachment && <p role="status" className="mt-2 text-[11px] text-amber-700 dark:text-amber-300">Lampiran belum didukung dalam mode Compare.</p>}
+        <p className="mt-1 text-[11px] text-slate-500">Pilih 2–3 model. Semua model akan menerima konteks dan dokumen yang identik.</p>
+        {hasAttachment && <p role="status" className="mt-2 text-[11px] text-emerald-700 dark:text-emerald-300">Lampiran aktif akan dibagikan secara adil (shared snapshot) ke seluruh kandidat.</p>}
         {notice && <p role="status" className="mt-2 text-[11px] text-amber-700 dark:text-amber-300">{notice}</p>}
         <div className="mt-2 space-y-1" role="group" aria-label="Model tersedia untuk comparison">
           {compatible.map(model => {
             const checked = selectedModelIds.includes(model.id);
-            const incompatible = hasAttachment;
-            const reason = incompatible ? 'Model ini tidak mendukung lampiran aktif.' : '';
-            return <button key={model.id} type="button" aria-pressed={checked} aria-label={`${model.name}${reason ? `. ${reason}` : ''}`} title={reason} disabled={incompatible} onClick={() => toggle(model.id)} className="flex min-h-10 w-full items-center gap-2 rounded-lg px-2 text-left text-xs hover:bg-slate-50 dark:hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
+            return <button key={model.id} type="button" aria-pressed={checked} aria-label={model.name} onClick={() => toggle(model.id)} className="flex min-h-10 w-full items-center gap-2 rounded-lg px-2 text-left text-xs hover:bg-slate-50 dark:hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
               <span aria-hidden="true" className={`flex h-4 w-4 items-center justify-center rounded border ${checked ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-slate-300 dark:border-slate-600'}`}>{checked && <Check className="h-3 w-3" />}</span>
               <span className="min-w-0 flex-1"><span className="block truncate font-medium">{model.name}</span><span className="block truncate text-[10px] text-slate-500">{model.provider}</span></span>
             </button>;

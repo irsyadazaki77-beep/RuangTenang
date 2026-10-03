@@ -1,6 +1,6 @@
 import { apiClient } from '../../../lib/apiClient';
 import { Message } from '../../chat/types';
-import { WorkspaceArtifact, ArtifactType } from '../types';
+import { WorkspaceArtifact, ArtifactType, WorkspaceFileKind } from '../types';
 
 export interface CreateArtifactPayload {
   id?: string;
@@ -17,10 +17,44 @@ export interface UpdateArtifactPayload {
   type?: ArtifactType;
   language?: string;
   chatId?: string | null;
-  createVersionSnapshot?: boolean;
+  createNewVersion?: boolean;
+  expectedUpdatedAt?: string;
+}
+
+export interface WorkspaceAttachmentDto {
+  id: string;
+  filename: string;
+  mimeType: string;
+  fileKind: WorkspaceFileKind;
+  size: number;
+  status: 'processing' | 'ready' | 'failed' | 'pending' | 'unsupported';
+  url: string;
+  checksum?: string;
+  pageCount?: number;
+  slideCount?: number;
+  sheetCount?: number;
+  errorMessage?: string;
+  createdAt?: string;
 }
 
 export class WorkspaceApiService {
+  static async fetchChatAttachments(chatId: string, signal?: AbortSignal): Promise<WorkspaceAttachmentDto[]> {
+    const res = await apiClient.get<{ attachments?: WorkspaceAttachmentDto[] }>(
+      `/api/v1/chat/${encodeURIComponent(chatId)}/attachments`, { signal }
+    );
+    if (!res.success || !Array.isArray(res.data?.attachments)) {
+      throw new Error(res.message || 'Gagal memuat dokumen Workspace');
+    }
+    return res.data.attachments;
+  }
+
+  static async deleteAttachment(attachmentId: string, signal?: AbortSignal): Promise<void> {
+    const res = await apiClient.delete<{ message?: string }>(
+      `/api/v1/chat/attachments/${encodeURIComponent(attachmentId)}`, { signal }
+    );
+    if (!res.success) throw new Error(res.message || 'Gagal menghapus dokumen');
+  }
+
   /**
    * Fetch all workspace artifacts for current user, optionally filtered by chatId
    */
@@ -44,7 +78,13 @@ export class WorkspaceApiService {
     if (res.success && res.data && Array.isArray(res.data.data)) {
       return res.data.data;
     }
-    return [];
+    throw new Error(res.message || 'Gagal memuat percakapan Workspace');
+  }
+
+  /** Clears only the messages belonging to an owned Workspace chat. */
+  static async clearMessages(chatId: string, signal?: AbortSignal): Promise<void> {
+    const res = await apiClient.delete<{ message?: string }>(`/api/v1/chat/${encodeURIComponent(chatId)}/messages`, { signal });
+    if (!res.success) throw new Error(res.message || 'Gagal membersihkan percakapan');
   }
 
   /**
@@ -66,6 +106,10 @@ export class WorkspaceApiService {
     if (res.success && res.data) {
       return res.data;
     }
+    if (res.status === 409 || res.code === 'ARTIFACT_CONFLICT') {
+      throw new Error(res.message || 'Dokumen berubah sejak revisi dimulai. Coba ulang revisi.');
+    }
+    if (!res.success) throw new Error(res.message || 'Gagal menyimpan artefak');
     return null;
   }
 

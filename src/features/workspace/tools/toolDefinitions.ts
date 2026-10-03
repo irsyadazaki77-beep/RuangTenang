@@ -26,8 +26,12 @@ export const WORKSPACE_TOOL_DEFINITIONS: WorkspaceToolDefinition[] = [
         ]
       }
     ],
-    promptTemplate: (input, contextText) => 
-      `Perbaiki tata bahasa, tanda baca, ejaan baku KBBI, dan pastikan struktur kalimat memenuhi standar SPOK tanpa mengubah makna substansi:\n\n${contextText}`
+    promptTemplate: (input, contextText) => {
+      const focusInstruction = input.focus === 'formalitas'
+        ? 'Fokus pada peningkatan diksi formal yang ekuivalen; jangan menambah klaim atau mengubah makna.'
+        : 'Fokus pada struktur SPOK, tanda baca, dan ejaan baku KBBI tanpa mengubah makna substansi.';
+      return `${focusInstruction}\n\n${contextText}`;
+    }
   },
   {
     id: 'document_formalize_academic',
@@ -91,7 +95,7 @@ export const WORKSPACE_TOOL_DEFINITIONS: WorkspaceToolDefinition[] = [
         label: 'Gaya Parafrase',
         defaultValue: 'KONSERVATIF',
         options: [
-          { value: 'KONSERVATIF', label: 'Konservatif (Substitusi Istilah Formal)' },
+          { value: 'KONSERVATIF', label: 'Konservatif (Pertahankan Klaim)' },
           { value: 'RESTRUKTURISASI', label: 'Restrukturisasi Kalimat' },
           { value: 'SINTESIS', label: 'Sintesis Ringkas' }
         ]

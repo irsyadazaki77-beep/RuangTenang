@@ -2,11 +2,12 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { prisma } from '../database.js';
+import { MAX_UPLOAD_FILE_SIZE_BYTES } from '../../shared/contracts/files.js';
 import { aiSafetyService } from './ai/aiSafetyService.js';
 import { resolveExistingStoredAttachmentFilePath } from './attachmentFileService.js';
 import { encryptionService } from './encryptionService.js';
 
-export const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB limit
+export const MAX_FILE_SIZE = MAX_UPLOAD_FILE_SIZE_BYTES;
 export const MAX_ATTACHMENTS_PER_MESSAGE = 3;
 
 export const UPLOAD_DIR = path.join(process.cwd(), 'uploads', 'attachments');

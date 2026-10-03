@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from 'react';
-import { Sparkles, ChevronRight, RefreshCw, FileText } from 'lucide-react';
+import { Sparkles, ChevronRight, RefreshCw, FileText, Copy, Check, FilePlus2 } from 'lucide-react';
 import { motion, useReducedMotion } from 'motion/react';
 import { Message } from '../../chat/types';
 import { StarterTaskItem, WorkspaceArtifact } from '../types';
@@ -18,6 +18,7 @@ interface WorkspaceConversationProps {
   onSelectStarterTask: (prompt: string) => void;
   onRetryMessage: (lastUserPrompt: string, errorMsgId: string) => void;
   onOpenCanvas: () => void;
+  onSendToCanvas?: (content: string) => void;
   comparisonRun?: WorkspaceComparisonRun | null;
   onUseComparisonResponse?: (run: WorkspaceComparisonRun, candidate: WorkspaceComparisonCandidate) => void;
   onComparisonSendToCanvas?: (candidate: WorkspaceComparisonCandidate) => void;
@@ -34,6 +35,7 @@ export const WorkspaceConversation: React.FC<WorkspaceConversationProps> = React
   onSelectStarterTask,
   onRetryMessage,
   onOpenCanvas,
+  onSendToCanvas,
   comparisonRun = null,
   onUseComparisonResponse = () => undefined,
   onComparisonSendToCanvas = () => undefined,
@@ -42,6 +44,7 @@ export const WorkspaceConversation: React.FC<WorkspaceConversationProps> = React
   const shouldReduceMotion = useReducedMotion();
   const scrollRafRef = useRef<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [copiedMessageId, setCopiedMessageId] = React.useState<string | null>(null);
 
   const hasUserSentMessage = messages.some(m => m.role === 'user') || isStreaming || messages.length > 1;
 
@@ -73,6 +76,17 @@ export const WorkspaceConversation: React.FC<WorkspaceConversationProps> = React
     return d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
   };
 
+  const copyMessage = async (message: Message) => {
+    if (!navigator.clipboard?.writeText) return;
+    try {
+      await navigator.clipboard.writeText(message.content);
+      setCopiedMessageId(message.id);
+      window.setTimeout(() => setCopiedMessageId(current => current === message.id ? null : current), 1400);
+    } catch {
+      setCopiedMessageId(null);
+    }
+  };
+
   return (
     <div role="log" aria-label="Percakapan RuangKerja" aria-live={isStreaming ? 'off' : 'polite'} className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-3.5 sm:p-5 space-y-4 custom-scrollbar flex flex-col">
       {isLoading ? (
@@ -83,11 +97,11 @@ export const WorkspaceConversation: React.FC<WorkspaceConversationProps> = React
         </div>
       ) : !hasUserSentMessage && !activeStreamingMessage ? (
         /* FRESH WORKSPACE STATE: Compact Intro & Starter Tasks */
-        <div className="my-auto py-6 px-2 space-y-6 animate-fade-in max-w-lg mx-auto w-full">
+        <div className="my-auto py-6 px-2 space-y-4 animate-fade-in max-w-2xl mx-auto w-full">
           {/* Compact Workspace Introduction */}
           <div className="text-center space-y-1.5">
             <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100">
-              Asisten Akademik
+              Mulai sesuatu
             </h2>
             <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 max-w-sm mx-auto leading-relaxed">
               Bantu riset, tulisan, coding, dan pekerjaan akademik secara terstruktur.
@@ -95,7 +109,7 @@ export const WorkspaceConversation: React.FC<WorkspaceConversationProps> = React
           </div>
 
           {/* Compact Starter Actions List */}
-          <div className="space-y-1.5">
+          <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
             {starterTasks.map((task) => (
               <button
                 key={task.id}
@@ -103,8 +117,8 @@ export const WorkspaceConversation: React.FC<WorkspaceConversationProps> = React
                 onClick={() => onSelectStarterTask(task.prompt)}
                 className={`w-full p-2.5 rounded-xl text-left transition-all flex items-center justify-between group cursor-pointer active:scale-[0.99] border ${
                   task.primary
-                    ? 'bg-emerald-50/50 dark:bg-emerald-950/30 border-emerald-300/80 dark:border-emerald-800/80 hover:border-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-950/50'
-                    : 'bg-slate-50/70 dark:bg-slate-900/70 border-slate-200/80 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 hover:bg-slate-100/60 dark:hover:bg-slate-800/60'
+                    ? 'bg-emerald-50/60 dark:bg-emerald-950/25 border-emerald-200/70 dark:border-emerald-900/70 hover:bg-emerald-50 dark:hover:bg-emerald-950/40'
+                    : 'bg-transparent border-transparent hover:border-slate-200/70 dark:hover:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900'
                 }`}
               >
                 <div className="flex items-center gap-2.5 min-w-0 pr-2">
@@ -134,7 +148,7 @@ export const WorkspaceConversation: React.FC<WorkspaceConversationProps> = React
               initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
               transition={shouldReduceMotion ? { duration: 0.1 } : { duration: 0.15 }}
-              className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
+              className={`mx-auto flex w-full max-w-[56rem] flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
             >
               {/* Assistant Message Header */}
               {msg.role === 'assistant' && (
@@ -161,12 +175,12 @@ export const WorkspaceConversation: React.FC<WorkspaceConversationProps> = React
                 </div>
               )}
 
-              {/* Message Content Bubble */}
+              {/* User prompts stay compact; assistant content reads like a document. */}
               <div 
                 className={`max-w-[92%] sm:max-w-[88%] leading-relaxed ${
                   msg.role === 'user'
-                    ? 'bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 rounded-xl rounded-tr-xs px-3.5 py-2.5 text-xs sm:text-sm font-normal'
-                    : 'bg-slate-50/90 dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 text-slate-800 dark:text-slate-100 rounded-xl rounded-tl-xs p-3.5 text-xs sm:text-sm'
+                    ? 'bg-slate-100 dark:bg-slate-800/80 text-slate-800 dark:text-slate-100 rounded-xl rounded-tr-sm px-3 py-2 text-xs sm:text-sm font-normal'
+                    : 'w-full max-w-full text-slate-800 dark:text-slate-100 text-xs sm:text-sm'
                 }`}
               >
                 <div className={`prose max-w-none text-xs sm:text-sm prose-p:my-1.5 prose-pre:my-1.5 ${
@@ -210,6 +224,14 @@ export const WorkspaceConversation: React.FC<WorkspaceConversationProps> = React
                   </div>
                 )}
               </div>
+              {msg.role === 'assistant' && !msg.error && (
+                <div className="mt-1 flex items-center gap-0.5 text-[11px] text-slate-400">
+                  <button type="button" onClick={() => { void copyMessage(msg); }} className="inline-flex h-7 items-center gap-1 rounded-md px-2 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500" aria-label="Salin jawaban">
+                    {copiedMessageId === msg.id ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}{copiedMessageId === msg.id ? 'Tersalin' : 'Salin'}
+                  </button>
+                  {onSendToCanvas && <button type="button" onClick={() => onSendToCanvas(msg.content)} className="inline-flex h-7 items-center gap-1 rounded-md px-2 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"><FilePlus2 className="h-3.5 w-3.5" />Kirim ke Canvas</button>}
+                </div>
+              )}
             </motion.div>
           ))}
 
@@ -227,7 +249,7 @@ export const WorkspaceConversation: React.FC<WorkspaceConversationProps> = React
                 <span className="text-[10.5px] text-emerald-600 dark:text-emerald-400 font-medium">Menulis...</span>
               </div>
 
-              <div className="max-w-[92%] sm:max-w-[88%] rounded-xl rounded-tl-xs p-3.5 bg-slate-50/90 dark:bg-slate-900/90 border border-emerald-300/80 dark:border-emerald-800/80 text-slate-800 dark:text-slate-100 leading-relaxed text-xs sm:text-sm">
+              <div className="mx-auto w-full max-w-[56rem] text-slate-800 dark:text-slate-100 leading-relaxed text-xs sm:text-sm">
                 <div className="prose dark:prose-invert max-w-none text-xs sm:text-sm prose-p:my-1">
                   <LazyMarkdown content={activeStreamingMessage.content || '...'} />
                 </div>

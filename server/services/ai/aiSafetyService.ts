@@ -701,6 +701,29 @@ Konteks Pengguna:
       if (builtContext.sourceReferences) {
         pipelineSourceReferences = builtContext.sourceReferences;
       }
+    } else if (isRuangKerja) {
+      const guestAttachmentIds = input.attachmentIds || (input.attachments || [])
+        .map((attachment: unknown) => {
+          if (typeof attachment === 'string') return attachment;
+          if (!attachment || typeof attachment !== 'object') return undefined;
+          const record = attachment as Record<string, unknown>;
+          return record.id || record.serverAttachmentId;
+        })
+        .filter((id: unknown): id is string => typeof id === 'string');
+      if (guestAttachmentIds.length > 0) {
+        try {
+          const { contextRetrievalService } = await import('../file-intelligence/contextRetrievalService.js');
+          const guestDocumentContext = await contextRetrievalService.retrieveContext({
+            userId: 'guest',
+            attachmentIds: guestAttachmentIds,
+            userQuery: redactedInput
+          });
+          if (guestDocumentContext.contextBlock) systemInstruction += `\n\n${guestDocumentContext.contextBlock}`;
+          pipelineSourceReferences = guestDocumentContext.sourceReferences;
+        } catch (error) {
+          console.warn('[AI_CONTEXT_GUEST_DOC_WARN] Guest document retrieval failed:', error);
+        }
+      }
     }
 
     // Treat stored memories and plugin results as UNTRUSTED DATA with strict boundary tags

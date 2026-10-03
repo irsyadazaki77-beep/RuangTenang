@@ -82,7 +82,7 @@ export const AcademicParaphraseModal: React.FC<AcademicParaphraseModalProps> = (
                 </span>
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Peningkatan diksi ilmiah formal (KBBI/PUEBI), restrukturisasi kalimat, dan sintesis ringkas
+                Penyuntingan konservatif yang menjaga klaim, susunan, angka, dan sitasi dari teks sumber
               </p>
             </div>
           </div>
@@ -110,7 +110,7 @@ export const AcademicParaphraseModal: React.FC<AcademicParaphraseModalProps> = (
                     ? 'bg-indigo-600 text-white shadow-xs'
                     : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
                 }`}
-                title="Ganti sinonim baku formal tanpa mengubah urutan kalimat"
+                title="Pertahankan kalimat dan klaim sumber"
               >
                 1. Konservatif
               </button>
@@ -122,7 +122,7 @@ export const AcademicParaphraseModal: React.FC<AcademicParaphraseModalProps> = (
                     ? 'bg-indigo-600 text-white shadow-xs'
                     : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
                 }`}
-                title="Ubah kalimat aktif/pasif & alur logika klausa"
+                title="Pertahankan urutan klaim dan kalimat sumber"
               >
                 2. Restrukturisasi
               </button>
@@ -134,7 +134,7 @@ export const AcademicParaphraseModal: React.FC<AcademicParaphraseModalProps> = (
                     ? 'bg-indigo-600 text-white shadow-xs'
                     : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
                 }`}
-                title="Rangkum inti gagasan menjadi kalimat padat berbobot"
+                title="Pilih kalimat klaim utama dan pendukung secara ekstraktif"
               >
                 3. Sintesis Ringkas
               </button>
@@ -142,9 +142,9 @@ export const AcademicParaphraseModal: React.FC<AcademicParaphraseModalProps> = (
           </div>
 
           <div className="text-xs text-slate-400">
-            {style === 'KONSERVATIF' && 'Diksi Baku KBBI • Struktur Utuh'}
-            {style === 'RESTRUKTURISASI' && 'Inversi Logika & Variasi Konjungsi'}
-            {style === 'SINTESIS' && 'Eksekutif Ringkas • Kerapatan Informasi'}
+            {style === 'KONSERVATIF' && 'Klaim dipertahankan • Tanpa substitusi sinonim'}
+            {style === 'RESTRUKTURISASI' && 'Urutan klaim dipertahankan • Tanpa inversi relasi'}
+            {style === 'SINTESIS' && 'Ringkasan ekstraktif • Kalimat diambil dari sumber'}
           </div>
         </div>
 

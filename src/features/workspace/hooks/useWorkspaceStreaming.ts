@@ -9,12 +9,16 @@ import { StoredAttachment } from '../../chat/types';
 
 interface UseWorkspaceStreamingOptions {
   chatId?: string;
+  onChatIdReceived?: (chatId: string) => void;
+  onChatCreated?: (chatId: string) => void;
   onStreamArtifactExtracted?: (artifact: WorkspaceArtifact, isStreaming: boolean) => void;
   onStreamCompleted?: (assistantMessage: Message, extractedArtifacts: WorkspaceArtifact[]) => void;
 }
 
 export function useWorkspaceStreaming({
   chatId,
+  onChatIdReceived,
+  onChatCreated,
   onStreamArtifactExtracted,
   onStreamCompleted
 }: UseWorkspaceStreamingOptions) {
@@ -23,24 +27,29 @@ export function useWorkspaceStreaming({
   const [activeStreamingMessage, setActiveStreamingMessage] = useState<Message | null>(null);
 
   const streamingClientRef = useRef<ChatStreamingClient | null>(null);
+  const streamGenerationRef = useRef(0);
+  const pendingChatIdRef = useRef<string | null>(null);
 
   // Clean up streaming client on chatId change or component unmount
   useEffect(() => {
     return () => {
       if (streamingClientRef.current) {
+        streamGenerationRef.current += 1;
         streamingClientRef.current.abort();
         streamingClientRef.current = null;
       }
     };
   }, [chatId]);
 
-  const abortStream = useCallback(() => {
+  const abortStream = useCallback((silent = false) => {
+    streamGenerationRef.current += 1;
+    pendingChatIdRef.current = null;
     if (streamingClientRef.current) {
       streamingClientRef.current.abort();
     }
     setStreamingStatus('aborted');
     setActiveStreamingMessage(null);
-    showToast('Respons dihentikan.', 'info');
+    if (!silent) showToast('Respons dihentikan.', 'info');
   }, [showToast]);
 
   const sendMessageStream = useCallback(async (
@@ -52,6 +61,8 @@ export function useWorkspaceStreaming({
     if (!userPrompt.trim() || streamingStatus === 'streaming' || streamingStatus === 'connecting') {
       return;
     }
+    const streamGeneration = ++streamGenerationRef.current;
+    pendingChatIdRef.current = null;
 
     // Abort any existing stream before starting a new one
     if (streamingClientRef.current) {
@@ -59,7 +70,7 @@ export function useWorkspaceStreaming({
     }
 
     setStreamingStatus('connecting');
-    const assistantMsgId = `asst_${Date.now()}`;
+    const assistantMsgId = `asst_${crypto.randomUUID()}`;
     let accumulatedText = '';
     let routingMeta: { modelUsed?: string; routingMode?: 'manual' | 'auto'; routingReason?: string } = {};
 
@@ -86,10 +97,17 @@ export function useWorkspaceStreaming({
           qualityPreference: config?.qualityPreference
         },
         {
+          onChatCreated: (newChatId) => {
+            if (streamGeneration !== streamGenerationRef.current) return;
+            pendingChatIdRef.current = newChatId;
+            onChatIdReceived?.(newChatId);
+          },
           onRoutingMetadata: (data) => {
+            if (streamGeneration !== streamGenerationRef.current) return;
             routingMeta = data;
           },
           onMessageStart: () => {
+            if (streamGeneration !== streamGenerationRef.current) return;
             setStreamingStatus('streaming');
             setActiveStreamingMessage({
               id: assistantMsgId,
@@ -99,6 +117,7 @@ export function useWorkspaceStreaming({
             });
           },
           onChunk: (chunk: string) => {
+            if (streamGeneration !== streamGenerationRef.current) return;
             accumulatedText += chunk;
             setActiveStreamingMessage({
               id: assistantMsgId,
@@ -109,7 +128,7 @@ export function useWorkspaceStreaming({
             });
 
             // Parse live artifacts during stream
-            const { artifacts: extracted, activeStreamingArtifact } = parseArtifactsFromText(accumulatedText, true);
+            const { artifacts: extracted, activeStreamingArtifact } = parseArtifactsFromText(accumulatedText, true, assistantMsgId);
 
             if (activeStreamingArtifact) {
               onStreamArtifactExtracted?.(activeStreamingArtifact, true);
@@ -118,10 +137,11 @@ export function useWorkspaceStreaming({
             }
           },
           onMessageComplete: (finalText: string) => {
+            if (streamGeneration !== streamGenerationRef.current) return;
             setStreamingStatus('completed');
             setActiveStreamingMessage(null);
 
-            const { cleanedText, artifacts: extracted } = parseArtifactsFromText(finalText, false);
+            const { cleanedText, artifacts: extracted } = parseArtifactsFromText(finalText, false, assistantMsgId);
 
             const finalAssistantMessage: Message = {
               id: assistantMsgId,
@@ -134,6 +154,7 @@ export function useWorkspaceStreaming({
             onStreamCompleted?.(finalAssistantMessage, extracted);
           },
           onError: (_errMsg: string) => {
+            if (streamGeneration !== streamGenerationRef.current) return;
             setStreamingStatus('error');
             setActiveStreamingMessage(null);
             // Keep transport details out of the user-facing conversation.
@@ -151,6 +172,7 @@ export function useWorkspaceStreaming({
         }
       );
     } catch (_err: unknown) {
+      if (streamGeneration !== streamGenerationRef.current) return;
       setStreamingStatus('error');
       setActiveStreamingMessage(null);
       onStreamCompleted?.({
@@ -161,7 +183,12 @@ export function useWorkspaceStreaming({
         createdAt: new Date()
       }, []);
     }
-  }, [chatId, streamingStatus, onStreamArtifactExtracted, onStreamCompleted]);
+    if (streamGeneration === streamGenerationRef.current && pendingChatIdRef.current) {
+      const createdChatId = pendingChatIdRef.current;
+      pendingChatIdRef.current = null;
+      onChatCreated?.(createdChatId);
+    }
+  }, [chatId, streamingStatus, onChatIdReceived, onChatCreated, onStreamArtifactExtracted, onStreamCompleted]);
 
   return {
     streamingStatus,
