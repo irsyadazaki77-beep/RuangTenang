@@ -16,15 +16,20 @@ vi.mock('../../lib/aiModelCatalog', () => ({
 
 const run: WorkspaceComparisonRun = {
   comparisonId: '11111111-1111-4111-8111-111111111111',
+  snapshotId: '22222222-2222-4222-8222-222222222222',
   chatId: 'chat-1', prompt: 'Ringkas artikel ini', selectedModelIds: ['gemini-3.8-flash', 'deepseek-chat'],
   responseStyle: 'Akademik', activeContext: { title: 'Artikel', content: 'Isi sama' }
 };
 
 function streamResponse(events: unknown[]) {
   const encoder = new TextEncoder();
+  const normalizedEvents = events.map(event => {
+    const item = event as Record<string, unknown>;
+    return { comparisonId: run.comparisonId, snapshotId: run.snapshotId, ...(item.candidateId ? { attemptId: `attempt-${item.candidateId}` } : {}), ...item };
+  });
   return new Response(new ReadableStream({
     start(controller) {
-      events.forEach(event => controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`)));
+      normalizedEvents.forEach(event => controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`)));
       controller.close();
     }
   }), { headers: { 'Content-Type': 'text/event-stream' } });
@@ -56,7 +61,7 @@ describe('Workspace AI comparison panel', () => {
     render(<WorkspaceComparisonPanel run={run} onUseResponse={onUse} onSendToCanvas={vi.fn()} onCompareAgain={vi.fn()} />);
 
     expect(await screen.findByText('Jawaban A')).toBeInTheDocument();
-    expect(screen.getByText('Respons model ini gagal dibuat. Kandidat lain tetap berjalan.')).toBeInTheDocument();
+    expect(screen.getByText('Model gagal menyelesaikan respons.')).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toMatchObject({
       prompt: run.prompt, selectedModelIds: run.selectedModelIds, activeContext: run.activeContext
@@ -70,8 +75,8 @@ describe('Workspace AI comparison panel', () => {
 
   it('aborts stale comparison transport when the panel leaves the conversation', async () => {
     let signal: AbortSignal | undefined;
-    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation((_input, init) => {
-      signal = init?.signal as AbortSignal;
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+      if (String(input).endsWith('/stream')) signal = init?.signal as AbortSignal;
       return new Promise(() => undefined);
     });
     const view = render(<WorkspaceComparisonPanel run={run} onUseResponse={vi.fn()} onSendToCanvas={vi.fn()} onCompareAgain={vi.fn()} />);
@@ -81,12 +86,27 @@ describe('Workspace AI comparison panel', () => {
     fetchMock.mockRestore();
   });
 
+  it('ignores late chunks from an obsolete attempt', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(streamResponse([
+      { type: 'candidate_started', candidateId: 'gemini-3.8-flash', attemptId: 'attempt-current' },
+      { type: 'candidate_chunk', candidateId: 'gemini-3.8-flash', attemptId: 'attempt-current', text: 'Hasil terbaru' },
+      { type: 'candidate_chunk', candidateId: 'gemini-3.8-flash', attemptId: 'attempt-obsolete', text: 'HASIL LAMA' },
+      { type: 'candidate_completed', candidateId: 'gemini-3.8-flash', attemptId: 'attempt-current' },
+      { type: 'candidate_failed', candidateId: 'deepseek-chat', attemptId: 'attempt-deepseek-chat' }
+    ]));
+    render(<WorkspaceComparisonPanel run={run} onUseResponse={vi.fn()} onSendToCanvas={vi.fn()} onCompareAgain={vi.fn()} />);
+    expect(await screen.findByText('Hasil terbaru')).toBeInTheDocument();
+    expect(screen.queryByText('Hasil terbaruHASIL LAMA')).not.toBeInTheDocument();
+    expect(screen.queryByText('HASIL LAMA')).not.toBeInTheDocument();
+    vi.restoreAllMocks();
+  });
+
   it('stops one candidate independently and exposes Stop All for the remaining stream', async () => {
     const encoder = new TextEncoder();
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
       if (String(input).includes('/cancel/')) return Promise.resolve(new Response('{}', { status: 200 }));
       return Promise.resolve(new Response(new ReadableStream({ start(controller) {
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'candidate_started', comparisonId: run.comparisonId, candidateId: 'gemini-3.8-flash', modelName: 'Gemini Flash' })}\n\ndata: ${JSON.stringify({ type: 'candidate_started', comparisonId: run.comparisonId, candidateId: 'deepseek-chat', modelName: 'DeepSeek Chat' })}\n\n`));
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'candidate_started', comparisonId: run.comparisonId, snapshotId: run.snapshotId, attemptId: 'attempt-gemini-3.8-flash', candidateId: 'gemini-3.8-flash', modelName: 'Gemini Flash' })}\n\ndata: ${JSON.stringify({ type: 'candidate_started', comparisonId: run.comparisonId, snapshotId: run.snapshotId, attemptId: 'attempt-deepseek-chat', candidateId: 'deepseek-chat', modelName: 'DeepSeek Chat' })}\n\n`));
       } }), { headers: { 'Content-Type': 'text/event-stream' } }));
     });
     render(<WorkspaceComparisonPanel run={run} onUseResponse={vi.fn()} onSendToCanvas={vi.fn()} onCompareAgain={vi.fn()} />);
@@ -107,11 +127,14 @@ describe('Workspace AI comparison panel', () => {
         { type: 'candidate_failed', comparisonId: run.comparisonId, candidateId: 'deepseek-chat' },
         { type: 'comparison_completed', comparisonId: run.comparisonId }
       ]))
-      .mockResolvedValueOnce(streamResponse([
-        { type: 'candidate_started', candidateId: 'deepseek-chat', modelName: 'DeepSeek Chat' },
-        { type: 'candidate_chunk', candidateId: 'deepseek-chat', text: 'Hasil DeepSeek setelah retry' },
-        { type: 'candidate_completed', candidateId: 'deepseek-chat', latencyMs: 650 }
-      ]));
+      .mockImplementationOnce((_input, init) => {
+        const body = JSON.parse(String(init?.body));
+        return Promise.resolve(streamResponse([
+          { type: 'candidate_started', candidateId: 'deepseek-chat', attemptId: body.attemptId, modelName: 'DeepSeek Chat' },
+          { type: 'candidate_chunk', candidateId: 'deepseek-chat', attemptId: body.attemptId, text: 'Hasil DeepSeek setelah retry' },
+          { type: 'candidate_completed', candidateId: 'deepseek-chat', attemptId: body.attemptId, latencyMs: 650 }
+        ]));
+      });
 
     render(<WorkspaceComparisonPanel run={run} onUseResponse={vi.fn()} onSendToCanvas={vi.fn()} onCompareAgain={vi.fn()} />);
 
@@ -121,13 +144,10 @@ describe('Workspace AI comparison panel', () => {
 
     expect(await screen.findByText('Hasil DeepSeek setelah retry')).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    // Verifying retry sent the exact prompt and active context
+    expect(String(fetchMock.mock.calls[1][0])).toContain(`/chat/compare/${run.comparisonId}/retry/deepseek-chat`);
     const retryBody = JSON.parse(String(fetchMock.mock.calls[1][1]?.body));
-    expect(retryBody).toMatchObject({
-      prompt: run.prompt,
-      activeContext: run.activeContext,
-      selectedModelIds: ['deepseek-chat']
-    });
+    expect(retryBody).toMatchObject({ snapshotId: run.snapshotId });
+    expect(retryBody.attemptId).toMatch(/^[0-9a-f-]{36}$/i);
     fetchMock.mockRestore();
   });
 });

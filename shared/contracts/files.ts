@@ -1,6 +1,10 @@
 import { z } from 'zod';
 
 export const MAX_WORKSPACE_ACTIVE_ATTACHMENTS = 8;
+/** Maximum binaries accepted by one multipart upload request. */
+export const MAX_ATTACHMENT_UPLOAD_BATCH = 3;
+/** Normal Chat message attachment limit; Workspace has a separate active-document limit. */
+export const MAX_CHAT_ATTACHMENTS_PER_MESSAGE = 3;
 export const MAX_UPLOAD_FILE_SIZE_BYTES = 5 * 1024 * 1024;
 export const MAX_DOCUMENT_CONTEXT_TOKENS = 2500;
 export const MAX_DOCUMENT_CONTEXT_CHUNKS = 8;

@@ -5,7 +5,7 @@ import type { WorkspaceComparisonCandidate, WorkspaceComparisonRun } from '../ty
 
 interface Props {
   run: WorkspaceComparisonRun | null;
-  onUseResponse: (run: WorkspaceComparisonRun, candidate: WorkspaceComparisonCandidate) => void;
+  onUseResponse: (run: WorkspaceComparisonRun, candidate: WorkspaceComparisonCandidate) => Promise<boolean | void> | boolean | void;
   onSendToCanvas: (candidate: WorkspaceComparisonCandidate) => void;
   onCompareAgain: (run: WorkspaceComparisonRun) => void;
 }
@@ -57,7 +57,7 @@ const CandidateCard = React.memo(function CandidateCard({ candidate, run, select
         </div>
       </div>
       <div className="flex items-center gap-1">
-        {candidate.status === 'streaming' && (
+        {(candidate.status === 'streaming' || candidate.status === 'queued') && (
           <button type="button" onClick={() => onCancel(candidate.candidateId)} className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md px-2 text-[10px] font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500" aria-label={`Hentikan ${candidate.modelName}`}><Square className="h-3 w-3" />Stop</button>
         )}
         {(candidate.status === 'failed' || candidate.status === 'cancelled') && (
@@ -76,6 +76,12 @@ const CandidateCard = React.memo(function CandidateCard({ candidate, run, select
   </article>;
 });
 
+interface CandidateChunkBuffer {
+  candidateId: string;
+  attemptId: string;
+  chunks: string[];
+}
+
 export const WorkspaceComparisonPanel = React.memo(function WorkspaceComparisonPanel({ run, onUseResponse, onSendToCanvas, onCompareAgain }: Props) {
   const { models } = useAiModelCatalog();
   const [candidates, setCandidates] = useState<WorkspaceComparisonCandidate[]>([]);
@@ -83,33 +89,80 @@ export const WorkspaceComparisonPanel = React.memo(function WorkspaceComparisonP
   const [isRunning, setIsRunning] = useState(false);
   const [notice, setNotice] = useState('');
   const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(null);
+  const [selectionPending, setSelectionPending] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+  const retryControllersRef = useRef(new Map<string, AbortController>());
+  const candidateAttemptsRef = useRef(new Map<string, string>());
   const mobileTabRefs = useRef(new Map<string, HTMLButtonElement>());
   const candidatesRef = useRef<WorkspaceComparisonCandidate[]>([]);
+  const candidateChunkBuffersRef = useRef(new Map<string, CandidateChunkBuffer>());
+  const candidateChunkTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const runIdRef = useRef<string | null>(null);
 
   const modelsRef = useRef(models);
   modelsRef.current = models;
-  const updateCandidate = useCallback((id: string, update: Partial<WorkspaceComparisonCandidate>) => {
-    const next = candidatesRef.current.map(candidate => candidate.candidateId === id
-        ? candidate.status === 'cancelled' && update.status !== 'cancelled' ? candidate : { ...candidate, ...update }
+  const updateCandidate = useCallback((id: string, update: Partial<WorkspaceComparisonCandidate>, expectedAttemptId?: string) => {
+    const next = candidatesRef.current.map(candidate => candidate.candidateId === id && (!expectedAttemptId || candidateAttemptsRef.current.get(id) === expectedAttemptId)
+        ? candidate.status === 'cancelled' && update.status !== 'cancelled' && expectedAttemptId === candidate.attemptId ? candidate : { ...candidate, ...update }
         : candidate);
     candidatesRef.current = next;
     setCandidates(next);
   }, []);
 
+  const discardCandidateChunkBuffers = useCallback((candidateId?: string) => {
+    for (const [key, buffer] of candidateChunkBuffersRef.current) {
+      if (candidateId && buffer.candidateId !== candidateId) continue;
+      const timer = candidateChunkTimersRef.current.get(key);
+      if (timer) clearTimeout(timer);
+      candidateChunkTimersRef.current.delete(key);
+      candidateChunkBuffersRef.current.delete(key);
+    }
+  }, []);
+
+  const flushCandidateChunks = useCallback((candidateId: string, attemptId: string) => {
+    const key = `${candidateId}:${attemptId}`;
+    const timer = candidateChunkTimersRef.current.get(key);
+    if (timer) clearTimeout(timer);
+    candidateChunkTimersRef.current.delete(key);
+    const buffer = candidateChunkBuffersRef.current.get(key);
+    candidateChunkBuffersRef.current.delete(key);
+    if (!buffer || candidateAttemptsRef.current.get(candidateId) !== attemptId) return;
+    const candidate = candidatesRef.current.find(item => item.candidateId === candidateId);
+    updateCandidate(candidateId, { status: 'streaming', output: (candidate?.output || '') + buffer.chunks.join('') }, attemptId);
+  }, [updateCandidate]);
+
+  const enqueueCandidateChunk = useCallback((candidateId: string, attemptId: string, text: string) => {
+    const key = `${candidateId}:${attemptId}`;
+    let buffer = candidateChunkBuffersRef.current.get(key);
+    if (!buffer) {
+      buffer = { candidateId, attemptId, chunks: [] };
+      candidateChunkBuffersRef.current.set(key, buffer);
+    }
+    buffer.chunks.push(text);
+    if (!candidateChunkTimersRef.current.has(key)) {
+      candidateChunkTimersRef.current.set(key, setTimeout(() => flushCandidateChunks(candidateId, attemptId), 50));
+    }
+  }, [flushCandidateChunks]);
+
   useEffect(() => {
     if (!run) return;
+    discardCandidateChunkBuffers();
+    const runKey = `${run.workspaceIdentity || ''}:${run.chatId || ''}:${run.comparisonId}:${run.snapshotId}`;
+    const activeRetryControllers = retryControllersRef.current;
     const controller = new AbortController();
     abortRef.current = controller;
-    runIdRef.current = run.comparisonId;
+    runIdRef.current = runKey;
     let active = true;
+    candidateAttemptsRef.current.clear();
+    activeRetryControllers.forEach(item => item.abort());
+    activeRetryControllers.clear();
     const nextCandidates = run.selectedModelIds.map(modelId => ({ candidateId: modelId, modelId, modelName: modelsRef.current.find(model => model.id === modelId)?.name || modelId, status: 'queued' as const, output: '' }));
     candidatesRef.current = nextCandidates;
     setCandidates(nextCandidates);
     setActiveMobileId(nextCandidates[0]?.candidateId || '');
     setNotice('');
     setSelectedCandidateId(null);
+    setSelectionPending(false);
     setIsRunning(true);
 
     const start = async () => {
@@ -131,68 +184,109 @@ export const WorkspaceComparisonPanel = React.memo(function WorkspaceComparisonP
           buffer = lines.pop() || '';
           for (const line of lines) {
             if (!line.startsWith('data: ')) continue;
-            const event = JSON.parse(line.slice(6)) as { type: string; comparisonId: string; candidateId?: string; modelName?: string; text?: string; latencyMs?: number; errorCode?: string };
-            if (!active || event.comparisonId !== run.comparisonId || runIdRef.current !== run.comparisonId) continue;
+            let event: { type: string; comparisonId: string; snapshotId?: string; contextFingerprint?: string; candidateId?: string; attemptId?: string; attempts?: Array<{ candidateId: string; attemptId: string }>; modelName?: string; text?: string; latencyMs?: number; errorCode?: string };
+            try { event = JSON.parse(line.slice(6)); } catch { continue; }
+            if (!active || event.comparisonId !== run.comparisonId || event.snapshotId !== run.snapshotId || runIdRef.current !== runKey) continue;
+            if (event.type === 'comparison_started' && event.attempts) {
+              event.attempts.forEach(attempt => {
+                candidateAttemptsRef.current.set(attempt.candidateId, attempt.attemptId);
+                updateCandidate(attempt.candidateId, { attemptId: attempt.attemptId, comparisonId: event.comparisonId, snapshotId: event.snapshotId, contextFingerprint: event.contextFingerprint });
+              });
+              continue;
+            }
             const id = event.candidateId;
-            if (event.type === 'candidate_started' && id) updateCandidate(id, { status: 'streaming', modelName: event.modelName || id });
-            else if (event.type === 'candidate_chunk' && id && event.text) updateCandidate(id, { status: 'streaming', output: (candidatesRef.current.find(candidate => candidate.candidateId === id)?.output || '') + event.text });
-            else if (event.type === 'candidate_completed' && id) updateCandidate(id, { status: 'completed', latencyMs: event.latencyMs });
-            else if (event.type === 'candidate_failed' && id) updateCandidate(id, {
-              status: 'failed', latencyMs: event.latencyMs,
-              ...(event.errorCode === 'OUTPUT_REJECTED' ? { output: '', error: 'Respons ditahan oleh pemeriksaan keamanan.' } : {})
-            });
-            else if (event.type === 'candidate_cancelled' && id) updateCandidate(id, { status: 'cancelled', latencyMs: event.latencyMs });
+            if (!id || !event.attemptId) continue;
+            if (event.type === 'candidate_started' && run.selectedModelIds.includes(id)) {
+              candidateAttemptsRef.current.set(id, event.attemptId);
+              updateCandidate(id, { status: 'streaming', modelName: event.modelName || id, comparisonId: event.comparisonId, snapshotId: event.snapshotId, attemptId: event.attemptId, contextFingerprint: event.contextFingerprint }, event.attemptId);
+            } else if (candidateAttemptsRef.current.get(id) !== event.attemptId) continue;
+            else if (event.type === 'candidate_chunk' && event.text) enqueueCandidateChunk(id, event.attemptId, event.text);
+            else if (event.type === 'candidate_completed') {
+              flushCandidateChunks(id, event.attemptId);
+              updateCandidate(id, { status: 'completed', latencyMs: event.latencyMs }, event.attemptId);
+            } else if (event.type === 'candidate_failed') {
+              flushCandidateChunks(id, event.attemptId);
+              updateCandidate(id, {
+                status: 'failed', latencyMs: event.latencyMs,
+                error: event.errorCode === 'OUTPUT_REJECTED' ? 'Respons ditahan oleh pemeriksaan keamanan.' : event.errorCode === 'PROVIDER_NOT_CONFIGURED' ? 'Provider model ini belum tersedia.' : 'Model gagal menyelesaikan respons.'
+              }, event.attemptId);
+            } else if (event.type === 'candidate_cancelled') {
+              flushCandidateChunks(id, event.attemptId);
+              updateCandidate(id, { status: 'cancelled', latencyMs: event.latencyMs }, event.attemptId);
+            }
           }
         }
       } catch (error) {
         if (active && !controller.signal.aborted) setNotice(error instanceof Error ? error.message : 'Comparison terputus.');
       } finally {
-        if (active) setIsRunning(false);
+        if (active && runIdRef.current === runKey) setIsRunning(retryControllersRef.current.size > 0);
       }
     };
     const startTimer = window.setTimeout(() => { void start(); }, 0);
     return () => {
+      const hasServerWork = candidatesRef.current.some(candidate => candidate.status === 'queued' || candidate.status === 'streaming');
       active = false;
       window.clearTimeout(startTimer);
       controller.abort();
+      activeRetryControllers.forEach(item => item.abort());
+      activeRetryControllers.clear();
+      discardCandidateChunkBuffers();
+      if (hasServerWork) {
+        void fetch(`/api/v1/chat/compare/${run.comparisonId}/cancel`, {
+          method: 'POST', credentials: 'include', headers: csrfHeaders()
+        }).catch(() => undefined);
+      }
       abortRef.current = null;
-      if (runIdRef.current === run.comparisonId) runIdRef.current = null;
+      if (runIdRef.current === runKey) runIdRef.current = null;
     };
-  }, [run, updateCandidate]);
+  }, [run, updateCandidate, discardCandidateChunkBuffers, enqueueCandidateChunk, flushCandidateChunks]);
 
   const cancelOne = useCallback(async (candidateId: string) => {
     if (!run) return;
-    updateCandidate(candidateId, { status: 'cancelled' });
-    await fetch(`/api/v1/chat/compare/${run.comparisonId}/cancel/${encodeURIComponent(candidateId)}`, { method: 'POST', credentials: 'include', headers: csrfHeaders() }).catch(() => undefined);
-  }, [run, updateCandidate]);
+    const attemptId = candidateAttemptsRef.current.get(candidateId);
+    if (!attemptId) return;
+    flushCandidateChunks(candidateId, attemptId);
+    retryControllersRef.current.get(attemptId)?.abort();
+    updateCandidate(candidateId, { status: 'cancelled' }, attemptId);
+    await fetch(`/api/v1/chat/compare/${run.comparisonId}/cancel/${encodeURIComponent(candidateId)}`, { method: 'POST', credentials: 'include', headers: csrfHeaders(), body: JSON.stringify({ attemptId }) }).catch(() => undefined);
+  }, [run, updateCandidate, flushCandidateChunks]);
 
   const stopAll = useCallback(async () => {
     if (!run) return;
+    for (const candidate of candidatesRef.current) {
+      const attemptId = candidateAttemptsRef.current.get(candidate.candidateId);
+      if (attemptId) flushCandidateChunks(candidate.candidateId, attemptId);
+    }
     const next = candidatesRef.current.map(candidate => candidate.status === 'streaming' || candidate.status === 'queued' ? { ...candidate, status: 'cancelled' as const } : candidate);
     candidatesRef.current = next;
     setCandidates(next);
+    retryControllersRef.current.forEach(item => item.abort());
+    retryControllersRef.current.clear();
     await fetch(`/api/v1/chat/compare/${run.comparisonId}/cancel`, { method: 'POST', credentials: 'include', headers: csrfHeaders() }).catch(() => undefined);
     abortRef.current?.abort();
     setIsRunning(false);
-  }, [run]);
+  }, [run, flushCandidateChunks]);
 
   const retryOne = useCallback(async (candidateId: string) => {
     if (!run) return;
-    updateCandidate(candidateId, { status: 'queued', output: '', error: undefined, latencyMs: undefined });
+    discardCandidateChunkBuffers(candidateId);
+    const attemptId = crypto.randomUUID();
+    candidateAttemptsRef.current.set(candidateId, attemptId);
+    updateCandidate(candidateId, { status: 'queued', output: '', error: undefined, latencyMs: undefined, attemptId });
+    const controller = new AbortController();
+    retryControllersRef.current.set(attemptId, controller);
+    setIsRunning(true);
     try {
-      const singleCandidateRun = {
-        ...run,
-        comparisonId: crypto.randomUUID(),
-        selectedModelIds: [candidateId]
-      };
-      const response = await fetch('/api/v1/chat/compare/stream', {
+      const response = await fetch(`/api/v1/chat/compare/${run.comparisonId}/retry/${encodeURIComponent(candidateId)}`, {
         method: 'POST',
         credentials: 'include',
         headers: csrfHeaders(),
-        body: JSON.stringify(singleCandidateRun)
+        signal: controller.signal,
+        body: JSON.stringify({ snapshotId: run.snapshotId, attemptId })
       });
       if (!response.ok || !response.body) {
-        updateCandidate(candidateId, { status: 'failed', error: 'Gagal mencoba ulang model ini.' });
+        const body = await response.json().catch(() => ({}));
+        updateCandidate(candidateId, { status: response.status === 410 ? 'failed' : 'failed', error: body.message || 'Gagal mencoba ulang model ini.' }, attemptId);
         return;
       }
       const reader = response.body.getReader();
@@ -206,35 +300,42 @@ export const WorkspaceComparisonPanel = React.memo(function WorkspaceComparisonP
         buffer = lines.pop() || '';
         for (const line of lines) {
           if (!line.startsWith('data: ')) continue;
-          const event = JSON.parse(line.slice(6)) as { type: string; candidateId?: string; text?: string; latencyMs?: number; errorCode?: string };
-          if (event.type === 'candidate_started') updateCandidate(candidateId, { status: 'streaming' });
-          else if (event.type === 'candidate_chunk' && event.text) {
-            updateCandidate(candidateId, {
-              status: 'streaming',
-              output: (candidatesRef.current.find(c => c.candidateId === candidateId)?.output || '') + event.text
-            });
-          } else if (event.type === 'candidate_completed') {
-            updateCandidate(candidateId, { status: 'completed', latencyMs: event.latencyMs });
+          let event: { type: string; comparisonId?: string; snapshotId?: string; candidateId?: string; attemptId?: string; contextFingerprint?: string; text?: string; latencyMs?: number; errorCode?: string };
+          try { event = JSON.parse(line.slice(6)); } catch { continue; }
+          if (event.comparisonId !== run.comparisonId || event.snapshotId !== run.snapshotId || event.candidateId !== candidateId || event.attemptId !== attemptId || runIdRef.current !== `${run.workspaceIdentity || ''}:${run.chatId || ''}:${run.comparisonId}:${run.snapshotId}`) continue;
+          if (event.type === 'candidate_started') updateCandidate(candidateId, { status: 'streaming', comparisonId: event.comparisonId, snapshotId: event.snapshotId, contextFingerprint: event.contextFingerprint }, attemptId);
+          else if (event.type === 'candidate_chunk' && event.text) enqueueCandidateChunk(candidateId, attemptId, event.text);
+          else if (event.type === 'candidate_completed') {
+            flushCandidateChunks(candidateId, attemptId);
+            updateCandidate(candidateId, { status: 'completed', latencyMs: event.latencyMs }, attemptId);
           } else if (event.type === 'candidate_failed') {
+            flushCandidateChunks(candidateId, attemptId);
             updateCandidate(candidateId, {
               status: 'failed',
               latencyMs: event.latencyMs,
-              ...(event.errorCode === 'OUTPUT_REJECTED' ? { output: '', error: 'Respons ditahan oleh pemeriksaan keamanan.' } : {})
-            });
+              error: event.errorCode === 'OUTPUT_REJECTED' ? 'Respons ditahan oleh pemeriksaan keamanan.' : 'Model gagal menyelesaikan respons.'
+            }, attemptId);
           } else if (event.type === 'candidate_cancelled') {
-            updateCandidate(candidateId, { status: 'cancelled', latencyMs: event.latencyMs });
+            flushCandidateChunks(candidateId, attemptId);
+            updateCandidate(candidateId, { status: 'cancelled', latencyMs: event.latencyMs }, attemptId);
           }
         }
       }
     } catch {
-      updateCandidate(candidateId, { status: 'failed', error: 'Gagal menghubungi model.' });
+      if (!controller.signal.aborted) updateCandidate(candidateId, { status: 'failed', error: 'Gagal menghubungi model.' }, attemptId);
+    } finally {
+      retryControllersRef.current.delete(attemptId);
+      if (runIdRef.current === `${run.workspaceIdentity || ''}:${run.chatId || ''}:${run.comparisonId}:${run.snapshotId}`) setIsRunning(Boolean(abortRef.current && !abortRef.current.signal.aborted) || retryControllersRef.current.size > 0);
     }
-  }, [run, updateCandidate]);
+  }, [run, updateCandidate, enqueueCandidateChunk, flushCandidateChunks, discardCandidateChunkBuffers]);
 
   const useCandidateResponse = useCallback((selectedRun: WorkspaceComparisonRun, selectedCandidate: WorkspaceComparisonCandidate) => {
-    setSelectedCandidateId(selectedCandidate.candidateId);
-    onUseResponse(selectedRun, selectedCandidate);
-  }, [onUseResponse]);
+    if (selectionPending || selectedCandidateId) return;
+    setSelectionPending(true);
+    void Promise.resolve(onUseResponse(selectedRun, selectedCandidate)).then(result => {
+      if (result !== false) setSelectedCandidateId(selectedCandidate.candidateId);
+    }).finally(() => setSelectionPending(false));
+  }, [onUseResponse, selectedCandidateId, selectionPending]);
 
   if (!run) return null;
   return <section aria-label="Hasil comparison AI" className="mx-auto w-full max-w-6xl px-3 pb-4 sm:px-5">
@@ -254,7 +355,7 @@ export const WorkspaceComparisonPanel = React.memo(function WorkspaceComparisonP
       }} className="min-h-9 shrink-0 rounded-lg border border-slate-200 px-3 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:border-slate-700">{candidate.modelName} · {candidate.status === 'completed' ? 'Selesai' : candidate.status === 'failed' ? 'Gagal' : candidate.status === 'cancelled' ? 'Stop' : candidate.status === 'streaming' ? 'Menjawab' : 'Menunggu'}</button>)}
     </div>
     <div className="grid grid-cols-1 gap-2 md:grid-cols-2 2xl:grid-cols-3">
-      {candidates.map(candidate => <div key={candidate.candidateId} className={candidate.candidateId === activeMobileId ? '' : 'hidden md:block'}><CandidateCard candidate={candidate} run={run} selected={candidate.candidateId === selectedCandidateId} selectionLocked={selectedCandidateId !== null} onUse={useCandidateResponse} onCanvas={onSendToCanvas} onCancel={cancelOne} onRetry={retryOne} /></div>)}
+      {candidates.map(candidate => <div key={candidate.candidateId} className={candidate.candidateId === activeMobileId ? '' : 'hidden md:block'}><CandidateCard candidate={candidate} run={run} selected={candidate.candidateId === selectedCandidateId} selectionLocked={selectedCandidateId !== null || selectionPending} onUse={useCandidateResponse} onCanvas={onSendToCanvas} onCancel={cancelOne} onRetry={retryOne} /></div>)}
     </div>
   </section>;
 });

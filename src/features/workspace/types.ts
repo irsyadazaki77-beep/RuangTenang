@@ -37,7 +37,8 @@ export interface WorkspaceRequestSnapshot {
 
 export interface WorkspaceComparisonRun {
   comparisonId: string;
-  snapshotId?: string;
+  snapshotId: string;
+  workspaceIdentity?: string;
   chatId?: string;
   prompt: string;
   selectedModelIds: string[];
@@ -46,7 +47,8 @@ export interface WorkspaceComparisonRun {
   taskCategory?: string;
   latencyPreference?: string;
   qualityPreference?: string;
-  activeContext?: { title: string; content: string };
+  activeContext?: { artifactId?: string; title: string; version?: number; content: string };
+  selectedText?: string;
   attachments?: Array<{ id: string; filename: string; mimeType?: string; size?: number; url?: string }>;
   createdAt?: string;
 }
@@ -56,9 +58,13 @@ export type WorkspaceComparisonCandidateStatus = 'queued' | 'streaming' | 'compl
 export interface WorkspaceComparisonCandidate {
   candidateId: string;
   modelId: string;
+  comparisonId?: string;
+  snapshotId?: string;
   modelName: string;
   status: WorkspaceComparisonCandidateStatus;
   output: string;
+  attemptId?: string;
+  contextFingerprint?: string;
   latencyMs?: number;
   tokensUsed?: {
     input?: number;
@@ -81,6 +87,9 @@ export interface ArtifactVersionRecord {
 export interface WorkspaceArtifact {
   id: string;
   chatId?: string | null;
+  /** Client-only ownership metadata for artifacts drafted before a chat exists. */
+  localWorkspaceId?: string;
+  persistenceStatus?: 'local' | 'saving' | 'failed' | 'persistent';
   userId?: string;
   title: string;
   type: ArtifactType;
@@ -151,6 +160,7 @@ export type WorkspaceAttachmentStatus =
   | 'processing' 
   | 'ready' 
   | 'failed' 
+  | 'unsupported'
   | 'error';
 
 export interface WorkspaceFileAttachment {
@@ -165,6 +175,7 @@ export interface WorkspaceFileAttachment {
   isText?: boolean;
   status?: WorkspaceAttachmentStatus;
   errorMessage?: string;
+  failureStage?: 'upload' | 'processing';
   pageCount?: number;
   slideCount?: number;
   sheetCount?: number;

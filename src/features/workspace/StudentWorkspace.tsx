@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Paperclip, Sparkles } from 'lucide-react';
 import { WorkspaceMode, WorkspaceArtifact, WorkspaceTab, WorkspaceComposerConfig, WorkspaceComparisonCandidate, WorkspaceComparisonRun, WorkspaceRequestSnapshot, WorkspaceArtifactSelection, ArtifactPatch } from './types';
@@ -9,7 +9,7 @@ import { STARTER_TASKS, ACADEMIC_PROMPT_PILLS } from './constants/workspaceConst
 // Custom Domain Hooks
 import { useWorkspacePersistence } from './hooks/useWorkspacePersistence';
 import { useWorkspaceArtifacts } from './hooks/useWorkspaceArtifacts';
-import { useWorkspaceStreaming } from './hooks/useWorkspaceStreaming';
+import { useWorkspaceStreaming, WorkspaceRequestIdentity } from './hooks/useWorkspaceStreaming';
 import { useWorkspaceFileIngestion } from './hooks/useWorkspaceFileIngestion';
 import { useAcademicDistress } from './hooks/useAcademicDistress';
 import { useWorkspaceTemplates } from './hooks/useWorkspaceTemplates';
@@ -47,6 +47,27 @@ export interface StudentWorkspaceProps {
   onOpenChangelog?: () => void;
 }
 
+function localWorkspaceStorageKey(userId?: string) {
+  return `ruangkerja:active-local-workspace:${userId || 'guest'}`;
+}
+
+function getLocalWorkspaceIdentity(userId?: string) {
+  const key = localWorkspaceStorageKey(userId);
+  try {
+    const existing = globalThis.sessionStorage?.getItem(key);
+    if (existing) return existing;
+    const identity = `local:${userId || 'guest'}:${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    globalThis.sessionStorage?.setItem(key, identity);
+    return identity;
+  } catch {
+    return `local:${userId || 'guest'}:${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  }
+}
+
+function clearLocalWorkspaceIdentity(userId?: string) {
+  try { globalThis.sessionStorage?.removeItem(localWorkspaceStorageKey(userId)); } catch { /* session storage is optional */ }
+}
+
 export function StudentWorkspace({ 
   user, 
   chats,
@@ -59,11 +80,18 @@ export function StudentWorkspace({
   const { models, defaultModel } = useAiModelCatalog();
   const { showToast } = useToast();
   const [streamCreatedChatId, setStreamCreatedChatId] = useState<string>();
+  const [workspaceIdentity, setWorkspaceIdentity] = useState(() => chatId ? `chat:${chatId}` : getLocalWorkspaceIdentity(user?.id));
   const effectiveChatId = chatId || streamCreatedChatId;
+  const logicalWorkspaceIdentity = streamCreatedChatId && (!chatId || chatId === streamCreatedChatId)
+    ? workspaceIdentity
+    : chatId ? `chat:${chatId}` : workspaceIdentity;
+  const logicalWorkspaceIdentityRef = React.useRef(logicalWorkspaceIdentity);
+  logicalWorkspaceIdentityRef.current = logicalWorkspaceIdentity;
   const workspaceTitle = chats?.find(chat => chat.id === effectiveChatId)?.title || 'Workspace baru';
   const effectiveChatIdRef = React.useRef(effectiveChatId);
   const lastRouteChatIdRef = React.useRef(chatId);
   const clearInProgressRef = React.useRef(false);
+  const activeSendOperationRef = React.useRef<string | null>(null);
   effectiveChatIdRef.current = effectiveChatId;
 
   // 1. Domain Persistence Hook
@@ -76,6 +104,7 @@ export function StudentWorkspace({
     isClearingConversation
   } = useWorkspacePersistence({
     chatId: effectiveChatId,
+    workspaceIdentity: logicalWorkspaceIdentity,
     userName: user?.name
   });
 
@@ -89,6 +118,7 @@ export function StudentWorkspace({
     setHasUnreadArtifact,
     updateActiveArtifact,
     saveArtifact,
+    migrateLocalArtifacts,
     rollbackArtifact,
     createNewArtifact,
     createArtifactFromContent,
@@ -97,9 +127,10 @@ export function StudentWorkspace({
     syncParsedMessageArtifacts
   } = useWorkspaceArtifacts({
     chatId: effectiveChatId,
+    workspaceIdentity: logicalWorkspaceIdentity,
     persistedArtifacts
   });
-  const canvasArtifacts = artifacts.filter(artifact => artifact.id !== DEFAULT_WELCOME_ARTIFACT_ID);
+  const canvasArtifacts = useMemo(() => artifacts.filter(artifact => artifact.id !== DEFAULT_WELCOME_ARTIFACT_ID), [artifacts]);
   const visibleActiveArtifact = activeArtifact?.id === DEFAULT_WELCOME_ARTIFACT_ID ? null : activeArtifact;
 
 
@@ -127,9 +158,10 @@ export function StudentWorkspace({
   const [inlineEditPatch, setInlineEditPatch] = useState<ArtifactPatch | null>(null);
   const [revisionCommit, setRevisionCommit] = useState<{ artifactId: string; content: string; version: number } | null>(null);
   const [isCreatingArtifact, setIsCreatingArtifact] = useState(false);
-  const [pendingCanvasTransfer, setPendingCanvasTransfer] = useState<{ content: string; title: string } | null>(null);
+  const [pendingCanvasTransfer, setPendingCanvasTransfer] = useState<{ id: string; content: string; title: string } | null>(null);
   const revisionRequestRef = React.useRef<{ scope: 'document' | 'selection'; artifactId: string; title: string; baseContent: string; baseVersion: number; workspaceId?: string; selection?: WorkspaceArtifactSelection } | null>(null);
   const requestSnapshotsRef = React.useRef(new Map<string, { snapshot: WorkspaceRequestSnapshot; attachments?: StoredAttachment[]; customSystemNote?: string; revisionRequest?: NonNullable<typeof revisionRequestRef.current> }>());
+  const isStreamRequestCurrentRef = React.useRef<(identity: WorkspaceRequestIdentity) => boolean>(() => false);
 
   const handleCompareModeChange = useCallback((enabled: boolean) => {
     setCompareMode(enabled);
@@ -146,6 +178,13 @@ export function StudentWorkspace({
     lastRouteChatIdRef.current = chatId;
     setComparisonRun(null);
     if (createdFromCurrentStream) return;
+    if (chatId) {
+      setWorkspaceIdentity(`chat:${chatId}`);
+      clearLocalWorkspaceIdentity(user?.id);
+    } else {
+      setWorkspaceIdentity(getLocalWorkspaceIdentity(user?.id));
+    }
+    setStreamCreatedChatId(undefined);
     setSelectedText('');
     setCanvasSelection(null);
     setCanvasDraft(null);
@@ -156,7 +195,8 @@ export function StudentWorkspace({
     setIsCreatingArtifact(false);
     setPendingCanvasTransfer(null);
     requestSnapshotsRef.current.clear();
-  }, [chatId]);
+    activeSendOperationRef.current = null;
+  }, [chatId, user?.id]);
 
   useEffect(() => {
     if (chatId && streamCreatedChatId === chatId) setStreamCreatedChatId(undefined);
@@ -199,7 +239,7 @@ export function StudentWorkspace({
     handleDrop,
     removeAttachment,
     retryAttachment
-  } = useWorkspaceFileIngestion(chatId);
+  } = useWorkspaceFileIngestion(effectiveChatId);
 
   // 5. Academic Distress Safety Hook
   const {
@@ -221,30 +261,36 @@ export function StudentWorkspace({
   } = useWorkspaceTemplates();
 
   // 7. Domain Streaming Hook
-  const handleChatIdReceived = useCallback((createdChatId: string) => {
+  const handleChatIdReceived = useCallback((createdChatId: string, identity: WorkspaceRequestIdentity) => {
+    if (identity.workspaceId !== logicalWorkspaceIdentityRef.current || !isStreamRequestCurrentRef.current(identity)) return;
     if (chatId) return;
     effectiveChatIdRef.current = createdChatId;
     setStreamCreatedChatId(createdChatId);
   }, [chatId]);
 
-  const handleChatCreated = useCallback((createdChatId: string) => {
-    if (chatId || !createdChatId) return;
+  const handleChatCreated = useCallback((createdChatId: string, identity: WorkspaceRequestIdentity) => {
+    if (chatId || !createdChatId || identity.workspaceId !== logicalWorkspaceIdentityRef.current || !isStreamRequestCurrentRef.current(identity)) return;
+    clearLocalWorkspaceIdentity(user?.id);
+    void migrateLocalArtifacts(createdChatId);
     navigate(getModeChatPath('RUANG_KERJA', createdChatId), { replace: true });
     void apiClient.get<Chat[]>('/api/v1/chat/history').then(response => {
       if (response.success && Array.isArray(response.data)) setChats?.(response.data);
     }).catch(error => console.warn('[Workspace] Chat list refresh failed:', error));
-  }, [chatId, navigate, setChats]);
+  }, [chatId, migrateLocalArtifacts, navigate, setChats, user?.id]);
 
-  const handleStreamArtifactExtracted = useCallback((_artifact: WorkspaceArtifact) => {
+  const handleStreamArtifactExtracted = useCallback((_artifact: WorkspaceArtifact, _streaming: boolean, identity: WorkspaceRequestIdentity) => {
+    if (identity.workspaceId !== logicalWorkspaceIdentityRef.current || !isStreamRequestCurrentRef.current(identity)) return;
     if (revisionRequestRef.current) return;
     setIsCanvasOpen(true);
     setIsCreatingArtifact(true);
   }, []);
 
-  const handleStreamCompleted = useCallback(async (assistantMsg: Message, extractedArtifacts: WorkspaceArtifact[]) => {
+  const handleStreamCompleted = useCallback(async (assistantMsg: Message, extractedArtifacts: WorkspaceArtifact[], identity: WorkspaceRequestIdentity) => {
+    const isCurrent = () => identity.workspaceId === logicalWorkspaceIdentityRef.current && isStreamRequestCurrentRef.current(identity);
+    if (!isCurrent()) return;
     setIsCreatingArtifact(false);
     const revisionRequest = revisionRequestRef.current;
-    if (revisionRequest && revisionRequest.workspaceId === effectiveChatIdRef.current && !assistantMsg.error) {
+    if (revisionRequest && revisionRequest.workspaceId === (identity.chatId || effectiveChatIdRef.current) && !assistantMsg.error) {
       revisionRequestRef.current = null;
       const proposal = extractedArtifacts.find(item => item.content.trim());
       if (proposal && !assistantMsg.error && revisionRequest.scope === 'selection' && revisionRequest.selection) {
@@ -257,12 +303,12 @@ export function StudentWorkspace({
           originalText: revisionRequest.selection.text,
           replacementText: proposal.content
         });
-        setMessages(previous => [...previous, { ...assistantMsg, content: `Usulan untuk teks terpilih di “${revisionRequest.title}” siap ditinjau di Canvas.` }]);
+        setMessages(previous => previous.some(message => message.id === assistantMsg.id) ? previous : [...previous, { ...assistantMsg, content: `Usulan untuk teks terpilih di “${revisionRequest.title}” siap ditinjau di Canvas.` }]);
         return;
       }
       if (proposal && !assistantMsg.error) {
         setPendingRevision({ ...revisionRequest, proposedContent: proposal.content });
-        setMessages(previous => [...previous, { ...assistantMsg, content: `Usulan revisi untuk “${revisionRequest.title}” sudah siap. Tinjau perbedaan di Canvas sebelum menerapkan.` }]);
+        setMessages(previous => previous.some(message => message.id === assistantMsg.id) ? previous : [...previous, { ...assistantMsg, content: `Usulan revisi untuk “${revisionRequest.title}” sudah siap. Tinjau perbedaan di Canvas sebelum menerapkan.` }]);
         return;
       }
     }
@@ -270,45 +316,51 @@ export function StudentWorkspace({
     if (extractedArtifacts.length > 0) {
       setHasUnreadArtifact(true);
       setIsCanvasOpen(true);
-      artifactsPersisted = await syncParsedMessageArtifacts(extractedArtifacts, effectiveChatIdRef.current);
+      artifactsPersisted = await syncParsedMessageArtifacts(extractedArtifacts, identity.chatId || effectiveChatIdRef.current);
+      if (!isCurrent()) return;
       setActiveArtifactId(extractedArtifacts[0].id);
     }
     const finalMessage = !artifactsPersisted && extractedArtifacts.length
       ? { ...assistantMsg, content: `${assistantMsg.content.replace(/Artefak Aktif[^\n]*/g, 'Draf dokumen dibuat secara lokal')}\n\nDokumen belum tersimpan ke server. Draf tetap tersedia di Canvas; coba simpan lagi.` }
       : assistantMsg;
-    setMessages(prev => [...prev, finalMessage]);
+    if (!isCurrent()) return;
+    setMessages(prev => prev.some(message => message.id === finalMessage.id) ? prev : [...prev, finalMessage]);
   }, [setMessages, setHasUnreadArtifact, syncParsedMessageArtifacts, setActiveArtifactId]);
 
   const {
     isStreaming,
     activeStreamingMessage,
     sendMessageStream,
-    abortStream
+    abortStream,
+    isRequestCurrent
   } = useWorkspaceStreaming({
     chatId,
+    workspaceIdentity: logicalWorkspaceIdentity,
     onChatIdReceived: handleChatIdReceived,
     onChatCreated: handleChatCreated,
     onStreamArtifactExtracted: handleStreamArtifactExtracted,
     onStreamCompleted: handleStreamCompleted
   });
+  isStreamRequestCurrentRef.current = isRequestCurrent;
 
   useEffect(() => {
     if (!isStreaming) setIsCreatingArtifact(false);
   }, [isStreaming]);
 
   // User Actions
-  const handleExecuteSendMessage = useCallback((promptText: string, customSystemNote?: string, attachments?: StoredAttachment[], config?: WorkspaceComposerConfig, existingSnapshot?: WorkspaceRequestSnapshot, isRetry = false, scopedSelection?: WorkspaceArtifactSelection) => {
-    if (!promptText.trim() || isStreaming || clearInProgressRef.current) return;
+  const handleExecuteSendMessage = useCallback((promptText: string, customSystemNote?: string, attachments?: StoredAttachment[], config?: WorkspaceComposerConfig, existingSnapshot?: WorkspaceRequestSnapshot, isRetry = false, scopedSelection?: WorkspaceArtifactSelection): boolean => {
+    if (!promptText.trim() || isStreaming || clearInProgressRef.current || activeSendOperationRef.current) return false;
     if (!isRetry && !customSystemNote?.startsWith('Instruksi revisi dokumen') && !customSystemNote?.startsWith('Instruksi revisi inline')) revisionRequestRef.current = null;
 
     if (config?.comparisonModelIds?.length) {
-      if (config.comparisonModelIds.length < 2 || config.comparisonModelIds.length > 3) return;
+      if (config.comparisonModelIds.length < 2 || config.comparisonModelIds.length > 3) return false;
       const compId = crypto.randomUUID();
       const snapId = crypto.randomUUID();
       setComparisonRun({
         comparisonId: compId,
         snapshotId: snapId,
-        chatId,
+        workspaceIdentity: logicalWorkspaceIdentity,
+        chatId: effectiveChatId,
         prompt: promptText.trim(),
         selectedModelIds: [...new Set(config.comparisonModelIds)],
         responseStyle: `${config.responseMode}${config.responseStyle !== 'Default' ? `; ${config.responseStyle}` : ''}`,
@@ -317,12 +369,13 @@ export function StudentWorkspace({
         latencyPreference: config.latencyPreference,
         qualityPreference: config.qualityPreference,
         activeContext: activeArtifact && activeArtifact.id !== DEFAULT_WELCOME_ARTIFACT_ID
-          ? { title: activeArtifact.title, content: activeArtifact.content.slice(0, 50000) }
+          ? { artifactId: activeArtifact.id, title: activeArtifact.title, version: activeArtifact.version, content: (canvasDraft?.artifactId === activeArtifact.id ? canvasDraft.content : activeArtifact.content).slice(0, 50000) }
           : undefined,
+        selectedText: scopedSelection?.text || selectedText || undefined,
         attachments: attachments && attachments.length > 0 ? attachments : undefined,
         createdAt: new Date().toISOString()
       });
-      return;
+      return true;
     }
 
     setComparisonRun(null);
@@ -331,7 +384,7 @@ export function StudentWorkspace({
     const activeContent = activeArtifact && activeArtifact.id !== DEFAULT_WELCOME_ARTIFACT_ID
       ? canvasDraft?.artifactId === activeArtifact.id ? canvasDraft.content : activeArtifact.content
       : undefined;
-    const snapshot = existingSnapshot ?? buildWorkspaceRequestSnapshot({
+    const baseSnapshot = existingSnapshot ?? buildWorkspaceRequestSnapshot({
       prompt: promptText,
       workspaceId: effectiveChatIdRef.current,
       model: selectedModel,
@@ -345,7 +398,15 @@ export function StudentWorkspace({
       } : undefined,
       selectedText: scopedSelection?.text || (selectedText && activeArtifact?.id !== DEFAULT_WELCOME_ARTIFACT_ID ? selectedText : undefined)
     });
-    requestSnapshotsRef.current.set(promptText.trim(), { snapshot, attachments, customSystemNote, revisionRequest: revisionRequestRef.current ? { ...revisionRequestRef.current } : undefined });
+    const snapshot = isRetry
+      ? { ...baseSnapshot, requestId: crypto.randomUUID(), createdAt: new Date().toISOString() }
+      : baseSnapshot;
+    activeSendOperationRef.current = snapshot.requestId;
+    requestSnapshotsRef.current.set(snapshot.requestId, { snapshot, attachments, customSystemNote, revisionRequest: revisionRequestRef.current ? { ...revisionRequestRef.current } : undefined });
+    if (requestSnapshotsRef.current.size > 100) {
+      const oldestRequestId = requestSnapshotsRef.current.keys().next().value;
+      if (oldestRequestId) requestSnapshotsRef.current.delete(oldestRequestId);
+    }
     const contextualNote = [customSystemNote, buildWorkspaceContextNote(snapshot)].filter(Boolean).join('\n\n');
     if (!isRetry) {
       setMessages(prev => [...prev, {
@@ -354,74 +415,115 @@ export function StudentWorkspace({
       }]);
     }
     setSelectedText('');
-    sendMessageStream(promptText.trim(), contextualNote || undefined, attachments, resolvedConfig);
-  }, [activeArtifact, canvasDraft, chatId, isStreaming, selectedModel, selectedText, setMessages, sendMessageStream, workspaceAttachments]);
+    void sendMessageStream(promptText.trim(), contextualNote || undefined, attachments, resolvedConfig, snapshot.requestId)
+      .finally(() => {
+        if (activeSendOperationRef.current === snapshot.requestId) activeSendOperationRef.current = null;
+      });
+    return true;
+  }, [activeArtifact, canvasDraft, effectiveChatId, isStreaming, selectedModel, selectedText, setMessages, sendMessageStream, workspaceAttachments, logicalWorkspaceIdentity]);
 
   const handleUseComparisonResponse = useCallback(async (run: WorkspaceComparisonRun, candidate: WorkspaceComparisonCandidate) => {
-    if (run.chatId !== chatId || candidate.status !== 'completed' || !candidate.output) return;
+    if (run.workspaceIdentity !== logicalWorkspaceIdentity || run.chatId !== effectiveChatIdRef.current || candidate.comparisonId !== run.comparisonId || candidate.snapshotId !== run.snapshotId || candidate.status !== 'completed' || !candidate.output || !candidate.attemptId) return false;
+    const selectionKey = `compare:${run.comparisonId}:${run.snapshotId}:${candidate.candidateId}:${candidate.attemptId}`;
+    if (messages.some(message => message.id === selectionKey)) return true;
+    let persistedPromptId: string;
+    let persistedResponseId: string;
+    let persistedChatId: string;
+    try {
+      const response = await fetch('/api/v1/chat/compare/select', {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest', ...(document.cookie.match(/(?:^|; )XSRF-TOKEN=([^;]+)/)?.[1] ? { 'X-CSRF-Token': decodeURIComponent(document.cookie.match(/(?:^|; )XSRF-TOKEN=([^;]+)/)![1]) } : {}) },
+        body: JSON.stringify({ chatId: run.chatId, workspaceIdentity: run.workspaceIdentity, prompt: run.prompt, response: candidate.output, modelId: candidate.modelId, comparisonId: run.comparisonId, snapshotId: run.snapshotId, candidateId: candidate.candidateId, attemptId: candidate.attemptId })
+      });
+      if (!response.ok) throw new Error('selection persistence failed');
+      const persistedSelection = await response.json();
+      if (!persistedSelection?.promptId || !persistedSelection?.responseId) throw new Error('selection response invalid');
+      persistedPromptId = persistedSelection.promptId as string;
+      persistedResponseId = persistedSelection.responseId as string;
+      if (typeof persistedSelection.chatId !== 'string') throw new Error('selection workspace unavailable');
+      persistedChatId = persistedSelection.chatId;
+    } catch {
+      showToast('Jawaban belum berhasil disimpan ke percakapan.', 'error');
+      return false;
+    }
+    if (run.workspaceIdentity !== logicalWorkspaceIdentity || run.chatId !== effectiveChatIdRef.current) return false;
     const { cleanedText, artifacts: selectedArtifacts } = parseArtifactsFromText(candidate.output, false);
     const messageTime = new Date();
     let artifactsPersisted = true;
     if (selectedArtifacts.length > 0) {
+      artifactsPersisted = await syncParsedMessageArtifacts(selectedArtifacts, run.chatId || persistedChatId);
+      if (run.workspaceIdentity !== logicalWorkspaceIdentity || run.chatId !== effectiveChatIdRef.current) return false;
       setIsCanvasOpen(true);
       setHasUnreadArtifact(true);
-      artifactsPersisted = await syncParsedMessageArtifacts(selectedArtifacts, chatId);
       setActiveArtifactId(selectedArtifacts[0].id);
     }
     const responseText = cleanedText || candidate.output;
     setMessages(previous => [...previous,
-      { id: `compare_user_${run.comparisonId}`, role: 'user', content: run.prompt, createdAt: messageTime },
-      { id: `compare_answer_${run.comparisonId}_${candidate.modelId}`, role: 'assistant', content: !artifactsPersisted && selectedArtifacts.length ? `${responseText}\n\nDokumen belum tersimpan ke server. Draf tetap tersedia di Canvas; coba simpan lagi.` : responseText, modelUsed: candidate.modelId, createdAt: new Date() }
+      ...(previous.some(message => message.id === persistedPromptId || message.id === persistedResponseId || message.id === selectionKey) ? [] : [
+        { id: persistedPromptId, role: 'user' as const, content: run.prompt, createdAt: messageTime },
+        { id: persistedResponseId, role: 'assistant' as const, content: !artifactsPersisted && selectedArtifacts.length ? `${responseText}\n\nDokumen belum tersimpan ke server. Draf tetap tersedia di Canvas; coba simpan lagi.` : responseText, modelUsed: candidate.modelId, createdAt: new Date() }
+      ])
     ]);
-    if (chatId && user) {
-      void fetch('/api/v1/chat/compare/select', {
-        method: 'POST', credentials: 'include',
-        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest', ...(document.cookie.match(/(?:^|; )XSRF-TOKEN=([^;]+)/)?.[1] ? { 'X-CSRF-Token': decodeURIComponent(document.cookie.match(/(?:^|; )XSRF-TOKEN=([^;]+)/)![1]) } : {}) },
-        body: JSON.stringify({ chatId, prompt: run.prompt, response: candidate.output, modelId: candidate.modelId })
-      }).catch(error => console.warn('[WorkspaceComparison] Could not persist selected response:', error));
+    if (selectedArtifacts.length && !artifactsPersisted) showToast('Jawaban tersimpan, tetapi dokumen Canvas belum tersimpan. Draf tetap tersedia; coba simpan lagi.', 'error');
+    if (!run.chatId) {
+      setStreamCreatedChatId(persistedChatId);
+      navigate(getModeChatPath('RUANG_KERJA', persistedChatId), { replace: true });
     }
-  }, [chatId, setActiveArtifactId, setHasUnreadArtifact, setMessages, syncParsedMessageArtifacts, user]);
+    return true;
+  }, [logicalWorkspaceIdentity, messages, navigate, setActiveArtifactId, setHasUnreadArtifact, setMessages, showToast, syncParsedMessageArtifacts]);
 
   const handleComparisonSendToCanvas = useCallback((candidate: WorkspaceComparisonCandidate) => {
     if (!candidate.output) return;
-    setPendingCanvasTransfer({ content: candidate.output, title: `Comparison · ${candidate.modelName}` });
+    setPendingCanvasTransfer({ id: `art_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`, content: candidate.output, title: `Comparison · ${candidate.modelName}` });
   }, []);
 
   const handleConversationSendToCanvas = useCallback((content: string) => {
     if (!content.trim()) return;
-    setPendingCanvasTransfer({ content: content.trim(), title: 'Jawaban AI' });
+    setPendingCanvasTransfer({ id: `art_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`, content: content.trim(), title: 'Jawaban AI' });
   }, []);
 
   const handleCompareAgain = useCallback((run: WorkspaceComparisonRun) => {
     setComparisonRun({
       ...run,
       comparisonId: crypto.randomUUID(),
-      chatId,
+      snapshotId: crypto.randomUUID(),
+      workspaceIdentity: logicalWorkspaceIdentity,
+      chatId: effectiveChatId,
       activeContext: activeArtifact && activeArtifact.id !== DEFAULT_WELCOME_ARTIFACT_ID
-        ? { title: activeArtifact.title, content: activeArtifact.content.slice(0, 50000) }
-        : undefined
+        ? { artifactId: activeArtifact.id, title: activeArtifact.title, version: activeArtifact.version, content: (canvasDraft?.artifactId === activeArtifact.id ? canvasDraft.content : activeArtifact.content).slice(0, 50000) }
+        : undefined,
+      selectedText: selectedText || undefined,
+      attachments: workspaceAttachments.filter(file => file.status === 'ready' && file.id).map(file => ({ id: file.id!, filename: file.name, mimeType: file.mimeType, size: file.size }))
     });
-  }, [activeArtifact, chatId]);
+  }, [activeArtifact, canvasDraft, effectiveChatId, selectedText, workspaceAttachments, logicalWorkspaceIdentity]);
 
   const handleRetryMessage = useCallback((lastUserPrompt: string, errorMsgId: string) => {
-    setMessages(prev => prev.filter(m => m.id !== errorMsgId));
-    const saved = requestSnapshotsRef.current.get(lastUserPrompt.trim());
+    const errorMessage = messages.find(message => message.id === errorMsgId);
+    const saved = errorMessage?.retryRequestId ? requestSnapshotsRef.current.get(errorMessage.retryRequestId) : undefined;
+    if (!saved || saved.snapshot.userMessage !== lastUserPrompt.trim()) {
+      showToast('Konteks permintaan ini sudah tidak tersedia. Kirim ulang pesan untuk mencoba lagi.', 'error');
+      return;
+    }
     revisionRequestRef.current = saved?.revisionRequest ? { ...saved.revisionRequest } : null;
-    handleExecuteSendMessage(lastUserPrompt, saved?.customSystemNote, saved?.attachments, saved?.snapshot.config, saved?.snapshot, true);
-  }, [setMessages, handleExecuteSendMessage]);
+    const accepted = handleExecuteSendMessage(lastUserPrompt, saved.customSystemNote, saved.attachments, saved.snapshot.config, saved.snapshot, true);
+    if (accepted) setMessages(prev => prev.filter(m => m.id !== errorMsgId));
+  }, [messages, setMessages, handleExecuteSendMessage, showToast]);
 
   const handleApplyCanvasTransfer = useCallback(async (mode: 'create' | 'replace' | 'append') => {
     if (!pendingCanvasTransfer) return;
     try {
       if (mode === 'create' || !visibleActiveArtifact) {
-        const success = await createArtifactFromContent(pendingCanvasTransfer.content, pendingCanvasTransfer.title);
+        const success = await createArtifactFromContent(pendingCanvasTransfer.content, pendingCanvasTransfer.title, pendingCanvasTransfer.id);
         if (!success) return;
       } else {
         const content = mode === 'append'
           ? `${visibleActiveArtifact.content.trim()}\n\n${pendingCanvasTransfer.content}`
           : pendingCanvasTransfer.content;
-        await saveArtifact(content, visibleActiveArtifact.title, true);
-        showToast(mode === 'append' ? 'Jawaban ditambahkan ke Canvas' : 'Dokumen Canvas diperbarui', 'success');
+        const saved = await saveArtifact(content, visibleActiveArtifact.title, true);
+        if (!saved) throw new Error('Dokumen Canvas tidak berhasil disimpan');
+        showToast(saved.persistenceStatus === 'local'
+          ? 'Perubahan tersedia sebagai draf lokal Canvas.'
+          : (mode === 'append' ? 'Jawaban ditambahkan ke Canvas' : 'Dokumen Canvas diperbarui'), saved.persistenceStatus === 'local' ? 'info' : 'success');
       }
       setIsCanvasOpen(true);
       setMobileActiveTab('canvas');
@@ -439,7 +541,6 @@ export function StudentWorkspace({
     const currentDraft = canvasDraft?.artifactId === pendingRevision.artifactId ? canvasDraft.content : visibleActiveArtifact.content;
     if (visibleActiveArtifact.version !== pendingRevision.baseVersion || currentDraft !== pendingRevision.baseContent) {
       showToast('Dokumen berubah sejak revisi dimulai. Coba ulang revisi.', 'error');
-      setPendingRevision(null);
       return;
     }
     try {
@@ -455,12 +556,11 @@ export function StudentWorkspace({
       setRevisionCommit({ artifactId: saved.id, content: saved.content, version: saved.version });
       setCanvasDraft({ artifactId: saved.id, content: saved.content });
       setPendingRevision(null);
-      showToast('Revisi diterapkan dan versi baru tersimpan.', 'success');
+      showToast(saved.persistenceStatus === 'local' ? 'Revisi diterapkan ke draf lokal.' : 'Revisi diterapkan dan versi baru tersimpan.', saved.persistenceStatus === 'local' ? 'info' : 'success');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Revisi gagal disimpan';
       if (message.includes('berubah')) {
-        setPendingRevision(null);
-        showToast('Dokumen berubah sejak revisi dimulai. Coba ulang revisi.', 'error');
+        showToast('Dokumen berubah di sesi lain. Revisi tetap tersedia; periksa versi terbaru sebelum menerapkan ulang.', 'error');
       } else {
         showToast('Revisi gagal disimpan. Draf tetap tersedia; coba lagi.', 'error');
       }
@@ -473,10 +573,14 @@ export function StudentWorkspace({
     const targetChatId = effectiveChatIdRef.current;
     revisionRequestRef.current = null;
     abortStream(true);
+    setComparisonRun(null);
+    setIsCreatingArtifact(false);
+    setPendingRevision(null);
+    setInlineEditPatch(null);
     try {
       const cleared = await clearWorkspaceConversation(targetChatId);
-      if (!chatId && targetChatId) navigate(getModeChatPath('RUANG_KERJA', targetChatId), { replace: true });
       if (!cleared) return false;
+      if (!chatId && targetChatId) navigate(getModeChatPath('RUANG_KERJA', targetChatId), { replace: true });
       showToast('Percakapan dibersihkan. Dokumen dan artefak Canvas tetap tersimpan.', 'success');
       return true;
     } finally {
@@ -558,8 +662,11 @@ export function StudentWorkspace({
           }
           showToast(`Berkas ${result.downloadData.filename} berhasil diunduh.`, 'success');
         } else if (result.proposedContent !== undefined && usableArtifact) {
-          await saveArtifact(result.proposedContent, usableArtifact.title, true);
-          showToast(`Aksi "${tool.name}" berhasil diterapkan. Versi sebelumnya tersimpan.`, 'success');
+          const saved = await saveArtifact(result.proposedContent, usableArtifact.title, true);
+          if (!saved) throw new Error('Perubahan belum berhasil disimpan ke Canvas.');
+          showToast(saved.persistenceStatus === 'local'
+            ? `Aksi "${tool.name}" diterapkan ke draf lokal.`
+            : `Aksi "${tool.name}" berhasil diterapkan. Versi sebelumnya tersimpan.`, saved.persistenceStatus === 'local' ? 'info' : 'success');
         }
         return;
       }
@@ -596,6 +703,32 @@ export function StudentWorkspace({
   const handleCanvasDraftChange = useCallback((artifactId: string, content: string) => {
     setCanvasDraft(current => current?.artifactId === artifactId && current.content === content ? current : { artifactId, content });
   }, []);
+  const handleOpenCanvas = useCallback(() => {
+    setIsCanvasOpen(true);
+    setMobileActiveTab('canvas');
+    setHasUnreadArtifact(false);
+  }, [setHasUnreadArtifact]);
+  const handleSelectStarterTask = useCallback((prompt: string) => { handleExecuteSendMessage(prompt); }, [handleExecuteSendMessage]);
+  const handleComposerSend = useCallback((prompt: string, attachments?: StoredAttachment[], config?: WorkspaceComposerConfig) => {
+    handleExecuteSendMessage(prompt, undefined, attachments, config);
+  }, [handleExecuteSendMessage]);
+  const handleSelectWorkspaceTool = useCallback((tool: WorkspaceToolDefinition) => { selectWorkspaceTool(tool); }, [selectWorkspaceTool]);
+  const handleRemoveFirstAttachment = useCallback(() => {
+    const first = workspaceAttachments[0];
+    if (first) void removeAttachment(first);
+  }, [removeAttachment, workspaceAttachments]);
+  const handleRemoveOneAttachment = useCallback((attachment: typeof workspaceAttachments[number]) => { void removeAttachment(attachment); }, [removeAttachment]);
+  const handleSwitchToQuietMode = useCallback(() => onSwitchMode?.('RUANG_TENANG'), [onSwitchMode]);
+  const handleSelectCanvasArtifact = useCallback((id: string) => {
+    setActiveArtifactId(id);
+    setHasUnreadArtifact(false);
+  }, [setActiveArtifactId, setHasUnreadArtifact]);
+  const handleCloseCanvas = useCallback(() => setIsCanvasOpen(false), []);
+  const handleToggleCanvas = useCallback(() => setIsCanvasExpanded(previous => !previous), []);
+  const handleSetMobileTab = useCallback((tab: WorkspaceTab) => {
+    setMobileActiveTab(tab);
+    if (tab === 'canvas') setHasUnreadArtifact(false);
+  }, [setHasUnreadArtifact]);
 
   return (
     <div 
@@ -685,15 +818,11 @@ export function StudentWorkspace({
             isStreaming={isStreaming}
             artifacts={artifacts}
             starterTasks={STARTER_TASKS}
-            onSelectStarterTask={(prompt) => handleExecuteSendMessage(prompt)}
+            onSelectStarterTask={handleSelectStarterTask}
             onRetryMessage={handleRetryMessage}
-            onOpenCanvas={() => {
-              setIsCanvasOpen(true);
-              setMobileActiveTab('canvas');
-              setHasUnreadArtifact(false);
-            }}
+            onOpenCanvas={handleOpenCanvas}
             onSendToCanvas={handleConversationSendToCanvas}
-            comparisonRun={comparisonRun?.chatId === chatId ? comparisonRun : null}
+            comparisonRun={comparisonRun?.workspaceIdentity === logicalWorkspaceIdentity && comparisonRun?.chatId === effectiveChatId ? comparisonRun : null}
             onUseComparisonResponse={handleUseComparisonResponse}
             onComparisonSendToCanvas={handleComparisonSendToCanvas}
             onCompareAgain={handleCompareAgain}
@@ -703,9 +832,8 @@ export function StudentWorkspace({
             activeArtifactType={activeArtifact?.id !== DEFAULT_WELCOME_ARTIFACT_ID ? activeArtifact?.type : null}
             activeArtifactTitle={visibleActiveArtifact?.title || null}
             selectedText={selectedText}
-            onSelectTool={(tool) => selectWorkspaceTool(tool)}
-            inputText={inputText}
-            setInputText={setInputText}
+            onSelectTool={handleSelectWorkspaceTool}
+            onInputTextChange={setInputText}
             attachments={workspaceAttachments}
             isStreaming={isStreaming}
             isDisabled={isClearingConversation}
@@ -721,18 +849,15 @@ export function StudentWorkspace({
             onModelChange={handleModelChange}
             modelPreferenceNotice={modelPreferenceNotice}
             fileInputRef={fileInputRef}
-            onSendMessage={(prompt, atts, config) => handleExecuteSendMessage(prompt, undefined, atts, config)}
+            onSendMessage={handleComposerSend}
             onAbortStream={handleAbortWorkspaceRequest}
-            onOpenTemplateGallery={() => openTemplateModal()}
-            onRemoveAttachedFile={() => {
-              const first = workspaceAttachments[0];
-              if (first) void removeAttachment(first);
-            }}
-            onRemoveAttachment={attachment => { void removeAttachment(attachment); }}
+            onOpenTemplateGallery={openTemplateModal}
+            onRemoveAttachedFile={handleRemoveFirstAttachment}
+            onRemoveAttachment={handleRemoveOneAttachment}
             onRetryAttachment={retryAttachment}
             onFileUploadChange={handleFileUploadChange}
             onOpenBreathing={openBreathingModal}
-            onSwitchToRuangTenang={() => onSwitchMode?.('RUANG_TENANG')}
+            onSwitchToRuangTenang={handleSwitchToQuietMode}
             onDismissDistress={dismissDistress}
             allPresets={allPresets}
             activePreset={activePreset}
@@ -757,13 +882,11 @@ export function StudentWorkspace({
           isCanvasExpanded={isCanvasExpanded}
           isStreaming={isStreaming}
           isCreatingArtifact={isCreatingArtifact}
+          hasWorkspaceChat={Boolean(effectiveChatId)}
           mobileActiveTab={mobileActiveTab}
-          onSelectArtifact={(id) => {
-            setActiveArtifactId(id);
-            setHasUnreadArtifact(false);
-          }}
-          onCloseCanvas={() => setIsCanvasOpen(false)}
-          onToggleExpand={() => setIsCanvasExpanded(prev => !prev)}
+          onSelectArtifact={handleSelectCanvasArtifact}
+          onCloseCanvas={handleCloseCanvas}
+          onToggleExpand={handleToggleCanvas}
           onUpdateActiveArtifact={updateActiveArtifact}
           onSaveArtifact={saveArtifact}
           onRollbackVersion={rollbackArtifact}
@@ -779,10 +902,7 @@ export function StudentWorkspace({
           onDismissInlineEdit={handleDismissInlineEdit}
           onDraftContentChange={handleCanvasDraftChange}
           revisionCommit={revisionCommit}
-          onSetMobileActiveTab={(tab) => {
-            setMobileActiveTab(tab);
-            if (tab === 'canvas') setHasUnreadArtifact(false);
-          }}
+          onSetMobileActiveTab={handleSetMobileTab}
         />
       </main>
 

@@ -22,6 +22,7 @@ interface WorkspaceCanvasPaneProps {
   isCanvasExpanded: boolean;
   isStreaming: boolean;
   isCreatingArtifact?: boolean;
+  hasWorkspaceChat?: boolean;
   mobileActiveTab: WorkspaceTab;
   onSelectArtifact: (id: string) => void;
   onCloseCanvas: () => void;
@@ -52,6 +53,7 @@ export const WorkspaceCanvasPane: React.FC<WorkspaceCanvasPaneProps> = React.mem
   isCanvasExpanded,
   isStreaming,
   isCreatingArtifact = false,
+  hasWorkspaceChat = false,
   mobileActiveTab,
   onSelectArtifact,
   onCloseCanvas,
@@ -106,6 +108,10 @@ export const WorkspaceCanvasPane: React.FC<WorkspaceCanvasPaneProps> = React.mem
         className="hidden xl:flex flex-1 min-h-0 min-w-0 flex-col h-full overflow-hidden transition-all duration-200"
         >
           {isCreatingArtifact && <div role="status" className="flex h-8 shrink-0 items-center gap-2 border-b border-emerald-100 bg-emerald-50/70 px-3 text-xs font-medium text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-300"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />Membuat dokumen di Canvas…</div>}
+          {activeArtifact?.persistenceStatus && activeArtifact.persistenceStatus !== 'persistent' && <div className="flex min-h-8 shrink-0 items-center justify-between gap-2 border-b border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200" role="status">
+            <span>{activeArtifact.persistenceStatus === 'failed' ? 'Draf masih tersimpan lokal. Penyimpanan ke Ruang Kerja belum berhasil.' : activeArtifact.persistenceStatus === 'saving' ? 'Menyimpan draf ke Ruang Kerja…' : 'Draf tersimpan lokal dan akan dipindahkan setelah chat dibuat.'}</span>
+            {activeArtifact.persistenceStatus === 'failed' && hasWorkspaceChat && <button type="button" className="font-semibold underline underline-offset-2" onClick={() => { void Promise.resolve(onSaveArtifact(activeArtifact.content, activeArtifact.title)).catch(() => undefined); }}>Coba simpan</button>}
+          </div>}
           {/* Multi-Artifact Tab & Filter Strip (when > 1 artifacts exist) */}
           {artifacts.length > 1 && (
             <div className="h-9 px-3 bg-white dark:bg-[#0F172A] border-b border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-1 shrink-0 z-10">

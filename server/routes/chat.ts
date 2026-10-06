@@ -1,5 +1,5 @@
 import { prisma } from '../database.js';
-import { MAX_WORKSPACE_ACTIVE_ATTACHMENTS } from '../../shared/contracts/files.js';
+import { MAX_CHAT_ATTACHMENTS_PER_MESSAGE, MAX_WORKSPACE_ACTIVE_ATTACHMENTS } from '../../shared/contracts/files.js';
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { requireAuth, requireRole, optionalAuth } from '../middleware/auth.js';
@@ -342,7 +342,7 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
     }
 
     const isWorkspace = Boolean(workspaceMode) || (mode || '').toLowerCase().includes('ruang_kerja') || (chatMode || '').toLowerCase().includes('ruangkerja');
-    const attachmentLimit = isWorkspace ? MAX_WORKSPACE_ACTIVE_ATTACHMENTS : 3;
+    const attachmentLimit = isWorkspace ? MAX_WORKSPACE_ACTIVE_ATTACHMENTS : MAX_CHAT_ATTACHMENTS_PER_MESSAGE;
     if (Array.isArray(attachments) && attachments.length > attachmentLimit) {
       return sendError(res, 'TOO_MANY_FILES', `Maksimal ${attachmentLimit} lampiran aktif diperbolehkan`, 400);
     }
@@ -423,7 +423,7 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
         }
 
         if (Array.isArray(attachments)) {
-          const maxAttachmentCount = isWorkspace ? MAX_WORKSPACE_ACTIVE_ATTACHMENTS : 3;
+          const maxAttachmentCount = isWorkspace ? MAX_WORKSPACE_ACTIVE_ATTACHMENTS : MAX_CHAT_ATTACHMENTS_PER_MESSAGE;
           if (attachments.length > maxAttachmentCount) {
             await rollbackUserAiQuota(userId, clientIp);
             return sendError(res, 'TOO_MANY_FILES', `Maksimal ${maxAttachmentCount} lampiran aktif diperbolehkan`, 400);

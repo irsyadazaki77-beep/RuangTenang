@@ -60,7 +60,7 @@ export interface AttachmentStatusResponseDTO {
   mimeType: string;
   fileKind: WorkspaceFileKind;
   size: number;
-  status: 'processing' | 'ready' | 'failed' | 'pending';
+  status: 'processing' | 'ready' | 'failed' | 'pending' | 'unsupported';
   url: string;
   checksum?: string;
   pageCount?: number;
@@ -85,15 +85,18 @@ export async function pollProcessingStatus(
   attachmentId: string,
   maxAttempts = 15,
   intervalMs = 800,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  chatId?: string
 ): Promise<PollResult> {
+  let latest: AttachmentStatusResponseDTO | undefined;
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     if (signal?.aborted) {
       return { success: false, timeout: false, errorMessage: 'Pemrosesan dibatalkan.' };
     }
 
     try {
-      const res = await fetch(`/api/v1/chat/attachments/${attachmentId}/status`, {
+      const scope = chatId ? `?chatId=${encodeURIComponent(chatId)}` : '';
+      const res = await fetch(`/api/v1/chat/attachments/${attachmentId}/status${scope}`, {
         credentials: 'include',
         signal
       });
@@ -102,7 +105,9 @@ export async function pollProcessingStatus(
         const data = await res.json();
         const att = data.attachment as AttachmentStatusResponseDTO | undefined;
         if (att) {
-          if (att.status === 'ready' || att.status === 'failed') {
+          if (att.id !== attachmentId) return { success: false, errorMessage: 'ID status lampiran tidak cocok.' };
+          latest = att;
+          if (att.status === 'ready' || att.status === 'failed' || att.status === 'unsupported') {
             return { success: true, attachment: att };
           }
         }
@@ -132,7 +137,7 @@ export async function pollProcessingStatus(
     }
   }
 
-  return { success: false, timeout: true };
+  return { success: false, timeout: true, attachment: latest };
 }
 
 function mapServerErrorCode(serverCode?: string): FileValidationErrorType {
@@ -188,6 +193,7 @@ export async function processFileForWorkspace(
     if (chatId) {
       formData.append('chatId', chatId);
     }
+    formData.append('workspaceMode', 'true');
 
     const res = await fetch('/api/v1/chat/attachments/upload', {
       method: 'POST',
@@ -220,10 +226,13 @@ export async function processFileForWorkspace(
     // If still in processing status, poll until ready with strict timeout
     if (att.status === 'processing' || att.status === 'pending') {
       onProcessing?.();
-      const pollResult = await pollProcessingStatus(att.id, 15, 800, signal);
+      const pollResult = await pollProcessingStatus(att.id, 15, 800, signal, chatId);
       if (pollResult.success && pollResult.attachment) {
         att = pollResult.attachment;
       } else if (pollResult.timeout) {
+        if (pollResult.attachment?.status === 'processing' || pollResult.attachment?.status === 'pending') {
+          return { valid: true, file: { id: att.id, name: att.filename || file.name, size: att.size || file.size, mimeType: att.mimeType || file.type || 'application/octet-stream', fileKind: (att.fileKind as WorkspaceFileKind) || 'text', status: 'processing', url: att.url || `/api/v1/chat/attachments/${att.id}` } };
+        }
         return {
           valid: false,
           error: 'PROCESSING_TIMEOUT',
@@ -259,6 +268,25 @@ export async function processFileForWorkspace(
           mimeType: att.mimeType || file.type || 'application/octet-stream',
           fileKind: (att.fileKind as WorkspaceFileKind) || 'text',
           status: 'failed',
+          failureStage: 'processing',
+          url: att.url || `/api/v1/chat/attachments/${att.id}`,
+          errorMessage: att.errorMessage
+        }
+      };
+    }
+
+    if (att.status === 'unsupported') {
+      return {
+        valid: false,
+        error: 'UNSUPPORTED_TYPE',
+        message: att.errorMessage || 'Format dokumen tidak didukung.',
+        file: {
+          id: att.id,
+          name: att.filename || file.name,
+          size: att.size || file.size,
+          mimeType: att.mimeType || file.type || 'application/octet-stream',
+          fileKind: (att.fileKind as WorkspaceFileKind) || 'text',
+          status: 'unsupported',
           url: att.url || `/api/v1/chat/attachments/${att.id}`,
           errorMessage: att.errorMessage
         }
@@ -297,9 +325,10 @@ export async function processFileForWorkspace(
   }
 }
 
-export async function retryWorkspaceFile(attachmentId: string, signal?: AbortSignal): Promise<FileValidationResult> {
+export async function retryWorkspaceFile(attachmentId: string, signal?: AbortSignal, chatId?: string): Promise<FileValidationResult> {
   try {
-    const response = await fetch(`/api/v1/chat/attachments/${encodeURIComponent(attachmentId)}/retry`, {
+    const scope = chatId ? `?chatId=${encodeURIComponent(chatId)}` : '';
+    const response = await fetch(`/api/v1/chat/attachments/${encodeURIComponent(attachmentId)}/retry${scope}`, {
       method: 'POST', credentials: 'include', signal
     });
     const payload = await response.json();
@@ -308,8 +337,11 @@ export async function retryWorkspaceFile(attachmentId: string, signal?: AbortSig
     }
     let attachment = payload.attachment as AttachmentStatusResponseDTO | undefined;
     if (attachment?.status === 'processing' || attachment?.status === 'pending') {
-      const polled = await pollProcessingStatus(attachmentId, 15, 800, signal);
+      const polled = await pollProcessingStatus(attachmentId, 15, 800, signal, chatId);
       if (!polled.success || !polled.attachment) {
+        if (polled.attachment?.status === 'processing' || polled.attachment?.status === 'pending') {
+          return { valid: true, file: { id: polled.attachment.id, name: polled.attachment.filename, mimeType: polled.attachment.mimeType, size: polled.attachment.size, fileKind: polled.attachment.fileKind, status: 'processing', url: polled.attachment.url } };
+        }
         return { valid: false, error: 'PROCESSING_TIMEOUT', message: polled.errorMessage || 'Pemrosesan dokumen belum selesai. Coba lagi.' };
       }
       attachment = polled.attachment;

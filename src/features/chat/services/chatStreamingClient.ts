@@ -22,8 +22,8 @@ export interface StreamCallbacks {
   onMessageStart?: (msgId: string) => void;
   onChunk?: (text: string) => void;
   onPluginSwitch?: (pluginName: string) => void;
-  onMessageComplete?: (fullText: string) => void;
-  onError?: (error: string) => void;
+  onMessageComplete?: (fullText: string) => void | Promise<void>;
+  onError?: (error: string) => void | Promise<void>;
   onFollowUps?: (followUps: string[]) => void;
   onChatCreated?: (chatId: string) => void;
   onQuotaExceeded?: (data: QuotaExceededData) => void;
@@ -274,7 +274,7 @@ export class ChatStreamingClient {
       this.changeState(token, 'completed', callbacks.onStateChange);
 
       if (!pluginName && callbacks.onMessageComplete) {
-        callbacks.onMessageComplete(currentText);
+        await callbacks.onMessageComplete(currentText);
       }
 
     } catch (err: any) {
@@ -287,13 +287,13 @@ export class ChatStreamingClient {
         this.changeState(token, 'aborted', callbacks.onStateChange);
         // Only trigger completion with existing text if there was content streamed
         if (callbacks.onMessageComplete && currentText.trim()) {
-          callbacks.onMessageComplete(currentText);
+          await callbacks.onMessageComplete(currentText);
         }
       } else {
         console.error('Streaming client error:', err);
         this.changeState(token, 'failed', callbacks.onStateChange);
         if (callbacks.onError) {
-          callbacks.onError(err.message || 'Koneksi terputus.');
+          await callbacks.onError(err.message || 'Koneksi terputus.');
         }
       }
     } finally {

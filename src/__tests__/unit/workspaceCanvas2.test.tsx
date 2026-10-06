@@ -58,7 +58,7 @@ describe('Workspace Canvas 2.0 UX & Behavior', () => {
 
   it('allows inline title editing with Enter key to save', async () => {
     const onUpdateArtifact = vi.fn();
-    const onSaveArtifact = vi.fn();
+    const onSaveArtifact = vi.fn().mockResolvedValue({ ...mockArtifact, title: 'Metodologi Penelitian Baru' });
 
     render(
       <ArtifactCanvas
@@ -75,7 +75,7 @@ describe('Workspace Canvas 2.0 UX & Behavior', () => {
     fireEvent.change(input, { target: { value: 'Metodologi Penelitian Baru' } });
     fireEvent.keyDown(input, { key: 'Enter' });
 
-    expect(onUpdateArtifact).toHaveBeenCalledWith({ title: 'Metodologi Penelitian Baru' });
+    await waitFor(() => expect(onUpdateArtifact).toHaveBeenCalledWith(expect.objectContaining({ title: 'Metodologi Penelitian Baru' })));
     expect(onSaveArtifact).toHaveBeenCalledWith(mockArtifact.content, 'Metodologi Penelitian Baru');
   });
 
@@ -106,7 +106,7 @@ describe('Workspace Canvas 2.0 UX & Behavior', () => {
   });
 
   it('protects dirty state and provides a manual Save button with shortcut', async () => {
-    const onSaveArtifact = vi.fn();
+    const onSaveArtifact = vi.fn().mockResolvedValue({ ...mockArtifact, content: '# Teks Draf Terupdate' });
     render(
       <ArtifactCanvas
         artifact={mockArtifact}
@@ -311,5 +311,101 @@ describe('Workspace Canvas 2.0 UX & Behavior', () => {
     fireEvent.change(searchInput, { target: { value: 'Python' } });
     expect(screen.getByText('Skrip Python Data')).toBeInTheDocument();
     expect(screen.queryByText('Daftar Referensi IEEE')).not.toBeInTheDocument();
+  });
+
+  it('provides honest static check on code artifacts without fake execution claims', async () => {
+    const artPy: WorkspaceArtifact = {
+      id: 'art_py_test',
+      title: 'Validasi Python',
+      type: 'CODE',
+      language: 'python',
+      content: 'def proses():\n    return 42',
+      version: 1,
+      updatedAt: new Date().toISOString()
+    };
+
+    render(
+      <ArtifactCanvas
+        artifact={artPy}
+        onUpdateArtifact={vi.fn()}
+      />
+    );
+
+    const checkBtn = screen.getByRole('button', { name: /Periksa kode secara statis/i });
+    expect(checkBtn).toBeInTheDocument();
+    fireEvent.click(checkBtn);
+
+    await waitFor(() => {
+      expect(screen.getByRole('region', { name: /Panel Hasil Pemeriksaan Kode/i })).toBeInTheDocument();
+      expect(screen.getByText(/Eksekusi Python belum tersedia di browser/i)).toBeInTheDocument();
+    });
+
+    // Ensure no fake claims exist
+    expect(screen.queryByText(/Optimal O\(n\)/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Index Scan verified/i)).not.toBeInTheDocument();
+  });
+
+  it('renders Jalankan aman button specifically for JavaScript artifacts', async () => {
+    const artJs: WorkspaceArtifact = {
+      id: 'art_js_test',
+      title: 'Skrip JS Aman',
+      type: 'CODE',
+      language: 'javascript',
+      content: 'console.log("Halo RuangKerja");',
+      version: 1,
+      updatedAt: new Date().toISOString()
+    };
+
+    render(
+      <ArtifactCanvas
+        artifact={artJs}
+        onUpdateArtifact={vi.fn()}
+      />
+    );
+
+    const checkBtn = screen.getByRole('button', { name: /Periksa kode secara statis/i });
+    const runBtn = screen.getByRole('button', { name: /Jalankan kode di sandbox lokal aman/i });
+    expect(checkBtn).toBeInTheDocument();
+    expect(runBtn).toBeInTheDocument();
+
+    fireEvent.click(runBtn);
+    await waitFor(() => {
+      expect(screen.getByRole('region', { name: /Panel Hasil Pemeriksaan Kode/i })).toBeInTheDocument();
+    });
+  });
+
+  it('resets validation result and isolates state when switching artifacts', async () => {
+    const artA: WorkspaceArtifact = {
+      id: 'art_A',
+      title: 'Dokumen A',
+      type: 'CODE',
+      language: 'python',
+      content: 'def a(): pass',
+      version: 1,
+      updatedAt: new Date().toISOString()
+    };
+    const artB: WorkspaceArtifact = {
+      id: 'art_B',
+      title: 'Dokumen B',
+      type: 'CODE',
+      language: 'python',
+      content: 'def b(): pass',
+      version: 1,
+      updatedAt: new Date().toISOString()
+    };
+
+    const { rerender } = render(<ArtifactCanvas artifact={artA} onUpdateArtifact={vi.fn()} />);
+
+    // Click check on A
+    fireEvent.click(screen.getByRole('button', { name: /Periksa kode secara statis/i }));
+    await waitFor(() => {
+      expect(screen.getByRole('region', { name: /Panel Hasil Pemeriksaan Kode/i })).toBeInTheDocument();
+    });
+
+    // Switch to artifact B
+    rerender(<ArtifactCanvas artifact={artB} onUpdateArtifact={vi.fn()} />);
+
+    // Panel from A should be cleared immediately
+    expect(screen.queryByRole('region', { name: /Panel Hasil Pemeriksaan Kode/i })).not.toBeInTheDocument();
   });
 });

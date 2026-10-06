@@ -15,6 +15,7 @@ import { deleteStoredAttachmentFile, resolveExistingStoredAttachmentFilePath } f
 import { encryptionService } from '../encryptionService.js';
 
 export const ATTACHMENTS_DIR = path.join(process.cwd(), 'uploads', 'attachments');
+const activeRetryControllers = new Map<string, AbortController>();
 
 if (!fs.existsSync(ATTACHMENTS_DIR)) {
   fs.mkdirSync(ATTACHMENTS_DIR, { recursive: true });
@@ -260,16 +261,32 @@ export const documentIngestionService = {
         }
       }).catch(() => {});
 
-      throw (procErr instanceof DocumentProcessingException)
+      const surfacedError = (procErr instanceof DocumentProcessingException)
         ? procErr
         : new DocumentProcessingException('PARSER_ERROR', errorMessage);
+      Object.assign(surfacedError, {
+        attachment: {
+          id: attachmentId,
+          filename: verified.sanitizedName,
+          mimeType: verified.verifiedMime,
+          fileKind: verified.fileKind,
+          size: verified.size,
+          status: 'failed',
+          url: `/api/v1/chat/attachments/${attachmentId}`,
+          checksum: verified.checksum,
+          errorMessage: `[${errorCode}] ${errorMessage}`,
+          errorCode,
+          createdAt: record.createdAt.toISOString()
+        } satisfies AttachmentResponseDTO
+      });
+      throw surfacedError;
     }
   },
 
   /**
    * Retry failed processing for a document
    */
-  async retryProcessing(attachmentId: string, userId: string): Promise<AttachmentResponseDTO> {
+  async retryProcessing(attachmentId: string, userId: string, chatId?: string, requestSignal?: AbortSignal): Promise<AttachmentResponseDTO> {
     const attachment = await prisma.attachments.findUnique({
       where: { id: attachmentId }
     });
@@ -281,9 +298,12 @@ export const documentIngestionService = {
     if (attachment.userId !== userId && !(attachment.userId === 'guest' && userId === 'guest')) {
       throw new DocumentProcessingException('OWNERSHIP_ERROR', 'Anda tidak memiliki hak akses ke dokumen ini.');
     }
+    if (chatId && attachment.chatId !== chatId) {
+      throw new DocumentProcessingException('OWNERSHIP_ERROR', 'Dokumen tidak termasuk dalam Ruang Kerja ini.');
+    }
 
     if (attachment.status === 'processing') {
-      throw new DocumentProcessingException('PROCESSING_IN_PROGRESS' as any, 'Dokumen sedang diproses, mohon tunggu.');
+      throw new DocumentProcessingException('PROCESSING_IN_PROGRESS', 'Dokumen sedang diproses, mohon tunggu.');
     }
 
     if (attachment.status === 'ready') {
@@ -320,13 +340,23 @@ export const documentIngestionService = {
     if (buffer.length !== attachment.size) throw new DocumentProcessingException('STORAGE_ERROR', 'Berkas terenkripsi tidak dapat diverifikasi.');
 
     // Transition failed -> processing
-    await prisma.attachments.update({
-      where: { id: attachmentId },
+    const claimed = await prisma.attachments.updateMany({
+      where: { id: attachmentId, userId, status: attachment.status, ...(chatId ? { chatId } : {}) },
       data: {
         status: 'processing',
         processingError: null
       }
     });
+    if (!claimed.count) {
+      const current = await prisma.attachments.findUnique({ where: { id: attachmentId } });
+      if (current?.status === 'processing') throw new DocumentProcessingException('PROCESSING_IN_PROGRESS', 'Dokumen sedang diproses, mohon tunggu.');
+      throw new DocumentProcessingException('OWNERSHIP_ERROR', 'Dokumen tidak dapat diproses ulang.');
+    }
+    const retryController = new AbortController();
+    const abortRetry = () => retryController.abort();
+    if (requestSignal?.aborted) retryController.abort();
+    else requestSignal?.addEventListener('abort', abortRetry, { once: true });
+    activeRetryControllers.set(attachmentId, retryController);
 
     // Clear any partial chunks from prior attempt
     await prisma.documentChunks.deleteMany({
@@ -338,7 +368,10 @@ export const documentIngestionService = {
         buffer,
         filename: attachment.filename,
         mimeType: attachment.mimeType,
+        abortSignal: retryController.signal,
       }).finally(() => buffer.fill(0));
+
+      if (retryController.signal.aborted) throw new DocumentProcessingException('PROCESSING_ABORTED', 'Pemrosesan ulang dibatalkan.');
 
       const normalized = normalizationService.normalizeDocument(extraction as any);
       const chunks = chunkingService.createChunks(normalized);
@@ -409,13 +442,16 @@ export const documentIngestionService = {
         }
       }).catch(() => {});
       throw err;
+    } finally {
+      requestSignal?.removeEventListener('abort', abortRetry);
+      if (activeRetryControllers.get(attachmentId) === retryController) activeRetryControllers.delete(attachmentId);
     }
   },
 
   /**
    * Delete attachment and all derived data (Right to be Forgotten)
    */
-  async deleteAttachment(attachmentId: string, userId: string): Promise<boolean> {
+  async deleteAttachment(attachmentId: string, userId: string, chatId?: string): Promise<boolean> {
     const attachment = await prisma.attachments.findUnique({
       where: { id: attachmentId }
     });
@@ -425,6 +461,11 @@ export const documentIngestionService = {
     if (attachment.userId !== userId && !(attachment.userId === 'guest' && userId === 'guest')) {
       throw new DocumentProcessingException('OWNERSHIP_ERROR', 'Anda tidak berhak menghapus berkas ini.');
     }
+    if (chatId && attachment.chatId !== chatId) {
+      throw new DocumentProcessingException('OWNERSHIP_ERROR', 'Dokumen tidak termasuk dalam Ruang Kerja ini.');
+    }
+
+    activeRetryControllers.get(attachmentId)?.abort();
 
     // Unlink physical file from disk
     try {
@@ -448,7 +489,7 @@ export const documentIngestionService = {
   /**
    * Get attachment status
    */
-  async getAttachmentStatus(attachmentId: string, userId: string): Promise<AttachmentResponseDTO | null> {
+  async getAttachmentStatus(attachmentId: string, userId: string, chatId?: string): Promise<AttachmentResponseDTO | null> {
     const attachment = await prisma.attachments.findUnique({
       where: { id: attachmentId }
     });
@@ -458,6 +499,7 @@ export const documentIngestionService = {
     if (attachment.userId !== userId && !(attachment.userId === 'guest' && userId === 'guest')) {
       throw new DocumentProcessingException('OWNERSHIP_ERROR', 'Akses tidak diizinkan.');
     }
+    if (chatId && attachment.chatId !== chatId) return null;
 
     let meta: any = {};
     try { if (attachment.metadata) meta = JSON.parse(attachment.metadata); } catch {}

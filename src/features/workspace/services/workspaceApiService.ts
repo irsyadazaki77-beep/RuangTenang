@@ -4,7 +4,7 @@ import { WorkspaceArtifact, ArtifactType, WorkspaceFileKind } from '../types';
 
 export interface CreateArtifactPayload {
   id?: string;
-  chatId?: string | null;
+  chatId: string;
   title: string;
   type: ArtifactType;
   language?: string;
@@ -16,7 +16,7 @@ export interface UpdateArtifactPayload {
   content?: string;
   type?: ArtifactType;
   language?: string;
-  chatId?: string | null;
+  chatId?: string;
   createNewVersion?: boolean;
   expectedUpdatedAt?: string;
 }
@@ -48,25 +48,38 @@ export class WorkspaceApiService {
     return res.data.attachments;
   }
 
-  static async deleteAttachment(attachmentId: string, signal?: AbortSignal): Promise<void> {
+  static async deleteAttachment(attachmentId: string, chatId?: string, signal?: AbortSignal): Promise<void> {
+    const query = chatId ? `?chatId=${encodeURIComponent(chatId)}` : '';
     const res = await apiClient.delete<{ message?: string }>(
-      `/api/v1/chat/attachments/${encodeURIComponent(attachmentId)}`, { signal }
+      `/api/v1/chat/attachments/${encodeURIComponent(attachmentId)}${query}`, { signal }
     );
     if (!res.success) throw new Error(res.message || 'Gagal menghapus dokumen');
   }
 
-  /**
-   * Fetch all workspace artifacts for current user, optionally filtered by chatId
-   */
-  static async fetchArtifacts(chatId?: string, signal?: AbortSignal): Promise<WorkspaceArtifact[]> {
-    const url = chatId 
-      ? `/api/v1/workspace/artifacts?chatId=${encodeURIComponent(chatId)}` 
-      : `/api/v1/workspace/artifacts`;
-      
+  static async retryAttachment(attachmentId: string, chatId?: string, signal?: AbortSignal): Promise<WorkspaceAttachmentDto> {
+    const query = chatId ? `?chatId=${encodeURIComponent(chatId)}` : '';
+    const res = await apiClient.post<{ attachment?: WorkspaceAttachmentDto }>(
+      `/api/v1/chat/attachments/${encodeURIComponent(attachmentId)}/retry${query}`, {}, { signal }
+    );
+    if (!res.success || !res.data?.attachment) throw new Error(res.message || 'Gagal mencoba ulang pemrosesan dokumen.');
+    return res.data.attachment;
+  }
+
+  /** Fetch artifacts belonging to one Workspace. A missing chat never falls back to the user library. */
+  static async fetchArtifacts(chatId: string | undefined, signal?: AbortSignal): Promise<WorkspaceArtifact[]> {
+    if (!chatId) return [];
+    const url = `/api/v1/workspace/artifacts?chatId=${encodeURIComponent(chatId)}`;
     const res = await apiClient.get<any>(url, { signal });
     if (res.success && Array.isArray(res.data)) {
       return res.data;
     }
+    return [];
+  }
+
+  /** Explicit library operation for screens that intentionally list every user artifact. */
+  static async fetchAllArtifacts(signal?: AbortSignal): Promise<WorkspaceArtifact[]> {
+    const res = await apiClient.get<any>('/api/v1/workspace/artifacts/all', { signal });
+    if (res.success && Array.isArray(res.data)) return res.data;
     return [];
   }
 
@@ -116,8 +129,9 @@ export class WorkspaceApiService {
   /**
    * Rollback an artifact to a previous target version
    */
-  static async rollbackArtifact(id: string, targetVersion: number, signal?: AbortSignal): Promise<WorkspaceArtifact> {
-    const res = await apiClient.post<any>(`/api/v1/workspace/artifacts/${encodeURIComponent(id)}/rollback`, {
+  static async rollbackArtifact(id: string, targetVersion: number, chatId?: string, signal?: AbortSignal): Promise<WorkspaceArtifact> {
+    const query = chatId ? `?chatId=${encodeURIComponent(chatId)}` : '';
+    const res = await apiClient.post<any>(`/api/v1/workspace/artifacts/${encodeURIComponent(id)}/rollback${query}`, {
       targetVersion
     }, { signal });
 
@@ -130,9 +144,10 @@ export class WorkspaceApiService {
   /**
    * Delete an artifact by ID
    */
-  static async deleteArtifact(id: string, signal?: AbortSignal): Promise<boolean> {
-    const res = await apiClient.delete<any>(`/api/v1/workspace/artifacts/${encodeURIComponent(id)}`, { signal });
-    return Boolean(res.success);
+  static async deleteArtifact(id: string, chatId?: string, signal?: AbortSignal): Promise<void> {
+    const query = chatId ? `?chatId=${encodeURIComponent(chatId)}` : '';
+    const res = await apiClient.delete<any>(`/api/v1/workspace/artifacts/${encodeURIComponent(id)}${query}`, { signal });
+    if (!res.success) throw new Error(res.message || 'Gagal menghapus artefak');
   }
 }
 

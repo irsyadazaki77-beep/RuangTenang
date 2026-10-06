@@ -8,6 +8,7 @@ import { DEFAULT_WELCOME_ARTIFACT, DEFAULT_WELCOME_ARTIFACT_ID } from '../../fea
 import { WorkspaceApiService } from '../../features/workspace/services/workspaceApiService';
 import { WorkspaceArtifact } from '../../features/workspace/types';
 import { Message } from '../../features/chat/types';
+import { ChatStreamingClient } from '../../features/chat/services/chatStreamingClient';
 
 // Mock the WorkspaceApiService
 vi.mock('../../features/workspace/services/workspaceApiService', () => ({
@@ -18,6 +19,7 @@ vi.mock('../../features/workspace/services/workspaceApiService', () => ({
     createArtifact: vi.fn(),
     updateArtifact: vi.fn(),
     rollbackArtifact: vi.fn(),
+    deleteArtifact: vi.fn(),
     fetchChatAttachments: vi.fn().mockResolvedValue([]),
     deleteAttachment: vi.fn().mockResolvedValue(undefined)
   }
@@ -33,6 +35,7 @@ vi.mock('../../components/Toast', () => ({
 describe('Workspace Lifecycle & Regression Suite', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    sessionStorage.clear();
   });
 
   describe('1. Fresh Workspace vs Existing Chat Lifecycle', () => {
@@ -52,6 +55,20 @@ describe('Workspace Lifecycle & Regression Suite', () => {
       expect(artifactResult.current.activeArtifactId).toBe(DEFAULT_WELCOME_ARTIFACT_ID);
       expect(artifactResult.current.activeArtifact?.title).toBe(DEFAULT_WELCOME_ARTIFACT.title);
       unmountArt();
+    });
+
+    it('never fetches the user artifact library for a new Workspace', async () => {
+      const { result } = renderHook(() => useWorkspacePersistence({ workspaceIdentity: 'local:test' }));
+      await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+      expect(WorkspaceApiService.fetchArtifacts).not.toHaveBeenCalled();
+      expect(result.current.persistedArtifacts).toEqual([]);
+    });
+
+    it('does not display a legacy orphan even if one is supplied to a new Workspace', async () => {
+      const orphan: WorkspaceArtifact = { id: 'art-orphan', chatId: null, title: 'Orphan', type: 'DOCUMENT', content: 'legacy', version: 1, updatedAt: '1' };
+      const { result } = renderHook(() => useWorkspaceArtifacts({ workspaceIdentity: 'local:new', persistedArtifacts: [orphan] }));
+      await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+      expect(result.current.artifacts.map(item => item.id)).not.toContain('art-orphan');
     });
 
     it('loads existing chat messages and artifacts without race conditions', async () => {
@@ -96,6 +113,71 @@ describe('Workspace Lifecycle & Regression Suite', () => {
       expect(artifactResult.current.activeArtifactId).toBe('art_101');
     });
 
+    it('keeps a local draft through chat binding and retains it when migration fails', async () => {
+      vi.mocked(WorkspaceApiService.createArtifact).mockRejectedValueOnce(new Error('offline'));
+      const { result, rerender, unmount } = renderHook(
+        ({ chatId, identity, persisted }) => useWorkspaceArtifacts({ chatId, workspaceIdentity: identity, persistedArtifacts: persisted }),
+        { initialProps: { chatId: undefined as string | undefined, identity: 'local:draft-a', persisted: [] as WorkspaceArtifact[] } }
+      );
+      await act(async () => { await result.current.createNewArtifact('DOCUMENT'); });
+      const created = result.current.activeArtifact!;
+      expect(created.persistenceStatus).toBe('local');
+
+      rerender({ chatId: 'chat-created', identity: 'local:draft-a', persisted: [] });
+      await act(async () => { expect(await result.current.migrateLocalArtifacts('chat-created')).toBe(false); });
+      expect(result.current.artifacts.some(item => item.id === created.id)).toBe(true);
+      expect(result.current.artifacts.find(item => item.id === created.id)?.persistenceStatus).toBe('failed');
+      expect(WorkspaceApiService.createArtifact).toHaveBeenCalledWith(expect.objectContaining({ id: created.id, chatId: 'chat-created' }));
+      unmount();
+      const reloaded = renderHook(() => useWorkspaceArtifacts({ chatId: 'chat-created', workspaceIdentity: 'chat:chat-created', persistedArtifacts: [] }));
+      expect(reloaded.result.current.artifacts.find(item => item.id === created.id)?.persistenceStatus).toBe('failed');
+    });
+
+    it('migrates a stable local artifact ID and reloads it from the bound Workspace', async () => {
+      const { result, rerender } = renderHook(
+        ({ chatId, identity, persisted }) => useWorkspaceArtifacts({ chatId, workspaceIdentity: identity, persistedArtifacts: persisted }),
+        { initialProps: { chatId: undefined as string | undefined, identity: 'local:migrate', persisted: [] as WorkspaceArtifact[] } }
+      );
+      await act(async () => { await result.current.createNewArtifact('DOCUMENT'); });
+      const createdId = result.current.activeArtifact!.id;
+      vi.mocked(WorkspaceApiService.createArtifact).mockImplementation(async payload => ({
+        ...payload, id: payload.id || 'art-migrated', chatId: 'chat-bound', persistenceStatus: undefined, version: 1, updatedAt: '2026-01-01T00:00:00.000Z'
+      }));
+      rerender({ chatId: 'chat-bound', identity: 'local:migrate', persisted: [] });
+      await act(async () => { expect(await result.current.migrateLocalArtifacts('chat-bound')).toBe(true); });
+      expect(WorkspaceApiService.createArtifact).toHaveBeenCalledWith(expect.objectContaining({ id: createdId, chatId: 'chat-bound' }));
+
+      const persisted: WorkspaceArtifact = { id: createdId, chatId: 'chat-bound', title: 'Reloaded', type: 'DOCUMENT', content: 'saved', version: 1, updatedAt: '2026-01-01T00:00:00.000Z' };
+      rerender({ chatId: 'chat-bound', identity: 'chat:chat-bound', persisted: [persisted] });
+      await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+      expect(result.current.artifacts.find(item => item.id === createdId)?.chatId).toBe('chat-bound');
+    });
+
+    it('persists a first AI response artifact directly to the newly created chat', async () => {
+      vi.mocked(WorkspaceApiService.createArtifact).mockImplementation(async payload => ({
+        ...payload, id: payload.id || 'art-ai', version: 1, updatedAt: new Date().toISOString()
+      }));
+      const { result } = renderHook(() => useWorkspaceArtifacts({ workspaceIdentity: 'local:first-ai', persistedArtifacts: [] }));
+      const parsed: WorkspaceArtifact = { id: 'art_first_ai', title: 'Hasil AI', type: 'DOCUMENT', content: 'isi', version: 1, updatedAt: new Date().toISOString() };
+      await act(async () => { expect(await result.current.syncParsedMessageArtifacts([parsed], 'chat-created-stream')).toBe(true); });
+      expect(WorkspaceApiService.createArtifact).toHaveBeenCalledWith(expect.objectContaining({ id: parsed.id, chatId: 'chat-created-stream' }));
+    });
+
+    it('does not merge artifacts from the previous Workspace after a switch', async () => {
+      const oldArtifact: WorkspaceArtifact = { id: 'art-a', chatId: 'chat-a', title: 'A', type: 'DOCUMENT', content: '', version: 1, updatedAt: '1' };
+      const newArtifact: WorkspaceArtifact = { id: 'art-b', chatId: 'chat-b', title: 'B', type: 'DOCUMENT', content: '', version: 1, updatedAt: '2' };
+      const { result, rerender } = renderHook(
+        ({ chatId, identity, persisted }) => useWorkspaceArtifacts({ chatId, workspaceIdentity: identity, persistedArtifacts: persisted }),
+        { initialProps: { chatId: 'chat-a', identity: 'chat:chat-a', persisted: [oldArtifact] } }
+      );
+      await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+      rerender({ chatId: 'chat-b', identity: 'chat:chat-b', persisted: [newArtifact] });
+      await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+      expect(result.current.artifacts.map(item => item.id)).toContain('art-b');
+      expect(result.current.artifacts.map(item => item.id)).not.toContain('art-a');
+      expect(result.current.activeArtifactId).toBe('art-b');
+    });
+
     it('cleans up old request when chatId switches rapidly', async () => {
       let resolveFirst: any;
       const firstPromise = new Promise<WorkspaceArtifact[]>((resolve) => {
@@ -106,7 +188,7 @@ describe('Workspace Lifecycle & Regression Suite', () => {
         .mockImplementationOnce(() => firstPromise)
         .mockResolvedValueOnce([]);
 
-      const { rerender } = renderHook(
+      const { result, rerender } = renderHook(
         ({ chatId }) => useWorkspacePersistence({ chatId }),
         { initialProps: { chatId: 'chat_old' } }
       );
@@ -115,13 +197,14 @@ describe('Workspace Lifecycle & Regression Suite', () => {
       rerender({ chatId: 'chat_new' });
 
       // Now resolve the old request
-      resolveFirst([{ id: 'art_stale', title: 'Stale', type: 'DOCUMENT', content: '', version: 1, updatedAt: '' }]);
+      resolveFirst([{ id: 'art_stale', chatId: 'chat_old', title: 'Stale', type: 'DOCUMENT', content: '', version: 1, updatedAt: '' }]);
 
       await act(async () => {
         await new Promise(r => setTimeout(r, 10));
       });
 
       expect(WorkspaceApiService.fetchArtifacts).toHaveBeenCalledTimes(2);
+      expect(result.current.persistedArtifacts).toEqual([]);
     });
   });
 
@@ -183,6 +266,7 @@ describe('Workspace Lifecycle & Regression Suite', () => {
     it('updates active artifact optimistically and persists save', async () => {
       const mockInitial: WorkspaceArtifact = {
         id: 'art_existing',
+        chatId: 'chat-existing',
         title: 'Existing Draft',
         type: 'DOCUMENT',
         content: 'Original content',
@@ -196,7 +280,7 @@ describe('Workspace Lifecycle & Regression Suite', () => {
       });
 
       const { result } = renderHook(() => 
-        useWorkspaceArtifacts({ persistedArtifacts: [mockInitial] })
+        useWorkspaceArtifacts({ chatId: 'chat-existing', persistedArtifacts: [mockInitial] })
       );
 
       act(() => {
@@ -216,9 +300,27 @@ describe('Workspace Lifecycle & Regression Suite', () => {
       );
     });
 
+    it('uses each server confirmed timestamp for the next save in the same Canvas', async () => {
+      const initial: WorkspaceArtifact = {
+        id: 'art-sequenced', chatId: 'chat-sequenced', title: 'Sequence', type: 'DOCUMENT',
+        content: 'initial', version: 1, updatedAt: '2026-01-01T00:00:00.000Z', persistenceStatus: 'persistent'
+      };
+      vi.mocked(WorkspaceApiService.updateArtifact)
+        .mockResolvedValueOnce({ ...initial, content: 'first', updatedAt: '2026-01-01T00:00:01.000Z' })
+        .mockResolvedValueOnce({ ...initial, content: 'second', updatedAt: '2026-01-01T00:00:02.000Z' });
+      const { result } = renderHook(() => useWorkspaceArtifacts({ chatId: initial.chatId!, persistedArtifacts: [initial] }));
+      await act(async () => { await result.current.saveArtifact('first'); });
+      await act(async () => { await result.current.saveArtifact('second'); });
+
+      expect(WorkspaceApiService.updateArtifact).toHaveBeenNthCalledWith(1, initial.id, expect.objectContaining({ expectedUpdatedAt: initial.updatedAt }));
+      expect(WorkspaceApiService.updateArtifact).toHaveBeenNthCalledWith(2, initial.id, expect.objectContaining({ expectedUpdatedAt: '2026-01-01T00:00:01.000Z' }));
+      expect(result.current.activeArtifact?.updatedAt).toBe('2026-01-01T00:00:02.000Z');
+    });
+
     it('performs rollback to previous version safely', async () => {
       const mockArt: WorkspaceArtifact = {
         id: 'art_with_history',
+        chatId: 'chat-history',
         title: 'Versioned Doc',
         type: 'DOCUMENT',
         content: 'Version 2 content',
@@ -233,7 +335,7 @@ describe('Workspace Lifecycle & Regression Suite', () => {
       });
 
       const { result } = renderHook(() => 
-        useWorkspaceArtifacts({ persistedArtifacts: [mockArt] })
+        useWorkspaceArtifacts({ chatId: 'chat-history', persistedArtifacts: [mockArt] })
       );
 
       await act(async () => {
@@ -241,9 +343,56 @@ describe('Workspace Lifecycle & Regression Suite', () => {
         await result.current.rollbackArtifact(1);
       });
 
-      expect(WorkspaceApiService.rollbackArtifact).toHaveBeenCalledWith('art_with_history', 1);
+      expect(WorkspaceApiService.rollbackArtifact).toHaveBeenCalledWith('art_with_history', 1, 'chat-history');
       expect(result.current.activeArtifact?.version).toBe(1);
       expect(result.current.activeArtifact?.content).toBe('Version 1 content');
+    });
+
+    it('keeps the artifact and active selection when server delete fails', async () => {
+      const artifact: WorkspaceArtifact = {
+        id: 'delete-me', chatId: 'delete-chat', title: 'Keep me', type: 'DOCUMENT',
+        content: 'content', version: 1, updatedAt: new Date().toISOString(), persistenceStatus: 'persistent'
+      };
+      vi.mocked(WorkspaceApiService.deleteArtifact).mockRejectedValueOnce(new Error('500'));
+      const { result } = renderHook(() => useWorkspaceArtifacts({ chatId: 'delete-chat', persistedArtifacts: [artifact] }));
+      act(() => result.current.setActiveArtifactId(artifact.id));
+
+      await act(async () => {
+        await expect(result.current.deleteArtifact(artifact.id)).rejects.toThrow('500');
+      });
+
+      expect(result.current.artifacts.some(item => item.id === artifact.id)).toBe(true);
+      expect(result.current.activeArtifactId).toBe(artifact.id);
+    });
+
+    it('inserts only the server returned duplicate after persistence succeeds', async () => {
+      const artifact: WorkspaceArtifact = {
+        id: 'source', chatId: 'duplicate-chat', title: 'Source', type: 'DOCUMENT',
+        content: 'content', version: 3, updatedAt: new Date().toISOString(), persistenceStatus: 'persistent'
+      };
+      vi.mocked(WorkspaceApiService.createArtifact).mockResolvedValueOnce({
+        ...artifact, id: 'server-copy', title: 'Source (Salinan)', version: 1
+      });
+      const { result } = renderHook(() => useWorkspaceArtifacts({ chatId: 'duplicate-chat', persistedArtifacts: [artifact] }));
+
+      await act(async () => { await result.current.duplicateArtifact(artifact.id); });
+
+      expect(result.current.artifacts.filter(item => item.title === 'Source (Salinan)')).toHaveLength(1);
+      expect(result.current.activeArtifactId).toBe('server-copy');
+    });
+
+    it('does not retain a duplicate when server creation fails', async () => {
+      const artifact: WorkspaceArtifact = {
+        id: 'source', chatId: 'duplicate-chat', title: 'Source', type: 'DOCUMENT',
+        content: 'content', version: 1, updatedAt: new Date().toISOString(), persistenceStatus: 'persistent'
+      };
+      vi.mocked(WorkspaceApiService.createArtifact).mockRejectedValueOnce(new Error('500'));
+      const { result } = renderHook(() => useWorkspaceArtifacts({ chatId: 'duplicate-chat', persistedArtifacts: [artifact] }));
+
+      await act(async () => { await result.current.duplicateArtifact(artifact.id); });
+
+      expect(result.current.artifacts.filter(item => item.title.includes('(Salinan)'))).toHaveLength(0);
+      expect(result.current.activeArtifactId).toBe(artifact.id);
     });
   });
 
@@ -296,7 +445,7 @@ describe('Workspace Lifecycle & Regression Suite', () => {
         result.current.abortStream();
       });
 
-      expect(result.current.streamingStatus).toBe('aborted');
+      expect(result.current.streamingStatus).toBe('cancelled');
     });
 
     it('does not commit a late stream callback after clear aborts the stream', async () => {
@@ -313,6 +462,98 @@ describe('Workspace Lifecycle & Regression Suite', () => {
       });
 
       expect(onStreamCompleted).not.toHaveBeenCalled();
+      vi.unstubAllGlobals();
+    });
+
+    it('ignores late completion and error callbacks after switching Workspace identity', async () => {
+      let callbacks: Parameters<ChatStreamingClient['stream']>[1] | undefined;
+      let releaseStream!: () => void;
+      const streamFinished = new Promise<void>(resolve => { releaseStream = resolve; });
+      const streamSpy = vi.spyOn(ChatStreamingClient.prototype, 'stream').mockImplementation(async (_payload, streamCallbacks) => {
+        callbacks = streamCallbacks;
+        await streamFinished;
+      });
+      const onStreamCompleted = vi.fn();
+      const { result, rerender } = renderHook(
+        ({ workspaceIdentity }: { workspaceIdentity: string }) => useWorkspaceStreaming({ chatId: undefined, workspaceIdentity, onStreamCompleted }),
+        { initialProps: { workspaceIdentity: 'workspace:A' } }
+      );
+
+      let pending!: Promise<void>;
+      await act(async () => {
+        pending = result.current.sendMessageStream('Pertanyaan');
+        await Promise.resolve();
+      });
+      expect(callbacks).toBeDefined();
+      rerender({ workspaceIdentity: 'workspace:B' });
+
+      await act(async () => {
+        await callbacks?.onMessageComplete?.('Jawaban terlambat');
+        await callbacks?.onError?.('error terlambat');
+        releaseStream();
+        await pending;
+      });
+
+      expect(onStreamCompleted).not.toHaveBeenCalled();
+      expect(result.current.streamingStatus).toBe('cancelled');
+      streamSpy.mockRestore();
+    });
+
+    it('retries a server processing failure by the same attachment ID without uploading a duplicate', async () => {
+      const { result } = renderHook(() => useWorkspaceFileIngestion('workspace-retry'));
+      vi.mocked(WorkspaceApiService.fetchChatAttachments).mockResolvedValue([]);
+      const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.includes('/retry')) return { ok: true, json: async () => ({ success: true, attachment: {
+          id: 'file-1', filename: 'retry.txt', mimeType: 'text/plain', fileKind: 'text', size: 4, status: 'ready', url: '/file'
+        } }) } as Response;
+        expect((init?.body as FormData).get('files')).toBeInstanceOf(File);
+        return { ok: true, json: async () => ({ success: true, attachment: {
+          id: 'file-1', filename: 'retry.txt', mimeType: 'text/plain', fileKind: 'text', size: 4, status: 'failed', errorMessage: 'Parser error', url: '/file'
+        } }) } as Response;
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      await act(async () => result.current.handleDrop({ preventDefault: vi.fn(), dataTransfer: { files: [new File(['text'], 'retry.txt', { type: 'text/plain' })] } } as unknown as React.DragEvent));
+      expect(result.current.attachments[0]).toMatchObject({ id: 'file-1', status: 'failed', failureStage: 'processing' });
+      await act(async () => result.current.retryAttachment(result.current.attachments[0]));
+
+      expect(result.current.attachments[0]).toMatchObject({ id: 'file-1', status: 'ready' });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(String(fetchMock.mock.calls[1][0])).toContain('/chat/attachments/file-1/retry?chatId=workspace-retry');
+      vi.unstubAllGlobals();
+    });
+
+    it('keeps an attachment visible when server deletion fails', async () => {
+      const { result } = renderHook(() => useWorkspaceFileIngestion());
+      vi.mocked(WorkspaceApiService.fetchChatAttachments).mockResolvedValue([]);
+      vi.mocked(WorkspaceApiService.deleteAttachment).mockRejectedValue(new Error('delete failed'));
+      vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ success: true, attachment: {
+        id: 'file-delete', filename: 'keep.txt', mimeType: 'text/plain', fileKind: 'text', size: 4, status: 'ready', url: '/file'
+      } }) } as Response)));
+      await act(async () => result.current.handleDrop({ preventDefault: vi.fn(), dataTransfer: { files: [new File(['text'], 'keep.txt', { type: 'text/plain' })] } } as unknown as React.DragEvent));
+
+      await act(async () => result.current.removeAttachment(result.current.attachments[0]));
+
+      expect(result.current.attachments).toHaveLength(1);
+      expect(result.current.attachments[0].id).toBe('file-delete');
+      vi.unstubAllGlobals();
+    });
+
+    it('accepts eight active documents and rejects the ninth in the client queue', async () => {
+      const { result } = renderHook(() => useWorkspaceFileIngestion());
+      vi.mocked(WorkspaceApiService.fetchChatAttachments).mockResolvedValue([]);
+      vi.stubGlobal('fetch', vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+        const file = (init?.body as FormData).get('files') as File;
+        return { ok: true, json: async () => ({ success: true, attachment: {
+          id: `server-${file.name}`, filename: file.name, mimeType: 'text/plain', fileKind: 'text', size: file.size, status: 'ready', url: '/file'
+        } }) } as Response;
+      }));
+      const files = Array.from({ length: 9 }, (_, index) => new File(['text'], `doc-${index}.txt`, { type: 'text/plain' }));
+
+      await act(async () => result.current.handleDrop({ preventDefault: vi.fn(), dataTransfer: { files } } as unknown as React.DragEvent));
+
+      expect(result.current.attachments).toHaveLength(8);
       vi.unstubAllGlobals();
     });
   });

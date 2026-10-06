@@ -7,10 +7,10 @@ interface Props {
   content: string;
 }
 
-export const LazyMarkdown: React.FC<Props> = ({ content }) => {
+export const LazyMarkdown: React.FC<Props> = React.memo(({ content }) => {
   return (
     <Suspense fallback={<div className="whitespace-pre-wrap">{content}</div>}>
       <MarkdownRenderer content={content} />
     </Suspense>
   );
-};
+});

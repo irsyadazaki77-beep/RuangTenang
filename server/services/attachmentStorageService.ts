@@ -8,7 +8,6 @@ import { resolveExistingStoredAttachmentFilePath } from './attachmentFileService
 import { encryptionService } from './encryptionService.js';
 
 export const MAX_FILE_SIZE = MAX_UPLOAD_FILE_SIZE_BYTES;
-export const MAX_ATTACHMENTS_PER_MESSAGE = 3;
 
 export const UPLOAD_DIR = path.join(process.cwd(), 'uploads', 'attachments');
 
@@ -297,9 +296,9 @@ export const attachmentStorageService = {
     return includeBase64 ? { attachment, buffer, base64: buffer.toString('base64') } : { attachment, buffer };
   },
 
-  async deleteAttachment(attachmentId: string, userId: string): Promise<boolean> {
+  async deleteAttachment(attachmentId: string, userId: string, chatId?: string): Promise<boolean> {
     try {
-      return await documentIngestionService.deleteAttachment(attachmentId, userId);
+      return await documentIngestionService.deleteAttachment(attachmentId, userId, chatId);
     } catch (err: any) {
       if (err instanceof DocumentProcessingException && err.code === 'OWNERSHIP_ERROR') {
         throw new Error('UNAUTHORIZED_ACCESS: Anda tidak berhak menghapus berkas ini.');

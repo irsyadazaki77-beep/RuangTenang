@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useMemo, useCallback } from 'react';
 import { Sparkles, ChevronRight, RefreshCw, FileText, Copy, Check, FilePlus2 } from 'lucide-react';
 import { motion, useReducedMotion } from 'motion/react';
 import { Message } from '../../chat/types';
@@ -20,10 +20,38 @@ interface WorkspaceConversationProps {
   onOpenCanvas: () => void;
   onSendToCanvas?: (content: string) => void;
   comparisonRun?: WorkspaceComparisonRun | null;
-  onUseComparisonResponse?: (run: WorkspaceComparisonRun, candidate: WorkspaceComparisonCandidate) => void;
+  onUseComparisonResponse?: (run: WorkspaceComparisonRun, candidate: WorkspaceComparisonCandidate) => Promise<boolean | void> | boolean | void;
   onComparisonSendToCanvas?: (candidate: WorkspaceComparisonCandidate) => void;
   onCompareAgain?: (run: WorkspaceComparisonRun) => void;
 }
+
+const StreamingMarkdownPreview = React.memo(function StreamingMarkdownPreview({ content }: { content: string }) {
+  const [renderedContent, setRenderedContent] = React.useState(content);
+  const latestContentRef = useRef(content);
+  const lastFlushAtRef = useRef(0);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  latestContentRef.current = content;
+
+  useEffect(() => {
+    const remaining = 100 - (Date.now() - lastFlushAtRef.current);
+    if (remaining <= 0) {
+      lastFlushAtRef.current = Date.now();
+      setRenderedContent(content);
+    } else if (!timerRef.current) {
+      timerRef.current = setTimeout(() => {
+        timerRef.current = null;
+        lastFlushAtRef.current = Date.now();
+        setRenderedContent(latestContentRef.current);
+      }, remaining);
+    }
+  }, [content]);
+
+  useEffect(() => () => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+  }, []);
+
+  return <LazyMarkdown content={renderedContent || '...'} />;
+});
 
 export const WorkspaceConversation: React.FC<WorkspaceConversationProps> = React.memo(({
   messages,
@@ -70,13 +98,13 @@ export const WorkspaceConversation: React.FC<WorkspaceConversationProps> = React
     };
   }, [messages, activeStreamingMessage]);
 
-  const formatMessageTime = (date?: Date | string) => {
+  const formatMessageTime = useCallback((date?: Date | string) => {
     if (!date) return '';
     const d = typeof date === 'string' ? new Date(date) : date;
     return d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
-  };
+  }, []);
 
-  const copyMessage = async (message: Message) => {
+  const copyMessage = useCallback(async (message: Message) => {
     if (!navigator.clipboard?.writeText) return;
     try {
       await navigator.clipboard.writeText(message.content);
@@ -85,64 +113,9 @@ export const WorkspaceConversation: React.FC<WorkspaceConversationProps> = React
     } catch {
       setCopiedMessageId(null);
     }
-  };
+  }, []);
 
-  return (
-    <div role="log" aria-label="Percakapan RuangKerja" aria-live={isStreaming ? 'off' : 'polite'} className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-3.5 sm:p-5 space-y-4 custom-scrollbar flex flex-col">
-      {isLoading ? (
-        <div role="status" aria-label="Memuat percakapan" className="my-auto w-full max-w-lg mx-auto space-y-3 px-2">
-          <div className="h-3 w-28 rounded bg-slate-200 dark:bg-slate-800 animate-pulse" />
-          <div className="h-16 rounded-xl bg-slate-100 dark:bg-slate-900 animate-pulse" />
-          <div className="h-12 w-4/5 ml-auto rounded-xl bg-slate-100 dark:bg-slate-900 animate-pulse" />
-        </div>
-      ) : !hasUserSentMessage && !activeStreamingMessage ? (
-        /* FRESH WORKSPACE STATE: Compact Intro & Starter Tasks */
-        <div className="my-auto py-6 px-2 space-y-4 animate-fade-in max-w-2xl mx-auto w-full">
-          {/* Compact Workspace Introduction */}
-          <div className="text-center space-y-1.5">
-            <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100">
-              Mulai sesuatu
-            </h2>
-            <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 max-w-sm mx-auto leading-relaxed">
-              Bantu riset, tulisan, coding, dan pekerjaan akademik secara terstruktur.
-            </p>
-          </div>
-
-          {/* Compact Starter Actions List */}
-          <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
-            {starterTasks.map((task) => (
-              <button
-                key={task.id}
-                type="button"
-                onClick={() => onSelectStarterTask(task.prompt)}
-                className={`w-full p-2.5 rounded-xl text-left transition-all flex items-center justify-between group cursor-pointer active:scale-[0.99] border ${
-                  task.primary
-                    ? 'bg-emerald-50/60 dark:bg-emerald-950/25 border-emerald-200/70 dark:border-emerald-900/70 hover:bg-emerald-50 dark:hover:bg-emerald-950/40'
-                    : 'bg-transparent border-transparent hover:border-slate-200/70 dark:hover:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900'
-                }`}
-              >
-                <div className="flex items-center gap-2.5 min-w-0 pr-2">
-                  <div className="p-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700 shrink-0">
-                    {task.icon}
-                  </div>
-                  <div className="min-w-0">
-                    <div className="text-xs font-semibold text-slate-800 dark:text-slate-200 group-hover:text-emerald-700 dark:group-hover:text-emerald-300 transition-colors truncate">
-                      {task.title}
-                    </div>
-                    <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
-                      {task.subtitle}
-                    </div>
-                  </div>
-                </div>
-                <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-200 transition-colors shrink-0" />
-              </button>
-            ))}
-          </div>
-        </div>
-      ) : (
-        /* ACTIVE WORKSPACE STATE: Chat Messages Feed */
-        <>
-          {messages.map((msg) => (
+  const persistedMessageRows = useMemo(() => (messages.map((msg) => (
             <motion.div 
               key={msg.id}
               initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 4 }}
@@ -233,7 +206,64 @@ export const WorkspaceConversation: React.FC<WorkspaceConversationProps> = React
                 </div>
               )}
             </motion.div>
-          ))}
+))), [messages, shouldReduceMotion, artifacts, onRetryMessage, onOpenCanvas, onSendToCanvas, copiedMessageId, copyMessage, formatMessageTime]);
+
+  return (
+    <div role="log" aria-label="Percakapan RuangKerja" aria-live={isStreaming ? 'off' : 'polite'} className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-3.5 sm:p-5 space-y-4 custom-scrollbar flex flex-col">
+      {isLoading ? (
+        <div role="status" aria-label="Memuat percakapan" className="my-auto w-full max-w-lg mx-auto space-y-3 px-2">
+          <div className="h-3 w-28 rounded bg-slate-200 dark:bg-slate-800 animate-pulse" />
+          <div className="h-16 rounded-xl bg-slate-100 dark:bg-slate-900 animate-pulse" />
+          <div className="h-12 w-4/5 ml-auto rounded-xl bg-slate-100 dark:bg-slate-900 animate-pulse" />
+        </div>
+      ) : !hasUserSentMessage && !activeStreamingMessage ? (
+        /* FRESH WORKSPACE STATE: Compact Intro & Starter Tasks */
+        <div className="my-auto py-6 px-2 space-y-4 animate-fade-in max-w-2xl mx-auto w-full">
+          {/* Compact Workspace Introduction */}
+          <div className="text-center space-y-1.5">
+            <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100">
+              Mulai sesuatu
+            </h2>
+            <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 max-w-sm mx-auto leading-relaxed">
+              Bantu riset, tulisan, coding, dan pekerjaan akademik secara terstruktur.
+            </p>
+          </div>
+
+          {/* Compact Starter Actions List */}
+          <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
+            {starterTasks.map((task) => (
+              <button
+                key={task.id}
+                type="button"
+                onClick={() => onSelectStarterTask(task.prompt)}
+                className={`w-full p-2.5 rounded-xl text-left transition-all flex items-center justify-between group cursor-pointer active:scale-[0.99] border ${
+                  task.primary
+                    ? 'bg-emerald-50/60 dark:bg-emerald-950/25 border-emerald-200/70 dark:border-emerald-900/70 hover:bg-emerald-50 dark:hover:bg-emerald-950/40'
+                    : 'bg-transparent border-transparent hover:border-slate-200/70 dark:hover:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900'
+                }`}
+              >
+                <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                  <div className="p-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700 shrink-0">
+                    {task.icon}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-xs font-semibold text-slate-800 dark:text-slate-200 group-hover:text-emerald-700 dark:group-hover:text-emerald-300 transition-colors truncate">
+                      {task.title}
+                    </div>
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                      {task.subtitle}
+                    </div>
+                  </div>
+                </div>
+                <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-200 transition-colors shrink-0" />
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : (
+        /* ACTIVE WORKSPACE STATE: Chat Messages Feed */
+        <>
+          {persistedMessageRows}
 
           {/* Active Streaming Preview */}
           {activeStreamingMessage && (
@@ -251,7 +281,7 @@ export const WorkspaceConversation: React.FC<WorkspaceConversationProps> = React
 
               <div className="mx-auto w-full max-w-[56rem] text-slate-800 dark:text-slate-100 leading-relaxed text-xs sm:text-sm">
                 <div className="prose dark:prose-invert max-w-none text-xs sm:text-sm prose-p:my-1">
-                  <LazyMarkdown content={activeStreamingMessage.content || '...'} />
+                  <StreamingMarkdownPreview content={activeStreamingMessage.content || '...'} />
                 </div>
                 <div className="mt-2.5 pt-2 border-t border-slate-200/70 dark:border-slate-800">
                   <RhythmicTypingIndicator label="Menyusun konten akademik di Canvas..." />
@@ -268,3 +298,4 @@ export const WorkspaceConversation: React.FC<WorkspaceConversationProps> = React
     </div>
   );
 });
+

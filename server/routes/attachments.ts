@@ -3,25 +3,27 @@ import { Readable } from 'stream';
 import multer from 'multer';
 import { prisma } from '../database.js';
 import { optionalAuth } from '../middleware/auth.js';
-import { attachmentStorageService, MAX_FILE_SIZE, MAX_ATTACHMENTS_PER_MESSAGE } from '../services/attachmentStorageService.js';
+import { attachmentStorageService, MAX_FILE_SIZE } from '../services/attachmentStorageService.js';
 import { documentIngestionService } from '../services/file-intelligence/documentIngestionService.js';
 import { DocumentProcessingException } from '../services/file-intelligence/fileTypes.js';
 import { attachmentUploadLimiter } from '../middleware/rateLimiters.js';
+import { MAX_ATTACHMENT_UPLOAD_BATCH, MAX_WORKSPACE_ACTIVE_ATTACHMENTS } from '../../shared/contracts/files.js';
 
 const router = Router();
 const MAX_CONCURRENT_ATTACHMENT_UPLOADS = 4;
 let activeAttachmentUploads = 0;
+const pendingWorkspaceAttachmentUploads = new Map<string, number>();
 
 // Configure Multer in-memory storage with strict size and file count limits
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
     fileSize: MAX_FILE_SIZE,
-    files: MAX_ATTACHMENTS_PER_MESSAGE,
+    files: MAX_ATTACHMENT_UPLOAD_BATCH,
     fieldNameSize: 100,
     fieldSize: 4 * 1024,
     fields: 2,
-    parts: MAX_ATTACHMENTS_PER_MESSAGE + 2,
+    parts: MAX_ATTACHMENT_UPLOAD_BATCH + 2,
     headerPairs: 100
   }
 });
@@ -64,7 +66,7 @@ router.post(
   limitConcurrentAttachmentUploads,
   (req: Request, res: Response, next) => {
     // Multer upload middleware handler with limit error catching
-    const uploadHandler = upload.array('files', MAX_ATTACHMENTS_PER_MESSAGE);
+    const uploadHandler = upload.array('files', MAX_ATTACHMENT_UPLOAD_BATCH);
     uploadHandler(req as any, res as any, (err: any) => {
       if (err) {
         if (err instanceof multer.MulterError) {
@@ -72,7 +74,7 @@ router.post(
             return sendAttachmentError(res, 'FILE_TOO_LARGE', 'Ukuran berkas melebihi batas maksimum 5MB', 400);
           }
           if (err.code === 'LIMIT_FILE_COUNT') {
-            return sendAttachmentError(res, 'TOO_MANY_FILES', 'Maksimal 3 lampiran diperbolehkan per pesan', 400);
+            return sendAttachmentError(res, 'TOO_MANY_FILES', `Maksimal ${MAX_ATTACHMENT_UPLOAD_BATCH} berkas per permintaan unggah.`, 400);
           }
           if (err.code === 'LIMIT_FIELD_COUNT' || err.code === 'LIMIT_PART_COUNT') {
             return sendAttachmentError(res, 'TOO_MANY_FORM_FIELDS', 'Data formulir unggahan melebihi batas.', 400);
@@ -94,6 +96,16 @@ router.post(
     });
   },
   async (req: Request, res: Response) => {
+    let reservedChatId: string | undefined;
+    let reservedAttachmentCount = 0;
+    const releaseWorkspaceReservation = (count: number) => {
+      if (!reservedChatId || count <= 0) return;
+      const releaseCount = Math.min(count, reservedAttachmentCount);
+      reservedAttachmentCount -= releaseCount;
+      const next = Math.max(0, (pendingWorkspaceAttachmentUploads.get(reservedChatId) || 0) - releaseCount);
+      if (next) pendingWorkspaceAttachmentUploads.set(reservedChatId, next);
+      else pendingWorkspaceAttachmentUploads.delete(reservedChatId);
+    };
     try {
       const userId = req.user?.userId || 'guest';
       const files = (req.files as Express.Multer.File[]) || [];
@@ -125,8 +137,19 @@ router.post(
         return sendAttachmentError(res, 'EMPTY_FILE', 'Tidak ada berkas yang diunggah', 400);
       }
 
-      if (fileList.length > MAX_ATTACHMENTS_PER_MESSAGE) {
-        return sendAttachmentError(res, 'TOO_MANY_FILES', 'Maksimal 3 lampiran diperbolehkan per pesan', 400);
+      if (fileList.length > MAX_ATTACHMENT_UPLOAD_BATCH) {
+        return sendAttachmentError(res, 'TOO_MANY_FILES', `Maksimal ${MAX_ATTACHMENT_UPLOAD_BATCH} berkas per permintaan unggah.`, 400);
+      }
+
+      if (chatId && req.body.workspaceMode === 'true') {
+        reservedChatId = chatId;
+        reservedAttachmentCount = fileList.length;
+        pendingWorkspaceAttachmentUploads.set(chatId, (pendingWorkspaceAttachmentUploads.get(chatId) || 0) + fileList.length);
+        const existingCount = await prisma.attachments.count({ where: { chatId, userId } });
+        const pendingCount = pendingWorkspaceAttachmentUploads.get(chatId) || fileList.length;
+        if (existingCount + pendingCount > MAX_WORKSPACE_ACTIVE_ATTACHMENTS) {
+          return sendAttachmentError(res, 'WORKSPACE_ATTACHMENT_LIMIT', `Maksimal ${MAX_WORKSPACE_ACTIVE_ATTACHMENTS} dokumen aktif dalam satu Ruang Kerja.`, 400);
+        }
       }
 
       const savedAttachments = [];
@@ -159,7 +182,13 @@ router.post(
             sheetCount: saved.sheetCount,
             url: saved.url || `/api/v1/chat/attachments/${saved.id}`
           });
+          releaseWorkspaceReservation(1);
         } catch (fileErr: any) {
+          if (fileErr.attachment) {
+            savedAttachments.push(fileErr.attachment);
+            releaseWorkspaceReservation(1);
+            continue;
+          }
           let code = 'INVALID_FILE';
           let msg = fileErr.safeMessage || fileErr.message || 'Berkas tidak valid.';
 
@@ -202,6 +231,8 @@ router.post(
     } catch (err: any) {
       console.error('[ATTACHMENT_UPLOAD_FATAL_ERROR]', err?.message || 'Unknown error');
       return sendAttachmentError(res, 'UPLOAD_FAILED', 'Terjadi kesalahan saat memproses unggahan lampiran', 500);
+    } finally {
+      releaseWorkspaceReservation(reservedAttachmentCount);
     }
   }
 );
@@ -263,7 +294,7 @@ router.get('/chat/attachments/:id/status', optionalAuth, async (req: Request, re
     }
 
     const { documentIngestionService } = await import('../services/file-intelligence/documentIngestionService.js');
-    const statusDto = await documentIngestionService.getAttachmentStatus(attachmentId, userId);
+    const statusDto = await documentIngestionService.getAttachmentStatus(attachmentId, userId, typeof req.query.chatId === 'string' ? req.query.chatId : undefined);
 
     if (!statusDto) {
       return sendAttachmentError(res, 'NOT_FOUND', 'Berkas lampiran tidak ditemukan', 404);
@@ -294,7 +325,11 @@ router.post('/chat/attachments/:id/retry', optionalAuth, async (req: Request, re
     }
 
     const { documentIngestionService } = await import('../services/file-intelligence/documentIngestionService.js');
-    const retriedDto = await documentIngestionService.retryProcessing(attachmentId, userId);
+    const retryController = new AbortController();
+    const abortRetryOnDisconnect = () => { if (!res.writableEnded) retryController.abort(); };
+    res.once('close', abortRetryOnDisconnect);
+    const retriedDto = await documentIngestionService.retryProcessing(attachmentId, userId, typeof req.query.chatId === 'string' ? req.query.chatId : undefined, retryController.signal);
+    res.off('close', abortRetryOnDisconnect);
 
     return res.json({
       success: true,
@@ -375,7 +410,7 @@ router.delete('/chat/attachments/:id', optionalAuth, async (req: Request, res: R
       return sendAttachmentError(res, 'MISSING_ATTACHMENT_ID', 'ID Lampiran tidak ditemukan', 400);
     }
 
-    const success = await attachmentStorageService.deleteAttachment(attachmentId, userId);
+    const success = await attachmentStorageService.deleteAttachment(attachmentId, userId, typeof req.query.chatId === 'string' ? req.query.chatId : undefined);
     if (!success) {
       return sendAttachmentError(res, 'NOT_FOUND', 'Berkas lampiran tidak ditemukan', 404);
     }

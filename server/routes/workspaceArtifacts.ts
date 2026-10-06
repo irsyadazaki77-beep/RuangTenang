@@ -11,7 +11,7 @@ const artifactTypeSchema = z.enum(['DOCUMENT', 'CODE', 'CITATION', 'OUTLINE']);
 
 const createOrUpdateArtifactSchema = z.object({
   id: z.string().optional(),
-  chatId: z.string().nullable().optional(),
+  chatId: z.string().min(1),
   title: z.string().min(1).max(200).default('Artefak Akademik'),
   type: artifactTypeSchema.default('DOCUMENT'),
   language: z.string().nullable().optional(),
@@ -20,6 +20,7 @@ const createOrUpdateArtifactSchema = z.object({
 });
 
 const autoSaveArtifactSchema = z.object({
+  chatId: z.string().min(1).optional(),
   title: z.string().min(1).max(200).optional(),
   type: artifactTypeSchema.optional(),
   language: z.string().nullable().optional(),
@@ -52,20 +53,22 @@ function decryptArtifact(art: any) {
 
 /**
  * GET /api/v1/workspace/artifacts
- * Fetch all artifacts for the authenticated user, optionally filtered by chatId
+ * Fetch artifacts for one owned Workspace. The user-wide library uses /all explicitly.
  */
 router.get('/', requireAuth, async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
-    const chatId = typeof req.query.chatId === 'string' && req.query.chatId.trim() ? req.query.chatId.trim() : undefined;
-
-    const whereClause: any = { userId };
-    if (chatId) {
-      whereClause.chatId = chatId;
+    const chatId = typeof req.query.chatId === 'string' ? req.query.chatId.trim() : '';
+    if (!chatId) {
+      return res.status(400).json({ success: false, code: 'CHAT_ID_REQUIRED', message: 'Workspace harus ditentukan untuk mengambil artefak' });
+    }
+    const ownedChat = await prisma.chats.findFirst({ where: { id: chatId, userId }, select: { id: true } });
+    if (!ownedChat) {
+      return res.status(404).json({ success: false, code: 'CHAT_NOT_FOUND', message: 'Workspace tidak ditemukan atau bukan milik Anda' });
     }
 
     const artifacts = await prisma.artifacts.findMany({
-      where: whereClause,
+      where: { userId, chatId },
       include: {
         versions: {
           orderBy: { version: 'desc' }
@@ -90,6 +93,21 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
   }
 });
 
+/** Explicit user-wide artifact library; Workspace UI must use the scoped endpoint above. */
+router.get('/all', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const artifacts = await prisma.artifacts.findMany({
+      where: { userId: req.user!.userId },
+      include: { versions: { orderBy: { version: 'desc' } } },
+      orderBy: { updatedAt: 'desc' }
+    });
+    return res.status(200).json({ success: true, data: artifacts.map(decryptArtifact) });
+  } catch (err: any) {
+    console.error('[WORKSPACE_ARTIFACTS_LIBRARY_ERROR]', err?.message || err);
+    return res.status(500).json({ success: false, code: 'FETCH_ARTIFACTS_FAILED', message: 'Gagal mengambil daftar artefak' });
+  }
+});
+
 /**
  * POST /api/v1/workspace/artifacts
  * Save a new artifact or update/append revision for an existing artifact
@@ -109,6 +127,10 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
     }
 
     const { id, chatId, title, type, language, content } = parsed.data;
+    const ownedChat = await prisma.chats.findFirst({ where: { id: chatId, userId }, select: { id: true } });
+    if (!ownedChat) {
+      return res.status(404).json({ success: false, code: 'CHAT_NOT_FOUND', message: 'Workspace tidak ditemukan atau bukan milik Anda' });
+    }
     const cleanTitle = sanitizeInput(title.trim(), 200);
     const encryptedContent = encryptionService.encryptSensitive(content) || content;
 
@@ -120,7 +142,19 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
         include: { versions: true }
       });
 
+      if (!existing) {
+        const conflictingId = await prisma.artifacts.findUnique({ where: { id }, select: { id: true } });
+        if (conflictingId) return res.status(404).json({ success: false, code: 'NOT_FOUND', message: 'Artefak tidak ditemukan atau bukan milik Anda' });
+      }
+
       if (existing) {
+        if (existing.chatId && existing.chatId !== chatId) {
+          return res.status(404).json({ success: false, code: 'NOT_FOUND', message: 'Artefak tidak ditemukan di Workspace ini' });
+        }
+        const existingContent = encryptionService.decryptSensitive(existing.content) || existing.content;
+        if (existing.chatId === chatId && existing.title === cleanTitle && existing.type === type && existing.language === (language || null) && existingContent === content) {
+          return res.status(200).json({ success: true, data: decryptArtifact(existing), message: 'Artefak sudah tersimpan' });
+        }
         const nextVersion = (existing.version || 1) + 1;
 
         // Create a new version snapshot
@@ -144,7 +178,7 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
             language: language || null,
             content: encryptedContent,
             version: nextVersion,
-            chatId: chatId || existing.chatId,
+            chatId,
             updatedAt: new Date()
           },
           include: {
@@ -164,7 +198,7 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
         data: {
           id: newId,
           userId,
-          chatId: chatId || null,
+          chatId,
           title: cleanTitle,
           type,
           language: language || null,
@@ -246,6 +280,10 @@ router.put('/:id', requireAuth, async (req: Request, res: Response) => {
       });
     }
 
+    if (parsed.data.chatId && existing.chatId && existing.chatId !== parsed.data.chatId) {
+      return res.status(404).json({ success: false, code: 'NOT_FOUND', message: 'Artefak tidak ditemukan di Workspace ini' });
+    }
+
     const { expectedUpdatedAt: _expectedUpdatedAt } = parsed.data;
     if (_expectedUpdatedAt && existing.updatedAt.toISOString() !== _expectedUpdatedAt) {
       return res.status(409).json({
@@ -256,6 +294,12 @@ router.put('/:id', requireAuth, async (req: Request, res: Response) => {
     }
 
     const { title, type, language, content, createNewVersion } = parsed.data;
+    if (parsed.data.chatId) {
+      const ownedChat = await prisma.chats.findFirst({ where: { id: parsed.data.chatId, userId }, select: { id: true } });
+      if (!ownedChat) {
+        return res.status(404).json({ success: false, code: 'CHAT_NOT_FOUND', message: 'Workspace tidak ditemukan atau bukan milik Anda' });
+      }
+    }
     const cleanTitle = title ? sanitizeInput(title.trim(), 200) : existing.title;
     const newContent = content !== undefined ? content : (encryptionService.decryptSensitive(existing.content) || existing.content);
     const encryptedContent = encryptionService.encryptSensitive(newContent) || newContent;
@@ -307,6 +351,7 @@ router.put('/:id', requireAuth, async (req: Request, res: Response) => {
         language: language !== undefined ? (language || null) : existing.language,
         content: encryptedContent,
         version: targetVersion,
+        ...(parsed.data.chatId ? { chatId: parsed.data.chatId } : {}),
         updatedAt: new Date()
       },
       include: {
@@ -362,6 +407,11 @@ router.post('/:id/rollback', requireAuth, async (req: Request, res: Response) =>
         code: 'NOT_FOUND',
         message: 'Artefak tidak ditemukan atau bukan milik Anda'
       });
+    }
+
+    const requestedChatId = typeof req.query.chatId === 'string' ? req.query.chatId : undefined;
+    if (requestedChatId && existing.chatId !== requestedChatId) {
+      return res.status(404).json({ success: false, code: 'NOT_FOUND', message: 'Artefak tidak ditemukan di Workspace ini' });
     }
 
     const { targetVersion, versionId } = parsed.data;
@@ -453,6 +503,11 @@ router.delete('/:id', requireAuth, async (req: Request, res: Response) => {
         code: 'NOT_FOUND',
         message: 'Artefak tidak ditemukan'
       });
+    }
+
+    const requestedChatId = typeof req.query.chatId === 'string' ? req.query.chatId : undefined;
+    if (requestedChatId && existing.chatId !== requestedChatId) {
+      return res.status(404).json({ success: false, code: 'NOT_FOUND', message: 'Artefak tidak ditemukan di Workspace ini' });
     }
 
     await prisma.artifacts.delete({

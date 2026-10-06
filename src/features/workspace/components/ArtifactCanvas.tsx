@@ -16,7 +16,6 @@ import {
   Edit3, 
   Eye, 
   Sparkles, 
-  Terminal,
   BookMarked,
   Workflow,
   History,
@@ -43,6 +42,10 @@ const MermaidRenderer = React.lazy(() => import('./MermaidRenderer').then(m => (
 const ExportModal = React.lazy(() => import('./ExportModal').then(m => ({ default: m.ExportModal })));
 const ArtifactDiffViewer = React.lazy(() => import('./ArtifactDiffViewer').then(m => ({ default: m.ArtifactDiffViewer })));
 const CitationSearchModal = React.lazy(() => import('./CitationSearchModal').then(m => ({ default: m.CitationSearchModal })));
+import { CodeExecutionResultPanel } from './CodeExecutionResultPanel';
+import { validateCodeStatically } from '../services/codeValidationService';
+import { runJavaScriptInSandbox, SandboxExecutionHandle } from '../services/sandboxExecutionService';
+import { CodeValidationResult, CodeExecutionStatus } from '../services/codeExecutionTypes';
 const AcademicParaphraseModal = React.lazy(() => import('./AcademicParaphraseModal').then(m => ({ default: m.AcademicParaphraseModal })));
 import { 
   downloadBibTeXFile, 
@@ -78,7 +81,7 @@ export interface ArtifactCanvasProps {
 }
 
 export type CanvasViewMode = 'preview' | 'edit' | 'raw' | 'diff';
-export type SaveState = 'idle' | 'saving' | 'saved' | 'unsaved' | 'failed';
+export type SaveState = 'idle' | 'saving' | 'saved' | 'unsaved' | 'failed' | 'local';
 
 export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
   artifact,
@@ -112,16 +115,17 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
   const [titleInput, setTitleInput] = useState(artifact.title || '');
   const [editableContent, setEditableContent] = useState(artifact.content);
   const [isDirty, setIsDirty] = useState(false);
-  const [saveStatus, setSaveStatus] = useState<SaveState>('saved');
+  const [saveStatus, setSaveStatus] = useState<SaveState>(artifact.persistenceStatus === 'persistent' || !artifact.persistenceStatus ? 'saved' : artifact.persistenceStatus === 'saving' ? 'saving' : artifact.persistenceStatus === 'failed' ? 'failed' : 'local');
   const [saveFailureMessage, setSaveFailureMessage] = useState('Gagal simpan');
 
   // Conflict handling states
   const [hasExternalConflict, setHasExternalConflict] = useState(false);
   const [conflictServerContent, setConflictServerContent] = useState<string | null>(null);
+  const [conflictServerArtifact, setConflictServerArtifact] = useState<WorkspaceArtifact | null>(null);
 
-  // Simulation & styles
-  const [simulationOutput, setSimulationOutput] = useState<string | null>(null);
-  const [isSimulating, setIsSimulating] = useState(false);
+  // Simulation & validation states
+  const [validationResult, setValidationResult] = useState<CodeValidationResult | null>(null);
+  const [executionStatus, setExecutionStatus] = useState<CodeExecutionStatus>('idle');
   const [citationStyle, setCitationStyle] = useState<CitationStyle>('APA7');
 
   // Modals & Popovers
@@ -131,6 +135,11 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
   const [showVersionHistoryModal, setShowVersionHistoryModal] = useState(false);
   const [previewingVersion, setPreviewingVersion] = useState<ArtifactVersionRecord | null>(null);
   const [isRollingBack, setIsRollingBack] = useState(false);
+  const [isSavingTitle, setIsSavingTitle] = useState(false);
+  const [titleSaveError, setTitleSaveError] = useState('');
+  const [isDuplicating, setIsDuplicating] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showCitationModal, setShowCitationModal] = useState(false);
   const [showParaphraseModal, setShowParaphraseModal] = useState(false);
@@ -146,20 +155,78 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
   const titleInputRef = useRef<HTMLInputElement>(null);
   const moreMenuRef = useRef<HTMLDivElement>(null);
   const autosaveTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const draftSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingDraftSyncRef = useRef<{ artifactId: string; content: string } | null>(null);
   const lastSavedContentRef = useRef<string>(artifact.content);
   const lastKnownVersionRef = useRef<number>(artifact.version || 1);
   const saveSeqRef = useRef<number>(0);
   const isApplyingInlinePatchRef = useRef(false);
+  const activeSandboxHandleRef = useRef<SandboxExecutionHandle | null>(null);
+  const currentExecutionIdRef = useRef<number>(0);
+
+  const flushDraftSync = useCallback(() => {
+    if (draftSyncTimerRef.current) clearTimeout(draftSyncTimerRef.current);
+    draftSyncTimerRef.current = null;
+    const pending = pendingDraftSyncRef.current;
+    pendingDraftSyncRef.current = null;
+    if (pending) onDraftContentChange?.(pending.artifactId, pending.content);
+  }, [onDraftContentChange]);
+
+  const scheduleDraftSync = useCallback((artifactId: string, content: string, immediate = false) => {
+    pendingDraftSyncRef.current = { artifactId, content };
+    if (draftSyncTimerRef.current) clearTimeout(draftSyncTimerRef.current);
+    if (immediate) {
+      flushDraftSync();
+      return;
+    }
+    draftSyncTimerRef.current = setTimeout(flushDraftSync, 200);
+  }, [flushDraftSync]);
+
+  // Terminate active sandbox worker on component unmount
+  useEffect(() => {
+    return () => {
+      if (draftSyncTimerRef.current) clearTimeout(draftSyncTimerRef.current);
+      pendingDraftSyncRef.current = null;
+      if (activeSandboxHandleRef.current) {
+        activeSandboxHandleRef.current.stop();
+        activeSandboxHandleRef.current = null;
+      }
+    };
+  }, []);
+
+  const currentArtifactIdRef = useRef<string>(artifact.id);
 
   // Sync state when active artifact changes (or changes from server)
   useEffect(() => {
     if (isApplyingInlinePatchRef.current) return;
-    // If switching to another artifact, reset all local session states
-    setTitleInput(artifact.title || '');
-    setSimulationOutput(null);
-    setShowMoreMenu(false);
-    setPreviewingVersion(null);
-    setShowDeleteConfirm(false);
+    const isNewArtifact = currentArtifactIdRef.current !== artifact.id;
+    if (isNewArtifact) {
+      saveSeqRef.current += 1;
+      currentArtifactIdRef.current = artifact.id;
+      // Terminate any running sandbox execution when switching artifacts
+      if (activeSandboxHandleRef.current) {
+        activeSandboxHandleRef.current.stop();
+        activeSandboxHandleRef.current = null;
+      }
+      currentExecutionIdRef.current += 1;
+      setValidationResult(null);
+      setExecutionStatus('idle');
+
+      // If switching to another artifact, reset all local session states
+      setTitleInput(artifact.title || '');
+      setEditableContent(artifact.content);
+      lastSavedContentRef.current = artifact.content;
+      lastKnownVersionRef.current = artifact.version || 1;
+      setIsDirty(false);
+      setSaveStatus(artifact.persistenceStatus === 'persistent' || !artifact.persistenceStatus ? 'saved' : artifact.persistenceStatus === 'saving' ? 'saving' : artifact.persistenceStatus === 'failed' ? 'failed' : 'local');
+      setHasExternalConflict(false);
+      setConflictServerContent(null);
+      setConflictServerArtifact(null);
+      setShowMoreMenu(false);
+      setPreviewingVersion(null);
+      setShowDeleteConfirm(false);
+      return;
+    }
 
     // If external version changed while user is dirty with unsaved changes:
     if (isDirty && artifact.content !== lastSavedContentRef.current && artifact.content !== editableContent) {
@@ -169,11 +236,12 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
       setEditableContent(artifact.content);
       lastSavedContentRef.current = artifact.content;
       lastKnownVersionRef.current = artifact.version || 1;
-      setSaveStatus('saved');
+      setSaveStatus(artifact.persistenceStatus === 'persistent' || !artifact.persistenceStatus ? 'saved' : artifact.persistenceStatus === 'saving' ? 'saving' : artifact.persistenceStatus === 'failed' ? 'failed' : 'local');
       setHasExternalConflict(false);
       setConflictServerContent(null);
+      setConflictServerArtifact(null);
     }
-  }, [artifact.id, artifact.title, artifact.version, artifact.content, isDirty, editableContent]);
+  }, [artifact.id, artifact.title, artifact.version, artifact.content, artifact.persistenceStatus, isDirty, editableContent]);
 
   useEffect(() => {
     onSelectedTextChange?.('');
@@ -184,10 +252,10 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
   }, [artifact.id, onSelectedTextChange, onSelectionChange]);
 
   useEffect(() => {
-    onDraftContentChange?.(artifact.id, artifact.content);
+    scheduleDraftSync(artifact.id, artifact.content, true);
     // Initialize the parent draft only when switching artifacts; content updates are conflict-checked below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [artifact.id, onDraftContentChange]);
+  }, [artifact.id, scheduleDraftSync]);
 
   useEffect(() => {
     if (!revisionCommit || revisionCommit.artifactId !== artifact.id || revisionCommit.version !== artifact.version || revisionCommit.content !== artifact.content) return;
@@ -195,56 +263,79 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
     lastSavedContentRef.current = revisionCommit.content;
     lastKnownVersionRef.current = revisionCommit.version;
     setIsDirty(false);
-    setSaveStatus('saved');
+    setSaveStatus(artifact.persistenceStatus === 'local' ? 'local' : 'saved');
     setHasExternalConflict(false);
     setConflictServerContent(null);
-  }, [artifact.content, artifact.id, artifact.version, revisionCommit]);
+  }, [artifact.content, artifact.id, artifact.persistenceStatus, artifact.version, revisionCommit]);
 
   // Handle saving inline title
-  const handleSaveTitle = () => {
-    setIsEditingTitle(false);
+  const handleSaveTitle = async () => {
     const trimmed = titleInput.trim();
-    if (trimmed && trimmed !== artifact.title) {
-      if (onUpdateArtifact) {
-        onUpdateArtifact({ title: trimmed });
-      }
-      if (onSaveArtifact) {
-        onSaveArtifact(editableContent, trimmed);
-      }
-      showToast('Judul dokumen berhasil diperbarui', 'success');
-    } else {
+    if (!trimmed || trimmed === artifact.title) {
       setTitleInput(artifact.title || '');
+      setIsEditingTitle(false);
+      return;
+    }
+    if (!onSaveArtifact || isSavingTitle || saveStatus === 'saving') return;
+    setIsSavingTitle(true);
+    setTitleSaveError('');
+    try {
+      const saved = await onSaveArtifact(editableContent, trimmed);
+      if (!saved || typeof saved !== 'object') throw new Error('Judul belum berhasil disimpan.');
+      onUpdateArtifact?.({ ...saved as Partial<WorkspaceArtifact>, persistenceStatus: (saved as WorkspaceArtifact).persistenceStatus || 'persistent' });
+      setTitleInput((saved as WorkspaceArtifact).title || trimmed);
+      setIsEditingTitle(false);
+      showToast((saved as WorkspaceArtifact).persistenceStatus === 'local' ? 'Judul draf lokal diperbarui.' : 'Judul dokumen berhasil diperbarui', (saved as WorkspaceArtifact).persistenceStatus === 'local' ? 'info' : 'success');
+    } catch (error) {
+      setTitleSaveError('Judul belum berhasil disimpan. Coba lagi.');
+      setTitleInput(trimmed);
+      const latest = (error as Error & { serverArtifact?: WorkspaceArtifact }).serverArtifact;
+      if (latest?.id === artifact.id) {
+        setConflictServerArtifact(latest);
+        setConflictServerContent(latest.content);
+        setHasExternalConflict(true);
+      }
+      showToast('Judul belum berhasil disimpan.', 'error');
+    } finally {
+      setIsSavingTitle(false);
     }
   };
 
   // Perform save with sequence guard
-  const performSave = useCallback(async (contentToSave: string, titleToSave?: string) => {
+  const performSave = useCallback(async (contentToSave: string, titleToSave?: string): Promise<boolean> => {
     const currentSeq = ++saveSeqRef.current;
     setSaveStatus('saving');
 
     try {
-      if (onUpdateArtifact) {
-        onUpdateArtifact({ content: contentToSave });
-      }
-      if (onSaveArtifact) {
-        await onSaveArtifact(contentToSave, titleToSave || artifact.title);
-      }
+      if (!onSaveArtifact) throw new Error('Penyimpanan Canvas tidak tersedia.');
+      const saved = await onSaveArtifact(contentToSave, titleToSave || artifact.title);
+      if (!saved || typeof saved !== 'object') throw new Error('Perubahan belum berhasil disimpan.');
 
       // Concurrency guard: Only set 'saved' if this was the latest save request
       if (currentSeq === saveSeqRef.current) {
         lastSavedContentRef.current = contentToSave;
         setSaveFailureMessage('Gagal simpan');
         setIsDirty(false);
-        setSaveStatus('saved');
+        setSaveStatus((saved as WorkspaceArtifact).persistenceStatus === 'local' ? 'local' : 'saved');
+        onUpdateArtifact?.({ ...saved as Partial<WorkspaceArtifact> });
+        return true;
       }
+      return false;
     } catch (err) {
       console.warn('[ArtifactCanvas] Save failed:', err);
       if (currentSeq === saveSeqRef.current) {
         setSaveFailureMessage(err instanceof Error ? err.message : 'Gagal simpan. Coba lagi.');
         setSaveStatus('failed');
+        const latest = (err as Error & { serverArtifact?: WorkspaceArtifact }).serverArtifact;
+        if (latest?.id === artifact.id) {
+          setConflictServerArtifact(latest);
+          setConflictServerContent(latest.content);
+          setHasExternalConflict(true);
+        }
       }
+      return false;
     }
-  }, [artifact.title, onSaveArtifact, onUpdateArtifact]);
+  }, [artifact.id, artifact.title, onSaveArtifact, onUpdateArtifact]);
 
   // Debounced auto-save (800ms) with clean timer cleanup
   useEffect(() => {
@@ -272,11 +363,13 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
 
   // Manual save trigger (e.g. Save button or Ctrl/Cmd + S)
   const handleManualSave = useCallback(() => {
+    if (saveStatus === 'saving') return;
+    flushDraftSync();
     if (autosaveTimerRef.current) {
       clearTimeout(autosaveTimerRef.current);
     }
     performSave(editableContent, artifact.title);
-  }, [editableContent, artifact.title, performSave]);
+  }, [editableContent, artifact.title, performSave, saveStatus, flushDraftSync]);
 
   const captureSelection = (target: HTMLTextAreaElement) => {
     const start = target.selectionStart;
@@ -342,10 +435,10 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
       setIsDirty(false);
       setSaveStatus('saved');
       setSaveFailureMessage('Gagal simpan');
-      onDraftContentChange?.(artifact.id, result.content);
+      scheduleDraftSync(artifact.id, result.content, true);
       onDismissInlineEdit?.();
       requestAnimationFrame(() => editorRef.current?.focus());
-      showToast('Perubahan diterapkan dan versi baru tersimpan.', 'success');
+      showToast((saved as WorkspaceArtifact).persistenceStatus === 'local' ? 'Perubahan diterapkan ke draf lokal.' : 'Perubahan diterapkan dan versi baru tersimpan.', 'success');
     } catch {
       setSaveStatus('failed');
       setSaveFailureMessage('Revisi gagal disimpan. Coba simpan lagi.');
@@ -534,14 +627,15 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
   };
 
   const handleContentChange = (newVal: string) => {
+    saveSeqRef.current += 1;
     setEditableContent(newVal);
-    onDraftContentChange?.(artifact.id, newVal);
+      scheduleDraftSync(artifact.id, newVal);
     if (newVal !== lastSavedContentRef.current) {
       setIsDirty(true);
       setSaveStatus('unsaved');
     } else {
       setIsDirty(false);
-      setSaveStatus('saved');
+      setSaveStatus(artifact.persistenceStatus === 'persistent' || !artifact.persistenceStatus ? 'saved' : 'local');
     }
   };
 
@@ -556,14 +650,14 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
     }
 
     handleContentChange(newContent);
-    performSave(newContent, artifact.title);
-    showToast('Sitasi berhasil disematkan ke Daftar Pustaka Canvas!', 'success');
+    void performSave(newContent, artifact.title).then(saved => {
+      if (saved) showToast('Sitasi disematkan ke draf Canvas.', 'info');
+    });
   };
 
   const handleApplyParaphrase = (newParaphrase: string) => {
     handleContentChange(newParaphrase);
-    performSave(newParaphrase, artifact.title);
-    showToast('Teks parafrase berhasil diterapkan ke dokumen.', 'success');
+    void performSave(newParaphrase, artifact.title);
   };
 
   const handleOpenParaphraseWithSelection = () => {
@@ -587,68 +681,74 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
     onSelectTool?.(tool, { ...artifact, content: editableContent });
   }, [isStreaming, artifact, editableContent, onSelectTool]);
 
-  const handleRunSimulation = () => {
-    setIsSimulating(true);
-    setSimulationOutput(null);
+  const handleStopExecution = useCallback(() => {
+    if (activeSandboxHandleRef.current) {
+      activeSandboxHandleRef.current.stop();
+      activeSandboxHandleRef.current = null;
+    }
+    setExecutionStatus('stopped');
+  }, []);
 
-    setTimeout(() => {
-      try {
-        const lang = (artifact.language || '').toLowerCase();
-        if (lang.includes('javascript') || lang === 'js' || lang.includes('typescript') || lang === 'ts') {
-          const logs: string[] = [];
-          const customConsole = {
-            log: (...args: any[]) => logs.push(args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : String(a)).join(' ')),
-            warn: (...args: any[]) => logs.push('[WARN] ' + args.join(' ')),
-            error: (...args: any[]) => logs.push('[ERR] ' + args.join(' '))
-          };
+  const handleRunStaticCheck = useCallback(() => {
+    if (isStreaming) return;
+    if (activeSandboxHandleRef.current) {
+      activeSandboxHandleRef.current.stop();
+      activeSandboxHandleRef.current = null;
+    }
+    ++currentExecutionIdRef.current;
+    setExecutionStatus('checking');
+    const res = validateCodeStatically(editableContent, artifact.language);
+    setValidationResult(res);
+    setExecutionStatus(res.status);
+  }, [editableContent, artifact.language, isStreaming]);
 
-          const runnableCode = `
-            (function(console) {
-              try {
-                ${editableContent}
-              } catch(e) {
-                console.error(e.message);
-              }
-            })(customConsole);
-          `;
+  const handleRunSecureSandbox = useCallback(async () => {
+    if (isStreaming) return;
+    if (activeSandboxHandleRef.current) {
+      activeSandboxHandleRef.current.stop();
+      activeSandboxHandleRef.current = null;
+    }
+    const execId = ++currentExecutionIdRef.current;
+    const lang = (artifact.language || '').toLowerCase().trim();
 
-          const runFn = new Function('customConsole', runnableCode);
-          runFn(customConsole);
+    // Pastikan hanya JavaScript yang dijalankan di Web Worker sandbox
+    const isJavaScript = lang === 'javascript' || lang === 'js';
 
-          if (logs.length === 0) {
-            setSimulationOutput('✓ Kode dieksekusi sukses tanpa error output (return 0).');
-          } else {
-            setSimulationOutput(logs.join('\n'));
-          }
-        } else if (lang.includes('python') || lang === 'py') {
-          const lines = editableContent.split('\n');
-          const hasSyntaxErr = lines.some(l => l.includes('def ') && !l.trim().endsWith(':'));
-          if (hasSyntaxErr) {
-            setSimulationOutput('SyntaxError: expected \':\' at end of function definition.');
-          } else {
-            setSimulationOutput(`[Simulasi Validasi Statis Python 3.11]
-=========================================
-✓ Syntax Check: Passed
-✓ Complexity Evaluation: Optimal O(n) loop
-✓ Simulation Status: Executed successfully.`);
-          }
-        } else if (lang.includes('sql')) {
-          setSimulationOutput(`[SQL Query Analyzer - Statis]
-=========================================
-✓ Query Parsing: Valid SQL syntax
-✓ Execution Plan: Index Scan verified
-✓ Safe Sandbox: No destructive queries detected.`);
-        } else {
-          setSimulationOutput(`[Static Syntax Analyzer]
-✓ Kode terverifikasi secara statis tanpa syntax error fatal.`);
-        }
-      } catch (err: any) {
-        setSimulationOutput(`[Execution Error] ${err?.message || 'Gagal menjalankan simulasi'}`);
-      } finally {
-        setIsSimulating(false);
+    if (!isJavaScript) {
+      // Bahasa tanpa runtime sandbox (Python, SQL, TypeScript mentah, dll)
+      handleRunStaticCheck();
+      return;
+    }
+
+    setExecutionStatus('running');
+    setValidationResult(null);
+
+    const handle = runJavaScriptInSandbox(editableContent, { timeoutMs: 2500 });
+    activeSandboxHandleRef.current = handle;
+
+    try {
+      const res = await handle.promise;
+      if (currentExecutionIdRef.current !== execId) return;
+      setValidationResult(res);
+      setExecutionStatus(res.status);
+    } catch (err: any) {
+      if (currentExecutionIdRef.current !== execId) return;
+      setValidationResult({
+        mode: 'sandbox',
+        language: 'javascript',
+        status: 'error',
+        stdout: [],
+        stderr: [err?.message || 'Terjadi kesalahan internal pada sandbox.'],
+        warnings: [],
+        message: 'Gagal menjalankan kode di sandbox.'
+      });
+      setExecutionStatus('error');
+    } finally {
+      if (currentExecutionIdRef.current === execId) {
+        activeSandboxHandleRef.current = null;
       }
-    }, 350);
-  };
+    }
+  }, [editableContent, artifact.language, isStreaming, handleRunStaticCheck]);
 
   const getArtifactIcon = (type: ArtifactType) => {
     switch (type) {
@@ -671,20 +771,40 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
   }, [artifact.type]);
 
   // Conflict Resolution Handlers
-  const handleKeepLocalDraft = () => {
-    setHasExternalConflict(false);
-    performSave(editableContent, artifact.title);
-    showToast('Perubahan lokal dipertahankan dan disimpan ke server', 'success');
+  const handleKeepLocalDraft = async () => {
+    if (saveStatus === 'saving') return;
+    setSaveStatus('saving');
+    try {
+      const saved = await onSaveArtifact?.(editableContent, artifact.title, false, conflictServerArtifact?.updatedAt);
+      if (!saved) throw new Error('Penyimpanan tidak berhasil');
+      lastSavedContentRef.current = editableContent;
+      setIsDirty(false);
+      setSaveStatus((saved as WorkspaceArtifact).persistenceStatus === 'local' ? 'local' : 'saved');
+      setHasExternalConflict(false);
+      setConflictServerArtifact(null);
+      setConflictServerContent(null);
+      onUpdateArtifact?.({ ...saved as Partial<WorkspaceArtifact> });
+      showToast((saved as WorkspaceArtifact).persistenceStatus === 'local' ? 'Perubahan tetap berada di draf lokal.' : 'Draf lokal berhasil disimpan ke server.', (saved as WorkspaceArtifact).persistenceStatus === 'local' ? 'info' : 'success');
+    } catch {
+      showToast('Perubahan belum tersimpan. Draf lokal tetap tersedia.', 'error');
+      setSaveStatus('failed');
+    }
   };
 
   const handleUseServerVersion = () => {
     if (conflictServerContent !== null) {
       setEditableContent(conflictServerContent);
+      if (conflictServerArtifact) setTitleInput(conflictServerArtifact.title);
       lastSavedContentRef.current = conflictServerContent;
       setIsDirty(false);
       setSaveStatus('saved');
+      if (conflictServerArtifact) {
+        lastKnownVersionRef.current = conflictServerArtifact.version;
+        onUpdateArtifact?.({ ...conflictServerArtifact, persistenceStatus: 'persistent' });
+      }
     }
     setHasExternalConflict(false);
+    setConflictServerArtifact(null);
     showToast('Versi terbaru dari server diterapkan ke Canvas', 'info');
   };
 
@@ -712,22 +832,27 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
 
           <div className="min-w-0 flex items-center gap-1.5 flex-1">
             {isEditingTitle ? (
+              <div className="min-w-0">
               <input
                 ref={titleInputRef}
                 type="text"
                 value={titleInput}
                 onChange={(e) => setTitleInput(e.target.value)}
-                onBlur={handleSaveTitle}
+                onBlur={() => { if (!isSavingTitle) void handleSaveTitle(); }}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleSaveTitle();
+                  if (e.key === 'Enter') { e.preventDefault(); void handleSaveTitle(); }
                   if (e.key === 'Escape') {
                     setTitleInput(artifact.title || '');
                     setIsEditingTitle(false);
                   }
                 }}
+                disabled={isSavingTitle}
                 autoFocus
                 className="h-7 text-xs sm:text-sm font-semibold px-2 py-0 bg-white dark:bg-slate-900 border border-emerald-500 rounded-lg text-slate-900 dark:text-slate-100 focus:outline-none ring-2 ring-emerald-500/20 w-full max-w-[180px]"
               />
+              {isSavingTitle && <span className="ml-1 text-[10px] text-amber-600">Menyimpan…</span>}
+              {titleSaveError && <span role="alert" className="ml-1 text-[10px] text-rose-600">{titleSaveError}</span>}
+              </div>
             ) : (
               <button
                 type="button"
@@ -773,7 +898,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
               ) : (
                 <span className="flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                  <span>Tersimpan</span>
+                  <span>{saveStatus === 'local' ? 'Draf lokal' : 'Tersimpan'}</span>
                 </span>
               )}
             </div>
@@ -985,15 +1110,24 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
                 {onDuplicateArtifact && (
                   <button
                     type="button"
-                    onClick={() => {
-                      setShowMoreMenu(false);
-                      onDuplicateArtifact(artifact.id);
+                    disabled={isDuplicating}
+                    onClick={async () => {
+                      if (isDuplicating) return;
+                      setIsDuplicating(true);
+                      try {
+                        await onDuplicateArtifact(artifact.id);
+                        setShowMoreMenu(false);
+                      } catch {
+                        showToast('Dokumen belum berhasil diduplikasi.', 'error');
+                      } finally {
+                        setIsDuplicating(false);
+                      }
                     }}
-                    className="w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/50 hover:text-emerald-700 transition-colors flex items-center justify-between cursor-pointer"
+                    className="w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/50 hover:text-emerald-700 transition-colors flex items-center justify-between cursor-pointer disabled:opacity-50"
                   >
                     <span className="flex items-center gap-2">
                       <CopyPlus className="w-3.5 h-3.5 text-emerald-600" />
-                      Duplikat Dokumen
+                      {isDuplicating ? 'Menduplikasi…' : 'Duplikat Dokumen'}
                     </span>
                   </button>
                 )}
@@ -1216,6 +1350,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
               ref={editorRef}
               value={editableContent}
               onChange={(e) => handleContentChange(e.target.value)}
+              onBlur={flushDraftSync}
               onSelect={(e) => {
                 const target = e.currentTarget;
                 captureSelection(target);
@@ -1320,26 +1455,15 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
                 </div>
               </div>
 
-              {simulationOutput && (
-                <div className="rounded-2xl overflow-hidden border border-slate-800 bg-[#0b0f19] text-emerald-400 shadow-md animate-slide-up">
-                  <div className="px-4 py-2 bg-[#111624] border-b border-slate-800 flex items-center justify-between text-xs font-mono text-slate-400">
-                    <div className="flex items-center gap-2">
-                      <Terminal className="w-3.5 h-3.5 text-emerald-400" />
-                      <span className="font-semibold text-slate-200">Hasil Analisis & Runtime</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setSimulationOutput(null)}
-                      className="p-1 hover:text-slate-200 text-slate-500 rounded-lg hover:bg-slate-800 cursor-pointer"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                  <div className="p-4 font-mono text-xs whitespace-pre-wrap leading-relaxed max-h-56 overflow-y-auto">
-                    {simulationOutput}
-                  </div>
-                </div>
-              )}
+              <CodeExecutionResultPanel
+                result={validationResult}
+                status={executionStatus}
+                onClose={() => {
+                  setValidationResult(null);
+                  setExecutionStatus('idle');
+                }}
+                onStop={handleStopExecution}
+              />
             </div>
           ) : (
             /* PAPER SHEET VIEW: Lembaran Kertas Kerja Rapi (max-w-3xl, centered, p-8 sampai p-12, shadow-sm, border tipis) */
@@ -1449,7 +1573,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
           ) : (
             <span className="inline-flex items-center gap-1 text-slate-400 dark:text-slate-500">
               <Check className="w-3 h-3 text-emerald-500/70" />
-              <span>Tersimpan otomatis</span>
+              <span>{saveStatus === 'local' ? 'Draf lokal (belum tersimpan ke server)' : 'Tersimpan otomatis'}</span>
             </span>
           )}
 
@@ -1469,15 +1593,31 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
               <span>•</span>
               <span>{editableContent.split('\n').length} baris</span>
               {viewMode === 'preview' && (
-                <button
-                  type="button"
-                  onClick={handleRunSimulation}
-                  disabled={isSimulating}
-                  className="ml-2 flex items-center gap-1 px-2 py-0.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-[10.5px] font-semibold cursor-pointer"
-                >
-                  <Play className="w-2.5 h-2.5 fill-current" />
-                  <span>{isSimulating ? 'Cek...' : 'Validasi'}</span>
-                </button>
+                <div className="flex items-center gap-1.5 ml-2">
+                  <button
+                    type="button"
+                    onClick={handleRunStaticCheck}
+                    disabled={executionStatus === 'running' || executionStatus === 'checking' || isStreaming}
+                    aria-label="Periksa kode secara statis"
+                    className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-700 text-[10.5px] font-semibold cursor-pointer disabled:opacity-50 transition-colors"
+                  >
+                    <Check className="w-2.5 h-2.5" />
+                    <span>{executionStatus === 'checking' ? 'Memeriksa...' : 'Periksa kode'}</span>
+                  </button>
+
+                  {((artifact.language || '').toLowerCase() === 'javascript' || (artifact.language || '').toLowerCase() === 'js') && (
+                    <button
+                      type="button"
+                      onClick={handleRunSecureSandbox}
+                      disabled={executionStatus === 'running' || executionStatus === 'checking' || isStreaming}
+                      aria-label="Jalankan kode di sandbox lokal aman"
+                      className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-[10.5px] font-semibold cursor-pointer disabled:opacity-50 transition-colors"
+                    >
+                      <Play className="w-2.5 h-2.5 fill-current" />
+                      <span>{executionStatus === 'running' ? 'Menjalankan...' : 'Jalankan aman'}</span>
+                    </button>
+                  )}
+                </div>
               )}
             </>
           ) : (
@@ -1605,10 +1745,11 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
                                   if (!confirmed) return;
                                   setIsRollingBack(true);
                                   try {
-                                    if (onRollbackVersion) {
-                                      await onRollbackVersion(ver.version);
-                                    }
+                                    if (!onRollbackVersion) throw new Error('Pemulihan tidak tersedia');
+                                    await onRollbackVersion(ver.version);
                                     setShowVersionHistoryModal(false);
+                                  } catch {
+                                    showToast('Versi belum berhasil dipulihkan.', 'error');
                                   } finally {
                                     setIsRollingBack(false);
                                   }
@@ -1680,7 +1821,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
             initial="hidden"
             animate="visible"
             exit="exit"
-            onClick={() => setShowDeleteConfirm(false)}
+            onClick={() => { if (!isDeleting) setShowDeleteConfirm(false); }}
           >
             <motion.div 
               className="w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl p-5 space-y-4"
@@ -1707,10 +1848,12 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
               <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
                 Tindakan ini akan menghapus artefak dokumen ini secara permanen dari sesi dan basis data. Seluruh riwayat versi terkait juga akan dibersihkan.
               </p>
+              {deleteError && <p role="alert" className="text-xs font-medium text-rose-600">{deleteError}</p>}
 
               <div className="flex items-center justify-end gap-2 pt-2">
                 <button
                   type="button"
+                  disabled={isDeleting}
                   onClick={() => setShowDeleteConfirm(false)}
                   className="px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors cursor-pointer"
                 >
@@ -1718,15 +1861,23 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
                 </button>
                 <button
                   type="button"
+                  disabled={isDeleting || !onDeleteArtifact || saveStatus === 'saving'}
                   onClick={async () => {
-                    setShowDeleteConfirm(false);
-                    if (onDeleteArtifact) {
+                    if (!onDeleteArtifact || isDeleting || saveStatus === 'saving') return;
+                    setIsDeleting(true);
+                    setDeleteError('');
+                    try {
                       await onDeleteArtifact(artifact.id);
+                      setShowDeleteConfirm(false);
+                    } catch {
+                      setDeleteError('Dokumen belum berhasil dihapus. Coba lagi.');
+                    } finally {
+                      setIsDeleting(false);
                     }
                   }}
-                  className="px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-rose-600 hover:bg-rose-700 text-white transition-colors cursor-pointer shadow-2xs"
+                  className="px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-rose-600 hover:bg-rose-700 text-white transition-colors cursor-pointer shadow-2xs disabled:opacity-50"
                 >
-                  Ya, Hapus Dokumen
+                  {isDeleting ? 'Menghapus…' : 'Ya, Hapus Dokumen'}
                 </button>
               </div>
             </motion.div>

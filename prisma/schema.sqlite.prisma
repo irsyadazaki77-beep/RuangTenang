@@ -509,6 +509,7 @@ model DocumentChunks {
 
   @@index([attachmentId])
   @@index([userId])
+  @@index([userId, attachmentId, chunkIndex])
 }
 
 model ClinicalSoapNotes {

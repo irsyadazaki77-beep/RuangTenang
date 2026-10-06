@@ -23,6 +23,8 @@ export interface StoredAttachment {
 
 export interface Message {
   isEdited?: boolean;
+  /** Internal link to the immutable Workspace request snapshot used for retry. */
+  retryRequestId?: string;
   id: string;
   role: 'user' | 'assistant';
   content: string;

@@ -25,8 +25,9 @@ interface WorkspaceComposerProps {
   activeArtifactTitle?: string | null;
   selectedText?: string;
   onSelectTool?: (tool: WorkspaceToolDefinition) => void;
-  inputText: string;
-  setInputText: (text: string) => void;
+  inputText?: string;
+  setInputText?: (text: string) => void;
+  onInputTextChange?: (text: string) => void;
   attachments?: WorkspaceFileAttachment[];
   attachedFile?: WorkspaceFileAttachment | null;
   isStreaming: boolean;
@@ -72,8 +73,9 @@ export const WorkspaceComposer: React.FC<WorkspaceComposerProps> = React.memo(({
   activeArtifactTitle,
   selectedText = '',
   onSelectTool,
-  inputText,
-  setInputText,
+  inputText: controlledInputText,
+  setInputText: setControlledInputText,
+  onInputTextChange,
   attachedFile,
   attachments,
   isStreaming,
@@ -112,6 +114,26 @@ export const WorkspaceComposer: React.FC<WorkspaceComposerProps> = React.memo(({
   onDeletePreset,
   onResetPersonalization
 }) => {
+  const [localInputText, setLocalInputText] = useState('');
+  const inputText = controlledInputText ?? localInputText;
+  const inputNotificationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const setInputText = React.useCallback((text: string) => {
+    if (setControlledInputText) setControlledInputText(text);
+    else setLocalInputText(text);
+    if (inputNotificationTimerRef.current) clearTimeout(inputNotificationTimerRef.current);
+    if (!text) {
+      inputNotificationTimerRef.current = null;
+      onInputTextChange?.('');
+      return;
+    }
+    inputNotificationTimerRef.current = setTimeout(() => {
+      inputNotificationTimerRef.current = null;
+      onInputTextChange?.(text);
+    }, 250);
+  }, [onInputTextChange, setControlledInputText]);
+  useEffect(() => () => {
+    if (inputNotificationTimerRef.current) clearTimeout(inputNotificationTimerRef.current);
+  }, []);
   const activeAttachments = attachments ?? (attachedFile ? [attachedFile] : []);
   const hasAttachments = activeAttachments.length > 0;
   const hasPendingAttachment = activeAttachments.some(attachment => attachment.status === 'uploading' || attachment.status === 'processing');

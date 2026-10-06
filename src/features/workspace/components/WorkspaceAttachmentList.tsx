@@ -27,8 +27,10 @@ export const WorkspaceAttachmentList: React.FC<WorkspaceAttachmentListProps> = R
           : attachment.status === 'uploading'
             ? <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400"><Loader2 className="h-3 w-3 animate-spin" />Unggah</span>
             : attachment.status === 'processing'
-              ? <span className="flex items-center gap-1 text-blue-600 dark:text-blue-400"><Loader2 className="h-3 w-3 animate-spin" />Proses</span>
-              : <span title={attachment.errorMessage || 'Dokumen gagal diproses'} className="flex items-center gap-1 text-rose-600 dark:text-rose-400"><AlertCircle className="h-3 w-3" />Gagal</span>;
+              ? <span className="flex items-center gap-1 text-blue-600 dark:text-blue-400"><Loader2 className="h-3 w-3 animate-spin" />Memproses…</span>
+              : attachment.status === 'unsupported'
+                ? <span title={attachment.errorMessage || 'Format dokumen tidak didukung.'} className="flex items-center gap-1 text-rose-600 dark:text-rose-400"><AlertCircle className="h-3 w-3" />Format tidak didukung</span>
+                : <span title={attachment.errorMessage || 'Dokumen gagal diproses'} className="flex items-center gap-1 text-rose-600 dark:text-rose-400"><AlertCircle className="h-3 w-3" />Gagal</span>;
         const fileType = attachment.name.split('.').pop()?.toUpperCase() || attachment.fileKind?.toUpperCase() || 'FILE';
         return (
           <li key={key} className="flex h-8 max-w-full items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-100 px-2 text-[11px] text-slate-800 dark:border-slate-700 dark:bg-slate-800/90 dark:text-slate-200">
