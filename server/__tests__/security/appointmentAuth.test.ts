@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest';
 import request from 'supertest';
 import express from 'express';
 import { prisma, serverDb } from '../../database.js';
@@ -24,6 +24,7 @@ describe('Appointment Security & IDOR Prevention Tests', () => {
   const adminToken = generateToken({ userId: 'adm-user-1', name: 'Admin Root', role: 'admin', email: 'admin@test.com' });
 
   beforeAll(async () => {
+    vi.useFakeTimers();
     vi.spyOn(serverDb, 'isSessionActive').mockResolvedValue(true);
 
     // Clean up
@@ -139,7 +140,12 @@ describe('Appointment Security & IDOR Prevention Tests', () => {
     });
   });
 
+  beforeEach(() => {
+    vi.setSystemTime(new Date('2026-09-20T09:50:00+07:00'));
+  });
+
   afterAll(async () => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
     await prisma.appointments.deleteMany({ where: { id: { in: ['apt-sec-1', 'apt-sec-2', 'apt-room-video-1', 'apt-room-cancelled-1'] } } });
     await prisma.counselors.deleteMany({ where: { id: { in: ['cns-prof-1', 'cns-prof-2', 'cns-room-prof'] } } });
@@ -192,7 +198,7 @@ describe('Appointment Security & IDOR Prevention Tests', () => {
       .set('Authorization', `Bearer ${student2Token}`)
       .send({ notes: 'Hacked notes' });
 
-    expect(res.status).toBe(403);
+    expect([403, 404]).toContain(res.status);
   });
 
   it('Prevents Counselor 2 from approving Counselor 1 appointment (IDOR)', async () => {
@@ -201,7 +207,16 @@ describe('Appointment Security & IDOR Prevention Tests', () => {
       .set('Authorization', `Bearer ${counselor2Token}`)
       .send({ status: 'CONFIRMED' });
 
-    expect(res.status).toBe(403);
+    expect([403, 404]).toContain(res.status);
+  });
+
+  it('rejects terminal appointment status recovery through the general update route', async () => {
+    const res = await request(app)
+      .put('/api/v1/appointments/apt-room-cancelled-1')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ status: 'CONFIRMED' });
+    expect(res.status).toBe(409);
+    expect(res.body.error).toBe('INVALID_APPOINTMENT_STATUS_TRANSITION');
   });
 
   it('Prevents Counselor 1 from reassigning appointment to another counselor (Field-Level Auth)', async () => {
@@ -235,15 +250,16 @@ describe('Appointment Security & IDOR Prevention Tests', () => {
         .get('/api/appointments/apt-room-video-1/room-access')
         .set('Cookie', [`rt_auth_token=${user3AttackerToken}`]);
 
-      expect(res.status).toBe(403);
+      expect(res.status).toBe(404);
       expect(res.body.error).toBe('ACCESS_DENIED');
     });
 
     it('Scenario 2: User 1 accesses room at 09:40 WIB (20 mins before 10:00 schedule) MUST return HTTP 403 (too early, 15m tolerance)', async () => {
+      vi.setSystemTime(new Date('2026-09-20T09:40:00+07:00'));
       const res = await request(app)
-        .get('/api/appointments/apt-room-video-1/room-access')
+        .get('/api/appointments/apt-room-video-1/room-access?simulatedTime=2026-09-20T09:50:00%2B07:00')
         .set('Cookie', [`rt_auth_token=${user1ClientToken}`])
-        .set('x-simulated-time', '2026-09-20T09:40:00+07:00');
+        .set('x-simulated-time', '2026-09-20T09:50:00+07:00');
 
       expect([400, 403]).toContain(res.status);
       expect(res.body.success).toBe(false);
@@ -252,22 +268,21 @@ describe('Appointment Security & IDOR Prevention Tests', () => {
     });
 
     it('Scenario 3: User 1 or User 2 accesses room at 09:50 WIB (10 mins before 10:00 schedule) MUST return HTTP 200 OK', async () => {
+      vi.setSystemTime(new Date('2026-09-20T09:50:00+07:00'));
       // User 1 (Client owner)
       const resUser1 = await request(app)
         .get('/api/appointments/apt-room-video-1/room-access')
-        .set('Cookie', [`rt_auth_token=${user1ClientToken}`])
-        .set('x-simulated-time', '2026-09-20T09:50:00+07:00');
+        .set('Cookie', [`rt_auth_token=${user1ClientToken}`]);
 
       expect(resUser1.status).toBe(200);
       expect(resUser1.body.success).toBe(true);
       expect(resUser1.body.allowed).toBe(true);
-      expect(resUser1.body.appointment).toBeDefined();
+      expect(resUser1.body.appointmentId).toBe('apt-room-video-1');
 
       // User 2 (Assigned Counselor)
       const resUser2 = await request(app)
         .get('/api/appointments/apt-room-video-1/room-access')
-        .set('Cookie', [`rt_auth_token=${user2CounselorToken}`])
-        .set('x-simulated-time', '2026-09-20T09:50:00+07:00');
+        .set('Cookie', [`rt_auth_token=${user2CounselorToken}`]);
 
       expect(resUser2.status).toBe(200);
       expect(resUser2.body.success).toBe(true);
@@ -283,7 +298,7 @@ describe('Appointment Security & IDOR Prevention Tests', () => {
       expect([400, 403]).toContain(res.status);
       expect(res.body.success).toBe(false);
       expect(res.body.allowed).toBe(false);
-      expect(res.body.error).toBe('ROOM_ACCESS_NOT_PERMITTED');
+      expect(res.body.error).toBe('ROOM_ACCESS_CANCELLED');
     });
 
     it('Scenario 5: Attacker (User 3) accessing /ice-servers MUST return HTTP 403 Forbidden', async () => {
@@ -291,7 +306,7 @@ describe('Appointment Security & IDOR Prevention Tests', () => {
         .get('/api/appointments/apt-room-video-1/ice-servers')
         .set('Cookie', [`rt_auth_token=${user3AttackerToken}`]);
 
-      expect(res.status).toBe(403);
+      expect(res.status).toBe(404);
       expect(res.body.error).toBe('ACCESS_DENIED');
     });
 
@@ -328,12 +343,42 @@ describe('Appointment Security & IDOR Prevention Tests', () => {
       expect(Array.isArray(res.body.iceServers)).toBe(true);
     });
 
+    it('denies ICE and signaling after the room window expires, regardless of a client clock override', async () => {
+      vi.setSystemTime(new Date('2026-09-20T11:31:00+07:00'));
+      const iceRes = await request(app)
+        .get('/api/v1/appointments/apt-room-video-1/ice-servers?simulatedTime=2026-09-20T09:50:00%2B07:00')
+        .set('Cookie', [`rt_auth_token=${user1ClientToken}`])
+        .set('x-simulated-time', '2026-09-20T09:50:00+07:00');
+      expect(iceRes.status).toBe(403);
+      expect(iceRes.body.error).toBe('ROOM_ACCESS_EXPIRED');
+
+      const signalRes = await request(app)
+        .get('/api/v1/appointments/apt-room-video-1/webrtc/signals')
+        .set('Cookie', [`rt_auth_token=${user1ClientToken}`]);
+      expect(signalRes.status).toBe(403);
+      expect(signalRes.body.error).toBe('ROOM_ACCESS_EXPIRED');
+    });
+
+    it('denies PENDING appointments and platform admins from confidential room access', async () => {
+      const pendingRes = await request(app)
+        .get('/api/v1/appointments/apt-sec-1/room-access')
+        .set('Cookie', [`rt_auth_token=${student1Token}`]);
+      expect(pendingRes.status).toBe(403);
+      expect(pendingRes.body.error).toBe('ROOM_ACCESS_NOT_APPROVED');
+
+      const adminRes = await request(app)
+        .get('/api/v1/appointments/apt-room-video-1/room-access')
+        .set('Cookie', [`rt_auth_token=${adminToken}`]);
+      expect(adminRes.status).toBe(403);
+      expect(adminRes.body.error).toBe('ROOM_ACCESS_NOT_PARTICIPANT');
+    });
+
     it('Scenario 8: Counselor A (counselor1Token) accessing Counselor B (User 2) room MUST return HTTP 403 Forbidden', async () => {
       const res = await request(app)
         .get('/api/v1/appointments/apt-room-video-1/room-access')
         .set('Cookie', [`rt_auth_token=${counselor1Token}`]);
 
-      expect(res.status).toBe(403);
+      expect(res.status).toBe(404);
       expect(res.body.error).toBe('ACCESS_DENIED');
     });
 
@@ -342,7 +387,7 @@ describe('Appointment Security & IDOR Prevention Tests', () => {
         .get('/api/v1/appointments/apt-room-video-1/room-access')
         .set('Cookie', [`rt_auth_token=${student2Token}`]);
 
-      expect(res.status).toBe(403);
+      expect(res.status).toBe(404);
       expect(res.body.error).toBe('ACCESS_DENIED');
     });
 
@@ -350,26 +395,26 @@ describe('Appointment Security & IDOR Prevention Tests', () => {
       const resGet = await request(app)
         .get('/api/v1/appointments/apt-room-video-1/room-presence')
         .set('Cookie', [`rt_auth_token=${user3AttackerToken}`]);
-      expect(resGet.status).toBe(403);
+      expect(resGet.status).toBe(404);
 
       const resPost = await request(app)
         .post('/api/v1/appointments/apt-room-video-1/room-presence')
         .set('Cookie', [`rt_auth_token=${user3AttackerToken}`])
         .send({ isScreenSharing: true });
-      expect(resPost.status).toBe(403);
+      expect(resPost.status).toBe(404);
     });
 
     it('Scenario 11: Unauthorized user cannot read or update in-call notes (HTTP 403)', async () => {
       const resGet = await request(app)
         .get('/api/v1/appointments/apt-room-video-1/in-call-notes')
         .set('Cookie', [`rt_auth_token=${user3AttackerToken}`]);
-      expect(resGet.status).toBe(403);
+      expect(resGet.status).toBe(404);
 
       const resPost = await request(app)
         .post('/api/v1/appointments/apt-room-video-1/in-call-notes')
         .set('Cookie', [`rt_auth_token=${user3AttackerToken}`])
         .send({ sharedContent: 'Hacked Notes' });
-      expect(resPost.status).toBe(403);
+      expect(resPost.status).toBe(404);
     });
 
     it('Scenario 12: Unauthorized user cannot send or receive WebRTC signals (HTTP 403)', async () => {
@@ -377,12 +422,12 @@ describe('Appointment Security & IDOR Prevention Tests', () => {
         .post('/api/v1/appointments/apt-room-video-1/webrtc/signal')
         .set('Cookie', [`rt_auth_token=${user3AttackerToken}`])
         .send({ type: 'offer', payload: { sdp: 'fake-sdp', type: 'offer' } });
-      expect(resPost.status).toBe(403);
+      expect(resPost.status).toBe(404);
 
       const resGet = await request(app)
         .get('/api/v1/appointments/apt-room-video-1/webrtc/signals')
         .set('Cookie', [`rt_auth_token=${user3AttackerToken}`]);
-      expect(resGet.status).toBe(403);
+      expect(resGet.status).toBe(404);
     });
 
     it('Scenario 13: Valid participants can perform WebRTC signaling exchange (offer, answer, candidate, cleanup)', async () => {

@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { Paperclip, Sparkles } from 'lucide-react';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { FileText, Paperclip, Sparkles } from 'lucide-react';
 import { WorkspaceMode, WorkspaceArtifact, WorkspaceTab, WorkspaceComposerConfig, WorkspaceComparisonCandidate, WorkspaceComparisonRun, WorkspaceRequestSnapshot, WorkspaceArtifactSelection, ArtifactPatch } from './types';
 import { UserSession } from '../../types';
 import { Chat, Message } from '../chat/types';
@@ -13,6 +13,7 @@ import { useWorkspaceStreaming, WorkspaceRequestIdentity } from './hooks/useWork
 import { useWorkspaceFileIngestion } from './hooks/useWorkspaceFileIngestion';
 import { useAcademicDistress } from './hooks/useAcademicDistress';
 import { useWorkspaceTemplates } from './hooks/useWorkspaceTemplates';
+import { useWorkspaceMetadata } from './hooks/useWorkspaceMetadata';
 
 // UI Orchestration Components
 import { WorkspaceHeader } from './components/WorkspaceHeader';
@@ -31,11 +32,16 @@ import { useAiModelCatalog } from '../../lib/aiModelCatalog';
 import { DEFAULT_WELCOME_ARTIFACT_ID } from './constants/workspaceConstants';
 import { parseArtifactsFromText } from './utils/artifactParser';
 import { WorkspaceToolConfigModal } from './components/WorkspaceToolConfigModal';
+import { WorkspaceTasksPanel } from './components/WorkspaceTasksPanel';
 import { useToast } from '../../components/Toast';
 import { getModeChatPath } from './utils/workspaceRouting';
 import { apiClient } from '../../lib/apiClient';
 import { buildWorkspaceContextNote, buildWorkspaceRequestSnapshot } from './utils/workspaceContext';
 import { getArtifactSelectionContext } from './utils/artifactPatch';
+import { WorkspaceFilePreviewModal } from './components/WorkspaceFilePreviewModal';
+import { WorkspacePlanSchema, type WorkspacePlan } from '../../../shared/contracts/workspace';
+import { validateResearchCitations } from './utils/citationIntegrity';
+import { WorkspaceSourceLibrary } from './components/WorkspaceSourceLibrary';
 
 export interface StudentWorkspaceProps {
   user: UserSession | null;
@@ -68,6 +74,22 @@ function clearLocalWorkspaceIdentity(userId?: string) {
   try { globalThis.sessionStorage?.removeItem(localWorkspaceStorageKey(userId)); } catch { /* session storage is optional */ }
 }
 
+function parseGeneratedPlan(content: string, goal: string): WorkspacePlan | null {
+  try {
+    const json = content.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+    const value = JSON.parse(json) as { title?: unknown; tasks?: Array<{ title?: unknown; description?: unknown; type?: unknown; dependsOn?: unknown }> };
+    if (typeof value.title !== 'string' || !Array.isArray(value.tasks) || value.tasks.length < 1 || value.tasks.length > 12) return null;
+    const ids = value.tasks.map(() => crypto.randomUUID());
+    const tasks = value.tasks.map((task, index) => ({
+      id: ids[index], title: task.title,
+      ...(typeof task.description === 'string' ? { description: task.description } : {}),
+      type: task.type, dependsOn: Array.isArray(task.dependsOn) ? task.dependsOn.map(Number).filter(dep => Number.isInteger(dep) && dep >= 1 && dep <= value.tasks!.length && dep !== index + 1).map(dep => ids[dep - 1]) : [], status: 'todo' as const
+    }));
+    const now = new Date().toISOString();
+    return WorkspacePlanSchema.parse({ id: crypto.randomUUID(), goal, title: value.title, status: 'draft', tasks, createdAt: now, updatedAt: now });
+  } catch { return null; }
+}
+
 export function StudentWorkspace({ 
   user, 
   chats,
@@ -76,12 +98,16 @@ export function StudentWorkspace({
   onOpenSidebar 
 }: StudentWorkspaceProps) {
   const { chatId } = useParams<{ chatId?: string }>();
+  const location = useLocation();
   const navigate = useNavigate();
   const { models, defaultModel } = useAiModelCatalog();
   const { showToast } = useToast();
   const [streamCreatedChatId, setStreamCreatedChatId] = useState<string>();
   const [workspaceIdentity, setWorkspaceIdentity] = useState(() => chatId ? `chat:${chatId}` : getLocalWorkspaceIdentity(user?.id));
   const effectiveChatId = chatId || streamCreatedChatId;
+  const workspaceMetadata = useWorkspaceMetadata(user?.role === 'guest' ? undefined : effectiveChatId);
+  const workspacePlanRef = React.useRef(workspaceMetadata.plan);
+  workspacePlanRef.current = workspaceMetadata.plan;
   const logicalWorkspaceIdentity = streamCreatedChatId && (!chatId || chatId === streamCreatedChatId)
     ? workspaceIdentity
     : chatId ? `chat:${chatId}` : workspaceIdentity;
@@ -92,6 +118,8 @@ export function StudentWorkspace({
   const lastRouteChatIdRef = React.useRef(chatId);
   const clearInProgressRef = React.useRef(false);
   const activeSendOperationRef = React.useRef<string | null>(null);
+  const taskGenerationRequestsRef = React.useRef(new Map<string, string>());
+  const taskRunRequestsRef = React.useRef(new Map<string, { taskId: string; planId: string; executionId: string; workspaceId?: string }>());
   effectiveChatIdRef.current = effectiveChatId;
 
   // 1. Domain Persistence Hook
@@ -137,6 +165,12 @@ export function StudentWorkspace({
   // 3. UI Layout & View States
   const [isCanvasOpen, setIsCanvasOpen] = useState<boolean>(true);
   const [isCanvasExpanded, setIsCanvasExpanded] = useState<boolean>(false);
+  const [isContextPanelOpen, setIsContextPanelOpen] = useState(false);
+  const [workspaceRightTab, setWorkspaceRightTab] = useState<'context' | 'sources'>('context');
+  const [includeFilesInContext, setIncludeFilesInContext] = useState(true);
+  const [selectedWorkspaceFileIds, setSelectedWorkspaceFileIds] = useState<string[]>([]);
+  const [previewAttachmentId, setPreviewAttachmentId] = useState<string | null>(null);
+  const [includeCanvasInContext, setIncludeCanvasInContext] = useState(true);
   const [mobileActiveTab, setMobileActiveTab] = useState<WorkspaceTab>('chat');
   const [inputText, setInputText] = useState<string>('');
   const [selectedModel, setSelectedModel] = useState<string>(() => {
@@ -149,6 +183,9 @@ export function StudentWorkspace({
   );
   const [compareMode, setCompareMode] = useState(false);
   const [selectedCompareModels, setSelectedCompareModels] = useState<string[]>([]);
+  const [instructionsDraft, setInstructionsDraft] = useState('');
+  const [isInstructionsEditing, setIsInstructionsEditing] = useState(false);
+  const [isInstructionsSaving, setIsInstructionsSaving] = useState(false);
   const [comparisonRun, setComparisonRun] = useState<WorkspaceComparisonRun | null>(null);
   const [pendingTool, setPendingTool] = useState<{ tool: WorkspaceToolDefinition; artifact: WorkspaceArtifact | null } | null>(null);
   const [selectedText, setSelectedText] = useState('');
@@ -172,6 +209,14 @@ export function StudentWorkspace({
     const second = selectable.find(model => model.id !== first)?.id;
     setSelectedCompareModels([first, ...(second ? [second] : [])]);
   }, [defaultModel, models, selectedCompareModels.length, selectedModel]);
+
+  useEffect(() => {
+    const state = location.state as { initialPrompt?: unknown; initialCompareMode?: unknown } | null;
+    if (typeof state?.initialPrompt === 'string' && state.initialPrompt.trim()) setInputText(state.initialPrompt.trim());
+    if (state?.initialCompareMode === true) handleCompareModeChange(true);
+    if (state?.initialPrompt || state?.initialCompareMode) navigate(location.pathname, { replace: true, state: null });
+  }, [handleCompareModeChange, location.pathname, location.state, navigate]);
+  useEffect(() => setInstructionsDraft(workspaceMetadata.workspace?.instructions || ''), [workspaceMetadata.workspace?.instructions]);
 
   useEffect(() => {
     const createdFromCurrentStream = !lastRouteChatIdRef.current && Boolean(chatId && effectiveChatIdRef.current === chatId);
@@ -240,6 +285,13 @@ export function StudentWorkspace({
     removeAttachment,
     retryAttachment
   } = useWorkspaceFileIngestion(effectiveChatId);
+  useEffect(() => {
+    setSelectedWorkspaceFileIds(current => {
+      const readyIds = workspaceAttachments.filter(file => file.status === 'ready' && file.id).map(file => file.id!);
+      const existing = new Set(current);
+      return [...current.filter(id => readyIds.includes(id)), ...readyIds.filter(id => !existing.has(id))];
+    });
+  }, [workspaceAttachments]);
 
   // 5. Academic Distress Safety Hook
   const {
@@ -289,6 +341,31 @@ export function StudentWorkspace({
     const isCurrent = () => identity.workspaceId === logicalWorkspaceIdentityRef.current && isStreamRequestCurrentRef.current(identity);
     if (!isCurrent()) return;
     setIsCreatingArtifact(false);
+    const generatedTaskGoal = taskGenerationRequestsRef.current.get(identity.requestId);
+    taskGenerationRequestsRef.current.delete(identity.requestId);
+    const taskRun = taskRunRequestsRef.current.get(identity.requestId);
+    taskRunRequestsRef.current.delete(identity.requestId);
+    let taskCompletionPlan: WorkspacePlan | undefined;
+    if (taskRun && taskRun.workspaceId === identity.workspaceId) {
+      const latest = workspacePlanRef.current;
+      if (latest?.id === taskRun.planId && latest.tasks.find(task => task.id === taskRun.taskId)?.executionId === taskRun.executionId) {
+        const taskType = latest.tasks.find(task => task.id === taskRun.taskId)?.type;
+        const resultStatus = assistantMsg.error ? 'failed' as const : taskType === 'writing' ? 'waiting_review' as const : 'done' as const;
+        const completedAt = new Date().toISOString();
+        const tasks = latest.tasks.map(task => task.id === taskRun.taskId ? { ...task, status: resultStatus, output: assistantMsg.error ? undefined : assistantMsg.content.slice(0, 20000), sources: assistantMsg.error ? undefined : assistantMsg.sources || [], executionHistory: (task.executionHistory || []).map(attempt => attempt.executionId === taskRun.executionId ? { ...attempt, status: assistantMsg.error ? 'failed' as const : 'completed' as const, completedAt } : attempt), updatedAt: completedAt } : task);
+        try { taskCompletionPlan = await workspaceMetadata.updatePlan({ ...latest, tasks, status: 'approved', updatedAt: new Date().toISOString() }); }
+        catch (error) { console.warn('[WorkspaceTasks] Task result persistence failed:', error); }
+      }
+    }
+    if (generatedTaskGoal && !assistantMsg.error) {
+      const plan = parseGeneratedPlan(assistantMsg.content, generatedTaskGoal);
+      try {
+        if (plan) { await workspaceMetadata.createPlan(plan); showToast('Draft plan siap ditinjau. Belum ada task yang dijalankan.', 'success'); }
+        else showToast('Respons plan tidak sesuai format terstruktur. Coba buat ulang.', 'error');
+      } catch (error) {
+        showToast(error instanceof Error ? error.message : 'Plan gagal disimpan.', 'error');
+      }
+    }
     const revisionRequest = revisionRequestRef.current;
     if (revisionRequest && revisionRequest.workspaceId === (identity.chatId || effectiveChatIdRef.current) && !assistantMsg.error) {
       revisionRequestRef.current = null;
@@ -319,13 +396,20 @@ export function StudentWorkspace({
       artifactsPersisted = await syncParsedMessageArtifacts(extractedArtifacts, identity.chatId || effectiveChatIdRef.current);
       if (!isCurrent()) return;
       setActiveArtifactId(extractedArtifacts[0].id);
+      if (taskCompletionPlan && taskRun && artifactsPersisted) {
+        taskCompletionPlan = { ...taskCompletionPlan, tasks: taskCompletionPlan.tasks.map(task => task.id === taskRun.taskId ? { ...task, outputArtifactId: extractedArtifacts[0].id } : task) };
+        try { taskCompletionPlan = await workspaceMetadata.updatePlan(taskCompletionPlan); }
+        catch (error) { console.warn('[WorkspaceTasks] Output artifact link did not persist:', error); }
+      }
     }
+    const citationAudit = taskRun && workspacePlanRef.current?.tasks.find(task => task.id === taskRun.taskId)?.type === 'research'
+      ? validateResearchCitations(assistantMsg.content, assistantMsg.sources || []) : null;
     const finalMessage = !artifactsPersisted && extractedArtifacts.length
       ? { ...assistantMsg, content: `${assistantMsg.content.replace(/Artefak Aktif[^\n]*/g, 'Draf dokumen dibuat secara lokal')}\n\nDokumen belum tersimpan ke server. Draf tetap tersedia di Canvas; coba simpan lagi.` }
-      : assistantMsg;
+      : citationAudit ? { ...assistantMsg, content: `${citationAudit.content}${citationAudit.removedUnknownCitationCount ? `\n\n${citationAudit.removedUnknownCitationCount} marker citation yang tidak cocok dengan evidence request ini dihapus.` : ''}${citationAudit.unreferencedSentenceCount ? `\n\n**Audit evidence:** ${citationAudit.unreferencedSentenceCount} kalimat panjang tidak memiliki marker sumber. Keterkaitan citation sudah divalidasi, tetapi dukungan makna belum diverifikasi otomatis.` : '\n\n**Audit evidence:** marker menunjuk ke sumber pada request ini. Dukungan makna tetap perlu ditinjau.'}` } : assistantMsg;
     if (!isCurrent()) return;
     setMessages(prev => prev.some(message => message.id === finalMessage.id) ? prev : [...prev, finalMessage]);
-  }, [setMessages, setHasUnreadArtifact, syncParsedMessageArtifacts, setActiveArtifactId]);
+  }, [setMessages, setHasUnreadArtifact, syncParsedMessageArtifacts, setActiveArtifactId, workspaceMetadata.plan, workspaceMetadata.updatePlan, workspaceMetadata.createPlan, showToast]);
 
   const {
     isStreaming,
@@ -368,11 +452,13 @@ export function StudentWorkspace({
         taskCategory: config.taskCategory,
         latencyPreference: config.latencyPreference,
         qualityPreference: config.qualityPreference,
-        activeContext: activeArtifact && activeArtifact.id !== DEFAULT_WELCOME_ARTIFACT_ID
+        activeContext: includeCanvasInContext && activeArtifact && activeArtifact.id !== DEFAULT_WELCOME_ARTIFACT_ID
           ? { artifactId: activeArtifact.id, title: activeArtifact.title, version: activeArtifact.version, content: (canvasDraft?.artifactId === activeArtifact.id ? canvasDraft.content : activeArtifact.content).slice(0, 50000) }
           : undefined,
-        selectedText: scopedSelection?.text || selectedText || undefined,
-        attachments: attachments && attachments.length > 0 ? attachments : undefined,
+        selectedText: includeCanvasInContext ? scopedSelection?.text || selectedText || undefined : undefined,
+        attachments: includeFilesInContext ? workspaceAttachments.filter(file => file.status === 'ready' && file.id && selectedWorkspaceFileIds.includes(file.id)).map(file => ({ id: file.id!, filename: file.name, mimeType: file.mimeType, size: file.size })) : undefined,
+        workspaceInstructions: workspaceMetadata.workspace?.instructions || undefined,
+        includeWorkspaceFiles: includeFilesInContext && selectedWorkspaceFileIds.length > 0,
         createdAt: new Date().toISOString()
       });
       return true;
@@ -381,28 +467,38 @@ export function StudentWorkspace({
     setComparisonRun(null);
 
     const resolvedConfig = config ?? { aiModel: selectedModel, responseMode: 'Seimbang' as const, responseStyle: 'Default' as const };
-    const activeContent = activeArtifact && activeArtifact.id !== DEFAULT_WELCOME_ARTIFACT_ID
+    const taskContextMode = Boolean(config?.isolatedTaskExecution);
+    const taskFileIds = taskContextMode ? (config?.taskContextSourceIds || []) : selectedWorkspaceFileIds;
+    const activeContent = taskContextMode ? config?.taskArtifactContext : includeCanvasInContext && activeArtifact && activeArtifact.id !== DEFAULT_WELCOME_ARTIFACT_ID
       ? canvasDraft?.artifactId === activeArtifact.id ? canvasDraft.content : activeArtifact.content
       : undefined;
     const baseSnapshot = existingSnapshot ?? buildWorkspaceRequestSnapshot({
       prompt: promptText,
       workspaceId: effectiveChatIdRef.current,
-      model: selectedModel,
+        model: resolvedConfig.aiModel,
       config: resolvedConfig,
-      files: scopedSelection ? [] : workspaceAttachments.filter(file => file.status === 'ready').map(file => ({ id: file.id, name: file.name })),
-      artifact: activeArtifact && activeArtifact.id !== DEFAULT_WELCOME_ARTIFACT_ID ? {
+      files: taskContextMode ? workspaceAttachments.filter(file => file.status === 'ready' && file.id && taskFileIds.includes(file.id)).map(file => ({ id: file.id, name: file.name })) : !includeFilesInContext ? [] : workspaceAttachments.filter(file => file.status === 'ready' && file.id && taskFileIds.includes(file.id)).map(file => ({ id: file.id, name: file.name })),
+      workspaceInstructions: taskContextMode ? config?.taskWorkspaceInstructions : workspaceMetadata.workspace?.instructions || undefined,
+      artifact: taskContextMode && activeContent ? { id: 'task-canvas-snapshot', title: 'Canvas snapshot', type: 'DOCUMENT', version: 1, content: activeContent } : includeCanvasInContext && activeArtifact && activeArtifact.id !== DEFAULT_WELCOME_ARTIFACT_ID ? {
         id: activeArtifact.id, title: activeArtifact.title, type: activeArtifact.type,
         version: activeArtifact.version, content: scopedSelection && activeContent
           ? getArtifactSelectionContext(activeContent, scopedSelection.start, scopedSelection.end)
           : activeContent || activeArtifact.content
       } : undefined,
-      selectedText: scopedSelection?.text || (selectedText && activeArtifact?.id !== DEFAULT_WELCOME_ARTIFACT_ID ? selectedText : undefined)
+      selectedText: taskContextMode ? undefined : includeCanvasInContext ? scopedSelection?.text || (selectedText && activeArtifact?.id !== DEFAULT_WELCOME_ARTIFACT_ID ? selectedText : undefined) : undefined
     });
     const snapshot = isRetry
       ? { ...baseSnapshot, requestId: crypto.randomUUID(), createdAt: new Date().toISOString() }
       : baseSnapshot;
+    const requestWorkspaceFileIds = config?.isolatedTaskExecution
+      ? config.taskContextSourceIds || []
+      : existingSnapshot
+      ? existingSnapshot.context.activeFiles.map(file => file.id).filter((id): id is string => Boolean(id))
+      : includeFilesInContext ? taskFileIds : [];
+    const includeWorkspaceFilesForRequest = requestWorkspaceFileIds.length > 0;
     activeSendOperationRef.current = snapshot.requestId;
-    requestSnapshotsRef.current.set(snapshot.requestId, { snapshot, attachments, customSystemNote, revisionRequest: revisionRequestRef.current ? { ...revisionRequestRef.current } : undefined });
+    const sendAttachments = existingSnapshot ? attachments : includeFilesInContext ? attachments : undefined;
+    requestSnapshotsRef.current.set(snapshot.requestId, { snapshot, attachments: sendAttachments, customSystemNote, revisionRequest: revisionRequestRef.current ? { ...revisionRequestRef.current } : undefined });
     if (requestSnapshotsRef.current.size > 100) {
       const oldestRequestId = requestSnapshotsRef.current.keys().next().value;
       if (oldestRequestId) requestSnapshotsRef.current.delete(oldestRequestId);
@@ -415,12 +511,12 @@ export function StudentWorkspace({
       }]);
     }
     setSelectedText('');
-    void sendMessageStream(promptText.trim(), contextualNote || undefined, attachments, resolvedConfig, snapshot.requestId)
+    void sendMessageStream(promptText.trim(), contextualNote || undefined, sendAttachments, resolvedConfig, snapshot.requestId, includeWorkspaceFilesForRequest, requestWorkspaceFileIds)
       .finally(() => {
         if (activeSendOperationRef.current === snapshot.requestId) activeSendOperationRef.current = null;
       });
     return true;
-  }, [activeArtifact, canvasDraft, effectiveChatId, isStreaming, selectedModel, selectedText, setMessages, sendMessageStream, workspaceAttachments, logicalWorkspaceIdentity]);
+  }, [activeArtifact, canvasDraft, effectiveChatId, includeCanvasInContext, includeFilesInContext, selectedWorkspaceFileIds, isStreaming, selectedModel, selectedText, setMessages, sendMessageStream, workspaceAttachments, logicalWorkspaceIdentity, workspaceMetadata.workspace?.instructions]);
 
   const handleUseComparisonResponse = useCallback(async (run: WorkspaceComparisonRun, candidate: WorkspaceComparisonCandidate) => {
     if (run.workspaceIdentity !== logicalWorkspaceIdentity || run.chatId !== effectiveChatIdRef.current || candidate.comparisonId !== run.comparisonId || candidate.snapshotId !== run.snapshotId || candidate.status !== 'completed' || !candidate.output || !candidate.attemptId) return false;
@@ -526,6 +622,7 @@ export function StudentWorkspace({
           : (mode === 'append' ? 'Jawaban ditambahkan ke Canvas' : 'Dokumen Canvas diperbarui'), saved.persistenceStatus === 'local' ? 'info' : 'success');
       }
       setIsCanvasOpen(true);
+      setIsContextPanelOpen(false);
       setMobileActiveTab('canvas');
       setPendingCanvasTransfer(null);
     } catch {
@@ -614,9 +711,20 @@ export function StudentWorkspace({
   const handleDismissInlineEdit = useCallback(() => setInlineEditPatch(null), []);
 
   const handleAbortWorkspaceRequest = useCallback(() => {
+    const requestId = activeSendOperationRef.current;
+    const taskRun = requestId ? taskRunRequestsRef.current.get(requestId) : undefined;
+    if (requestId) {
+      taskRunRequestsRef.current.delete(requestId);
+      taskGenerationRequestsRef.current.delete(requestId);
+    }
     revisionRequestRef.current = null;
     abortStream();
-  }, [abortStream]);
+    if (taskRun && workspacePlanRef.current?.id === taskRun.planId) {
+      const plan = workspacePlanRef.current;
+      const cancelledAt = new Date().toISOString();
+      void workspaceMetadata.updatePlan({ ...plan, status: 'approved', tasks: plan.tasks.map(task => task.id === taskRun.taskId && task.executionId === taskRun.executionId ? { ...task, status: 'todo', output: undefined, executionHistory: (task.executionHistory || []).map(attempt => attempt.executionId === taskRun.executionId ? { ...attempt, status: 'cancelled', completedAt: cancelledAt } : attempt), updatedAt: cancelledAt } : task) }).catch(error => showToast(error instanceof Error ? error.message : 'Task belum dapat diperbarui.', 'error'));
+    }
+  }, [abortStream, showToast, workspaceMetadata.plan, workspaceMetadata.updatePlan]);
 
   const executeWorkspaceTool = useCallback(async (tool: WorkspaceToolDefinition, input: Record<string, unknown>, artifact: WorkspaceArtifact | null) => {
     const usableArtifact = artifact && artifact.id !== DEFAULT_WELCOME_ARTIFACT_ID ? artifact : null;
@@ -705,6 +813,7 @@ export function StudentWorkspace({
   }, []);
   const handleOpenCanvas = useCallback(() => {
     setIsCanvasOpen(true);
+    setIsContextPanelOpen(false);
     setMobileActiveTab('canvas');
     setHasUnreadArtifact(false);
   }, [setHasUnreadArtifact]);
@@ -712,6 +821,75 @@ export function StudentWorkspace({
   const handleComposerSend = useCallback((prompt: string, attachments?: StoredAttachment[], config?: WorkspaceComposerConfig) => {
     handleExecuteSendMessage(prompt, undefined, attachments, config);
   }, [handleExecuteSendMessage]);
+  const handleRunWorkspaceTask = useCallback(async (taskId: string, feedback?: string) => {
+    const plan = workspaceMetadata.plan;
+    const task = plan?.tasks.find(item => item.id === taskId);
+    if (!plan || plan.status !== 'approved' || !task || task.status !== 'todo' && task.status !== 'failed' && task.status !== 'waiting_review' || !task.dependsOn.every(id => plan.tasks.find(dependency => dependency.id === id)?.status === 'done') || plan.tasks.some(item => item.status === 'running') || isStreaming) return;
+    const researchInstructions = task.type === 'research' ? '\nGunakan evidence pack pada konteks request saja. Tautkan klaim faktual dengan marker [cite:SRC_N] yang tersedia. Jangan membuat author, tahun, DOI, nomor halaman, atau bibliography yang tidak diberikan sumber. Jika bukti tidak cukup, nyatakan belum terverifikasi.' : '';
+    const basePrompt = task.snapshot?.inputPrompt || `Kerjakan hanya langkah yang disetujui ini untuk tujuan “${plan.goal}”.\nTask: ${task.title}\n${task.description || ''}${researchInstructions}\n\nBerikan hasil yang bisa ditinjau. Jangan menandai task lain selesai dan jangan mengubah Canvas secara langsung.`;
+    const prompt = feedback ? `${basePrompt}\n\nMasukan user untuk revisi hasil: ${feedback}` : basePrompt;
+    const executionId = crypto.randomUUID();
+    const freshSnapshot = task.snapshot ? { ...task.snapshot, inputPrompt: prompt.slice(0, 8000), modelId: task.modelId || task.snapshot.modelId, createdAt: feedback ? new Date().toISOString() : task.snapshot.createdAt } : { inputPrompt: prompt.slice(0, 8000), contextSourceIds: (includeFilesInContext ? selectedWorkspaceFileIds : []).slice(0, 50), ...(includeCanvasInContext && visibleActiveArtifact ? { artifactContext: (canvasDraft?.artifactId === visibleActiveArtifact.id ? canvasDraft.content : visibleActiveArtifact.content).slice(0, 20000) } : {}), ...(workspaceMetadata.workspace?.instructions ? { workspaceInstructions: workspaceMetadata.workspace.instructions } : {}), modelId: task.modelId || selectedModel, createdAt: new Date().toISOString() };
+    const snapshot = freshSnapshot;
+    try {
+      const runningPlan = await workspaceMetadata.startTaskExecution(plan.id, task.id, executionId, snapshot);
+      const sent = handleExecuteSendMessage(prompt, undefined, undefined, { aiModel: snapshot.modelId, responseMode: 'Seimbang', responseStyle: 'Langkah demi langkah', taskCategory: task.type === 'coding' ? 'coding' : task.type === 'research' ? 'research' : 'structured_reasoning', isolatedTaskExecution: true, taskContextSourceIds: snapshot.contextSourceIds, taskArtifactContext: snapshot.artifactContext, taskWorkspaceInstructions: snapshot.workspaceInstructions });
+      const requestId = activeSendOperationRef.current;
+      if (!sent || !requestId) {
+        const cancelledAt = new Date().toISOString();
+        await workspaceMetadata.updatePlan({ ...runningPlan, status: 'approved', tasks: runningPlan.tasks.map(item => item.id === task.id ? { ...item, status: task.status, executionHistory: (item.executionHistory || []).map(attempt => attempt.executionId === executionId ? { ...attempt, status: 'cancelled', completedAt: cancelledAt } : attempt) } : item), updatedAt: cancelledAt });
+        showToast('Task tidak dapat dijalankan saat ini.', 'info');
+        return;
+      }
+      taskRunRequestsRef.current.set(requestId, { taskId: task.id, planId: plan.id, executionId, workspaceId: logicalWorkspaceIdentity });
+    } catch (error) {
+      const latest = workspacePlanRef.current;
+      if (latest?.id === plan.id) void workspaceMetadata.updatePlan({ ...latest, status: 'approved', tasks: latest.tasks.map(item => item.id === task.id && item.executionId === executionId ? { ...item, status: 'todo', updatedAt: new Date().toISOString() } : item) }).catch(() => undefined);
+      showToast(error instanceof Error ? error.message : 'Task gagal dijalankan.', 'error');
+    }
+  }, [canvasDraft, handleExecuteSendMessage, includeCanvasInContext, isStreaming, logicalWorkspaceIdentity, selectedModel, selectedWorkspaceFileIds, showToast, visibleActiveArtifact, workspaceMetadata.plan, workspaceMetadata.startTaskExecution, workspaceMetadata.updatePlan]);
+  const handleAcceptTaskReview = useCallback((taskId: string) => {
+    const plan = workspaceMetadata.plan;
+    if (!plan) return;
+    void workspaceMetadata.updatePlan({ ...plan, tasks: plan.tasks.map(task => task.id === taskId && task.status === 'waiting_review' ? { ...task, status: 'done', updatedAt: new Date().toISOString() } : task), updatedAt: new Date().toISOString() }).catch(error => showToast(error instanceof Error ? error.message : 'Hasil belum dapat diterima.', 'error'));
+  }, [showToast, workspaceMetadata.plan, workspaceMetadata.updatePlan]);
+  const handleRejectTaskReview = useCallback((taskId: string) => {
+    const plan = workspaceMetadata.plan;
+    if (!plan) return;
+    void workspaceMetadata.updatePlan({ ...plan, tasks: plan.tasks.map(task => task.id === taskId && task.status === 'waiting_review' ? { ...task, status: 'todo', updatedAt: new Date().toISOString() } : task), updatedAt: new Date().toISOString() }).catch(error => showToast(error instanceof Error ? error.message : 'Hasil belum dapat ditolak.', 'error'));
+  }, [showToast, workspaceMetadata.plan, workspaceMetadata.updatePlan]);
+  const handleGenerateWorkspaceTasks = useCallback((goal: string) => {
+    const sent = handleExecuteSendMessage(`Rencanakan workflow untuk tujuan berikut berdasarkan konteks Workspace yang relevan. Buat 3 sampai 8 task yang actionable (maksimal 12), dengan urutan dependency yang aman. Jangan menjalankan task. Balas hanya JSON valid dengan bentuk: {"title":"judul plan","tasks":[{"title":"...","description":"...","type":"analysis|writing|research|coding|review|transform","dependsOn":[]}]} . Nilai dependsOn adalah array nomor task 1-based yang harus selesai lebih dulu. Tujuan: ${goal}`, undefined, undefined, { aiModel: selectedModel, responseMode: 'Seimbang', responseStyle: 'Langkah demi langkah', taskCategory: 'structured_reasoning' });
+    const requestId = activeSendOperationRef.current;
+    if (sent && requestId) taskGenerationRequestsRef.current.set(requestId, goal);
+  }, [handleExecuteSendMessage, selectedModel]);
+  const handleCancelWorkflow = useCallback(() => {
+    const plan = workspaceMetadata.plan;
+    if (!plan) return;
+    if (plan.tasks.some(task => task.status === 'running') && isStreaming) {
+      const requestId = activeSendOperationRef.current;
+      if (requestId) { taskRunRequestsRef.current.delete(requestId); taskGenerationRequestsRef.current.delete(requestId); }
+      abortStream();
+    }
+    const cancelledAt = new Date().toISOString();
+    void workspaceMetadata.updatePlan({ ...plan, status: 'cancelled', tasks: plan.tasks.map(task => task.status === 'running' ? { ...task, status: 'todo', executionHistory: (task.executionHistory || []).map(attempt => attempt.status === 'running' ? { ...attempt, status: 'cancelled', completedAt: cancelledAt } : attempt), updatedAt: cancelledAt } : task), updatedAt: cancelledAt }).catch(error => showToast(error instanceof Error ? error.message : 'Plan gagal dibatalkan.', 'error'));
+  }, [abortStream, isStreaming, showToast, workspaceMetadata.plan, workspaceMetadata.updatePlan]);
+  const handleCompleteWorkflow = useCallback(() => {
+    const plan = workspaceMetadata.plan;
+    if (plan && plan.tasks.length > 0 && plan.tasks.every(task => task.status === 'done')) void workspaceMetadata.updatePlan({ ...plan, status: 'completed', updatedAt: new Date().toISOString() }).catch(error => showToast(error instanceof Error ? error.message : 'Plan gagal diselesaikan.', 'error'));
+  }, [showToast, workspaceMetadata.plan, workspaceMetadata.updatePlan]);
+  const handleSaveWorkspaceInstructions = useCallback(async () => {
+    setIsInstructionsSaving(true);
+    try {
+      await workspaceMetadata.save({ instructions: instructionsDraft.trim() || null });
+      setIsInstructionsEditing(false);
+      showToast('Instruksi Workspace tersimpan.', 'success');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Instruksi gagal disimpan.', 'error');
+    } finally {
+      setIsInstructionsSaving(false);
+    }
+  }, [instructionsDraft, showToast, workspaceMetadata.save]);
   const handleSelectWorkspaceTool = useCallback((tool: WorkspaceToolDefinition) => { selectWorkspaceTool(tool); }, [selectWorkspaceTool]);
   const handleRemoveFirstAttachment = useCallback(() => {
     const first = workspaceAttachments[0];
@@ -727,7 +905,8 @@ export function StudentWorkspace({
   const handleToggleCanvas = useCallback(() => setIsCanvasExpanded(previous => !previous), []);
   const handleSetMobileTab = useCallback((tab: WorkspaceTab) => {
     setMobileActiveTab(tab);
-    if (tab === 'canvas') setHasUnreadArtifact(false);
+    if (tab === 'context' || tab === 'sources') { setIsContextPanelOpen(true); setWorkspaceRightTab(tab); }
+    if (tab === 'canvas') { setIsContextPanelOpen(false); setHasUnreadArtifact(false); }
   }, [setHasUnreadArtifact]);
 
   return (
@@ -757,20 +936,35 @@ export function StudentWorkspace({
         hasUnreadArtifact={hasUnreadArtifact}
         onOpenSidebar={onOpenSidebar}
         onSwitchMode={onSwitchMode}
-        onSetMobileActiveTab={(tab) => {
-          setMobileActiveTab(tab);
-          if (tab === 'canvas') setHasUnreadArtifact(false);
-        }}
-        onToggleCanvas={() => setIsCanvasOpen(prev => !prev)}
+        onSetMobileActiveTab={handleSetMobileTab}
+        onToggleCanvas={() => { setIsContextPanelOpen(false); setIsCanvasOpen(prev => !prev); }}
+        onToggleContext={() => setIsContextPanelOpen(prev => !prev)}
         onCreateNewArtifact={(type) => {
           createNewArtifact(type);
           setIsCanvasOpen(true);
-          setMobileActiveTab('canvas');
+          handleSetMobileTab('canvas');
         }}
         onOpenTemplateGallery={() => openTemplateModal()}
         onConfirmClearWorkspace={handleClearWorkspaceConversation}
         isClearingConversation={isClearingConversation}
         isPreparingConversation={isStreaming && !effectiveChatId && Boolean(user && user.role !== 'guest')}
+      />
+
+      <WorkspaceTasksPanel
+        plan={workspaceMetadata.plan}
+        canPersist={Boolean(workspaceMetadata.workspace)}
+        isGenerating={taskGenerationRequestsRef.current.size > 0 && isStreaming}
+        isExecuting={Boolean(workspaceMetadata.plan?.tasks.some(task => task.status === 'running')) && isStreaming}
+        modelOptions={models.map(model => ({ id: model.id, name: model.name }))}
+        onOpenArtifact={id => { handleSelectCanvasArtifact(id); handleOpenCanvas(); }}
+        onOpenSource={source => setPreviewAttachmentId(source.documentId)}
+        onAcceptReview={handleAcceptTaskReview}
+        onRejectReview={handleRejectTaskReview}
+        onUpdate={workspaceMetadata.updatePlan}
+          onRun={(taskId, feedback) => void handleRunWorkspaceTask(taskId, feedback)}
+        onGenerate={handleGenerateWorkspaceTasks}
+        onCancel={handleCancelWorkflow}
+        onComplete={handleCompleteWorkflow}
       />
 
       {/* Floating Notification for Mobile when Artifact Updates */}
@@ -787,7 +981,7 @@ export function StudentWorkspace({
             <button
               type="button"
               onClick={() => {
-                setMobileActiveTab('canvas');
+                handleSetMobileTab('canvas');
                 setHasUnreadArtifact(false);
               }}
               className="h-7 px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold transition-colors shrink-0 ml-2 cursor-pointer"
@@ -826,12 +1020,15 @@ export function StudentWorkspace({
             onUseComparisonResponse={handleUseComparisonResponse}
             onComparisonSendToCanvas={handleComparisonSendToCanvas}
             onCompareAgain={handleCompareAgain}
+        onOpenSource={source => setPreviewAttachmentId(source.documentId)}
           />
 
           <WorkspaceComposer
             activeArtifactType={activeArtifact?.id !== DEFAULT_WELCOME_ARTIFACT_ID ? activeArtifact?.type : null}
             activeArtifactTitle={visibleActiveArtifact?.title || null}
             selectedText={selectedText}
+            inputText={inputText}
+            setInputText={setInputText}
             onSelectTool={handleSelectWorkspaceTool}
             onInputTextChange={setInputText}
             attachments={workspaceAttachments}
@@ -873,12 +1070,36 @@ export function StudentWorkspace({
           />
         </section>
 
+        <aside aria-label="Workspace Context" className={`${mobileActiveTab === 'context' || mobileActiveTab === 'sources' ? 'flex' : 'hidden'} ${isContextPanelOpen ? 'xl:flex' : ''} min-h-0 min-w-0 flex-1 flex-col overflow-hidden border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 ${isCanvasExpanded ? 'xl:flex-1' : 'xl:flex-[0_0_48%]'}`}>
+          <div className="flex h-10 shrink-0 items-center justify-between border-b border-slate-200 px-3 dark:border-slate-800">
+            <div className="flex h-full items-center gap-1" role="tablist" aria-label="Panel Workspace">
+              <button type="button" role="tab" aria-selected={workspaceRightTab === 'context'} onClick={() => { setWorkspaceRightTab('context'); setMobileActiveTab('context'); }} className={`inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-xs font-semibold ${workspaceRightTab === 'context' ? 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-100' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}><Sparkles className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />Context</button>
+              <button type="button" role="tab" aria-selected={workspaceRightTab === 'sources'} onClick={() => { setWorkspaceRightTab('sources'); setMobileActiveTab('sources'); }} className={`h-7 rounded-md px-2 text-xs font-semibold ${workspaceRightTab === 'sources' ? 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-100' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}>Sources</button>
+            </div>
+            <span className="truncate text-[11px] text-slate-500">{includeFilesInContext ? `${workspaceAttachments.filter(file => file.status === 'ready').length} file` : 'File nonaktif'} · {messages.length} pesan</span>
+          </div>
+          {workspaceRightTab === 'context' ? (
+            <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
+              <p className="mb-3 text-[11px] text-slate-500">Dipakai pada respons berikutnya · riwayat chat selalu tersedia.</p>
+              <label className="flex items-center gap-2 border-b border-slate-100 py-2 text-xs font-medium text-slate-700 dark:border-slate-800 dark:text-slate-200"><input type="checkbox" checked={includeFilesInContext} onChange={event => setIncludeFilesInContext(event.target.checked)} className="accent-emerald-600" />Gunakan file workspace <span className="ml-auto text-[10px] text-slate-500">{selectedWorkspaceFileIds.length} dipilih</span></label>
+              {includeFilesInContext && workspaceAttachments.filter(file => file.status === 'ready' && file.id).map(file => <div key={file.id} className="flex min-w-0 items-center gap-2 border-b border-slate-100 py-2 dark:border-slate-800"><input type="checkbox" aria-label={`Gunakan ${file.name} sebagai konteks`} checked={selectedWorkspaceFileIds.includes(file.id!)} onChange={event => setSelectedWorkspaceFileIds(current => event.target.checked ? [...new Set([...current, file.id!])] : current.filter(id => id !== file.id))} className="accent-emerald-600" /><FileText className="h-4 w-4 shrink-0 text-slate-400" /><span className="min-w-0 flex-1 truncate text-xs text-slate-700 dark:text-slate-200">{file.name}</span><span className="shrink-0 text-[10px] text-slate-500">Ready</span><button type="button" aria-label={`Pratinjau ${file.name}`} onClick={() => setPreviewAttachmentId(file.id!)} className="rounded px-2 py-1 text-[11px] text-emerald-700 hover:bg-emerald-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:text-emerald-300 dark:hover:bg-emerald-950/40">Preview</button></div>)}
+              <label className="flex items-center gap-2 border-b border-slate-100 py-3 text-xs font-medium text-slate-700 dark:border-slate-800 dark:text-slate-200"><input type="checkbox" checked={includeCanvasInContext} onChange={event => setIncludeCanvasInContext(event.target.checked)} className="accent-emerald-600" />Gunakan Canvas aktif <span className="ml-auto max-w-[55%] truncate text-[10px] font-normal text-slate-500">{visibleActiveArtifact?.title || 'Belum ada Canvas'}</span></label>
+              <div className="mt-4 border-t border-slate-100 pt-3 dark:border-slate-800"><div className="flex items-start justify-between gap-2"><div className="min-w-0"><p className="text-xs font-semibold text-slate-700 dark:text-slate-200">Instruksi Workspace</p><p className="mt-1 text-[11px] text-slate-500">{workspaceMetadata.workspace?.instructions || 'Belum ada instruksi khusus.'}</p></div><button type="button" disabled={!workspaceMetadata.workspace || workspaceMetadata.pendingIds.includes('workspace')} onClick={() => setIsInstructionsEditing(open => !open)} className="shrink-0 rounded-md px-2 py-1 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:text-emerald-300 dark:hover:bg-emerald-950">{isInstructionsEditing ? 'Batal' : 'Ubah'}</button></div>
+                {isInstructionsEditing && <div className="mt-2 grid gap-2"><textarea value={instructionsDraft} onChange={event => setInstructionsDraft(event.target.value.slice(0, 4000))} maxLength={4000} rows={4} aria-label="Instruksi Workspace" placeholder="Contoh: Gunakan IEEE dan bahasa Indonesia formal." className="w-full resize-y rounded-md border border-slate-200 bg-white p-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:border-slate-700 dark:bg-slate-950" /><div className="flex items-center justify-between"><span className="text-[10px] text-slate-500">{instructionsDraft.length}/4000</span><button type="button" disabled={isInstructionsSaving} onClick={() => void handleSaveWorkspaceInstructions()} className="rounded-md bg-emerald-700 px-2.5 py-1.5 text-[11px] font-semibold text-white disabled:opacity-50">{isInstructionsSaving ? 'Menyimpan…' : 'Simpan'}</button></div></div>}
+              </div>
+              {workspaceMetadata.error && <p role="status" className="mt-3 text-[11px] text-amber-700 dark:text-amber-300">{workspaceMetadata.error}</p>}
+            </div>
+          ) : (
+            <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2" role="tabpanel" aria-label="Sources"><WorkspaceSourceLibrary chatId={effectiveChatId} onPreview={setPreviewAttachmentId} /></div>
+          )}
+        </aside>
+
         {/* RIGHT PANE: LIVE ARTIFACT CANVAS */}
         <WorkspaceCanvasPane
           artifacts={canvasArtifacts}
           activeArtifact={visibleActiveArtifact}
           activeArtifactId={activeArtifactId}
-          isCanvasOpen={isCanvasOpen}
+          isCanvasOpen={isCanvasOpen && !isContextPanelOpen}
           isCanvasExpanded={isCanvasExpanded}
           isStreaming={isStreaming}
           isCreatingArtifact={isCreatingArtifact}
@@ -978,6 +1199,7 @@ export function StudentWorkspace({
           if (selected) void executeWorkspaceTool(selected.tool, input, selected.artifact);
         }}
       />
+      {previewAttachmentId && <WorkspaceFilePreviewModal attachmentId={previewAttachmentId} onClose={() => setPreviewAttachmentId(null)} />}
     </div>
   );
 }

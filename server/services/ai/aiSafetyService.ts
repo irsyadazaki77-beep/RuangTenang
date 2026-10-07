@@ -38,6 +38,8 @@ export interface UnifiedPipelineInput {
   workspaceMode?: boolean;
   attachments?: any[];
   attachmentIds?: string[];
+  includeWorkspaceFiles?: boolean;
+  workspaceAttachmentIds?: string[];
   routingDecision?: RoutingDecision;
   routingContext?: AiRoutingContext;
 }
@@ -678,7 +680,7 @@ Konteks Pengguna:
         content: h.parts[0]?.text || ''
       }));
 
-      const attachmentIds = input.attachmentIds || (input.attachments ? input.attachments.map((a: any) => typeof a === 'string' ? a : (a?.id || a?.serverAttachmentId)).filter(Boolean) : undefined);
+      const attachmentIds = input.workspaceAttachmentIds ?? input.attachmentIds ?? (input.attachments ? input.attachments.map((a: any) => typeof a === 'string' ? a : (a?.id || a?.serverAttachmentId)).filter(Boolean) : undefined);
 
       const builtContext = await aiContextBuilder.buildContext({
         userId,
@@ -689,6 +691,7 @@ Konteks Pengguna:
         pluginResult: sanitizedPluginResult,
         isTemporary: input.isTemporary,
         chatMode: input.chatMode || input.mode,
+        includeWorkspaceFiles: input.includeWorkspaceFiles,
         abortSignal: input.abortSignal
       });
 

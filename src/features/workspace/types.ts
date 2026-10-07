@@ -12,10 +12,15 @@ export interface WorkspaceComposerConfig {
   latencyPreference?: string;
   qualityPreference?: string;
   comparisonModelIds?: string[];
+  isolatedTaskExecution?: boolean;
+  taskContextSourceIds?: string[];
+  taskArtifactContext?: string;
+  taskWorkspaceInstructions?: string;
 }
 
 export interface WorkspaceActiveContext {
   workspaceId?: string;
+  workspaceInstructions?: string;
   activeFiles: Array<{ id?: string; name: string }>;
   activeArtifact?: { id: string; title: string; type: ArtifactType; version: number; content: string };
   selectedText?: string;
@@ -50,6 +55,8 @@ export interface WorkspaceComparisonRun {
   activeContext?: { artifactId?: string; title: string; version?: number; content: string };
   selectedText?: string;
   attachments?: Array<{ id: string; filename: string; mimeType?: string; size?: number; url?: string }>;
+  workspaceInstructions?: string;
+  includeWorkspaceFiles?: boolean;
   createdAt?: string;
 }
 
@@ -221,7 +228,7 @@ export interface WorkspaceError {
   timestamp: string;
 }
 
-export type WorkspaceTab = 'chat' | 'canvas';
+export type WorkspaceTab = 'chat' | 'canvas' | 'context' | 'sources';
 
 export interface StarterTaskItem {
   id: string;

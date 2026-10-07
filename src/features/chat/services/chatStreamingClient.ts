@@ -1,4 +1,5 @@
 import { StoredAttachment } from '../types';
+import type { FileSourceReference } from '../../../../shared/contracts/files';
 
 export type StreamState = 'idle' | 'connecting' | 'streaming' | 'completed' | 'aborted' | 'failed';
 
@@ -28,6 +29,7 @@ export interface StreamCallbacks {
   onChatCreated?: (chatId: string) => void;
   onQuotaExceeded?: (data: QuotaExceededData) => void;
   onRoutingMetadata?: (data: RoutingEventData) => void;
+  onSources?: (sources: FileSourceReference[]) => void;
 }
 
 export interface StreamPayload {
@@ -39,6 +41,9 @@ export interface StreamPayload {
   responseStyle?: string;
   aiModel?: string;
   attachments?: StoredAttachment[];
+  includeWorkspaceFiles?: boolean;
+  workspaceAttachmentIds?: string[];
+  isolatedTaskExecution?: boolean;
   taskCategory?: string;
   latencyPreference?: string;
   qualityPreference?: string;
@@ -219,6 +224,8 @@ export class ChatStreamingClient {
                           fallbackFrom: parsed.fallbackFrom
                         });
                       }
+                    } else if (Array.isArray(parsed.sources)) {
+                      if (token === this.activeToken && callbacks.onSources) callbacks.onSources(parsed.sources as FileSourceReference[]);
                     } else if (parsed.text || (parsed.type === 'text' && parsed.content)) {
                       const content = parsed.text || parsed.content;
                       currentText += content;

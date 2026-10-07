@@ -50,6 +50,7 @@ import counselorsRouter from './server/routes/counselors.js';
 import counselorPortalRouter from './server/routes/counselorPortal.js';
 import systemStatsRouter from './server/routes/systemStats.js';
 import workspaceArtifactsRouter from './server/routes/workspaceArtifacts.js';
+import workspaceRouter from './server/routes/workspace.js';
 
 async function startServer() {
   const isProd = process.env.NODE_ENV === 'production';
@@ -66,7 +67,7 @@ async function startServer() {
   if (portArgIdx !== -1 && process.argv[portArgIdx + 1]) {
     const parsed = Number(process.argv[portArgIdx + 1]);
     if (!isNaN(parsed) && parsed > 0) PORT = parsed;
-  } else if (isProd && process.env.PORT) {
+  } else if (process.env.PORT) {
     try {
       PORT = parsePort(process.env.PORT, 3000);
     } catch {
@@ -96,6 +97,8 @@ async function startServer() {
   if (!isProd) {
     allowedOrigins.add('https://ruangtenang.ai.studio');
     allowedOrigins.add('https://ruangtenang.ui.ac.id');
+    allowedOrigins.add(`http://localhost:${PORT}`);
+    allowedOrigins.add(`http://127.0.0.1:${PORT}`);
     allowedOrigins.add('http://localhost:3000');
     allowedOrigins.add('http://127.0.0.1:3000');
     allowedOrigins.add('http://localhost:5173');
@@ -462,6 +465,7 @@ async function startServer() {
   app.use('/api/health', systemStatsRouter);
 
   app.use('/api/v1/workspace/artifacts', workspaceArtifactsRouter);
+  app.use('/api/v1/workspace', workspaceRouter);
   app.use('/api/workspace/artifacts', workspaceArtifactsRouter);
 
   // Dedicated 404 handler for unhandled /api/* routes before SPA fallback

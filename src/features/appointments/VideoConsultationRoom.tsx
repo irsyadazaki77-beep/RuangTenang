@@ -55,6 +55,7 @@ export const VideoConsultationRoom: React.FC<VideoConsultationRoomProps> = ({
   const [counselorNotes, setCounselorNotes] = useState('');
   const [showSimNotice, setShowSimNotice] = useState(true);
   const [apiAccessDeniedMsg, setApiAccessDeniedMsg] = useState<string | null>(null);
+  const [roomAccessGranted, setRoomAccessGranted] = useState(false);
   const [roomPresenceText, setRoomPresenceText] = useState<string>('Memeriksa izin akses ruangan...');
   const [participantCount, setParticipantCount] = useState<number>(1);
   const [hasCounselorJoined, setHasCounselorJoined] = useState<boolean>(false);
@@ -85,10 +86,12 @@ export const VideoConsultationRoom: React.FC<VideoConsultationRoomProps> = ({
   const isInitiatorRef = useRef<boolean>(userRole === 'konselor');
   const notesSaveDebounceRef = useRef<NodeJS.Timeout | null>(null);
   const isMountedRef = useRef<boolean>(true);
+  const iceRefreshInFlightRef = useRef(false);
 
   // 1. Authorization check & ICE server configuration loading
   useEffect(() => {
     isMountedRef.current = true;
+    setRoomAccessGranted(false);
     if (!appointment || userRole === 'guest') return;
 
     let isSubscribed = true;
@@ -98,6 +101,7 @@ export const VideoConsultationRoom: React.FC<VideoConsultationRoomProps> = ({
         if (!isSubscribed) return;
         if (res && res.success === false) {
           setApiAccessDeniedMsg(res.message || 'Akses ditolak. Anda tidak memiliki izin untuk sesi konsultasi ini.');
+          setRoomAccessGranted(false);
         } else {
           setApiAccessDeniedMsg(null);
           setRoomPresenceText('Menginisialisasi koneksi terenkripsi...');
@@ -111,14 +115,17 @@ export const VideoConsultationRoom: React.FC<VideoConsultationRoomProps> = ({
               if (iceRes && iceRes.success && Array.isArray(servers) && servers.length > 0) {
                 setIceServers(servers);
                 setIceServersError(null);
+                setRoomAccessGranted(true);
               } else {
                 setIceServersError('Gagal memuat konfigurasi ICE/TURN.');
+                setApiAccessDeniedMsg('Izin sesi tidak dapat divalidasi ulang. Silakan keluar dan coba lagi.');
               }
             })
             .catch(err => {
               if (!isSubscribed) return;
-              console.warn('Failed to fetch ICE servers, fallback to default:', err);
+              console.warn('Room ICE authorization failed:', err);
               setIceServersError('Gagal mengambil konfigurasi ICE/TURN.');
+              setApiAccessDeniedMsg('Izin sesi tidak dapat divalidasi ulang. Silakan keluar dan coba lagi.');
             });
         }
       })
@@ -147,11 +154,7 @@ export const VideoConsultationRoom: React.FC<VideoConsultationRoomProps> = ({
       }
 
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-          facingMode: 'user'
-        },
+        video: false,
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
@@ -159,9 +162,26 @@ export const VideoConsultationRoom: React.FC<VideoConsultationRoomProps> = ({
         }
       });
 
+      try {
+        const videoStream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' }
+        });
+        videoStream.getVideoTracks().forEach(track => stream.addTrack(track));
+      } catch (cameraError: any) {
+        setIsCameraDenied(true);
+        if (cameraError?.name !== 'NotAllowedError' && cameraError?.name !== 'PermissionDeniedError') {
+          setMediaError('Kamera tidak tersedia. Sesi dilanjutkan dengan audio saja.');
+        }
+      }
+
       localStreamRef.current = stream;
-      setMediaError(null);
-      setIsCameraDenied(false);
+      if (stream.getVideoTracks().length > 0) {
+        setMediaError(null);
+        setIsCameraDenied(false);
+      } else {
+        setMediaError('Kamera tidak tersedia atau izinnya ditolak. Sesi dilanjutkan dengan audio saja.');
+      }
 
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = stream;
@@ -196,6 +216,28 @@ export const VideoConsultationRoom: React.FC<VideoConsultationRoomProps> = ({
       console.warn(`[WebRTC] Failed to send ${type} signal:`, err);
     }
   }, [appointment?.id, userRole]);
+
+  const refreshIceServers = useCallback(async (pc: RTCPeerConnection) => {
+    if (!appointment?.id || iceRefreshInFlightRef.current) return;
+    iceRefreshInFlightRef.current = true;
+    try {
+      const response = await apiClient.get<any>(`/api/v1/appointments/${appointment.id}/ice-servers`);
+      if (!response.success) {
+        if (response.status === 403) setApiAccessDeniedMsg(`Akses sesi ditutup oleh server (${response.error || 'ROOM_ACCESS_DENIED'}).`);
+        return;
+      }
+      const data: any = response.data || response;
+      const servers: RTCIceServer[] = data?.iceServers;
+      if (!Array.isArray(servers) || servers.length === 0 || pc.connectionState === 'closed') return;
+      setIceServers(servers);
+      pc.setConfiguration({ ...pc.getConfiguration(), iceServers: servers });
+      pc.restartIce();
+    } catch (error) {
+      console.warn('[WebRTC] Failed to re-authorize ICE configuration:', error);
+    } finally {
+      iceRefreshInFlightRef.current = false;
+    }
+  }, [appointment?.id]);
 
   // 4. WebRTC RTCPeerConnection Setup
   const createPeerConnection = useCallback((customIceServers?: RTCIceServer[]) => {
@@ -262,14 +304,7 @@ export const VideoConsultationRoom: React.FC<VideoConsultationRoomProps> = ({
       } else if (state === 'failed') {
         setRoomPresenceText('Koneksi gagal. Mencoba ICE restart...');
         setIsReconnecting(true);
-        // Attempt ICE restart
-        try {
-          if (pc.restartIce) {
-            pc.restartIce();
-          }
-        } catch (e) {
-          console.warn('ICE restart failed:', e);
-        }
+        void refreshIceServers(pc);
       } else if (state === 'closed') {
         setHasRemoteStream(false);
         setRoomPresenceText('Sesi panggilan ditutup.');
@@ -279,18 +314,12 @@ export const VideoConsultationRoom: React.FC<VideoConsultationRoomProps> = ({
     // ICE Connection State Monitoring
     pc.oniceconnectionstatechange = () => {
       if (pc.iceConnectionState === 'failed') {
-        try {
-          if (pc.restartIce) {
-            pc.restartIce();
-          }
-        } catch (e) {
-          console.warn('ICE restart on iceConnectionState failed:', e);
-        }
+        void refreshIceServers(pc);
       }
     };
 
     return pc;
-  }, [iceServers, sendSignal]);
+  }, [iceServers, refreshIceServers, sendSignal]);
 
   // 5. Negotiation Initiator
   const initiateOffer = useCallback(async () => {
@@ -396,7 +425,7 @@ export const VideoConsultationRoom: React.FC<VideoConsultationRoomProps> = ({
       }
     };
 
-    if (appointment && !apiAccessDeniedMsg) {
+    if (appointment && roomAccessGranted && !apiAccessDeniedMsg) {
       setupSession();
     }
 
@@ -421,7 +450,17 @@ export const VideoConsultationRoom: React.FC<VideoConsultationRoomProps> = ({
       }
       sendSignal('leave', {});
     };
-  }, [appointment?.id, apiAccessDeniedMsg, initLocalMedia, createPeerConnection, initiateOffer, sendSignal, userRole]);
+  }, [appointment?.id, roomAccessGranted, apiAccessDeniedMsg, initLocalMedia, createPeerConnection, initiateOffer, sendSignal, userRole]);
+
+  useEffect(() => {
+    if (!apiAccessDeniedMsg) return;
+    localStreamRef.current?.getTracks().forEach(track => track.stop());
+    localStreamRef.current = null;
+    screenStreamRef.current?.getTracks().forEach(track => track.stop());
+    screenStreamRef.current = null;
+    peerConnectionRef.current?.close();
+    peerConnectionRef.current = null;
+  }, [apiAccessDeniedMsg]);
 
   // 8. Signaling Polling Loop
   useEffect(() => {
@@ -439,6 +478,11 @@ export const VideoConsultationRoom: React.FC<VideoConsultationRoomProps> = ({
         const rawData: any = res?.data || res;
         const signals = rawData?.signals;
         const serverTime = rawData?.serverTime;
+
+        if (!res.success && res.status === 403) {
+          setApiAccessDeniedMsg(`Akses sesi ditutup oleh server (${res.error || 'ROOM_ACCESS_DENIED'}).`);
+          return;
+        }
 
         if (res.success && Array.isArray(signals)) {
           for (const signal of signals) {
@@ -495,13 +539,21 @@ export const VideoConsultationRoom: React.FC<VideoConsultationRoomProps> = ({
 
     const pingRoom = async () => {
       try {
-        await apiClient.post(`/api/v1/appointments/${appointment.id}/room-presence`, {
+        const presenceRes = await apiClient.post(`/api/v1/appointments/${appointment.id}/room-presence`, {
           isScreenSharing,
           networkQuality
         });
+        if (!presenceRes.success && presenceRes.status === 403) {
+          setApiAccessDeniedMsg(`Akses sesi ditutup oleh server (${presenceRes.error || 'ROOM_ACCESS_DENIED'}).`);
+          return;
+        }
 
         const statusRes = await apiClient.get<any>(`/api/v1/appointments/${appointment.id}/room-presence`);
         if (!isSubscribed) return;
+        if (!statusRes.success && statusRes.status === 403) {
+          setApiAccessDeniedMsg(`Akses sesi ditutup oleh server (${statusRes.error || 'ROOM_ACCESS_DENIED'}).`);
+          return;
+        }
 
         if (statusRes.success && statusRes.data) {
           setParticipantCount(statusRes.data.participantCount || 1);

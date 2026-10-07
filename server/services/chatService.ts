@@ -156,7 +156,9 @@ export class ChatService {
           title: encryptionService.encryptSensitive(newChatTitle) || newChatTitle,
           parentChatId,
           branchedFromMessageId: messageId,
-          useMemory: parentChat.useMemory
+          useMemory: parentChat.useMemory,
+          workspaceMode: parentChat.workspaceMode,
+          ...(parentChat.workspaceMode === 'RUANG_KERJA' ? { workspace: { create: {} } } : {})
         }
       });
 

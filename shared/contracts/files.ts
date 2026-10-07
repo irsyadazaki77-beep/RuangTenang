@@ -105,6 +105,7 @@ export interface DocumentChunk {
 }
 
 export interface FileSourceReference {
+  citationId?: string;
   documentId: string;
   filename: string;
   page?: number;
@@ -113,6 +114,45 @@ export interface FileSourceReference {
   section?: string;
   sourceRef: string;
   snippet?: string;
+}
+
+export type ResearchSourceProvenance = 'uploaded_file' | 'workspace_artifact' | 'user_note' | 'external_verified' | 'unknown';
+export interface ResearchSource {
+  id: string;
+  workspaceId: string;
+  type: ResearchSourceProvenance;
+  title: string;
+  author?: string;
+  year?: number;
+  fileName?: string;
+  pageCount?: number;
+  url?: string;
+  doi?: string;
+  metadataConfidence: 'verified' | 'parsed' | 'user_provided' | 'unknown';
+  createdAt: string;
+}
+export const ResearchSourceMetadataSchema = z.object({
+  title: z.string().trim().min(1).max(240),
+  author: z.string().trim().max(240).optional(),
+  year: z.number().int().min(1000).max(2200).optional(),
+  doi: z.string().trim().max(300).regex(/^10\.\d{4,9}\/\S+$/).optional(),
+  url: z.string().url().max(1000).refine(value => value.startsWith('https://'), 'URL sumber harus menggunakan HTTPS.').optional()
+}).strict();
+export type ResearchSourceMetadata = z.infer<typeof ResearchSourceMetadataSchema>;
+export interface ResearchCitation {
+  id: string;
+  sourceId: string;
+  chunkId?: string;
+  page?: number;
+  section?: string;
+  excerpt?: string;
+  supportType: 'direct_support' | 'partial_support' | 'background' | 'contradicting';
+}
+export interface ResearchClaim {
+  id: string;
+  text: string;
+  citationIds: string[];
+  verificationStatus: 'supported' | 'partially_supported' | 'unsupported' | 'conflicting' | 'unverified';
 }
 
 /** Immutable document context selected for one Workspace model request. */

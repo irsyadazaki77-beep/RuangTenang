@@ -7,6 +7,7 @@ import { LazyMarkdown } from '../../../components/common/LazyMarkdown';
 import { RhythmicTypingIndicator } from '../../../components/ui/RhythmicTypingIndicator';
 import { WorkspaceComparisonPanel } from './WorkspaceComparisonPanel';
 import type { WorkspaceComparisonCandidate, WorkspaceComparisonRun } from '../types';
+import type { FileSourceReference } from '../../../../shared/contracts/files';
 
 interface WorkspaceConversationProps {
   messages: Message[];
@@ -23,6 +24,7 @@ interface WorkspaceConversationProps {
   onUseComparisonResponse?: (run: WorkspaceComparisonRun, candidate: WorkspaceComparisonCandidate) => Promise<boolean | void> | boolean | void;
   onComparisonSendToCanvas?: (candidate: WorkspaceComparisonCandidate) => void;
   onCompareAgain?: (run: WorkspaceComparisonRun) => void;
+  onOpenSource?: (source: FileSourceReference) => void;
 }
 
 const StreamingMarkdownPreview = React.memo(function StreamingMarkdownPreview({ content }: { content: string }) {
@@ -53,6 +55,20 @@ const StreamingMarkdownPreview = React.memo(function StreamingMarkdownPreview({ 
   return <LazyMarkdown content={renderedContent || '...'} />;
 });
 
+function ResearchCitationContent({ content, sources, onOpenSource }: { content: string; sources: NonNullable<Message['sources']>; onOpenSource: (source: FileSourceReference) => void }) {
+  const byId = new Map(sources.filter(source => source.citationId).map(source => [source.citationId!, source]));
+  const parts: Array<{ text?: string; id?: string }> = [];
+  const marker = /\[cite:([A-Za-z0-9_-]+)\]/g;
+  let cursor = 0; let match: RegExpExecArray | null;
+  while ((match = marker.exec(content))) {
+    if (match.index > cursor) parts.push({ text: content.slice(cursor, match.index) });
+    parts.push(byId.has(match[1]) ? { id: match[1] } : { text: '[referensi sumber tidak dikenali]' });
+    cursor = marker.lastIndex;
+  }
+  if (cursor < content.length) parts.push({ text: content.slice(cursor) });
+  return <>{parts.map((part, index) => part.id ? <button key={`cite-${index}`} type="button" onClick={() => onOpenSource(byId.get(part.id!)!)} title={byId.get(part.id!)?.sourceRef} className="rounded bg-emerald-100 px-1 font-semibold text-emerald-800 underline decoration-dotted underline-offset-2 dark:bg-emerald-950 dark:text-emerald-200">[{part.id!.replace('SRC_', '')}]</button> : <LazyMarkdown key={`text-${index}`} content={part.text || ''} />)}</>;
+}
+
 export const WorkspaceConversation: React.FC<WorkspaceConversationProps> = React.memo(({
   messages,
   isLoading = false,
@@ -67,7 +83,8 @@ export const WorkspaceConversation: React.FC<WorkspaceConversationProps> = React
   comparisonRun = null,
   onUseComparisonResponse = () => undefined,
   onComparisonSendToCanvas = () => undefined,
-  onCompareAgain = () => undefined
+  onCompareAgain = () => undefined,
+  onOpenSource = () => undefined
 }) => {
   const shouldReduceMotion = useReducedMotion();
   const scrollRafRef = useRef<number | null>(null);
@@ -121,7 +138,7 @@ export const WorkspaceConversation: React.FC<WorkspaceConversationProps> = React
               initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
               transition={shouldReduceMotion ? { duration: 0.1 } : { duration: 0.15 }}
-              className={`mx-auto flex w-full max-w-[56rem] flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
+              className="mx-auto flex w-full max-w-[56rem] flex-col items-start"
             >
               {/* Assistant Message Header */}
               {msg.role === 'assistant' && (
@@ -144,15 +161,17 @@ export const WorkspaceConversation: React.FC<WorkspaceConversationProps> = React
               {/* User Message Header */}
               {msg.role === 'user' && (
                 <div className="flex items-center gap-1 mb-1 px-1 select-none text-[10.5px] font-mono text-slate-400">
+                  <span className="font-sans font-semibold text-slate-500 dark:text-slate-400">Anda</span>
+                  <span>·</span>
                   <span>{formatMessageTime(msg.createdAt)}</span>
                 </div>
               )}
 
               {/* User prompts stay compact; assistant content reads like a document. */}
               <div 
-                className={`max-w-[92%] sm:max-w-[88%] leading-relaxed ${
+                className={`w-full max-w-full leading-relaxed ${
                   msg.role === 'user'
-                    ? 'bg-slate-100 dark:bg-slate-800/80 text-slate-800 dark:text-slate-100 rounded-xl rounded-tr-sm px-3 py-2 text-xs sm:text-sm font-normal'
+                    ? 'border-l-2 border-slate-200 bg-slate-50/70 px-3 py-2 text-slate-800 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-100 text-xs sm:text-sm font-normal'
                     : 'w-full max-w-full text-slate-800 dark:text-slate-100 text-xs sm:text-sm'
                 }`}
               >
@@ -161,8 +180,9 @@ export const WorkspaceConversation: React.FC<WorkspaceConversationProps> = React
                     ? 'text-white dark:text-slate-900 prose-headings:text-white dark:prose-headings:text-slate-900 prose-code:text-white dark:prose-code:text-slate-900' 
                     : 'dark:prose-invert text-slate-800 dark:text-slate-200'
                 }`}>
-                  <LazyMarkdown content={msg.content} />
+                  {msg.sources?.some(source => source.citationId) ? <ResearchCitationContent content={msg.content} sources={msg.sources} onOpenSource={onOpenSource} /> : <LazyMarkdown content={msg.content} />}
                 </div>
+                {msg.role === 'assistant' && msg.sources?.length ? <details className="mt-2 rounded-lg border border-slate-200 bg-slate-50/70 px-2.5 py-2 text-[10px] dark:border-slate-800 dark:bg-slate-900/60"><summary className="cursor-pointer font-semibold text-slate-600 dark:text-slate-300">Evidence · {msg.sources.length}</summary><ul className="mt-2 space-y-1.5">{msg.sources.map((source, index) => <li key={`${source.documentId}:${source.sourceRef}:${index}`} className="leading-5 text-slate-600 dark:text-slate-400"><button type="button" onClick={() => onOpenSource(source)} className="text-left hover:text-emerald-700 dark:hover:text-emerald-300"><span className="font-medium text-slate-700 dark:text-slate-200">{source.filename}</span>{source.sourceRef && source.sourceRef !== source.filename && <span> · {source.sourceRef}</span>}</button>{source.citationId && <span className="ml-1 rounded bg-slate-200 px-1 dark:bg-slate-700">{source.citationId}</span>}{source.snippet && <p className="mt-0.5 line-clamp-3">{source.snippet}</p>}</li>)}</ul></details> : null}
 
                 {/* Error Retry Option */}
                 {msg.error && (
@@ -206,7 +226,7 @@ export const WorkspaceConversation: React.FC<WorkspaceConversationProps> = React
                 </div>
               )}
             </motion.div>
-))), [messages, shouldReduceMotion, artifacts, onRetryMessage, onOpenCanvas, onSendToCanvas, copiedMessageId, copyMessage, formatMessageTime]);
+))), [messages, shouldReduceMotion, artifacts, onRetryMessage, onOpenCanvas, onOpenSource, onSendToCanvas, copiedMessageId, copyMessage, formatMessageTime]);
 
   return (
     <div role="log" aria-label="Percakapan RuangKerja" aria-live={isStreaming ? 'off' : 'polite'} className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-3.5 sm:p-5 space-y-4 custom-scrollbar flex flex-col">

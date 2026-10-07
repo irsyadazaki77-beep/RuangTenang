@@ -2,7 +2,8 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { Readable } from 'stream';
 import multer from 'multer';
 import { prisma } from '../database.js';
-import { optionalAuth } from '../middleware/auth.js';
+import { optionalAuth, requireAuth } from '../middleware/auth.js';
+import { encryptionService } from '../services/encryptionService.js';
 import { attachmentStorageService, MAX_FILE_SIZE } from '../services/attachmentStorageService.js';
 import { documentIngestionService } from '../services/file-intelligence/documentIngestionService.js';
 import { DocumentProcessingException } from '../services/file-intelligence/fileTypes.js';
@@ -249,7 +250,8 @@ router.get('/chat/:chatId/attachments', optionalAuth, async (req: Request, res: 
       where: { chatId, userId },
       select: {
         id: true, filename: true, mimeType: true, fileKind: true, size: true,
-        status: true, checksum: true, metadata: true, processingError: true, createdAt: true
+        status: true, checksum: true, metadata: true, processingError: true, createdAt: true,
+        _count: { select: { chunks: true } }
       },
       orderBy: { createdAt: 'asc' }
     });
@@ -269,6 +271,7 @@ router.get('/chat/:chatId/attachments', optionalAuth, async (req: Request, res: 
           pageCount: metadata.pageCount,
           slideCount: metadata.slideCount,
           sheetCount: metadata.sheetCount,
+          chunkCount: attachment._count?.chunks ?? 0,
           errorMessage: attachment.processingError || undefined,
           url: `/api/v1/chat/attachments/${attachment.id}`,
           createdAt: attachment.createdAt.toISOString()
@@ -278,6 +281,27 @@ router.get('/chat/:chatId/attachments', optionalAuth, async (req: Request, res: 
   } catch (error) {
     console.error('[WORKSPACE_ATTACHMENT_LIST_FAILED]', error);
     return sendAttachmentError(res, 'ATTACHMENT_LIST_FAILED', 'Gagal memuat dokumen Workspace.', 500);
+  }
+});
+
+/** Return a bounded, ownership-checked text preview from the document's existing extraction. */
+router.get('/chat/attachments/:id/preview', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const attachment = await prisma.attachments.findFirst({
+      where: { id: req.params.id, userId: req.user!.userId },
+      select: { id: true, chatId: true, filename: true, mimeType: true, fileKind: true, size: true, status: true, extractedText: true, isEncrypted: true, metadata: true }
+    });
+    if (!attachment || !attachment.chatId) return sendAttachmentError(res, 'NOT_FOUND', 'Berkas tidak ditemukan.', 404);
+    const chat = await prisma.chats.findFirst({ where: { id: attachment.chatId, userId: req.user!.userId }, select: { id: true } });
+    if (!chat) return sendAttachmentError(res, 'NOT_FOUND', 'Berkas tidak ditemukan.', 404);
+    if (attachment.status !== 'ready') return sendAttachmentError(res, 'ATTACHMENT_NOT_READY', 'Preview tersedia setelah dokumen selesai diproses.', 409);
+    let previewText = attachment.extractedText || '';
+    if (attachment.isEncrypted) previewText = encryptionService.decryptSensitive(previewText) || '';
+    let metadata: Record<string, unknown> = {};
+    try { metadata = attachment.metadata ? JSON.parse(attachment.metadata) as Record<string, unknown> : {}; } catch { /* optional */ }
+    return res.json({ success: true, data: { id: attachment.id, filename: attachment.filename, mimeType: attachment.mimeType, fileKind: attachment.fileKind, size: attachment.size, chunkCount: metadata.chunkCount, previewText: previewText.slice(0, 20_000) } });
+  } catch {
+    return sendAttachmentError(res, 'ATTACHMENT_PREVIEW_FAILED', 'Preview dokumen gagal dimuat.', 500);
   }
 });
 

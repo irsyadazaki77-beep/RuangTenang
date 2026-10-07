@@ -6,6 +6,7 @@ import { sanitizeInput } from '../security';
 import { validatePagination, idempotencyMiddleware } from '../apiV1Helpers';
 import { EventEmitter } from 'events';
 import { getValidatedTurnConfig } from '../config/envValidation.js';
+import { buildScheduledAppointmentTime, canJoinAppointmentRoom, isValidAppointmentStatusTransition } from '../services/appointmentRoomPolicy.js';
 import {
   CreateAppointmentSchema as createAppointmentSchema,
   UpdateAppointmentSchema as updateAppointmentSchema,
@@ -36,7 +37,13 @@ router.get('/stream', requireAuth, (req: Request, res: Response) => {
     const isAdmin = role === 'admin';
 
     if (isStudentMatch || isCounselorMatch || isAdmin) {
-      res.write(`data: ${JSON.stringify(data)}\n\n`);
+      res.write(`data: ${JSON.stringify({
+        id: data.id,
+        status: data.status,
+        approvalStatus: data.approvalStatus,
+        attendanceStatus: data.attendanceStatus,
+        updatedAt: data.updatedAt
+      })}\n\n`);
     }
   };
 
@@ -55,7 +62,7 @@ export interface AppointmentResponseDTO {
   time: string;
   timezone: 'WIB' | 'WITA' | 'WIT';
   notes?: string;
-  status: 'PENDING' | 'CONFIRMED' | 'CANCELLED' | 'REJECTED' | 'COMPLETED';
+  status: 'PENDING' | 'CONFIRMED' | 'IN_PROGRESS' | 'CANCELLED' | 'REJECTED' | 'COMPLETED';
   approvalStatus: 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED';
   attendanceStatus: 'SCHEDULED' | 'ATTENDED' | 'NO_SHOW' | 'CANCELLED' | 'RESCHEDULED';
   meetingLink?: string;
@@ -72,20 +79,11 @@ export interface AppointmentResponseDTO {
  * Handles WIB (+07:00), WITA (+08:00), and WIT (+09:00).
  */
 export function parseAppointmentToUtcDate(dateStr: string, timeStr: string, timezoneStr: string = 'WIB'): Date {
-  const tz = (timezoneStr || 'WIB').toUpperCase();
-  const offsetMap: Record<string, string> = {
-    WIB: '+07:00',
-    WITA: '+08:00',
-    WIT: '+09:00'
-  };
-  const offset = offsetMap[tz] || '+07:00';
-  const cleanTime = (timeStr || '09:00').trim();
-  const timeMatch = cleanTime.match(/(\d{1,2}):(\d{2})/);
-  const hours = timeMatch ? timeMatch[1].padStart(2, '0') : '09';
-  const minutes = timeMatch ? timeMatch[2] : '00';
-  const isoStr = `${dateStr}T${hours}:${minutes}:00${offset}`;
-  const dt = new Date(isoStr);
-  return isNaN(dt.getTime()) ? new Date() : dt;
+  try {
+    return buildScheduledAppointmentTime(dateStr, timeStr, timezoneStr);
+  } catch {
+    return new Date(Number.NaN);
+  }
 }
 
 export function mapAppointmentToResponse(appt: any): AppointmentResponseDTO {
@@ -136,7 +134,7 @@ export const verifyAppointmentAccess = async (req: Request, res: Response, next:
       return res.status(401).json({ success: false, error: 'UNAUTHORIZED', message: 'Sesi tidak valid.' });
     }
 
-    // Admin has unrestricted access
+    // Admin can manage records operationally, but room authorization is separately denied.
     const role = normalizeRole(user.role);
     if (role === 'admin') {
       (req as any).appointment = appt;
@@ -146,7 +144,8 @@ export const verifyAppointmentAccess = async (req: Request, res: Response, next:
     // Mahasiswa must be the owner
     if (role === 'mahasiswa') {
       if (appt.userId !== user.userId) {
-        return res.status(403).json({
+        console.warn('[APPOINTMENT_ROOM_ACCESS]', JSON.stringify({ appointmentId, userId: user.userId, role, allowed: false, reason: 'ROOM_ACCESS_NOT_PARTICIPANT', timestamp: new Date().toISOString() }));
+        return res.status(404).json({
           success: false,
           error: 'ACCESS_DENIED',
           message: 'Akses ditolak. Anda tidak memiliki izin untuk sesi konsultasi ini.'
@@ -162,7 +161,8 @@ export const verifyAppointmentAccess = async (req: Request, res: Response, next:
         where: { userId: user.userId }
       });
       if (!counselor || appt.counselorId !== counselor.id) {
-        return res.status(403).json({
+        console.warn('[APPOINTMENT_ROOM_ACCESS]', JSON.stringify({ appointmentId, userId: user.userId, role, allowed: false, reason: 'ROOM_ACCESS_NOT_PARTICIPANT', timestamp: new Date().toISOString() }));
+        return res.status(404).json({
           success: false,
           error: 'ACCESS_DENIED',
           message: 'Akses ditolak. Anda tidak memiliki izin untuk sesi konsultasi ini.'
@@ -181,6 +181,24 @@ export const verifyAppointmentAccess = async (req: Request, res: Response, next:
     console.error('Error in verifyAppointmentAccess:', err);
     res.status(500).json({ success: false, error: 'INTERNAL_SERVER_ERROR', message: 'Gagal memverifikasi otorisasi janji temu.' });
   }
+};
+
+/** Recheck room policy on every room-related request; participant identity alone is insufficient. */
+export const requireEligibleAppointmentRoom = (req: Request, res: Response, next: () => void) => {
+  const appt = (req as any).appointment;
+  const role = normalizeRole(req.user?.role);
+  if (!appt || !req.user || !['mahasiswa', 'konselor'].includes(role)) {
+    if (appt && req.user) console.warn('[APPOINTMENT_ROOM_ACCESS]', JSON.stringify({ appointmentId: appt.id, userId: req.user.userId, role, allowed: false, reason: 'ROOM_ACCESS_NOT_PARTICIPANT', timestamp: new Date().toISOString() }));
+    return res.status(403).json({ success: false, allowed: false, error: 'ROOM_ACCESS_NOT_PARTICIPANT' });
+  }
+  const decision = canJoinAppointmentRoom(appt);
+  if (decision.allowed === false) {
+    console.warn('[APPOINTMENT_ROOM_ACCESS]', JSON.stringify({ appointmentId: appt.id, userId: req.user.userId, role, allowed: false, reason: decision.reason, timestamp: new Date().toISOString() }));
+    return res.status(403).json({ success: false, allowed: false, error: decision.reason });
+  }
+  (req as any).roomWindow = decision.window;
+  console.info('[APPOINTMENT_ROOM_ACCESS]', JSON.stringify({ appointmentId: appt.id, userId: req.user.userId, role, allowed: true, timestamp: decision.window.serverTime.toISOString() }));
+  return next();
 };
 
 // Availability Check
@@ -342,63 +360,22 @@ router.get(['/:id', '/db/appointments/:id'], requireAuth, verifyAppointmentAcces
 });
 
 // Video Consultation Room Access Verification
-router.get(['/:id/room-access', '/db/appointments/:id/room-access'], requireAuth, verifyAppointmentAccess, async (req: Request, res: Response) => {
+router.get(['/:id/room-access', '/db/appointments/:id/room-access'], requireAuth, verifyAppointmentAccess, requireEligibleAppointmentRoom, async (req: Request, res: Response) => {
   try {
     const appt = (req as any).appointment;
     
-    // Check if appointment status is eligible for video call
-    const isEligibleStatus = ['CONFIRMED', 'PENDING', 'APPROVED'].includes(appt.status) || ['APPROVED', 'PENDING_APPROVAL'].includes(appt.approvalStatus);
-    if (!isEligibleStatus || appt.status === 'CANCELLED' || appt.status === 'REJECTED') {
-      return res.status(403).json({
-        success: false,
-        allowed: false,
-        error: 'ROOM_ACCESS_NOT_PERMITTED',
-        message: 'Sesi video konsultasi tidak dapat diakses karena status janji temu telah dibatalkan atau ditolak.'
-      });
-    }
-
-    // Time window validation: Sesi video hanya dapat diakses paling awal 15 menit sebelum waktu mulai
-    const dateStr = appt.date;
-    const rawTime = (appt.time || '').trim();
-    const timeMatch = rawTime.match(/(\d{1,2}):(\d{2})/);
-
-    if (dateStr && timeMatch) {
-      const hours = timeMatch[1].padStart(2, '0');
-      const minutes = timeMatch[2];
-      const startIso = `${dateStr}T${hours}:${minutes}:00+07:00`;
-      const startTime = new Date(startIso).getTime();
-
-      if (!isNaN(startTime)) {
-        let currentTime = Date.now();
-        const simTimeHeader = (req.headers['x-simulated-time'] as string) || (req.query.simulatedTime as string);
-        if (simTimeHeader) {
-          if (simTimeHeader.includes('T')) {
-            currentTime = new Date(simTimeHeader).getTime();
-          } else if (/^\d{1,2}:\d{2}/.test(simTimeHeader)) {
-            const [sh, sm] = simTimeHeader.split(':');
-            currentTime = new Date(`${dateStr}T${sh.padStart(2, '0')}:${sm.padStart(2, '0')}:00+07:00`).getTime();
-          }
-        }
-
-        const earliestAllowed = startTime - (15 * 60 * 1000); // 15 menit sebelum jadwal
-        if (currentTime < earliestAllowed) {
-          const minutesLeft = Math.ceil((startTime - currentTime) / 60000);
-          return res.status(403).json({
-            success: false,
-            allowed: false,
-            error: 'ROOM_ACCESS_TOO_EARLY',
-            message: `Sesi video konsultasi hanya dapat diakses paling cepat 15 menit sebelum jadwal dimulai (mulai dalam ${minutesLeft} menit).`
-          });
-        }
-      }
-    }
+    const window = (req as any).roomWindow;
 
     res.json({
       success: true,
       allowed: true,
-      appointment: mapAppointmentToResponse(appt),
-      userRole: req.user!.role,
-      userId: req.user!.userId
+      appointmentId: appt.id,
+      serverTime: window.serverTime.toISOString(),
+      scheduledStart: window.scheduledStart.toISOString(),
+      scheduledEnd: window.scheduledEnd.toISOString(),
+      earliestJoinAt: window.earliestJoinAt.toISOString(),
+      latestJoinAt: window.latestJoinAt.toISOString(),
+      role: normalizeRole(req.user!.role) as 'mahasiswa' | 'konselor'
     });
   } catch (err: any) {
     console.error('Error validating room access:', err);
@@ -407,7 +384,7 @@ router.get(['/:id/room-access', '/db/appointments/:id/room-access'], requireAuth
 });
 
 // GET /api/appointments/:id/ice-servers secured by verifyAppointmentAccess
-router.get(['/:id/ice-servers', '/db/appointments/:id/ice-servers'], requireAuth, verifyAppointmentAccess, async (req: Request, res: Response) => {
+router.get(['/:id/ice-servers', '/db/appointments/:id/ice-servers'], requireAuth, verifyAppointmentAccess, requireEligibleAppointmentRoom, async (req: Request, res: Response) => {
   try {
     const iceServers: Array<{ urls: string; username?: string; credential?: string }> = [
       { urls: "stun:stun.l.google.com:19302" }
@@ -478,11 +455,12 @@ router.post(['/', '/db/appointments'], requireAuth, requireRole(['mahasiswa', 'k
 
     res.json({ success: true, record: mapAppointmentToResponse(record) });
   } catch (err: any) {
-    if (err.message === 'SLOT_ALREADY_BOOKED') {
+    if (err.message === 'SLOT_ALREADY_BOOKED' || err.code === 'P2034') {
       return res.status(409).json({
         error: 'Jadwal bentrok! Slot pada tanggal dan jam tersebut sudah dipesan oleh mahasiswa lain. Silakan pilih waktu yang berbeda.'
       });
     }
+    if (err.message === 'INVALID_APPOINTMENT_DATETIME') return res.status(400).json({ success: false, error: err.message });
     console.error('Error creating appointment:', err);
     res.status(500).json({ error: 'Gagal menyimpan jadwal ke database.' });
   }
@@ -526,6 +504,12 @@ router.put(['/:id', '/db/appointments/:id'], requireAuth, verifyAppointmentAcces
     }
 
     const validated = parsed.data;
+    if (validated.status && !isValidAppointmentStatusTransition(appt.status, validated.status)) {
+      return res.status(409).json({ success: false, error: 'INVALID_APPOINTMENT_STATUS_TRANSITION' });
+    }
+    if (role === 'mahasiswa' && validated.status && validated.status !== 'CANCELLED') {
+      return res.status(403).json({ success: false, error: 'STATUS_UPDATE_FORBIDDEN' });
+    }
     const updates: any = {};
 
     // FIELD-LEVEL AUTHORIZATION ENFORCEMENT
@@ -591,6 +575,9 @@ router.put(['/:id', '/db/appointments/:id'], requireAuth, verifyAppointmentAcces
     if (!record) {
       return res.status(404).json({ error: 'Jadwal gagal diperbarui.' });
     }
+    if (record.status !== appt.status || record.approvalStatus !== appt.approvalStatus || record.attendanceStatus !== appt.attendanceStatus) {
+      clearAppointmentRoomState(id);
+    }
     
     // Emit event for SSE
     // Need to get counselor user ID to filter SSE properly
@@ -599,15 +586,25 @@ router.put(['/:id', '/db/appointments/:id'], requireAuth, verifyAppointmentAcces
     if (counselorProfile && counselorProfile.userId) {
       counselorUserId = counselorProfile.userId;
     }
-    appointmentEvents.emit('update', { ...mapAppointmentToResponse(record), counselorUserId });
+    appointmentEvents.emit('update', {
+      id: record.id,
+      appointmentId: record.id,
+      userId: record.userId,
+      counselorUserId,
+      status: record.status,
+      approvalStatus: record.approvalStatus,
+      attendanceStatus: record.attendanceStatus,
+      updatedAt: new Date().toISOString()
+    });
 
     res.json({ success: true, record: mapAppointmentToResponse(record) });
   } catch (err: any) {
-    if (err.message === 'SLOT_ALREADY_BOOKED') {
+    if (err.message === 'SLOT_ALREADY_BOOKED' || err.code === 'P2034') {
       return res.status(409).json({
         error: 'Jadwal bentrok! Slot pada tanggal dan jam tersebut sudah terisi oleh jadwal lain.'
       });
     }
+    if (err.message === 'INVALID_APPOINTMENT_DATETIME') return res.status(400).json({ success: false, error: err.message });
     console.error('Error updating appointment:', err);
     res.status(500).json({ error: 'Gagal memperbarui jadwal.' });
   }
@@ -643,6 +640,7 @@ router.delete(['/:id', '/db/appointments/:id'], requireAuth, verifyAppointmentAc
     }
 
     const success = await serverDb.deleteAppointment(id);
+    if (success) clearAppointmentRoomState(id);
     res.json({ success });
   } catch (err: any) {
     console.error('Error deleting appointment:', err);
@@ -659,6 +657,11 @@ router.post(['/:id/reschedule', '/db/appointments/:id/reschedule'], requireAuth,
       return res.status(404).json({ success: false, error: 'Jadwal tidak ditemukan.' });
     }
 
+    // Rescheduling is a normal pending/confirmed workflow; terminal or active sessions are immutable.
+    if (['CANCELLED', 'REJECTED', 'COMPLETED', 'IN_PROGRESS'].includes(appt.status) || appt.attendanceStatus === 'ATTENDED') {
+      return res.status(400).json({ success: false, error: 'APPOINTMENT_CANNOT_BE_RESCHEDULED' });
+    }
+
     // Role-based authorization
     const role = normalizeRole(req.user!.role);
     if (role === 'mahasiswa') {
@@ -666,12 +669,6 @@ router.post(['/:id/reschedule', '/db/appointments/:id/reschedule'], requireAuth,
         return res.status(403).json({
           success: false,
           error: 'Akses ditolak. Anda hanya diperbolehkan menjadwal ulang janji temu milik Anda sendiri.'
-        });
-      }
-      if (['CANCELLED', 'REJECTED', 'COMPLETED'].includes(appt.status)) {
-        return res.status(400).json({
-          success: false,
-          error: 'Jadwal yang sudah dibatalkan atau selesai tidak dapat dijadwalkan ulang.'
         });
       }
     } else if (role === 'konselor') {
@@ -727,6 +724,7 @@ router.post(['/:id/reschedule', '/db/appointments/:id/reschedule'], requireAuth,
     if (!record) {
       return res.status(404).json({ success: false, error: 'Jadwal gagal dijadwalkan ulang.' });
     }
+    clearAppointmentRoomState(id);
 
     // Emit event for SSE
     let counselorUserId = '';
@@ -734,16 +732,26 @@ router.post(['/:id/reschedule', '/db/appointments/:id/reschedule'], requireAuth,
     if (counselorProfile && counselorProfile.userId) {
       counselorUserId = counselorProfile.userId;
     }
-    appointmentEvents.emit('update', { ...mapAppointmentToResponse(record), counselorUserId });
+    appointmentEvents.emit('update', {
+      id: record.id,
+      appointmentId: record.id,
+      userId: record.userId,
+      counselorUserId,
+      status: record.status,
+      approvalStatus: record.approvalStatus,
+      attendanceStatus: record.attendanceStatus,
+      updatedAt: new Date().toISOString()
+    });
 
     res.json({ success: true, record: mapAppointmentToResponse(record), message: 'Jadwal janji temu berhasil dijadwalkan ulang.' });
   } catch (err: any) {
-    if (err.message === 'SLOT_ALREADY_BOOKED') {
+    if (err.message === 'SLOT_ALREADY_BOOKED' || err.code === 'P2034') {
       return res.status(409).json({
         success: false,
         error: 'Jadwal bentrok! Slot pada tanggal dan jam baru tersebut sudah terisi oleh jadwal lain.'
       });
     }
+    if (err.message === 'INVALID_APPOINTMENT_DATETIME') return res.status(400).json({ success: false, error: err.message });
     console.error('Error rescheduling appointment:', err);
     res.status(500).json({ success: false, error: 'Gagal menjadwalkan ulang janji temu.' });
   }
@@ -784,6 +792,12 @@ const activeRoomPresences = new Map<string, Map<string, RoomParticipant>>();
 const activeInCallNotes = new Map<string, InCallNote>();
 const activeRoomSignals = new Map<string, WebRtcSignalMessage[]>();
 
+function clearAppointmentRoomState(appointmentId: string): void {
+  activeRoomPresences.delete(appointmentId);
+  activeRoomSignals.delete(appointmentId);
+  activeInCallNotes.delete(appointmentId);
+}
+
 // Clean up stale participants (no ping for > 30s) and expired signals (> 2 mins)
 setInterval(() => {
   const now = Date.now();
@@ -810,7 +824,7 @@ setInterval(() => {
 }, 15000);
 
 // GET /api/v1/appointments/:id/room-presence
-router.get(['/:id/room-presence', '/db/appointments/:id/room-presence'], requireAuth, verifyAppointmentAccess, async (req: Request, res: Response) => {
+router.get(['/:id/room-presence', '/db/appointments/:id/room-presence'], requireAuth, verifyAppointmentAccess, requireEligibleAppointmentRoom, async (req: Request, res: Response) => {
   try {
     const appointmentId = req.params.id;
     const roomMap = activeRoomPresences.get(appointmentId) || new Map<string, RoomParticipant>();
@@ -849,7 +863,7 @@ router.get(['/:id/room-presence', '/db/appointments/:id/room-presence'], require
 });
 
 // POST /api/v1/appointments/:id/room-presence (Heartbeat / Status update)
-router.post(['/:id/room-presence', '/db/appointments/:id/room-presence'], requireAuth, verifyAppointmentAccess, async (req: Request, res: Response) => {
+router.post(['/:id/room-presence', '/db/appointments/:id/room-presence'], requireAuth, verifyAppointmentAccess, requireEligibleAppointmentRoom, async (req: Request, res: Response) => {
   try {
     const appointmentId = req.params.id;
     const user = req.user;
@@ -894,15 +908,19 @@ router.post(['/:id/room-presence', '/db/appointments/:id/room-presence'], requir
 });
 
 // WebRTC Signaling: POST Signal
-router.post(['/:id/webrtc/signal', '/db/appointments/:id/webrtc/signal', '/:id/signal', '/db/appointments/:id/signal'], requireAuth, verifyAppointmentAccess, async (req: Request, res: Response) => {
+router.post(['/:id/webrtc/signal', '/db/appointments/:id/webrtc/signal', '/:id/signal', '/db/appointments/:id/signal'], requireAuth, verifyAppointmentAccess, requireEligibleAppointmentRoom, async (req: Request, res: Response) => {
   try {
     const appointmentId = req.params.id;
     const user = req.user!;
-    const { type, payload } = req.body;
-
-    if (!type || !['offer', 'answer', 'candidate', 'hangup', 'screen-state', 'leave'].includes(type)) {
-      return res.status(400).json({ success: false, error: 'INVALID_SIGNAL_TYPE', message: 'Tipe sinyal WebRTC tidak valid.' });
+    const signalSchema = z.object({
+      type: z.enum(['offer', 'answer', 'candidate', 'hangup', 'screen-state', 'leave']),
+      payload: z.record(z.string(), z.unknown()).optional()
+    }).strict();
+    const parsedSignal = signalSchema.safeParse(req.body);
+    if (!parsedSignal.success || JSON.stringify(parsedSignal.data?.payload || {}).length > 32_000) {
+      return res.status(400).json({ success: false, error: 'INVALID_SIGNAL_PAYLOAD' });
     }
+    const { type, payload } = parsedSignal.data;
 
     let signals = activeRoomSignals.get(appointmentId);
     if (!signals) {
@@ -937,7 +955,7 @@ router.post(['/:id/webrtc/signal', '/db/appointments/:id/webrtc/signal', '/:id/s
 });
 
 // WebRTC Signaling: GET Signals
-router.get(['/:id/webrtc/signals', '/db/appointments/:id/webrtc/signals', '/:id/signals', '/db/appointments/:id/signals'], requireAuth, verifyAppointmentAccess, async (req: Request, res: Response) => {
+router.get(['/:id/webrtc/signals', '/db/appointments/:id/webrtc/signals', '/:id/signals', '/db/appointments/:id/signals'], requireAuth, verifyAppointmentAccess, requireEligibleAppointmentRoom, async (req: Request, res: Response) => {
   try {
     const appointmentId = req.params.id;
     const user = req.user!;
@@ -958,7 +976,7 @@ router.get(['/:id/webrtc/signals', '/db/appointments/:id/webrtc/signals', '/:id/
 });
 
 // WebRTC Signaling: Reset room signals
-router.post(['/:id/webrtc/reset', '/db/appointments/:id/webrtc/reset'], requireAuth, verifyAppointmentAccess, async (req: Request, res: Response) => {
+router.post(['/:id/webrtc/reset', '/db/appointments/:id/webrtc/reset'], requireAuth, verifyAppointmentAccess, requireEligibleAppointmentRoom, async (req: Request, res: Response) => {
   try {
     const appointmentId = req.params.id;
     activeRoomSignals.delete(appointmentId);
@@ -970,7 +988,7 @@ router.post(['/:id/webrtc/reset', '/db/appointments/:id/webrtc/reset'], requireA
 });
 
 // GET /api/v1/appointments/:id/in-call-notes
-router.get(['/:id/in-call-notes', '/db/appointments/:id/in-call-notes'], requireAuth, verifyAppointmentAccess, async (req: Request, res: Response) => {
+router.get(['/:id/in-call-notes', '/db/appointments/:id/in-call-notes'], requireAuth, verifyAppointmentAccess, requireEligibleAppointmentRoom, async (req: Request, res: Response) => {
   try {
     const appointmentId = req.params.id;
     const existing = activeInCallNotes.get(appointmentId) || {
@@ -988,7 +1006,7 @@ router.get(['/:id/in-call-notes', '/db/appointments/:id/in-call-notes'], require
 });
 
 // POST /api/v1/appointments/:id/in-call-notes
-router.post(['/:id/in-call-notes', '/db/appointments/:id/in-call-notes'], requireAuth, verifyAppointmentAccess, async (req: Request, res: Response) => {
+router.post(['/:id/in-call-notes', '/db/appointments/:id/in-call-notes'], requireAuth, verifyAppointmentAccess, requireEligibleAppointmentRoom, async (req: Request, res: Response) => {
   try {
     const appointmentId = req.params.id;
     const user = req.user;

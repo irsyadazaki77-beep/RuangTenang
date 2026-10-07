@@ -153,7 +153,7 @@ export interface AppointmentRecord {
   time: string;
   timezone?: "WIB" | "WITA" | "WIT";
   notes?: string;
-  status: "PENDING" | "CONFIRMED" | "CANCELLED" | "REJECTED" | "Selesai";
+  status: "PENDING" | "CONFIRMED" | "IN_PROGRESS" | "CANCELLED" | "REJECTED" | "COMPLETED" | "Selesai";
   approvalStatus: "PENDING_APPROVAL" | "APPROVED" | "REJECTED";
   attendanceStatus:
     | "SCHEDULED" | "ATTENDED" | "NO_SHOW" | "CANCELLED" | "RESCHEDULED";

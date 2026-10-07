@@ -99,7 +99,7 @@ export const StudentShell: React.FC<StudentShellProps> = ({
         isOpen={isSidebarOpen} 
         setIsOpen={setIsSidebarOpen} 
         onNewChat={() => {
-          navigate(getModeHomePath(currentMode));
+          navigate(currentMode === 'RUANG_KERJA' ? '/workspace/new' : getModeHomePath(currentMode));
         }}
         chats={chats}
         currentChatId={getChatIdFromPath(location.pathname)}
@@ -177,6 +177,7 @@ export const StudentShell: React.FC<StudentShellProps> = ({
                       setUser,
                       chats,
                       setChats,
+                      isLoadingChats,
                       selectedCounselor,
                       setSelectedCounselor,
                       onSwitchMode: handleSwitchMode,

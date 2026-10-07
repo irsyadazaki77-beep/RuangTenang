@@ -203,7 +203,7 @@ describe('FASE 1 — CRITICAL AUTHORIZATION & SSO HARDENING TEST SUITE', () => {
         id: apptAId,
         counselorId: counselorProfile1Id,
         counselorName: counselor1.name,
-        scheduledAt: new Date('2026-10-15T14:00:00+07:00'),
+        scheduledAt: new Date(Date.now() - 5 * 60_000),
         mode: 'video_call',
         notes: 'Sesi Konseling Alice dengan Konselor 1',
         status: 'CONFIRMED',
@@ -381,7 +381,7 @@ describe('FASE 1 — CRITICAL AUTHORIZATION & SSO HARDENING TEST SUITE', () => {
         .get(`/api/v1/appointments/${apptAId}`)
         .set('Authorization', `Bearer ${tokenStudentB}`);
 
-      expect(res.status).toBe(403);
+      expect(res.status).toBe(404);
       expect(res.body.error).toBe('ACCESS_DENIED');
     });
 
@@ -391,7 +391,7 @@ describe('FASE 1 — CRITICAL AUTHORIZATION & SSO HARDENING TEST SUITE', () => {
         .set('Authorization', `Bearer ${tokenStudentB}`)
         .send({ notes: 'Hacked notes by Bob' });
 
-      expect(res.status).toBe(403);
+      expect(res.status).toBe(404);
       expect(res.body.error).toBe('ACCESS_DENIED');
     });
 
@@ -400,7 +400,7 @@ describe('FASE 1 — CRITICAL AUTHORIZATION & SSO HARDENING TEST SUITE', () => {
         .get(`/api/v1/appointments/${apptAId}`)
         .set('Authorization', `Bearer ${tokenCounselor2}`);
 
-      expect(res.status).toBe(403);
+      expect(res.status).toBe(404);
       expect(res.body.error).toBe('ACCESS_DENIED');
     });
 
@@ -418,7 +418,7 @@ describe('FASE 1 — CRITICAL AUTHORIZATION & SSO HARDENING TEST SUITE', () => {
         .get(`/api/v1/appointments/${apptAId}/room-presence`)
         .set('Authorization', `Bearer ${tokenStudentB}`);
 
-      expect(res.status).toBe(403);
+      expect(res.status).toBe(404);
       expect(res.body.error).toBe('ACCESS_DENIED');
     });
 
@@ -428,7 +428,7 @@ describe('FASE 1 — CRITICAL AUTHORIZATION & SSO HARDENING TEST SUITE', () => {
         .set('Authorization', `Bearer ${tokenStudentB}`)
         .send({ isScreenSharing: true });
 
-      expect(res.status).toBe(403);
+      expect(res.status).toBe(404);
       expect(res.body.error).toBe('ACCESS_DENIED');
     });
 
@@ -437,7 +437,7 @@ describe('FASE 1 — CRITICAL AUTHORIZATION & SSO HARDENING TEST SUITE', () => {
         .get(`/api/v1/appointments/${apptAId}/in-call-notes`)
         .set('Authorization', `Bearer ${tokenStudentB}`);
 
-      expect(res.status).toBe(403);
+      expect(res.status).toBe(404);
       expect(res.body.error).toBe('ACCESS_DENIED');
     });
 
@@ -447,7 +447,7 @@ describe('FASE 1 — CRITICAL AUTHORIZATION & SSO HARDENING TEST SUITE', () => {
         .set('Authorization', `Bearer ${tokenStudentB}`)
         .send({ sharedContent: 'Unauthorized injection notes' });
 
-      expect(res.status).toBe(403);
+      expect(res.status).toBe(404);
       expect(res.body.error).toBe('ACCESS_DENIED');
     });
 

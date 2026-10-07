@@ -201,7 +201,7 @@ describe('RuangKerja UX foundation', () => {
   it('exposes attachment status and removal action', () => {
     const { props } = renderComposer({ attachedFile: { name: 'paper.pdf', size: 2048, status: 'processing' } });
     expect(screen.getByText('paper.pdf')).toBeInTheDocument();
-    expect(screen.getByText('Proses')).toBeInTheDocument();
+    expect(screen.getByText('Memproses…')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Hapus paper.pdf' }));
     expect(props.onRemoveAttachedFile).toHaveBeenCalledOnce();
   });
@@ -212,6 +212,15 @@ describe('RuangKerja UX foundation', () => {
       onConfirmClearWorkspace={noop} />);
     expect(screen.getByRole('button', { name: 'Canvas' })).toBeInTheDocument();
     expect(screen.getByText('Bab Pendahuluan')).toBeInTheDocument();
+  });
+
+  it('opens the Context tab from compact workspace navigation', () => {
+    const onSetMobileActiveTab = vi.fn();
+    render(<WorkspaceHeader activeArtifact={null} isCanvasOpen mobileActiveTab="chat" hasUnreadArtifact={false}
+      onSetMobileActiveTab={onSetMobileActiveTab} onToggleCanvas={noop} onCreateNewArtifact={noop} onOpenTemplateGallery={noop}
+      onConfirmClearWorkspace={noop} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Context' }));
+    expect(onSetMobileActiveTab).toHaveBeenCalledWith('context');
   });
 
   it('preserves the last user prompt for retry after an assistant error', () => {

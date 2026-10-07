@@ -15,6 +15,8 @@ const CounselorDirectory = lazyWithRetry(() => import('../../features/counselors
 const AppointmentScheduler = lazyWithRetry(() => import('../../features/appointments/AppointmentScheduler').then(module => ({ default: module.AppointmentScheduler })));
 const EmergencyCenter = lazyWithRetry(() => import('../../components/EmergencyCenter').then(module => ({ default: module.EmergencyCenter })));
 const StudentWorkspace = lazyWithRetry(() => import('../../features/workspace/StudentWorkspace').then(module => ({ default: module.StudentWorkspace })));
+const WorkspaceHome = lazyWithRetry(() => import('../../features/workspace/WorkspaceHome').then(module => ({ default: module.WorkspaceHome })));
+const WorkspaceEntry = lazyWithRetry(() => import('../../features/workspace/WorkspaceEntry').then(module => ({ default: module.WorkspaceEntry })));
 const CounselorDashboard = lazyWithRetry(() => import('../../features/counselors/CounselorDashboard').then(module => ({ default: module.CounselorDashboard })));
 const CounselorPortal = lazyWithRetry(() => import('../../features/counselor-portal/CounselorPortal').then(module => ({ default: module.CounselorPortal })));
 
@@ -31,6 +33,7 @@ export interface StudentRouteContext {
   setUser: (user: UserSession | null) => void;
   chats: Chat[];
   setChats: React.Dispatch<React.SetStateAction<Chat[]>>;
+  isLoadingChats?: boolean;
   selectedCounselor: Counselor | null;
   setSelectedCounselor: (counselor: Counselor | null) => void;
   onSwitchMode: (mode: WorkspaceMode) => void;
@@ -46,7 +49,7 @@ const canAccessCounselorTools = (role: string) => role === 'konselor' || role ==
 
 export function createStudentRoutes(context: StudentRouteContext): AppRoute[] {
   const {
-    user, setUser, chats, setChats, selectedCounselor, setSelectedCounselor,
+    user, setUser, chats, setChats, isLoadingChats = false, selectedCounselor, setSelectedCounselor,
     onSwitchMode, onOpenSidebar, onOpenSettings, onOpenChangelog, onPersisted, onTriggerSOS, navigate
   } = context;
   const openProps = { onOpenSidebar, onOpenSettings, onOpenChangelog };
@@ -61,7 +64,8 @@ export function createStudentRoutes(context: StudentRouteContext): AppRoute[] {
   return [
     { path: '/', element: mainChat, mode: 'ruangtenang', sidebarSection: 'primary' },
     { path: '/c/:chatId', element: mainChat, mode: 'ruangtenang', sidebarSection: 'history' },
-    { path: '/workspace', element: workspace, mode: 'ruangkerja', sidebarSection: 'primary' },
+    { path: '/workspace', element: <WorkspaceHome chats={chats} isLoading={isLoadingChats} onOpenSidebar={onOpenSidebar} />, mode: 'ruangkerja', sidebarSection: 'primary' },
+    { path: '/workspace/new', element: <WorkspaceEntry user={user} chats={chats} setChats={setChats} {...openProps} onSwitchMode={onSwitchMode} />, mode: 'ruangkerja', sidebarSection: 'primary' },
     { path: '/workspace/c/:chatId', element: workspace, mode: 'ruangkerja', sidebarSection: 'history' },
     {
       path: '/mood', sidebarSection: 'tools',

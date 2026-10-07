@@ -58,6 +58,7 @@ model Appointments {
   counselorId      String
   counselorName    String
   scheduledAt      DateTime @default(now())
+  timezone         String   @default("WIB")
   notes            String?
   status           String
   approvalStatus   String
@@ -243,11 +244,13 @@ model Chats {
   branchedFromMessageId String?
   summary               String?
   useMemory             Boolean  @default(true)
+  workspaceMode         String   @default("RUANG_TENANG")
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
   messages              ChatMessages[]
   bookmarks             MessageBookmarks[]
   artifacts             Artifacts[]
+  workspace             Workspaces?
 
   // Relations
   user                  Users    @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -510,6 +513,36 @@ model DocumentChunks {
   @@index([attachmentId])
   @@index([userId])
   @@index([userId, attachmentId, chunkIndex])
+}
+
+/// Workspace metadata is attached one-to-one to its legacy Chat record so old
+/// /workspace/c/:chatId links and existing files/artifacts remain valid.
+model Workspaces {
+  chatId          String   @id
+  description     String?
+  instructions    String?
+  defaultModel    String?
+  defaultPreset   String?
+  settings        String   @default("{}")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  chat            Chats    @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  tasks           WorkspaceTasks[]
+
+  @@index([updatedAt])
+}
+
+model WorkspaceTasks {
+  id          String   @id
+  workspaceId String
+  title       String
+  status      String   @default("todo")
+  source      String   @default("user")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  workspace   Workspaces @relation(fields: [workspaceId], references: [chatId], onDelete: Cascade)
+
+  @@index([workspaceId, status, updatedAt])
 }
 
 model ClinicalSoapNotes {

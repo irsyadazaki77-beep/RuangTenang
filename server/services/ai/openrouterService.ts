@@ -71,7 +71,7 @@ export const openrouterService = {
     const openrouterModel = this.mapModelName(targetModel);
     const messages = this.buildMessages(options);
     const isAnonymous = !options.userId || options.userId === 'guest';
-    const maxTokens = isAnonymous ? 400 : 800;
+    const maxTokens = isAnonymous ? 600 : 1200;
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), AI_RELIABILITY_POLICY.connectTimeoutMs);
@@ -110,7 +110,9 @@ export const openrouterService = {
 
       const data = await response.json();
       const choice = data.choices?.[0];
-      const outputText = typeof choice?.message?.content === 'string' ? choice.message.content.trim() : '';
+      const content = typeof choice?.message?.content === 'string' ? choice.message.content.trim() : '';
+      const reasoning = typeof choice?.message?.reasoning === 'string' ? choice.message.reasoning.trim() : '';
+      const outputText = content || reasoning;
       if (!outputText) throw Object.assign(new Error('AI_PROVIDER_CONTENT_ERROR_INVALID_RESPONSE'), { category: 'CONTENT_ERROR', retryable: false });
       clearTimeout(timeoutId);
 
@@ -139,7 +141,7 @@ export const openrouterService = {
     const openrouterModel = this.mapModelName(targetModel);
     const messages = this.buildMessages(options);
     const isAnonymous = !options.userId || options.userId === 'guest';
-    const maxTokens = isAnonymous ? 400 : 800;
+    const maxTokens = isAnonymous ? 600 : 1200;
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), AI_RELIABILITY_POLICY.totalRequestTimeoutMs);
@@ -205,7 +207,7 @@ export const openrouterService = {
                 if (!jsonStr) continue;
                 const parsed = JSON.parse(jsonStr);
                 const delta = parsed.choices?.[0]?.delta;
-                const textContent = delta?.content || '';
+                const textContent = delta?.content || delta?.reasoning || '';
 
                 if (textContent) {
                   yield { text: textContent };
@@ -223,7 +225,7 @@ export const openrouterService = {
             const jsonStr = buffer.trim().slice(6).trim();
             const parsed = JSON.parse(jsonStr);
             const delta = parsed.choices?.[0]?.delta;
-            const textContent = delta?.content || '';
+            const textContent = delta?.content || delta?.reasoning || '';
             if (textContent) {
               yield { text: textContent };
             }

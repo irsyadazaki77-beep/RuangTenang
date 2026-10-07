@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { aiSafetyService } from '../../services/ai/aiSafetyService.js';
 import { validateAndSanitizeToolCall } from '../../services/ai/aiToolSchemas.js';
 import { aiGateway } from '../../services/ai/aiGateway.js';
@@ -11,6 +11,10 @@ import { aiRequestService } from '../../services/ai/aiRequestService.js';
 describe('FASE 8: Unified AI Gateway & Safety Pipeline Tests', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   describe('1. Prompt Injection & Adversarial Defense', () => {
@@ -233,6 +237,7 @@ describe('FASE 8: Unified AI Gateway & Safety Pipeline Tests', () => {
 
   describe('7. Untrusted Plugin Result & Context Isolation', () => {
     it('strips prompt injection inside untrusted plugin results', async () => {
+      vi.stubEnv('GEMINI_API_KEY', 'test-only-gemini-placeholder');
       vi.spyOn(consentService, 'canUseAI').mockResolvedValue(true);
       vi.spyOn(aiRequestService, 'generateChatResponse').mockResolvedValue({
         text: 'Hasil screening Anda menunjukkan tingkat kecemasan sedang.',
@@ -254,6 +259,7 @@ describe('FASE 8: Unified AI Gateway & Safety Pipeline Tests', () => {
 
   describe('8. Context Budget & History Truncation', () => {
     it('truncates oversized history and redacts history PII', async () => {
+      vi.stubEnv('GEMINI_API_KEY', 'test-only-gemini-placeholder');
       vi.spyOn(consentService, 'canUseAI').mockResolvedValue(true);
       vi.spyOn(aiRequestService, 'generateChatResponse').mockResolvedValue({
         text: 'Tentu, mari kita lanjutkan pembahasannya.',

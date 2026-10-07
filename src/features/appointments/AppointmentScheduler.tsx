@@ -101,10 +101,6 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
                   status: data.status,
                   approvalStatus: data.approvalStatus,
                   attendanceStatus: data.attendanceStatus,
-                  notes: data.notes || a.notes,
-                  mode: data.mode || a.mode,
-                  date: data.date || a.date,
-                  timeSlot: (data.time && data.timezone) ? `${data.time} ${data.timezone}` : a.timeSlot
                 };
               }
               return a;
@@ -531,7 +527,7 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
                         ? 'bg-slate-100 dark:bg-slate-800 text-secondary border-strong'
                         : 'bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400 border-teal-200 dark:border-teal-900/50'
                     }`}>
-                      {apt.status === 'PENDING' ? '⏳ Menunggu Konfirmasi' : apt.status === 'CONFIRMED' ? '✅ Terkonfirmasi' : apt.status === 'COMPLETED' ? '✅ Selesai' : apt.status === 'CANCELLED' ? '🚫 Dibatalkan' : '❌ Ditolak'}
+                      {apt.status === 'PENDING' ? '⏳ Menunggu Konfirmasi' : apt.status === 'CONFIRMED' ? '✅ Terkonfirmasi' : apt.status === 'IN_PROGRESS' ? '🔵 Sedang Berlangsung' : apt.status === 'COMPLETED' ? '✅ Selesai' : apt.status === 'CANCELLED' ? '🚫 Dibatalkan' : '❌ Ditolak'}
                     </span>
                     {apt.attendanceStatus && (
                       <span className="text-[11px] font-mono font-medium text-secondary">

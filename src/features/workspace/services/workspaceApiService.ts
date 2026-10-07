@@ -1,6 +1,8 @@
 import { apiClient } from '../../../lib/apiClient';
 import { Message } from '../../chat/types';
 import { WorkspaceArtifact, ArtifactType, WorkspaceFileKind } from '../types';
+import type { WorkspaceContract, WorkspaceTaskContract, WorkspaceTaskStatus, WorkspaceTaskSource, WorkspacePlan } from '../../../../shared/contracts/workspace';
+import type { ResearchSource, ResearchSourceMetadata } from '../../../../shared/contracts/files';
 
 export interface CreateArtifactPayload {
   id?: string;
@@ -33,11 +35,108 @@ export interface WorkspaceAttachmentDto {
   pageCount?: number;
   slideCount?: number;
   sheetCount?: number;
+  chunkCount?: number;
   errorMessage?: string;
   createdAt?: string;
 }
 
+export interface WorkspaceAttachmentPreviewDto extends Pick<WorkspaceAttachmentDto, 'id' | 'filename' | 'mimeType' | 'fileKind' | 'size' | 'chunkCount'> {
+  previewText: string;
+}
+
+export interface WorkspaceSearchResult {
+  kind: 'workspace' | 'task' | 'artifact' | 'file' | 'message';
+  chatId: string;
+  itemId?: string;
+  title: string;
+  snippet: string;
+  updatedAt: string;
+}
+
 export class WorkspaceApiService {
+  static async fetchResearchSources(chatId: string, signal?: AbortSignal): Promise<ResearchSource[]> {
+    const res = await apiClient.get<ResearchSource[]>(`/api/v1/workspace/${encodeURIComponent(chatId)}/sources`, { signal });
+    if (!res.success || !Array.isArray(res.data)) throw new Error(res.message || 'Sumber gagal dimuat.');
+    return res.data;
+  }
+
+  static async updateResearchSource(chatId: string, sourceId: string, metadata: ResearchSourceMetadata): Promise<ResearchSource> {
+    const res = await apiClient.put<ResearchSource>(`/api/v1/workspace/${encodeURIComponent(chatId)}/sources/${encodeURIComponent(sourceId)}`, metadata);
+    if (!res.success || !res.data) throw new Error(res.message || 'Metadata sumber gagal disimpan.');
+    return res.data;
+  }
+
+  static async startTaskExecution(chatId: string, planId: string, taskId: string, executionId: string, snapshot: NonNullable<WorkspacePlan['tasks'][number]['snapshot']>): Promise<WorkspacePlan> {
+    const res = await apiClient.post<WorkspacePlan>(`/api/v1/workspace/${encodeURIComponent(chatId)}/plans/${encodeURIComponent(planId)}/tasks/${encodeURIComponent(taskId)}/run`, { executionId, snapshot });
+    if (!res.success || !res.data) throw new Error(res.message || 'Task tidak dapat dijalankan.');
+    return res.data;
+  }
+
+  static async createPlan(chatId: string, plan: WorkspacePlan): Promise<WorkspacePlan> {
+    const res = await apiClient.post<WorkspacePlan>(`/api/v1/workspace/${encodeURIComponent(chatId)}/plans`, plan);
+    if (!res.success || !res.data) throw new Error(res.message || 'Plan gagal disimpan.');
+    return res.data;
+  }
+
+  static async updatePlan(chatId: string, plan: WorkspacePlan): Promise<WorkspacePlan> {
+    const res = await apiClient.put<WorkspacePlan>(`/api/v1/workspace/${encodeURIComponent(chatId)}/plans/${encodeURIComponent(plan.id)}`, plan);
+    if (!res.success || !res.data) throw new Error(res.message || 'Plan gagal diperbarui.');
+    return res.data;
+  }
+
+  static async searchWorkspaces(query: string, signal?: AbortSignal): Promise<WorkspaceSearchResult[]> {
+    const res = await apiClient.get<WorkspaceSearchResult[]>(`/api/v1/workspace/search?q=${encodeURIComponent(query)}`, { signal });
+    if (!res.success || !Array.isArray(res.data)) throw new Error(res.message || 'Pencarian Workspace gagal.');
+    return res.data;
+  }
+
+  static async fetchAttachmentPreview(attachmentId: string, signal?: AbortSignal): Promise<WorkspaceAttachmentPreviewDto> {
+    const res = await apiClient.get<WorkspaceAttachmentPreviewDto>(`/api/v1/chat/attachments/${encodeURIComponent(attachmentId)}/preview`, { signal });
+    if (!res.success || !res.data) throw new Error(res.message || 'Preview dokumen gagal dimuat.');
+    return res.data;
+  }
+
+  static async listWorkspaces(signal?: AbortSignal): Promise<WorkspaceContract[]> {
+    const res = await apiClient.get<WorkspaceContract[]>('/api/v1/workspace', { signal });
+    if (!res.success || !Array.isArray(res.data)) throw new Error(res.message || 'Gagal memuat Workspace');
+    return res.data;
+  }
+
+  static async createWorkspace(name?: string, signal?: AbortSignal): Promise<WorkspaceContract> {
+    const res = await apiClient.post<WorkspaceContract>('/api/v1/workspace', { ...(name ? { name } : {}) }, { signal });
+    if (!res.success || !res.data) throw new Error(res.message || 'Gagal membuat Workspace');
+    return res.data;
+  }
+
+  static async fetchWorkspace(chatId: string, signal?: AbortSignal): Promise<WorkspaceContract> {
+    const res = await apiClient.get<WorkspaceContract>(`/api/v1/workspace/${encodeURIComponent(chatId)}`, { signal });
+    if (!res.success || !res.data) throw new Error(res.message || 'Gagal memuat Workspace');
+    return res.data;
+  }
+
+  static async updateWorkspace(chatId: string, payload: Partial<Pick<WorkspaceContract, 'name' | 'description' | 'instructions' | 'defaultModel' | 'defaultPreset'>>, signal?: AbortSignal): Promise<WorkspaceContract> {
+    const res = await apiClient.put<WorkspaceContract>(`/api/v1/workspace/${encodeURIComponent(chatId)}`, payload, { signal });
+    if (!res.success || !res.data) throw new Error(res.message || 'Gagal menyimpan Workspace');
+    return res.data;
+  }
+
+  static async createTask(chatId: string, title: string, source: WorkspaceTaskSource = 'user', signal?: AbortSignal): Promise<WorkspaceTaskContract> {
+    const res = await apiClient.post<WorkspaceTaskContract>(`/api/v1/workspace/${encodeURIComponent(chatId)}/tasks`, { title, source }, { signal });
+    if (!res.success || !res.data) throw new Error(res.message || 'Gagal membuat task');
+    return res.data;
+  }
+
+  static async updateTask(chatId: string, taskId: string, status: WorkspaceTaskStatus, signal?: AbortSignal): Promise<WorkspaceTaskContract> {
+    const res = await apiClient.put<WorkspaceTaskContract>(`/api/v1/workspace/${encodeURIComponent(chatId)}/tasks/${encodeURIComponent(taskId)}`, { status }, { signal });
+    if (!res.success || !res.data) throw new Error(res.message || 'Gagal memperbarui task');
+    return res.data;
+  }
+
+  static async deleteTask(chatId: string, taskId: string, signal?: AbortSignal): Promise<void> {
+    const res = await apiClient.delete(`/api/v1/workspace/${encodeURIComponent(chatId)}/tasks/${encodeURIComponent(taskId)}`, { signal });
+    if (!res.success) throw new Error(res.message || 'Gagal menghapus task');
+  }
+
   static async fetchChatAttachments(chatId: string, signal?: AbortSignal): Promise<WorkspaceAttachmentDto[]> {
     const res = await apiClient.get<{ attachments?: WorkspaceAttachmentDto[] }>(
       `/api/v1/chat/${encodeURIComponent(chatId)}/attachments`, { signal }

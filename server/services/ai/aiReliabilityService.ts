@@ -43,7 +43,8 @@ export function classifyAiError(error: unknown): AiProviderError {
   if ((err as any).name === 'AbortError' || raw.includes('aborted') || raw.includes('aborterror')) category = 'ABORTED';
   else if (raw.includes('timeout') || raw.includes('timed out')) category = 'TIMEOUT';
   else if (status === 401 || status === 403 || /api.?key|unauthorized|forbidden/.test(raw)) category = 'AUTH_ERROR';
-  else if (status === 429 && /quota|billing|resource_exhausted/.test(raw)) category = 'QUOTA_EXCEEDED';
+  else if ((status === 429 || status === 402) && /quota|billing|resource_exhausted|insufficient balance|balance/.test(raw)) category = 'QUOTA_EXCEEDED';
+  else if (status === 402 || /insufficient balance/.test(raw)) category = 'QUOTA_EXCEEDED';
   else if (status === 429 || /rate.?limit|too many requests/.test(raw)) category = 'RATE_LIMIT';
   else if (status === 404 || /model_not_found|model not found/.test(raw)) category = 'MODEL_NOT_FOUND';
   else if (status === 400 || status === 422 || /invalid request|validation/.test(raw)) category = 'INVALID_REQUEST';

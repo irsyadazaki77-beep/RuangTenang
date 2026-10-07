@@ -4,6 +4,9 @@ on:
     branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   quality_gate:
     name: Build, Test & Security Release Gate
@@ -27,7 +30,7 @@ jobs:
       JWT_SECRET: "ci-only-jwt-signing-key-not-for-production-32chars"
       ENCRYPTION_KEY: "0123456789abcdef0123456789abcdef"
       BLIND_INDEX_SECRET: "ci-only-blind-index-key-not-for-production-32chars"
-      DATABASE_URL: "file:./dev.db"
+      DATABASE_URL: "file:./prisma/ruangtenang_sqlite.db"
       POSTGRES_URL: "postgresql://ruangtenang:ci-only-postgres-password@localhost:5432/ruangtenang_ci?schema=public"
     steps:
       - name: Checkout Repository

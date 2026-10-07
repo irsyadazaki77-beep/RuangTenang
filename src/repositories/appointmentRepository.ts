@@ -3,28 +3,19 @@ import { AppointmentRecord } from "../../server/database";
 import { encryptionService } from "../../server/services/encryptionService";
 import { redisService } from "../../server/services/redisService";
 import { blindIndexService } from "../services/crypto/BlindIndexService";
+import { buildScheduledAppointmentTime, DEFAULT_SESSION_DURATION_MINUTES } from "../../server/services/appointmentRoomPolicy";
 
 const HARD_MAX_PAGE_SIZE = 100;
+const SERIALIZABLE_TX_OPTIONS = process.env.DATABASE_URL?.startsWith('postgres')
+  ? { isolationLevel: 'Serializable' as const }
+  : undefined;
 
 /**
  * Calculates absolute UTC DateTime from local date string, time string, and timezone.
  * Handles WIB (+07:00), WITA (+08:00), and WIT (+09:00).
  */
 export function calculateScheduledAtUtc(dateStr: string, timeStr: string, timezoneStr: string = 'WIB'): Date {
-  const tz = (timezoneStr || 'WIB').toUpperCase();
-  const offsetMap: Record<string, string> = {
-    WIB: '+07:00',
-    WITA: '+08:00',
-    WIT: '+09:00'
-  };
-  const offset = offsetMap[tz] || '+07:00';
-  const cleanTime = (timeStr || '09:00').trim();
-  const timeMatch = cleanTime.match(/(\d{1,2}):(\d{2})/);
-  const hours = timeMatch ? timeMatch[1].padStart(2, '0') : '09';
-  const minutes = timeMatch ? timeMatch[2] : '00';
-  const isoStr = `${dateStr}T${hours}:${minutes}:00${offset}`;
-  const dt = new Date(isoStr);
-  return isNaN(dt.getTime()) ? new Date() : dt;
+  return buildScheduledAppointmentTime(dateStr, timeStr, timezoneStr);
 }
 
 /**
@@ -51,7 +42,8 @@ export function utcToLocalAppointmentFields(scheduledAt: Date, tz: string = 'WIB
  * strongly-typed `AppointmentRecord` domain model.
  */
 function mapDbAppointmentToRecord(a: any): AppointmentRecord {
-  const fields = utcToLocalAppointmentFields(new Date(a.scheduledAt), 'WIB');
+  const timezone = ['WIB', 'WITA', 'WIT'].includes(a.timezone) ? a.timezone : 'WIB';
+  const fields = utcToLocalAppointmentFields(new Date(a.scheduledAt), timezone);
   return {
     ...a,
     date: fields.date,
@@ -330,15 +322,21 @@ export class AppointmentRepository {
 
       // Check slot availability
       if (!isCancelledOrRejected) {
-        const conflict = await tx.appointments.findFirst({
+        const durationMs = DEFAULT_SESSION_DURATION_MINUTES * 60_000;
+        const overlapWhere = {
+          scheduledAt: { gt: new Date(scheduledAt.getTime() - durationMs), lt: new Date(scheduledAt.getTime() + durationMs) },
+          status: { notIn: ["CANCELLED", "REJECTED"] },
+        };
+        const counselorConflict = await tx.appointments.findFirst({
           where: {
             counselorId: resolvedCounselorId,
-            scheduledAt,
-            status: { notIn: ["CANCELLED", "REJECTED"] },
+            ...overlapWhere,
           },
         });
-
-        if (conflict) {
+        const studentConflict = appt.userId ? await tx.appointments.findFirst({
+          where: { userId: appt.userId, ...overlapWhere },
+        }) : null;
+        if (counselorConflict || studentConflict) {
           throw new Error("SLOT_ALREADY_BOOKED");
         }
       }
@@ -349,6 +347,7 @@ export class AppointmentRepository {
           counselorId: resolvedCounselorId,
           counselorName: appt.counselorName,
           scheduledAt,
+          timezone: appt.timezone || 'WIB',
           notes: encryptedNotes,
           status: initialStatus,
           approvalStatus: initialApproval,
@@ -400,7 +399,7 @@ export class AppointmentRepository {
       await redisService.del(`availability:${resolvedCounselorId}:${appt.date}`);
 
       return mapDbAppointmentToRecord(created);
-    });
+    }, SERIALIZABLE_TX_OPTIONS);
   }
 
   /**
@@ -418,7 +417,8 @@ export class AppointmentRepository {
       const current = await tx.appointments.findUnique({ where: { id } });
       if (!current) return null;
 
-      const currentFields = utcToLocalAppointmentFields(new Date(current.scheduledAt), 'WIB');
+      const currentTimezone = ['WIB', 'WITA', 'WIT'].includes(current.timezone) ? current.timezone : 'WIB';
+      const currentFields = utcToLocalAppointmentFields(new Date(current.scheduledAt), currentTimezone);
       const targetCounselorId = updates.counselorId || current.counselorId;
       const targetDate = updates.date || currentFields.date;
       const targetTime = updates.time || currentFields.time;
@@ -432,7 +432,7 @@ export class AppointmentRepository {
 
       const wasCancelledOrRejected = ["CANCELLED", "REJECTED"].includes(current.status);
 
-      const targetTimezone = updates.timezone || currentFields.timezone || "WIB";
+      const targetTimezone = updates.timezone || currentTimezone || "WIB";
       const scheduledAt = calculateScheduledAtUtc(targetDate, targetTime, targetTimezone);
 
       if (isCancelledOrRejected) {
@@ -443,6 +443,18 @@ export class AppointmentRepository {
         await tx.appointmentSlot.deleteMany({
           where: { appointmentId: id },
         });
+
+        if (!isCancelledOrRejected) {
+          const durationMs = DEFAULT_SESSION_DURATION_MINUTES * 60_000;
+          const overlapWhere = {
+            id: { not: id },
+            scheduledAt: { gt: new Date(scheduledAt.getTime() - durationMs), lt: new Date(scheduledAt.getTime() + durationMs) },
+            status: { notIn: ["CANCELLED", "REJECTED"] },
+          };
+          const counselorConflict = await tx.appointments.findFirst({ where: { counselorId: targetCounselorId, ...overlapWhere } });
+          const studentConflict = current.userId ? await tx.appointments.findFirst({ where: { userId: current.userId, ...overlapWhere } }) : null;
+          if (counselorConflict || studentConflict) throw new Error("SLOT_ALREADY_BOOKED");
+        }
 
         const slotId = `slot-${targetCounselorId}-${scheduledAt.getTime()}`;
         try {
@@ -491,6 +503,7 @@ export class AppointmentRepository {
           counselorId: updates.counselorId,
           counselorName: updates.counselorName,
           scheduledAt,
+          timezone: targetTimezone,
           notes: encryptedNotes,
           status: updates.status,
           approvalStatus: updates.approvalStatus,
@@ -526,7 +539,7 @@ export class AppointmentRepository {
       }
 
       return mapDbAppointmentToRecord(updated);
-    });
+    }, SERIALIZABLE_TX_OPTIONS);
   }
 
   /**

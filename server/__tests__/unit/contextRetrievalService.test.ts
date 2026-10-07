@@ -37,7 +37,8 @@ describe('Workspace document context retrieval', () => {
     expect(result.chunksSelected[0]?.documentId).toBe('file-waterfall');
     expect(result.snapshot.selectedAttachmentIds).toContain('file-waterfall');
     expect(result.sourceReferences[0]).toMatchObject({ filename: 'Waterfall.pdf', page: 4, documentId: 'file-waterfall' });
-    expect(result.contextBlock).toContain('Waterfall.pdf [Bagian 1]');
+    expect(result.contextBlock).toContain('[SUMBER: p. 4]');
+    expect(result.contextBlock).toContain('[cite:SRC_1]');
     expect(findAttachments).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({ userId: 'user-a', chatId: 'workspace-1', id: { in: ['file-agile', 'file-waterfall'] } })
     }));
@@ -55,6 +56,20 @@ describe('Workspace document context retrieval', () => {
     });
     expect(result.totalTokensUsed).toBeLessThanOrEqual(60);
     expect(result.snapshot.totalTokensUsed).toBeLessThanOrEqual(60);
+  });
+
+  it('does not invent a section/page from an internal chunk index and diversifies multi-source retrieval', async () => {
+    findChunks.mockResolvedValue([
+      ...Array.from({ length: 5 }, (_, index) => ({ id: `a-${index}`, attachmentId: 'file-agile', chunkIndex: index, content: `Agile iterative sprint planning process evidence ${index}.`, tokenCount: 10, isEncrypted: false })),
+      { id: 'b-0', attachmentId: 'file-waterfall', chunkIndex: 0, content: 'General discussion of a second source and software process.', tokenCount: 10, isEncrypted: false, sourceRef: 'Waterfall.pdf [Bagian 1]' }
+    ]);
+    const result = await contextRetrievalService.retrieveContext({ userId: 'user-a', chatId: 'workspace-1', attachmentIds: ['file-agile', 'file-waterfall'], userQuery: 'Agile iterative sprint planning', maxTokens: 200, maxChunks: 6 });
+    expect(result.chunksSelected.filter(chunk => chunk.documentId === 'file-agile')).toHaveLength(3);
+    expect(result.chunksSelected.some(chunk => chunk.documentId === 'file-waterfall')).toBe(true);
+    expect(result.sourceReferences[0]?.sourceRef).toBe('Agile.pdf');
+    expect(result.sourceReferences.find(source => source.documentId === 'file-waterfall')?.sourceRef).toBe('Waterfall.pdf');
+    expect(result.contextBlock).not.toMatch(/Agile\.pdf \[Bagian \d+\]/);
+    expect(result.sourceReferences.map(source => source.citationId)).toEqual(result.sourceReferences.map((_, index) => `SRC_${index + 1}`));
   });
 
   it('does not fall back to every workspace document when the explicit active set is empty', async () => {

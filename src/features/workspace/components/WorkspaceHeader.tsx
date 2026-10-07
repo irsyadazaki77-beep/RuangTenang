@@ -26,6 +26,7 @@ interface WorkspaceHeaderProps {
   onSwitchMode?: (mode: WorkspaceMode) => void;
   onSetMobileActiveTab: (tab: WorkspaceTab) => void;
   onToggleCanvas: () => void;
+  onToggleContext?: () => void;
   onCreateNewArtifact: (type: ArtifactType) => void;
   onOpenTemplateGallery: () => void;
   onConfirmClearWorkspace: () => Promise<boolean> | void;
@@ -43,6 +44,7 @@ export const WorkspaceHeader: React.FC<WorkspaceHeaderProps> = React.memo(({
   onSwitchMode,
   onSetMobileActiveTab,
   onToggleCanvas,
+  onToggleContext,
   onCreateNewArtifact,
   onOpenTemplateGallery,
   onConfirmClearWorkspace,
@@ -98,10 +100,10 @@ export const WorkspaceHeader: React.FC<WorkspaceHeaderProps> = React.memo(({
         )}
 
         <div className="flex items-center gap-2 min-w-0">
-          <BrandLogo mode="RUANG_KERJA" size="xs" />
+          <span className="hidden sm:inline-flex"><BrandLogo mode="RUANG_KERJA" size="xs" /></span>
           <div className="min-w-0 leading-tight">
-            <span className="block text-[10px] font-medium text-slate-400">RuangKerja</span>
-            <span className="block max-w-[38vw] truncate text-[13px] font-semibold tracking-tight text-slate-900 dark:text-slate-100 sm:max-w-[24rem]">
+            <span className="hidden text-[10px] font-medium text-slate-400 sm:block">RuangKerja</span>
+            <span className="block max-w-[30vw] truncate text-xs font-semibold tracking-tight text-slate-900 dark:text-slate-100 sm:max-w-[24rem] sm:text-[13px]">
               {workspaceTitle}
             </span>
           </div>
@@ -151,10 +153,13 @@ export const WorkspaceHeader: React.FC<WorkspaceHeaderProps> = React.memo(({
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block ml-1 animate-pulse" />
             )}
           </button>
+          <button type="button" onClick={() => onSetMobileActiveTab('context')} aria-pressed={mobileActiveTab === 'context'} className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer ${mobileActiveTab === 'context' ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-semibold shadow-2xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'}`}>Context</button>
         </div>
 
+        {onToggleContext && <button type="button" onClick={onToggleContext} aria-label="Buka panel context" title="Context" className="hidden xl:inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:hover:bg-slate-800 dark:hover:text-slate-100"><Sparkles className="h-3.5 w-3.5" /><span>Context</span></button>}
+
         {/* Primary Action: + Draf Baru Dropdown */}
-        <div className="relative" ref={newArtifactMenuRef}>
+        <div className="relative hidden sm:block" ref={newArtifactMenuRef}>
           <button
             type="button"
             onClick={() => setShowNewArtifactMenu(!showNewArtifactMenu)}

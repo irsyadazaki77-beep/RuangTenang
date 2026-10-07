@@ -313,7 +313,10 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
       taskCategory,
       latencyPreference,
       qualityPreference,
-      presetId
+      presetId,
+      includeWorkspaceFiles,
+      workspaceAttachmentIds,
+      isolatedTaskExecution
     } = req.body;
     
     const isAnonymous = !req.user || req.user.userId === 'guest';
@@ -417,9 +420,16 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
               id: `chat_${Date.now()}`,
               userId,
               title: encryptionService.encryptSensitive(newTitle) || newTitle,
+              workspaceMode: isWorkspace ? 'RUANG_KERJA' : 'RUANG_TENANG',
             }
           });
           currentChatId = newChat.id;
+          if (isWorkspace) await prisma.workspaces.create({ data: { chatId: newChat.id } });
+        }
+
+        if (isWorkspace && currentChatId) {
+          await prisma.chats.update({ where: { id: currentChatId }, data: { workspaceMode: 'RUANG_KERJA' } });
+          await prisma.workspaces.upsert({ where: { chatId: currentChatId }, create: { chatId: currentChatId }, update: {} });
         }
 
         if (Array.isArray(attachments)) {
@@ -555,6 +565,12 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
           include: { attachments: true }
         });
         history.reverse();
+        if (isolatedTaskExecution === true) {
+          if (!isWorkspace) return sendError(res, 'TASK_CONTEXT_DENIED', 'Konteks terisolasi hanya tersedia di Workspace.', 403);
+          const latestUserIndex = history.map((msg: any) => msg.role === 'user').lastIndexOf(true);
+          if (latestUserIndex < 0) history.length = 0;
+          else history.splice(0, latestUserIndex);
+        }
         for (const msg of history) {
            // Skip duplicating the current prompt
           const decryptedContent = encryptionService.decryptSensitive(msg.content) || msg.content;
@@ -820,6 +836,24 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
     let responseStream: any = null;
     let fullResponseText = '';
     let pipelineRes: any = null;
+    const requestedWorkspaceAttachmentIds = Array.isArray(workspaceAttachmentIds)
+      ? [...new Set(workspaceAttachmentIds.filter((id: unknown): id is string => typeof id === 'string' && id.length > 0 && id.length <= 100))].slice(0, 8)
+      : [];
+
+    if (requestedWorkspaceAttachmentIds.length > 0) {
+      if (!isWorkspace || !currentChatId || !userId || userId === 'guest') {
+        if (userId) await rollbackUserAiQuota(userId, clientIp).catch(() => undefined);
+        return sendError(res, 'WORKSPACE_FILE_ACCESS_DENIED', 'File hanya dapat digunakan dari Workspace yang memilikinya.', 403);
+      }
+      const ownedReadyFiles = await prisma.attachments.findMany({
+        where: { id: { in: requestedWorkspaceAttachmentIds }, chatId: currentChatId, userId, status: 'ready' },
+        select: { id: true }
+      });
+      if (ownedReadyFiles.length !== requestedWorkspaceAttachmentIds.length) {
+        await rollbackUserAiQuota(userId, clientIp).catch(() => undefined);
+        return sendError(res, 'WORKSPACE_FILE_ACCESS_DENIED', 'File tidak tersedia di Workspace ini.', 403);
+      }
+    }
     
     try {
       // Call the canonical Unified Safety Pipeline
@@ -837,6 +871,8 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
         pluginResult,
         workspaceMode: Boolean(workspaceMode) || (mode || '').toLowerCase().includes('ruang_kerja') || (chatMode || '').toLowerCase().includes('ruangkerja'),
         attachments,
+        includeWorkspaceFiles: typeof includeWorkspaceFiles === 'boolean' ? includeWorkspaceFiles : undefined,
+        workspaceAttachmentIds: isWorkspace ? requestedWorkspaceAttachmentIds : undefined,
         isStreaming: true,
         isTemporary: activeIsTemporary,
         abortSignal: reqAbortController.signal,

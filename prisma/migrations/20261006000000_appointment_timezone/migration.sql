@@ -1,0 +1,1 @@
+ALTER TABLE "Appointments" ADD COLUMN "timezone" TEXT NOT NULL DEFAULT 'WIB';

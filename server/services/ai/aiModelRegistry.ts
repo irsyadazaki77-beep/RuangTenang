@@ -149,6 +149,17 @@ const MODEL_METADATA: AiModelMetadata[] = [
     recommendedFor: 'Pendampingan konseling umum yang stabil dan teruji',
     allowedTiers: ['Free', 'Pro', 'Premium']
   },
+  {
+    id: 'openrouter-cohere-code',
+    name: 'OpenRouter • Cohere North Code',
+    category: 'Model Utama & Seimbang',
+    tag: 'OpenRouter • Spesialis Kode & Logika',
+    description: 'Model cerdas dari Cohere via OpenRouter yang dioptimalkan untuk sintaksis pemrograman, logika terstruktur, dan analisis teknis bebas kuota.',
+    speed: 'Sangat Cepat',
+    reasoning: 'Tinggi',
+    recommendedFor: 'Tugas pemrograman, analisis kode teknis, dan penalaran logika terstruktur',
+    allowedTiers: ['Free', 'Pro', 'Premium']
+  },
 
   // --- 3. ULTRA-FAST & LIGHTWEIGHT TIER (Respons Kilat / Minim Latensi) ---
   {
@@ -160,6 +171,17 @@ const MODEL_METADATA: AiModelMetadata[] = [
     speed: 'Sangat Cepat',
     reasoning: 'Tinggi',
     recommendedFor: 'Tanggapan instan, pendampingan responsif cepat, dan obrolan hemat waktu',
+    allowedTiers: ['Free', 'Pro', 'Premium']
+  },
+  {
+    id: 'openrouter-ling-flash',
+    name: 'OpenRouter • Ling 3.0 Flash',
+    category: 'Ultra-Cepat & Ringan',
+    tag: 'OpenRouter • Kilat & Efisien',
+    description: 'Model ultra responsif Ling 3.0 Flash via OpenRouter dengan jendela konteks 256k dan pemrosesan berkecepatan tinggi tanpa biaya.',
+    speed: 'Sangat Cepat',
+    reasoning: 'Standar',
+    recommendedFor: 'Tanggapan kilat tanpa jeda tunggu, obrolan santai, dan ringkasan cepat',
     allowedTiers: ['Free', 'Pro', 'Premium']
   },
   {
@@ -216,6 +238,8 @@ const providerModels: Record<string, { provider: ProviderId; providerModelId: st
   'openrouter-nemotron-550b': { provider: 'openrouter', providerModelId: 'nvidia/nemotron-3-ultra-550b-a55b:free' },
   'openrouter-nemotron-super-120b': { provider: 'openrouter', providerModelId: 'nvidia/nemotron-3-super-120b-a12b:free' },
   'openrouter-nemotron-lightning': { provider: 'openrouter', providerModelId: 'nvidia/nemotron-3.5-lightning:free' },
+  'openrouter-cohere-code': { provider: 'openrouter', providerModelId: 'cohere/north-mini-code:free' },
+  'openrouter-ling-flash': { provider: 'openrouter', providerModelId: 'inclusionai/ling-3.0-flash-sante:free' },
   'groq-gpt-120b': { provider: 'groq', providerModelId: 'openai/gpt-oss-120b' },
   'groq-gpt-20b': { provider: 'groq', providerModelId: 'openai/gpt-oss-20b' },
   'groq-qwen-27b': { provider: 'groq', providerModelId: 'qwen/qwen3.8-27b' },
@@ -237,6 +261,8 @@ export const LEGACY_AI_MODEL_ALIASES: Readonly<Record<string, string>> = Object.
   'nvidia/nemotron-3-ultra-550b-a55b:free': 'openrouter-nemotron-550b',
   'nvidia/nemotron-3-super-120b-a12b:free': 'openrouter-nemotron-super-120b',
   'nvidia/nemotron-3.5-lightning:free': 'openrouter-nemotron-lightning',
+  'cohere/north-mini-code:free': 'openrouter-cohere-code',
+  'inclusionai/ling-3.0-flash-sante:free': 'openrouter-ling-flash',
   'gemini-2.0-flash': 'gemini-2.5-flash',
   'gemini-2.5-pro': 'gemini-3.1-pro-preview',
   'gemini-2.5-flash-lite': 'gemini-3.1-flash-lite',

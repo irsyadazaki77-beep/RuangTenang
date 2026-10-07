@@ -227,6 +227,8 @@ export interface TurnConfig {
   credential?: string;
 }
 
+export const TURN_CREDENTIAL_TTL_SECONDS = 10 * 60;
+
 export function getValidatedTurnConfig(): TurnConfig | null {
   const isProd = process.env.NODE_ENV === 'production';
 
@@ -260,7 +262,7 @@ export function getValidatedTurnConfig(): TurnConfig | null {
 }
 
 function createEphemeralTurnConfig(url: string, sharedSecret: string, usernamePrefix?: string): TurnConfig {
-  const expiresAt = Math.floor(Date.now() / 1000) + 60 * 60;
+  const expiresAt = Math.floor(Date.now() / 1000) + TURN_CREDENTIAL_TTL_SECONDS;
   const username = `${expiresAt}:${usernamePrefix || 'ruangtenang'}`;
   const credential = crypto.createHmac('sha1', sharedSecret).update(username).digest('base64');
   return { url, username, credential };

@@ -9,7 +9,7 @@ export default defineConfig({
   workers: 1,
   reporter: 'list',
   use: {
-    baseURL: 'http://localhost:3000',
+    baseURL: process.env.PORT ? `http://localhost:${process.env.PORT}` : 'http://localhost:3000',
     trace: 'on-first-retry',
   },
   projects: [
@@ -24,7 +24,7 @@ export default defineConfig({
   ],
   webServer: {
     command: 'node scripts/prismaGenerate.js && tsx server.ts',
-    url: 'http://localhost:3000/api/health',
+    url: process.env.PORT ? `http://localhost:${process.env.PORT}/api/health` : 'http://localhost:3000/api/health',
     reuseExistingServer: true,
     timeout: 30000,
   },

@@ -219,7 +219,7 @@ describe('Core Feature Integrity Integration Tests (FASE 8)', () => {
         .set('Authorization', `Bearer ${counselor2Token}`)
         .send({ status: 'CONFIRMED' });
 
-      expect(resUpdate.status).toBe(403);
+      expect(resUpdate.status).toBe(404);
     });
 
     it('allows assigned counselor 1 to update status: requested -> confirmed -> completed', async () => {

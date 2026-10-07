@@ -19,6 +19,7 @@ export interface AiContextParams {
   useMemory?: boolean;
   isTemporary?: boolean;
   chatMode?: 'normal' | 'temporary' | 'incognito' | 'workspace' | 'RuangKerja' | string;
+  includeWorkspaceFiles?: boolean;
 }
 
 export interface BuiltContextResult {
@@ -240,7 +241,7 @@ ${memoryLines.join('\n')}
     const isAcademicWorkspace = normalizedMode === 'workspace' || normalizedMode === 'ruangkerja';
     const hasExplicitAttachments = params.attachmentIds && params.attachmentIds.length > 0;
 
-    if (isAcademicWorkspace || hasExplicitAttachments) {
+    if ((isAcademicWorkspace && params.includeWorkspaceFiles !== false) || hasExplicitAttachments) {
       try {
         const { contextRetrievalService } = await import('../file-intelligence/contextRetrievalService.js');
         retrievedDocContext = await contextRetrievalService.retrieveContext({
@@ -253,6 +254,7 @@ ${memoryLines.join('\n')}
         });
 
         if (retrievedDocContext && retrievedDocContext.contextBlock) {
+          contextParts.push('RESEARCH CITATION PROTOCOL: Evidence chunks carry request-scoped markers such as [cite:SRC_1]. You may cite only markers present in the supplied evidence. Never invent a page, author, year, DOI, or source. If evidence is insufficient, say it is unverified. Marker identity validation does not itself prove semantic support.');
           contextParts.push(retrievedDocContext.contextBlock);
         }
       } catch (err: any) {

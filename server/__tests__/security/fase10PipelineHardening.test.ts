@@ -313,7 +313,7 @@ describe('FASE 10 — Comprehensive File Pipeline Hardening Verification', () =>
     const origFetch = global.fetch;
     global.fetch = async () => ({
       ok: true,
-      json: async () => ({ attachment: { status: 'processing' } })
+      json: async () => ({ attachment: { id: 'att_mock_timeout', status: 'processing' } })
     } as any);
 
     try {

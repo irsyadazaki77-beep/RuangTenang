@@ -146,7 +146,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         icon: BookOpen,
         action: () => {
           safeLocalStorage.setItem('academic_trigger', 'new_skripsi');
-          navigate('/workspace');
+          navigate('/workspace/new');
           onClose();
         }
       },
@@ -161,7 +161,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
           if (onTriggerExportDocx) {
             onTriggerExportDocx();
           } else {
-            navigate('/workspace');
+            navigate('/workspace/new');
           }
           onClose();
         }
@@ -174,7 +174,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         icon: Quote,
         action: () => {
           safeLocalStorage.setItem('academic_trigger', 'citation_helper');
-          navigate('/workspace');
+          navigate('/workspace/new');
           onClose();
         }
       },
@@ -186,7 +186,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         icon: ListTree,
         action: () => {
           safeLocalStorage.setItem('academic_trigger', 'outline_generator');
-          navigate('/workspace');
+          navigate('/workspace/new');
           onClose();
         }
       },

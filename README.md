@@ -45,8 +45,10 @@ RuangTenang Kampus adalah platform digital kesehatan emosional dan pendampingan 
 
 1. **Install Dependensi:**
    ```bash
-   npm install
+   npm ci
    ```
+
+   Node.js 22 adalah runtime CI yang didukung. Setiap perubahan dependensi harus memperbarui dan menyertakan `package-lock.json` bersama `package.json` menggunakan npm 10. Pastikan `npm ci` berhasil sebelum mengirim perubahan; CI selalu menggunakan `npm ci`.
 
 2. **Setup Database Lokal (SQLite):**
    *Aplikasi secara otomatis membuat file database SQLite dan mensinkronisasikan tabel skema saat pertama kali dijalankan via `npm run dev`.*
@@ -85,7 +87,7 @@ RuangTenang Kampus menggunakan **Prisma ORM** yang mendukung arsitektur multi-en
 
 ### 1. Kebijakan Git Hygiene (Pemisahan Data Runtime)
 - **Zero Runtime Data in Git:** File runtime database (`*.db`, `*.sqlite`, `*.sqlite3`), runtime JSON data (`data/*.json`), backup database (`backups/`, `*.backup`, `*.dump`), report exports (`reports/*.xlsx`), serta file environment (`.env`) **diabaikan secara ketat oleh `.gitignore`** dan tidak pernah di-commit ke repositori.
-- **Fresh Clone Readiness:** Pengembang baru dapat langsung melakukan `git clone` -> `npm install` -> `npm run dev`. Sistem akan otomatis menginisialisasi database SQLite kosong yang siap digunakan tanpa ketergantungan pada artefak database lama.
+- **Fresh Clone Readiness:** Pengembang baru dapat langsung melakukan `git clone` -> `npm ci` -> `npm run dev`. Sistem akan otomatis menginisialisasi database SQLite kosong yang siap digunakan tanpa ketergantungan pada artefak database lama.
 
 ### 2. Sinkronisasi SQLite & PostgreSQL
 - **Development (SQLite):** Menggunakan `prisma/schema.sqlite.prisma` dan database lokal `prisma/ruangtenang_sqlite.db`.

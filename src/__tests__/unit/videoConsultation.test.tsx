@@ -119,6 +119,27 @@ describe('VideoConsultationRoom', () => {
     expect(screen.getAllByText('Dr. Jane Doe').length).toBeGreaterThanOrEqual(1);
   });
 
+  it('does not request camera or microphone until both room and ICE authorization succeed', async () => {
+    vi.spyOn(apiClient, 'get').mockImplementation(async (url: string) => {
+      if (url.includes('/room-access')) return { success: false, status: 403, error: 'ROOM_ACCESS_NOT_APPROVED', message: 'ROOM_ACCESS_NOT_APPROVED' };
+      return { success: true, iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+    });
+    const getUserMedia = navigator.mediaDevices.getUserMedia as ReturnType<typeof vi.fn>;
+    getUserMedia.mockClear();
+
+    render(
+      <VideoConsultationRoom
+        appointment={mockAppointment}
+        onClose={vi.fn()}
+        onEndCall={vi.fn()}
+        userRole="mahasiswa"
+      />
+    );
+
+    await waitFor(() => expect(screen.getByText(/ROOM_ACCESS_NOT_APPROVED/)).toBeInTheDocument());
+    expect(getUserMedia).not.toHaveBeenCalled();
+  });
+
   it('toggles microphone mute state', () => {
     const handleClose = vi.fn();
     const handleEndCall = vi.fn();

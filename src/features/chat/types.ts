@@ -1,3 +1,5 @@
+import type { FileSourceReference } from '../../../shared/contracts/files';
+
 export interface Attachment {
   id: string;
   file: File;
@@ -39,6 +41,7 @@ export interface Message {
   routingMode?: 'manual' | 'auto';
   routingReason?: string;
   presetId?: string;
+  sources?: FileSourceReference[];
 }
 
 export interface Chat {

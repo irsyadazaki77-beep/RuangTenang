@@ -18,9 +18,8 @@ export function buildSourceRef(params: {
   slideNumber?: number;
   sheetName?: string;
   section?: string;
-  index: number;
 }): string {
-  const { filename, pageStart, pageEnd, slideNumber, sheetName, section, index } = params;
+  const { filename, pageStart, pageEnd, slideNumber, sheetName, section } = params;
 
   if (pageStart !== undefined) {
     const pageRange = (pageEnd && pageEnd !== pageStart) ? `${pageStart}-${pageEnd}` : `${pageStart}`;
@@ -39,7 +38,8 @@ export function buildSourceRef(params: {
     return `${filename} [Bagian: ${section}]`;
   }
 
-  return `${filename} [Bagian ${index + 1}]`;
+  // Chunk ordering is an internal retrieval detail, not a source location.
+  return filename;
 }
 
 export const chunkingService = {
@@ -70,8 +70,7 @@ export const chunkingService = {
         pageEnd,
         slideNumber: currentSlide,
         sheetName: currentSheet,
-        section: currentSection,
-        index: chunkIndex
+        section: currentSection
       });
 
       chunks.push({

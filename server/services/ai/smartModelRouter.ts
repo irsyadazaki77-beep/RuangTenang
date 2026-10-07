@@ -280,7 +280,7 @@ export function scoreCandidate(
 
     case 'coding':
       if (model.reasoning === 'Sangat Tinggi' || model.reasoning === 'Tinggi') score += 25;
-      if (model.id.includes('reasoner') || model.id.includes('qwen') || model.id.includes('pro')) score += 15;
+      if (model.id.includes('reasoner') || model.id.includes('qwen') || model.id.includes('pro') || model.id.includes('code')) score += 15;
       break;
 
     case 'document_analysis':
@@ -404,7 +404,9 @@ export class SmartModelRouter {
       'gemini-3.1-flash-lite',
       DEFAULT_AI_MODEL_ID,
       'groq-qwen-27b',
-      'deepseek-chat'
+      'deepseek-chat',
+      'openrouter-nemotron-lightning',
+      'groq-gpt-20b'
     ];
 
     for (const id of fallbackCandidates) {

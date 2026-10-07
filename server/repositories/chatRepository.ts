@@ -25,6 +25,7 @@ export const chatRepository = {
         branchedFromMessageId: true,
         summary: true,
         useMemory: true,
+        workspaceMode: true,
         updatedAt: true 
       }
     });

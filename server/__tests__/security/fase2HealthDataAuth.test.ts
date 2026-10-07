@@ -210,12 +210,12 @@ describe('FASE 2: Health Data & SOAP Authorization Security Tests', () => {
     expect(res.body.error).toBe('Data tidak ditemukan atau akses tidak tersedia.');
   });
 
-  it('3. Counselor A accessing appointment of Counselor B → 403 Forbidden', async () => {
+  it('3. Counselor A accessing appointment of Counselor B → 404 Not Found', async () => {
     const res = await request(app)
       .get(`/api/v1/appointments/${apptBId}`)
       .set('Authorization', `Bearer ${tokenCounselorA}`);
 
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(404);
   });
 
   it('4. Forged studentUserId in body for SOAP creation → 403 Forbidden', async () => {

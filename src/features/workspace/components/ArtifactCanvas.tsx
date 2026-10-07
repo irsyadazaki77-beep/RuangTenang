@@ -1299,7 +1299,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
 
         {/* MODE 2: EDIT (EDITOR BERSIH BERGAYA PAPER SHEET) */}
         {viewMode === 'edit' && (
-          <div className="max-w-3xl mx-auto bg-white dark:bg-slate-900 rounded-2xl p-5 sm:p-7 border border-slate-200/80 dark:border-slate-800 shadow-sm space-y-3 min-h-[580px] flex flex-col">
+          <div className="max-w-3xl mx-auto bg-white dark:bg-slate-900/70 rounded-lg p-4 sm:p-6 space-y-3 min-h-[580px] flex flex-col">
             <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-800 pb-2.5">
               <div className="flex items-center gap-2">
                 <Edit3 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />

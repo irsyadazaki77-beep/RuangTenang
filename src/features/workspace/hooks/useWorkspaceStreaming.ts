@@ -4,6 +4,7 @@ import { Message, StoredAttachment } from '../../chat/types';
 import { parseArtifactsFromText } from '../utils/artifactParser';
 import { useToast } from '../../../components/Toast';
 import { WorkspaceArtifact, WorkspaceComposerConfig } from '../types';
+import type { FileSourceReference } from '../../../../shared/contracts/files';
 
 export type WorkspaceStreamingStatus =
   | 'idle'
@@ -127,7 +128,9 @@ export function useWorkspaceStreaming({
     customSystemNote?: string,
     attachments?: StoredAttachment[],
     config?: WorkspaceComposerConfig,
-    requestSnapshotId?: string
+    requestSnapshotId?: string,
+    includeWorkspaceFiles = true,
+    workspaceAttachmentIds?: string[]
   ) => {
     if (!userPrompt.trim() || ['preparing', 'connecting', 'streaming', 'finalizing'].includes(statusRef.current)) return;
 
@@ -157,6 +160,7 @@ export function useWorkspaceStreaming({
     let artifactCandidateSeen = false;
     let artifactScanTail = '';
     let routingMeta: Partial<Message> = {};
+    let sourceReferences: FileSourceReference[] = [];
     let createdChatId: string | undefined;
     let completionHandled = false;
     let requestFailed = false;
@@ -233,6 +237,9 @@ export function useWorkspaceStreaming({
           : config?.responseMode ?? 'Seimbang',
         aiModel: config?.aiModel,
         attachments: attachments && attachments.length > 0 ? attachments : undefined,
+        includeWorkspaceFiles,
+        workspaceAttachmentIds,
+        isolatedTaskExecution: config?.isolatedTaskExecution,
         presetId: config?.presetId,
         taskCategory: config?.taskCategory,
         latencyPreference: config?.latencyPreference,
@@ -246,6 +253,9 @@ export function useWorkspaceStreaming({
         },
         onRoutingMetadata: data => {
           if (isCurrentRequest(identity)) routingMeta = data;
+        },
+        onSources: sources => {
+          if (isCurrentRequest(identity)) sourceReferences = sources;
         },
         onMessageStart: () => {
           if (!isCurrentRequest(identity)) return;
@@ -280,6 +290,7 @@ export function useWorkspaceStreaming({
             role: 'assistant',
             content: cleanedText || finalText,
             createdAt: new Date(),
+            sources: sourceReferences,
             ...routingMeta
           };
           try {

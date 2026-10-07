@@ -96,7 +96,7 @@ export const SidebarNavLinks: React.FC<SidebarNavLinksProps> = ({
                 type="button"
                 onClick={() => handleNavigate('/workspace')}
                 className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors cursor-pointer ${
-                  location.pathname === '/workspace'
+                  location.pathname.startsWith('/workspace')
                     ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-bold'
                     : 'text-slate-500 hover:bg-slate-200/70 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-200'
                 }`}
@@ -274,7 +274,7 @@ export const SidebarNavLinks: React.FC<SidebarNavLinksProps> = ({
                   type="button"
                   onClick={() => handleNavigate('/workspace')} 
                   className={`w-full flex items-center justify-between px-2 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-                    location.pathname === '/workspace'
+                  location.pathname.startsWith('/workspace')
                       ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 font-semibold'
                       : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60'
                   }`}

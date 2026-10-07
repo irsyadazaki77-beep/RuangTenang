@@ -38,7 +38,7 @@ describe('declarative application routes', () => {
     const paths = new Set(routes.map(route => route.path));
 
     expect(paths).toEqual(new Set([
-      '/', '/c/:chatId', '/workspace', '/workspace/c/:chatId', '/mood', '/mindfulness',
+      '/', '/c/:chatId', '/workspace', '/workspace/new', '/workspace/c/:chatId', '/mood', '/mindfulness',
       '/screening', '/counselors', '/counselor-portal', '/counselordashboard', '/emergency', '*'
     ]));
     expect(routes.find(route => route.path === '/workspace')?.mode).toBe('ruangkerja');
