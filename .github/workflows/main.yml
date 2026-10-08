@@ -9,7 +9,47 @@ concurrency:
   cancel-in-progress: true
 jobs:
   quality_gate:
-    name: Build, Test & Security Release Gate
+    name: Code Quality, Tests & Build Release Gate
+    runs-on: ubuntu-latest
+    env:
+      NODE_ENV: test
+      JWT_SECRET: "ci-only-jwt-signing-key-not-for-production-32chars"
+      ENCRYPTION_KEY: "0123456789abcdef0123456789abcdef"
+      BLIND_INDEX_SECRET: "ci-only-blind-index-key-not-for-production-32chars"
+      DATABASE_URL: "file:./prisma/ruangtenang_sqlite.db"
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+      - name: Setup Node.js Environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - name: Install Dependencies
+        run: npm ci
+      - name: Install Playwright Browsers
+        run: npx playwright install --with-deps
+      - name: Setup Database
+        run: npm run db:push:sqlite
+      - name: Type Checking
+        run: npm run typecheck
+      - name: Linter
+        run: npm run lint
+      - name: Unit Tests
+        run: npm run test:unit
+      - name: Integration Tests
+        run: npm run test:integration
+      - name: Security Tests
+        run: npm run test:security
+      - name: Build Application
+        run: npm run build:production
+      - name: Performance Budget Check
+        run: node scripts/check_bundle_size.cjs
+      - name: True E2E Playwright Tests
+        run: npm run test:e2e
+
+  postgres_migration_rehearsal:
+    name: PostgreSQL Migration & Upgrade Release Gate
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -42,27 +82,11 @@ jobs:
           cache: 'npm'
       - name: Install Dependencies
         run: npm ci
-      - name: Install Playwright Browsers
-        run: npx playwright install --with-deps
-      - name: Setup Database
-        run: npm run db:push:sqlite
-      - name: Setup PostgreSQL Database & Migration Rehearsal
-        run: DATABASE_URL=$POSTGRES_URL npx prisma generate --schema prisma/schema.postgres.prisma && DATABASE_URL=$POSTGRES_URL npx prisma migrate deploy --schema prisma/schema.postgres.prisma
-      - name: Type Checking
-        run: npm run typecheck
-      - name: Linter
-        run: npm run lint
-      - name: Unit Tests
-        run: npm run test:unit
-      - name: Integration Tests
-        run: npm run test:integration
-      - name: Security Tests
-        run: npm run test:security
-      - name: PostgreSQL Tests
+      - name: Generate PostgreSQL Prisma Client
+        run: DATABASE_URL=$POSTGRES_URL npx prisma generate --schema prisma/schema.postgres.prisma
+      - name: Fresh & Legacy Migration Rehearsal
+        run: POSTGRES_ADMIN_URL=$POSTGRES_URL npm run db:rehearse:postgres
+      - name: Deploy CI PostgreSQL Database
+        run: DATABASE_URL=$POSTGRES_URL npx prisma migrate deploy --schema prisma/schema.postgres.prisma
+      - name: PostgreSQL Integration Tests
         run: DATABASE_URL=$POSTGRES_URL npm run test:integration
-      - name: Build Application
-        run: npm run build:production
-      - name: Performance Budget Check
-        run: node scripts/check_bundle_size.cjs
-      - name: True E2E Playwright Tests
-        run: npm run test:e2e

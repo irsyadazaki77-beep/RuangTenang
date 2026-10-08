@@ -11,7 +11,8 @@ import {
   MoreVertical, 
   HeartHandshake, 
   Sparkles, 
-  Trash2 
+  Trash2,
+  MessageSquareText
 } from 'lucide-react';
 import { WorkspaceArtifact, ArtifactType, WorkspaceMode, WorkspaceTab } from '../types';
 import { BrandLogo } from '../../../components/ui/BrandLogo';
@@ -125,35 +126,39 @@ export const WorkspaceHeader: React.FC<WorkspaceHeaderProps> = React.memo(({
       {/* Center / Right Zone: Segmented Switcher & Workspace Actions */}
       <div className="flex items-center gap-2 shrink-0">
         {/* Mobile/Tablet Tab Switcher */}
-        <div className="xl:hidden flex items-center p-0.5 bg-slate-100/90 dark:bg-slate-800/90 rounded-lg border border-slate-200/60 dark:border-slate-700/60">
+        <div role="group" aria-label="Tampilan workspace" className="xl:hidden flex items-center p-0.5 bg-slate-100/90 dark:bg-slate-800/90 rounded-lg border border-slate-200/60 dark:border-slate-700/60">
           <button
             type="button"
             onClick={() => onSetMobileActiveTab('chat')}
             aria-pressed={mobileActiveTab === 'chat'}
-            className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+            aria-label="Obrolan"
+            title="Obrolan"
+            className={`flex min-h-9 items-center justify-center gap-1.5 rounded-md px-2 sm:px-2.5 text-xs font-medium transition-colors cursor-pointer ${
               mobileActiveTab === 'chat'
                 ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-semibold shadow-2xs'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
             }`}
           >
-            Obrolan
+            <MessageSquareText className="h-4 w-4 sm:hidden" aria-hidden="true" /><span className="hidden sm:inline">Obrolan</span>
           </button>
           <button
             type="button"
             onClick={() => onSetMobileActiveTab('canvas')}
             aria-pressed={mobileActiveTab === 'canvas'}
-            className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer relative ${
+            aria-label="Canvas"
+            title="Canvas"
+            className={`relative flex min-h-9 items-center justify-center gap-1.5 rounded-md px-2 sm:px-2.5 text-xs font-medium transition-colors cursor-pointer ${
               mobileActiveTab === 'canvas'
                 ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-semibold shadow-2xs'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
             }`}
           >
-            Canvas
+            <FileText className="h-4 w-4 sm:hidden" aria-hidden="true" /><span className="hidden sm:inline">Canvas</span>
             {hasUnreadArtifact && (
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block ml-1 animate-pulse" />
             )}
           </button>
-          <button type="button" onClick={() => onSetMobileActiveTab('context')} aria-pressed={mobileActiveTab === 'context'} className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer ${mobileActiveTab === 'context' ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-semibold shadow-2xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'}`}>Context</button>
+          <button type="button" onClick={() => onSetMobileActiveTab('context')} aria-label="Context" title="Context" aria-pressed={mobileActiveTab === 'context'} className={`flex min-h-9 items-center justify-center gap-1.5 rounded-md px-2 sm:px-2.5 text-xs font-medium transition-colors cursor-pointer ${mobileActiveTab === 'context' ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-semibold shadow-2xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'}`}><Sparkles className="h-4 w-4 sm:hidden" aria-hidden="true" /><span className="hidden sm:inline">Context</span></button>
         </div>
 
         {onToggleContext && <button type="button" onClick={onToggleContext} aria-label="Buka panel context" title="Context" className="hidden xl:inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:hover:bg-slate-800 dark:hover:text-slate-100"><Sparkles className="h-3.5 w-3.5" /><span>Context</span></button>}

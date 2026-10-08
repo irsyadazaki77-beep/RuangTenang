@@ -7,7 +7,7 @@ import { sanitizeInput } from '../security.js';
 
 const router = Router();
 
-const artifactTypeSchema = z.enum(['DOCUMENT', 'CODE', 'CITATION', 'OUTLINE']);
+const artifactTypeSchema = z.enum(['DOCUMENT', 'CODE', 'CITATION', 'OUTLINE', 'CHART', 'TABLE']);
 
 const createOrUpdateArtifactSchema = z.object({
   id: z.string().optional(),

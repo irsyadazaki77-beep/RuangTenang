@@ -1,5 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { Readable } from 'stream';
+import crypto from 'crypto';
 import multer from 'multer';
 import { prisma } from '../database.js';
 import { optionalAuth, requireAuth } from '../middleware/auth.js';
@@ -9,6 +10,8 @@ import { documentIngestionService } from '../services/file-intelligence/document
 import { DocumentProcessingException } from '../services/file-intelligence/fileTypes.js';
 import { attachmentUploadLimiter } from '../middleware/rateLimiters.js';
 import { MAX_ATTACHMENT_UPLOAD_BATCH, MAX_WORKSPACE_ACTIVE_ATTACHMENTS } from '../../shared/contracts/files.js';
+import { TabularAnalysisRequestSchema, TabularTransformRequestSchema } from '../../shared/contracts/tabular.js';
+import { createTabularDataset, parseTabularWorkbook, runTabularAnalysis, toSafeCsv, toSafeXlsx, previewTabularTransform } from '../services/tabularDatasetService.js';
 
 const router = Router();
 const MAX_CONCURRENT_ATTACHMENT_UPLOADS = 4;
@@ -38,6 +41,148 @@ const sendAttachmentError = (res: Response, code: string, message: string, statu
     error: { code, message }
   });
 };
+
+async function loadOwnedTabularAttachment(attachmentId: string, userId: string) {
+  let loaded: Awaited<ReturnType<typeof attachmentStorageService.getAttachmentForUser>>;
+  try { loaded = await attachmentStorageService.getAttachmentForUser(attachmentId, userId, false); }
+  catch { return { error: { code: 'NOT_FOUND', message: 'Dataset tidak ditemukan.', status: 404 } } as const; }
+  if (!loaded) return { error: { code: 'NOT_FOUND', message: 'Dataset tidak ditemukan.', status: 404 } } as const;
+  const { attachment, buffer } = loaded;
+  if (attachment.status !== 'ready') {
+    buffer.fill(0);
+    return { error: { code: 'ATTACHMENT_NOT_READY', message: 'Dataset tersedia setelah pemrosesan selesai.', status: 409 } } as const;
+  }
+  if (!attachment.chatId || !['csv', 'tsv', 'xlsx'].includes((attachment.filename.split('.').pop() || '').toLowerCase())) {
+    buffer.fill(0);
+    return { error: { code: 'UNSUPPORTED_DATASET', message: 'Analisis tabular tersedia untuk CSV, TSV, dan XLSX.', status: 415 } } as const;
+  }
+  let chat;
+  try { chat = await prisma.chats.findFirst({ where: { id: attachment.chatId, userId }, select: { id: true } }); }
+  catch {
+    buffer.fill(0);
+    return { error: { code: 'NOT_FOUND', message: 'Dataset tidak ditemukan.', status: 404 } } as const;
+  }
+  if (!chat) {
+    buffer.fill(0);
+    return { error: { code: 'NOT_FOUND', message: 'Dataset tidak ditemukan.', status: 404 } } as const;
+  }
+  try {
+    const workbook = await parseTabularWorkbook(buffer, attachment.filename);
+    return { attachment, buffer, workbook } as const;
+  } catch (error) {
+    buffer.fill(0);
+    return { error: { code: 'TABULAR_PARSE_FAILED', message: error instanceof Error ? error.message : 'Dataset gagal dibaca.', status: 422 } } as const;
+  }
+}
+
+/** Structured, ownership-checked spreadsheet overview and profile. */
+router.get('/chat/attachments/:id/dataset', requireAuth, async (req: Request, res: Response) => {
+  const loaded = await loadOwnedTabularAttachment(req.params.id, req.user!.userId);
+  if ('error' in loaded) return sendAttachmentError(res, loaded.error.code, loaded.error.message, loaded.error.status);
+  try {
+    const sheetName = typeof req.query.sheet === 'string' ? req.query.sheet : undefined;
+    const dataset = createTabularDataset({ attachmentId: loaded.attachment.id, workspaceId: loaded.attachment.chatId!, filename: loaded.attachment.filename, checksum: loaded.attachment.checksum || '', createdAt: loaded.attachment.createdAt, workbook: loaded.workbook, sheetName });
+    return res.json({ success: true, data: dataset });
+  } finally { loaded.buffer.fill(0); }
+});
+
+/** Return a bounded page of structured cells; the browser never receives the full workbook. */
+router.get('/chat/attachments/:id/dataset/preview', requireAuth, async (req: Request, res: Response) => {
+  const loaded = await loadOwnedTabularAttachment(req.params.id, req.user!.userId);
+  if ('error' in loaded) return sendAttachmentError(res, loaded.error.code, loaded.error.message, loaded.error.status);
+  try {
+    const requestedSheet = typeof req.query.sheet === 'string' ? req.query.sheet : loaded.workbook.activeSheet;
+    const sheet = loaded.workbook.sheets.find(candidate => candidate.name === requestedSheet);
+    if (!sheet) return sendAttachmentError(res, 'SHEET_NOT_FOUND', 'Sheet tidak ditemukan pada workbook ini.', 404);
+    const offset = Math.max(0, Math.min(100_000, Number.parseInt(String(req.query.offset || '0'), 10) || 0));
+    const limit = Math.max(1, Math.min(50, Number.parseInt(String(req.query.limit || '25'), 10) || 25));
+    return res.json({ success: true, data: { sheetName: sheet.name, columns: sheet.headers, rows: sheet.rows.slice(offset, offset + limit), offset, limit, rowCount: sheet.rows.length } });
+  } finally { loaded.buffer.fill(0); }
+});
+
+/** Execute a validated allowlisted aggregation in server code, never generated code. */
+router.post('/chat/attachments/:id/dataset/analyze', requireAuth, async (req: Request, res: Response) => {
+  const parsedPlan = TabularAnalysisRequestSchema.safeParse(req.body);
+  if (!parsedPlan.success) return sendAttachmentError(res, 'INVALID_ANALYSIS_PLAN', 'Rencana analisis tidak valid.', 400);
+  const loaded = await loadOwnedTabularAttachment(req.params.id, req.user!.userId);
+  if ('error' in loaded) return sendAttachmentError(res, loaded.error.code, loaded.error.message, loaded.error.status);
+  try {
+    const result = runTabularAnalysis({ attachmentId: loaded.attachment.id, filename: loaded.attachment.filename, checksum: loaded.attachment.checksum || '', createdAt: loaded.attachment.createdAt, workbook: loaded.workbook, plan: parsedPlan.data });
+    return res.json({ success: true, data: result });
+  } catch (error) {
+    return sendAttachmentError(res, 'ANALYSIS_VALIDATION_FAILED', error instanceof Error ? error.message : 'Rencana analisis tidak dapat dijalankan.', 422);
+  } finally { loaded.buffer.fill(0); }
+});
+
+/** Preview transformation changes without persisting or changing the source file. */
+router.post('/chat/attachments/:id/dataset/transform/preview', requireAuth, async (req: Request, res: Response) => {
+  const parsedPlan = TabularTransformRequestSchema.safeParse(req.body);
+  if (!parsedPlan.success) return sendAttachmentError(res, 'INVALID_TRANSFORM_PLAN', 'Rencana transformasi tidak valid.', 400);
+  const loaded = await loadOwnedTabularAttachment(req.params.id, req.user!.userId);
+  if ('error' in loaded) return sendAttachmentError(res, loaded.error.code, loaded.error.message, loaded.error.status);
+  try {
+    const preview = previewTabularTransform({ attachmentId: loaded.attachment.id, checksum: loaded.attachment.checksum || '', workbook: loaded.workbook, plan: parsedPlan.data });
+    return res.json({ success: true, data: preview.result });
+  } catch (error) {
+    return sendAttachmentError(res, 'TRANSFORM_PREVIEW_FAILED', error instanceof Error ? error.message : 'Preview transformasi gagal dibuat.', 422);
+  } finally { loaded.buffer.fill(0); }
+});
+
+/** User-confirmed transformation creates a structured Workspace TABLE artifact; source attachment is immutable. */
+router.post('/chat/attachments/:id/dataset/transform/confirm', requireAuth, async (req: Request, res: Response) => {
+  const parsedPlan = TabularTransformRequestSchema.safeParse(req.body);
+  if (!parsedPlan.success) return sendAttachmentError(res, 'INVALID_TRANSFORM_PLAN', 'Rencana transformasi tidak valid.', 400);
+  const loaded = await loadOwnedTabularAttachment(req.params.id, req.user!.userId);
+  if ('error' in loaded) return sendAttachmentError(res, loaded.error.code, loaded.error.message, loaded.error.status);
+  try {
+    const transformed = previewTabularTransform({ attachmentId: loaded.attachment.id, checksum: loaded.attachment.checksum || '', workbook: loaded.workbook, plan: parsedPlan.data });
+    const title = `${loaded.attachment.filename.replace(/\.[^.]+$/, '')} · ${transformed.result.sheetName} (derived)`;
+    const columns = loaded.workbook.sheets.find(sheet => sheet.name === transformed.result.sheetName)?.headers || [];
+    const content = JSON.stringify({ type: 'table', title, columns, rows: transformed.rows, sourceVersion: transformed.result.sourceVersion, sourceFileId: transformed.result.sourceFileId, filename: loaded.attachment.filename, sheetName: transformed.result.sheetName, transformations: parsedPlan.data.operations });
+    if (content.length > 1_500_000) return sendAttachmentError(res, 'DERIVED_DATASET_TOO_LARGE', 'Hasil transformasi melebihi batas ukuran artefak Workspace.', 413);
+    const chatId = loaded.attachment.chatId!;
+    const userId = req.user!.userId;
+    const encryptedContent = encryptionService.encryptSensitive(content) || content;
+    const now = new Date();
+    const artifact = await prisma.artifacts.create({
+      data: {
+        id: `art_${crypto.randomUUID()}`, userId, chatId, title: title.slice(0, 200), type: 'TABLE', language: 'json', content: encryptedContent, version: 1, createdAt: now, updatedAt: now,
+        versions: { create: [{ id: `ver_${crypto.randomUUID()}`, version: 1, title: title.slice(0, 200), content: encryptedContent, createdAt: now }] }
+      },
+      include: { versions: { orderBy: { version: 'desc' } } }
+    });
+    return res.status(201).json({ success: true, data: { artifact: { ...artifact, content, versions: artifact.versions.map(version => ({ ...version, content })) }, transform: transformed.result, sourceUnchanged: true } });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Transformasi gagal disimpan.';
+    const code = message.includes('Versi sumber berubah') ? 'DATASET_VERSION_CHANGED' : 'TRANSFORM_CONFIRM_FAILED';
+    return sendAttachmentError(res, code, message, code === 'DATASET_VERSION_CHANGED' ? 409 : 422);
+  } finally { loaded.buffer.fill(0); }
+});
+
+/** Export an immutable source sheet as CSV with spreadsheet-formula injection protection. */
+router.get('/chat/attachments/:id/dataset/export', requireAuth, async (req: Request, res: Response) => {
+  const loaded = await loadOwnedTabularAttachment(req.params.id, req.user!.userId);
+  if ('error' in loaded) return sendAttachmentError(res, loaded.error.code, loaded.error.message, loaded.error.status);
+  try {
+    const requestedSheet = typeof req.query.sheet === 'string' ? req.query.sheet : loaded.workbook.activeSheet;
+    const sheet = loaded.workbook.sheets.find(candidate => candidate.name === requestedSheet);
+    if (!sheet) return sendAttachmentError(res, 'SHEET_NOT_FOUND', 'Sheet tidak ditemukan pada workbook ini.', 404);
+    const format = req.query.format === 'xlsx' ? 'xlsx' : 'csv';
+    if (req.query.format && !['csv', 'xlsx'].includes(String(req.query.format))) return sendAttachmentError(res, 'UNSUPPORTED_EXPORT_FORMAT', 'Format ekspor yang diminta tidak didukung.', 400);
+    const safeBase = loaded.attachment.filename.replace(/\.[^.]+$/, '').replace(/[^\p{L}\p{N}_-]+/gu, '_').slice(0, 100) || 'dataset';
+    const safeSheet = sheet.name.replace(/[^\p{L}\p{N}_-]+/gu, '_').slice(0, 60) || 'sheet';
+    if (format === 'xlsx') {
+      const xlsx = await toSafeXlsx(sheet.headers, sheet.rows, safeSheet);
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="${safeBase}_${safeSheet}.xlsx"`);
+      return res.send(xlsx);
+    }
+    const csv = toSafeCsv(sheet.headers, sheet.rows);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${safeBase}_${safeSheet}.csv"`);
+    return res.send(`\uFEFF${csv}`);
+  } finally { loaded.buffer.fill(0); }
+});
 
 const limitConcurrentAttachmentUploads = (_req: Request, res: Response, next: NextFunction) => {
   if (activeAttachmentUploads >= MAX_CONCURRENT_ATTACHMENT_UPLOADS) {

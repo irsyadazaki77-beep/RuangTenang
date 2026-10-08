@@ -7,7 +7,9 @@ import {
   FilePlus, 
   X,
   Search,
-  ChevronDown
+  ChevronDown,
+  BarChart3,
+  Table2
 } from 'lucide-react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { WorkspaceArtifact, ArtifactType, WorkspaceTab, WorkspaceArtifactSelection, ArtifactPatch } from '../types';
@@ -85,6 +87,8 @@ export const WorkspaceCanvasPane: React.FC<WorkspaceCanvasPaneProps> = React.mem
       case 'CODE': return <FileCode className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />;
       case 'CITATION': return <Quote className="w-3.5 h-3.5 text-amber-500" />;
       case 'OUTLINE': return <ListTree className="w-3.5 h-3.5 text-teal-500" />;
+      case 'CHART': return <BarChart3 className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400" />;
+      case 'TABLE': return <Table2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />;
       default: return <FileText className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />;
     }
   };
@@ -173,7 +177,7 @@ export const WorkspaceCanvasPane: React.FC<WorkspaceCanvasPaneProps> = React.mem
 
                     {showFilterDropdown && (
                       <div className="absolute right-0 top-full mt-1 w-28 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-lg p-1 z-30 space-y-0.5">
-                        {(['ALL', 'DOCUMENT', 'CODE', 'CITATION', 'OUTLINE'] as const).map(t => (
+                        {(['ALL', 'DOCUMENT', 'CODE', 'CITATION', 'OUTLINE', 'CHART', 'TABLE'] as const).map(t => (
                           <button
                             key={t}
                             type="button"

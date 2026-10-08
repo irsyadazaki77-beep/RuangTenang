@@ -9,7 +9,7 @@ export const MAX_UPLOAD_FILE_SIZE_BYTES = 5 * 1024 * 1024;
 export const MAX_DOCUMENT_CONTEXT_TOKENS = 2500;
 export const MAX_DOCUMENT_CONTEXT_CHUNKS = 8;
 export const SUPPORTED_WORKSPACE_FILE_EXTENSIONS = [
-  'txt', 'md', 'markdown', 'csv', 'json', 'bib', 'ris',
+  'txt', 'md', 'markdown', 'csv', 'tsv', 'json', 'bib', 'ris',
   'py', 'js', 'jsx', 'ts', 'tsx', 'java', 'cpp', 'c', 'h', 'sql', 'html', 'css', 'xml', 'yaml', 'yml', 'sh', 'r',
   'pdf', 'docx', 'pptx', 'xlsx', 'png', 'jpg', 'jpeg', 'webp'
 ] as const;

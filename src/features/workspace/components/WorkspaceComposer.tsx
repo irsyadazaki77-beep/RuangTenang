@@ -316,22 +316,25 @@ export const WorkspaceComposer: React.FC<WorkspaceComposerProps> = React.memo(({
             >
               <Paperclip className="w-4 h-4" />
             </button>
-            {compareMode ? (
-              <WorkspaceCompareModelSelector selectedModelIds={selectedCompareModels} onChange={onCompareModelsChange} disabled={isStreaming} hasAttachment={hasAttachments} />
-            ) : <WorkspaceModelSelector value={selectedModel} onChange={onModelChange} disabled={isStreaming} />}
             <div className="relative shrink-0">
               <button type="button" disabled={isStreaming || isDisabled} aria-label="Opsi Workspace" aria-expanded={optionsOpen} aria-haspopup="dialog" aria-controls="workspace-composer-options" onClick={() => setOptionsOpen(value => !value)} className={`inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${optionsOpen ? 'relative z-50 bg-slate-200 text-slate-800 dark:bg-slate-800 dark:text-slate-100' : 'text-slate-500 hover:bg-slate-200/70 dark:hover:bg-slate-800'}`}>
                 <SlidersHorizontal className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Opsi</span>
+                <span className="hidden sm:inline">AI &amp; opsi</span>
               </button>
               {optionsOpen && <>
                 <button type="button" className="fixed inset-0 z-30 cursor-default" aria-label="Tutup opsi composer" onClick={() => { setOptionsOpen(false); setAdvancedOpen(false); }} />
                 <div id="workspace-composer-options" role="dialog" aria-label="Opsi Workspace" onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); setOptionsOpen(false); setAdvancedOpen(false); } }} className="absolute bottom-full left-0 z-40 mb-2 w-[min(22rem,calc(100vw-2rem))] max-h-[min(65dvh,32rem)] overflow-y-auto rounded-xl border border-slate-200 bg-white p-2 shadow-xl dark:border-slate-700 dark:bg-slate-900">
-                  <div className="flex flex-wrap items-center gap-1 border-b border-slate-100 pb-2 dark:border-slate-800">
+                  <div className="flex flex-col gap-2 border-b border-slate-100 pb-2 dark:border-slate-800">
+                    <div className="flex min-w-0 items-center justify-between gap-2 rounded-lg bg-slate-50 px-2 py-1 dark:bg-slate-950/70">
+                      <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Model AI</span>
+                      <WorkspaceModelSelector value={selectedModel} onChange={onModelChange} disabled={isStreaming} overlayPlacement="viewport" />
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1">
                     {allPresets && activePreset && onSelectPreset && onCreatePreset && onUpdatePreset && onDuplicatePreset && onDeletePreset && (
                       <WorkspacePresetSelector allPresets={allPresets} activePreset={activePreset} activePresetId={activePresetId || activePreset.id} summary={presetSummary || activePreset.name} isManualOverride={isManualModelOverride} disabled={isStreaming} onSelectPreset={onSelectPreset} onCreatePreset={onCreatePreset} onUpdatePreset={onUpdatePreset} onDuplicatePreset={onDuplicatePreset} onDeletePreset={onDeletePreset} onResetPersonalization={onResetPersonalization} />
                     )}
                     <button type="button" disabled={isStreaming} aria-pressed={compareMode} onClick={() => onCompareModeChange(!compareMode)} className={`h-8 rounded-lg px-2 text-xs font-medium transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${compareMode ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'}`} title={compareMode ? 'Kembali ke mode Normal' : 'Bandingkan jawaban dari beberapa model'}>{compareMode ? 'Compare aktif' : 'Compare'}</button>
+                    {compareMode && <WorkspaceCompareModelSelector selectedModelIds={selectedCompareModels} onChange={onCompareModelsChange} disabled={isStreaming} hasAttachment={hasAttachments} />}
                     <div className="relative shrink-0">
                       <button ref={advancedTriggerRef} type="button" aria-expanded={advancedOpen} aria-haspopup="dialog" onClick={() => setAdvancedOpen(value => !value)} className="h-8 rounded-lg px-2 text-xs text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">Respons</button>
                       {advancedOpen && <>
@@ -342,6 +345,7 @@ export const WorkspaceComposer: React.FC<WorkspaceComposerProps> = React.memo(({
                           <div className="mt-3 border-t border-slate-100 pt-2 text-[11px] text-slate-500 dark:border-slate-800"><div className="font-medium text-slate-600 dark:text-slate-300">Konteks sesi</div><div>{hasAttachments ? `${activeAttachments.length} dokumen · ${activeAttachments.slice(0, 2).map(attachment => attachment.name).join(', ')}${activeAttachments.length > 2 ? ', …' : ''}` : 'Tanpa dokumen'}</div><div>Percakapan ini · riwayat percakapan aktif</div></div>
                         </div>
                       </>}
+                    </div>
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center gap-1 pt-2">

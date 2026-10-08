@@ -80,7 +80,7 @@ export interface WorkspaceComparisonCandidate {
   error?: string;
 }
 
-export type ArtifactType = 'DOCUMENT' | 'CODE' | 'CITATION' | 'OUTLINE';
+export type ArtifactType = 'DOCUMENT' | 'CODE' | 'CITATION' | 'OUTLINE' | 'CHART' | 'TABLE';
 
 export interface ArtifactVersionRecord {
   id: string;

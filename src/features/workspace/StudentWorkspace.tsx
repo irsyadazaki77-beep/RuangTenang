@@ -139,6 +139,7 @@ export function StudentWorkspace({
   // 2. Domain Artifacts Hook
   const {
     artifacts,
+    setArtifacts,
     activeArtifact,
     activeArtifactId,
     setActiveArtifactId,
@@ -1199,7 +1200,7 @@ export function StudentWorkspace({
           if (selected) void executeWorkspaceTool(selected.tool, input, selected.artifact);
         }}
       />
-      {previewAttachmentId && <WorkspaceFilePreviewModal attachmentId={previewAttachmentId} onClose={() => setPreviewAttachmentId(null)} />}
+      {previewAttachmentId && <WorkspaceFilePreviewModal attachmentId={previewAttachmentId} onClose={() => setPreviewAttachmentId(null)} onArtifactCreated={artifact => { setArtifacts(current => [artifact, ...current.filter(item => item.id !== artifact.id)]); setActiveArtifactId(artifact.id); setHasUnreadArtifact(true); }} />}
     </div>
   );
 }

@@ -253,7 +253,7 @@ export async function validateAndInspectFile(
     }
   }
 
-  if (ext === 'csv') {
+  if (ext === 'csv' || ext === 'tsv') {
     return {
       verifiedMime: 'text/csv',
       sanitizedName,

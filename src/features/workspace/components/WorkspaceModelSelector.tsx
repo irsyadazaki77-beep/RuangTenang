@@ -7,13 +7,15 @@ interface WorkspaceModelSelectorProps {
   value: string;
   onChange: (modelId: string) => void;
   disabled?: boolean;
+  overlayPlacement?: 'anchored' | 'viewport';
 }
 
 /** Uses the server's sanitized model catalog and supports Auto Smart Routing. */
 export const WorkspaceModelSelector = React.memo(function WorkspaceModelSelector({
   value,
   onChange,
-  disabled = false
+  disabled = false,
+  overlayPlacement = 'anchored'
 }: WorkspaceModelSelectorProps) {
   const { models, loading, error, defaultModel } = useAiModelCatalog();
   const isAuto = value === AUTO_ROUTING_MODEL_ID;
@@ -100,7 +102,7 @@ export const WorkspaceModelSelector = React.memo(function WorkspaceModelSelector
         <>
           <button type="button" className="fixed inset-0 z-40 cursor-default" aria-label="Tutup pilihan model" onClick={close} />
           <div
-            className="fixed inset-x-2 bottom-3 z-50 max-h-[min(70dvh,34rem)] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900 md:absolute md:inset-auto md:bottom-full md:left-0 md:mb-2 md:w-[min(24rem,calc(100vw-2rem))]"
+            className={`fixed inset-x-2 bottom-3 z-50 max-h-[min(70dvh,34rem)] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900 ${overlayPlacement === 'anchored' ? 'md:absolute md:inset-auto md:bottom-full md:left-0 md:mb-2 md:w-[min(24rem,calc(100vw-2rem))]' : 'md:inset-x-auto md:bottom-20 md:left-4 md:w-[min(24rem,calc(100vw-2rem))]'}`}
             onKeyDown={event => {
               if (event.key === 'Escape') { event.preventDefault(); close(); }
               if (event.key === 'ArrowDown') { event.preventDefault(); moveActive(1); }

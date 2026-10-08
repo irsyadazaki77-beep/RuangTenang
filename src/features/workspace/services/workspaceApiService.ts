@@ -3,6 +3,7 @@ import { Message } from '../../chat/types';
 import { WorkspaceArtifact, ArtifactType, WorkspaceFileKind } from '../types';
 import type { WorkspaceContract, WorkspaceTaskContract, WorkspaceTaskStatus, WorkspaceTaskSource, WorkspacePlan } from '../../../../shared/contracts/workspace';
 import type { ResearchSource, ResearchSourceMetadata } from '../../../../shared/contracts/files';
+import type { TabularAnalysisRequest, TabularAnalysisResult, TabularDataset, TabularTransformPreview, TabularTransformRequest } from '../../../../shared/contracts/tabular';
 
 export interface CreateArtifactPayload {
   id?: string;
@@ -43,6 +44,8 @@ export interface WorkspaceAttachmentDto {
 export interface WorkspaceAttachmentPreviewDto extends Pick<WorkspaceAttachmentDto, 'id' | 'filename' | 'mimeType' | 'fileKind' | 'size' | 'chunkCount'> {
   previewText: string;
 }
+
+export interface TabularPreviewDto { sheetName: string; columns: string[]; rows: Array<Record<string, unknown>>; offset: number; limit: number; rowCount: number }
 
 export interface WorkspaceSearchResult {
   kind: 'workspace' | 'task' | 'artifact' | 'file' | 'message';
@@ -93,6 +96,38 @@ export class WorkspaceApiService {
   static async fetchAttachmentPreview(attachmentId: string, signal?: AbortSignal): Promise<WorkspaceAttachmentPreviewDto> {
     const res = await apiClient.get<WorkspaceAttachmentPreviewDto>(`/api/v1/chat/attachments/${encodeURIComponent(attachmentId)}/preview`, { signal });
     if (!res.success || !res.data) throw new Error(res.message || 'Preview dokumen gagal dimuat.');
+    return res.data;
+  }
+
+  static async fetchTabularDataset(attachmentId: string, sheetName?: string, signal?: AbortSignal): Promise<TabularDataset> {
+    const suffix = sheetName ? `?sheet=${encodeURIComponent(sheetName)}` : '';
+    const res = await apiClient.get<TabularDataset>(`/api/v1/chat/attachments/${encodeURIComponent(attachmentId)}/dataset${suffix}`, { signal });
+    if (!res.success || !res.data) throw new Error(res.message || 'Profil dataset gagal dimuat.');
+    return res.data;
+  }
+
+  static async fetchTabularPreview(attachmentId: string, sheetName: string, offset: number, signal?: AbortSignal): Promise<TabularPreviewDto> {
+    const query = new URLSearchParams({ sheet: sheetName, offset: String(offset), limit: '25' });
+    const res = await apiClient.get<TabularPreviewDto>(`/api/v1/chat/attachments/${encodeURIComponent(attachmentId)}/dataset/preview?${query}`, { signal });
+    if (!res.success || !res.data) throw new Error(res.message || 'Preview dataset gagal dimuat.');
+    return res.data;
+  }
+
+  static async analyzeTabularDataset(attachmentId: string, plan: TabularAnalysisRequest): Promise<TabularAnalysisResult> {
+    const res = await apiClient.post<TabularAnalysisResult>(`/api/v1/chat/attachments/${encodeURIComponent(attachmentId)}/dataset/analyze`, plan);
+    if (!res.success || !res.data) throw new Error(res.message || 'Analisis dataset gagal dijalankan.');
+    return res.data;
+  }
+
+  static async previewTabularTransform(attachmentId: string, plan: TabularTransformRequest): Promise<TabularTransformPreview> {
+    const res = await apiClient.post<TabularTransformPreview>(`/api/v1/chat/attachments/${encodeURIComponent(attachmentId)}/dataset/transform/preview`, plan);
+    if (!res.success || !res.data) throw new Error(res.message || 'Preview transformasi gagal.');
+    return res.data;
+  }
+
+  static async confirmTabularTransform(attachmentId: string, plan: TabularTransformRequest): Promise<{ artifact: WorkspaceArtifact; transform: TabularTransformPreview; sourceUnchanged: boolean }> {
+    const res = await apiClient.post<{ artifact: WorkspaceArtifact; transform: TabularTransformPreview; sourceUnchanged: boolean }>(`/api/v1/chat/attachments/${encodeURIComponent(attachmentId)}/dataset/transform/confirm`, plan);
+    if (!res.success || !res.data) throw new Error(res.message || 'Transformasi gagal disimpan.');
     return res.data;
   }
 

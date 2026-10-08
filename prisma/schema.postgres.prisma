@@ -604,3 +604,25 @@ model ArtifactVersions {
 
   @@index([artifactId])
 }
+
+/// Retained for deployments created by the original PostgreSQL baseline.
+model DistributedState {
+  key       String   @id
+  category  String
+  value     String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime
+
+  @@index([category, key])
+  @@index([expiresAt])
+}
+
+model DistributedLock {
+  id         String   @id
+  holder     String
+  acquiredAt DateTime @default(now())
+  expiresAt  DateTime
+
+  @@index([expiresAt])
+}

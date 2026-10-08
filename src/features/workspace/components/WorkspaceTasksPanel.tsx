@@ -20,7 +20,7 @@ interface Props {
 }
 
 export const WorkspaceTasksPanel: React.FC<Props> = ({ plan, canPersist, isGenerating, isExecuting, onGenerate, onUpdate, onRun, onCancel, onComplete, modelOptions, onOpenArtifact, onOpenSource, onAcceptReview, onRejectReview }) => {
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(() => Boolean(plan));
   const [goal, setGoal] = useState('');
   const [titleEdits, setTitleEdits] = useState<Record<string, string>>({});
   const [reviewFeedback, setReviewFeedback] = useState<Record<string, string>>({});
@@ -55,7 +55,7 @@ export const WorkspaceTasksPanel: React.FC<Props> = ({ plan, canPersist, isGener
       {!plan ? <>
         <p className="mb-2 text-xs text-slate-500">Buat draft langkah yang bisa ditinjau dan diedit sebelum dijalankan.</p>
         {!canPersist && <p className="mb-2 text-[11px] text-slate-500">Kirim pesan untuk menyimpan Workspace sebelum membuat plan.</p>}
-        <form onSubmit={event => { event.preventDefault(); if (goal.trim()) onGenerate(goal.trim()); }} className="flex gap-2">
+        <form onSubmit={event => { event.preventDefault(); if (goal.trim()) { setExpanded(true); onGenerate(goal.trim()); } }} className="flex gap-2">
           <input value={goal} onChange={event => setGoal(event.target.value.slice(0, 1000))} maxLength={1000} placeholder="Apa yang ingin diselesaikan?" aria-label="Tujuan workflow" className="h-9 min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 text-xs outline-none focus:border-emerald-500 dark:border-slate-700 dark:bg-slate-900" />
           <button type="submit" disabled={!canPersist || !goal.trim() || isGenerating} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-emerald-700 px-3 text-xs font-semibold text-white disabled:opacity-50"><Sparkles className="h-3.5 w-3.5" />{isGenerating ? 'Menyusun…' : 'Buat plan'}</button>
         </form>

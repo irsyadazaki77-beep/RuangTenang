@@ -26,6 +26,7 @@
     "db:migrate:postgres": "npx prisma migrate deploy --schema prisma/schema.postgres.prisma",
     "db:deploy": "npx prisma migrate deploy --schema prisma/schema.postgres.prisma",
     "db:deploy:postgres": "npx prisma migrate deploy --schema prisma/schema.postgres.prisma",
+    "db:rehearse:postgres": "tsx scripts/rehearsePostgresMigrations.ts",
     "db:encrypt": "tsx server/scripts/migrateEncryption.ts",
     "seed:demo": "tsx server/scripts/seedDemoData.ts",
     "admin:bootstrap": "tsx server/scripts/bootstrapAdmin.ts",

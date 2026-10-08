@@ -1,7 +1,10 @@
 ALTER TABLE "Chats"
-ADD COLUMN "workspaceMode" TEXT NOT NULL DEFAULT 'RUANG_TENANG';
+ADD COLUMN IF NOT EXISTS "workspaceMode" TEXT NOT NULL DEFAULT 'RUANG_TENANG';
+UPDATE "Chats" SET "workspaceMode" = 'RUANG_TENANG' WHERE "workspaceMode" IS NULL;
+ALTER TABLE "Chats" ALTER COLUMN "workspaceMode" SET DEFAULT 'RUANG_TENANG';
+ALTER TABLE "Chats" ALTER COLUMN "workspaceMode" SET NOT NULL;
 
-CREATE TABLE "Workspaces" (
+CREATE TABLE IF NOT EXISTS "Workspaces" (
   "chatId" TEXT NOT NULL,
   "description" TEXT,
   "instructions" TEXT,
@@ -14,9 +17,9 @@ CREATE TABLE "Workspaces" (
   CONSTRAINT "Workspaces_chatId_fkey" FOREIGN KEY ("chatId") REFERENCES "Chats"("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 
-CREATE INDEX "Workspaces_updatedAt_idx" ON "Workspaces"("updatedAt");
+CREATE INDEX IF NOT EXISTS "Workspaces_updatedAt_idx" ON "Workspaces"("updatedAt");
 
-CREATE TABLE "WorkspaceTasks" (
+CREATE TABLE IF NOT EXISTS "WorkspaceTasks" (
   "id" TEXT NOT NULL,
   "workspaceId" TEXT NOT NULL,
   "title" TEXT NOT NULL,
@@ -28,4 +31,4 @@ CREATE TABLE "WorkspaceTasks" (
   CONSTRAINT "WorkspaceTasks_workspaceId_fkey" FOREIGN KEY ("workspaceId") REFERENCES "Workspaces"("chatId") ON DELETE CASCADE ON UPDATE CASCADE
 );
 
-CREATE INDEX "WorkspaceTasks_workspaceId_status_updatedAt_idx" ON "WorkspaceTasks"("workspaceId", "status", "updatedAt");
+CREATE INDEX IF NOT EXISTS "WorkspaceTasks_workspaceId_status_updatedAt_idx" ON "WorkspaceTasks"("workspaceId", "status", "updatedAt");
