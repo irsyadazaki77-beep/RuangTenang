@@ -23,7 +23,7 @@ import workspaceRouter from '../../routes/workspace.js';
 
 const app = express(); app.use(express.json()); app.use('/api/v1/workspace', workspaceRouter);
 const now = '2026-10-06T00:00:00.000Z';
-const plan = (status: string, tasks = [
+const plan = (status: string, tasks: any[] = [
   { id: 't1', title: 'Analisis sumber', type: 'analysis', dependsOn: [], status: 'todo' },
   { id: 't2', title: 'Tulis ringkasan', type: 'writing', dependsOn: ['t1'], status: 'todo' }
 ]) => ({ id: 'p1', goal: 'Buat ringkasan', title: 'Ringkasan sumber', status, tasks, createdAt: now, updatedAt: now });
@@ -62,6 +62,47 @@ describe('Workspace workflow authorization and task execution', () => {
     expect(JSON.stringify(JSON.parse(row.settings).agentWorkflow)).not.toContain('Analyze only source A');
     expect(JSON.parse(row.settings).agentWorkflow.storage).toBe('encrypted-v1');
     expect(db.workspaceUpdateMany).toHaveBeenCalledOnce();
+  });
+
+  it('decrypts encrypted plan records for the owning Workspace API response', async () => {
+    const savedPlan = plan('approved');
+    const plaintext = JSON.stringify({ version: 1, plan: savedPlan });
+    row.settings = JSON.stringify({ agentWorkflow: { storage: 'encrypted-v1', payload: `encrypted:${Buffer.from(plaintext).toString('base64')}` } });
+
+    const response = await request(app).get('/api/v1/workspace/chat-a').set('x-test-user', 'user-a').expect(200);
+
+    expect(response.body.data.plan).toMatchObject({ id: 'p1', title: 'Ringkasan sumber' });
+    expect(response.body.data.settings.agentWorkflow).toMatchObject({ version: 1, plan: { id: 'p1' } });
+    expect(JSON.stringify(response.body)).not.toContain('encrypted-v1');
+  });
+
+  it('upgrades a legacy plaintext plan on Workspace load without losing its contents', async () => {
+    const savedPlan = plan('approved');
+    row.settings = JSON.stringify({ theme: 'minimal', agentWorkflow: { version: 1, plan: savedPlan } });
+
+    const response = await request(app).get('/api/v1/workspace/chat-a').set('x-test-user', 'user-a').expect(200);
+
+    expect(response.body.data.plan).toMatchObject({ id: 'p1', goal: 'Buat ringkasan' });
+    const persistedWorkflow = JSON.parse(row.settings).agentWorkflow;
+    expect(persistedWorkflow.storage).toBe('encrypted-v1');
+    expect(JSON.stringify(persistedWorkflow)).not.toContain('Buat ringkasan');
+    expect(JSON.parse(row.settings).theme).toBe('minimal');
+  });
+
+  it('rejects completion submitted by an obsolete task execution', async () => {
+    const currentPlan = plan('running', [
+      { id: 't1', title: 'Analisis sumber', type: 'analysis', dependsOn: [], status: 'running', executionId: 'exec-new' },
+      { id: 't2', title: 'Tulis ringkasan', type: 'writing', dependsOn: ['t1'], status: 'todo' }
+    ]);
+    row.settings = JSON.stringify({ agentWorkflow: { version: 1, plan: currentPlan } });
+    const stalePlan = plan('running', [
+      { id: 't1', title: 'Analisis sumber', type: 'analysis', dependsOn: [], status: 'done', executionId: 'exec-old' },
+      { id: 't2', title: 'Tulis ringkasan', type: 'writing', dependsOn: ['t1'], status: 'todo' }
+    ]);
+
+    await request(app).put('/api/v1/workspace/chat-a/plans/p1').set('x-test-user', 'user-a').send(stalePlan).expect(409)
+      .expect(({ body }) => expect(body.code).toBe('WORKSPACE_TASK_EXECUTION_STALE'));
+    expect(db.workspaceUpdateMany).not.toHaveBeenCalled();
   });
 
   it('scopes plan execution to the authenticated Workspace owner', async () => {

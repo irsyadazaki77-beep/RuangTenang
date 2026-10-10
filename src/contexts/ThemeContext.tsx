@@ -43,6 +43,12 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       root.classList.remove('dark');
       root.style.colorScheme = 'light';
     }
+
+    // Sinkronisasi dinamis browser theme-color meta tag (Mobile Safari & Chrome)
+    const themeColorMetas = document.querySelectorAll('meta[name="theme-color"]:not([media])');
+    themeColorMetas.forEach(meta => {
+      meta.setAttribute('content', actualTheme === 'dark' ? '#080d14' : '#fafaf9');
+    });
   }, [actualTheme]);
 
   const setTheme = (newTheme: ThemeMode) => {

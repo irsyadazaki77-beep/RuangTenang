@@ -94,7 +94,10 @@ export const StudentShell: React.FC<StudentShellProps> = ({
 
   return (
     <div className="flex w-full h-[100dvh] bg-transparent text-primary font-sans relative overflow-hidden">
-      <ChatAuroraBackground variant={currentMode === 'RUANG_KERJA' ? 'kerja' : 'tenang'} />
+      <ChatAuroraBackground 
+        variant={currentMode === 'RUANG_KERJA' ? 'kerja' : 'tenang'} 
+        intensity={((safeLocalStorage.getItem('aurora_intensity') as 'subtle' | 'normal' | 'vivid' | null) || 'normal')}
+      />
       <Sidebar 
         isOpen={isSidebarOpen} 
         setIsOpen={setIsSidebarOpen} 

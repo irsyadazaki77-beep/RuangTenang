@@ -1051,7 +1051,7 @@ export function StudentWorkspace({
 
   return (
     <div 
-      className="flex flex-col h-dvh w-full bg-slate-50/70 dark:bg-[#0B101B]/75 backdrop-blur-[1px] text-slate-800 dark:text-slate-100 overflow-hidden relative"
+      className="flex flex-col h-dvh w-full bg-transparent text-slate-800 dark:text-slate-100 overflow-hidden relative"
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
@@ -1118,12 +1118,12 @@ export function StudentWorkspace({
       <main className="flex-1 min-h-0 min-w-0 flex overflow-hidden relative">
         {/* LEFT PANE: CONVERSATION & COMPOSER */}
         <section 
-          className={`flex flex-col min-h-0 min-w-0 h-full bg-white/80 dark:bg-secondary-900/80 backdrop-blur-md border-r border-slate-200/80 dark:border-slate-800 transition-all duration-200 ${
+          className={`flex flex-col min-h-0 min-w-0 h-full border-r border-slate-200/80 dark:border-slate-800 transition-all duration-200 ${
             isCanvasExpanded 
               ? 'hidden' 
               : isCanvasOpen 
-                ? 'w-full xl:flex-[0_0_48%] 2xl:flex-[0_0_45%] shrink-0'
-                : 'w-full max-w-3xl mx-auto border-r-0'
+                ? 'w-full xl:flex-[0_0_48%] 2xl:flex-[0_0_45%] shrink-0 bg-white/60 dark:bg-secondary-900/60 backdrop-blur-xs'
+                : 'w-full max-w-3xl mx-auto border-r-0 bg-white/45 dark:bg-secondary-900/45 backdrop-blur-xs'
           } ${mobileActiveTab === 'chat' || workspaceView.inspector === 'sources' ? 'flex' : 'hidden xl:flex'}`}
         >
           <WorkspaceConversation

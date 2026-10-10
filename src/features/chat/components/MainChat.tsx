@@ -99,24 +99,16 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
     fetchMessages
   });
 
-  // Sinkronisasi status AI streaming ke root ambient Aurora mesh 2.0
+  // Sinkronisasi status AI streaming ke root ambient Aurora mesh 2.1
   useEffect(() => {
-    let phase: 'idle' | 'preparing' | 'thinking' | 'streaming' | 'finishing' | 'error' = 'idle';
     if (isTyping) {
-      phase = streamingMessage?.content ? 'streaming' : 'thinking';
-    } else {
-      phase = 'idle';
+      const phase: 'thinking' | 'streaming' = streamingMessage?.content ? 'streaming' : 'thinking';
+      dispatchAuroraActivity({
+        mode: 'RUANG_TENANG',
+        phase,
+        chatId,
+      });
     }
-
-    dispatchAuroraActivity({
-      mode: 'RUANG_TENANG',
-      phase,
-      chatId,
-    });
-
-    window.dispatchEvent(
-      new CustomEvent('rt-aurora-streaming', { detail: { isStreaming: isTyping } })
-    );
   }, [isTyping, Boolean(streamingMessage?.content), chatId]);
 
   // Reset aurora ke idle saat unmount

@@ -191,8 +191,25 @@ router.get('/:chatId', async (req: Request, res: Response) => {
     if (!row) return res.status(404).json({ success: false, code: 'WORKSPACE_NOT_FOUND', message: 'Workspace tidak ditemukan.' });
     // Workflow execution is request-scoped. A persisted "running" marker after a page reload
     // cannot represent live background work, so expose it as resumable without claiming progress.
-    const settings = parseWorkspaceSettings(row.settings);
-    const workflow = readAgentWorkflow(settings);
+    let settings = parseWorkspaceSettings(row.settings);
+    let workflow = readAgentWorkflow(settings);
+    if (workflow && settings.agentWorkflow?.storage !== 'encrypted-v1') {
+      const migratedSettings = { ...settings };
+      storeAgentWorkflow(migratedSettings, workflow);
+      const migratedRaw = JSON.stringify(migratedSettings);
+      const migrated = await prisma.workspaces.updateMany({ where: { chatId: req.params.chatId, settings: row.settings }, data: { settings: migratedRaw } });
+      if (migrated.count) {
+        row = { ...row, settings: migratedRaw };
+        settings = migratedSettings;
+      } else {
+        // Another tab won the CAS. Re-read so this GET never returns the stale plaintext plan.
+        const fresh = await ownedWorkspace(req.params.chatId, req.user!.userId, false);
+        if (!fresh) return res.status(404).json({ success: false, code: 'WORKSPACE_NOT_FOUND', message: 'Workspace tidak ditemukan.' });
+        row = fresh;
+        settings = parseWorkspaceSettings(row.settings);
+        workflow = readAgentWorkflow(settings);
+      }
+    }
     const plan = workflow?.plan;
     if (plan?.status === 'running' && Array.isArray(plan.tasks)) {
       const recoveredAt = new Date().toISOString();

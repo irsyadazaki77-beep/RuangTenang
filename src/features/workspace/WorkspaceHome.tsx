@@ -110,7 +110,7 @@ export const WorkspaceHome: React.FC<WorkspaceHomeProps> = ({ chats, isLoading =
   const showResults = search.trim().length >= 2;
 
   return (
-    <div className="h-full min-h-0 overflow-y-auto bg-[#f7f8f6]/70 px-4 py-5 dark:bg-[#0b1220]/65 backdrop-blur-[2px] transition-colors duration-500 sm:px-7 sm:py-8 lg:px-10">
+    <div className="h-full min-h-0 overflow-y-auto bg-transparent px-4 py-5 transition-colors duration-500 sm:px-7 sm:py-8 lg:px-10">
       <div className="mx-auto w-full max-w-3xl">
         {onOpenSidebar && <button type="button" onClick={onOpenSidebar} className="mb-4 inline-flex min-h-10 items-center gap-2 rounded-lg px-2 text-xs font-medium text-slate-600 transition hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:text-slate-300 dark:hover:bg-slate-900 lg:hidden"><Menu className="h-4 w-4" /> Menu workspace</button>}
 
