@@ -3,11 +3,11 @@ import path from 'path';
 import crypto from 'crypto';
 import { prisma } from '../../database.js';
 import { validateAndInspectFile, VerifiedFileInfo } from './magicByteValidator.js';
-import { getAdapterForKind } from './adapters/index.js';
+
 import { DocumentExtractor } from './documentExtractor.js';
 import { normalizationService } from './normalizationService.js';
 import { chunkingService } from './chunkingService.js';
-import { DocumentProcessingException, DEFAULT_FILE_LIMITS } from './fileTypes.js';
+import { DocumentProcessingException } from './fileTypes.js';
 import { AttachmentResponseDTO, SupportedFileKind } from '../../../shared/contracts/files.js';
 
 import { aiSafetyService } from '../ai/aiSafetyService.js';

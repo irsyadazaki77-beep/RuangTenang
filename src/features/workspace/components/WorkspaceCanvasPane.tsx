@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { Suspense, useState, useMemo } from 'react';
 import { 
   FileText, 
   FileCode, 
@@ -13,12 +13,19 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { WorkspaceArtifact, ArtifactType, WorkspaceTab, WorkspaceArtifactSelection, ArtifactPatch } from '../types';
-import { ArtifactCanvas } from './ArtifactCanvas';
 import { WorkspaceToolDefinition } from '../tools/toolTypes';
+
+const ArtifactCanvas = React.lazy(() => import('./ArtifactCanvas').then(module => ({ default: module.ArtifactCanvas })));
+
+function CanvasLoadingFallback() {
+  return <div className="flex min-h-40 flex-1 items-center justify-center text-xs text-slate-500" role="status">Memuat Canvas…</div>;
+}
 
 interface WorkspaceCanvasPaneProps {
   artifacts: WorkspaceArtifact[];
   activeArtifact: WorkspaceArtifact | null;
+  draftContent?: string;
+  scrollStorageKey?: string;
   activeArtifactId: string;
   isCanvasOpen: boolean;
   isCanvasExpanded: boolean;
@@ -30,7 +37,7 @@ interface WorkspaceCanvasPaneProps {
   onCloseCanvas: () => void;
   onToggleExpand: () => void;
   onUpdateActiveArtifact: (updated: Partial<WorkspaceArtifact>) => void;
-  onSaveArtifact: (content: string, title?: string, createVersionSnapshot?: boolean, expectedUpdatedAt?: string) => Promise<unknown> | unknown;
+  onSaveArtifact: (content: string, title?: string, createVersionSnapshot?: boolean, expectedUpdatedAt?: string, expectedVersion?: number) => Promise<unknown> | unknown;
   onRollbackVersion: (targetVersion: number) => Promise<void> | void;
   onRequestRevision: (revisionPrompt: string, currentArtifact: WorkspaceArtifact) => void;
   onSelectTool?: (tool: WorkspaceToolDefinition, currentArtifact: WorkspaceArtifact) => void;
@@ -50,6 +57,8 @@ interface WorkspaceCanvasPaneProps {
 export const WorkspaceCanvasPane: React.FC<WorkspaceCanvasPaneProps> = React.memo(({
   artifacts,
   activeArtifact,
+  draftContent,
+  scrollStorageKey,
   activeArtifactId,
   isCanvasOpen,
   isCanvasExpanded,
@@ -78,9 +87,23 @@ export const WorkspaceCanvasPane: React.FC<WorkspaceCanvasPaneProps> = React.mem
   revisionCommit
 }) => {
   const shouldReduceMotion = useReducedMotion();
+  const [isDesktopLayout, setIsDesktopLayout] = useState(() => typeof window === 'undefined'
+    ? true
+    : window.matchMedia ? window.matchMedia('(min-width: 1280px)').matches : true);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<ArtifactType | 'ALL'>('ALL');
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
+
+  React.useEffect(() => {
+    const media = window.matchMedia?.('(min-width: 1280px)');
+    if (media) {
+      const update = () => setIsDesktopLayout(media.matches);
+      update();
+      media.addEventListener?.('change', update);
+      return () => media.removeEventListener?.('change', update);
+    }
+    return undefined;
+  }, []);
 
   const getArtifactTabIcon = (type: ArtifactType) => {
     switch (type) {
@@ -107,7 +130,7 @@ export const WorkspaceCanvasPane: React.FC<WorkspaceCanvasPaneProps> = React.mem
   return (
     <>
       {/* DESKTOP RIGHT PANE: LIVE ARTIFACT CANVAS */}
-      {isCanvasOpen && (
+      {isCanvasOpen && isDesktopLayout && (
         <section 
         className="hidden xl:flex flex-1 min-h-0 min-w-0 flex-col h-full overflow-hidden transition-all duration-200"
         >
@@ -118,7 +141,7 @@ export const WorkspaceCanvasPane: React.FC<WorkspaceCanvasPaneProps> = React.mem
           </div>}
           {/* Multi-Artifact Tab & Filter Strip (when > 1 artifacts exist) */}
           {artifacts.length > 1 && (
-            <div className="h-9 px-3 bg-white dark:bg-[#0F172A] border-b border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-1 shrink-0 z-10">
+            <div className="h-9 px-3 bg-white dark:bg-secondary-900 border-b border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-1 shrink-0 z-10">
               {/* Tab Strip with Horizontal Scroll */}
               <div className="flex items-center gap-1 overflow-x-auto no-scrollbar flex-1 min-w-0 py-1">
                 {filteredArtifacts.map((art) => {
@@ -137,7 +160,7 @@ export const WorkspaceCanvasPane: React.FC<WorkspaceCanvasPaneProps> = React.mem
                       title={art.title}
                     >
                       {getArtifactTabIcon(art.type)}
-                      <span className="truncate max-w-[130px]">{art.title}</span>
+                      <span className="truncate max-w-32.5">{art.title}</span>
                       <span className="text-[9.5px] font-mono opacity-60">v{art.version || 1}</span>
                     </button>
                   );
@@ -203,8 +226,11 @@ export const WorkspaceCanvasPane: React.FC<WorkspaceCanvasPaneProps> = React.mem
           )}
 
           {activeArtifact ? (
+            <Suspense fallback={<CanvasLoadingFallback />}>
             <ArtifactCanvas
               artifact={activeArtifact}
+              initialDraftContent={draftContent}
+              scrollStorageKey={scrollStorageKey}
               onUpdateArtifact={onUpdateActiveArtifact}
               onSaveArtifact={onSaveArtifact}
               onRollbackVersion={onRollbackVersion}
@@ -224,6 +250,7 @@ export const WorkspaceCanvasPane: React.FC<WorkspaceCanvasPaneProps> = React.mem
               isExpanded={isCanvasExpanded}
               onToggleExpand={onToggleExpand}
             />
+            </Suspense>
           ) : (
             <div className="flex-1 min-h-0 flex flex-col items-center justify-center p-6 sm:p-8 text-center text-slate-400">
               <FileText className="w-10 h-10 text-slate-300 dark:text-slate-700 mb-2" />
@@ -272,14 +299,14 @@ export const WorkspaceCanvasPane: React.FC<WorkspaceCanvasPaneProps> = React.mem
 
       {/* MOBILE SLIDE-OVER DRAWER FOR CANVAS */}
       <AnimatePresence>
-        {mobileActiveTab === 'canvas' && (
+        {mobileActiveTab === 'canvas' && !isDesktopLayout && (
           <motion.div
             key="mobile-canvas-drawer"
             initial={shouldReduceMotion ? { opacity: 0 } : { x: '100%' }}
             animate={{ x: 0 }}
             exit={shouldReduceMotion ? { opacity: 0 } : { x: '100%' }}
             transition={{ duration: 0.18 }}
-            className="xl:hidden fixed inset-0 z-40 bg-white dark:bg-[#0F172A] flex flex-col shadow-2xl pt-safe pb-safe"
+            className="xl:hidden fixed inset-0 z-40 bg-white dark:bg-secondary-900 flex flex-col shadow-2xl pt-safe pb-safe"
           >
             {/* Mobile Drawer Top Bar */}
             <div className="flex items-center justify-between px-3 py-2 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 shrink-0">
@@ -303,12 +330,15 @@ export const WorkspaceCanvasPane: React.FC<WorkspaceCanvasPaneProps> = React.mem
             {/* Drawer Body */}
             <div className="flex-1 overflow-hidden">
               {activeArtifact ? (
+                <Suspense fallback={<CanvasLoadingFallback />}>
                 <ArtifactCanvas
                   artifact={activeArtifact}
+                  initialDraftContent={draftContent}
+                  scrollStorageKey={scrollStorageKey}
                   onUpdateArtifact={onUpdateActiveArtifact}
                   onSaveArtifact={onSaveArtifact}
                   onRollbackVersion={onRollbackVersion}
-                  onClose={() => onSetMobileActiveTab('chat')}
+                  onClose={() => { onCloseCanvas(); onSetMobileActiveTab('chat'); }}
                   onRequestRevision={onRequestRevision}
                   onSelectTool={onSelectTool}
                   onDuplicateArtifact={onDuplicateArtifact}
@@ -324,6 +354,7 @@ export const WorkspaceCanvasPane: React.FC<WorkspaceCanvasPaneProps> = React.mem
                   isExpanded={false}
                   onToggleExpand={() => {}}
                 />
+                </Suspense>
               ) : (
                 <div className="flex-1 h-full flex flex-col items-center justify-center p-8 text-center text-slate-400">
                   <FileText className="w-10 h-10 text-slate-300 dark:text-slate-700 mb-2" />

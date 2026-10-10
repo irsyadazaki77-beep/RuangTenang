@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import crypto from 'crypto';
+
 import { prisma } from '../database.js';
 import { MAX_UPLOAD_FILE_SIZE_BYTES } from '../../shared/contracts/files.js';
 import { aiSafetyService } from './ai/aiSafetyService.js';
@@ -100,9 +100,10 @@ export function sanitizeFilename(rawFilename: string): string {
   if (!rawFilename || typeof rawFilename !== 'string') return 'attachment.bin';
   
   // Strip path traversal characters (slashes, backslashes, dot-dots, null bytes)
-  let name = rawFilename.replace(/[\/\\]/g, '').replace(/\.\.+/g, '').replace(/\0/g, '').trim();
+  let name = rawFilename.replace(/[/\\]/g, '').replace(/\.\.+/g, '').replace(/\0/g, '').trim();
   
   // Remove control characters
+  // eslint-disable-next-line no-control-regex
   name = name.replace(/[\x00-\x1F\x7F]/g, '');
   
   // Prevent dangerous double extensions like .php.png or .exe.txt
@@ -120,7 +121,7 @@ export function sanitizeFilename(rawFilename: string): string {
   return name;
 }
 
-export function validateAndDetectFile(buffer: Buffer, originalFilename: string, clientMime: string): {
+export function validateAndDetectFile(buffer: Buffer, originalFilename: string, _clientMime: string): {
   verifiedMime: string;
   sanitizedName: string;
   size: number;
@@ -138,7 +139,7 @@ export function validateAndDetectFile(buffer: Buffer, originalFilename: string, 
   const sanitizedName = sanitizeFilename(originalFilename);
 
   // Find matching rule considering the extension first if there are multiple rules with same signature (e.g. zip/ooxml)
-  let matchedRule = MAGIC_BYTES_RULES.find(rule => rule.exts.includes(ext) && rule.check(buffer))
+  const matchedRule = MAGIC_BYTES_RULES.find(rule => rule.exts.includes(ext) && rule.check(buffer))
     || MAGIC_BYTES_RULES.find(rule => rule.check(buffer));
   let verifiedMime = matchedRule ? matchedRule.mime : '';
 

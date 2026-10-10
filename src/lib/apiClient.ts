@@ -8,6 +8,7 @@ export interface ApiResponse<T = unknown> {
   error?: string;
   code?: string;
   status?: number;
+  retryAfterMs?: number;
   message?: string;
 }
 
@@ -141,7 +142,17 @@ export async function fetchWithTimeoutAndRetry<T = unknown>(
   }
 
   const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), timeoutMs);
+  const callerSignal = options.signal;
+  if (callerSignal?.aborted) {
+    return { success: false, error: 'Permintaan dibatalkan.', message: 'Permintaan dibatalkan.', code: 'ABORTED' };
+  }
+  let timedOut = false;
+  const abortFromCaller = () => controller.abort();
+  callerSignal?.addEventListener('abort', abortFromCaller, { once: true });
+  const id = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
 
   const mergedOptions: RequestInit = {
     ...options,
@@ -156,6 +167,7 @@ export async function fetchWithTimeoutAndRetry<T = unknown>(
   try {
     const res = await fetch(url, mergedOptions);
     clearTimeout(id);
+    callerSignal?.removeEventListener('abort', abortFromCaller);
 
     if (!res.ok) {
       const fallbackMsg = `Server error (${res.status})`;
@@ -172,7 +184,16 @@ export async function fetchWithTimeoutAndRetry<T = unknown>(
         // ignore json parse error on non-ok
       }
 
-      return { success: false, error: errorMsg, message: errorMsg, code, status: res.status, data: errorDetails as Extract<T, unknown> };
+      const retryAfter = typeof res.headers?.get === 'function' ? res.headers.get('retry-after') : null;
+      let retryAfterMs: number | undefined;
+      if (retryAfter) {
+        const seconds = Number(retryAfter);
+        const parsedDate = Date.parse(retryAfter);
+        if (Number.isFinite(seconds) && seconds >= 0) retryAfterMs = seconds * 1000;
+        else if (Number.isFinite(parsedDate)) retryAfterMs = Math.max(0, parsedDate - Date.now());
+      }
+
+      return { success: false, error: errorMsg, message: errorMsg, code, status: res.status, retryAfterMs, data: errorDetails as Extract<T, unknown> };
     }
 
     if (res.status === 204) {
@@ -226,8 +247,11 @@ export async function fetchWithTimeoutAndRetry<T = unknown>(
   } catch (err: any) {
     clearTimeout(id);
     if (err instanceof Error && err.name === 'AbortError') {
-      return { success: false, error: 'Waktu koneksi habis. Silakan coba lagi.', message: 'Waktu koneksi habis. Silakan coba lagi.', code: 'TIMEOUT' };
+      callerSignal?.removeEventListener('abort', abortFromCaller);
+      if (callerSignal?.aborted) return { success: false, error: 'Permintaan dibatalkan.', message: 'Permintaan dibatalkan.', code: 'ABORTED' };
+      if (timedOut) return { success: false, error: 'Waktu koneksi habis. Silakan coba lagi.', message: 'Waktu koneksi habis. Silakan coba lagi.', code: 'TIMEOUT' };
     }
+    callerSignal?.removeEventListener('abort', abortFromCaller);
     if (canRetry && retries > 0) {
       // Exponential backoff + jitter
       const delay = Math.pow(2, attempt) * 1000 + Math.random() * 500;

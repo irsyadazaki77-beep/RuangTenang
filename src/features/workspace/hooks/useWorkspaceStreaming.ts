@@ -5,6 +5,7 @@ import { parseArtifactsFromText } from '../utils/artifactParser';
 import { useToast } from '../../../components/Toast';
 import { WorkspaceArtifact, WorkspaceComposerConfig } from '../types';
 import type { FileSourceReference } from '../../../../shared/contracts/files';
+import { dispatchAuroraActivity } from '../../../lib/auroraEvents';
 
 export type WorkspaceStreamingStatus =
   | 'idle'
@@ -66,6 +67,40 @@ export function useWorkspaceStreaming({
     if (statusRef.current === status) return;
     statusRef.current = status;
     if (mountedRef.current) setStreamingStatus(status);
+
+    // Sinkronisasi ke Aurora Engine untuk Ruang Kerja
+    const currentIdentity = activeIdentityRef.current;
+    let auroraPhase: 'idle' | 'preparing' | 'thinking' | 'streaming' | 'finishing' | 'error' = 'idle';
+    switch (status) {
+      case 'preparing':
+        auroraPhase = 'preparing';
+        break;
+      case 'connecting':
+        auroraPhase = 'thinking';
+        break;
+      case 'streaming':
+        auroraPhase = 'streaming';
+        break;
+      case 'finalizing':
+      case 'completed':
+        auroraPhase = 'finishing';
+        break;
+      case 'error':
+        auroraPhase = 'error';
+        break;
+      case 'cancelled':
+      case 'idle':
+      default:
+        auroraPhase = 'idle';
+        break;
+    }
+
+    dispatchAuroraActivity({
+      mode: 'RUANG_KERJA',
+      phase: auroraPhase,
+      requestId: currentIdentity?.requestId,
+      workspaceId: currentIdentity?.workspaceId || currentWorkspaceRef.current,
+    });
   }, []);
 
   const clearParseTimer = useCallback(() => {
@@ -108,6 +143,10 @@ export function useWorkspaceStreaming({
       clearStreamUiTimer();
       streamingClientRef.current?.abort();
       streamingClientRef.current = null;
+      dispatchAuroraActivity({
+        mode: 'RUANG_KERJA',
+        phase: 'idle',
+      });
     };
   }, [clearParseTimer, clearStreamUiTimer]);
 

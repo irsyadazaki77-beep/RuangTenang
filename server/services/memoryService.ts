@@ -30,7 +30,7 @@ export class MemoryService {
       // Memories older than 30 days have a lower score, but not 0 if highly relevant
       const ageMs = now - m.createdAt.getTime();
       const ageDays = ageMs / (1000 * 60 * 60 * 24);
-      let timeScore = Math.max(0, 5 - (ageDays / 30)); // Max +5 for brand new, 0 for > 150 days
+      const timeScore = Math.max(0, 5 - (ageDays / 30)); // Max +5 for brand new, 0 for > 150 days
       score += timeScore;
 
       // If highly irrelevant (score < 1), we can filter them out later, but keep if we need baseline

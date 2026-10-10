@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { serverDb, prisma } from '../database';
 import { requireAuth, requireRole, normalizeRole } from '../middleware/auth';
+import { verifyOfflineOwner } from '../middleware/offlineOwnership.js';
 import { sanitizeInput } from '../security';
 import { validatePagination, idempotencyMiddleware } from '../apiV1Helpers';
 import { EventEmitter } from 'events';
@@ -86,7 +87,7 @@ export function parseAppointmentToUtcDate(dateStr: string, timeStr: string, time
   }
 }
 
-export function mapAppointmentToResponse(appt: any): AppointmentResponseDTO {
+export function mapAppointmentToResponse(appt: any, redactPrivateDetails = false): AppointmentResponseDTO {
   return {
     id: appt.id,
     counselorId: appt.counselorId,
@@ -94,17 +95,16 @@ export function mapAppointmentToResponse(appt: any): AppointmentResponseDTO {
     date: appt.date,
     time: appt.time,
     timezone: appt.timezone || 'WIB',
-    notes: appt.notes || '',
+    ...(!redactPrivateDetails ? { notes: appt.notes || '' } : {}),
     status: appt.status,
     approvalStatus: appt.approvalStatus,
     attendanceStatus: appt.attendanceStatus,
-    meetingLink: appt.meetingLink || '',
+    ...(!redactPrivateDetails ? { meetingLink: appt.meetingLink || '' } : {}),
     mode: appt.mode || 'video_call',
     createdAt: appt.createdAt,
     userId: appt.userId || '',
     studentName: appt.studentName || '',
-    studentNIM: appt.studentNIM || '',
-    studentEmail: appt.studentEmail || '',
+    ...(!redactPrivateDetails ? { studentNIM: appt.studentNIM || '', studentEmail: appt.studentEmail || '' } : {}),
   };
 }
 
@@ -329,7 +329,8 @@ router.get(['/', '/db/appointments'], requireAuth, requireRole(['mahasiswa', 'ko
     res.setHeader('X-Limit', limit.toString());
     res.setHeader('X-Total-Pages', Math.ceil(total / Math.max(limit, 1)));
 
-    const responseData = appointmentsData.map(mapAppointmentToResponse);
+    const redactPrivateDetails = normalizeRole(req.user!.role) === 'admin';
+    const responseData = appointmentsData.map(appointment => mapAppointmentToResponse(appointment, redactPrivateDetails));
 
     if (req.query.format === 'object') {
       return res.json({
@@ -352,7 +353,7 @@ router.get(['/', '/db/appointments'], requireAuth, requireRole(['mahasiswa', 'ko
 router.get(['/:id', '/db/appointments/:id'], requireAuth, verifyAppointmentAccess, async (req: Request, res: Response) => {
   try {
     const appt = (req as any).appointment;
-    res.json({ success: true, record: mapAppointmentToResponse(appt) });
+    res.json({ success: true, record: mapAppointmentToResponse(appt, normalizeRole(req.user!.role) === 'admin') });
   } catch (err: any) {
     console.error('Error fetching appointment by ID:', err);
     res.status(500).json({ error: 'Gagal mengambil data janji temu.' });
@@ -410,7 +411,19 @@ router.get(['/:id/ice-servers', '/db/appointments/:id/ice-servers'], requireAuth
 });
 
 // Create Appointment
-router.post(['/', '/db/appointments'], requireAuth, requireRole(['mahasiswa', 'konselor', 'admin']), idempotencyMiddleware, async (req: Request, res: Response) => {
+router.post(['/', '/db/appointments'], requireAuth, requireRole(['mahasiswa', 'konselor', 'admin']), verifyOfflineOwner, idempotencyMiddleware({
+  projectResponse: (body) => {
+    if (!body || typeof body !== 'object') return { success: true };
+    const response = body as { record?: Record<string, unknown> };
+    const record = response.record;
+    if (!record) return { success: true };
+    const safeRecord = Object.fromEntries([
+      'id', 'counselorId', 'counselorName', 'date', 'time', 'timezone', 'mode',
+      'status', 'approvalStatus', 'attendanceStatus', 'createdAt',
+    ].flatMap(key => key in record ? [[key, record[key]]] : []));
+    return { success: true, record: safeRecord };
+  },
+}), async (req: Request, res: Response) => {
   try {
     const parsed = createAppointmentSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -453,7 +466,7 @@ router.post(['/', '/db/appointments'], requireAuth, requireRole(['mahasiswa', 'k
       studentEmail: sanitizeInput(finalStudentEmail, 100)
     });
 
-    res.json({ success: true, record: mapAppointmentToResponse(record) });
+    res.json({ success: true, record: mapAppointmentToResponse(record, role === 'admin') });
   } catch (err: any) {
     if (err.message === 'SLOT_ALREADY_BOOKED' || err.code === 'P2034') {
       return res.status(409).json({
@@ -461,7 +474,8 @@ router.post(['/', '/db/appointments'], requireAuth, requireRole(['mahasiswa', 'k
       });
     }
     if (err.message === 'INVALID_APPOINTMENT_DATETIME') return res.status(400).json({ success: false, error: err.message });
-    console.error('Error creating appointment:', err);
+    // Avoid logging request fields or ORM error details that may echo private notes.
+    console.error('[APPOINTMENT] CREATE_APPOINTMENT_FAILED');
     res.status(500).json({ error: 'Gagal menyimpan jadwal ke database.' });
   }
 });
@@ -507,8 +521,26 @@ router.put(['/:id', '/db/appointments/:id'], requireAuth, verifyAppointmentAcces
     if (validated.status && !isValidAppointmentStatusTransition(appt.status, validated.status)) {
       return res.status(409).json({ success: false, error: 'INVALID_APPOINTMENT_STATUS_TRANSITION' });
     }
+    if (validated.approvalStatus !== undefined) {
+      return res.status(400).json({ success: false, error: 'APPROVAL_STATUS_DERIVED_FROM_APPOINTMENT_STATUS' });
+    }
+    if (validated.attendanceStatus !== undefined && validated.status !== 'COMPLETED' && validated.status !== 'CANCELLED') {
+      return res.status(400).json({ success: false, error: 'ATTENDANCE_STATUS_DERIVED_FROM_APPOINTMENT_STATUS' });
+    }
     if (role === 'mahasiswa' && validated.status && validated.status !== 'CANCELLED') {
       return res.status(403).json({ success: false, error: 'STATUS_UPDATE_FORBIDDEN' });
+    }
+    if (validated.status === 'IN_PROGRESS') {
+      if (role !== 'konselor' || appt.approvalStatus !== 'APPROVED') {
+        return res.status(403).json({ success: false, error: 'SESSION_START_FORBIDDEN' });
+      }
+      const roomDecision = canJoinAppointmentRoom(appt);
+      if (roomDecision.allowed === false) {
+        return res.status(409).json({ success: false, error: 'SESSION_START_NOT_AVAILABLE', reason: roomDecision.reason });
+      }
+    }
+    if (validated.status === 'COMPLETED' && role !== 'konselor') {
+      return res.status(403).json({ success: false, error: 'SESSION_COMPLETION_FORBIDDEN' });
     }
     const updates: any = {};
 
@@ -537,22 +569,21 @@ router.put(['/:id', '/db/appointments/:id'], requireAuth, verifyAppointmentAcces
           updates.approvalStatus = 'REJECTED';
         } else if (validated.status === 'CANCELLED') {
           updates.attendanceStatus = 'CANCELLED';
+        } else if (validated.status === 'COMPLETED') {
+          updates.attendanceStatus = 'ATTENDED';
         }
       }
-      if (validated.approvalStatus !== undefined) updates.approvalStatus = validated.approvalStatus;
-      if (validated.attendanceStatus !== undefined) updates.attendanceStatus = validated.attendanceStatus;
       if (validated.meetingLink !== undefined) updates.meetingLink = validated.meetingLink;
       if (validated.notes !== undefined) updates.notes = sanitizeInput(validated.notes, 300);
       if (validated.mode !== undefined) updates.mode = validated.mode;
     } else if (role === 'admin') {
-      // Admin has unrestricted update authority including reassignment and rescheduling
+      // Admin manages scheduling and assignments; private clinical fields remain counselor-only.
       if (validated.counselorId !== undefined) updates.counselorId = validated.counselorId;
       if (validated.counselorName !== undefined) updates.counselorName = validated.counselorName;
       if (validated.date !== undefined) updates.date = validated.date;
       if (validated.time !== undefined) updates.time = validated.time;
       if (validated.timezone !== undefined) updates.timezone = validated.timezone;
       if (validated.mode !== undefined) updates.mode = validated.mode;
-      if (validated.notes !== undefined) updates.notes = sanitizeInput(validated.notes, 300);
       if (validated.status !== undefined) {
         updates.status = validated.status;
         if (validated.status === 'CONFIRMED') {
@@ -561,19 +592,15 @@ router.put(['/:id', '/db/appointments/:id'], requireAuth, verifyAppointmentAcces
           updates.approvalStatus = 'REJECTED';
         } else if (validated.status === 'CANCELLED') {
           updates.attendanceStatus = 'CANCELLED';
+        } else if (validated.status === 'COMPLETED') {
+          updates.attendanceStatus = 'ATTENDED';
         }
       }
-      if (validated.approvalStatus !== undefined) updates.approvalStatus = validated.approvalStatus;
-      if (validated.attendanceStatus !== undefined) updates.attendanceStatus = validated.attendanceStatus;
-      if (validated.meetingLink !== undefined) updates.meetingLink = validated.meetingLink;
-      if (validated.studentName !== undefined) updates.studentName = sanitizeInput(validated.studentName, 100);
-      if (validated.studentNIM !== undefined) updates.studentNIM = sanitizeInput(validated.studentNIM, 30);
-      if (validated.studentEmail !== undefined) updates.studentEmail = sanitizeInput(validated.studentEmail, 100);
     }
 
-    const record = await serverDb.updateAppointment(id, updates);
+    const record = await serverDb.updateAppointment(id, updates, appt.status);
     if (!record) {
-      return res.status(404).json({ error: 'Jadwal gagal diperbarui.' });
+      return res.status(409).json({ success: false, error: 'APPOINTMENT_STATUS_CONFLICT' });
     }
     if (record.status !== appt.status || record.approvalStatus !== appt.approvalStatus || record.attendanceStatus !== appt.attendanceStatus) {
       clearAppointmentRoomState(id);
@@ -599,10 +626,16 @@ router.put(['/:id', '/db/appointments/:id'], requireAuth, verifyAppointmentAcces
 
     res.json({ success: true, record: mapAppointmentToResponse(record) });
   } catch (err: any) {
-    if (err.message === 'SLOT_ALREADY_BOOKED' || err.code === 'P2034') {
+    if (err.message === 'APPOINTMENT_STATUS_CONFLICT') {
+      return res.status(409).json({ success: false, error: 'APPOINTMENT_STATUS_CONFLICT' });
+    }
+    if (err.message === 'SLOT_ALREADY_BOOKED') {
       return res.status(409).json({
         error: 'Jadwal bentrok! Slot pada tanggal dan jam tersebut sudah terisi oleh jadwal lain.'
       });
+    }
+    if (err.code === 'P2034') {
+      return res.status(409).json({ success: false, error: 'APPOINTMENT_CONCURRENT_UPDATE' });
     }
     if (err.message === 'INVALID_APPOINTMENT_DATETIME') return res.status(400).json({ success: false, error: err.message });
     console.error('Error updating appointment:', err);
@@ -719,7 +752,7 @@ router.post(['/:id/reschedule', '/db/appointments/:id/reschedule'], requireAuth,
       status: 'PENDING',
       approvalStatus: 'PENDING_APPROVAL',
       notes: updatedNotes
-    });
+    }, appt.status);
 
     if (!record) {
       return res.status(404).json({ success: false, error: 'Jadwal gagal dijadwalkan ulang.' });
@@ -743,13 +776,19 @@ router.post(['/:id/reschedule', '/db/appointments/:id/reschedule'], requireAuth,
       updatedAt: new Date().toISOString()
     });
 
-    res.json({ success: true, record: mapAppointmentToResponse(record), message: 'Jadwal janji temu berhasil dijadwalkan ulang.' });
+    res.json({ success: true, record: mapAppointmentToResponse(record, role === 'admin'), message: 'Jadwal janji temu berhasil dijadwalkan ulang.' });
   } catch (err: any) {
-    if (err.message === 'SLOT_ALREADY_BOOKED' || err.code === 'P2034') {
+    if (err.message === 'APPOINTMENT_STATUS_CONFLICT') {
+      return res.status(409).json({ success: false, error: 'APPOINTMENT_STATUS_CONFLICT' });
+    }
+    if (err.message === 'SLOT_ALREADY_BOOKED') {
       return res.status(409).json({
         success: false,
         error: 'Jadwal bentrok! Slot pada tanggal dan jam baru tersebut sudah terisi oleh jadwal lain.'
       });
+    }
+    if (err.code === 'P2034') {
+      return res.status(409).json({ success: false, error: 'APPOINTMENT_CONCURRENT_UPDATE' });
     }
     if (err.message === 'INVALID_APPOINTMENT_DATETIME') return res.status(400).json({ success: false, error: err.message });
     console.error('Error rescheduling appointment:', err);

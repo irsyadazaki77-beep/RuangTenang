@@ -1,25 +1,28 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { WorkspaceContract, WorkspaceTaskContract, WorkspaceTaskSource, WorkspaceTaskStatus, WorkspacePlan } from '../../../../shared/contracts/workspace';
 import { WorkspaceApiService } from '../services/workspaceApiService';
 
 export function useWorkspaceMetadata(chatId?: string) {
   const [workspace, setWorkspace] = useState<WorkspaceContract | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [workspaceChatId, setWorkspaceChatId] = useState(chatId);
+  const [isLoading, setIsLoading] = useState(Boolean(chatId));
   const [pendingIds, setPendingIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const generation = useRef(0);
+  const activeChatIdRef = useRef(chatId);
+  activeChatIdRef.current = chatId;
 
   const refresh = useCallback(async () => {
-    if (!chatId) { setWorkspace(null); return null; }
+    if (!chatId) { setWorkspace(null); setWorkspaceChatId(undefined); setError(null); setIsLoading(false); return null; }
     const currentGeneration = ++generation.current;
     setIsLoading(true);
     setError(null);
     try {
       const result = await WorkspaceApiService.fetchWorkspace(chatId);
-      if (generation.current === currentGeneration) setWorkspace(result);
+      if (generation.current === currentGeneration) { setWorkspace(result); setWorkspaceChatId(chatId); }
       return result;
     } catch (reason) {
-      if (generation.current === currentGeneration) setError(reason instanceof Error ? reason.message : 'Workspace gagal dimuat.');
+      if (generation.current === currentGeneration) { setWorkspace(null); setWorkspaceChatId(chatId); setError(reason instanceof Error ? reason.message : 'Workspace gagal dimuat.'); }
       return null;
     } finally {
       if (generation.current === currentGeneration) setIsLoading(false);
@@ -31,16 +34,23 @@ export function useWorkspaceMetadata(chatId?: string) {
     return () => { generation.current += 1; };
   }, [refresh]);
 
+  useLayoutEffect(() => {
+    setPendingIds([]);
+  }, [chatId]);
+
   const save = useCallback(async (patch: Partial<Pick<WorkspaceContract, 'name' | 'description' | 'instructions' | 'defaultModel' | 'defaultPreset'>>) => {
     if (!chatId) return null;
     setPendingIds(current => [...current, 'workspace']);
     try {
       const result = await WorkspaceApiService.updateWorkspace(chatId, patch);
-      setWorkspace(result);
-      setError(null);
+      if (activeChatIdRef.current === chatId) {
+        setWorkspace(result);
+        setWorkspaceChatId(chatId);
+        setError(null);
+      }
       return result;
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Workspace gagal disimpan.');
+      if (activeChatIdRef.current === chatId) setError(reason instanceof Error ? reason.message : 'Workspace gagal disimpan.');
       throw reason;
     } finally {
       setPendingIds(current => current.filter(id => id !== 'workspace'));
@@ -53,7 +63,7 @@ export function useWorkspaceMetadata(chatId?: string) {
     setPendingIds(current => [...current, optimisticId]);
     try {
       const task = await WorkspaceApiService.createTask(chatId, title, source);
-      setWorkspace(current => current ? { ...current, tasks: [...(current.tasks || []), task] } : current);
+      if (activeChatIdRef.current === chatId) setWorkspace(current => current ? { ...current, tasks: [...(current.tasks || []), task] } : current);
       return task;
     } finally {
       setPendingIds(current => current.filter(id => id !== optimisticId));
@@ -65,7 +75,7 @@ export function useWorkspaceMetadata(chatId?: string) {
     setPendingIds(current => [...current, taskId]);
     try {
       const task = await WorkspaceApiService.updateTask(chatId, taskId, status);
-      setWorkspace(current => current ? { ...current, tasks: (current.tasks || []).map(item => item.id === taskId ? task : item) } : current);
+      if (activeChatIdRef.current === chatId) setWorkspace(current => current ? { ...current, tasks: (current.tasks || []).map(item => item.id === taskId ? task : item) } : current);
       return task;
     } finally {
       setPendingIds(current => current.filter(id => id !== taskId));
@@ -77,7 +87,7 @@ export function useWorkspaceMetadata(chatId?: string) {
     setPendingIds(current => [...current, taskId]);
     try {
       await WorkspaceApiService.deleteTask(chatId, taskId);
-      setWorkspace(current => current ? { ...current, tasks: (current.tasks || []).filter(item => item.id !== taskId) } : current);
+      if (activeChatIdRef.current === chatId) setWorkspace(current => current ? { ...current, tasks: (current.tasks || []).filter(item => item.id !== taskId) } : current);
     } finally {
       setPendingIds(current => current.filter(id => id !== taskId));
     }
@@ -86,23 +96,39 @@ export function useWorkspaceMetadata(chatId?: string) {
   const createPlan = useCallback(async (plan: WorkspacePlan) => {
     if (!chatId) throw new Error('Simpan Workspace sebelum membuat plan.');
     const saved = await WorkspaceApiService.createPlan(chatId, plan);
-    setWorkspace(current => current ? { ...current, plan: saved } : current);
+    if (activeChatIdRef.current === chatId) setWorkspace(current => current ? { ...current, plan: saved } : current);
     return saved;
   }, [chatId]);
 
   const updatePlan = useCallback(async (plan: WorkspacePlan) => {
     if (!chatId) throw new Error('Workspace tidak tersedia.');
     const saved = await WorkspaceApiService.updatePlan(chatId, plan);
-    setWorkspace(current => current ? { ...current, plan: saved } : current);
+    if (activeChatIdRef.current === chatId) setWorkspace(current => current ? { ...current, plan: saved } : current);
     return saved;
   }, [chatId]);
 
   const startTaskExecution = useCallback(async (planId: string, taskId: string, executionId: string, snapshot: NonNullable<WorkspacePlan['tasks'][number]['snapshot']>) => {
     if (!chatId) throw new Error('Workspace tidak tersedia.');
     const saved = await WorkspaceApiService.startTaskExecution(chatId, planId, taskId, executionId, snapshot);
-    setWorkspace(current => current ? { ...current, plan: saved } : current);
+    if (activeChatIdRef.current === chatId) setWorkspace(current => current ? { ...current, plan: saved } : current);
     return saved;
   }, [chatId]);
 
-  return { workspace, tasks: workspace?.tasks || [], plan: workspace?.plan || null, isLoading, pendingIds, error, refresh, save, createTask, updateTask, deleteTask, createPlan, updatePlan, startTaskExecution };
+  const activeWorkspace = workspaceChatId === chatId ? workspace : null;
+  return {
+    workspace: activeWorkspace,
+    tasks: activeWorkspace?.tasks || [],
+    plan: activeWorkspace?.plan || null,
+    isLoading: isLoading || workspaceChatId !== chatId,
+    pendingIds,
+    error: workspaceChatId === chatId ? error : null,
+    refresh,
+    save,
+    createTask,
+    updateTask,
+    deleteTask,
+    createPlan,
+    updatePlan,
+    startTaskExecution
+  };
 }

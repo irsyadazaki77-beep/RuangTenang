@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { safeLocalStorage } from '../lib/storage';
 
 interface PrivacyVaultContextType {
@@ -48,13 +48,12 @@ export const PrivacyVaultProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [isVaultUnlocked, setIsVaultUnlocked] = useState<boolean>(false);
   const [isIncognitoMode, setIsIncognitoMode] = useState<boolean>(false);
   const [isPanicScreenActive, setIsPanicScreenActive] = useState<boolean>(false);
-  const [autoLockMinutes, setAutoLockMinutes] = useState<number>(() => {
+  const [autoLockMinutes] = useState<number>(() => {
     const saved = safeLocalStorage.getItem(VAULT_AUTOLOCK_KEY);
     return saved ? parseInt(saved, 10) : 5; // Default 5 minutes
   });
 
   const lastActivityRef = useRef<number>(Date.now());
-  const autoLockTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Check if vault is configured on mount
   useEffect(() => {

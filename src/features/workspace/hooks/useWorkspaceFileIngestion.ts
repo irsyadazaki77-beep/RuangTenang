@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useLayoutEffect } from 'react';
 import { WorkspaceFileAttachment } from '../types.js';
 import { pollProcessingStatus, processFileForWorkspace, retryWorkspaceFile, validateFileHeader } from '../services/fileIngestionService.js';
 import { WorkspaceApiService } from '../services/workspaceApiService.js';
@@ -37,6 +37,7 @@ function fromDto(dto: WorkspaceAttachmentDto): WorkspaceFileAttachment {
 export function useWorkspaceFileIngestion(chatId?: string) {
   const { showToast } = useToast();
   const [attachments, setAttachments] = useState<WorkspaceFileAttachment[]>([]);
+  const [isLoadingAttachments, setIsLoadingAttachments] = useState(Boolean(chatId));
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const attachmentsRef = useRef<WorkspaceFileAttachment[]>([]);
@@ -269,7 +270,7 @@ export function useWorkspaceFileIngestion(chatId?: string) {
 
   const openFilePicker = useCallback(() => fileInputRef.current?.click(), []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const generation = ++generationRef.current;
     isMountedRef.current = true;
     const controller = new AbortController();
@@ -279,6 +280,7 @@ export function useWorkspaceFileIngestion(chatId?: string) {
     let active = true;
     attachmentsRef.current = [];
     setAttachments([]);
+    setIsLoadingAttachments(Boolean(chatId));
     if (chatId) {
       void WorkspaceApiService.fetchChatAttachments(chatId, controller.signal).then(serverAttachments => {
         if (!active || !isMountedRef.current) return;
@@ -311,6 +313,8 @@ export function useWorkspaceFileIngestion(chatId?: string) {
           console.error('[Workspace] Attachment list fetch failed:', error);
           showToastRef.current('Dokumen Workspace gagal dimuat.', 'error');
         }
+      }).finally(() => {
+        if (active && isMountedRef.current) setIsLoadingAttachments(false);
       });
     }
     return () => {
@@ -328,6 +332,7 @@ export function useWorkspaceFileIngestion(chatId?: string) {
 
   return {
     attachments,
+    isLoadingAttachments,
     isDraggingOver,
     fileInputRef,
     handleFileUploadChange,

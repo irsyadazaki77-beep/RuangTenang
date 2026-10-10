@@ -56,7 +56,7 @@ describe('Logout Flow Reliability', () => {
       
       React.useEffect(() => {
         setUser({ id: 'u1', role: 'mahasiswa', name: 'Test', email: 'test@ui', tier: 'Free', usageStats: { chatMessagesSent: 0, appointmentsBooked: 0 } });
-      }, []);
+      }, [setUser]);
 
       const handleLogout = async () => {
         try {

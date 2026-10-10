@@ -30,9 +30,7 @@ export class PdfAdapter implements DocumentExtractorAdapter {
         await parser.destroy();
       }
 
-      // Fallback: check if textResult or pages exist
-      const rawFallback = (textResult?.text || '').trim();
-      const pagesList = Array.isArray(textResult?.pages) ? textResult.pages : [];
+
 
       if (!textResult || !textResult.pages || textResult.pages.length === 0) {
         // Fallback if pages array is empty but raw text exists

@@ -91,7 +91,7 @@ export const WorkspaceModelSelector = React.memo(function WorkspaceModelSelector
         aria-label={`Pilih model, ${selectedModel?.name ?? 'Default'}`}
         onClick={() => setOpen(value => !value)}
         onKeyDown={event => { if (event.key === 'Escape' && open) close(); }}
-        className="h-8 max-w-[min(42vw,14rem)] inline-flex items-center gap-1.5 rounded-lg px-2 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-200/70 dark:hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+        className="h-8 max-w-[min(28vw,10rem)] inline-flex min-w-0 items-center gap-1.5 rounded-lg px-2 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-200/70 dark:hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
         title={disabled ? 'Model tidak dapat diubah selama respons berlangsung' : 'Pilih model'}
       >
         <Sparkles className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />

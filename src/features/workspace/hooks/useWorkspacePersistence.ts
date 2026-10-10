@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { Message } from '../../chat/types';
 import { WorkspaceArtifact } from '../types';
 import { WorkspaceApiService } from '../services/workspaceApiService';
@@ -49,7 +49,7 @@ export function useWorkspacePersistence({
     return () => { mountedRef.current = false; };
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     // Abort previous pending requests on chatId change
     if (activeAbortControllerRef.current) {
       activeAbortControllerRef.current.abort();

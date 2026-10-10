@@ -9,7 +9,7 @@ import { getJwtSecret } from '../../middleware/auth.js';
 import counselorsRouter from '../../routes/counselors.js';
 import emergencyRouter, { clearSosHistoryForTesting } from '../../routes/emergency.js';
 import appointmentsRouter from '../../routes/appointments.js';
-import { idempotencyMiddleware, clearIdempotencyStoreForTesting } from '../../apiV1Helpers.js';
+import { clearIdempotencyStoreForTesting } from '../../apiV1Helpers.js';
 
 const app = express();
 app.use(express.json());

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useLayoutEffect, useRef, useState } from 'react';
 import { FileText, Pencil, Save } from 'lucide-react';
 import type { ResearchSource, ResearchSourceMetadata } from '../../../../shared/contracts/files';
 import { WorkspaceApiService } from '../services/workspaceApiService';
@@ -8,10 +8,24 @@ export function WorkspaceSourceLibrary({ chatId, onPreview }: { chatId?: string;
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<ResearchSourceMetadata | null>(null);
   const [error, setError] = useState<string | null>(null);
-  useEffect(() => {
-    if (!chatId) { setSources([]); return; }
+  const [isLoading, setIsLoading] = useState(Boolean(chatId));
+  const activeChatIdRef = useRef(chatId);
+  activeChatIdRef.current = chatId;
+  useLayoutEffect(() => {
+    setSources([]);
+    setError(null);
+    setEditingId(null);
+    setDraft(null);
+    setIsLoading(Boolean(chatId));
+    if (!chatId) return;
     const controller = new AbortController();
-    void WorkspaceApiService.fetchResearchSources(chatId, controller.signal).then(setSources).catch(reason => { if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : 'Sumber gagal dimuat.'); });
+    void WorkspaceApiService.fetchResearchSources(chatId, controller.signal).then(result => {
+      if (!controller.signal.aborted && activeChatIdRef.current === chatId) setSources(result);
+    }).catch(reason => {
+      if (!controller.signal.aborted && activeChatIdRef.current === chatId) setError(reason instanceof Error ? reason.message : 'Sumber gagal dimuat.');
+    }).finally(() => {
+      if (!controller.signal.aborted && activeChatIdRef.current === chatId) setIsLoading(false);
+    });
     return () => controller.abort();
   }, [chatId]);
   const beginEdit = (source: ResearchSource) => {
@@ -20,10 +34,18 @@ export function WorkspaceSourceLibrary({ chatId, onPreview }: { chatId?: string;
   };
   const save = async (source: ResearchSource) => {
     if (!chatId || !draft) return;
-    try { const saved = await WorkspaceApiService.updateResearchSource(chatId, source.id, draft); setSources(current => current.map(item => item.id === source.id ? saved : item)); setEditingId(null); setDraft(null); setError(null); }
-    catch (reason) { setError(reason instanceof Error ? reason.message : 'Metadata sumber gagal disimpan.'); }
+    const savingChatId = chatId;
+    try {
+      const saved = await WorkspaceApiService.updateResearchSource(savingChatId, source.id, draft);
+      if (activeChatIdRef.current !== savingChatId) return;
+      setSources(current => current.map(item => item.id === source.id ? saved : item)); setEditingId(null); setDraft(null); setError(null);
+    } catch (reason) {
+      if (activeChatIdRef.current === savingChatId) setError(reason instanceof Error ? reason.message : 'Metadata sumber gagal disimpan.');
+    }
   };
   if (!chatId) return <p className="py-8 text-center text-xs text-slate-500">Sumber tersedia setelah Workspace tersimpan.</p>;
+  if (isLoading) return <p role="status" className="py-8 text-center text-xs text-slate-500">Memuat sumber…</p>;
+  if (error && !sources.length) return <p role="alert" className="py-8 text-center text-xs text-rose-600">{error}</p>;
   if (!sources.length) return <p className="py-8 text-center text-xs text-slate-500">Belum ada sumber dokumen siap di Workspace ini.</p>;
   return <div className="space-y-2 py-2">
     {error && <p role="alert" className="px-1 text-xs text-rose-600">{error}</p>}

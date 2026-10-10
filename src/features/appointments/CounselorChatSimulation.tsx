@@ -1,5 +1,5 @@
 import { useEscapeKey } from '../../hooks/useEscapeKey';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Send, Bot, AlertCircle, XCircle, Check } from 'lucide-react';
 import { Appointment } from '../../types';
 import { useCounselors } from '../../hooks/useCounselors';
@@ -26,23 +26,7 @@ export const CounselorChatSimulation: React.FC<CounselorChatSimulationProps> = (
   const [isGeneratingResponse, setIsGeneratingResponse] = useState(false);
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
 
-  useEffect(() => {
-    if (appointment) {
-      const savedChatKey = `ruangtenang_chat_${appointment.id}`;
-      const savedChat = null;
-      if (savedChat) {
-        try {
-          setChatMessages(JSON.parse(savedChat));
-        } catch {
-          initializeNewChat(appointment);
-        }
-      } else {
-        initializeNewChat(appointment);
-      }
-    }
-  }, [appointment]);
-
-  const initializeNewChat = (apt: Appointment) => {
+  const initializeNewChat = useCallback((apt: Appointment) => {
     if (counselors.length === 0) return;
     const counselor = counselors.find(c => c.id === apt.counselorId) || counselors[0];
     const initialGreeting = `Halo ${apt.studentName}! Selamat datang di Sesi Konseling Virtual RuangTenang Kampus 🤍. Saya ${counselor.name} 👋. Saya di sini siap merangkul, mendengarkan ceritamu, dan mendampingimu terkait masalah "${apt.primaryConcern}". Jangan ragu atau takut bercerita yaa, sesi ini sepenuhnya privat, aman, & rahasia 🔐✨. Apa yang paling berat atau sedang mengganjal di hatimu saat ini, kawan?`;
@@ -53,8 +37,13 @@ export const CounselorChatSimulation: React.FC<CounselorChatSimulationProps> = (
       timestamp: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
     };
     setChatMessages([initialMsg]);
-    
-  };
+  }, [counselors]);
+
+  useEffect(() => {
+    if (appointment) {
+      initializeNewChat(appointment);
+    }
+  }, [appointment, initializeNewChat]);
 
   if (!appointment) return null;
 
@@ -73,7 +62,7 @@ export const CounselorChatSimulation: React.FC<CounselorChatSimulationProps> = (
     setChatInput('');
     setIsGeneratingResponse(true);
 
-    const savedChatKey = `ruangtenang_chat_${appointment.id}`;
+
     
 
     try {

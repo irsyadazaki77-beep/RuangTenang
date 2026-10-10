@@ -18,7 +18,7 @@ export function resolveDatabaseConfiguration(): DatabaseConfiguration {
   const hasPostgresUrl = dbUrl.startsWith('postgresql://') || dbUrl.startsWith('postgres://');
   const explicitProvider = (process.env.DB_PROVIDER || '').toLowerCase().trim();
 
-  const isTest = process.env.VITEST === 'true' || process.env.NODE_ENV === 'test';
+
   if (isProduction) {
     if (!dbUrl) {
       throw new Error('Production database requires PostgreSQL');

@@ -8,10 +8,6 @@ import {
   Users, 
   Bell, 
   Sparkles, 
-  FileCode, 
-  Quote, 
-  FileText, 
-  BookOpen,
   LayoutDashboard,
   ChevronDown,
   Lock,
@@ -65,12 +61,6 @@ export const SidebarNavLinks: React.FC<SidebarNavLinksProps> = ({
     onCloseMobile();
   };
 
-  const handleTriggerTemplate = (templateId: string) => {
-    navigate('/workspace');
-    window.dispatchEvent(new CustomEvent('ruangkerja_trigger_template', { detail: templateId }));
-    onCloseMobile();
-  };
-
   if (isCollapsed) {
     return (
       <div className="py-2 px-2 border-t border-slate-200/60 dark:border-slate-800/60 space-y-1 flex flex-col items-center shrink-0">
@@ -106,27 +96,6 @@ export const SidebarNavLinks: React.FC<SidebarNavLinksProps> = ({
               </button>
             </SidebarTooltip>
 
-            <SidebarTooltip content="Generator Sitasi (APA/IEEE)" show={true} position="right">
-              <button
-                type="button"
-                onClick={() => handleTriggerTemplate('format-sitasi')}
-                className="w-9 h-9 rounded-lg flex items-center justify-center text-amber-500 hover:bg-slate-200/70 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-                aria-label="Generator Sitasi"
-              >
-                <Quote className="w-4 h-4" />
-              </button>
-            </SidebarTooltip>
-
-            <SidebarTooltip content="Format Skripsi & Paper" show={true} position="right">
-              <button
-                type="button"
-                onClick={() => handleTriggerTemplate('struktur-proposal')}
-                className="w-9 h-9 rounded-lg flex items-center justify-center text-emerald-600 dark:text-emerald-400 hover:bg-slate-200/70 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-                aria-label="Format Skripsi"
-              >
-                <FileText className="w-4 h-4" />
-              </button>
-            </SidebarTooltip>
           </>
         ) : (
           <>
@@ -241,7 +210,7 @@ export const SidebarNavLinks: React.FC<SidebarNavLinksProps> = ({
           {isRuangKerja ? (
             <>
               <Sparkles className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-              <span>Alat & Fitur Akademik</span>
+              <span>RuangKerja</span>
             </>
           ) : (
             <>
@@ -268,7 +237,7 @@ export const SidebarNavLinks: React.FC<SidebarNavLinksProps> = ({
             className="overflow-hidden space-y-0.5 pt-0.5"
           >
             {isRuangKerja ? (
-              /* Academic Tools */
+              /* Workspace navigation */
               <>
                 <button 
                   type="button"
@@ -280,40 +249,11 @@ export const SidebarNavLinks: React.FC<SidebarNavLinksProps> = ({
                   }`}
                 >
                   <div className="flex items-center gap-2">
-                    <FileCode className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                    <span>Canvas Workspace</span>
+                    <LayoutDashboard className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    <span>Beranda RuangKerja</span>
                   </div>
-                  <span className="text-[9px] bg-emerald-100 dark:bg-emerald-900/50 text-emerald-800 dark:text-emerald-300 px-1 rounded font-bold">
-                    Live
-                  </span>
                 </button>
 
-                <button 
-                  type="button"
-                  onClick={() => handleTriggerTemplate('format-sitasi')} 
-                  className="w-full flex items-center gap-2 px-2 py-1 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors cursor-pointer"
-                >
-                  <Quote className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                  <span className="truncate">Generator Sitasi (APA/IEEE)</span>
-                </button>
-
-                <button 
-                  type="button"
-                  onClick={() => handleTriggerTemplate('struktur-proposal')} 
-                  className="w-full flex items-center gap-2 px-2 py-1 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors cursor-pointer"
-                >
-                  <FileText className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                  <span className="truncate">Format Skripsi & Paper</span>
-                </button>
-
-                <button 
-                  type="button"
-                  onClick={() => handleTriggerTemplate('resume-jurnal')} 
-                  className="w-full flex items-center gap-2 px-2 py-1 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors cursor-pointer"
-                >
-                  <BookOpen className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                  <span className="truncate">Bedah Jurnal & Catatan</span>
-                </button>
               </>
             ) : (
               /* Campus Services */

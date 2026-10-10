@@ -1,5 +1,21 @@
 import { z } from 'zod';
 
+export const APPOINTMENT_STATUSES = ['PENDING', 'CONFIRMED', 'IN_PROGRESS', 'CANCELLED', 'REJECTED', 'COMPLETED'] as const;
+export type AppointmentStatus = typeof APPOINTMENT_STATUSES[number];
+
+export const APPOINTMENT_STATUS_TRANSITIONS: Readonly<Record<AppointmentStatus, readonly AppointmentStatus[]>> = {
+  PENDING: ['CONFIRMED', 'REJECTED', 'CANCELLED'],
+  CONFIRMED: ['IN_PROGRESS', 'CANCELLED'],
+  IN_PROGRESS: ['COMPLETED'],
+  REJECTED: [],
+  CANCELLED: [],
+  COMPLETED: [],
+};
+
+export function isValidAppointmentStatusTransition(from: string, to: string): boolean {
+  return from === to || (APPOINTMENT_STATUS_TRANSITIONS[from as AppointmentStatus] || []).includes(to as AppointmentStatus);
+}
+
 export const CreateAppointmentSchema = z.object({
   counselorId: z.string().max(100).optional(),
   counselorName: z.string().min(2, 'Nama konselor minimal 2 karakter').max(100),
@@ -24,7 +40,7 @@ export const UpdateAppointmentSchema = z.object({
   timezone: z.enum(['WIB', 'WITA', 'WIT']).optional(),
   mode: z.enum(['video_call', 'in_person', 'tele_counseling']).optional(),
   notes: z.string().max(500).optional(),
-  status: z.enum(['PENDING', 'CONFIRMED', 'IN_PROGRESS', 'CANCELLED', 'REJECTED', 'COMPLETED']).optional(),
+  status: z.enum(APPOINTMENT_STATUSES).optional(),
   approvalStatus: z.enum(['PENDING_APPROVAL', 'APPROVED', 'REJECTED']).optional(),
   attendanceStatus: z.enum(['SCHEDULED', 'ATTENDED', 'NO_SHOW', 'CANCELLED', 'RESCHEDULED']).optional(),
   meetingLink: z.string().max(255).optional(),

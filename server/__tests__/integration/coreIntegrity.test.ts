@@ -5,6 +5,7 @@ import cookieParser from 'cookie-parser';
 import jwt from 'jsonwebtoken';
 import { prisma, serverDb } from '../../database.js';
 import { redisService } from '../../services/redisService.js';
+import { encryptionService } from '../../services/encryptionService.js';
 import appointmentsRouter from '../../routes/appointments.js';
 import counselorsRouter from '../../routes/counselors.js';
 import userDataRouter from '../../routes/userData.js';
@@ -18,6 +19,7 @@ const app = express();
 app.use(express.json());
 app.use(cookieParser());
 app.use('/api/appointments', appointmentsRouter);
+app.use('/api/v1', userDataRouter);
 app.use('/api/counselors', counselorsRouter);
 app.use('/api/user-data', userDataRouter);
 app.use('/api/emergency', emergencyRouter);
@@ -131,6 +133,7 @@ describe('Core Feature Integrity Integration Tests (FASE 8)', () => {
         userId: { in: [student1.userId, student2.userId] }
       }
     });
+    await prisma.idempotencyRecord.deleteMany({ where: { key: { contains: 'offline-owner-test' } } });
     await prisma.emergencyContacts.deleteMany({
       where: {
         userId: { in: [student1.userId, student2.userId] }
@@ -162,6 +165,100 @@ describe('Core Feature Integrity Integration Tests (FASE 8)', () => {
 
   describe('2. Appointment Booking & Double-Booking Prevention', () => {
     let createdApptId: string;
+
+    it('rejects an offline owner mismatch and persists spoofed mood ownership under the authenticated actor', async () => {
+      const beforeCount = await prisma.moodLogs.count({ where: { userId: student2.userId } });
+      const offlineHeaders = {
+        'X-RuangTenang-Offline-Owner': student1.userId,
+        'Idempotency-Key': `offline-owner-test-${Date.now()}`,
+      };
+      const payload = { mood: 4, notes: 'offline ownership integrity check' };
+      const mismatch = await request(app)
+        .post('/api/v1/mood')
+        .set('Authorization', `Bearer ${student2Token}`)
+        .set(offlineHeaders)
+        .send(payload);
+      expect(mismatch.status).toBe(403);
+      expect(mismatch.body.code).toBe('OFFLINE_OWNER_MISMATCH');
+      expect(await prisma.moodLogs.count({ where: { userId: student2.userId } })).toBe(beforeCount);
+
+      const missingIdempotencyKey = await request(app)
+        .post('/api/v1/mood')
+        .set('Authorization', `Bearer ${student2Token}`)
+        .set('X-RuangTenang-Offline-Owner', student2.userId)
+        .send(payload);
+      expect(missingIdempotencyKey.status).toBe(400);
+      expect(missingIdempotencyKey.body.code).toBe('IDEMPOTENCY_KEY_REQUIRED');
+      expect(await prisma.moodLogs.count({ where: { userId: student2.userId } })).toBe(beforeCount);
+
+      const ownerKey = `offline-owner-test-${Date.now()}-spoof`;
+      const safePayload = { ...payload, userId: student1.userId };
+      const created = await request(app)
+        .post('/api/v1/mood')
+        .set('Authorization', `Bearer ${student2Token}`)
+        .set('X-RuangTenang-Offline-Owner', student2.userId)
+        .set('Idempotency-Key', ownerKey)
+        .send(safePayload);
+      expect(created.status).toBe(200);
+      expect(created.body.log.userId).toBe(student2.userId);
+      expect(await prisma.moodLogs.count({ where: { userId: student2.userId } })).toBe(beforeCount + 1);
+
+      const replay = await request(app)
+        .post('/api/v1/mood')
+        .set('Authorization', `Bearer ${student2Token}`)
+        .set('X-RuangTenang-Offline-Owner', student2.userId)
+        .set('Idempotency-Key', ownerKey)
+        .send(safePayload);
+      expect(replay.status).toBe(200);
+      expect(replay.body.isIdempotentReplay).toBe(true);
+      expect(replay.body.log.notes).toBeUndefined();
+      expect(await prisma.moodLogs.count({ where: { userId: student2.userId } })).toBe(beforeCount + 1);
+
+      const raceKey = `offline-owner-test-${Date.now()}-race`;
+      const racePayload = { mood: 3, notes: 'single logical offline retry' };
+      const concurrent = await Promise.all([0, 1].map(() => request(app)
+        .post('/api/v1/mood')
+        .set('Authorization', `Bearer ${student2Token}`)
+        .set('X-RuangTenang-Offline-Owner', student2.userId)
+        .set('Idempotency-Key', raceKey)
+        .send(racePayload)));
+      expect(concurrent.some(response => response.status === 200)).toBe(true);
+      expect(concurrent.every(response => response.status === 200 || response.body.code === 'IDEMPOTENCY_IN_PROGRESS')).toBe(true);
+      expect(await prisma.moodLogs.count({ where: { userId: student2.userId } })).toBe(beforeCount + 2);
+      if (concurrent.some(response => response.status === 409)) {
+        const retry = await request(app)
+          .post('/api/v1/mood')
+          .set('Authorization', `Bearer ${student2Token}`)
+          .set('X-RuangTenang-Offline-Owner', student2.userId)
+          .set('Idempotency-Key', raceKey)
+          .send(racePayload);
+        expect(retry.status).toBe(200);
+        expect(await prisma.moodLogs.count({ where: { userId: student2.userId } })).toBe(beforeCount + 2);
+      }
+
+      const appointmentSpoof = await request(app)
+        .post('/api/appointments')
+        .set('Authorization', `Bearer ${student2Token}`)
+        .set('X-RuangTenang-Offline-Owner', student2.userId)
+        .set('Idempotency-Key', `offline-owner-test-${Date.now()}-appointment`)
+        .send({
+          counselorId: 'c-integ-1',
+          counselorName: counselor1.name,
+          date: '2026-12-10',
+          time: '10:30',
+          timezone: 'WIB',
+          mode: 'video_call',
+          notes: 'appointment ownership verification',
+          userId: student1.userId,
+          studentName: student1.name,
+          studentEmail: student1.email,
+        });
+      expect(appointmentSpoof.status).toBe(200);
+      const persistedAppointment = await prisma.appointments.findUnique({ where: { id: appointmentSpoof.body.record.id } });
+      expect(persistedAppointment?.userId).toBe(student2.userId);
+      expect(persistedAppointment?.studentName).toBe(student2.name);
+      expect(encryptionService.decryptSensitive(persistedAppointment?.studentEmail)).toBe(student2.email);
+    });
 
     it('successfully books an appointment for student 1', async () => {
       const bookingData = {
@@ -222,24 +319,95 @@ describe('Core Feature Integrity Integration Tests (FASE 8)', () => {
       expect(resUpdate.status).toBe(404);
     });
 
-    it('allows assigned counselor 1 to update status: requested -> confirmed -> completed', async () => {
-      // Confirm
-      const resConfirm = await request(app)
+    it('does not allow the student to confirm their own appointment', async () => {
+      const res = await request(app)
         .put(`/api/appointments/${createdApptId}`)
-        .set('Authorization', `Bearer ${counselor1Token}`)
+        .set('Authorization', `Bearer ${student1Token}`)
         .send({ status: 'CONFIRMED' });
 
-      expect(resConfirm.status).toBe(200);
-      expect(resConfirm.body.record.status).toBe('CONFIRMED');
+      expect(res.status).toBe(403);
+      expect((await prisma.appointments.findUnique({ where: { id: createdApptId } }))?.status).toBe('PENDING');
+    });
 
-      // Complete
-      const resComplete = await request(app)
+    it('allows assigned counselor 1 to update status: requested -> confirmed -> in progress -> completed', async () => {
+      const actualNow = new Date();
+      vi.setSystemTime(new Date('2026-09-10T09:50:00+07:00'));
+      try {
+        const resConfirm = await request(app)
+          .put(`/api/appointments/${createdApptId}`)
+          .set('Authorization', `Bearer ${counselor1Token}`)
+          .send({ status: 'CONFIRMED' });
+
+        expect(resConfirm.status).toBe(200);
+        expect(resConfirm.body.record).toMatchObject({ status: 'CONFIRMED', approvalStatus: 'APPROVED' });
+        expect((await prisma.appointments.findUnique({ where: { id: createdApptId } }))?.approvalStatus).toBe('APPROVED');
+
+        const resInProgress = await request(app)
+          .put(`/api/appointments/${createdApptId}`)
+          .set('Authorization', `Bearer ${counselor1Token}`)
+          .send({ status: 'IN_PROGRESS' });
+
+        expect(resInProgress.status).toBe(200);
+        expect(resInProgress.body.record.status).toBe('IN_PROGRESS');
+        expect((await prisma.appointments.findUnique({ where: { id: createdApptId } }))?.status).toBe('IN_PROGRESS');
+
+        const resComplete = await request(app)
+          .put(`/api/appointments/${createdApptId}`)
+          .set('Authorization', `Bearer ${counselor1Token}`)
+          .send({ status: 'COMPLETED', notes: 'Ringkasan sesi integration test' });
+
+        expect(resComplete.status).toBe(200);
+        expect(resComplete.body.record).toMatchObject({ status: 'COMPLETED', attendanceStatus: 'ATTENDED' });
+        const persisted = await prisma.appointments.findUnique({ where: { id: createdApptId } });
+        expect(persisted?.status).toBe('COMPLETED');
+        expect(persisted?.attendanceStatus).toBe('ATTENDED');
+      } finally {
+        vi.setSystemTime(actualNow);
+      }
+    });
+
+    it('rejects terminal state reversal and refreshes the persisted status', async () => {
+      const res = await request(app)
         .put(`/api/appointments/${createdApptId}`)
         .set('Authorization', `Bearer ${counselor1Token}`)
-        .send({ status: 'COMPLETED' });
+        .send({ status: 'PENDING' });
 
-      expect(resComplete.status).toBe(200);
-      expect(resComplete.body.record.status).toBe('COMPLETED');
+      expect(res.status).toBe(409);
+      expect(res.body.error).toBe('INVALID_APPOINTMENT_STATUS_TRANSITION');
+      expect((await prisma.appointments.findUnique({ where: { id: createdApptId } }))?.status).toBe('COMPLETED');
+    });
+
+    it('allows only one competing confirmation or rejection to win', async () => {
+      const booking = await request(app)
+        .post('/api/appointments')
+        .set('Authorization', `Bearer ${student2Token}`)
+        .send({
+          counselorId: 'c-integ-1',
+          counselorName: 'Dr. Anita Rahmawati, M.Psi., Psikolog',
+          date: '2026-09-11',
+          time: '11:00',
+          timezone: 'WIB',
+          mode: 'video_call',
+          notes: 'Appointment status concurrency regression',
+        });
+
+      expect(booking.status).toBe(200);
+      const appointmentId = booking.body.record.id as string;
+      const [confirm, reject] = await Promise.all([
+        request(app)
+          .put(`/api/appointments/${appointmentId}`)
+          .set('Authorization', `Bearer ${counselor1Token}`)
+          .send({ status: 'CONFIRMED' }),
+        request(app)
+          .put(`/api/appointments/${appointmentId}`)
+          .set('Authorization', `Bearer ${counselor1Token}`)
+          .send({ status: 'REJECTED' }),
+      ]);
+
+      expect([confirm.status, reject.status].sort()).toEqual([200, 409]);
+      const persisted = await prisma.appointments.findUnique({ where: { id: appointmentId } });
+      expect(['CONFIRMED', 'REJECTED']).toContain(persisted?.status);
+      expect(persisted?.approvalStatus).toBe(persisted?.status === 'CONFIRMED' ? 'APPROVED' : 'REJECTED');
     });
   });
 

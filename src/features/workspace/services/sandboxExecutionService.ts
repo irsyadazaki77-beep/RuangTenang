@@ -8,7 +8,7 @@ const DEFAULT_MAX_CODE_SIZE_BYTES = 100 * 1024; // 100 KB
 /**
  * Serializer aman untuk menangani argument console (menghindari error circular references, DOM refs, functions, dsb).
  */
-function safeSerializeArg(arg: any, depth = 0): string {
+function _safeSerializeArg(arg: any, depth = 0): string {
   if (arg === null) return 'null';
   if (arg === undefined) return 'undefined';
   if (typeof arg === 'string') return arg;
@@ -23,13 +23,13 @@ function safeSerializeArg(arg: any, depth = 0): string {
       return `${arg.name}: ${arg.message}`;
     }
     if (Array.isArray(arg)) {
-      return `[${arg.slice(0, 50).map(item => safeSerializeArg(item, depth + 1)).join(', ')}${arg.length > 50 ? ', ...' : ''}]`;
+      return `[${arg.slice(0, 50).map(item => _safeSerializeArg(item, depth + 1)).join(', ')}${arg.length > 50 ? ', ...' : ''}]`;
     }
     // Object
     const keys = Object.keys(arg).slice(0, 30);
     const entries = keys.map(k => {
       try {
-        return `${JSON.stringify(k)}: ${safeSerializeArg(arg[k], depth + 1)}`;
+        return `${JSON.stringify(k)}: ${_safeSerializeArg(arg[k], depth + 1)}`;
       } catch {
         return `${JSON.stringify(k)}: [Unreadable]`;
       }
@@ -150,7 +150,7 @@ export function runJavaScriptInSandbox(
 ): SandboxExecutionHandle {
   const timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const maxOutputEntries = options?.maxOutputEntries ?? DEFAULT_MAX_OUTPUT_ENTRIES;
-  const maxOutputChars = options?.maxOutputChars ?? DEFAULT_MAX_OUTPUT_CHARS;
+  const _maxOutputChars = options?.maxOutputChars ?? DEFAULT_MAX_OUTPUT_CHARS;
   const maxCodeSizeBytes = options?.maxCodeSizeBytes ?? DEFAULT_MAX_CODE_SIZE_BYTES;
 
   let worker: Worker | null = null;

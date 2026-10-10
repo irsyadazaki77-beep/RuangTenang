@@ -1,39 +1,56 @@
 import React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { WorkspaceHome } from '../../features/workspace/WorkspaceHome';
+import { WorkspaceApiService } from '../../features/workspace/services/workspaceApiService';
 
 vi.mock('../../features/workspace/services/workspaceApiService', () => ({
   WorkspaceApiService: {
     listWorkspaces: vi.fn(async () => []),
-    fetchAllArtifacts: vi.fn(async () => []),
-    fetchChatAttachments: vi.fn(async () => []),
     searchWorkspaces: vi.fn(async () => [])
   }
 }));
 
-describe('Workspace home organization', () => {
+function LocationProbe() {
+  const location = useLocation();
+  return <output data-testid="location">{JSON.stringify({ pathname: location.pathname, state: location.state })}</output>;
+}
+
+describe('Workspace home', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('organizes recent work into accessible collection tabs', async () => {
-    render(<MemoryRouter><WorkspaceHome chats={[]} /></MemoryRouter>);
+  it('keeps the home focused on starting, continuing, and searching work', async () => {
+    render(<MemoryRouter><WorkspaceHome chats={[]} /><LocationProbe /></MemoryRouter>);
 
-    expect(await screen.findByRole('tab', { name: /Workspace/ })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByRole('tab', { name: /Task/ })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: /Dokumen/ })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: /File/ })).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('tab', { name: /Dokumen/ }));
-    expect(screen.getByRole('tabpanel', { name: 'Dokumen' })).toHaveTextContent('Belum ada dokumen aktif');
+    expect(await screen.findByRole('heading', { name: 'Apa yang ingin kamu kerjakan?' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Workspace baru/ })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Lanjutkan pekerjaan' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Mulai dengan cepat' })).toBeInTheDocument();
+    expect(screen.queryByRole('tab')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Analisis dokumen/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Tulis dokumen/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Review kode/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Riset topik/ })).toBeInTheDocument();
   });
 
-  it('keeps secondary starter tasks available in a compact disclosure', async () => {
+  it('keeps secondary starters available under a compact disclosure', async () => {
     render(<MemoryRouter><WorkspaceHome chats={[]} /></MemoryRouter>);
 
-    const disclosure = screen.getByText('Aktivitas lainnya');
-    fireEvent.click(disclosure);
-    expect(screen.getByRole('button', { name: /Review kode/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Buat presentasi/ })).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Lihat aktivitas lainnya'));
+    expect(screen.getByRole('button', { name: /Brainstorm ide/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Bandingkan jawaban/ })).toBeInTheDocument();
+  });
+
+  it('routes search results to their matching object inside the workspace', async () => {
+    vi.mocked(WorkspaceApiService.searchWorkspaces).mockResolvedValueOnce([{
+      kind: 'artifact', chatId: 'chat-7', itemId: 'artifact-12', title: 'Rencana riset', snippet: 'Pendahuluan', updatedAt: '2026-10-08T10:00:00.000Z'
+    }]);
+    render(<MemoryRouter><WorkspaceHome chats={[]} /><LocationProbe /></MemoryRouter>);
+
+    fireEvent.change(screen.getByRole('textbox', { name: /Cari workspace/ }), { target: { value: 'rencana' } });
+    fireEvent.click(await screen.findByRole('button', { name: /Rencana riset/ }));
+    expect(screen.getByTestId('location')).toHaveTextContent('/workspace/c/chat-7');
+    expect(screen.getByTestId('location')).toHaveTextContent('artifact-12');
   });
 });

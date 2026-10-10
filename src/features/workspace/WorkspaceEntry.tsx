@@ -21,6 +21,7 @@ export const WorkspaceEntry: React.FC<WorkspaceEntryProps> = props => {
   const [attempt, setAttempt] = useState(0);
   const createRequestRef = useRef<ReturnType<typeof WorkspaceApiService.createWorkspace> | null>(null);
   const { user } = props;
+  const setChats = props.setChats;
 
   useEffect(() => {
     if (user.role === 'guest') return;
@@ -29,7 +30,7 @@ export const WorkspaceEntry: React.FC<WorkspaceEntryProps> = props => {
     void createRequestRef.current.then(workspace => {
       if (!active) return;
       const now = workspace.createdAt || new Date().toISOString();
-      props.setChats?.(current => [{
+      setChats?.(current => [{
         id: workspace.chatId,
         title: workspace.name,
         isPinned: Boolean(workspace.isPinned),
@@ -46,7 +47,7 @@ export const WorkspaceEntry: React.FC<WorkspaceEntryProps> = props => {
       }
     });
     return () => { active = false; };
-  }, [attempt, location.state, navigate, props.setChats, user.role]);
+  }, [attempt, location.state, navigate, setChats, user.role]);
 
   if (user.role === 'guest') {
     return <React.Suspense fallback={<LoadingState message="Membuka Workspace" className="p-4" />}><GuestWorkspace {...props} /></React.Suspense>;

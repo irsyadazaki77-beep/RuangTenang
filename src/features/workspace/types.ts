@@ -96,6 +96,8 @@ export interface WorkspaceArtifact {
   chatId?: string | null;
   /** Client-only ownership metadata for artifacts drafted before a chat exists. */
   localWorkspaceId?: string;
+  /** Browser-local draft owner tag; this is isolation metadata, not encryption. */
+  localOwnerId?: string;
   persistenceStatus?: 'local' | 'saving' | 'failed' | 'persistent';
   userId?: string;
   title: string;

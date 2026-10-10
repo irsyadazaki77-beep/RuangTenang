@@ -29,7 +29,7 @@ type TabType = 'breathing' | 'grounding' | 'counselor';
 
 export const BurnoutInterventionCard: React.FC<BurnoutInterventionCardProps> = ({
   distressType = 'overwhelm',
-  triggerReason,
+  triggerReason: _triggerReason,
   onOpenBreathingModal,
   onOpenCounselorBooking
 }) => {
@@ -128,7 +128,7 @@ export const BurnoutInterventionCard: React.FC<BurnoutInterventionCardProps> = (
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, scale: 0.95 }}
       transition={{ type: 'spring', stiffness: 350, damping: 28 }}
-      className="my-3 rounded-2xl sm:rounded-3xl border border-emerald-500/20 bg-gradient-to-br from-emerald-50/70 via-white to-teal-50/50 dark:from-slate-900/90 dark:via-[#09121E] dark:to-emerald-950/30 p-4 sm:p-5 shadow-lg backdrop-blur-md overflow-hidden relative"
+      className="my-3 rounded-2xl sm:rounded-3xl border border-emerald-500/20 bg-linear-to-br from-emerald-50/70 via-white to-teal-50/50 dark:from-slate-900/90 dark:via-[#09121E] dark:to-emerald-950/30 p-4 sm:p-5 shadow-lg backdrop-blur-md overflow-hidden relative"
     >
       {/* Background Calm Orb */}
       <div className="absolute -top-12 -right-12 w-36 h-36 bg-emerald-400/10 dark:bg-emerald-500/10 rounded-full blur-2xl pointer-events-none" />

@@ -224,8 +224,8 @@ router.get(['/', '/counselors', '/api/counselors', '/api/v1/counselors'], async 
     }
     
     const formattedCounselors = dbCounselors.map(c => {
-      let specialties = [];
-      let availability = [];
+      let specialties: string[];
+      let availability: string[];
       let consultationType = ["video_call", "Chat"];
       let languages = ["Indonesia"];
       try { specialties = JSON.parse(c.specialties); } catch (e) { specialties = [c.specialties]; }

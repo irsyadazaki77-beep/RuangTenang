@@ -14,8 +14,7 @@ import {
   StopCircle,
   FileText,
   Clock,
-  RefreshCw,
-  Volume2
+  RefreshCw
 } from 'lucide-react';
 import { Appointment } from '../../types';
 import { apiClient } from '../../lib/apiClient';
@@ -33,6 +32,7 @@ export const VideoConsultationRoom: React.FC<VideoConsultationRoomProps> = ({
   onEndCall,
   userRole
 }) => {
+  const appointmentId = appointment?.id;
   // Media & Device State
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
@@ -48,7 +48,7 @@ export const VideoConsultationRoom: React.FC<VideoConsultationRoomProps> = ({
   const [iceServersError, setIceServersError] = useState<string | null>(null);
   const [hasRemoteStream, setHasRemoteStream] = useState<boolean>(false);
   const [remoteScreenSharing, setRemoteScreenSharing] = useState<boolean>(false);
-  const [networkQuality, setNetworkQuality] = useState<'good' | 'poor'>('good');
+  const [networkQuality] = useState<'good' | 'poor'>('good');
   const [isReconnecting, setIsReconnecting] = useState<boolean>(false);
 
   // UI & Presence State
@@ -105,9 +105,8 @@ export const VideoConsultationRoom: React.FC<VideoConsultationRoomProps> = ({
         } else {
           setApiAccessDeniedMsg(null);
           setRoomPresenceText('Menginisialisasi koneksi terenkripsi...');
-          
-          // Fetch secure ICE/TURN credentials from backend
-          apiClient.get<any>(`/api/v1/appointments/${appointment.id}/ice-servers`)
+
+          const loadIceServers = () => apiClient.get<any>(`/api/v1/appointments/${appointment.id}/ice-servers`)
             .then(iceRes => {
               if (!isSubscribed) return;
               const rawData: any = iceRes?.data || iceRes;
@@ -127,6 +126,27 @@ export const VideoConsultationRoom: React.FC<VideoConsultationRoomProps> = ({
               setIceServersError('Gagal mengambil konfigurasi ICE/TURN.');
               setApiAccessDeniedMsg('Izin sesi tidak dapat divalidasi ulang. Silakan keluar dan coba lagi.');
             });
+
+          if (userRole === 'konselor' && appointment.status === 'CONFIRMED') {
+            apiClient.put(`/api/v1/appointments/${appointment.id}`, { status: 'IN_PROGRESS' })
+              .then(startRes => {
+                if (!isSubscribed) return;
+                if (!startRes.success) {
+                  setApiAccessDeniedMsg(startRes.error === 'SESSION_START_NOT_AVAILABLE'
+                    ? 'Sesi belum berada dalam jendela waktu yang diizinkan.'
+                    : 'Status jadwal berubah di server. Muat ulang jadwal sebelum membuka sesi.');
+                  return;
+                }
+                loadIceServers();
+              })
+              .catch(err => {
+                if (!isSubscribed) return;
+                console.warn('Could not start appointment session:', err);
+                setApiAccessDeniedMsg('Sesi gagal dimulai. Muat ulang jadwal dan coba lagi.');
+              });
+          } else {
+            loadIceServers();
+          }
         }
       })
       .catch(err => {
@@ -411,7 +431,7 @@ export const VideoConsultationRoom: React.FC<VideoConsultationRoomProps> = ({
     let isSubscribed = true;
 
     const setupSession = async () => {
-      const stream = await initLocalMedia();
+      await initLocalMedia();
       if (!isSubscribed) return;
 
       const pc = createPeerConnection();
@@ -425,7 +445,7 @@ export const VideoConsultationRoom: React.FC<VideoConsultationRoomProps> = ({
       }
     };
 
-    if (appointment && roomAccessGranted && !apiAccessDeniedMsg) {
+    if (appointmentId && roomAccessGranted && !apiAccessDeniedMsg) {
       setupSession();
     }
 
@@ -450,7 +470,7 @@ export const VideoConsultationRoom: React.FC<VideoConsultationRoomProps> = ({
       }
       sendSignal('leave', {});
     };
-  }, [appointment?.id, roomAccessGranted, apiAccessDeniedMsg, initLocalMedia, createPeerConnection, initiateOffer, sendSignal, userRole]);
+  }, [appointmentId, roomAccessGranted, apiAccessDeniedMsg, initLocalMedia, createPeerConnection, initiateOffer, sendSignal, userRole]);
 
   useEffect(() => {
     if (!apiAccessDeniedMsg) return;

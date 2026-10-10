@@ -101,7 +101,7 @@ export const WorkspaceToolSelector: React.FC<WorkspaceToolSelectorProps> = ({
           type="button"
           onClick={() => setIsOpen(!isOpen)}
           disabled={disabled}
-          className="h-[32px] px-2.5 rounded-xl text-xs font-semibold text-emerald-800 dark:text-emerald-300 bg-emerald-50 hover:bg-emerald-100/90 dark:bg-emerald-950/70 dark:hover:bg-emerald-900/80 border border-emerald-200/80 dark:border-emerald-800/80 transition-colors flex items-center gap-1.5 cursor-pointer shadow-3xs disabled:opacity-50"
+          className="h-8 px-2.5 rounded-xl text-xs font-semibold text-emerald-800 dark:text-emerald-300 bg-emerald-50 hover:bg-emerald-100/90 dark:bg-emerald-950/70 dark:hover:bg-emerald-900/80 border border-emerald-200/80 dark:border-emerald-800/80 transition-colors flex items-center gap-1.5 cursor-pointer shadow-3xs disabled:opacity-50"
           title="Buka Alat Bantu Workspace (AI Tools)"
           aria-expanded={isOpen}
           aria-label="Alat Bantu Workspace"

@@ -1,7 +1,34 @@
 import { describe, it, expect } from 'vitest';
 import { parseArtifactsFromText } from '../../features/workspace/utils/artifactParser';
+import { readLocalDrafts, writeLocalDrafts } from '../../features/workspace/hooks/useWorkspaceArtifacts';
+import type { WorkspaceArtifact } from '../../features/workspace/types';
 
 describe('Workspace Artifacts & Multi-Version History', () => {
+  it('restores a session draft only for its exact user and Workspace identity', () => {
+    const artifact = {
+      id: 'draft-1', title: 'Draf lokal', type: 'DOCUMENT', content: 'Isi privat', version: 1,
+      localWorkspaceId: 'chat:chat-a', localOwnerId: 'user-a', persistenceStatus: 'failed'
+    } as WorkspaceArtifact;
+    writeLocalDrafts('chat:chat-a', [artifact], 'user-a');
+
+    expect(readLocalDrafts('chat:chat-a', 'user-a').map(item => item.id)).toEqual(['draft-1']);
+    expect(readLocalDrafts('chat:chat-a', 'user-b')).toEqual([]);
+    expect(readLocalDrafts('chat:chat-b', 'user-a')).toEqual([]);
+  });
+
+  it('migrates only legacy local drafts whose Workspace identity names the account', () => {
+    sessionStorage.clear();
+    const legacyDraft = {
+      id: 'legacy-local-draft', title: 'Draf lama', type: 'DOCUMENT', content: 'Belum tersimpan', version: 1,
+      localWorkspaceId: 'local:user-a:session-1', persistenceStatus: 'failed'
+    } as WorkspaceArtifact;
+    sessionStorage.setItem('ruangkerja:artifact-drafts:local:user-a:session-1', JSON.stringify([legacyDraft]));
+
+    expect(readLocalDrafts('local:user-a:session-1', 'user-a')[0]).toMatchObject({ id: legacyDraft.id, localOwnerId: 'user-a' });
+    expect(readLocalDrafts('local:user-a:session-1', 'user-b')).toEqual([]);
+    expect(readLocalDrafts('chat:chat-a', 'user-a')).toEqual([]);
+  });
+
   it('correctly parses document and code artifacts from assistant messages', () => {
     const rawText = `Berikut adalah draf metodologi penelitian Anda:
 

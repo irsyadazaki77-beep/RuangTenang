@@ -21,9 +21,10 @@ export function sanitizeFilename(rawFilename: string): string {
   if (!rawFilename || typeof rawFilename !== 'string') return 'document.bin';
   
   // Strip directory traversals (slashes, backslashes, double dots, null bytes)
-  let name = rawFilename.replace(/[\/\\]/g, '').replace(/\.\.+/g, '').replace(/\0/g, '').trim();
+  let name = rawFilename.replace(/[/\\]/g, '').replace(/\.\.+/g, '').replace(/\0/g, '').trim();
   
   // Strip control characters
+  // eslint-disable-next-line no-control-regex
   name = name.replace(/[\x00-\x1F\x7F]/g, '');
   
   // Disallow executable double extensions
@@ -59,7 +60,7 @@ export function isExecutableOrDangerous(buffer: Buffer): boolean {
 export async function validateAndInspectFile(
   buffer: Buffer,
   originalFilename: string,
-  declaredMime?: string
+  _declaredMime?: string
 ): Promise<VerifiedFileInfo> {
   if (!buffer || buffer.length === 0) {
     throw new DocumentProcessingException('EMPTY_FILE', 'Berkas kosong (0 byte).');
@@ -167,7 +168,7 @@ export async function validateAndInspectFile(
       const fileEntry = zip.files[entryName];
       if (!fileEntry.dir) {
         // Zip Bomb protection: check uncompressed size estimate
-        // @ts-ignore
+        // @ts-expect-error uncompressedSize internal access
         const uncompressed = fileEntry._data?.uncompressedSize || 0;
         totalUncompressedSize += uncompressed;
         if (totalUncompressedSize > DEFAULT_FILE_LIMITS.maxDecompressedArchiveSize) {

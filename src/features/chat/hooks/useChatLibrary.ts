@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from 'react';
+import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { UserSession } from '../../../types';
 import { apiClient } from '../../../lib/apiClient';
 import { clientDb } from '../../../lib/clientDb';
+import { getAuthSessionSnapshot, isCurrentAuthenticatedSession } from '../../../lib/authSessionLifecycle';
 import { Chat } from '../types';
 
 type Toast = (message: string, type?: 'success' | 'error' | 'info', title?: string) => void;
@@ -18,9 +19,16 @@ export function useChatLibrary(user: UserSession | null, showToast: Toast) {
   const location = useLocation();
   const userId = user?.id;
   const userRole = user?.role;
+  const previousUserIdRef = useRef(userId);
 
   const fetchChats = useCallback(async () => {
     if (!userId || userRole === 'guest') {
+      setChats([]);
+      setIsLoadingChats(false);
+      return;
+    }
+    const session = getAuthSessionSnapshot();
+    if (!isCurrentAuthenticatedSession(session) || session.userId !== userId) {
       setChats([]);
       setIsLoadingChats(false);
       return;
@@ -29,6 +37,7 @@ export function useChatLibrary(user: UserSession | null, showToast: Toast) {
     setIsLoadingChats(true);
     try {
       const response = await apiClient.get<Chat[]>('/api/v1/chat/history');
+      if (!isCurrentAuthenticatedSession(session)) return;
       if (response.success && Array.isArray(response.data)) {
         setChats(response.data);
         try {
@@ -40,16 +49,21 @@ export function useChatLibrary(user: UserSession | null, showToast: Toast) {
       }
 
       if (response.status !== 401) console.warn('Fetch chats failed:', response.error);
-      await restoreCachedChats(userId, setChats);
+      await restoreCachedChats(userId, session, setChats);
     } catch (error) {
+      if (!isCurrentAuthenticatedSession(session)) return;
       console.warn('Failed to fetch chat history:', error);
-      await restoreCachedChats(userId, setChats);
+      await restoreCachedChats(userId, session, setChats);
     } finally {
-      setIsLoadingChats(false);
+      if (isCurrentAuthenticatedSession(session)) setIsLoadingChats(false);
     }
   }, [userId, userRole]);
 
   useEffect(() => {
+    if (previousUserIdRef.current !== user?.id) {
+      previousUserIdRef.current = user?.id;
+      setChats([]);
+    }
     if (user?.id) void fetchChats();
     else {
       setChats([]);
@@ -118,13 +132,15 @@ export function useChatLibrary(user: UserSession | null, showToast: Toast) {
 
 async function restoreCachedChats(
   userId: string,
+  session: ReturnType<typeof getAuthSessionSnapshot>,
   setChats: Dispatch<SetStateAction<Chat[]>>
 ): Promise<void> {
   try {
     const cachedJson = await clientDb.getDecrypted(`chats_${userId}`);
+    if (!isCurrentAuthenticatedSession(session)) return;
     const cachedValue: unknown = cachedJson ? JSON.parse(cachedJson) : [];
     setChats(Array.isArray(cachedValue) ? cachedValue as Chat[] : []);
   } catch {
-    setChats([]);
+    if (isCurrentAuthenticatedSession(session)) setChats([]);
   }
 }

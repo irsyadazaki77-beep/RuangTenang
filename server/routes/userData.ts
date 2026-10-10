@@ -2,6 +2,8 @@ import { prisma } from '../database.js';
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { requireAuth } from '../middleware/auth.js';
+import { verifyOfflineOwner } from '../middleware/offlineOwnership.js';
+import { idempotencyMiddleware } from '../apiV1Helpers.js';
 import { encryptionService } from '../services/encryptionService.js';
 import { generateStudentProgressPdf } from '../services/reportGenerator.js';
 import { CreateMoodSchema, UpdateMoodSchema } from '../../shared/contracts/mood.js';
@@ -66,7 +68,13 @@ router.get('/mood', requireAuth, async (req: Request, res: Response) => {
   }
 });
 
-router.post('/mood', requireAuth, async (req: Request, res: Response) => {
+router.post('/mood', requireAuth, verifyOfflineOwner, idempotencyMiddleware({
+  projectResponse: (body) => {
+    if (!body || typeof body !== 'object') return { success: true };
+    const logId = (body as { log?: { id?: unknown } }).log?.id;
+    return { success: true, log: typeof logId === 'string' ? { id: logId } : undefined };
+  },
+}), async (req: Request, res: Response) => {
   try {
     const parsed = CreateMoodSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -113,8 +121,9 @@ router.post('/mood', requireAuth, async (req: Request, res: Response) => {
     });
 
     res.json({ success: true, log: { ...log, notes: notes || '', factors: factors || [], emotions: emotions || [] } });
-  } catch (e: any) {
-    console.error('[MOOD] Error:', e.message);
+  } catch {
+    // Do not log request fields or provider/ORM error details that may echo sensitive values.
+    console.error('[MOOD] CREATE_MOOD_FAILED');
     sendError(res, 'CREATE_MOOD_FAILED', 'Gagal menyimpan data mood');
   }
 });

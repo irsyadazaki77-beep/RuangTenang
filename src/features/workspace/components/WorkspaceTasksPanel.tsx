@@ -1,9 +1,11 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { Check, ChevronDown, ChevronUp, Circle, ListChecks, Pause, Play, Plus, Sparkles, X } from 'lucide-react';
 import type { WorkspacePlan, WorkspaceTaskStatus } from '../../../../shared/contracts/workspace';
 
 interface Props {
   plan: WorkspacePlan | null;
+  workspaceKey?: string;
+  isLoading?: boolean;
   canPersist: boolean;
   isGenerating: boolean;
   isExecuting: boolean;
@@ -17,9 +19,11 @@ interface Props {
   onOpenSource: (source: { documentId: string }) => void;
   onAcceptReview: (taskId: string) => void;
   onRejectReview: (taskId: string) => void;
+  hideHeader?: boolean;
+  focusedTaskId?: string;
 }
 
-export const WorkspaceTasksPanel: React.FC<Props> = ({ plan, canPersist, isGenerating, isExecuting, onGenerate, onUpdate, onRun, onCancel, onComplete, modelOptions, onOpenArtifact, onOpenSource, onAcceptReview, onRejectReview }) => {
+export const WorkspaceTasksPanel: React.FC<Props> = ({ plan, workspaceKey, isLoading = false, canPersist, isGenerating, isExecuting, onGenerate, onUpdate, onRun, onCancel, onComplete, modelOptions, onOpenArtifact, onOpenSource, onAcceptReview, onRejectReview, hideHeader = false, focusedTaskId }) => {
   const [expanded, setExpanded] = useState(() => Boolean(plan));
   const [goal, setGoal] = useState('');
   const [titleEdits, setTitleEdits] = useState<Record<string, string>>({});
@@ -41,18 +45,34 @@ export const WorkspaceTasksPanel: React.FC<Props> = ({ plan, canPersist, isGener
   };
   const statusLabel: Record<WorkspaceTaskStatus, string> = { todo: 'Menunggu', running: 'Berjalan', waiting_review: 'Perlu ditinjau', done: 'Selesai', failed: 'Gagal', cancelled: 'Dibatalkan' };
 
+  useEffect(() => { if (plan) setExpanded(true); }, [plan?.id]); // eslint-disable-line react-hooks/exhaustive-deps -- expand only when a different plan is loaded.
+  useLayoutEffect(() => {
+    setGoal('');
+    setTitleEdits({});
+    setReviewFeedback({});
+    setError(null);
+    setExpanded(false);
+  }, [workspaceKey]);
+  useEffect(() => {
+    if (!focusedTaskId) return;
+    const target = Array.from(document.querySelectorAll<HTMLElement>('[data-workspace-task-id]'))
+      .find(element => element.dataset.workspaceTaskId === focusedTaskId);
+    target?.scrollIntoView?.({ block: 'center', behavior: 'auto' });
+    target?.focus?.({ preventScroll: true });
+  }, [focusedTaskId, plan?.tasks]);
+
   return <section className="shrink-0 border-b border-slate-200/70 bg-white dark:border-slate-800/80 dark:bg-[#0F172A]" aria-label="Agent Workflow">
-    <div className="flex min-h-10 items-center gap-2 px-3 sm:px-4">
+    {!hideHeader && <div className="flex min-h-10 items-center gap-2 px-3 sm:px-4">
       <button type="button" onClick={() => setExpanded(open => !open)} aria-expanded={expanded} className="flex min-h-10 flex-1 items-center gap-2 text-left text-xs text-slate-600 dark:text-slate-300">
         <ListChecks className="h-4 w-4 text-emerald-600 dark:text-emerald-400" /><span className="font-semibold">Plan</span>
         {plan && <><span className="min-w-0 truncate text-slate-500">{plan.title}</span><span className="ml-auto shrink-0 text-slate-500">{doneCount}/{plan.tasks.length}</span></>}
         {!plan && <span className="text-slate-500">Uraikan pekerjaan bertahap</span>}
         <span className="text-slate-400">{expanded ? 'Tutup' : 'Buka'}</span>
       </button>
-    </div>
-    {expanded && <div className="max-h-[45vh] overflow-y-auto border-t border-slate-100 px-3 py-3 dark:border-slate-800 sm:px-4">
+    </div>}
+    {(expanded || hideHeader) && <div className="max-h-[calc(100dvh-8rem)] overflow-y-auto px-3 py-3 sm:px-4">
       {error && <p role="alert" className="mb-2 text-xs text-rose-600">{error}</p>}
-      {!plan ? <>
+      {isLoading ? <p role="status" className="py-5 text-center text-xs text-slate-500">Memuat rencana Workspace…</p> : !plan ? <>
         <p className="mb-2 text-xs text-slate-500">Buat draft langkah yang bisa ditinjau dan diedit sebelum dijalankan.</p>
         {!canPersist && <p className="mb-2 text-[11px] text-slate-500">Kirim pesan untuk menyimpan Workspace sebelum membuat plan.</p>}
         <form onSubmit={event => { event.preventDefault(); if (goal.trim()) { setExpanded(true); onGenerate(goal.trim()); } }} className="flex gap-2">
@@ -64,7 +84,7 @@ export const WorkspaceTasksPanel: React.FC<Props> = ({ plan, canPersist, isGener
         <ol className="mt-3 space-y-1.5">
           {plan.tasks.map((task, index) => {
             const ready = task.dependsOn.every(id => plan.tasks.find(candidate => candidate.id === id)?.status === 'done');
-            return <li key={task.id} className={`flex items-center gap-2 rounded-lg border px-2 py-2 ${task.status === 'running' ? 'border-emerald-300 bg-emerald-50/70 dark:border-emerald-800 dark:bg-emerald-950/30' : 'border-slate-100 dark:border-slate-800'}`}>
+            return <li key={task.id} data-workspace-task-id={task.id} tabIndex={focusedTaskId === task.id ? -1 : undefined} aria-current={focusedTaskId === task.id ? 'location' : undefined} className={`flex items-center gap-2 rounded-lg border px-2 py-2 ${focusedTaskId === task.id ? 'border-emerald-300 bg-emerald-50/70 dark:border-emerald-800 dark:bg-emerald-950/30' : task.status === 'running' ? 'border-emerald-300 bg-emerald-50/70 dark:border-emerald-800 dark:bg-emerald-950/30' : 'border-slate-100 dark:border-slate-800'}`}>
               {task.status === 'done' ? <Check className="h-4 w-4 shrink-0 text-emerald-600" /> : task.status === 'running' ? <span className="h-3 w-3 shrink-0 animate-pulse rounded-full bg-amber-500" /> : <Circle className="h-4 w-4 shrink-0 text-slate-300" />}
               <div className="min-w-0 flex-1">
                 {plan.status === 'draft' ? <input aria-label={`Nama task ${index + 1}`} value={titleEdits[task.id] ?? task.title} onChange={event => setTitleEdits(current => ({ ...current, [task.id]: event.target.value.slice(0, 240) }))} className="w-full bg-transparent text-xs font-medium outline-none" /> : <p className="truncate text-xs font-medium text-slate-700 dark:text-slate-200">{task.title}</p>}

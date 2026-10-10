@@ -1,3 +1,5 @@
+import { isValidAppointmentStatusTransition } from '../../shared/contracts/appointments.js';
+
 export interface Clock {
   now(): Date;
 }
@@ -11,6 +13,8 @@ export const APPOINTMENT_TIMEZONE_IANA: Record<string, string> = {
   WITA: 'Asia/Makassar',
   WIT: 'Asia/Jayapura',
 };
+
+export { isValidAppointmentStatusTransition };
 
 export type RoomAccessReason =
   | 'ROOM_ACCESS_NOT_APPROVED'
@@ -112,17 +116,4 @@ export function canJoinAppointmentRoom(
   if (window.serverTime < window.earliestJoinAt) return { allowed: false, reason: 'ROOM_ACCESS_TOO_EARLY', window };
   if (window.serverTime > window.latestJoinAt) return { allowed: false, reason: 'ROOM_ACCESS_EXPIRED', window };
   return { allowed: true, window };
-}
-
-const VALID_STATUS_TRANSITIONS: Record<string, readonly string[]> = {
-  PENDING: ['CONFIRMED', 'REJECTED', 'CANCELLED'],
-  CONFIRMED: ['IN_PROGRESS', 'CANCELLED'],
-  IN_PROGRESS: ['CANCELLED', 'COMPLETED'],
-  REJECTED: [],
-  CANCELLED: [],
-  COMPLETED: [],
-};
-
-export function isValidAppointmentStatusTransition(from: string, to: string): boolean {
-  return from === to || (VALID_STATUS_TRANSITIONS[from] || []).includes(to);
 }

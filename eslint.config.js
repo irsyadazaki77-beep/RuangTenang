@@ -28,7 +28,7 @@ export default tseslint.config(
       // Downgraded to 'off' temporarily as bulk of core domains have been typed. Remaining 'any' are mostly in UI callbacks where typing is complex.
       '@typescript-eslint/no-explicit-any': 'off',
       // Re-enabled as warning
-      '@typescript-eslint/no-unused-vars': ['warn', { 'argsIgnorePattern': '^_', 'varsIgnorePattern': '^_', 'caughtErrorsIgnorePattern': '^_' }],
+      '@typescript-eslint/no-unused-vars': ['warn', { 'argsIgnorePattern': '^_', 'varsIgnorePattern': '^_', 'caughtErrors': 'none' }],
       '@typescript-eslint/no-empty-object-type': 'off',
       '@typescript-eslint/no-unused-expressions': 'warn',
       '@typescript-eslint/no-require-imports': 'warn',
@@ -53,10 +53,23 @@ export default tseslint.config(
     }
   },
   {
-    files: ['src/__tests__/**/*', 'server/__tests__/**/*', 'server/**/*.test.ts'],
+    files: ['src/__tests__/**/*', 'server/__tests__/**/*', 'server/**/*.test.ts', 'e2e/**/*'],
     rules: {
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-unused-vars': 'off'
+    }
+  },
+  {
+    files: ['scripts/**/*', 'server/scripts/**/*', '**/*.cjs'],
+    rules: {
+      'no-console': 'off',
+      '@typescript-eslint/no-require-imports': 'off'
+    }
+  },
+  {
+    files: ['server/**/*', 'server.ts'],
+    rules: {
+      'no-console': 'off'
     }
   }
 );

@@ -15,7 +15,7 @@ export class XlsxAdapter implements DocumentExtractorAdapter {
 
     try {
       const workbook = new ExcelJS.Workbook();
-      await workbook.xlsx.load(input.buffer);
+      await workbook.xlsx.load(input.buffer as any);
 
       const worksheets = workbook.worksheets;
       if (worksheets.length === 0) {
@@ -52,12 +52,12 @@ export class XlsxAdapter implements DocumentExtractorAdapter {
 
         // Format worksheet into tabular markdown-like text
         const rowsText: string[] = [];
-        let headerRow: string[] = [];
+
 
         ws.eachRow({ includeEmpty: false }, (row, rowNumber) => {
           const cells: string[] = [];
           row.eachCell({ includeEmpty: true }, (cell) => {
-            let val = cell.value;
+            const val = cell.value;
             if (val === null || val === undefined) {
               cells.push('');
             } else if (typeof val === 'object' && 'result' in val) {
@@ -72,7 +72,6 @@ export class XlsxAdapter implements DocumentExtractorAdapter {
           });
 
           if (rowNumber === 1) {
-            headerRow = cells;
             rowsText.push(`| ${cells.join(' | ')} |`);
             rowsText.push(`| ${cells.map(() => '---').join(' | ')} |`);
           } else {

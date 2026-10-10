@@ -1,5 +1,5 @@
 import { useEscapeKey } from '../../hooks/useEscapeKey';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   CalendarCheck,
   Calendar as CalendarIcon,
@@ -54,6 +54,7 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
 }) => {
   const { showToast } = useToast();
   const { counselors, loading: counselorsLoading, error: counselorsError} = useCounselors();
+  const sessionRole = userSession?.role;
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loadingAppointments, setLoadingAppointments] = useState(true);
   const [errorAppointments, setErrorAppointments] = useState<string | null>(null);
@@ -82,7 +83,7 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
 
   // Real-time Appointment Status Updates (SSE)
   useEffect(() => {
-    if (!userSession || userSession.role === 'guest') {
+    if (!sessionRole || sessionRole === 'guest') {
       return;
     }
 
@@ -126,7 +127,7 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
         eventSource.close();
       }
     };
-  }, [userSession?.role, showToast]);
+  }, [sessionRole, showToast]);
 
   // Active Reminder Scheduler Interval
   useEffect(() => {
@@ -191,14 +192,14 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
     checkScheduledReminders();
     const intervalId = setInterval(checkScheduledReminders, 30000);
     return () => clearInterval(intervalId);
-  }, [appointments]);
+  }, [appointments, showToast]);
 
   // Notification Status
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>(
     'default'
   );
 
-  const fetchAppointments = () => {
+  const fetchAppointments = useCallback(() => {
     setLoadingAppointments(true);
     setErrorAppointments(null);
     apiClient.get<any[]>('/api/v1/appointments?limit=all')
@@ -244,7 +245,7 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
         setAppointments([]);
         setLoadingAppointments(false);
       });
-  };
+  }, [counselors]);
 
   useEffect(() => {
     if ('Notification' in window) {
@@ -257,7 +258,13 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
       setErrorAppointments(counselorsError);
       setLoadingAppointments(false);
     }
-  }, [counselorsLoading, counselorsError]);
+  }, [counselorsLoading, counselorsError, fetchAppointments]);
+
+  useEffect(() => {
+    const refreshAfterOfflineSync = () => fetchAppointments();
+    window.addEventListener('ruangtenang:offline-synced', refreshAfterOfflineSync);
+    return () => window.removeEventListener('ruangtenang:offline-synced', refreshAfterOfflineSync);
+  }, [fetchAppointments]);
 
   useEffect(() => {
     if (selectedCounselorFromDir) {
@@ -299,7 +306,12 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
       });
 
       if (!res.success) {
-        showToast(res.error || 'Gagal membatalkan jadwal di server.', 'error');
+        if (res.status === 409 || ['APPOINTMENT_STATUS_CONFLICT', 'APPOINTMENT_CONCURRENT_UPDATE'].includes(res.error || '')) {
+          showToast('Status jadwal berubah di server. Memuat status terbaru.', 'error');
+          fetchAppointments();
+        } else {
+          showToast(res.error || 'Gagal membatalkan jadwal di server.', 'error');
+        }
         return;
       }
 
@@ -313,7 +325,12 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
       showToast('Jadwal konseling berhasil dibatalkan.', 'success');
     } catch (e: any) {
       console.warn('Backend cancel failed:', e);
-      showToast('Terjadi kesalahan saat membatalkan jadwal konseling.', 'error');
+      if (e.status === 409 || ['APPOINTMENT_STATUS_CONFLICT', 'APPOINTMENT_CONCURRENT_UPDATE'].includes(e.error || '')) {
+        showToast('Status jadwal berubah di server. Memuat status terbaru.', 'error');
+        fetchAppointments();
+      } else {
+        showToast('Terjadi kesalahan saat membatalkan jadwal konseling.', 'error');
+      }
     }
   };
 
@@ -552,7 +569,7 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
                   </div>
                   
                   {/* Virtual Meeting Link */}
-                  {apt.mode === 'video_call' && apt.status !== 'COMPLETED' && (
+                  {apt.mode === 'video_call' && ['CONFIRMED', 'IN_PROGRESS'].includes(apt.status) && apt.approvalStatus === 'APPROVED' && userSession?.role !== 'admin' && (
                     <div className="flex items-center justify-between pt-2.5 border-t border-slate-200 dark:border-slate-700">
                       <span className="text-secondary font-medium">Link Pertemuan:</span>
                       {apt.meetingLink ? (
@@ -605,7 +622,7 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
                       </a>
 
                       {/* Reschedule Button */}
-                      {apt.status !== 'CANCELLED' && (
+                      {['PENDING', 'CONFIRMED'].includes(apt.status) && (
                         <button
                           onClick={() => setRescheduleApt(apt)}
                           className="px-3.5 py-2.5 min-h-[44px] bg-amber-50 dark:bg-amber-950/40 hover:bg-[#FEF5D9] text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-900/50 rounded-xl text-xs sm:text-sm font-medium transition-all cursor-pointer"
@@ -622,7 +639,7 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
                         <Download className="w-4 h-4" />
                       </button>
 
-                      {apt.status !== 'CANCELLED' && (
+                      {['PENDING', 'CONFIRMED'].includes(apt.status) && (
                         <button
                           onClick={() => handleCancelAppointment(apt.id)}
                           className="p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center bg-transparent hover:bg-rose-50 dark:hover:bg-rose-950/40 text-secondary hover:text-rose-500 border border-default hover:border-rose-200 dark:hover:border-rose-900/50 rounded-xl transition-all cursor-pointer"
@@ -658,7 +675,7 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
                           </button>
                         )}
                         
-                        {apt.mode === 'video_call' && (
+                        {apt.mode === 'video_call' && ['CONFIRMED', 'IN_PROGRESS'].includes(apt.status) && apt.approvalStatus === 'APPROVED' && userSession?.role !== 'admin' && (
                           <button
                             onClick={() => setActiveVideoApt(apt)}
                             className="w-full py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-all shadow-sm cursor-pointer"

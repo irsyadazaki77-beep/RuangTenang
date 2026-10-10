@@ -113,7 +113,7 @@ export const contextRetrievalService = {
     }
 
     const targetAttachmentIds = readyAttachments.map(a => a.id);
-    const filenameMap = new Map(readyAttachments.map(a => [a.id, a.filename]));
+    const filenameMap = new Map<string, string>(readyAttachments.map((a: any) => [String(a.id), String(a.filename || 'Dokumen')]));
 
     // 2. Fetch all chunks for these attachments
     const rawChunks = await prisma.documentChunks.findMany({
@@ -178,7 +178,7 @@ export const contextRetrievalService = {
         }
       }
 
-      const filename = filenameMap.get(c.attachmentId) || 'Dokumen';
+      const filename: string = filenameMap.get(c.attachmentId) || 'Dokumen';
       // Never turn a storage chunk index into a user-visible page/section citation.
       const parsedLocation = [c.pageStart ? `p. ${c.pageStart}${c.pageEnd && c.pageEnd !== c.pageStart ? `–${c.pageEnd}` : ''}` : '', c.slideNumber ? `slide ${c.slideNumber}` : '', c.sheetName ? `sheet ${c.sheetName}` : '', c.section || ''].filter(Boolean).join(' · ');
       const storedSourceRef = c.sourceRef && !/\[(?:Bagian|Section)\s+\d+\]/i.test(c.sourceRef) ? c.sourceRef : undefined;
@@ -233,7 +233,7 @@ export const contextRetrievalService = {
       
       // If the document content contains blatant prompt injection phrases, neutralize them as raw data
       if (detectPromptInjection(safeContent)) {
-        safeContent = `[DATA NETRALISIR - TERDETEKSI POLA INSTRUKSI UNTRUSTED]\n${safeContent.replace(/([\[\]{}<>])/g, '')}`;
+        safeContent = `[DATA NETRALISIR - TERDETEKSI POLA INSTRUKSI UNTRUSTED]\n${safeContent.replace(/([[\]{}<>])/g, '')}`;
       }
 
       const referenceIndex = selectedChunks.findIndex(selected => selected.id === c.id);

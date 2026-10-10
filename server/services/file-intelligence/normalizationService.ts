@@ -18,6 +18,7 @@ export const normalizationService = {
 
       // 1. Replace zero-width spaces and control chars except newlines and tabs
       text = text.replace(/[\u200B-\u200D\uFEFF]/g, '');
+      // eslint-disable-next-line no-control-regex
       text = text.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
 
       // 2. Normalize CRLF to LF

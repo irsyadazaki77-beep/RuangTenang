@@ -52,7 +52,7 @@ export const auditRepository = {
     ipOrHash?: string | null,
     userRole?: string | null,
   ): Promise<AuditLogRecord> {
-    const id = "log-" + Date.now() + "-" + Math.floor(Math.random() * 1000);
+    const id = `log-${crypto.randomUUID()}`;
     const timestamp = new Date();
 
     // Automatic PII Redaction for Audit Log details

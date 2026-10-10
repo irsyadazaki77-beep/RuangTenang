@@ -1,8 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { 
-  Layers, 
+  Menu,
   FilePlus, 
-  ChevronDown, 
   FileText, 
   FileCode, 
   Quote, 
@@ -54,20 +53,15 @@ export const WorkspaceHeader: React.FC<WorkspaceHeaderProps> = React.memo(({
 }) => {
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [showNewArtifactMenu, setShowNewArtifactMenu] = useState(false);
 
   const moreMenuRef = useRef<HTMLDivElement>(null);
-  const newArtifactMenuRef = useRef<HTMLDivElement>(null);
+  const moreTriggerRef = useRef<HTMLButtonElement>(null);
 
   // Close popovers on click outside
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (moreMenuRef.current && !moreMenuRef.current.contains(e.target as Node)) {
         setShowMoreMenu(false);
-        setShowDeleteConfirm(false);
-      }
-      if (newArtifactMenuRef.current && !newArtifactMenuRef.current.contains(e.target as Node)) {
-        setShowNewArtifactMenu(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -75,7 +69,6 @@ export const WorkspaceHeader: React.FC<WorkspaceHeaderProps> = React.memo(({
       if (event.key === 'Escape') {
         setShowMoreMenu(false);
         setShowDeleteConfirm(false);
-        setShowNewArtifactMenu(false);
       }
     };
     document.addEventListener('keydown', handleEscape);
@@ -86,6 +79,7 @@ export const WorkspaceHeader: React.FC<WorkspaceHeaderProps> = React.memo(({
   }, []);
 
   return (
+    <>
     <header className="h-12 px-3 sm:px-4 bg-white dark:bg-[#0F172A] border-b border-slate-200/70 dark:border-slate-800/80 flex items-center justify-between gap-2 sm:gap-3 z-30 shrink-0 min-w-0">
       {/* Left Zone: Workspace Identity & Mobile Navigation Toggle */}
       <div className="flex items-center gap-2 sm:gap-3 min-w-0">
@@ -93,10 +87,10 @@ export const WorkspaceHeader: React.FC<WorkspaceHeaderProps> = React.memo(({
           <button
             type="button"
             onClick={onOpenSidebar}
-            className="xl:hidden p-1.5 rounded-lg text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+            className="xl:hidden flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
             aria-label="Buka Sidebar Menu"
           >
-            <Layers className="w-4 h-4" />
+            <Menu className="w-4 h-4" />
           </button>
         )}
 
@@ -124,16 +118,16 @@ export const WorkspaceHeader: React.FC<WorkspaceHeaderProps> = React.memo(({
       </div>
 
       {/* Center / Right Zone: Segmented Switcher & Workspace Actions */}
-      <div className="flex items-center gap-2 shrink-0">
+      <div className="flex items-center gap-1 shrink-0">
         {/* Mobile/Tablet Tab Switcher */}
-        <div role="group" aria-label="Tampilan workspace" className="xl:hidden flex items-center p-0.5 bg-slate-100/90 dark:bg-slate-800/90 rounded-lg border border-slate-200/60 dark:border-slate-700/60">
+        <div role="group" aria-label="Tampilan workspace" className="xl:hidden flex items-center gap-0.5 rounded-lg border border-slate-200/60 bg-slate-100/90 p-0.5 dark:border-slate-700/60 dark:bg-slate-800/90">
           <button
             type="button"
             onClick={() => onSetMobileActiveTab('chat')}
             aria-pressed={mobileActiveTab === 'chat'}
             aria-label="Obrolan"
             title="Obrolan"
-            className={`flex min-h-9 items-center justify-center gap-1.5 rounded-md px-2 sm:px-2.5 text-xs font-medium transition-colors cursor-pointer ${
+            className={`flex min-h-10 min-w-10 items-center justify-center gap-1.5 rounded-md px-2 sm:px-2.5 text-xs font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
               mobileActiveTab === 'chat'
                 ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-semibold shadow-2xs'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
@@ -147,7 +141,7 @@ export const WorkspaceHeader: React.FC<WorkspaceHeaderProps> = React.memo(({
             aria-pressed={mobileActiveTab === 'canvas'}
             aria-label="Canvas"
             title="Canvas"
-            className={`relative flex min-h-9 items-center justify-center gap-1.5 rounded-md px-2 sm:px-2.5 text-xs font-medium transition-colors cursor-pointer ${
+            className={`relative flex min-h-10 min-w-10 items-center justify-center gap-1.5 rounded-md px-2 sm:px-2.5 text-xs font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
               mobileActiveTab === 'canvas'
                 ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-semibold shadow-2xs'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
@@ -158,71 +152,17 @@ export const WorkspaceHeader: React.FC<WorkspaceHeaderProps> = React.memo(({
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block ml-1 animate-pulse" />
             )}
           </button>
-          <button type="button" onClick={() => onSetMobileActiveTab('context')} aria-label="Context" title="Context" aria-pressed={mobileActiveTab === 'context'} className={`flex min-h-9 items-center justify-center gap-1.5 rounded-md px-2 sm:px-2.5 text-xs font-medium transition-colors cursor-pointer ${mobileActiveTab === 'context' ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-semibold shadow-2xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'}`}><Sparkles className="h-4 w-4 sm:hidden" aria-hidden="true" /><span className="hidden sm:inline">Context</span></button>
+          <button type="button" onClick={() => onSetMobileActiveTab('context')} aria-label="Panel" title="Panel" aria-pressed={mobileActiveTab === 'context' || mobileActiveTab === 'sources'} className={`flex min-h-10 min-w-10 items-center justify-center gap-1.5 rounded-md px-2 sm:px-2.5 text-xs font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${mobileActiveTab === 'context' || mobileActiveTab === 'sources' ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-semibold shadow-2xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'}`}><Sparkles className="h-4 w-4 sm:hidden" aria-hidden="true" /><span className="hidden sm:inline">Panel</span></button>
         </div>
 
-        {onToggleContext && <button type="button" onClick={onToggleContext} aria-label="Buka panel context" title="Context" className="hidden xl:inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:hover:bg-slate-800 dark:hover:text-slate-100"><Sparkles className="h-3.5 w-3.5" /><span>Context</span></button>}
+        {onToggleContext && <button type="button" onClick={onToggleContext} aria-label="Buka panel" title="Files, sumber, rencana, dan konteks" className="hidden xl:inline-flex h-9 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:hover:bg-slate-800 dark:hover:text-slate-100"><Sparkles className="h-3.5 w-3.5" /><span>Panel</span></button>}
 
         {/* Primary Action: + Draf Baru Dropdown */}
-        <div className="relative hidden sm:block" ref={newArtifactMenuRef}>
-          <button
-            type="button"
-            onClick={() => setShowNewArtifactMenu(!showNewArtifactMenu)}
-            className="h-8 px-2 rounded-lg text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 text-xs font-medium transition-colors cursor-pointer flex items-center gap-1.5"
-            title="Buat Berkas / Draf Baru"
-            aria-label="Buat draf baru"
-            aria-expanded={showNewArtifactMenu}
-            aria-haspopup="true"
-          >
-            <FilePlus className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Artefak</span>
-            <ChevronDown className="w-3 h-3 opacity-80" />
-          </button>
-
-          {showNewArtifactMenu && (
-            <div role="group" aria-label="Jenis draf baru" className="absolute right-0 top-full mt-1.5 w-48 p-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl z-50 animate-scale-up space-y-0.5">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowNewArtifactMenu(false);
-                  onCreateNewArtifact('DOCUMENT');
-                }}
-                className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center gap-2 cursor-pointer"
-              >
-                <FileText className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                <span>Draf Dokumen (.md)</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowNewArtifactMenu(false);
-                  onCreateNewArtifact('CODE');
-                }}
-                className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center gap-2 cursor-pointer"
-              >
-                <FileCode className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                <span>Skrip Kode (.py/.ts)</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowNewArtifactMenu(false);
-                  onCreateNewArtifact('CITATION');
-                }}
-                className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center gap-2 cursor-pointer"
-              >
-                <Quote className="w-3.5 h-3.5 text-amber-500" />
-                <span>Daftar Sitasi (.bib)</span>
-              </button>
-            </div>
-          )}
-        </div>
-
         {/* Desktop Canvas Toggle */}
         <button
           type="button"
           onClick={onToggleCanvas}
-          className="hidden xl:flex h-8 px-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-medium items-center gap-1.5 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+          className="hidden xl:flex h-9 px-2.5 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-medium items-center gap-1.5 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
           title={isCanvasOpen ? 'Sembunyikan Panel Canvas' : 'Tampilkan Panel Canvas'}
           aria-label={isCanvasOpen ? 'Tutup Canvas' : 'Buka Canvas'}
         >
@@ -247,7 +187,8 @@ export const WorkspaceHeader: React.FC<WorkspaceHeaderProps> = React.memo(({
           <button
             type="button"
             onClick={() => setShowMoreMenu(!showMoreMenu)}
-            className="h-8 w-8 flex items-center justify-center rounded-lg text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+            ref={moreTriggerRef}
+            className="h-10 w-10 flex items-center justify-center rounded-lg text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
             title="Menu Opsi Workspace"
             aria-label="Opsi Lebih Lanjut"
             aria-expanded={showMoreMenu}
@@ -286,10 +227,14 @@ export const WorkspaceHeader: React.FC<WorkspaceHeaderProps> = React.memo(({
 
               <div className="border-t border-slate-100 dark:border-slate-800 my-1" />
 
+              <button type="button" onClick={() => { setShowMoreMenu(false); onCreateNewArtifact('DOCUMENT'); }} className="w-full rounded-lg px-2.5 py-2 text-left text-xs font-medium text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"><FilePlus className="mr-2 inline h-3.5 w-3.5 text-emerald-600" />Dokumen baru</button>
+              <button type="button" onClick={() => { setShowMoreMenu(false); onCreateNewArtifact('CODE'); }} className="w-full rounded-lg px-2.5 py-2 text-left text-xs font-medium text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"><FileCode className="mr-2 inline h-3.5 w-3.5 text-emerald-600" />Kode baru</button>
+              <button type="button" onClick={() => { setShowMoreMenu(false); onCreateNewArtifact('CITATION'); }} className="w-full rounded-lg px-2.5 py-2 text-left text-xs font-medium text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"><Quote className="mr-2 inline h-3.5 w-3.5 text-amber-600" />Daftar sitasi baru</button>
+
               <button
                 type="button"
                 disabled={isClearingConversation || isPreparingConversation}
-                onClick={() => setShowDeleteConfirm(true)}
+                onClick={() => { setShowMoreMenu(false); setShowDeleteConfirm(true); }}
                 title={isPreparingConversation ? 'Menyiapkan identitas percakapan agar penghapusan tersimpan dengan benar.' : 'Bersihkan percakapan RuangKerja'}
                 className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors flex items-center gap-2 cursor-pointer"
               >
@@ -297,43 +242,12 @@ export const WorkspaceHeader: React.FC<WorkspaceHeaderProps> = React.memo(({
                 <span>Bersihkan Obrolan</span>
               </button>
 
-              {/* Delete Confirmation Sub-Popover */}
-              {showDeleteConfirm && (
-                <div className="p-2.5 mt-1 bg-rose-50/90 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-900 rounded-lg text-xs space-y-2">
-                  <p className="text-xs font-semibold text-rose-900 dark:text-rose-100">Bersihkan percakapan?</p>
-                  <p className="text-[11px] text-rose-800 dark:text-rose-200">
-                    Semua pesan di RuangKerja ini akan dihapus. Dokumen dan artefak Canvas tetap tersimpan.
-                  </p>
-                  <div className="flex items-center justify-end gap-1.5">
-                    <button
-                      type="button"
-                      disabled={isClearingConversation || isPreparingConversation}
-                      onClick={() => setShowDeleteConfirm(false)}
-                      className="px-2 py-0.5 rounded text-[11px] text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800 transition-colors cursor-pointer"
-                    >
-                      Batal
-                    </button>
-                    <button
-                      type="button"
-                      disabled={isClearingConversation || isPreparingConversation}
-                      onClick={async () => {
-                        const cleared = await onConfirmClearWorkspace();
-                        if (cleared !== false) {
-                          setShowDeleteConfirm(false);
-                          setShowMoreMenu(false);
-                        }
-                      }}
-                      className="px-2 py-0.5 rounded bg-rose-600 text-white font-semibold text-[11px] hover:bg-rose-700 transition-colors cursor-pointer disabled:cursor-wait disabled:opacity-60"
-                    >
-                      {isClearingConversation ? 'Membersihkan…' : 'Bersihkan'}
-                    </button>
-                  </div>
-                </div>
-              )}
             </div>
           )}
         </div>
       </div>
     </header>
+    {showDeleteConfirm && <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/40 p-4" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget && !isClearingConversation && !isPreparingConversation) { setShowDeleteConfirm(false); moreTriggerRef.current?.focus(); } }}><section role="dialog" aria-modal="true" aria-labelledby="clear-workspace-title" className="w-full max-w-sm rounded-xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-700 dark:bg-slate-900"><h2 id="clear-workspace-title" className="text-sm font-semibold text-slate-900 dark:text-white">Bersihkan percakapan?</h2><p className="mt-2 text-xs leading-5 text-slate-600 dark:text-slate-300">Semua pesan di RuangKerja ini akan dihapus. Dokumen dan artefak Canvas tetap tersimpan.</p><div className="mt-5 flex justify-end gap-2"><button type="button" disabled={isClearingConversation || isPreparingConversation} onClick={() => { setShowDeleteConfirm(false); moreTriggerRef.current?.focus(); }} className="h-9 rounded-lg px-3 text-xs font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-50 dark:text-slate-300 dark:hover:bg-slate-800">Batal</button><button type="button" autoFocus disabled={isClearingConversation || isPreparingConversation} onClick={async () => { const cleared = await onConfirmClearWorkspace(); if (cleared !== false) { setShowDeleteConfirm(false); moreTriggerRef.current?.focus(); } }} className="h-9 rounded-lg bg-rose-600 px-3 text-xs font-semibold text-white hover:bg-rose-700 disabled:cursor-wait disabled:opacity-60">{isClearingConversation ? 'Membersihkan…' : 'Bersihkan'}</button></div></section></div>}
+    </>
   );
 });

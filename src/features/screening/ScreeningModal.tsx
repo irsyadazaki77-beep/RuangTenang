@@ -169,16 +169,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
     wantsTrustedContact: null,
   });
 
-  const autoAdvanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => {
-    return () => {
-      const timer = autoAdvanceTimerRef.current;
-      if (timer) {
-        clearTimeout(timer);
-      }
-    };
-  }, []);
 
   const fetchHistory = () => {
     if (!isOpen && !isPageMode) return;
@@ -496,7 +487,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
             </div>
 
             {/* Riwayat Tes Terakhir */}
-            <div className="surface-card p-3.5 rounded-xl space-y-2.5 border border-default min-h-[80px]">
+            <div className="surface-card p-3.5 rounded-xl space-y-2.5 border border-default min-h-20">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold text-primary flex items-center gap-1.5">
                   <History className="w-3.5 h-3.5 text-secondary" /> Riwayat Skrining Terakhir
@@ -543,7 +534,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
                   setSlideDirection('next');
                 }}
                 aria-label="Mulai Cek Kondisi Mental"
-                className="btn-primary flex items-center justify-center gap-2 px-5 py-2.5 min-h-[44px] rounded-xl text-xs sm:text-sm cursor-pointer shadow-md hover:shadow-lg transition-all btn-tactile"
+                className="btn-primary flex items-center justify-center gap-2 px-5 py-2.5 min-h-11 rounded-xl text-xs sm:text-sm cursor-pointer shadow-md hover:shadow-lg transition-all btn-tactile"
               >
                 <span>Mulai Skrining Mandiri</span>
                 <ArrowRight className="w-4 h-4" />
@@ -571,7 +562,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
               {/* Progress Track */}
               <div className="w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden p-0.5 border border-slate-200/60 dark:border-slate-700/60">
                 <div
-                  className="bg-gradient-to-r from-teal-500 to-emerald-500 h-full rounded-full transition-all duration-300 ease-out shadow-xs"
+                  className="bg-linear-to-r from-teal-500 to-emerald-500 h-full rounded-full transition-all duration-300 ease-out shadow-xs"
                   style={{ width: `${progressPercentage}%` }}
                 />
               </div>
@@ -582,7 +573,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
             </p>
 
             {/* CARD SWIPER CONTAINER */}
-            <div className="relative min-h-[290px] sm:min-h-[280px] overflow-hidden flex flex-col justify-center">
+            <div className="relative min-h-72.5 sm:min-h-70 overflow-hidden flex flex-col justify-center">
               <AnimatePresence mode="popLayout" custom={slideDirection}>
                 <motion.div
                   key={currentQ.id}
@@ -611,7 +602,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
                           key={opt.value}
                           onClick={() => handleSelectOption(opt.value)}
                           aria-pressed={isSelected}
-                          className={`p-3.5 sm:p-4 min-h-[52px] rounded-xl text-xs sm:text-sm font-medium border text-left transition-all focus:outline-none focus:ring-2 focus:ring-teal-500/30 cursor-pointer flex items-center justify-between group chip-tactile ${
+                          className={`p-3.5 sm:p-4 min-h-13 rounded-xl text-xs sm:text-sm font-medium border text-left transition-all focus:outline-none focus:ring-2 focus:ring-teal-500/30 cursor-pointer flex items-center justify-between group chip-tactile ${
                             isSelected
                               ? 'bg-teal-600 text-white border-teal-600 shadow-md scale-[1.01]'
                               : 'surface-card border-default text-primary hover:bg-teal-50/60 dark:hover:bg-teal-950/30 hover:border-teal-300 dark:hover:border-teal-700 shadow-3xs'
@@ -643,7 +634,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
             <div className="flex items-center justify-between pt-3 border-t border-default">
               <button
                 onClick={handlePrevQuestion}
-                className="px-4 py-2 min-h-[44px] sm:min-h-[36px] text-xs font-semibold text-secondary hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 btn-press"
+                className="px-4 py-2 min-h-11 sm:min-h-9 text-xs font-semibold text-secondary hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 btn-press"
               >
                 <ChevronLeft className="w-4 h-4" />
                 <span>Sebelumnya</span>
@@ -653,7 +644,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
                 <button
                   onClick={handleNextQuestion}
                   disabled={!hasCurrentAnswer || isSubmitting}
-                  className={`flex items-center justify-center gap-1.5 px-5 py-2 min-h-[44px] sm:min-h-[36px] rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer btn-tactile ${
+                  className={`flex items-center justify-center gap-1.5 px-5 py-2 min-h-11 sm:min-h-9 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer btn-tactile ${
                     hasCurrentAnswer && !isSubmitting
                       ? 'bg-teal-600 text-white hover:bg-teal-700 shadow-3xs'
                       : 'bg-slate-100 dark:bg-slate-800 text-muted border border-default cursor-not-allowed opacity-60'
@@ -729,7 +720,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
 
             {/* ACTIONABLE ONE-CLICK REFERRAL BANNER TO CAMPUS COUNSELOR */}
             {isSevereOrModerate ? (
-              <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-amber-50 via-teal-50/60 to-emerald-50 dark:from-amber-950/40 dark:via-teal-950/30 dark:to-emerald-950/30 border-2 border-amber-300/80 dark:border-amber-700/80 shadow-md space-y-3 relative overflow-hidden">
+              <div className="p-4 sm:p-5 rounded-2xl bg-linear-to-br from-amber-50 via-teal-50/60 to-emerald-50 dark:from-amber-950/40 dark:via-teal-950/30 dark:to-emerald-950/30 border-2 border-amber-300/80 dark:border-amber-700/80 shadow-md space-y-3 relative overflow-hidden">
                 <div className="flex items-start gap-3">
                   <div className="p-2.5 bg-amber-500 text-white rounded-xl shadow-xs shrink-0 mt-0.5">
                     <HeartHandshake className="w-5 h-5 animate-pulse" />
@@ -751,7 +742,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
                 <div className="pt-2 flex flex-col sm:flex-row items-center gap-2.5">
                   <button
                     onClick={handleOneClickReferral}
-                    className="w-full sm:w-auto px-5 py-3 min-h-[48px] bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white text-xs sm:text-sm font-bold rounded-xl shadow-md hover:shadow-lg transition-all transform hover:-translate-y-0.5 active:translate-y-0 flex items-center justify-center gap-2 cursor-pointer"
+                    className="w-full sm:w-auto px-5 py-3 min-h-12 bg-linear-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white text-xs sm:text-sm font-bold rounded-xl shadow-md hover:shadow-lg transition-all transform hover:-translate-y-0.5 active:translate-y-0 flex items-center justify-center gap-2 cursor-pointer"
                   >
                     <UserCheck className="w-4 h-4 text-emerald-100" />
                     <span>Hubungkan ke Konselor Kampus Hari Ini</span>
@@ -839,7 +830,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
             <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5 pt-3 border-t border-default">
               <button
                 onClick={() => downloadReportTxt(finalResult)}
-                className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-3.5 py-2 min-h-[44px] sm:min-h-[36px] bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-xl border border-default transition-all cursor-pointer btn-press"
+                className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-3.5 py-2 min-h-11 sm:min-h-9 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-xl border border-default transition-all cursor-pointer btn-press"
               >
                 <Download className="w-3.5 h-3.5" />
                 <span>Unduh Laporan (.txt)</span>
@@ -854,14 +845,14 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
                     setGad7Answers(Array(7).fill(-1));
                     setSlideDirection('next');
                   }}
-                  className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-3.5 py-2 min-h-[44px] sm:min-h-[36px] bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-secondary text-xs font-semibold rounded-xl transition-all cursor-pointer btn-press"
+                  className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-3.5 py-2 min-h-11 sm:min-h-9 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-secondary text-xs font-semibold rounded-xl transition-all cursor-pointer btn-press"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
                   <span>Tes Ulang</span>
                 </button>
                 <button
                   onClick={onClose}
-                  className="w-full sm:w-auto px-5 py-2 min-h-[44px] sm:min-h-[36px] bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold rounded-xl shadow-3xs transition-all cursor-pointer flex items-center justify-center btn-tactile"
+                  className="w-full sm:w-auto px-5 py-2 min-h-11 sm:min-h-9 bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold rounded-xl shadow-3xs transition-all cursor-pointer flex items-center justify-center btn-tactile"
                 >
                   Selesai
                 </button>
@@ -928,7 +919,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
             <button
               onClick={onClose}
               aria-label="Tutup"
-              className="absolute top-3 right-3 p-1.5 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-all z-10 cursor-pointer min-h-[44px] min-w-[44px] sm:min-h-[36px] sm:min-w-[36px] flex items-center justify-center btn-press-compact"
+              className="absolute top-3 right-3 p-1.5 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-all z-10 cursor-pointer min-h-11 min-w-11 sm:min-h-9 sm:min-w-9 flex items-center justify-center btn-press-compact"
             >
               <X className="w-5 h-5 sm:w-4 sm:h-4" />
             </button>

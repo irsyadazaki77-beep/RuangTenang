@@ -1,8 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Smile, X, Lightbulb, RefreshCw, Check } from 'lucide-react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { apiClient } from '../../lib/apiClient';
-import { clientDb } from '../../lib/clientDb';
+import { clientDb, createOfflineIdempotencyKey } from '../../lib/clientDb';
+import { useAuth } from '../../contexts/AuthContext';
+import { getStableStudentSession } from '../../lib/authSessionLifecycle';
 import { modalBackdropVariants, modalPanelVariants, reducedMotionVariants } from '../../lib/motionTokens';
 
 export interface MoodLog {
@@ -63,6 +65,7 @@ export const DailyCheckinModal: React.FC<DailyCheckinModalProps> = ({
   onSaveSuccess,
   showToast
 }) => {
+  const { user } = useAuth();
   const shouldReduceMotion = useReducedMotion();
   const [selectedMood, setSelectedMood] = useState<number | null>(null);
   const [selectedEmotions, setSelectedEmotions] = useState<string[]>([]);
@@ -75,6 +78,7 @@ export const DailyCheckinModal: React.FC<DailyCheckinModalProps> = ({
   const [reflectionPrompts, setReflectionPrompts] = useState<string[]>([]);
   const [isLoadingPrompts, setIsLoadingPrompts] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const submitGuard = useRef(false);
 
   // Lock body scroll and handle Escape key
   useEffect(() => {
@@ -139,11 +143,27 @@ export const DailyCheckinModal: React.FC<DailyCheckinModalProps> = ({
 
   const handleSaveMoodLog = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submitGuard.current) return;
     if (selectedMood === null) {
       showToast('Harap pilih ekspresi mood utama Anda.', 'warning');
       return;
     }
 
+    let expectedUserId: string;
+    try {
+      expectedUserId = getStableStudentSession(user?.id).userId!;
+    } catch {
+      showToast('Masuk ke akun mahasiswa sebelum menyimpan catatan mood.', 'error');
+      return;
+    }
+    let idempotencyKey: string;
+    try {
+      idempotencyKey = createOfflineIdempotencyKey();
+    } catch {
+      showToast('Browser tidak menyediakan generator aman. Catatan mood belum dikirim.', 'error');
+      return;
+    }
+    submitGuard.current = true;
     setIsSubmitting(true);
     const payload = { 
       mood: selectedMood, 
@@ -153,91 +173,24 @@ export const DailyCheckinModal: React.FC<DailyCheckinModalProps> = ({
       factors: selectedFactors,
       emotions: selectedEmotions 
     };
-
-    try {
-      if (typeof navigator !== 'undefined' && !navigator.onLine) {
-        // Offline mode fallback
-        await clientDb.addToOutbox('mood_log', '/api/v1/mood', payload);
-        const offlineLog: MoodLog = {
-          id: `offline-${Date.now()}`,
-          date: logDate,
-          mood: selectedMood,
-          emotions: selectedEmotions,
-          notes: journalNote.trim() ? `${journalNote.trim()} (Offline)` : '(Disimpan Offline)',
-          factors: selectedFactors,
-          sleepHours,
-          sleepQuality: sleepQuality === 'Nyenyak' ? 'good' : sleepQuality === 'Insomnia' ? 'very_poor' : 'poor'
-        };
-
-        setSelectedMood(null);
-        setSelectedEmotions([]);
-        setSelectedFactors([]);
-        setJournalNote('');
-        setLogDate(new Date().toISOString().split('T')[0]);
-
-        onSaveSuccess(offlineLog);
-        onClose();
-        showToast('Catatan Mood disimpan di antrean offline. Akan disinkronkan saat terhubung.', 'info');
-        return;
-      }
-
-      const res = await apiClient.post<{ success: boolean; log: any }>("/api/v1/mood", payload);
-
-      if (!res.success || !res.data?.log) {
-        // Fallback to outbox on API failure
-        await clientDb.addToOutbox('mood_log', '/api/v1/mood', payload);
-        const offlineLog: MoodLog = {
-          id: `offline-${Date.now()}`,
-          date: logDate,
-          mood: selectedMood,
-          emotions: selectedEmotions,
-          notes: journalNote.trim() ? `${journalNote.trim()} (Offline)` : '(Disimpan Offline)',
-          factors: selectedFactors,
-          sleepHours,
-          sleepQuality: sleepQuality === 'Nyenyak' ? 'good' : sleepQuality === 'Insomnia' ? 'very_poor' : 'poor'
-        };
-
-        setSelectedMood(null);
-        setSelectedEmotions([]);
-        setSelectedFactors([]);
-        setJournalNote('');
-        setLogDate(new Date().toISOString().split('T')[0]);
-
-        onSaveSuccess(offlineLog);
-        onClose();
-        showToast('Koneksi terganggu. Catatan Mood disimpan offline.', 'warning');
-        return;
-      }
-
-      const saved = res.data.log;
-      const canonicalDate = saved.timestamp
-        ? new Date(saved.timestamp).toISOString().split('T')[0]
-        : logDate;
-
-      const canonicalLog: MoodLog = {
-        id: saved.id,
-        date: canonicalDate,
-        mood: typeof saved.mood === 'number' ? saved.mood : (parseInt(saved.mood, 10) || selectedMood),
-        emotions: Array.isArray(saved.emotions) ? saved.emotions : selectedEmotions,
-        notes: saved.notes || journalNote.trim(),
-        factors: Array.isArray(saved.factors) ? saved.factors : selectedFactors,
-        sleepHours: saved.sleepHours ?? sleepHours,
-        sleepQuality: saved.sleepQuality ?? (sleepQuality === 'Nyenyak' ? 'good' : sleepQuality === 'Insomnia' ? 'very_poor' : 'poor')
-      };
-
-      // Reset fields
+    const finishSaved = (log: MoodLog, message: string, type: 'success' | 'info' | 'warning') => {
       setSelectedMood(null);
       setSelectedEmotions([]);
       setSelectedFactors([]);
       setJournalNote('');
       setLogDate(new Date().toISOString().split('T')[0]);
-      
-      onSaveSuccess(canonicalLog);
+      onSaveSuccess(log);
       onClose();
-      showToast('Catatan Mood harian berhasil disimpan! 🎉', 'success');
-    } catch (err: any) {
-      console.error("Failed to sync mood with backend:", err);
-      await clientDb.addToOutbox('mood_log', '/api/v1/mood', payload);
+      showToast(message, type);
+    };
+
+    const queueOffline = async (message: string, type: 'info' | 'warning') => {
+      await clientDb.enqueueOfflineAction({
+        type: 'mood_log',
+        payload,
+        expectedUserId,
+        idempotencyKey,
+      });
       const offlineLog: MoodLog = {
         id: `offline-${Date.now()}`,
         date: logDate,
@@ -246,19 +199,86 @@ export const DailyCheckinModal: React.FC<DailyCheckinModalProps> = ({
         notes: journalNote.trim() ? `${journalNote.trim()} (Offline)` : '(Disimpan Offline)',
         factors: selectedFactors,
         sleepHours,
-        sleepQuality: sleepQuality === 'Nyenyak' ? 'good' : sleepQuality === 'Insomnia' ? 'very_poor' : 'poor'
+        sleepQuality: sleepQuality === 'Nyenyak' ? 'good' : sleepQuality === 'Insomnia' ? 'very_poor' : 'poor',
+      };
+      finishSaved(offlineLog, message, type);
+    };
+
+    try {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        await queueOffline('Catatan mood tersimpan terenkripsi untuk akun ini dan akan dicoba saat online.', 'info');
+        return;
+      }
+
+      const response = await apiClient.post<{ success: boolean; isIdempotentReplay?: boolean; log?: {
+        id: string; timestamp?: string; mood?: string | number; emotions?: string[]; notes?: string;
+        factors?: string[]; sleepHours?: number | null;
+        sleepQuality?: MoodLog['sleepQuality'];
+      } }>('/api/v1/mood', payload, {
+        headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined,
+      });
+
+      if (response.success && response.data?.isIdempotentReplay && response.data.log?.id) {
+        finishSaved({
+          id: response.data.log.id,
+          date: logDate,
+          mood: selectedMood,
+          emotions: selectedEmotions,
+          notes: journalNote.trim(),
+          factors: selectedFactors,
+          sleepHours,
+          sleepQuality: sleepQuality === 'Nyenyak' ? 'good' : sleepQuality === 'Insomnia' ? 'very_poor' : 'poor',
+        }, 'Catatan mood sebelumnya telah dikonfirmasi server.', 'success');
+        return;
+      }
+      if (!response.success || !response.data?.log?.id) {
+        const retryable = response.status === 429 || (response.status !== undefined && response.status >= 500)
+          || response.code === 'NETWORK_ERROR' || response.code === 'TIMEOUT';
+        if (retryable) {
+          await queueOffline('Server belum mengonfirmasi catatan mood. Data disimpan terenkripsi untuk dicoba kembali.', 'warning');
+          return;
+        }
+        showToast(response.error || 'Server menolak penyimpanan catatan mood. Data belum disimpan.', 'error');
+        return;
+      }
+
+      const saved = response.data.log;
+      const canonicalDate = saved.timestamp
+        ? new Date(saved.timestamp).toISOString().split('T')[0]
+        : logDate;
+
+      const canonicalLog: MoodLog = {
+        id: saved.id,
+        date: canonicalDate,
+        mood: typeof saved.mood === 'number' ? saved.mood : (parseInt(String(saved.mood || ''), 10) || selectedMood),
+        emotions: Array.isArray(saved.emotions) ? saved.emotions : selectedEmotions,
+        notes: saved.notes || journalNote.trim(),
+        factors: Array.isArray(saved.factors) ? saved.factors : selectedFactors,
+        sleepHours: saved.sleepHours ?? sleepHours,
+        sleepQuality: saved.sleepQuality ?? (sleepQuality === 'Nyenyak' ? 'good' : sleepQuality === 'Insomnia' ? 'very_poor' : 'poor')
       };
 
-      setSelectedMood(null);
-      setSelectedEmotions([]);
-      setSelectedFactors([]);
-      setJournalNote('');
-      setLogDate(new Date().toISOString().split('T')[0]);
-
-      onSaveSuccess(offlineLog);
-      onClose();
-      showToast('Gagal terhubung ke server. Catatan Mood disimpan di antrean offline.', 'warning');
+      finishSaved(canonicalLog, 'Catatan mood harian berhasil disimpan.', 'success');
+    } catch (error) {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        try {
+          await queueOffline('Koneksi terputus. Catatan mood tersimpan terenkripsi untuk dicoba kembali.', 'warning');
+        } catch (queueError) {
+          const code = queueError instanceof Error ? queueError.message : '';
+          showToast(code === 'OFFLINE_STORAGE_UNAVAILABLE'
+            ? 'Penyimpanan offline aman tidak tersedia. Catatan belum disimpan.'
+            : code === 'OFFLINE_STORAGE_QUOTA_EXCEEDED' || code === 'OFFLINE_QUEUE_LIMIT_REACHED'
+              ? 'Penyimpanan offline penuh atau antrean mencapai batas. Catatan belum disimpan.'
+              : 'Catatan mood belum tersimpan. Pastikan sesi dan penyimpanan tersedia, lalu coba lagi.', 'error');
+        }
+      } else {
+        const code = error instanceof Error ? error.message : '';
+        showToast(code === 'OFFLINE_STORAGE_UNAVAILABLE'
+          ? 'Penyimpanan offline aman tidak tersedia. Catatan belum disimpan.'
+          : 'Catatan mood belum tersimpan. Silakan coba lagi.', 'error');
+      }
     } finally {
+      submitGuard.current = false;
       setIsSubmitting(false);
     }
   };

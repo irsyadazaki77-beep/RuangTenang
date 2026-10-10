@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { act, renderHook } from '@testing-library/react';
 import { WorkspaceComposer } from '../../features/workspace/components/WorkspaceComposer';
 import { WorkspaceConversation } from '../../features/workspace/components/WorkspaceConversation';
@@ -11,7 +11,7 @@ import { WorkspaceCanvasPane } from '../../features/workspace/components/Workspa
 import { useWorkspaceFileIngestion } from '../../features/workspace/hooks/useWorkspaceFileIngestion';
 import { processFileForWorkspace } from '../../features/workspace/services/fileIngestionService';
 import { AcademicPromptPill, AcademicTaskTemplate, StarterTaskItem, WorkspaceArtifact } from '../../features/workspace/types';
-import { readWorkspaceModelPreference, saveWorkspaceModelPreference } from '../../features/workspace/utils/workspaceModelPreference';
+import { loadWorkspaceModelPreference, readWorkspaceModelPreference, saveWorkspaceModelPreference } from '../../features/workspace/utils/workspaceModelPreference';
 
 vi.mock('../../features/workspace/services/fileIngestionService', async importOriginal => ({
   ...await importOriginal<typeof import('../../features/workspace/services/fileIngestionService')>(),
@@ -87,6 +87,14 @@ describe('RuangKerja UX foundation', () => {
     }));
   });
 
+  it('keeps the composer draft when the send handler rejects a request', () => {
+    const { props } = renderComposer({ inputText: 'Jangan hilangkan draf ini', onSendMessage: vi.fn(() => false) });
+    fireEvent.click(screen.getByRole('button', { name: 'Kirim Pesan' }));
+    expect(props.onSendMessage).toHaveBeenCalledOnce();
+    expect(props.setInputText).not.toHaveBeenCalled();
+    expect(screen.getByRole('textbox', { name: 'Pesan untuk Asisten RuangKerja' })).toHaveValue('Jangan hilangkan draf ini');
+  });
+
   it('keeps send disabled for an empty composer', () => {
     renderComposer();
     expect(screen.getByRole('button', { name: 'Kirim Pesan' })).toBeDisabled();
@@ -134,7 +142,6 @@ describe('RuangKerja UX foundation', () => {
 
   it('opens the model picker, searches and selects a model', async () => {
     const { props } = renderComposer();
-    fireEvent.click(screen.getByRole('button', { name: 'Opsi Workspace' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Pilih model, Gemini 3.8 Flash' }));
     expect(screen.getByRole('listbox', { name: 'Model AI' })).toBeInTheDocument();
     fireEvent.change(screen.getByRole('textbox', { name: 'Cari model' }), { target: { value: 'DeepSeek V3' } });
@@ -144,13 +151,12 @@ describe('RuangKerja UX foundation', () => {
 
   it('keeps AI controls closed during streaming', () => {
     renderComposer({ isStreaming: true });
-    expect(screen.getByRole('button', { name: 'Opsi Workspace' })).toBeDisabled();
-    expect(screen.queryByRole('button', { name: 'Pilih model, Gemini 3.8 Flash' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'AI & Opsi' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Pilih model, Gemini 3.8 Flash' })).toBeDisabled();
   });
 
   it('supports keyboard model selection and exposes expanded/selected state', async () => {
     const { props } = renderComposer();
-    fireEvent.click(screen.getByRole('button', { name: 'Opsi Workspace' }));
     const trigger = await screen.findByRole('button', { name: 'Pilih model, Gemini 3.8 Flash' });
     fireEvent.click(trigger);
     expect(trigger).toHaveAttribute('aria-expanded', 'true');
@@ -171,10 +177,29 @@ describe('RuangKerja UX foundation', () => {
     expect(readWorkspaceModelPreference(storage)).toBe('deepseek-chat');
   });
 
+  it('defaults to Auto and preserves a manual override when one is saved', () => {
+    const values = new Map<string, string>();
+    const storage = { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { values.set(key, value); } };
+    expect(loadWorkspaceModelPreference(storage).modelId).toBe('auto');
+    saveWorkspaceModelPreference(storage, 'deepseek-chat');
+    expect(loadWorkspaceModelPreference(storage).modelId).toBe('deepseek-chat');
+    saveWorkspaceModelPreference(storage, 'auto');
+    expect(loadWorkspaceModelPreference(storage).modelId).toBe('auto');
+  });
+
+  it('shows the actual selected Workspace context and opens compare controls from compare mode', () => {
+    renderComposer({ workspaceContextSummary: '0 dokumen aktif · Canvas tidak disertakan' });
+    expect(screen.getByRole('button', { name: /Buka panel konteks: 0 dokumen aktif/ })).toBeInTheDocument();
+    expect(screen.queryByLabelText('Mode respons')).not.toBeInTheDocument();
+    const compareRender = renderComposer({ compareMode: true, selectedCompareModels: ['gemini-3.8-flash', 'deepseek-chat'] });
+    expect(screen.getByRole('dialog', { name: 'AI & Opsi' })).toBeInTheDocument();
+    expect(screen.getByText('Pilih model untuk dibandingkan')).toBeInTheDocument();
+    compareRender.unmount();
+  });
+
   it('passes selected model and response preferences when sending', () => {
     const { props } = renderComposer({ inputText: 'Tolong jelaskan' });
-    fireEvent.click(screen.getByRole('button', { name: /Opsi/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'Respons' }));
+    fireEvent.click(screen.getByRole('button', { name: 'AI & Opsi' }));
     fireEvent.change(screen.getByLabelText('Mode respons'), { target: { value: 'Ringkas' } });
     fireEvent.change(screen.getByLabelText('Gaya (opsional)'), { target: { value: 'Akademik' } });
     fireEvent.click(screen.getByRole('button', { name: 'Kirim Pesan' }));
@@ -183,21 +208,20 @@ describe('RuangKerja UX foundation', () => {
     }));
   });
 
-  it('closes the response menu with Escape', () => {
+  it('keeps AI and response settings in one dialog that closes with Escape', () => {
     renderComposer();
-    fireEvent.click(screen.getByRole('button', { name: /Opsi/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'Respons' }));
-    expect(screen.getByRole('dialog', { name: 'Pengaturan respons dan konteks' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'AI & Opsi' }));
+    expect(screen.getByRole('dialog', { name: 'AI & Opsi' })).toBeInTheDocument();
     fireEvent.keyDown(screen.getByLabelText('Mode respons'), { key: 'Escape' });
-    expect(screen.queryByRole('dialog', { name: 'Pengaturan respons dan konteks' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'AI & Opsi' })).not.toBeInTheDocument();
   });
 
   it('keeps secondary composer controls hidden until requested', () => {
     renderComposer();
-    expect(screen.queryByRole('button', { name: 'Respons' })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Mode respons')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Template' })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Opsi Workspace' }));
-    expect(screen.getByRole('button', { name: 'Respons' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'AI & Opsi' }));
+    expect(screen.getByLabelText('Mode respons')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Template' })).toBeInTheDocument();
   });
 
@@ -222,7 +246,7 @@ describe('RuangKerja UX foundation', () => {
     render(<WorkspaceHeader activeArtifact={null} isCanvasOpen mobileActiveTab="chat" hasUnreadArtifact={false}
       onSetMobileActiveTab={onSetMobileActiveTab} onToggleCanvas={noop} onCreateNewArtifact={noop} onOpenTemplateGallery={noop}
       onConfirmClearWorkspace={noop} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Context' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Panel' }));
     expect(onSetMobileActiveTab).toHaveBeenCalledWith('context');
   });
 
@@ -245,15 +269,14 @@ describe('RuangKerja UX foundation', () => {
     expect(screen.getByText('Menulis...')).toBeInTheDocument();
   });
 
-  it('opens and closes the new artifact menu with Escape', () => {
+  it('keeps new artifact creation available from the secondary menu', () => {
+    const onCreateNewArtifact = vi.fn();
     render(<WorkspaceHeader activeArtifact={null} isCanvasOpen mobileActiveTab="chat" hasUnreadArtifact={false}
-      onSetMobileActiveTab={noop} onToggleCanvas={noop} onCreateNewArtifact={noop} onOpenTemplateGallery={noop}
+      onSetMobileActiveTab={noop} onToggleCanvas={noop} onCreateNewArtifact={onCreateNewArtifact} onOpenTemplateGallery={noop}
       onConfirmClearWorkspace={noop} />);
-    const menuButton = screen.getByRole('button', { name: 'Buat draf baru' });
-    fireEvent.click(menuButton);
-    expect(screen.getByRole('group', { name: 'Jenis draf baru' })).toBeInTheDocument();
-    fireEvent.keyDown(document, { key: 'Escape' });
-    expect(screen.queryByRole('group', { name: 'Jenis draf baru' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Opsi Lebih Lanjut' }));
+    fireEvent.click(screen.getByRole('button', { name: /Dokumen baru/ }));
+    expect(onCreateNewArtifact).toHaveBeenCalledWith('DOCUMENT');
   });
 
   it('switches mode, opens templates, and confirms clearing from the secondary menu', () => {
@@ -271,6 +294,7 @@ describe('RuangKerja UX foundation', () => {
     expect(onOpenTemplateGallery).toHaveBeenCalledOnce();
     fireEvent.click(screen.getByRole('button', { name: 'Opsi Lebih Lanjut' }));
     fireEvent.click(screen.getByText('Bersihkan Obrolan'));
+    expect(screen.getByRole('dialog', { name: 'Bersihkan percakapan?' })).toBeInTheDocument();
     expect(screen.getByText('Semua pesan di RuangKerja ini akan dihapus. Dokumen dan artefak Canvas tetap tersimpan.')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Bersihkan' }));
     expect(onConfirmClearWorkspace).toHaveBeenCalledOnce();
@@ -393,7 +417,7 @@ describe('RuangKerja UX foundation', () => {
     expect(onCreateNewArtifact).toHaveBeenCalledWith('DOCUMENT');
   });
 
-  it('switches artifacts and toggles fullscreen without replacing the canvas', () => {
+  it('switches artifacts and toggles fullscreen without replacing the canvas', async () => {
     const second = { ...artifact, id: 'a2', title: 'Metode', content: '# Metode' };
     const onSelectArtifact = vi.fn();
     const onToggleExpand = vi.fn();
@@ -402,7 +426,7 @@ describe('RuangKerja UX foundation', () => {
       onCloseCanvas={noop} onToggleExpand={onToggleExpand} onUpdateActiveArtifact={noop} onSaveArtifact={noop}
       onRollbackVersion={noop} onRequestRevision={noop} onCreateNewArtifact={noop} onSetMobileActiveTab={noop} />);
     fireEvent.click(screen.getByRole('button', { name: /Metode/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'Toggle fullscreen' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Toggle fullscreen' }));
     expect(onSelectArtifact).toHaveBeenCalledWith('a2');
     expect(onToggleExpand).toHaveBeenCalledOnce();
     expect(screen.getByText('# Bab 1')).toBeInTheDocument();
@@ -431,8 +455,9 @@ describe('RuangKerja UX foundation', () => {
     expect(trigger).toBeInTheDocument();
     fireEvent.click(trigger);
 
-    expect(screen.getByRole('listbox', { name: 'Daftar Preset AI' })).toBeInTheDocument();
-    const akademikOption = screen.getByRole('option', { name: /Akademik/ });
+    const presetList = screen.getByRole('listbox', { name: 'Daftar Preset AI' });
+    expect(presetList).toBeInTheDocument();
+    const akademikOption = within(presetList).getByRole('option', { name: /Akademik/ });
     fireEvent.click(akademikOption);
 
     expect(onSelectPreset).toHaveBeenCalledWith('akademik');

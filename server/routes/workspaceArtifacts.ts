@@ -26,6 +26,7 @@ const autoSaveArtifactSchema = z.object({
   language: z.string().nullable().optional(),
   content: z.string().optional(),
   createNewVersion: z.boolean().optional(),
+  expectedVersion: z.number().int().positive().optional(),
   expectedUpdatedAt: z.string().datetime().optional()
 });
 
@@ -156,37 +157,31 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
           return res.status(200).json({ success: true, data: decryptArtifact(existing), message: 'Artefak sudah tersimpan' });
         }
         const nextVersion = (existing.version || 1) + 1;
-
-        // Create a new version snapshot
-        await prisma.artifactVersions.create({
-          data: {
-            id: `ver_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
-            artifactId: existing.id,
-            version: nextVersion,
-            title: cleanTitle,
-            content: encryptedContent,
-            createdAt: new Date()
-          }
-        });
-
-        // Update main artifact record
-        artifactRecord = await prisma.artifacts.update({
-          where: { id: existing.id },
-          data: {
-            title: cleanTitle,
-            type,
-            language: language || null,
-            content: encryptedContent,
-            version: nextVersion,
-            chatId,
-            updatedAt: new Date()
-          },
-          include: {
-            versions: {
-              orderBy: { version: 'desc' }
+        const updatedAt = new Date(Math.max(Date.now(), existing.updatedAt.getTime() + 1));
+        artifactRecord = await prisma.$transaction(async (tx) => {
+          const claimed = await tx.artifacts.updateMany({
+            where: { id: existing.id, userId, version: existing.version, updatedAt: existing.updatedAt },
+            data: { title: cleanTitle, type, language: language || null, content: encryptedContent, version: nextVersion, chatId, updatedAt }
+          });
+          if (claimed.count !== 1) return null;
+          await tx.artifactVersions.create({
+            data: {
+              id: `ver_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
+              artifactId: existing.id,
+              version: nextVersion,
+              title: cleanTitle,
+              content: encryptedContent,
+              createdAt: updatedAt
             }
-          }
+          });
+          return tx.artifacts.findUnique({
+            where: { id: existing.id },
+            include: { versions: { orderBy: { version: 'desc' } } }
+          });
         });
+        if (!artifactRecord) {
+          return res.status(409).json({ success: false, code: 'ARTIFACT_CONFLICT', message: 'Dokumen berubah saat proses penyimpanan. Muat versi terbaru sebelum mencoba lagi.' });
+        }
       }
     }
 
@@ -194,36 +189,44 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
       const newId = id && id.startsWith('art_') ? id : `art_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
 
       // Create new artifact
-      artifactRecord = await prisma.artifacts.create({
-        data: {
-          id: newId,
-          userId,
-          chatId,
-          title: cleanTitle,
-          type,
-          language: language || null,
-          content: encryptedContent,
-          version: 1,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          versions: {
-            create: [
-              {
-                id: `ver_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
-                version: 1,
-                title: cleanTitle,
-                content: encryptedContent,
-                createdAt: new Date()
-              }
-            ]
-          }
-        },
-        include: {
-          versions: {
-            orderBy: { version: 'desc' }
-          }
+      try {
+        artifactRecord = await prisma.artifacts.create({
+          data: {
+            id: newId,
+            userId,
+            chatId,
+            title: cleanTitle,
+            type,
+            language: language || null,
+            content: encryptedContent,
+            version: 1,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            versions: {
+              create: [
+                {
+                  id: `ver_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
+                  version: 1,
+                  title: cleanTitle,
+                  content: encryptedContent,
+                  createdAt: new Date()
+                }
+              ]
+            }
+          },
+          include: { versions: { orderBy: { version: 'desc' } } }
+        });
+      } catch (error: any) {
+        // A retry can race the first request before its record becomes visible.
+        // Treat the unique-key winner as success only when the payload is identical.
+        if (error?.code !== 'P2002' || !id) throw error;
+        const winner = await prisma.artifacts.findFirst({ where: { id: newId, userId, chatId }, include: { versions: true } });
+        const winnerContent = winner && (encryptionService.decryptSensitive(winner.content) || winner.content);
+        if (!winner || winner.title !== cleanTitle || winner.type !== type || winner.language !== (language || null) || winnerContent !== content) {
+          return res.status(409).json({ success: false, code: 'ARTIFACT_CONFLICT', message: 'ID dokumen ini sudah digunakan oleh perubahan lain.' });
         }
-      });
+        artifactRecord = winner;
+      }
     }
 
     const decrypted = decryptArtifact(artifactRecord);
@@ -284,8 +287,8 @@ router.put('/:id', requireAuth, async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, code: 'NOT_FOUND', message: 'Artefak tidak ditemukan di Workspace ini' });
     }
 
-    const { expectedUpdatedAt: _expectedUpdatedAt } = parsed.data;
-    if (_expectedUpdatedAt && existing.updatedAt.toISOString() !== _expectedUpdatedAt) {
+    const { expectedUpdatedAt: _expectedUpdatedAt, expectedVersion } = parsed.data;
+    if ((expectedVersion !== undefined && existing.version !== expectedVersion) || (_expectedUpdatedAt && existing.updatedAt.toISOString() !== _expectedUpdatedAt)) {
       return res.status(409).json({
         success: false,
         code: 'ARTIFACT_CONFLICT',
@@ -304,62 +307,65 @@ router.put('/:id', requireAuth, async (req: Request, res: Response) => {
     const newContent = content !== undefined ? content : (encryptionService.decryptSensitive(existing.content) || existing.content);
     const encryptedContent = encryptionService.encryptSensitive(newContent) || newContent;
 
-    let targetVersion = existing.version;
-
-    if (createNewVersion) {
-      targetVersion = existing.version + 1;
-      await prisma.artifactVersions.create({
+    const targetVersion = createNewVersion ? existing.version + 1 : existing.version;
+    const now = new Date(Math.max(Date.now(), existing.updatedAt.getTime() + 1));
+    const updated = await prisma.$transaction(async (tx) => {
+      // Compare-and-swap the integer version. This protects against two requests
+      // that both read the same row before either one writes it.
+      const claimed = await tx.artifacts.updateMany({
+        where: { id: existing.id, userId, version: existing.version, updatedAt: existing.updatedAt },
         data: {
-          id: `ver_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
-          artifactId: existing.id,
-          version: targetVersion,
           title: cleanTitle,
+          type: type || existing.type,
+          language: language !== undefined ? (language || null) : existing.language,
           content: encryptedContent,
-          createdAt: new Date()
+          version: targetVersion,
+          ...(parsed.data.chatId ? { chatId: parsed.data.chatId } : {}),
+          updatedAt: now
         }
       });
-    } else {
-      // Update latest version snapshot if it exists for the same version
-      const latestVer = existing.versions[0];
-      if (latestVer && latestVer.version === existing.version) {
-        await prisma.artifactVersions.update({
-          where: { id: latestVer.id },
-          data: {
-            title: cleanTitle,
-            content: encryptedContent
-          }
-        });
-      } else {
-        await prisma.artifactVersions.create({
+      if (claimed.count !== 1) return null;
+
+      if (createNewVersion) {
+        await tx.artifactVersions.create({
           data: {
             id: `ver_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
             artifactId: existing.id,
-            version: existing.version,
+            version: targetVersion,
             title: cleanTitle,
             content: encryptedContent,
-            createdAt: new Date()
+            createdAt: now
           }
         });
-      }
-    }
-
-    const updated = await prisma.artifacts.update({
-      where: { id: existing.id },
-      data: {
-        title: cleanTitle,
-        type: type || existing.type,
-        language: language !== undefined ? (language || null) : existing.language,
-        content: encryptedContent,
-        version: targetVersion,
-        ...(parsed.data.chatId ? { chatId: parsed.data.chatId } : {}),
-        updatedAt: new Date()
-      },
-      include: {
-        versions: {
-          orderBy: { version: 'desc' }
+      } else {
+        const latestVer = await tx.artifactVersions.findFirst({
+          where: { artifactId: existing.id, version: existing.version },
+          orderBy: { createdAt: 'desc' }
+        });
+        if (latestVer) {
+          await tx.artifactVersions.update({ where: { id: latestVer.id }, data: { title: cleanTitle, content: encryptedContent } });
+        } else {
+          await tx.artifactVersions.create({
+            data: {
+              id: `ver_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
+              artifactId: existing.id,
+              version: existing.version,
+              title: cleanTitle,
+              content: encryptedContent,
+              createdAt: now
+            }
+          });
         }
       }
+
+      return tx.artifacts.findUnique({
+        where: { id: existing.id },
+        include: { versions: { orderBy: { version: 'desc' } } }
+      });
     });
+    if (!updated) {
+      return res.status(409).json({ success: false, code: 'ARTIFACT_CONFLICT', message: 'Dokumen berubah sejak revisi dimulai. Tinjau versi terbaru sebelum menyimpan kembali.' });
+    }
 
     const decrypted = decryptArtifact(updated);
 
@@ -438,34 +444,31 @@ router.post('/:id/rollback', requireAuth, async (req: Request, res: Response) =>
     const restoredVersionNum = (existing.version || 1) + 1;
     const restoredTitle = targetVerRecord.title;
     const restoredContent = targetVerRecord.content; // already encrypted in db
-
-    // Record new snapshot for the restored state
-    await prisma.artifactVersions.create({
-      data: {
-        id: `ver_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
-        artifactId: existing.id,
-        version: restoredVersionNum,
-        title: restoredTitle,
-        content: restoredContent,
-        createdAt: new Date()
-      }
-    });
-
-    // Update main artifact
-    const updated = await prisma.artifacts.update({
-      where: { id: existing.id },
-      data: {
-        title: restoredTitle,
-        content: restoredContent,
-        version: restoredVersionNum,
-        updatedAt: new Date()
-      },
-      include: {
-        versions: {
-          orderBy: { version: 'desc' }
+    const restoredAt = new Date(Math.max(Date.now(), existing.updatedAt.getTime() + 1));
+    const updated = await prisma.$transaction(async (tx) => {
+      const claimed = await tx.artifacts.updateMany({
+        where: { id: existing.id, userId, version: existing.version, updatedAt: existing.updatedAt },
+        data: { title: restoredTitle, content: restoredContent, version: restoredVersionNum, updatedAt: restoredAt }
+      });
+      if (claimed.count !== 1) return null;
+      await tx.artifactVersions.create({
+        data: {
+          id: `ver_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
+          artifactId: existing.id,
+          version: restoredVersionNum,
+          title: restoredTitle,
+          content: restoredContent,
+          createdAt: restoredAt
         }
-      }
+      });
+      return tx.artifacts.findUnique({
+        where: { id: existing.id },
+        include: { versions: { orderBy: { version: 'desc' } } }
+      });
     });
+    if (!updated) {
+      return res.status(409).json({ success: false, code: 'ARTIFACT_CONFLICT', message: 'Dokumen berubah saat pemulihan. Muat versi terbaru sebelum mencoba lagi.' });
+    }
 
     const decrypted = decryptArtifact(updated);
 

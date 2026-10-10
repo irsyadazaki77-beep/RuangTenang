@@ -1,4 +1,4 @@
-import { z } from 'zod';
+
 import { scanAndSanitizePII } from '../services/piiService.js';
 
 // Types for fallback responses
@@ -12,7 +12,7 @@ export interface FallbackResponse {
  * response or activates a plugin if required by the user's message.
  * Enforces PII sanitization parity with the primary AI pipeline.
  */
-export function getLocalFallbackResponse(userMessage: string = '', chatMode = 'Teman Cerita', responseStyle = 'Seimbang'): FallbackResponse {
+export function getLocalFallbackResponse(userMessage: string = '', chatMode = 'Teman Cerita', _responseStyle = 'Seimbang'): FallbackResponse {
   const sanitizedInput = scanAndSanitizePII(userMessage || '').sanitizedText;
   const cleanMsg = sanitizedInput.toLowerCase().trim();
 

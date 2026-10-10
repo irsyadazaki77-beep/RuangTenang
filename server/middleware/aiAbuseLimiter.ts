@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { serverDb } from '../database.js';
+
 
 interface ClientState {
   burstTokens: number;

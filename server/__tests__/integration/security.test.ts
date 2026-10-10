@@ -30,8 +30,7 @@ describe('Security Utilities', () => {
 
     it('should handle empty or null input', () => {
       expect(scanAndSanitizePII('').sanitizedText).toBe('');
-      // @ts-ignore testing invalid input
-      expect(scanAndSanitizePII(null).sanitizedText).toBe('');
+      expect(scanAndSanitizePII(null as unknown as string).sanitizedText).toBe('');
     });
   });
 

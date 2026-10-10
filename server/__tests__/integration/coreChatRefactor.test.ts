@@ -6,6 +6,7 @@ import jwt from 'jsonwebtoken';
 import { prisma, serverDb } from '../../database.js';
 import chatRouter from '../../routes/chat.js';
 import { chatSummarizer } from '../../services/ai/chatSummarizer.js';
+import { geminiAdapter } from '../../services/ai/geminiAdapter.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-for-development-ruangtenang';
 
@@ -92,17 +93,21 @@ describe('Core Chat Refactor Integration Tests', () => {
   describe('1. Long Chat & Summary Token Budgeting', () => {
     it('summarizes older history incrementally and calculates tokens saved', async () => {
       chatSummarizer.clearCache(longChatId);
+      const generate = vi.spyOn(geminiAdapter, 'generate').mockResolvedValue({ text: 'Ringkasan deterministik untuk pengujian.' } as any);
+      try {
+        const history = await prisma.chatMessages.findMany({
+          where: { chatId: longChatId },
+          orderBy: { createdAt: 'asc' }
+        });
 
-      const history = await prisma.chatMessages.findMany({
-        where: { chatId: longChatId },
-        orderBy: { createdAt: 'asc' }
-      });
+        const res = await chatSummarizer.getOrUpdateSummary(longChatId, history.map(m => ({ id: m.id, role: m.role as any, content: m.content })));
 
-      const res = await chatSummarizer.getOrUpdateSummary(longChatId, history.map(m => ({ id: m.id, role: m.role as any, content: m.content })));
-
-      expect(res.summary).toBeTruthy();
-      expect(res.tokensSaved).toBeGreaterThan(0);
-      expect(res.lastSummarizedMsgId).toBeTruthy();
+        expect(res.summary).toBeTruthy();
+        expect(res.tokensSaved).toBeGreaterThan(0);
+        expect(res.lastSummarizedMsgId).toBeTruthy();
+      } finally {
+        generate.mockRestore();
+      }
     });
   });
 

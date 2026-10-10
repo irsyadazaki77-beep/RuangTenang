@@ -7,7 +7,7 @@ import { CommandPalette } from './CommandPalette';
 import { AmbientSoundscapeWidget } from './soundscape/AmbientSoundscapeWidget';
 import { PanicScreen } from '../features/privacy/PanicScreen';
 
-const SettingsPage = lazyWithRetry(() => import('../features/settings/SettingsPage').then(module => ({ default: module.SettingsPage })));
+
 const AuthModal = lazyWithRetry(() => import('../features/authentication/AuthModal').then(module => ({ default: module.AuthModal })));
 const LegalDocsModal = lazyWithRetry(() => import('../features/privacy/LegalDocsModal').then(module => ({ default: module.LegalDocsModal })));
 const ChangelogModal = lazyWithRetry(() => import('./changelog/ChangelogModal').then(module => ({ default: module.ChangelogModal })));
@@ -42,8 +42,8 @@ interface GlobalOverlaysProps {
 export const GlobalOverlays: React.FC<GlobalOverlaysProps> = ({
   user,
   setUser,
-  isSettingsOpen,
-  setIsSettingsOpen,
+  isSettingsOpen: _isSettingsOpen,
+  setIsSettingsOpen: _setIsSettingsOpen,
   isAuthModalOpen,
   setIsAuthModalOpen,
   isLegalDocsOpen,

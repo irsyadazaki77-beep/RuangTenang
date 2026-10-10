@@ -37,12 +37,28 @@ const mockArtifact: WorkspaceArtifact = {
   updatedAt: new Date().toISOString()
 };
 
+function CanvasDraftHarness() {
+  const [isOpen, setIsOpen] = React.useState(true);
+  const [draft, setDraft] = React.useState<string>();
+  return <>
+    {!isOpen && <button type="button" onClick={() => setIsOpen(true)}>Buka Canvas</button>}
+    <WorkspaceCanvasPane
+      artifacts={[mockArtifact]} activeArtifact={mockArtifact} activeArtifactId={mockArtifact.id} draftContent={draft}
+      isCanvasOpen={isOpen} isCanvasExpanded={false} isStreaming={false} mobileActiveTab="chat"
+      onSelectArtifact={vi.fn()} onCloseCanvas={() => setIsOpen(false)} onToggleExpand={vi.fn()}
+      onUpdateActiveArtifact={vi.fn()} onSaveArtifact={vi.fn()} onRollbackVersion={vi.fn()}
+      onRequestRevision={vi.fn()} onCreateNewArtifact={vi.fn()} onSetMobileActiveTab={vi.fn()}
+      onDraftContentChange={(_artifactId, content) => setDraft(content)}
+    />
+  </>;
+}
+
 describe('Workspace Canvas 2.0 UX & Behavior', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('renders canvas header hierarchy with type icon, title, version, and save badge', () => {
+  it('keeps the canvas header focused on the document and save state', () => {
     render(
       <ArtifactCanvas
         artifact={mockArtifact}
@@ -52,8 +68,22 @@ describe('Workspace Canvas 2.0 UX & Behavior', () => {
     );
 
     expect(screen.getByText('Analisis Metodologi')).toBeInTheDocument();
-    expect(screen.getByText('v2')).toBeInTheDocument();
     expect(screen.getByText('Tersimpan')).toBeInTheDocument();
+    expect(screen.queryByText('v2')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Menu Opsi Lainnya' }));
+    expect(screen.getByText('Riwayat Versi')).toBeInTheDocument();
+  });
+
+  it('restores an unsaved document draft after closing and reopening Canvas', async () => {
+    render(<CanvasDraftHarness />);
+    fireEvent.click(await screen.findByTitle('Edit Dokumen Langsung (Autosave)'));
+    const textarea = screen.getByPlaceholderText(/Ketik atau sesuaikan draf dokumen/) as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: '# Draf yang belum disimpan' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Tutup Canvas' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Buka Canvas' }));
+    fireEvent.click(screen.getByTitle('Edit Dokumen Langsung (Autosave)'));
+    expect(screen.getByPlaceholderText(/Ketik atau sesuaikan draf dokumen/)).toHaveValue('# Draf yang belum disimpan');
+    expect(screen.getByText('Belum disimpan')).toBeInTheDocument();
   });
 
   it('allows inline title editing with Enter key to save', async () => {
@@ -96,12 +126,14 @@ describe('Workspace Canvas 2.0 UX & Behavior', () => {
     const textarea = screen.getByPlaceholderText(/Ketik atau sesuaikan draf dokumen/);
     expect(textarea).toBeInTheDocument();
 
-    // Switch to raw mode
-    fireEvent.click(screen.getByRole('button', { name: 'Kode' }));
+    // Advanced views stay available from More.
+    fireEvent.click(screen.getByRole('button', { name: 'Menu Opsi Lainnya' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Lihat Markdown atau kode' }));
     expect(screen.getByText(/Raw Source/)).toBeInTheDocument();
 
     // Switch to diff mode
-    fireEvent.click(screen.getByRole('button', { name: 'Diff' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Menu Opsi Lainnya' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Bandingkan perubahan' }));
     expect(screen.queryByPlaceholderText(/Ketik atau sesuaikan/)).not.toBeInTheDocument();
   });
 
@@ -211,7 +243,8 @@ describe('Workspace Canvas 2.0 UX & Behavior', () => {
     const rollback = vi.fn().mockResolvedValue(undefined);
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     render(<ArtifactCanvas artifact={mockArtifact} onRollbackVersion={rollback} />);
-    fireEvent.click(screen.getByRole('button', { name: 'v2' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Menu Opsi Lainnya' }));
+    fireEvent.click(screen.getByText('Riwayat Versi'));
     fireEvent.click(screen.getByRole('button', { name: 'Pulihkan' }));
     await waitFor(() => expect(rollback).toHaveBeenCalledWith(1));
     confirmSpy.mockRestore();
@@ -233,7 +266,7 @@ describe('Workspace Canvas 2.0 UX & Behavior', () => {
     fireEvent.click(moreBtn);
 
     expect(screen.getByText('Riwayat Versi')).toBeInTheDocument();
-    expect(screen.getByText('Pusat Ekspor (.docx, .pdf)')).toBeInTheDocument();
+    expect(screen.getByText('Ekspor dokumen')).toBeInTheDocument();
     expect(screen.getByText('Salin Seluruh Konten')).toBeInTheDocument();
     expect(screen.getByText('Duplikat Dokumen')).toBeInTheDocument();
     expect(screen.getByText('Hapus Artefak Ini')).toBeInTheDocument();
@@ -252,8 +285,8 @@ describe('Workspace Canvas 2.0 UX & Behavior', () => {
     );
 
     // Open version history
-    const versionBadge = screen.getByRole('button', { name: 'v2' });
-    fireEvent.click(versionBadge);
+    fireEvent.click(screen.getByRole('button', { name: 'Menu Opsi Lainnya' }));
+    fireEvent.click(screen.getByText('Riwayat Versi'));
 
     expect(screen.getByText('Riwayat Versi Artefak')).toBeInTheDocument();
     expect(screen.getByText('v1')).toBeInTheDocument();

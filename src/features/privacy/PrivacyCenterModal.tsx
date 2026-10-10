@@ -24,6 +24,7 @@ import { EmptyState } from '../../components/common/EmptyState';
 import { ConsentTab } from './components/ConsentTab';
 import { ErasureTab } from './components/ErasureTab';
 import { clientDb } from '../../lib/clientDb';
+import { safeLocalStorage } from '../../lib/storage';
 
 interface PrivacyCenterModalProps {
   isOpen: boolean;
@@ -364,9 +365,15 @@ export const PrivacyCenterModal: React.FC<PrivacyCenterModalProps> = ({
       });
       if (res.success) {
         // Remove this app's local records and offline queue as part of account erasure.
-        try { await clientDb.clearAllPersistentData(); } catch { /* Server-side erasure succeeded; continue signing out. */ }
-        try { localStorage.clear(); } catch {}
-        try { sessionStorage.clear(); } catch {}
+        try { await clientDb.clearUserPersistentData(userSession.id); } catch { /* Server-side erasure succeeded; do not erase another local account's data. */ }
+        for (const key of [
+          `rt_onboarding_completed_${userSession.id}`,
+          `rt_user_mood_${userSession.id}`,
+          `rt_user_goals_${userSession.id}`,
+          `rt_self_care_${userSession.id}`,
+          `ruangtenang_app_notifications_${userSession.id}`,
+        ]) safeLocalStorage.removeItem(key);
+        if (safeLocalStorage.getItem('rt_active_user_id') === userSession.id) safeLocalStorage.removeItem('rt_active_user_id');
         setMsg({ type: 'success', text: 'Akun dan catatan pengguna di database aktif telah dihapus. Catatan audit penghapusan tetap disimpan. Memuat ulang sesi...' });
         setTimeout(() => {
           window.location.reload();

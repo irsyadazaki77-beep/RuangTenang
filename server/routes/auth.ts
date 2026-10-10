@@ -1,13 +1,11 @@
 import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
-import rateLimit from 'express-rate-limit';
 import { serverDb } from '../database.js';
+import { requireAuth, optionalAuth } from '../middleware/auth.js';
+import { AuthController } from '../controllers/authController.js';
 import { authService } from '../services/authService.js';
 import { emailService } from '../services/emailService.js';
-import { requireAuth, optionalAuth, requireRole, getTokenFromReq, getJwtSecret } from '../middleware/auth.js';
-import { AuthController } from '../controllers/authController.js';
-import jwt from 'jsonwebtoken';
 
 import {
   loginLimiter,
@@ -85,7 +83,7 @@ router.get('/sso/providers', (_req: Request, res: Response) => {
 // Campus Single Sign-On (SSO / OIDC Authentication Flow)
 router.post('/sso/campus-login', loginLimiter, async (req: Request, res: Response) => {
   try {
-    const { email, name, university, providerId, roleHint } = req.body;
+    const { email, name, university, providerId } = req.body;
 
     if (!email || typeof email !== 'string') {
       return res.status(400).json({ error: 'Email institusi kampus wajib diisi.' });

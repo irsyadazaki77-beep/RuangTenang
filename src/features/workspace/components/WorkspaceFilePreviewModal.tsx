@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { BarChart3, Check, ChevronLeft, ChevronRight, Download, FileText, LoaderCircle, Table2, WandSparkles, X } from 'lucide-react';
 import { WorkspaceApiService, type TabularPreviewDto, type WorkspaceAttachmentPreviewDto } from '../services/workspaceApiService';
 import type { TabularAnalysisRequest, TabularAnalysisResult, TabularDataset, TabularTransformPreview, TabularTransformRequest, DataTransformation } from '../../../../shared/contracts/tabular';
@@ -10,6 +10,10 @@ type Panel = 'data' | 'profile' | 'analysis' | 'transform';
 const valueText = (value: unknown) => value === null || value === undefined ? '' : typeof value === 'object' ? JSON.stringify(value) : String(value);
 
 export const WorkspaceFilePreviewModal: React.FC<Props> = ({ attachmentId, onClose, onArtifactCreated }) => {
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const returnFocusRef = useRef<HTMLElement | null>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
   const [preview, setPreview] = useState<WorkspaceAttachmentPreviewDto | null>(null);
   const [dataset, setDataset] = useState<TabularDataset | null>(null);
   const [table, setTable] = useState<TabularPreviewDto | null>(null);
@@ -44,6 +48,22 @@ export const WorkspaceFilePreviewModal: React.FC<Props> = ({ attachmentId, onClo
   const [derivedArtifact, setDerivedArtifact] = useState<WorkspaceArtifact | null>(null);
   const tabular = preview?.fileKind === 'csv' || preview?.fileKind === 'xlsx';
   const numericColumns = useMemo(() => dataset?.columns.filter(item => ['number', 'integer', 'currency', 'percentage'].includes(item.inferredType)) || [], [dataset]);
+
+  useEffect(() => {
+    returnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    requestAnimationFrame(() => closeButtonRef.current?.focus());
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !event.defaultPrevented) {
+        event.preventDefault();
+        onCloseRef.current();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      requestAnimationFrame(() => returnFocusRef.current?.focus());
+    };
+  }, [attachmentId]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -159,7 +179,7 @@ export const WorkspaceFilePreviewModal: React.FC<Props> = ({ attachmentId, onClo
       <header className="flex items-center gap-3 border-b border-slate-200 px-4 py-3 dark:border-slate-700"><span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300"><FileText className="h-4 w-4" /></span><div className="min-w-0 flex-1"><h2 id="workspace-file-preview-title" className="truncate text-sm font-semibold text-slate-900 dark:text-white">{preview?.filename || 'Preview file'}</h2><p className="text-[11px] text-slate-500">{dataset ? `${dataset.sheets.length} sheet · ${dataset.rowCount.toLocaleString()} baris · ${dataset.columnCount} kolom · Profile lengkap` : preview ? `${preview.fileKind || preview.mimeType} · ${Math.ceil(preview.size / 1024)} KB · ${preview.chunkCount || 0} bagian` : 'Memuat struktur berkas'}</p></div>
         {dataset && <><a href={exportHref} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"><Download className="h-3.5 w-3.5" />CSV</a><a href={exportXlsxHref} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"><Download className="h-3.5 w-3.5" />XLSX</a></>}
         {preview && !dataset && <a href={`/api/v1/chat/attachments/${encodeURIComponent(preview.id)}`} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"><Download className="h-3.5 w-3.5" />Buka file</a>}
-        <button type="button" onClick={onClose} aria-label="Tutup preview" className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"><X className="h-4 w-4" /></button>
+        <button ref={closeButtonRef} type="button" onClick={onClose} aria-label="Tutup preview" className="min-h-10 min-w-10 rounded-lg p-2 text-slate-500 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:hover:bg-slate-800"><X className="h-4 w-4" /></button>
       </header>
       {dataset && <div className="flex gap-1 border-b border-slate-200 px-4 pt-2 dark:border-slate-700">
         {(['data', 'profile', 'analysis', 'transform'] as Panel[]).map(item => <button key={item} type="button" onClick={() => setPanel(item)} aria-pressed={panel === item} className={`rounded-t-lg px-3 py-2 text-xs font-semibold ${panel === item ? 'border-b-2 border-emerald-600 text-emerald-700 dark:text-emerald-300' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}>

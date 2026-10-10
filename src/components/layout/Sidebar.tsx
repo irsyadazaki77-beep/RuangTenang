@@ -205,7 +205,7 @@ export default function Sidebar({
         className={`fixed lg:sticky lg:top-0 lg:h-[100dvh] inset-y-0 left-0 z-50 shrink-0 bg-[#f8fafc] dark:bg-[#121316] border-r border-slate-200/80 dark:border-slate-800/80 flex flex-col overflow-y-auto lg:overflow-y-hidden pt-safe pb-safe transform transition-all duration-200 ease-in-out select-none shadow-sm lg:shadow-none ${
           isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         } ${
-          isCollapsed ? 'lg:w-[72px] w-[280px]' : 'w-[280px]'
+          isCollapsed ? 'lg:w-[72px] w-[280px]' : 'w-[280px] lg:w-[256px]'
         }`}
       >
         {/* Header (Brand Logo, Mode Switcher, + New Chat, Instant Search) */}

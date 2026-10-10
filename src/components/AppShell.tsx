@@ -22,7 +22,7 @@ const ShellLoadingState: React.FC<{ label: string }> = ({ label }) => (
 );
 
 export const AppShell: React.FC = () => {
-  const { user, setUser, isOffline, logout } = useAuth();
+  const { user, setUser, isOffline, logout, loading: authLoading, authLifecycle, sessionGeneration } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
   const modals = useAppModals();
@@ -52,8 +52,9 @@ export const AppShell: React.FC = () => {
     setIsCommandPaletteOpen(open => !open);
   }, [setIsCommandPaletteOpen]);
   useGlobalShortcuts(toggleCommandPalette);
-  useOfflineSync(user?.id, chatLibrary.fetchChats, showToast);
+  useOfflineSync(user?.id, sessionGeneration, !authLoading && authLifecycle === 'authenticated' && user?.role === 'mahasiswa', chatLibrary.fetchChats, showToast);
 
+  if (authLoading) return <ShellLoadingState label="Memulihkan sesi akun" />;
   if (!user) return null;
 
   if (user.role === 'konselor') {

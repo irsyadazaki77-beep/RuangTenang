@@ -22,6 +22,7 @@ import { ChatSearchBar } from './ChatSearchBar';
 import { RhythmicTypingIndicator } from '../../../components/ui/RhythmicTypingIndicator';
 import { detectAcademicDistress } from '../../workspace/utils/distressDetector';
 import { usePrivacyVault } from '../../../contexts/PrivacyVaultContext';
+import { dispatchAuroraActivity } from '../../../lib/auroraEvents';
 
 // Import our cohesive, feature-scoped custom hooks
 import { useUpcomingAppointment } from '../hooks/useUpcomingAppointment';
@@ -98,12 +99,35 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
     fetchMessages
   });
 
-  // Sinkronisasi status AI streaming ke root ambient Aurora mesh
+  // Sinkronisasi status AI streaming ke root ambient Aurora mesh 2.0
   useEffect(() => {
+    let phase: 'idle' | 'preparing' | 'thinking' | 'streaming' | 'finishing' | 'error' = 'idle';
+    if (isTyping) {
+      phase = streamingMessage?.content ? 'streaming' : 'thinking';
+    } else {
+      phase = 'idle';
+    }
+
+    dispatchAuroraActivity({
+      mode: 'RUANG_TENANG',
+      phase,
+      chatId,
+    });
+
     window.dispatchEvent(
       new CustomEvent('rt-aurora-streaming', { detail: { isStreaming: isTyping } })
     );
-  }, [isTyping]);
+  }, [isTyping, Boolean(streamingMessage?.content), chatId]);
+
+  // Reset aurora ke idle saat unmount
+  useEffect(() => {
+    return () => {
+      dispatchAuroraActivity({
+        mode: 'RUANG_TENANG',
+        phase: 'idle',
+      });
+    };
+  }, []);
 
   const {
     bottomRef,
@@ -188,6 +212,11 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
     setFollowUps([]);
     let assistantMsgId = `assistant_${Date.now()}`;
     let routingMeta: { modelUsed?: string; routingMode?: 'manual' | 'auto'; routingReason?: string } = {};
+    dispatchAuroraActivity({
+      mode: 'RUANG_TENANG',
+      phase: 'preparing',
+      chatId,
+    });
     setStreamingMessage({ id: assistantMsgId, role: 'assistant', content: '' });
 
     await streamMessage(
@@ -241,6 +270,11 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
               }
             ]);
           }
+          dispatchAuroraActivity({
+            mode: 'RUANG_TENANG',
+            phase: 'finishing',
+            chatId,
+          });
           setStreamingMessage(null);
         },
         onQuotaExceeded: (data) => {
@@ -252,6 +286,11 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
           });
         },
         onError: (err) => {
+          dispatchAuroraActivity({
+            mode: 'RUANG_TENANG',
+            phase: 'error',
+            chatId,
+          });
           setStreamingMessage(null);
           if (err.includes('DAILY_LIMIT_EXCEEDED') || err.toLowerCase().includes('kuota') || err.toLowerCase().includes('limit')) {
             const tomorrow = new Date();

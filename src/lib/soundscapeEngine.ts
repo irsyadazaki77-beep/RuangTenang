@@ -616,7 +616,7 @@ class SoundscapeSynthesizer {
     trackGain.gain.exponentialRampToValueAtTime(Math.max(0.0001, targetVol), ctx.currentTime + 0.4);
     trackGain.connect(this.masterGain);
 
-    let stopFn: () => void = () => {};
+    let stopFn: () => void;
     switch (trackId) {
       case 'rain': stopFn = this.startRain(ctx, trackGain); break;
       case 'waves': stopFn = this.startWaves(ctx, trackGain); break;

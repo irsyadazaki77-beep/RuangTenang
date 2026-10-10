@@ -42,9 +42,14 @@ describe('appointment room access policy', () => {
     expect(() => calculateScheduledAtUtc('2026-09-20', '25:00', 'WIB')).toThrow('INVALID_APPOINTMENT_DATETIME');
     expect(() => calculateScheduledAtUtc('2026-09-20', '10:00', 'UNKNOWN')).toThrow('INVALID_APPOINTMENT_DATETIME');
     expect(isValidAppointmentStatusTransition('PENDING', 'CONFIRMED')).toBe(true);
+    expect(isValidAppointmentStatusTransition('PENDING', 'REJECTED')).toBe(true);
     expect(isValidAppointmentStatusTransition('CONFIRMED', 'IN_PROGRESS')).toBe(true);
     expect(isValidAppointmentStatusTransition('CONFIRMED', 'COMPLETED')).toBe(false);
-    expect(isValidAppointmentStatusTransition('CANCELLED', 'CONFIRMED')).toBe(false);
+    expect(isValidAppointmentStatusTransition('IN_PROGRESS', 'COMPLETED')).toBe(true);
+    expect(isValidAppointmentStatusTransition('IN_PROGRESS', 'CANCELLED')).toBe(false);
     expect(isValidAppointmentStatusTransition('COMPLETED', 'PENDING')).toBe(false);
+    expect(isValidAppointmentStatusTransition('CANCELLED', 'IN_PROGRESS')).toBe(false);
+    expect(isValidAppointmentStatusTransition('REJECTED', 'CONFIRMED')).toBe(false);
+    expect(isValidAppointmentStatusTransition('CANCELLED', 'CONFIRMED')).toBe(false);
   });
 });

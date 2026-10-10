@@ -8,15 +8,15 @@ import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import cors from 'cors';
 
-import crypto from 'crypto';
 
-import { serverDb, seedInitialDataIfNeeded, ensureDatabaseReady, prisma } from './server/database.js';
+
+import { serverDb, ensureDatabaseReady, prisma } from './server/database.js';
 import { redisService } from './server/services/redisService.js';
 import {
   validateStartupEnvironment,
   requestIdAndLoggerMiddleware,
   timeoutMiddleware,
-  idempotencyMiddleware,
+
   openApiSpec,
   renderSwaggerHtml,
   centralizedErrorHandler
@@ -27,7 +27,7 @@ import { parsePort } from './server/config/port.js';
 import { validateEnvironment } from './server/config/envValidation.js';
 import { csrfProtection, csrfRouter } from './server/middleware/csrf.js';
 import { generalApiLimiter, diagnosticsLimiter, clientTelemetryLimiter } from './server/middleware/rateLimiters.js';
-import { rateLimit } from 'express-rate-limit';
+
 import { optionalAuth, requireAuth, requireRole } from './server/middleware/auth.js';
 import { clientTelemetryService, clientDebugSchema } from './server/services/clientTelemetryService.js';
 import { metricsService } from './server/services/metricsService.js';

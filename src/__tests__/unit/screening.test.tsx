@@ -54,6 +54,8 @@ describe('Screening Modal Unit & Integration Tests', () => {
       user: null,
       setUser: vi.fn(),
       loading: false,
+      authLifecycle: 'unauthenticated',
+      sessionGeneration: 0,
       isOffline: false,
       refreshSession: vi.fn(),
       logout: vi.fn()
@@ -70,6 +72,8 @@ describe('Screening Modal Unit & Integration Tests', () => {
       user: { id: 'std-1', name: 'Budi Mahasiswa', email: 'budi@kampus.ac.id', role: 'mahasiswa', tier: 'Free', usageStats: { chatMessagesSent: 0, appointmentsBooked: 0 } },
       setUser: vi.fn(),
       loading: false,
+      authLifecycle: 'authenticated',
+      sessionGeneration: 1,
       isOffline: false,
       refreshSession: vi.fn(),
       logout: vi.fn()
@@ -114,6 +118,8 @@ describe('Screening Modal Unit & Integration Tests', () => {
       user: { id: 'std-1', name: 'Budi Mahasiswa', email: 'budi@kampus.ac.id', role: 'mahasiswa', tier: 'Free', usageStats: { chatMessagesSent: 0, appointmentsBooked: 0 } },
       setUser: vi.fn(),
       loading: false,
+      authLifecycle: 'authenticated',
+      sessionGeneration: 1,
       isOffline: false,
       refreshSession: vi.fn(),
       logout: vi.fn()
@@ -146,6 +152,8 @@ describe('Screening Modal Unit & Integration Tests', () => {
       user: { id: 'guest', name: 'Tamu', email: 'tamu@anon.id', role: 'guest', tier: 'Free', usageStats: { chatMessagesSent: 0, appointmentsBooked: 0 } },
       setUser: vi.fn(),
       loading: false,
+      authLifecycle: 'unauthenticated',
+      sessionGeneration: 0,
       isOffline: false,
       refreshSession: vi.fn(),
       logout: vi.fn()
@@ -177,6 +185,8 @@ describe('Screening Modal Unit & Integration Tests', () => {
       user: null,
       setUser: vi.fn(),
       loading: false,
+      authLifecycle: 'unauthenticated',
+      sessionGeneration: 0,
       isOffline: false,
       refreshSession: vi.fn(),
       logout: vi.fn()
@@ -201,6 +211,8 @@ describe('Screening Modal Unit & Integration Tests', () => {
       user: null,
       setUser: vi.fn(),
       loading: false,
+      authLifecycle: 'unauthenticated',
+      sessionGeneration: 0,
       isOffline: false,
       refreshSession: vi.fn(),
       logout: vi.fn()

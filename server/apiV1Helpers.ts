@@ -9,6 +9,7 @@ import { metricsService } from './services/metricsService.js';
 import { isAiAvailable } from './config/aiConfig.js';
 
 declare global {
+  // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace Express {
     interface Request {
       requestId?: string;
@@ -179,10 +180,10 @@ export function timeoutMiddleware(timeoutMs: number = 15000) {
     if (req.originalUrl?.includes('/stream') || req.url?.includes('/stream')) {
       return next();
     }
-    let timedOut = false;
+
 
     const timer = setTimeout(() => {
-      timedOut = true;
+
       if (!res.headersSent) {
         res.status(504).json({
           success: false,
@@ -238,7 +239,12 @@ const cleanupTimer = setInterval(async () => {
 }, 60 * 60 * 1000);
 cleanupTimer.unref();
 
-export async function idempotencyMiddleware(req: Request, res: Response, next: NextFunction) {
+export interface IdempotencyMiddlewareOptions {
+  projectResponse?: (body: unknown) => unknown;
+}
+
+export function idempotencyMiddleware(options: IdempotencyMiddlewareOptions = {}) {
+  return async (req: Request, res: Response, next: NextFunction) => {
   // Only apply to mutation methods
   const isMutation = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method.toUpperCase());
   if (!isMutation) {
@@ -251,10 +257,18 @@ export async function idempotencyMiddleware(req: Request, res: Response, next: N
     req.body?.idempotencyKey;
 
   if (!rawKey || typeof rawKey !== 'string' || rawKey.trim() === '') {
+    if (req.get('X-RuangTenang-Offline-Owner')) {
+      return res.status(400).json({ success: false, code: 'IDEMPOTENCY_KEY_REQUIRED', error: 'IDEMPOTENCY_KEY_REQUIRED' });
+    }
     return next();
   }
 
-  req.idempotencyKey = rawKey;
+  const normalizedKey = rawKey.trim();
+  if (normalizedKey.length > 128 || !/^[A-Za-z0-9._:-]+$/.test(normalizedKey)) {
+    return res.status(400).json({ success: false, code: 'IDEMPOTENCY_KEY_INVALID', error: 'IDEMPOTENCY_KEY_INVALID' });
+  }
+
+  req.idempotencyKey = normalizedKey;
 
   // Derive isolated subject namespace from authenticated user, session, or IP
   const subject = req.user?.userId || req.user?.sessionId || (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || 'anonymous';
@@ -262,86 +276,86 @@ export async function idempotencyMiddleware(req: Request, res: Response, next: N
   const route = (req.baseUrl || '') + (req.path || (req.originalUrl || req.url).split('?')[0]);
   
   // Composite namespaced storage key
-  const compositeKey = `${subject}:${method}:${route}:${rawKey}`;
+  const compositeKey = `${subject}:${method}:${route}:${normalizedKey}`;
 
   // Request body fingerprinting using SHA-256
   const bodyString = JSON.stringify(req.body || {});
   const currentBodyHash = crypto.createHash('sha256').update(bodyString).digest('hex');
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+  const sendCached = (cached: { responseStatus: number; responseBody: string }) => {
+    if (cached.responseStatus === 0) {
+      return res.status(409).json({
+        success: false,
+        code: 'IDEMPOTENCY_IN_PROGRESS',
+        error: 'IDEMPOTENCY_IN_PROGRESS',
+        message: 'Permintaan dengan kunci yang sama sedang diproses.',
+      });
+    }
+    try {
+      const parsedBody = JSON.parse(cached.responseBody) as Record<string, unknown>;
+      return res.status(cached.responseStatus).json({ ...parsedBody, isIdempotentReplay: true, requestId: req.requestId });
+    } catch {
+      return res.status(503).json({ success: false, code: 'IDEMPOTENCY_RESPONSE_UNAVAILABLE', error: 'IDEMPOTENCY_RESPONSE_UNAVAILABLE' });
+    }
+  };
 
   try {
-    // Check if composite key exists in store
-    const cached = await prisma.idempotencyRecord.findUnique({
-      where: { key: compositeKey }
-    });
+    let reservation = await prisma.idempotencyRecord.findUnique({ where: { key: compositeKey } });
+    if (reservation && reservation.requestHash !== currentBodyHash) {
+      return res.status(409).json({ success: false, code: 'IDEMPOTENCY_CONFLICT', error: 'IDEMPOTENCY_CONFLICT' });
+    }
+    if (reservation) return sendCached(reservation);
 
-    if (cached) {
-      // Verify body fingerprint match
-      if (cached.requestHash !== currentBodyHash) {
-        console.warn(`[IDEMPOTENCY_CONFLICT] Key '${rawKey}' reused with different body fingerprint by subject '${subject}'`);
-        return res.status(409).json({
-          success: false,
-          error: 'IDEMPOTENCY_CONFLICT',
-          message: 'Idempotency key sama digunakan dengan payload request yang berbeda.',
-          requestId: req.requestId
-        });
+    try {
+      reservation = await prisma.idempotencyRecord.create({
+        data: {
+          key: compositeKey,
+          userId: req.user?.userId || null,
+          route,
+          method,
+          requestHash: currentBodyHash,
+          responseStatus: 0,
+          responseBody: '',
+          expiresAt,
+        },
+      });
+    } catch {
+      const racedReservation = await prisma.idempotencyRecord.findUnique({ where: { key: compositeKey } });
+      if (!racedReservation) throw new Error('IDEMPOTENCY_RESERVATION_FAILED');
+      if (racedReservation.requestHash !== currentBodyHash) {
+        return res.status(409).json({ success: false, code: 'IDEMPOTENCY_CONFLICT', error: 'IDEMPOTENCY_CONFLICT' });
       }
-
-      console.log(`[IDEMPOTENCY_MATCH] Returning cached response for composite key: ${compositeKey}`);
-      try {
-        const parsedBody = JSON.parse(cached.responseBody);
-        return res.status(cached.responseStatus).json({
-          ...parsedBody,
-          isIdempotentReplay: true,
-          requestId: req.requestId
-        });
-      } catch (e) {
-        console.error('[IDEMPOTENCY_ERROR] Failed to parse cached response:', e);
-      }
+      return sendCached(racedReservation);
     }
 
-    // Intercept json response to cache it safely for mutation requests
     const originalJson = res.json.bind(res);
+    let finalized = false;
     res.json = (body: any) => {
-      if (res.statusCode >= 200 && res.statusCode < 300) {
-        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24-hour retention
-        
-        // Asynchronously upsert record but also handle synchronous return if needed
-        prisma.idempotencyRecord.upsert({
-          where: { key: compositeKey },
-          update: {
-            requestHash: currentBodyHash,
-            responseStatus: res.statusCode,
-            responseBody: JSON.stringify(body),
-            expiresAt,
-          },
-          create: {
-            key: compositeKey,
-            userId: req.user?.userId || null,
-            route,
-            method,
-            requestHash: currentBodyHash,
-            responseStatus: res.statusCode,
-            responseBody: JSON.stringify(body),
-            expiresAt,
-          }
-        }).catch(err => {
-          console.error('[IDEMPOTENCY_SAVE_ERROR] Failed to save idempotency:', err);
-        }).finally(() => {
-          // If response not yet finished/sent
-          if (!res.writableEnded) {
-            originalJson(body);
-          }
-        });
-        return res;
-      }
-      return originalJson(body);
+      if (finalized) return originalJson(body);
+      finalized = true;
+      const status = res.statusCode;
+      const responseForCache = options.projectResponse ? options.projectResponse(body) : body;
+      const persist = status >= 200 && status < 300
+        ? prisma.idempotencyRecord.update({
+            where: { key: compositeKey },
+            data: { responseStatus: status, responseBody: JSON.stringify(responseForCache), expiresAt },
+          })
+        : prisma.idempotencyRecord.deleteMany({ where: { key: compositeKey } });
+      void persist.then(() => {
+        if (!res.writableEnded) originalJson(body);
+      }).catch(() => {
+        // Keep the in-progress reservation on persistence failure to prevent a duplicate write.
+        if (!res.writableEnded) originalJson(body);
+      });
+      return res;
     };
 
     next();
-  } catch (err) {
-    console.error('[IDEMPOTENCY_MIDDLEWARE_ERROR] Failed during checking:', err);
-    next();
+  } catch {
+    return res.status(503).json({ success: false, code: 'IDEMPOTENCY_STORE_UNAVAILABLE', error: 'IDEMPOTENCY_STORE_UNAVAILABLE' });
   }
+  };
 }
 
 // ==========================================

@@ -412,6 +412,7 @@ export class AppointmentRepository {
   async updateAppointment(
     id: string,
     updates: Partial<AppointmentRecord>,
+    expectedStatus?: string,
   ): Promise<AppointmentRecord | null> {
     return await prisma.$transaction(async (tx) => {
       const current = await tx.appointments.findUnique({ where: { id } });
@@ -497,9 +498,7 @@ export class AppointmentRepository {
         ? (updates.studentEmail ? blindIndexService.generateHash(updates.studentEmail) : null)
         : current.studentEmailHash;
 
-      const updated = await tx.appointments.update({
-        where: { id },
-        data: {
+      const updateData = {
           counselorId: updates.counselorId,
           counselorName: updates.counselorName,
           scheduledAt,
@@ -516,8 +515,18 @@ export class AppointmentRepository {
           studentEmail: encryptedEmail,
           studentNimHash: nimHash,
           studentEmailHash: emailHash,
-        },
-      });
+        };
+      if (expectedStatus !== undefined) {
+        const result = await tx.appointments.updateMany({
+          where: { id, status: expectedStatus },
+          data: updateData,
+        });
+        if (result.count === 0) throw new Error('APPOINTMENT_STATUS_CONFLICT');
+      } else {
+        await tx.appointments.update({ where: { id }, data: updateData });
+      }
+      const updated = await tx.appointments.findUnique({ where: { id } });
+      if (!updated) return null;
 
       try {
         await tx.auditLogs.create({

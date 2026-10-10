@@ -203,7 +203,7 @@ export function parseArtifactsFromText(text: string, isStreaming = false, genera
 
       // Must be followed by space, newline, tab, '>', or '{'
       if (charAfterTag === undefined || /\s|>|\{/.test(charAfterTag)) {
-        let openTagCloseIndex = -1;
+        let openTagCloseIndex: number;
         let attrContent = '';
         let bodyStartIndex = -1;
 

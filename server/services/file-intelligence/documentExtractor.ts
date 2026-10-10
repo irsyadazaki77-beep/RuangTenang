@@ -1,6 +1,6 @@
 import { validateAndInspectFile } from './magicByteValidator.js';
 import { getAdapterForKind } from './adapters/index.js';
-import { ExtractedDocument, SupportedFileKind, DocumentBlock } from '../../../shared/contracts/files.js';
+import { SupportedFileKind, DocumentBlock } from '../../../shared/contracts/files.js';
 import { DocumentProcessingException } from './fileTypes.js';
 
 export interface ExtractedDocResult {

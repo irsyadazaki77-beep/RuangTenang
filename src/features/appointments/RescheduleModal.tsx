@@ -54,8 +54,8 @@ export const RescheduleModal: React.FC<RescheduleModalProps> = ({
           }
           setAvailableSlots(slots);
           setIsFullyBooked(slots.length === 0);
-          if (slots.length > 0 && !slots.includes(rescheduleTime)) {
-            setRescheduleTime(slots[0]);
+          if (slots.length > 0) {
+            setRescheduleTime(current => slots.includes(current) ? current : slots[0]);
           }
         }
       })

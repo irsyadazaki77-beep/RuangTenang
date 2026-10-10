@@ -1,5 +1,5 @@
 import { useEscapeKey } from "../../hooks/useEscapeKey";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   XCircle,
   CheckCircle2,
@@ -10,7 +10,7 @@ import {
 import { UserSession, Appointment, TIER_LIMITS, Counselor } from "../../types";
 import { useCounselors } from "../../hooks/useCounselors";
 import { apiClient } from "../../lib/apiClient";
-import { clientDb } from "../../lib/clientDb";
+import { clientDb, createOfflineIdempotencyKey } from "../../lib/clientDb";
 import { addNotification } from "../../lib/notificationStore";
 
 interface BookingFormProps {
@@ -28,33 +28,7 @@ interface BookingFormProps {
   onShowLimitModal: () => void;
 }
 
-const KEBUTUHAN_OPTIONS = [
-  {
-    id: "akademik",
-    title: "Kendala Akademik & Skripsi",
-    desc: "Stres revisi, dosen pembimbing, atau beban perkuliahan.",
-  },
-  {
-    id: "kecemasan",
-    title: "Kecemasan & Burnout",
-    desc: "Gelisah berlebihan, panik, rasa lelah fisik & emosional.",
-  },
-  {
-    id: "hubungan",
-    title: "Hubungan & Sosial Kampus",
-    desc: "Masalah pertemanan, organisasi, pasangan, atau keluarga.",
-  },
-  {
-    id: "depresi",
-    title: "Suasana Hati & Depresi",
-    desc: "Perasaan hampa, kehilangan motivasi, atau sedih berkepanjangan.",
-  },
-  {
-    id: "karir",
-    title: "Karir & Masa Depan",
-    desc: "Kebingungan arah karir, magang, atau tekanan masa depan.",
-  },
-];
+
 
 export const BookingForm: React.FC<BookingFormProps> = ({
   isOpen,
@@ -70,7 +44,7 @@ export const BookingForm: React.FC<BookingFormProps> = ({
   const { counselors, loading } = useCounselors();
 
   const [currentStep, setCurrentStep] = useState<number>(1);
-  const [selectedConcern, setSelectedConcern] = useState<string>(() => {
+  const [selectedConcern] = useState<string>(() => {
     try {
       const savedNote = typeof window !== 'undefined' ? sessionStorage.getItem('rt_screening_referral_notes') : null;
       if (savedNote) {
@@ -108,10 +82,11 @@ export const BookingForm: React.FC<BookingFormProps> = ({
   const [date, setDate] = useState<string>(getInitialBookingDate);
   const [timeSlot, setTimeSlot] = useState("");
   const [timezone, setTimezone] = useState<"WIB" | "WITA" | "WIT">(getLocalTimezone());
-  const [mode, setMode] = useState<"video_call">("video_call");
-  const [reminderMinutes, setReminderMinutes] = useState<number>(30);
+  const [mode] = useState<"video_call">("video_call");
+  const [reminderMinutes] = useState<number>(30);
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const submitGuard = useRef(false);
 
   const [availableSlots, setAvailableSlots] = useState<string[]>([]);
   const [isFullyBooked, setIsFullyBooked] = useState(false);
@@ -141,9 +116,7 @@ export const BookingForm: React.FC<BookingFormProps> = ({
             data.fullyBooked || data.availableSlots.length === 0,
           );
           if (data.availableSlots.length > 0) {
-            if (!data.availableSlots.includes(timeSlot)) {
-              setTimeSlot(data.availableSlots[0]);
-            }
+            setTimeSlot(current => data.availableSlots.includes(current) ? current : data.availableSlots[0]);
           } else {
             setTimeSlot("");
           }
@@ -182,7 +155,13 @@ export const BookingForm: React.FC<BookingFormProps> = ({
 
   const handleCreateAppointment = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submitGuard.current) return;
     setFormError(null);
+
+    if (userSession.role !== 'mahasiswa' || !userSession.id || userSession.id === 'guest') {
+      setFormError('Masuk ke akun mahasiswa untuk membuat janji temu.');
+      return;
+    }
 
     const currentLimit = TIER_LIMITS[userSession.tier].appointments;
     if (userSession.usageStats.appointmentsBooked >= currentLimit) {
@@ -217,7 +196,17 @@ export const BookingForm: React.FC<BookingFormProps> = ({
       return;
     }
 
+    submitGuard.current = true;
     setIsSubmitting(true);
+    let requestIdempotencyKey: string;
+    try {
+      requestIdempotencyKey = createOfflineIdempotencyKey();
+    } catch {
+      submitGuard.current = false;
+      setIsSubmitting(false);
+      setFormError('Browser tidak menyediakan generator aman. Jadwal belum dikirim.');
+      return;
+    }
     const fullTimeSlot = `${timeSlot} ${timezone}`;
     const appointmentPayload = {
       counselorId: counselorObj.id,
@@ -227,16 +216,18 @@ export const BookingForm: React.FC<BookingFormProps> = ({
       timezone,
       mode,
       notes: selectedConcern,
-      userId: studentNIM || "mahasiswa-anon",
-      studentName: studentName.trim(),
       studentNIM: studentNIM.trim(),
-      studentEmail: studentEmail.trim(),
     };
 
     // Offline check: store directly to local encrypted outbox queue if disconnected
     if (typeof navigator !== "undefined" && !navigator.onLine) {
       try {
-        await clientDb.addToOutbox("appointment", "/api/v1/appointments", appointmentPayload);
+        await clientDb.enqueueOfflineAction({
+          type: 'appointment',
+          payload: appointmentPayload,
+          expectedUserId: userSession.id,
+          idempotencyKey: requestIdempotencyKey,
+        });
         const offlineAppointment: Appointment = {
           id: `offline-apt-${Date.now()}`,
           counselorId: counselorObj.id,
@@ -272,18 +263,69 @@ export const BookingForm: React.FC<BookingFormProps> = ({
           "info"
         );
       } catch (err) {
-        console.warn("Failed to store offline appointment:", err);
-        setFormError("Gagal menyimpan jadwal secara offline. Silakan coba lagi.");
+        const code = err instanceof Error ? err.message : '';
+        setFormError(code === 'OFFLINE_STORAGE_UNAVAILABLE'
+          ? 'Penyimpanan offline aman tidak tersedia. Jadwal belum disimpan.'
+          : code === 'OFFLINE_STORAGE_QUOTA_EXCEEDED' || code === 'OFFLINE_QUEUE_LIMIT_REACHED'
+            ? 'Penyimpanan offline penuh atau antrean mencapai batas. Jadwal belum disimpan.'
+            : 'Gagal menyimpan jadwal secara offline. Sesi atau enkripsi tidak tersedia.');
       } finally {
+        submitGuard.current = false;
         setIsSubmitting(false);
       }
       return;
     }
 
     try {
-      const res = await apiClient.post<any>("/api/v1/appointments", appointmentPayload);
+      const res = await apiClient.post<any>("/api/v1/appointments", appointmentPayload, {
+        headers: { 'Idempotency-Key': requestIdempotencyKey },
+      });
 
       if (!res.success) {
+        const retryable = res.status === 429 || (res.status !== undefined && res.status >= 500)
+          || res.code === 'NETWORK_ERROR' || res.code === 'TIMEOUT';
+        if (retryable) {
+          try {
+            await clientDb.enqueueOfflineAction({
+              type: 'appointment',
+              payload: appointmentPayload,
+              expectedUserId: userSession.id,
+              idempotencyKey: requestIdempotencyKey,
+            });
+            onAddAppointment({
+              id: `offline-apt-${requestIdempotencyKey || Date.now()}`,
+              counselorId: counselorObj.id,
+              counselorName: counselorObj.name,
+              counselorTitle: counselorObj.title,
+              counselorAvatar: counselorObj.avatar,
+              studentName: studentName.trim(),
+              studentNIM: studentNIM.trim(),
+              studentEmail: studentEmail.trim(),
+              date,
+              timeSlot: fullTimeSlot,
+              timezone,
+              mode,
+              primaryConcern: `${selectedConcern} (Offline)`,
+              status: 'PENDING',
+              approvalStatus: 'PENDING_APPROVAL',
+              attendanceStatus: 'SCHEDULED',
+              reminderEnabled: true,
+              reminderMinutesBefore: reminderMinutes,
+              createdAt: new Date().toISOString(),
+            });
+            showToast('Server belum mengonfirmasi jadwal. Jadwal disimpan terenkripsi dan akan dicoba kembali.', 'warning');
+            onClose();
+            setFormError(null);
+          } catch (queueError) {
+            const code = queueError instanceof Error ? queueError.message : '';
+            setFormError(code === 'OFFLINE_STORAGE_UNAVAILABLE'
+              ? 'Penyimpanan offline aman tidak tersedia. Jadwal belum disimpan.'
+              : code === 'OFFLINE_STORAGE_QUOTA_EXCEEDED' || code === 'OFFLINE_QUEUE_LIMIT_REACHED'
+                ? 'Penyimpanan offline penuh atau antrean mencapai batas. Jadwal belum disimpan.'
+                : 'Jadwal belum tersimpan. Periksa sesi dan coba kembali.');
+          }
+          return;
+        }
         if (res.status === 409) {
           setFormError(
             res.error ||
@@ -295,7 +337,6 @@ export const BookingForm: React.FC<BookingFormProps> = ({
               "Gagal menyimpan jadwal ke server. Silakan coba lagi.",
           );
         }
-        setIsSubmitting(false);
         return;
       }
 
@@ -338,11 +379,15 @@ export const BookingForm: React.FC<BookingFormProps> = ({
         "success",
       );
     } catch (e: any) {
-      console.warn("Backend appointment save failed:", e);
       // Only queue to outbox if browser is truly offline
       if (typeof navigator !== "undefined" && !navigator.onLine) {
         try {
-          await clientDb.addToOutbox("appointment", "/api/v1/appointments", appointmentPayload);
+          await clientDb.enqueueOfflineAction({
+            type: 'appointment',
+            payload: appointmentPayload,
+            expectedUserId: userSession.id,
+            idempotencyKey: requestIdempotencyKey,
+          });
           const offlineAppointment: Appointment = {
             id: `offline-apt-${Date.now()}`,
             counselorId: counselorObj.id,
@@ -377,13 +422,22 @@ export const BookingForm: React.FC<BookingFormProps> = ({
             "Koneksi terputus. Jadwal disimpan di antrean offline.",
             "info"
           );
-        } catch {
-          setFormError("Gagal menyimpan jadwal secara offline. Silakan coba lagi.");
+        } catch (queueError) {
+          const code = queueError instanceof Error ? queueError.message : '';
+          setFormError(code === 'OFFLINE_STORAGE_UNAVAILABLE'
+            ? 'Penyimpanan offline aman tidak tersedia. Jadwal belum disimpan.'
+            : code === 'OFFLINE_STORAGE_QUOTA_EXCEEDED' || code === 'OFFLINE_QUEUE_LIMIT_REACHED'
+              ? 'Penyimpanan offline penuh atau antrean mencapai batas. Jadwal belum disimpan.'
+              : 'Gagal menyimpan jadwal secara offline. Sesi atau enkripsi tidak tersedia.');
         }
       } else {
-        setFormError(e?.message || "Gagal menyimpan jadwal ke server. Silakan coba lagi.");
+        const code = e instanceof Error ? e.message : '';
+        setFormError(code === 'OFFLINE_STORAGE_UNAVAILABLE'
+          ? 'Penyimpanan offline aman tidak tersedia. Jadwal belum disimpan.'
+          : 'Gagal menyimpan jadwal ke server. Silakan coba lagi.');
       }
     } finally {
+      submitGuard.current = false;
       setIsSubmitting(false);
     }
   };
@@ -414,7 +468,7 @@ export const BookingForm: React.FC<BookingFormProps> = ({
             </div>
             <button
               onClick={onClose}
-              className="p-1.5 text-secondary hover:text-primary hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer min-h-[40px] min-w-[40px] flex items-center justify-center"
+              className="p-1.5 text-secondary hover:text-primary hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer min-h-10 min-w-10 flex items-center justify-center"
               aria-label="Tutup Form"
             >
               <XCircle className="w-5 h-5" />
@@ -482,7 +536,7 @@ export const BookingForm: React.FC<BookingFormProps> = ({
             })}
             
             {/* Connecting line */}
-            <div className="absolute top-3 left-[12.5%] right-[12.5%] h-0.5 bg-slate-200 dark:bg-slate-800 -z-0">
+            <div className="absolute top-3 left-[12.5%] right-[12.5%] h-0.5 bg-slate-200 dark:bg-slate-800 z-0">
               <div
                 className="bg-teal-600 dark:bg-teal-500 h-full transition-all duration-300 ease-out"
                 style={{ width: `${((currentStep - 1) / 3) * 100}%` }}
@@ -503,7 +557,7 @@ export const BookingForm: React.FC<BookingFormProps> = ({
               <p className="text-xs text-secondary">
                 Pilih psikolog atau konselor kampus yang ingin Anda temui:
               </p>
-              <div className="space-y-2.5 max-h-[360px] overflow-y-auto pr-1">
+              <div className="space-y-2.5 max-h-90 overflow-y-auto pr-1">
                 {loading ? (
                   <div className="text-center text-secondary py-8 text-xs">Memuat daftar konselor...</div>
                 ) : (
@@ -592,7 +646,7 @@ export const BookingForm: React.FC<BookingFormProps> = ({
                     min={new Date().toISOString().split("T")[0]}
                     value={date}
                     onChange={(e) => setDate(e.target.value)}
-                    className="w-full surface-muted border border-default rounded-xl px-3.5 py-2 text-base sm:text-sm text-primary focus:outline-none focus:border-teal-600 focus:ring-1 focus:ring-teal-600 transition-all min-h-[44px]"
+                    className="w-full surface-muted border border-default rounded-xl px-3.5 py-2 text-base sm:text-sm text-primary focus:outline-none focus:border-teal-600 focus:ring-1 focus:ring-teal-600 transition-all min-h-11"
                   />
                 </div>
 
@@ -608,7 +662,7 @@ export const BookingForm: React.FC<BookingFormProps> = ({
                     value={timeSlot}
                     onChange={(e) => setTimeSlot(e.target.value)}
                     disabled={isFullyBooked || availableSlots.length === 0}
-                    className="w-full surface-muted border border-default rounded-xl px-3.5 py-2 text-base sm:text-sm text-primary focus:outline-none focus:border-teal-600 focus:ring-1 focus:ring-teal-600 transition-all disabled:opacity-50 min-h-[44px]"
+                    className="w-full surface-muted border border-default rounded-xl px-3.5 py-2 text-base sm:text-sm text-primary focus:outline-none focus:border-teal-600 focus:ring-1 focus:ring-teal-600 transition-all disabled:opacity-50 min-h-11"
                   >
                     {availableSlots.length > 0 ? (
                       availableSlots.map((slot) => (
@@ -634,7 +688,7 @@ export const BookingForm: React.FC<BookingFormProps> = ({
                   id="session-timezone"
                   value={timezone}
                   onChange={(e) => setTimezone(e.target.value as any)}
-                  className="w-full surface-muted border border-default rounded-xl px-3.5 py-2 text-base sm:text-sm text-primary focus:outline-none focus:border-teal-600 focus:ring-1 focus:ring-teal-600 transition-all min-h-[44px]"
+                  className="w-full surface-muted border border-default rounded-xl px-3.5 py-2 text-base sm:text-sm text-primary focus:outline-none focus:border-teal-600 focus:ring-1 focus:ring-teal-600 transition-all min-h-11"
                 >
                   <option value="WIB">WIB (Jakarta / Jawa / Sumatra)</option>
                   <option value="WITA">WITA (Bali / Sulawesi / Kaltim)</option>
@@ -664,15 +718,15 @@ export const BookingForm: React.FC<BookingFormProps> = ({
               <div className="space-y-3">
                 <div className="space-y-1">
                   <label className="block text-xs font-semibold text-secondary">Nama Lengkap</label>
-                  <input type="text" value={studentName} onChange={(e) => setStudentName(e.target.value)} placeholder="Sesuai kartu identitas" className="w-full surface-muted border border-default rounded-xl px-3.5 py-2 text-base sm:text-sm text-primary focus:outline-none focus:border-teal-600 focus:ring-1 focus:ring-teal-600 transition-all min-h-[44px]" />
+                  <input type="text" value={studentName} onChange={(e) => setStudentName(e.target.value)} placeholder="Sesuai kartu identitas" className="w-full surface-muted border border-default rounded-xl px-3.5 py-2 text-base sm:text-sm text-primary focus:outline-none focus:border-teal-600 focus:ring-1 focus:ring-teal-600 transition-all min-h-11" />
                 </div>
                 <div className="space-y-1">
                   <label className="block text-xs font-semibold text-secondary">NIM / Nomor Induk</label>
-                  <input type="text" value={studentNIM} onChange={(e) => setStudentNIM(e.target.value)} placeholder="Cth: 12345678" className="w-full surface-muted border border-default rounded-xl px-3.5 py-2 text-base sm:text-sm text-primary focus:outline-none focus:border-teal-600 focus:ring-1 focus:ring-teal-600 transition-all min-h-[44px]" />
+                  <input type="text" value={studentNIM} onChange={(e) => setStudentNIM(e.target.value)} placeholder="Cth: 12345678" className="w-full surface-muted border border-default rounded-xl px-3.5 py-2 text-base sm:text-sm text-primary focus:outline-none focus:border-teal-600 focus:ring-1 focus:ring-teal-600 transition-all min-h-11" />
                 </div>
                 <div className="space-y-1">
                   <label className="block text-xs font-semibold text-secondary">Email Utama</label>
-                  <input type="email" value={studentEmail} onChange={(e) => setStudentEmail(e.target.value)} placeholder="email@contoh.com" className="w-full surface-muted border border-default rounded-xl px-3.5 py-2 text-base sm:text-sm text-primary focus:outline-none focus:border-teal-600 focus:ring-1 focus:ring-teal-600 transition-all min-h-[44px]" />
+                  <input type="email" value={studentEmail} onChange={(e) => setStudentEmail(e.target.value)} placeholder="email@contoh.com" className="w-full surface-muted border border-default rounded-xl px-3.5 py-2 text-base sm:text-sm text-primary focus:outline-none focus:border-teal-600 focus:ring-1 focus:ring-teal-600 transition-all min-h-11" />
                 </div>
               </div>
             </div>
@@ -709,12 +763,12 @@ export const BookingForm: React.FC<BookingFormProps> = ({
         </div>
         
         {/* Sticky Footer Navigation Buttons */}
-        <div className="sticky bottom-0 surface-card border-t border-default pt-3 pb-[max(env(safe-area-inset-bottom),_0.75rem)] mt-5 -mx-4 sm:-mx-6 px-4 sm:px-6 flex items-center justify-between gap-2.5 z-10">
+        <div className="sticky bottom-0 surface-card border-t border-default pt-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] mt-5 -mx-4 sm:-mx-6 px-4 sm:px-6 flex items-center justify-between gap-2.5 z-10">
           {currentStep > 1 ? (
             <button
               type="button"
               onClick={handlePrevStep}
-              className="px-4 py-2 min-h-[44px] surface-card border border-default hover:bg-slate-100 dark:hover:bg-slate-800 text-secondary text-xs sm:text-sm font-semibold rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer active:scale-[0.98]"
+              className="px-4 py-2 min-h-11 surface-card border border-default hover:bg-slate-100 dark:hover:bg-slate-800 text-secondary text-xs sm:text-sm font-semibold rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer active:scale-[0.98]"
             >
               <ChevronLeft className="w-4 h-4" />
               <span>Kembali</span>
@@ -723,7 +777,7 @@ export const BookingForm: React.FC<BookingFormProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 min-h-[44px] text-secondary hover:text-primary text-xs sm:text-sm font-semibold rounded-xl transition-colors cursor-pointer active:scale-[0.98]"
+              className="px-4 py-2 min-h-11 text-secondary hover:text-primary text-xs sm:text-sm font-semibold rounded-xl transition-colors cursor-pointer active:scale-[0.98]"
             >
               Batal
             </button>
@@ -733,7 +787,7 @@ export const BookingForm: React.FC<BookingFormProps> = ({
             <button
               type="button"
               onClick={handleNextStep}
-              className="px-5 py-2 min-h-[44px] bg-slate-800 dark:bg-white hover:bg-slate-900 dark:hover:bg-slate-100 text-white dark:text-slate-900 text-xs sm:text-sm font-semibold rounded-xl shadow-3xs transition-all flex items-center gap-1.5 cursor-pointer ml-auto active:scale-[0.98]"
+              className="px-5 py-2 min-h-11 bg-slate-800 dark:bg-white hover:bg-slate-900 dark:hover:bg-slate-100 text-white dark:text-slate-900 text-xs sm:text-sm font-semibold rounded-xl shadow-3xs transition-all flex items-center gap-1.5 cursor-pointer ml-auto active:scale-[0.98]"
             >
               <span>Lanjut</span>
               <ChevronRight className="w-4 h-4" />
@@ -743,7 +797,7 @@ export const BookingForm: React.FC<BookingFormProps> = ({
               type="button"
               onClick={handleCreateAppointment}
               disabled={isSubmitting}
-              className="px-5 py-2 min-h-[44px] bg-teal-600 hover:bg-teal-700 text-white text-xs sm:text-sm font-semibold rounded-xl shadow-3xs transition-all disabled:opacity-50 cursor-pointer ml-auto active:scale-[0.98] flex items-center gap-1.5"
+              className="px-5 py-2 min-h-11 bg-teal-600 hover:bg-teal-700 text-white text-xs sm:text-sm font-semibold rounded-xl shadow-3xs transition-all disabled:opacity-50 cursor-pointer ml-auto active:scale-[0.98] flex items-center gap-1.5"
             >
               {isSubmitting ? "Memproses..." : "Konfirmasi Sesi"}
             </button>

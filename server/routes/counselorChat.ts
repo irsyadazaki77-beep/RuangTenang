@@ -2,9 +2,9 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { optionalAuth } from '../middleware/auth.js';
 import { counselorAiLimiter } from '../middleware/rateLimiters.js';
-import { checkRateLimit, sanitizeInput } from '../security.js';
-import { scanAndSanitizePII } from '../services/piiService.js';
-import { checkUserAiUsageLimit, recordUserAiUsage } from '../services/aiUsageLimiter.js';
+import { checkRateLimit } from '../security.js';
+
+import { checkUserAiUsageLimit } from '../services/aiUsageLimiter.js';
 import { getLocalCounselorResponse } from './fallbackAi.js';
 import { consentService } from '../services/consentService.js';
 import { aiGateway } from '../services/ai/aiGateway.js';

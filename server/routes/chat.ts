@@ -1,19 +1,19 @@
 import { prisma } from '../database.js';
 import { MAX_CHAT_ATTACHMENTS_PER_MESSAGE, MAX_WORKSPACE_ACTIVE_ATTACHMENTS } from '../../shared/contracts/files.js';
 import { Router, Request, Response, NextFunction } from 'express';
-import { z } from 'zod';
+
 import { requireAuth, requireRole, optionalAuth } from '../middleware/auth.js';
 import { aiAbuseLimiter } from '../middleware/aiAbuseLimiter.js';
 import { aiChatLimiter, aiSummaryLimiter } from '../middleware/rateLimiters.js';
 import { sanitizeInput } from '../security.js';
 import { scanAndSanitizePII } from '../services/piiService.js';
-import { checkUserAiUsageLimit, recordUserAiUsage, rollbackUserAiQuota } from '../services/aiUsageLimiter.js';
+import { checkUserAiUsageLimit, rollbackUserAiQuota } from '../services/aiUsageLimiter.js';
 import { serverDb } from '../database.js';
-import { consentService } from '../services/consentService.js';
+
 import { encryptionService } from '../services/encryptionService.js';
-import { getLocalFallbackResponse, getLocalFallbackSummary, getLocalFallbackFollowups } from './fallbackAi.js';
-import { withRetry } from '../apiV1Helpers.js';
-import { aiRequestService } from '../services/ai/aiRequestService.js';
+import { getLocalFallbackResponse } from './fallbackAi.js';
+
+
 import { aiSafetyService } from '../services/ai/aiSafetyService.js';
 import { aiGateway } from '../services/ai/aiGateway.js';
 import { validateAndSanitizeToolCall } from '../services/ai/aiToolSchemas.js';
@@ -23,7 +23,7 @@ import { attachmentStorageService } from '../services/attachmentStorageService.j
 import { documentIngestionService } from '../services/file-intelligence/documentIngestionService.js';
 import { DocumentProcessingException } from '../services/file-intelligence/fileTypes.js';
 import { getVerifiedEmergencyContacts } from '../config/emergencyRegistry.js';
-import { AiModelError, getConfiguredDefaultAiModelId, getModelDefinition, resolveAiModel } from '../services/ai/aiModelRegistry.js';
+import { AiModelError, getModelDefinition, resolveAiModel } from '../services/ai/aiModelRegistry.js';
 import { AUTO_ROUTING_MODEL_ID } from '../../shared/aiModelContract.js';
 import { smartModelRouter } from '../services/ai/smartModelRouter.js';
 

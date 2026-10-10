@@ -11,7 +11,12 @@ vi.mock('../../database.js', () => ({ prisma: {
   attachments: { findMany: db.attachmentsFindMany, findFirst: db.attachmentsFindFirst, update: db.attachmentsUpdate }
 } }));
 vi.mock('../../middleware/auth.js', () => ({ requireAuth: (req: any, _res: any, next: () => void) => { req.user = { userId: req.header('x-test-user') || 'user-a' }; next(); } }));
-vi.mock('../../services/encryptionService.js', () => ({ encryptionService: { encryptSensitive: (value: string) => value, decryptSensitive: (value: string) => value } }));
+vi.mock('../../services/encryptionService.js', () => ({ encryptionService: {
+  encryptSensitive: (value: string) => value,
+  encryptRequiredSensitive: (value: string) => `encrypted:${Buffer.from(value).toString('base64')}`,
+  decryptSensitive: (value: string) => value.startsWith('encrypted:') ? Buffer.from(value.slice('encrypted:'.length), 'base64').toString() : value,
+  isEncrypted: (value: string) => value.startsWith('encrypted:')
+} }));
 vi.mock('../../security.js', () => ({ sanitizeInput: (value: string) => value }));
 
 import workspaceRouter from '../../routes/workspace.js';
@@ -54,6 +59,8 @@ describe('Workspace workflow authorization and task execution', () => {
     const response = await request(app).post('/api/v1/workspace/chat-a/plans/p1/tasks/t1/run').set('x-test-user', 'user-a').send({ executionId: 'exec-a', snapshot }).expect(202);
     expect(response.body.data.status).toBe('running');
     expect(response.body.data.tasks[0]).toMatchObject({ status: 'running', executionId: 'exec-a', snapshot });
+    expect(JSON.stringify(JSON.parse(row.settings).agentWorkflow)).not.toContain('Analyze only source A');
+    expect(JSON.parse(row.settings).agentWorkflow.storage).toBe('encrypted-v1');
     expect(db.workspaceUpdateMany).toHaveBeenCalledOnce();
   });
 

@@ -32,12 +32,10 @@ export function validateCodeStatically(code: string, languageRaw?: string): Code
   let inSingleQuote = false;
   let inDoubleQuote = false;
   let inBacktick = false;
-  let inLineComment = false;
   let inBlockComment = false;
 
   for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
     const line = lines[lineIdx];
-    inLineComment = false;
 
     for (let charIdx = 0; charIdx < line.length; charIdx++) {
       const char = line[charIdx];
@@ -52,15 +50,12 @@ export function validateCodeStatically(code: string, languageRaw?: string): Code
       // Handle comments based on language
       if (!inSingleQuote && !inDoubleQuote && !inBacktick) {
         if (!inBlockComment && char === '/' && nextChar === '/') {
-          inLineComment = true;
           break; // Sisa baris adalah comment
         }
         if (!inBlockComment && (language.includes('python') || language === 'py' || language.includes('shell') || language.includes('bash') || language.includes('sh') || language.includes('r')) && char === '#') {
-          inLineComment = true;
           break;
         }
         if (!inBlockComment && (language.includes('sql')) && char === '-' && nextChar === '-') {
-          inLineComment = true;
           break;
         }
         if (!inBlockComment && char === '/' && nextChar === '*') {
@@ -75,7 +70,7 @@ export function validateCodeStatically(code: string, languageRaw?: string): Code
         }
       }
 
-      if (inLineComment || inBlockComment) continue;
+      if (inBlockComment) continue;
 
       // Handle quotes
       if (char === "'" && !inDoubleQuote && !inBacktick) {

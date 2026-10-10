@@ -1,4 +1,4 @@
-import { getVerifiedEmergencyContacts } from '../../config/emergencyRegistry.js';
+
 import { scanAndSanitizePII } from '../piiService.js';
 import { analyzeMultiTurnSentiment, CrisisAnalysisResult } from '../../../src/lib/crisisDetector.js';
 import { consentService } from '../consentService.js';
@@ -214,7 +214,6 @@ export const aiSafetyService = {
     // If text is purely academic / forensic / research citation without personal crisis intent,
     // prevent false positive override so students can complete papers and studies safely
     if (isAcademicAnalysis && !hasPersonalIntent) {
-      riskLevel = 'LOW';
       return {
         isCrisis: false,
         riskLevel: 'LOW',
@@ -447,7 +446,7 @@ export const aiSafetyService = {
     // For registered users with persistent accounts, verify consent preferences from DB.
     // For anonymous/guest/temporary sessions, conversational interaction in ephemeral RAM is permitted.
     const isGuestOrTemporary = !userId || userId === 'guest' || Boolean(input.isTemporary);
-    let hasAiConsent = false;
+    let hasAiConsent: boolean;
 
     if (isGuestOrTemporary) {
       hasAiConsent = true;
@@ -520,7 +519,7 @@ export const aiSafetyService = {
 
     // 6. Context authorization & boundary setting
 
-    let systemInstruction = '';
+    let systemInstruction: string;
 
     if (isRuangKerja) {
       systemInstruction = `Kamu adalah Asisten Metodologi & Penulisan Skripsi Akademik di RuangKerja.

@@ -116,7 +116,7 @@ function isSensitiveKey(key: string): boolean {
 export function redactSensitiveText(value: string): string {
   return value
     .replace(/\b(?:postgres(?:ql)?|redis):\/\/[^\s@]+@[^\s]+/gi, '[REDACTED_CONNECTION_URL]')
-    .replace(/\bBearer\s+[A-Za-z0-9._~+\/-]+=*/gi, 'Bearer [REDACTED]')
+    .replace(/\bBearer\s+[A-Za-z0-9._~+/-]+=*/gi, 'Bearer [REDACTED]')
     .replace(/\b(password|passwd|secret|credential|authorization|api[_-]?key|token)\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi, '$1=[REDACTED]')
     .replace(/\b(?:AIza[0-9A-Za-z_-]{20,}|sk-[A-Za-z0-9_-]{16,})\b/g, '[REDACTED_API_KEY]');
 }

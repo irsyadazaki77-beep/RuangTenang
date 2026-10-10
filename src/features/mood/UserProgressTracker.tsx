@@ -207,6 +207,8 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
 
   useEffect(() => {
     fetchDashboardData();
+    window.addEventListener('ruangtenang:offline-synced', fetchDashboardData);
+    return () => window.removeEventListener('ruangtenang:offline-synced', fetchDashboardData);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 

@@ -6,26 +6,45 @@ import { useToast } from '../../../components/Toast';
 
 interface UseWorkspaceArtifactsOptions {
   chatId?: string;
+  userId?: string;
   workspaceIdentity?: string;
   persistedArtifacts: WorkspaceArtifact[];
 }
 
 const draftStoragePrefix = 'ruangkerja:artifact-drafts:';
 
-function readLocalDrafts(workspaceIdentity: string): WorkspaceArtifact[] {
+function localDraftStorageKey(userId: string | undefined, workspaceIdentity: string): string {
+  return `${draftStoragePrefix}${encodeURIComponent(userId || 'guest')}:${encodeURIComponent(workspaceIdentity)}`;
+}
+
+export function readLocalDrafts(workspaceIdentity: string, userId?: string): WorkspaceArtifact[] {
   try {
-    const saved = globalThis.sessionStorage?.getItem(`${draftStoragePrefix}${workspaceIdentity}`);
-    const parsed = saved ? JSON.parse(saved) : [];
-    return Array.isArray(parsed) ? parsed.filter((item): item is WorkspaceArtifact => item && item.localWorkspaceId === workspaceIdentity && item.persistenceStatus !== 'persistent') : [];
+    const ownerId = userId || 'guest';
+    const scopedSaved = globalThis.sessionStorage?.getItem(localDraftStorageKey(userId, workspaceIdentity));
+    const saved = scopedSaved || (workspaceIdentity.startsWith(`local:${ownerId}:`)
+      ? globalThis.sessionStorage?.getItem(`${draftStoragePrefix}${workspaceIdentity}`)
+      : null);
+    const parsed = saved ? JSON.parse(saved) : null;
+    if (Array.isArray(parsed)) {
+      // Migrate only legacy drafts whose local Workspace identity itself records the account.
+      // Older chat-scoped records do not prove ownership and remain untouched in storage.
+      if (!workspaceIdentity.startsWith(`local:${ownerId}:`)) return [];
+      return parsed.filter((item): item is WorkspaceArtifact => !!item && item.localWorkspaceId === workspaceIdentity && item.persistenceStatus !== 'persistent')
+        .map(item => ({ ...item, localOwnerId: ownerId }));
+    }
+    if (!parsed || parsed.version !== 1 || parsed.userId !== ownerId || parsed.workspaceIdentity !== workspaceIdentity || !Array.isArray(parsed.drafts)) return [];
+    return parsed.drafts.filter((item: unknown): item is WorkspaceArtifact => !!item && typeof item === 'object' && (item as WorkspaceArtifact).localWorkspaceId === workspaceIdentity && (item as WorkspaceArtifact).localOwnerId === ownerId && (item as WorkspaceArtifact).persistenceStatus !== 'persistent');
   } catch {
     return [];
   }
 }
 
-function writeLocalDrafts(workspaceIdentity: string, drafts: WorkspaceArtifact[]) {
+export function writeLocalDrafts(workspaceIdentity: string, drafts: WorkspaceArtifact[], userId?: string) {
   try {
-    if (drafts.length) globalThis.sessionStorage?.setItem(`${draftStoragePrefix}${workspaceIdentity}`, JSON.stringify(drafts));
-    else globalThis.sessionStorage?.removeItem(`${draftStoragePrefix}${workspaceIdentity}`);
+    const key = localDraftStorageKey(userId, workspaceIdentity);
+    // Draft contents remain plaintext in tab-scoped storage for refresh recovery.
+    if (drafts.length) globalThis.sessionStorage?.setItem(key, JSON.stringify({ version: 1, userId: userId || 'guest', workspaceIdentity, drafts }));
+    else globalThis.sessionStorage?.removeItem(key);
   } catch {
     // Keep the in-memory draft usable if browser storage is unavailable or full.
   }
@@ -33,18 +52,21 @@ function writeLocalDrafts(workspaceIdentity: string, drafts: WorkspaceArtifact[]
 
 export function useWorkspaceArtifacts({
   chatId,
+  userId,
   workspaceIdentity = chatId ? `chat:${chatId}` : 'local:workspace',
   persistedArtifacts
 }: UseWorkspaceArtifactsOptions) {
   const { showToast } = useToast();
-  const [artifacts, setArtifacts] = useState<WorkspaceArtifact[]>(() => [DEFAULT_WELCOME_ARTIFACT, ...readLocalDrafts(workspaceIdentity)]);
-  const [activeArtifactId, setActiveArtifactId] = useState<string>(() => readLocalDrafts(workspaceIdentity)[0]?.id || DEFAULT_WELCOME_ARTIFACT_ID);
+  const identityScope = `${userId || 'guest'}:${workspaceIdentity}`;
+  const [artifacts, setArtifacts] = useState<WorkspaceArtifact[]>(() => [DEFAULT_WELCOME_ARTIFACT, ...readLocalDrafts(workspaceIdentity, userId)]);
+  const [activeArtifactId, setActiveArtifactId] = useState<string>(() => readLocalDrafts(workspaceIdentity, userId)[0]?.id || DEFAULT_WELCOME_ARTIFACT_ID);
   const [hasUnreadArtifact, setHasUnreadArtifact] = useState<boolean>(false);
 
   // Share in-flight writes between stream persistence and post-chat draft migration.
   const pendingArtifactSavesRef = useRef(new Map<string, Promise<WorkspaceArtifact | null>>());
   const activeMutationsRef = useRef(new Set<string>());
   const failedDuplicateIdsRef = useRef(new Map<string, string>());
+  const deletedArtifactIdsRef = useRef(new Set<string>());
   const saveTailsRef = useRef(new Map<string, Promise<void>>());
   const confirmedArtifactsRef = useRef(new Map<string, WorkspaceArtifact>());
   const isMountedRef = useRef(true);
@@ -57,40 +79,60 @@ export function useWorkspaceArtifacts({
   }, []);
 
   const lastPersistedSigRef = useRef<string>('');
-  const currentIdentityRef = useRef(workspaceIdentity);
-  currentIdentityRef.current = workspaceIdentity;
-  const lastWorkspaceIdentityRef = useRef(workspaceIdentity);
+  const currentIdentityRef = useRef(identityScope);
+  currentIdentityRef.current = identityScope;
+  const lastWorkspaceIdentityRef = useRef(identityScope);
 
   const persistArtifact = useCallback((artifact: WorkspaceArtifact, targetChatId: string) => {
-    const pending = pendingArtifactSavesRef.current.get(artifact.id);
+    if (deletedArtifactIdsRef.current.has(artifact.id) || activeMutationsRef.current.has(`delete:${artifact.id}`)) {
+      return Promise.reject(new Error('Dokumen sedang dihapus dan tidak dapat disimpan kembali.'));
+    }
+    const pendingKey = `${identityScope}:${targetChatId}:${artifact.id}`;
+    const pending = pendingArtifactSavesRef.current.get(pendingKey);
     if (pending) return pending;
     const operation = WorkspaceApiService.createArtifact({
       id: artifact.id, chatId: targetChatId, title: artifact.title, type: artifact.type,
       language: artifact.language, content: artifact.content
+    }).then(saved => {
+      if (saved) confirmedArtifactsRef.current.set(saved.id, { ...saved, persistenceStatus: 'persistent' });
+      return saved;
     }).finally(() => {
-      if (pendingArtifactSavesRef.current.get(artifact.id) === operation) pendingArtifactSavesRef.current.delete(artifact.id);
+      if (pendingArtifactSavesRef.current.get(pendingKey) === operation) pendingArtifactSavesRef.current.delete(pendingKey);
     });
-    pendingArtifactSavesRef.current.set(artifact.id, operation);
+    pendingArtifactSavesRef.current.set(pendingKey, operation);
     return operation;
-  }, []);
+  }, [identityScope]);
 
   useLayoutEffect(() => {
-    if (lastWorkspaceIdentityRef.current === workspaceIdentity) return;
-    lastWorkspaceIdentityRef.current = workspaceIdentity;
+    if (lastWorkspaceIdentityRef.current === identityScope) return;
+    lastWorkspaceIdentityRef.current = identityScope;
     lastPersistedSigRef.current = '';
-    const localDrafts = readLocalDrafts(workspaceIdentity);
+    confirmedArtifactsRef.current.clear();
+    deletedArtifactIdsRef.current.clear();
+    const localDrafts = readLocalDrafts(workspaceIdentity, userId);
     setArtifacts([DEFAULT_WELCOME_ARTIFACT, ...localDrafts]);
     setActiveArtifactId(localDrafts[0]?.id || DEFAULT_WELCOME_ARTIFACT_ID);
     setHasUnreadArtifact(false);
-  }, [workspaceIdentity]);
+  }, [identityScope, userId, workspaceIdentity]);
 
   useEffect(() => {
-    writeLocalDrafts(workspaceIdentity, artifacts.filter(item => item.localWorkspaceId === workspaceIdentity && item.persistenceStatus !== 'persistent'));
-  }, [artifacts, workspaceIdentity]);
+    const localDrafts = artifacts.filter(item => item.localWorkspaceId === workspaceIdentity && item.localOwnerId === (userId || 'guest') && item.persistenceStatus !== 'persistent');
+    // An empty state can be the previous account's artifacts during an identity switch.
+    // Only explicit acknowledged cleanup paths may remove a stored draft entry.
+    if (localDrafts.length) writeLocalDrafts(workspaceIdentity, localDrafts, userId);
+  }, [artifacts, userId, workspaceIdentity]);
 
   // Sync state when persistedArtifacts change from persistence hook
   useEffect(() => {
     const workspaceArtifacts = chatId ? persistedArtifacts.filter(item => item.chatId === chatId) : [];
+    workspaceArtifacts.forEach(item => {
+      const confirmed = confirmedArtifactsRef.current.get(item.id);
+      const incomingTime = Date.parse(item.updatedAt || '');
+      const confirmedTime = Date.parse(confirmed?.updatedAt || '');
+      if (!confirmed || (Number.isFinite(incomingTime) && incomingTime >= confirmedTime) || ((!Number.isFinite(incomingTime) || !Number.isFinite(confirmedTime)) && (item.version || 1) >= (confirmed.version || 1))) {
+        confirmedArtifactsRef.current.set(item.id, { ...item, persistenceStatus: 'persistent' });
+      }
+    });
     if (workspaceArtifacts.length > 0 || chatId) {
       const sig = `${workspaceIdentity}:${JSON.stringify(workspaceArtifacts.map(a => `${a.id}:${a.version}:${a.updatedAt}`))}`;
       if (sig === lastPersistedSigRef.current) return;
@@ -133,32 +175,33 @@ export function useWorkspaceArtifacts({
     }));
   }, [activeArtifact]);
 
-  const saveArtifact = useCallback(async (content: string, title?: string, createVersionSnapshot = false, expectedUpdatedAt?: string): Promise<WorkspaceArtifact | undefined> => {
+  const saveArtifact = useCallback(async (content: string, title?: string, createVersionSnapshot = false, expectedUpdatedAt?: string, expectedVersion?: number): Promise<WorkspaceArtifact | undefined> => {
     if (!activeArtifact || activeArtifact.id === DEFAULT_WELCOME_ARTIFACT_ID) return undefined;
 
     const savingArtifact = activeArtifact;
-    const identityAtStart = workspaceIdentity;
+    const identityAtStart = identityScope;
+    if (deletedArtifactIdsRef.current.has(savingArtifact.id) || activeMutationsRef.current.has(`delete:${savingArtifact.id}`)) {
+      throw new Error('Dokumen sedang dihapus. Perubahan tidak dikirim ke server.');
+    }
     if (!chatId) {
       const localSaved = { ...savingArtifact, title: title || savingArtifact.title, content, persistenceStatus: 'local' as const };
       setArtifacts(prev => prev.map(a => a.id === savingArtifact.id ? localSaved : a));
       return localSaved;
     }
 
-    const previous = saveTailsRef.current.get(savingArtifact.id) || Promise.resolve();
+    const saveKey = `${identityScope}:${savingArtifact.id}`;
+    const previous = saveTailsRef.current.get(saveKey) || Promise.resolve();
     let release!: () => void;
     const lock = new Promise<void>(resolve => { release = resolve; });
     const tail = previous.then(() => lock);
-    saveTailsRef.current.set(savingArtifact.id, tail);
+    saveTailsRef.current.set(saveKey, tail);
     await previous;
     try {
       const previouslyConfirmed = confirmedArtifactsRef.current.get(savingArtifact.id);
       const isServerBacked = !!previouslyConfirmed || savingArtifact.persistenceStatus === 'persistent' || (!savingArtifact.persistenceStatus && !!savingArtifact.chatId);
       if (!isServerBacked) setArtifacts(prev => prev.map(a => a.id === savingArtifact.id ? { ...a, persistenceStatus: 'saving' } : a));
       const saved = !isServerBacked
-        ? await WorkspaceApiService.createArtifact({
-            id: savingArtifact.id, chatId, title: title || savingArtifact.title, content,
-            language: savingArtifact.language, type: savingArtifact.type
-          })
+        ? await persistArtifact({ ...savingArtifact, title: title || savingArtifact.title, content }, chatId)
         : await WorkspaceApiService.updateArtifact(savingArtifact.id, {
             title: title || savingArtifact.title,
             content,
@@ -166,6 +209,7 @@ export function useWorkspaceArtifacts({
             type: savingArtifact.type,
             chatId,
             createNewVersion: createVersionSnapshot,
+            expectedVersion: expectedVersion ?? previouslyConfirmed?.version ?? savingArtifact.version ?? 1,
             expectedUpdatedAt: expectedUpdatedAt || previouslyConfirmed?.updatedAt || savingArtifact.updatedAt
           });
 
@@ -181,7 +225,7 @@ export function useWorkspaceArtifacts({
       console.warn('[useWorkspaceArtifacts] Save error:', err);
       if (currentIdentityRef.current === identityAtStart) {
         setArtifacts(prev => prev.map(item => item.id === savingArtifact.id
-          ? { ...item, persistenceStatus: confirmedArtifactsRef.current.has(savingArtifact.id) || savingArtifact.persistenceStatus === 'persistent' || (!savingArtifact.persistenceStatus && savingArtifact.chatId) ? 'persistent' : 'failed' }
+          ? { ...item, persistenceStatus: 'failed' }
           : item));
       }
       if (err instanceof Error && err.message.includes('berubah') && chatId && currentIdentityRef.current === identityAtStart) {
@@ -199,14 +243,14 @@ export function useWorkspaceArtifacts({
       throw err;
     } finally {
       release();
-      if (saveTailsRef.current.get(savingArtifact.id) === tail) saveTailsRef.current.delete(savingArtifact.id);
+      if (saveTailsRef.current.get(saveKey) === tail) saveTailsRef.current.delete(saveKey);
     }
-  }, [activeArtifact, chatId, showToast, workspaceIdentity]);
+  }, [activeArtifact, chatId, identityScope, persistArtifact, showToast]);
 
   const migrateLocalArtifacts = useCallback(async (targetChatId: string): Promise<boolean> => {
     if (!targetChatId) return false;
-    const identityAtStart = workspaceIdentity;
-    const drafts = artifacts.filter(item => item.id !== DEFAULT_WELCOME_ARTIFACT_ID && item.localWorkspaceId === identityAtStart && item.persistenceStatus !== 'persistent');
+    const identityAtStart = identityScope;
+    const drafts = artifacts.filter(item => item.id !== DEFAULT_WELCOME_ARTIFACT_ID && item.localWorkspaceId === workspaceIdentity && item.persistenceStatus !== 'persistent');
     let succeeded = true;
     for (const draft of drafts) {
       if (currentIdentityRef.current === identityAtStart) {
@@ -218,12 +262,12 @@ export function useWorkspaceArtifacts({
         if (currentIdentityRef.current === identityAtStart) {
           setArtifacts(prev => prev.map(item => item.id === draft.id ? { ...saved, persistenceStatus: 'persistent', localWorkspaceId: undefined } : item));
         }
-        writeLocalDrafts(identityAtStart, readLocalDrafts(identityAtStart).filter(item => item.id !== draft.id));
+        writeLocalDrafts(workspaceIdentity, readLocalDrafts(workspaceIdentity, userId).filter(item => item.id !== draft.id), userId);
       } catch (error) {
         succeeded = false;
         console.warn('[useWorkspaceArtifacts] Draft migration failed:', error);
         const retainedDraft = { ...draft, persistenceStatus: 'failed' as const, localWorkspaceId: `chat:${targetChatId}`, chatId: undefined };
-        writeLocalDrafts(`chat:${targetChatId}`, [...readLocalDrafts(`chat:${targetChatId}`).filter(item => item.id !== draft.id), retainedDraft]);
+        writeLocalDrafts(`chat:${targetChatId}`, [...readLocalDrafts(`chat:${targetChatId}`, userId).filter(item => item.id !== draft.id), retainedDraft], userId);
         if (currentIdentityRef.current === identityAtStart) setArtifacts(prev => prev.map(item => item.id === draft.id ? { ...item, persistenceStatus: 'failed', chatId: undefined } : item));
       }
     }
@@ -231,12 +275,12 @@ export function useWorkspaceArtifacts({
       showToast('Draf masih tersimpan lokal. Penyimpanan ke Ruang Kerja belum berhasil.', 'error');
     }
     return succeeded;
-  }, [artifacts, persistArtifact, showToast, workspaceIdentity]);
+  }, [artifacts, identityScope, persistArtifact, showToast, userId, workspaceIdentity]);
 
   const rollbackArtifact = useCallback(async (targetVersion: number) => {
     if (!activeArtifact || activeArtifact.id === DEFAULT_WELCOME_ARTIFACT_ID) return;
     const target = activeArtifact;
-    const identityAtStart = workspaceIdentity;
+    const identityAtStart = identityScope;
     if (activeMutationsRef.current.has(target.id)) return;
     activeMutationsRef.current.add(target.id);
     try {
@@ -251,7 +295,7 @@ export function useWorkspaceArtifacts({
     } finally {
       activeMutationsRef.current.delete(target.id);
     }
-  }, [activeArtifact, chatId, showToast, workspaceIdentity]);
+  }, [activeArtifact, chatId, identityScope, showToast]);
 
   const createNewArtifact = useCallback(async (type: ArtifactType = 'DOCUMENT') => {
     const newId = `art_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
@@ -259,6 +303,7 @@ export function useWorkspaceArtifacts({
       id: newId,
       chatId: chatId || undefined,
       localWorkspaceId: workspaceIdentity,
+      localOwnerId: userId || 'guest',
       persistenceStatus: chatId ? 'saving' : 'local',
       title: type === 'CODE' ? 'Skrip Kode Baru' : type === 'CITATION' ? 'Daftar Sitasi Ilmiah' : 'Draf Dokumen Baru',
       type,
@@ -281,32 +326,25 @@ export function useWorkspaceArtifacts({
     }
 
     try {
-      const persisted = await WorkspaceApiService.createArtifact({
-        id: newArt.id,
-        chatId,
-        title: newArt.title,
-        type: newArt.type,
-        language: newArt.language,
-        content: newArt.content
-      });
+      const persisted = await persistArtifact(newArt, chatId);
 
       if (!persisted) throw new Error('Server tidak mengembalikan artefak yang tersimpan');
-      if (currentIdentityRef.current === workspaceIdentity) {
+      if (currentIdentityRef.current === identityScope) {
         setArtifacts(prev => [ { ...persisted, persistenceStatus: 'persistent', localWorkspaceId: undefined }, ...prev.filter(a => a.id !== newArt.id && a.id !== persisted.id) ]);
         setActiveArtifactId(current => current === newArt.id ? persisted.id : current);
       }
       showToast('Draf baru berhasil disimpan dan dibuka di Canvas', 'success');
     } catch (err) {
       console.warn('[useWorkspaceArtifacts] Failed to persist new artifact immediately:', err);
-      if (currentIdentityRef.current === workspaceIdentity) setArtifacts(prev => prev.map(a => a.id === newArt.id ? { ...a, persistenceStatus: 'failed' } : a));
+      if (currentIdentityRef.current === identityScope) setArtifacts(prev => prev.map(a => a.id === newArt.id ? { ...a, persistenceStatus: 'failed' } : a));
       showToast('Draf baru belum berhasil disimpan. Draf lokal tetap tersedia.', 'error');
     }
-  }, [chatId, showToast, workspaceIdentity]);
+  }, [chatId, identityScope, persistArtifact, showToast, userId, workspaceIdentity]);
 
   const createArtifactFromContent = useCallback(async (content: string, title: string, operationId?: string): Promise<boolean> => {
     const id = operationId || `art_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     const draft: WorkspaceArtifact = {
-      id, chatId: chatId || undefined, localWorkspaceId: workspaceIdentity, persistenceStatus: chatId ? 'saving' : 'local', title: title.slice(0, 120), type: 'DOCUMENT',
+      id, chatId: chatId || undefined, localWorkspaceId: workspaceIdentity, localOwnerId: userId || 'guest', persistenceStatus: chatId ? 'saving' : 'local', title: title.slice(0, 120), type: 'DOCUMENT',
       content, version: 1, updatedAt: new Date().toISOString()
     };
     setArtifacts(current => [draft, ...current.filter(item => item.id !== id)]);
@@ -317,9 +355,9 @@ export function useWorkspaceArtifacts({
       return true;
     }
     try {
-      const persisted = await WorkspaceApiService.createArtifact({ id, chatId, title: draft.title, type: draft.type, content });
+      const persisted = await persistArtifact(draft, chatId);
       if (!persisted) throw new Error('Server tidak mengembalikan artefak yang tersimpan');
-      if (currentIdentityRef.current === workspaceIdentity) {
+      if (currentIdentityRef.current === identityScope) {
         setArtifacts(current => [ { ...persisted, persistenceStatus: 'persistent', localWorkspaceId: undefined }, ...current.filter(item => item.id !== id && item.id !== persisted.id) ]);
         setActiveArtifactId(current => current === id ? persisted.id : current);
       }
@@ -327,11 +365,11 @@ export function useWorkspaceArtifacts({
       return true;
     } catch (error) {
       console.warn('[useWorkspaceArtifacts] Failed to save comparison result to Canvas:', error);
-      if (currentIdentityRef.current === workspaceIdentity) setArtifacts(current => current.map(item => item.id === id ? { ...item, persistenceStatus: 'failed' } : item));
+      if (currentIdentityRef.current === identityScope) setArtifacts(current => current.map(item => item.id === id ? { ...item, persistenceStatus: 'failed' } : item));
       showToast('Draf masih tersimpan lokal. Penyimpanan ke Ruang Kerja belum berhasil.', 'error');
       return false;
     }
-  }, [chatId, showToast, workspaceIdentity]);
+  }, [chatId, identityScope, persistArtifact, showToast, userId, workspaceIdentity]);
 
   const duplicateArtifact = useCallback(async (id: string) => {
     const target = artifacts.find(a => a.id === id);
@@ -343,6 +381,7 @@ export function useWorkspaceArtifacts({
       ...target,
       id: newId,
       localWorkspaceId: workspaceIdentity,
+      localOwnerId: userId || 'guest',
       persistenceStatus: chatId ? 'saving' : 'local',
       title: `${target.title} (Salinan)`,
       version: 1,
@@ -352,7 +391,7 @@ export function useWorkspaceArtifacts({
     };
 
     if (!chatId) {
-      if (currentIdentityRef.current === workspaceIdentity) {
+      if (currentIdentityRef.current === identityScope) {
         setArtifacts(prev => [clonedArt, ...prev]);
         setActiveArtifactId(clonedArt.id);
       }
@@ -362,17 +401,10 @@ export function useWorkspaceArtifacts({
     }
 
     try {
-      const persisted = await WorkspaceApiService.createArtifact({
-        id: clonedArt.id,
-        chatId,
-        title: clonedArt.title,
-        type: clonedArt.type,
-        language: clonedArt.language,
-        content: clonedArt.content
-      });
+      const persisted = await persistArtifact(clonedArt, chatId);
 
       if (!persisted) throw new Error('Server tidak mengembalikan artefak yang tersimpan');
-      if (currentIdentityRef.current === workspaceIdentity) {
+      if (currentIdentityRef.current === identityScope) {
         setArtifacts(prev => [ { ...persisted, persistenceStatus: 'persistent', localWorkspaceId: undefined }, ...prev.filter(a => a.id !== persisted.id) ]);
         setActiveArtifactId(persisted.id);
         failedDuplicateIdsRef.current.delete(id);
@@ -385,7 +417,7 @@ export function useWorkspaceArtifacts({
     } finally {
       activeMutationsRef.current.delete(`duplicate:${id}`);
     }
-  }, [artifacts, chatId, showToast, workspaceIdentity]);
+  }, [artifacts, chatId, identityScope, persistArtifact, showToast, userId, workspaceIdentity]);
 
   const deleteArtifact = useCallback(async (id: string) => {
     if (id === DEFAULT_WELCOME_ARTIFACT_ID) {
@@ -396,37 +428,44 @@ export function useWorkspaceArtifacts({
     const target = artifacts.find(a => a.id === id);
     if (!target || activeMutationsRef.current.has(`delete:${id}`)) return;
     const targetTitle = target?.title || 'Dokumen';
-    const identityAtStart = workspaceIdentity;
+    const identityAtStart = identityScope;
     activeMutationsRef.current.add(`delete:${id}`);
+    deletedArtifactIdsRef.current.add(id);
 
-    if (target?.persistenceStatus === 'persistent' || (!target?.persistenceStatus && target?.chatId)) {
-      try {
+    try {
+      const pendingKey = `${identityScope}:${target.chatId || chatId}:${id}`;
+      const pendingCreate = pendingArtifactSavesRef.current.get(pendingKey);
+      if (pendingCreate) await pendingCreate.catch(() => null);
+      const pendingSave = saveTailsRef.current.get(`${identityScope}:${id}`);
+      if (pendingSave) await pendingSave;
+
+      if (target.persistenceStatus === 'persistent' || (!target.persistenceStatus && !!target.chatId) || confirmedArtifactsRef.current.has(id)) {
         await WorkspaceApiService.deleteArtifact(id, target.chatId || chatId);
-      } catch (err) {
-        console.warn('[useWorkspaceArtifacts] Backend delete error:', err);
-        activeMutationsRef.current.delete(`delete:${id}`);
-        showToast('Dokumen belum berhasil dihapus.', 'error');
-        throw err;
       }
-    }
 
-    if (currentIdentityRef.current !== identityAtStart) {
+      if (currentIdentityRef.current !== identityAtStart) return;
+      const index = artifacts.findIndex(a => a.id === id);
+      const remaining = artifacts.filter(a => a.id !== id);
+      const nextId = remaining.length ? remaining[Math.min(Math.max(index, 0), remaining.length - 1)].id : DEFAULT_WELCOME_ARTIFACT_ID;
+      setArtifacts(prev => {
+        const filtered = prev.filter(a => a.id !== id);
+        return filtered.length > 0 ? filtered : [DEFAULT_WELCOME_ARTIFACT];
+      });
+
+      setActiveArtifactId(prevId => prevId === id ? nextId : prevId);
+      writeLocalDrafts(workspaceIdentity, readLocalDrafts(workspaceIdentity, userId).filter(item => item.id !== id), userId);
+      confirmedArtifactsRef.current.delete(id);
+      showToast(`"${targetTitle}" berhasil dihapus`, 'success');
+    } catch (err) {
+      deletedArtifactIdsRef.current.delete(id);
+      console.warn('[useWorkspaceArtifacts] Backend delete error:', err);
+      showToast('Dokumen belum berhasil dihapus.', 'error');
+      throw err;
+    } finally {
       activeMutationsRef.current.delete(`delete:${id}`);
-      return;
     }
-    const index = artifacts.findIndex(a => a.id === id);
-    const remaining = artifacts.filter(a => a.id !== id);
-    const nextId = remaining.length ? remaining[Math.min(Math.max(index, 0), remaining.length - 1)].id : DEFAULT_WELCOME_ARTIFACT_ID;
-    setArtifacts(prev => {
-      const filtered = prev.filter(a => a.id !== id);
-      return filtered.length > 0 ? filtered : [DEFAULT_WELCOME_ARTIFACT];
-    });
 
-    setActiveArtifactId(prevId => prevId === id ? nextId : prevId);
-    activeMutationsRef.current.delete(`delete:${id}`);
-
-    showToast(`"${targetTitle}" berhasil dihapus`, 'success');
-  }, [artifacts, chatId, showToast, workspaceIdentity]);
+  }, [artifacts, chatId, identityScope, showToast, userId, workspaceIdentity]);
 
   /**
    * Syncs artifacts parsed from messages into the local state and triggers background persistence
@@ -435,7 +474,7 @@ export function useWorkspaceArtifacts({
   const syncParsedMessageArtifacts = useCallback(async (extracted: WorkspaceArtifact[], targetChatId?: string): Promise<boolean> => {
     if (!extracted || extracted.length === 0) return true;
     const destinationChatId = targetChatId || chatId;
-    const identityAtStart = workspaceIdentity;
+    const identityAtStart = identityScope;
 
     setArtifacts(prev => {
       if (currentIdentityRef.current !== identityAtStart) return prev;
@@ -453,11 +492,12 @@ export function useWorkspaceArtifacts({
             language: newArt.language || updated[idx].language,
             version: Math.max(updated[idx].version || 1, newArt.version || 1),
             updatedAt: new Date().toISOString(),
-            localWorkspaceId: identityAtStart,
+            localWorkspaceId: workspaceIdentity,
+            localOwnerId: userId || 'guest',
             persistenceStatus: destinationChatId ? 'saving' : 'local'
           };
         } else {
-          updated = [{ ...newArt, chatId: destinationChatId, localWorkspaceId: identityAtStart, persistenceStatus: destinationChatId ? 'saving' : 'local' }, ...updated];
+          updated = [{ ...newArt, chatId: destinationChatId, localWorkspaceId: workspaceIdentity, localOwnerId: userId || 'guest', persistenceStatus: destinationChatId ? 'saving' : 'local' }, ...updated];
         }
       });
       return updated;
@@ -490,7 +530,7 @@ export function useWorkspaceArtifacts({
     const allSaved = results.every(Boolean);
     if (!allSaved) showToast('Dokumen dibuat, tetapi belum tersimpan. Canvas mempertahankan draf lokal; coba simpan lagi.', 'error');
     return allSaved;
-  }, [chatId, persistArtifact, showToast, workspaceIdentity]);
+  }, [chatId, identityScope, persistArtifact, showToast, userId, workspaceIdentity]);
 
   return {
     artifacts,

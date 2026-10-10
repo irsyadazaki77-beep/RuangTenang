@@ -1,4 +1,4 @@
-import { DEFAULT_AI_MODEL_ID } from '../../../lib/aiModels';
+import { AUTO_ROUTING_MODEL_ID } from '../../../lib/aiModels';
 import { getCachedAiModelCatalog } from '../../../lib/aiModelCatalog';
 
 const MODEL_PREFERENCE_KEY = 'ruangkerja.model';
@@ -16,10 +16,10 @@ export function loadWorkspaceModelPreference(storage: Pick<Storage, 'getItem'> |
   try {
     const savedModel = storage?.getItem(MODEL_PREFERENCE_KEY);
     const catalog = getCachedAiModelCatalog();
-    const valid = Boolean(savedModel && (!catalog || catalog.models.some(model => model.id === savedModel)));
-    return { modelId: savedModel && valid ? savedModel : (catalog?.defaultModel ?? DEFAULT_AI_MODEL_ID), wasReset: Boolean(savedModel && catalog && !valid) };
+    const valid = Boolean(savedModel && (savedModel === AUTO_ROUTING_MODEL_ID || !catalog || catalog.models.some(model => model.id === savedModel)));
+    return { modelId: savedModel && valid ? savedModel : AUTO_ROUTING_MODEL_ID, wasReset: Boolean(savedModel && catalog && !valid) };
   } catch {
-    return { modelId: DEFAULT_AI_MODEL_ID, wasReset: false };
+    return { modelId: AUTO_ROUTING_MODEL_ID, wasReset: false };
   }
 }
 

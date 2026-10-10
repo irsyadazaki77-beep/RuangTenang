@@ -238,6 +238,15 @@ describe('Appointment Security & IDOR Prevention Tests', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.length).toBeGreaterThanOrEqual(2);
+    expect(res.body[0]).not.toHaveProperty('notes');
+    expect(res.body[0]).not.toHaveProperty('studentNIM');
+    expect(res.body[0]).not.toHaveProperty('studentEmail');
+
+    const detail = await request(app)
+      .get('/api/v1/appointments/apt-sec-1')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(detail.status).toBe(200);
+    expect(detail.body.record).not.toHaveProperty('notes');
   });
 
   describe('Video Consultation Room Access Authorization & Time Window Tests', () => {
@@ -257,9 +266,8 @@ describe('Appointment Security & IDOR Prevention Tests', () => {
     it('Scenario 2: User 1 accesses room at 09:40 WIB (20 mins before 10:00 schedule) MUST return HTTP 403 (too early, 15m tolerance)', async () => {
       vi.setSystemTime(new Date('2026-09-20T09:40:00+07:00'));
       const res = await request(app)
-        .get('/api/appointments/apt-room-video-1/room-access?simulatedTime=2026-09-20T09:50:00%2B07:00')
-        .set('Cookie', [`rt_auth_token=${user1ClientToken}`])
-        .set('x-simulated-time', '2026-09-20T09:50:00+07:00');
+        .get('/api/appointments/apt-room-video-1/room-access')
+        .set('Cookie', [`rt_auth_token=${user1ClientToken}`]);
 
       expect([400, 403]).toContain(res.status);
       expect(res.body.success).toBe(false);
@@ -292,8 +300,7 @@ describe('Appointment Security & IDOR Prevention Tests', () => {
     it('Scenario 4: User 1 accessing CANCELLED appointment room MUST return HTTP 400 or 403', async () => {
       const res = await request(app)
         .get('/api/appointments/apt-room-cancelled-1/room-access')
-        .set('Cookie', [`rt_auth_token=${user1ClientToken}`])
-        .set('x-simulated-time', '2026-09-20T09:50:00+07:00');
+        .set('Cookie', [`rt_auth_token=${user1ClientToken}`]);
 
       expect([400, 403]).toContain(res.status);
       expect(res.body.success).toBe(false);
@@ -346,9 +353,8 @@ describe('Appointment Security & IDOR Prevention Tests', () => {
     it('denies ICE and signaling after the room window expires, regardless of a client clock override', async () => {
       vi.setSystemTime(new Date('2026-09-20T11:31:00+07:00'));
       const iceRes = await request(app)
-        .get('/api/v1/appointments/apt-room-video-1/ice-servers?simulatedTime=2026-09-20T09:50:00%2B07:00')
-        .set('Cookie', [`rt_auth_token=${user1ClientToken}`])
-        .set('x-simulated-time', '2026-09-20T09:50:00+07:00');
+        .get('/api/v1/appointments/apt-room-video-1/ice-servers')
+        .set('Cookie', [`rt_auth_token=${user1ClientToken}`]);
       expect(iceRes.status).toBe(403);
       expect(iceRes.body.error).toBe('ROOM_ACCESS_EXPIRED');
 
@@ -371,6 +377,31 @@ describe('Appointment Security & IDOR Prevention Tests', () => {
         .set('Cookie', [`rt_auth_token=${adminToken}`]);
       expect(adminRes.status).toBe(403);
       expect(adminRes.body.error).toBe('ROOM_ACCESS_NOT_PARTICIPANT');
+    });
+
+    it('keeps session start and completion authority with the assigned counselor', async () => {
+      const startRes = await request(app)
+        .put('/api/v1/appointments/apt-room-video-1')
+        .set('Cookie', [`rt_auth_token=${adminToken}`])
+        .send({ status: 'IN_PROGRESS' });
+      expect(startRes.status).toBe(403);
+      expect(startRes.body.error).toBe('SESSION_START_FORBIDDEN');
+
+      await prisma.appointments.update({
+        where: { id: 'apt-room-video-1' },
+        data: { status: 'IN_PROGRESS' },
+      });
+      const completeRes = await request(app)
+        .put('/api/v1/appointments/apt-room-video-1')
+        .set('Cookie', [`rt_auth_token=${adminToken}`])
+        .send({ status: 'COMPLETED' });
+      expect(completeRes.status).toBe(403);
+      expect(completeRes.body.error).toBe('SESSION_COMPLETION_FORBIDDEN');
+      expect((await prisma.appointments.findUnique({ where: { id: 'apt-room-video-1' } }))?.status).toBe('IN_PROGRESS');
+      await prisma.appointments.update({
+        where: { id: 'apt-room-video-1' },
+        data: { status: 'CONFIRMED' },
+      });
     });
 
     it('Scenario 8: Counselor A (counselor1Token) accessing Counselor B (User 2) room MUST return HTTP 403 Forbidden', async () => {

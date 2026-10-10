@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { modalBackdropVariants, modalPanelVariants } from '../../../lib/motionTokens';
 import { 
@@ -102,12 +102,14 @@ import {
 
 export interface ArtifactCanvasProps {
   artifact: WorkspaceArtifact;
+  initialDraftContent?: string;
+  scrollStorageKey?: string;
   onUpdateArtifact?: (updated: Partial<WorkspaceArtifact>) => void;
   onClose?: () => void;
   onRequestRevision?: (revisionPrompt: string, currentArtifact: WorkspaceArtifact) => void;
   onSelectTool?: (tool: WorkspaceToolDefinition, currentArtifact: WorkspaceArtifact) => void;
   onRollbackVersion?: (targetVersion: number) => Promise<void> | void;
-  onSaveArtifact?: (content: string, title?: string, createVersionSnapshot?: boolean, expectedUpdatedAt?: string) => Promise<unknown> | unknown;
+  onSaveArtifact?: (content: string, title?: string, createVersionSnapshot?: boolean, expectedUpdatedAt?: string, expectedVersion?: number) => Promise<unknown> | unknown;
   onDuplicateArtifact?: (id: string) => Promise<void> | void;
   onDeleteArtifact?: (id: string) => Promise<void> | void;
   onSelectedTextChange?: (text: string) => void;
@@ -127,6 +129,8 @@ export type SaveState = 'idle' | 'saving' | 'saved' | 'unsaved' | 'failed' | 'lo
 
 export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
   artifact,
+  initialDraftContent,
+  scrollStorageKey,
   onUpdateArtifact,
   onClose,
   onRequestRevision,
@@ -155,7 +159,9 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
   const [viewMode, setViewMode] = useState<CanvasViewMode>('preview');
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [titleInput, setTitleInput] = useState(artifact.title || '');
-  const [editableContent, setEditableContent] = useState(artifact.content);
+  const [editableContent, setEditableContent] = useState(initialDraftContent ?? artifact.content);
+  const contentScrollRef = useRef<HTMLDivElement>(null);
+  const scrollSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savedChart = useMemo(() => {
     if (artifact.type !== 'CHART') return null;
     try {
@@ -170,8 +176,8 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
       return value.type === 'table' && typeof value.title === 'string' && Array.isArray(value.columns) && Array.isArray(value.rows) && typeof value.sourceVersion === 'string' ? value as SavedTableSpec : null;
     } catch { return null; }
   }, [artifact.type, editableContent]);
-  const [isDirty, setIsDirty] = useState(false);
-  const [saveStatus, setSaveStatus] = useState<SaveState>(artifact.persistenceStatus === 'persistent' || !artifact.persistenceStatus ? 'saved' : artifact.persistenceStatus === 'saving' ? 'saving' : artifact.persistenceStatus === 'failed' ? 'failed' : 'local');
+  const [isDirty, setIsDirty] = useState(initialDraftContent !== undefined && initialDraftContent !== artifact.content);
+  const [saveStatus, setSaveStatus] = useState<SaveState>(initialDraftContent !== undefined && initialDraftContent !== artifact.content ? 'unsaved' : artifact.persistenceStatus === 'persistent' || !artifact.persistenceStatus ? 'saved' : artifact.persistenceStatus === 'saving' ? 'saving' : artifact.persistenceStatus === 'failed' ? 'failed' : 'local');
   const [saveFailureMessage, setSaveFailureMessage] = useState('Gagal simpan');
 
   // Conflict handling states
@@ -241,6 +247,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
   // Terminate active sandbox worker on component unmount
   useEffect(() => {
     return () => {
+      flushDraftSync();
       if (draftSyncTimerRef.current) clearTimeout(draftSyncTimerRef.current);
       pendingDraftSyncRef.current = null;
       if (activeSandboxHandleRef.current) {
@@ -248,11 +255,26 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
         activeSandboxHandleRef.current = null;
       }
     };
-  }, []);
+  }, [flushDraftSync]);
 
   const currentArtifactIdRef = useRef<string>(artifact.id);
 
+  useLayoutEffect(() => {
+    if (!scrollStorageKey || !contentScrollRef.current) return;
+    try {
+      const saved = Number(globalThis.sessionStorage?.getItem(scrollStorageKey));
+      if (Number.isFinite(saved) && saved >= 0) contentScrollRef.current.scrollTop = saved;
+    } catch { /* Scrolling stays usable when session storage is unavailable. */ }
+  }, [artifact.id, scrollStorageKey]);
+
+  useEffect(() => () => {
+    if (scrollSaveTimerRef.current) clearTimeout(scrollSaveTimerRef.current);
+    if (!scrollStorageKey) return;
+    try { globalThis.sessionStorage?.setItem(scrollStorageKey, String(contentScrollRef.current?.scrollTop || 0)); } catch { /* Scroll restoration is an enhancement only. */ }
+  }, [scrollStorageKey]);
+
   // Sync state when active artifact changes (or changes from server)
+  /* eslint-disable react-hooks/exhaustive-deps -- initialDraftContent is a snapshot for artifact switches, not a server-sync trigger. */
   useEffect(() => {
     if (isApplyingInlinePatchRef.current) return;
     const isNewArtifact = currentArtifactIdRef.current !== artifact.id;
@@ -270,11 +292,11 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
 
       // If switching to another artifact, reset all local session states
       setTitleInput(artifact.title || '');
-      setEditableContent(artifact.content);
+      setEditableContent(initialDraftContent ?? artifact.content);
       lastSavedContentRef.current = artifact.content;
       lastKnownVersionRef.current = artifact.version || 1;
-      setIsDirty(false);
-      setSaveStatus(artifact.persistenceStatus === 'persistent' || !artifact.persistenceStatus ? 'saved' : artifact.persistenceStatus === 'saving' ? 'saving' : artifact.persistenceStatus === 'failed' ? 'failed' : 'local');
+      setIsDirty(initialDraftContent !== undefined && initialDraftContent !== artifact.content);
+      setSaveStatus(initialDraftContent !== undefined && initialDraftContent !== artifact.content ? 'unsaved' : artifact.persistenceStatus === 'persistent' || !artifact.persistenceStatus ? 'saved' : artifact.persistenceStatus === 'saving' ? 'saving' : artifact.persistenceStatus === 'failed' ? 'failed' : 'local');
       setHasExternalConflict(false);
       setConflictServerContent(null);
       setConflictServerArtifact(null);
@@ -298,6 +320,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
       setConflictServerArtifact(null);
     }
   }, [artifact.id, artifact.title, artifact.version, artifact.content, artifact.persistenceStatus, isDirty, editableContent]);
+  /* eslint-enable react-hooks/exhaustive-deps */
 
   useEffect(() => {
     onSelectedTextChange?.('');
@@ -308,9 +331,8 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
   }, [artifact.id, onSelectedTextChange, onSelectionChange]);
 
   useEffect(() => {
-    scheduleDraftSync(artifact.id, artifact.content, true);
-    // Initialize the parent draft only when switching artifacts; content updates are conflict-checked below.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    scheduleDraftSync(artifact.id, initialDraftContent ?? artifact.content, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- initialize the parent draft only when the artifact changes.
   }, [artifact.id, scheduleDraftSync]);
 
   useEffect(() => {
@@ -839,7 +861,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
     if (saveStatus === 'saving') return;
     setSaveStatus('saving');
     try {
-      const saved = await onSaveArtifact?.(editableContent, artifact.title, false, conflictServerArtifact?.updatedAt);
+      const saved = await onSaveArtifact?.(editableContent, artifact.title, false, conflictServerArtifact?.updatedAt, conflictServerArtifact?.version);
       if (!saved) throw new Error('Penyimpanan tidak berhasil');
       lastSavedContentRef.current = editableContent;
       setIsDirty(false);
@@ -883,7 +905,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
       }`}
     >
       {/* 1. CANVAS HEADER (CLEAN HIERARCHY: Identity & Save State -> View Modes -> Primary Action -> Secondary) */}
-      <header className="h-12 px-3 sm:px-4 py-1.5 border-b border-slate-200/70 dark:border-slate-800/80 bg-white dark:bg-[#0F172A] flex items-center justify-between gap-2 shrink-0 z-20">
+      <header className="h-12 px-3 sm:px-4 py-1.5 border-b border-slate-200/70 dark:border-slate-800/80 bg-white dark:bg-secondary-900 flex items-center justify-between gap-2 shrink-0 z-20">
         
         {/* Sisi Kiri: Ikon Tipe + Judul (Editable) + Badge Versi + Indikator Save State */}
         <div className="flex items-center gap-2 min-w-0 flex-1 max-w-[36%] 2xl:max-w-[40%]">
@@ -912,7 +934,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
                 }}
                 disabled={isSavingTitle}
                 autoFocus
-                className="h-7 text-xs sm:text-sm font-semibold px-2 py-0 bg-white dark:bg-slate-900 border border-emerald-500 rounded-lg text-slate-900 dark:text-slate-100 focus:outline-none ring-2 ring-emerald-500/20 w-full max-w-[180px]"
+                className="h-7 text-xs sm:text-sm font-semibold px-2 py-0 bg-white dark:bg-slate-900 border border-emerald-500 rounded-lg text-slate-900 dark:text-slate-100 focus:outline-none ring-2 ring-emerald-500/20 w-full max-w-45"
               />
               {isSavingTitle && <span className="ml-1 text-[10px] text-amber-600">Menyimpan…</span>}
               {titleSaveError && <span role="alert" className="ml-1 text-[10px] text-rose-600">{titleSaveError}</span>}
@@ -930,16 +952,6 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
                 <Pencil className="w-3 h-3 text-slate-400 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 opacity-60 group-hover:opacity-100 transition-opacity shrink-0" />
               </button>
             )}
-
-            {/* Version Badge Button */}
-            <button
-              type="button"
-              onClick={() => setShowVersionHistoryModal(true)}
-              className="px-1.5 py-0.5 rounded-md text-[10px] font-mono font-medium text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 shrink-0 transition-colors cursor-pointer"
-              title="Riwayat Versi & Snapshot"
-            >
-              v{artifact.version || 1}
-            </button>
 
             {/* Save Status Badge */}
             <div className="hidden lg:flex items-center ml-1 shrink-0">
@@ -970,7 +982,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
         </div>
 
         {/* Sisi Tengah: View Modes [ Pratinjau | Edit | Kode | Diff ] */}
-        <div className="h-[32px] p-0.5 bg-slate-100 dark:bg-slate-800/90 rounded-xl flex items-center border border-slate-200/80 dark:border-slate-700/80 shrink-0 relative">
+        <div className="h-8 p-0.5 bg-slate-100 dark:bg-slate-800/90 rounded-xl flex items-center border border-slate-200/80 dark:border-slate-700/80 shrink-0 relative">
           <button
             type="button"
             onClick={() => setViewMode('preview')}
@@ -989,7 +1001,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
               />
             )}
             <Eye className="w-3 h-3" />
-            <span className="hidden 2xl:inline">Pratinjau</span>
+            <span>Pratinjau</span>
           </button>
 
           <button
@@ -1013,13 +1025,13 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
               />
             )}
             <Edit3 className="w-3 h-3" />
-            <span className="hidden 2xl:inline">Edit</span>
+            <span>Edit</span>
           </button>
 
           <button
             type="button"
             onClick={() => setViewMode('raw')}
-            className={`h-full px-2.5 sm:px-3 rounded-lg text-[11px] transition-colors cursor-pointer flex items-center gap-1.5 relative z-10 ${
+            className={`hidden sm:flex h-full px-2.5 sm:px-3 rounded-lg text-[11px] transition-colors cursor-pointer items-center gap-1.5 relative z-10 ${
               viewMode === 'raw'
                 ? 'text-emerald-800 dark:text-emerald-300 font-semibold'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 font-medium'
@@ -1040,7 +1052,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
           <button
             type="button"
             onClick={() => setViewMode('diff')}
-            className={`h-full px-2.5 sm:px-3 rounded-lg text-[11px] transition-colors cursor-pointer flex items-center gap-1.5 relative z-10 ${
+            className={`hidden sm:flex h-full px-2.5 sm:px-3 rounded-lg text-[11px] transition-colors cursor-pointer items-center gap-1.5 relative z-10 ${
               viewMode === 'diff'
                 ? 'text-emerald-800 dark:text-emerald-300 font-semibold'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 font-medium'
@@ -1061,22 +1073,13 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
 
         {/* Sisi Kanan: Tools + Primary Action (Simpan / Edit) + Fullscreen + More Menu */}
         <div className="flex items-center gap-1.5 shrink-0">
-          {/* Workspace Tools Dropdown */}
-          <WorkspaceToolSelector
-            artifactType={artifact.type}
-            hasArtifact={artifact.id !== 'art_welcome'}
-            disabled={isStreaming}
-            onSelectTool={handleExecuteTool}
-            triggerVariant="header"
-          />
-
           {/* Primary Action Button: Context-Aware */}
           {viewMode === 'edit' && isDirty ? (
             <button
               type="button"
               onClick={handleManualSave}
               disabled={saveStatus === 'saving'}
-              className="h-[32px] px-3 rounded-xl text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs disabled:opacity-50"
+              className="h-8 px-3 rounded-xl text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs disabled:opacity-50"
               title="Simpan Perubahan Dokumen (Ctrl+S)"
             >
               <Save className="w-3.5 h-3.5" />
@@ -1089,7 +1092,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
                 setViewMode('edit');
                 setTimeout(() => editorRef.current?.focus(), 50);
               }}
-              className="h-[32px] px-3 rounded-xl text-xs font-semibold text-emerald-800 dark:text-emerald-300 bg-emerald-50 hover:bg-emerald-100/90 dark:bg-emerald-950/70 dark:hover:bg-emerald-900/80 border border-emerald-200/80 dark:border-emerald-800/80 transition-colors flex items-center gap-1.5 cursor-pointer shadow-3xs"
+              className="h-8 px-3 rounded-xl text-xs font-semibold text-emerald-800 dark:text-emerald-300 bg-emerald-50 hover:bg-emerald-100/90 dark:bg-emerald-950/70 dark:hover:bg-emerald-900/80 border border-emerald-200/80 dark:border-emerald-800/80 transition-colors flex items-center gap-1.5 cursor-pointer shadow-3xs"
               title="Mulai Edit Dokumen Ini"
             >
               <Edit3 className="w-3.5 h-3.5" />
@@ -1101,7 +1104,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
           <button
             type="button"
             onClick={toggleExpand}
-            className="h-[32px] w-[32px] rounded-xl text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 bg-white dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center transition-colors cursor-pointer hidden sm:flex shadow-3xs"
+            className="h-8 w-8 rounded-xl text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 bg-white dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 hidden sm:flex items-center justify-center transition-colors cursor-pointer shadow-3xs"
             title={isExpanded ? 'Kembalikan Ukuran Layar' : 'Mode Layar Penuh (Fokus)'}
             aria-label="Toggle Fullscreen"
           >
@@ -1113,7 +1116,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
             <button
               type="button"
               onClick={() => setShowMoreMenu(!showMoreMenu)}
-              className="h-[32px] px-2 rounded-xl text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center gap-1 cursor-pointer shadow-3xs"
+              className="h-8 px-2 rounded-xl text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center gap-1 cursor-pointer shadow-3xs"
               title="Opsi & Tindakan Tambahan"
               aria-label="Menu Opsi Lainnya"
               aria-expanded={showMoreMenu}
@@ -1123,6 +1126,11 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
 
             {showMoreMenu && (
               <div className="absolute right-0 top-full mt-1.5 w-60 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl p-1.5 z-50 animate-scale-up space-y-0.5">
+                <div className="px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Dokumen</div>
+                <button type="button" onClick={() => { setShowMoreMenu(false); setViewMode('raw'); }} className="w-full rounded-xl px-2.5 py-2 text-left text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"><Code2 className="mr-2 inline h-3.5 w-3.5 text-slate-500" />Lihat Markdown atau kode</button>
+                <button type="button" onClick={() => { setShowMoreMenu(false); setViewMode('diff'); }} className="w-full rounded-xl px-2.5 py-2 text-left text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"><GitCompare className="mr-2 inline h-3.5 w-3.5 text-slate-500" />Bandingkan perubahan</button>
+                <div className="relative z-20 px-1.5 py-1"><WorkspaceToolSelector artifactType={artifact.type} hasArtifact={artifact.id !== 'art_welcome'} disabled={isStreaming} onSelectTool={handleExecuteTool} triggerVariant="header" /></div>
+                <div className="border-t border-slate-100 dark:border-slate-800 my-1" />
                 {/* 1. Riwayat Versi */}
                 <button
                   type="button"
@@ -1150,7 +1158,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
                 >
                   <span className="flex items-center gap-2">
                     <Download className="w-3.5 h-3.5 text-emerald-600" />
-                    Pusat Ekspor (.docx, .pdf)
+                    Ekspor dokumen
                   </span>
                   <span className="text-[10px] font-mono text-slate-400">Word/PDF</span>
                 </button>
@@ -1301,7 +1309,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="h-[32px] w-[32px] rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 bg-white dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center transition-colors cursor-pointer shadow-3xs"
+              className="h-8 w-8 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 bg-white dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center transition-colors cursor-pointer shadow-3xs"
               title="Tutup Canvas (Kembali ke Obrolan)"
               aria-label="Tutup Canvas"
             >
@@ -1347,10 +1355,18 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
       )}
 
       {/* 2. AREA KONTEN KANVAS UTAMA */}
-      <div className="flex-1 overflow-y-auto bg-slate-100/70 dark:bg-[#080d17] p-3 sm:p-5 lg:p-8 custom-scrollbar">
+      <div ref={contentScrollRef} onScroll={event => {
+        if (!scrollStorageKey) return;
+        const scrollTop = event.currentTarget.scrollTop;
+        if (scrollSaveTimerRef.current) clearTimeout(scrollSaveTimerRef.current);
+        scrollSaveTimerRef.current = setTimeout(() => {
+          scrollSaveTimerRef.current = null;
+          try { globalThis.sessionStorage?.setItem(scrollStorageKey, String(scrollTop)); } catch { /* Scroll restoration is an enhancement only. */ }
+        }, 120);
+      }} className="flex-1 overflow-y-auto bg-slate-100/70 dark:bg-[#080d17] p-3 sm:p-5 lg:p-8 custom-scrollbar">
         {/* MODE 4: DIFF (VISUAL VERSION COMPARISON) */}
         {viewMode === 'diff' && (
-          <div className="max-w-4xl mx-auto h-[580px] flex flex-col shadow-sm">
+          <div className="max-w-4xl mx-auto h-145 flex flex-col shadow-sm">
             <React.Suspense fallback={<div className="p-8 text-center text-xs text-slate-400">Memuat visual diff...</div>}>
               <ArtifactDiffViewer
                 currentArtifact={{ ...artifact, content: editableContent }}
@@ -1363,7 +1379,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
 
         {/* MODE 2: EDIT (EDITOR BERSIH BERGAYA PAPER SHEET) */}
         {viewMode === 'edit' && (
-          <div className="max-w-3xl mx-auto bg-white dark:bg-slate-900/70 rounded-lg p-4 sm:p-6 space-y-3 min-h-[580px] flex flex-col">
+          <div className="max-w-3xl mx-auto bg-white dark:bg-slate-900/70 rounded-lg p-4 sm:p-6 space-y-3 min-h-145 flex flex-col">
             <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-800 pb-2.5">
               <div className="flex items-center gap-2">
                 <Edit3 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
@@ -1422,7 +1438,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
               onMouseUp={(e) => captureSelection(e.currentTarget)}
               onKeyUp={(e) => captureSelection(e.currentTarget)}
               placeholder="Ketik atau sesuaikan draf dokumen Anda di sini..."
-              className="w-full flex-1 min-h-[500px] p-3 bg-transparent resize-none focus:outline-none font-mono text-xs sm:text-sm leading-relaxed text-slate-900 dark:text-slate-100 selection:bg-emerald-500/20"
+              className="w-full flex-1 min-h-125 p-3 bg-transparent resize-none focus:outline-none font-mono text-xs sm:text-sm leading-relaxed text-slate-900 dark:text-slate-100 selection:bg-emerald-500/20"
             />
           </div>
         )}
@@ -1620,7 +1636,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
       </div>
 
       {/* 3. STATUS BAR BAWAH RAMPING (~28px - 32px) */}
-      <footer className="h-8 px-4 bg-white/95 dark:bg-[#0F172A]/95 border-t border-slate-200/80 dark:border-slate-800/80 text-[11px] text-slate-500 dark:text-slate-400 flex items-center justify-between shrink-0 select-none z-10">
+      <footer className="h-8 px-4 bg-white/95 dark:bg-secondary-900/95 border-t border-slate-200/80 dark:border-slate-800/80 text-[11px] text-slate-500 dark:text-slate-400 flex items-center justify-between shrink-0 select-none z-10">
         {/* Kiri: Status penyimpanan + Streaming indicator */}
         <div className="flex items-center gap-2">
           {saveStatus === 'saving' ? (

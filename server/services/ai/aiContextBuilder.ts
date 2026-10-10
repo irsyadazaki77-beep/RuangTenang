@@ -100,7 +100,7 @@ export const aiContextBuilder = {
 
     // 1. Process Chat Summarization for Long History (>10 messages) - Sliding Window with Rolling Summary
     let conversationSummary = '';
-    let recentHistoryItems: ChatMessageItem[] = fullHistory;
+    let recentHistoryItems: ChatMessageItem[];
 
     // Temporary & incognito sessions do NOT read or update persistent chat summaries
     if (!isTempOrIncognitoOrWorkspace && chatId && fullHistory.length > 10) {
@@ -161,7 +161,7 @@ ${conversationSummary}
           if (isDuplicate(safeNotes)) {
             safeNotes = '';
           } else {
-            safeNotes = safeNotes.replace(/[\[\]<>]/g, '');
+            safeNotes = safeNotes.replace(/[[\]<>]/g, '');
             safeNotes = scanAndSanitizePII(safeNotes).sanitizedText;
           }
 
@@ -220,7 +220,7 @@ Skor skrining psikologis awal (PHQ-9: ${s.phq9Score}, GAD-7: ${s.gad7Score})
             continue;
           }
 
-          safeContent = safeContent.replace(/[\[\]<>]/g, '');
+          safeContent = safeContent.replace(/[[\]<>]/g, '');
           if (/ignore|bypass|override|system|instruction/i.test(safeContent) || detectPromptInjection(safeContent)) {
             safeContent = '[Catatan refleksi terlindungi]';
           }
@@ -266,7 +266,7 @@ ${memoryLines.join('\n')}
     const formattedRecentHistory = recentHistoryItems.map(h => {
       let text = (h.content || '').substring(0, 1000);
       text = scanAndSanitizePII(text).sanitizedText;
-      text = text.replace(/[\[\]<>]/g, '');
+      text = text.replace(/[[\]<>]/g, '');
 
       if (/ignore|bypass|override|system|instruction/i.test(text) || detectPromptInjection(text)) {
         text = '[REDACTED_UNTRUSTED_HISTORY_INJECTION]';

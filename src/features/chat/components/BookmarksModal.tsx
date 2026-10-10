@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { apiClient } from '../../../lib/apiClient';
 import { useToast } from '../../../components/Toast';
 import { BookmarkItem } from '../types';
@@ -28,13 +28,7 @@ export function BookmarksModal({
   const [filterCurrentOnly, setFilterCurrentOnly] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (isOpen) {
-      fetchBookmarks();
-    }
-  }, [isOpen]);
-
-  const fetchBookmarks = async (cursor?: string) => {
+  const fetchBookmarks = useCallback(async (cursor?: string) => {
     if (!cursor) {
       setLoading(true);
     } else {
@@ -69,7 +63,13 @@ export function BookmarksModal({
         setLoadingMore(false);
       }
     }
-  };
+  }, [showToast]);
+
+  useEffect(() => {
+    if (isOpen) {
+      fetchBookmarks();
+    }
+  }, [isOpen, fetchBookmarks]);
 
   const handleRemove = async (messageId: string) => {
     try {
@@ -173,7 +173,7 @@ export function BookmarksModal({
                     <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${item.message.role === 'assistant' ? 'bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300' : 'bg-slate-200/60 dark:bg-slate-700/60 text-slate-700 dark:text-slate-300'}`}>
                       {item.message.role === 'assistant' ? 'Teman AI' : 'Kamu'}
                     </span>
-                    <span className="truncate max-w-[140px] sm:max-w-[200px]" title={item.chatTitle}>
+                    <span className="truncate max-w-35 sm:max-w-50" title={item.chatTitle}>
                       · {item.chatTitle}
                     </span>
                   </div>
@@ -217,7 +217,7 @@ export function BookmarksModal({
                   </div>
                 </div>
 
-                <p className="text-xs sm:text-[13px] text-slate-800 dark:text-slate-200 leading-relaxed whitespace-pre-wrap break-words">
+                <p className="text-xs sm:text-[13px] text-slate-800 dark:text-slate-200 leading-relaxed whitespace-pre-wrap wrap-break-word">
                   {item.message.content}
                 </p>
 

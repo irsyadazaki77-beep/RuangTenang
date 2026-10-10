@@ -41,7 +41,7 @@ export const chatSummarizer = {
   async getOrUpdateSummary(
     chatId: string,
     fullHistory: ChatMessageItem[],
-    options?: { userId?: string; abortSignal?: AbortSignal }
+    _options?: { userId?: string; abortSignal?: AbortSignal }
   ): Promise<{ summary: string; lastSummarizedMsgId: string; tokensSaved: number }> {
     if (!chatId || !Array.isArray(fullHistory) || fullHistory.length <= 10) {
       return { summary: '', lastSummarizedMsgId: '', tokensSaved: 0 };
@@ -73,7 +73,7 @@ export const chatSummarizer = {
     }
 
     // 2. Incremental or Fresh Summarization
-    let textToSummarize = '';
+    let textToSummarize: string;
     let previousSummaryContext = '';
 
     if (cached && cached.lastSummarizedMsgId && (Date.now() - cached.timestamp) < MAX_CACHE_AGE_MS) {
@@ -124,7 +124,7 @@ export const chatSummarizer = {
 
     // Sanitize generated summary against PII & prompt injection delimiters
     generatedSummary = scanAndSanitizePII(generatedSummary).sanitizedText;
-    generatedSummary = generatedSummary.replace(/[\[\]<>]/g, '');
+    generatedSummary = generatedSummary.replace(/[[\]<>]/g, '');
 
     // Calculate token metrics
     const rawOlderText = olderMessages.map(m => m.content).join(' ');

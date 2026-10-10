@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { encryptData, decryptData, isClientCryptoAvailable } from '../../lib/clientCrypto';
 import { clientDb } from '../../lib/clientDb';
+import { transitionAuthSession } from '../../lib/authSessionLifecycle';
 
 describe('Client Crypto & Fail-Closed Storage Validation', () => {
   beforeEach(() => {
@@ -42,6 +43,25 @@ describe('Client Crypto & Fail-Closed Storage Validation', () => {
         value: originalCrypto,
         configurable: true
       });
+    }
+  });
+
+  it('outbox encryption unavailable: enqueue fails without persisting sensitive plaintext', async () => {
+    const originalCrypto = window.crypto;
+    const ownerUserId = `crypto-unavailable-${Date.now()}`;
+    transitionAuthSession('authenticated', { id: ownerUserId, role: 'mahasiswa' });
+    try {
+      Object.defineProperty(window, 'crypto', {
+        value: { ...originalCrypto, subtle: undefined },
+        configurable: true,
+      });
+
+      await expect(clientDb.enqueueOfflineAction({
+        type: 'mood_log', payload: { mood: 1, notes: 'MUST_NOT_PERSIST_PLAINTEXT' },
+      })).rejects.toThrow(/CRYPTO_UNAVAILABLE/);
+    } finally {
+      Object.defineProperty(window, 'crypto', { value: originalCrypto, configurable: true });
+      transitionAuthSession('unauthenticated');
     }
   });
 

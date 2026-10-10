@@ -4,7 +4,7 @@ import crypto from 'crypto';
 import { serverDb, prisma } from '../database.js';
 import { optionalAuth } from '../middleware/auth.js';
 import { sanitizeInput, safeLog } from '../security.js';
-import { scanAndSanitizePII } from '../services/piiService.js';
+
 import { aiGateway } from '../services/ai/aiGateway.js';
 import { idempotencyMiddleware } from '../apiV1Helpers.js';
 import { DistributedStateService } from '../services/distributedStateService.js';
@@ -47,7 +47,7 @@ export const crisisClassifierSchema = z.object({
 router.post(
   ['/sos/trigger', '/api/sos/trigger', '/trigger'],
   optionalAuth,
-  idempotencyMiddleware,
+  idempotencyMiddleware(),
   async (req: Request, res: Response) => {
     try {
       const parsed = sosTriggerSchema.safeParse(req.body);

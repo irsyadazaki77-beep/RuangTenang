@@ -1,5 +1,5 @@
 import { prisma } from "../database";
-import { UserRecord, ActiveSession, LoginHistoryEntry, SecurityNotification } from "../database";
+import { UserRecord } from "../database";
 import { auditRepository } from "./auditRepository";
 import { hashIpAddress, maskIpAddress } from '../utils/ipPrivacy';
 

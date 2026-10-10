@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Search,
   BookOpen,
@@ -16,10 +16,12 @@ import {
   CornerDownLeft,
   X,
   Compass,
-  FileText
+  FileText,
+  Sparkles
 } from 'lucide-react';
 import { Chat } from '../features/chat/types';
 import { safeLocalStorage } from '../lib/storage';
+import { dispatchWorkspaceCommand } from '../features/workspace/utils/workspaceCommandEvents';
 
 export interface CommandPaletteProps {
   isOpen: boolean;
@@ -32,7 +34,7 @@ interface CommandItem {
   id: string;
   title: string;
   subtitle: string;
-  category: 'Mode & Ruang' | 'Aksi Akademik' | 'Relaksasi & Tenang' | 'Riwayat Obrolan';
+  category: 'Mode & Ruang' | 'Ruang Kerja' | 'Aksi Akademik' | 'Relaksasi & Tenang' | 'Riwayat Obrolan';
   icon: React.ComponentType<{ className?: string }>;
   badge?: string;
   shortcut?: string;
@@ -46,6 +48,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   onTriggerExportDocx
 }) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -64,7 +67,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
 
   // Built-in Actions List
   const baseCommands: CommandItem[] = useMemo(() => {
-    return [
+    const commands: CommandItem[] = [
       // Kategori 1: Mode & Ruang
       {
         id: 'nav-ruangtenang',
@@ -215,7 +218,36 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         }
       }
     ];
-  }, [navigate, onClose, onTriggerExportDocx]);
+    if (!onTriggerExportDocx) {
+      const exportIndex = commands.findIndex(command => command.id === 'action-export-skripsi');
+      if (exportIndex >= 0) commands.splice(exportIndex, 1);
+    }
+    if (location.pathname.startsWith('/workspace/c/')) {
+      const workspaceActions: Array<{ id: import('../features/workspace/utils/workspaceCommandEvents').WorkspaceCommandId; title: string; subtitle: string; icon: CommandItem['icon'] }> = [
+        { id: 'open-canvas', title: 'Buka Canvas', subtitle: 'Lanjutkan atau tinjau dokumen aktif', icon: FileText },
+        { id: 'new-document', title: 'Dokumen baru', subtitle: 'Buat dokumen di Workspace ini', icon: BookOpen },
+        { id: 'open-files', title: 'Kelola file konteks', subtitle: 'Lihat status, pratinjau, dan file yang disertakan', icon: FileText },
+        { id: 'open-sources', title: 'Lihat sumber', subtitle: 'Tinjau daftar sumber Workspace', icon: Quote },
+        { id: 'open-plan', title: 'Buka rencana', subtitle: 'Lihat atau susun langkah pekerjaan', icon: ListTree },
+        { id: 'compare-models', title: 'Bandingkan model', subtitle: 'Pilih model dan bandingkan respons', icon: Sparkles }
+      ];
+      commands.push(...workspaceActions.map(command => ({
+        id: `workspace-${command.id}`,
+        title: command.title,
+        subtitle: command.subtitle,
+        category: 'Ruang Kerja' as const,
+        icon: command.icon,
+        action: () => { dispatchWorkspaceCommand(command.id); onClose(); }
+      })));
+    }
+    if (location.pathname === '/workspace') {
+      commands.push({
+        id: 'workspace-new', title: 'Workspace baru', subtitle: 'Mulai pekerjaan di Workspace kosong', category: 'Ruang Kerja', icon: GraduationCap,
+        action: () => { navigate('/workspace/new'); onClose(); }
+      });
+    }
+    return commands;
+  }, [location.pathname, navigate, onClose, onTriggerExportDocx]);
 
   // Combine static commands and dynamic chat history items
   const allCommands = useMemo(() => {
@@ -288,7 +320,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
     if (listRef.current) {
       const activeEl = listRef.current.querySelector(`[data-index="${selectedIndex}"]`);
       if (activeEl) {
-        activeEl.scrollIntoView({ block: 'nearest' });
+        activeEl.scrollIntoView?.({ block: 'nearest' });
       }
     }
   }, [selectedIndex]);
@@ -369,12 +401,13 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
                 const IconComponent = cmd.icon;
 
                 return (
-                  <div
+                  <button
+                    type="button"
                     key={cmd.id}
                     data-index={index}
                     onClick={() => cmd.action()}
                     onMouseEnter={() => setSelectedIndex(index)}
-                    className={`group flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-2xl transition-all cursor-pointer ${
+                    className={`group flex w-full items-center justify-between gap-3 px-3.5 py-2.5 text-left rounded-2xl transition-all cursor-pointer ${
                       isSelected
                         ? 'bg-emerald-500/10 dark:bg-emerald-500/15 border border-emerald-500/30 text-emerald-950 dark:text-emerald-100 shadow-2xs'
                         : 'hover:bg-slate-100/70 dark:hover:bg-slate-800/50 text-slate-700 dark:text-slate-200 border border-transparent'
@@ -424,7 +457,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
                         </div>
                       )}
                     </div>
-                  </div>
+                  </button>
                 );
               })
             )}

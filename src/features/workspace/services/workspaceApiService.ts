@@ -21,6 +21,7 @@ export interface UpdateArtifactPayload {
   language?: string;
   chatId?: string;
   createNewVersion?: boolean;
+  expectedVersion?: number;
   expectedUpdatedAt?: string;
 }
 

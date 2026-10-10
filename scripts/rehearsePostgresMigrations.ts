@@ -34,10 +34,10 @@ async function createDatabase(name: string): Promise<string> {
   await client.connect();
   try {
     await client.query(`CREATE DATABASE ${quotedIdentifier(name)}`);
+    createdDatabases.push(name);
   } finally {
     await client.end();
   }
-  createdDatabases.push(name);
   return databaseUrl(name);
 }
 
@@ -225,28 +225,79 @@ async function main() {
   console.log('[migration rehearsal] Upgrade from the encryption migration passed and preserved attachment/chunk data.');
 }
 
-main()
-  .catch((error) => {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error(`[migration rehearsal] Failed: ${message}`);
-    process.exitCode = 1;
-  })
-  .finally(async () => {
-    const admin = new Client({ connectionString: adminUrl });
-    await admin.connect();
-    try {
+function safeErrorMessage(error: unknown): string {
+  let message = error instanceof Error ? error.message : String(error);
+  const configuredUrls = [adminUrl, process.env.POSTGRES_URL, process.env.DATABASE_URL]
+    .filter((value): value is string => Boolean(value));
+  for (const url of configuredUrls) message = message.replaceAll(url, '[redacted database URL]');
+  return message.replace(/(postgres(?:ql)?:\/\/)[^\s/@]+:[^\s/@]+@/gi, '$1[redacted]@');
+}
+
+async function cleanup(): Promise<unknown[]> {
+  const errors: unknown[] = [];
+  let admin: Client | null = null;
+  try {
+    if (createdDatabases.length > 0) {
+      admin = new Client({ connectionString: adminUrl });
+      await admin.connect();
       for (const name of createdDatabases) {
-        await admin.query(`DROP DATABASE IF EXISTS ${quotedIdentifier(name)} WITH (FORCE)`);
-      }
-    } finally {
-      await admin.end();
-      const tempBase = path.resolve(os.tmpdir()) + path.sep;
-      for (const tempRoot of migrationWorkspaces) {
-        const resolved = path.resolve(tempRoot);
-        if (!resolved.startsWith(tempBase) || !path.basename(resolved).startsWith('ruangtenang-prisma-history-')) {
-          throw new Error('Refusing to remove a migration workspace outside the generated temporary workspace area.');
+        try {
+          await admin.query(`DROP DATABASE IF EXISTS ${quotedIdentifier(name)} WITH (FORCE)`);
+        } catch (error) {
+          errors.push(error);
         }
-        fs.rmSync(resolved, { recursive: true, force: true });
       }
+    }
+  } catch (error) {
+    errors.push(error);
+  } finally {
+    if (admin) {
+      try {
+        await admin.end();
+      } catch (error) {
+        errors.push(error);
+      }
+    }
   }
-});
+
+  const tempBase = path.resolve(os.tmpdir()) + path.sep;
+  for (const tempRoot of migrationWorkspaces) {
+    const resolved = path.resolve(tempRoot);
+    if (!resolved.startsWith(tempBase) || !path.basename(resolved).startsWith('ruangtenang-prisma-history-')) {
+      errors.push(new Error('Refusing to remove a migration workspace outside the generated temporary workspace area.'));
+      continue;
+    }
+    try {
+      fs.rmSync(resolved, { recursive: true, force: true });
+    } catch (error) {
+      errors.push(error);
+    }
+  }
+  return errors;
+}
+
+async function run(): Promise<void> {
+  let primaryError: unknown = null;
+  let cleanupErrors: unknown[] = [];
+  try {
+    await main();
+  } catch (error) {
+    primaryError = error;
+  } finally {
+    try {
+      cleanupErrors = await cleanup();
+    } catch (error) {
+      cleanupErrors.push(error);
+    }
+  }
+
+  if (primaryError) {
+    console.error(`[migration rehearsal] Failed: ${safeErrorMessage(primaryError)}`);
+  }
+  for (const error of cleanupErrors) {
+    console.error(`[migration rehearsal] Cleanup failed: ${safeErrorMessage(error)}`);
+  }
+  if (primaryError || cleanupErrors.length > 0) process.exitCode = 1;
+}
+
+void run();

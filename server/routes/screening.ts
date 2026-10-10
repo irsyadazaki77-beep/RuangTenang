@@ -1,8 +1,8 @@
 import { Router, Request, Response } from 'express';
-import { z } from 'zod';
+
 import { serverDb } from '../database.js';
 import { requireAuth, normalizeRole } from '../middleware/auth.js';
-import { consentService } from '../services/consentService.js';
+
 import { canAccessHealthData } from '../services/healthDataAuth.js';
 import { validatePagination } from '../apiV1Helpers.js';
 import {

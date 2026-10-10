@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Menu, Ghost, ChevronLeft, WifiOff, RefreshCw } from 'lucide-react';
+import { Menu, Ghost, ChevronLeft, WifiOff, RefreshCw, AlertCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { AiQuotaBadge } from '../AiQuotaBadge';
 import { VersionBadge } from '../changelog/VersionBadge';
 import { clientDb } from '../../lib/clientDb';
-import { apiClient } from '../../lib/apiClient';
 import { useToast } from '../Toast';
+import { getAuthSessionSnapshot } from '../../lib/authSessionLifecycle';
+import type { OutboxSummary } from '../../lib/clientDb';
+
+const EMPTY_OUTBOX_SUMMARY: OutboxSummary = { pending: 0, syncing: 0, failed: 0, permanentlyRejected: 0, authPaused: 0, quarantined: 0, hasOwnerUnknown: false };
 
 interface TopbarProps {
   onOpenSidebar?: () => void;
@@ -21,24 +24,22 @@ export function Topbar({ onOpenSidebar, title = 'RuangTenang', showBackButton, u
   const navigate = useNavigate();
   const { showToast } = useToast();
   const [isOnline, setIsOnline] = useState<boolean>(typeof navigator !== 'undefined' ? navigator.onLine : true);
-  const [isSyncing, setIsSyncing] = useState(false);
+  const [outboxSummary, setOutboxSummary] = useState<OutboxSummary>(EMPTY_OUTBOX_SUMMARY);
 
   useEffect(() => {
-    const handleOnline = async () => {
-      setIsOnline(true);
-      setIsSyncing(true);
-      try {
-        const synced = await clientDb.processOutboxQueue(apiClient);
-        if (synced > 0) {
-          showToast(`Koneksi pulih. ${synced} data offline berhasil disinkronkan!`, 'success');
-        } else {
-          showToast('Koneksi internet terhubung kembali.', 'info');
-        }
-      } catch (e) {
-        console.warn('Sync on reconnect failed:', e);
-      } finally {
-        setIsSyncing(false);
+    let active = true;
+    const refreshOutboxSummary = async () => {
+      const session = getAuthSessionSnapshot();
+      if (user?.role !== 'mahasiswa' || session.phase !== 'authenticated' || session.userId !== user.id) {
+        if (active) setOutboxSummary(EMPTY_OUTBOX_SUMMARY);
+        return;
       }
+      const summary = await clientDb.getOutboxSummary();
+      if (active && getAuthSessionSnapshot().userId === user.id) setOutboxSummary(summary);
+    };
+    const handleOnline = () => {
+      setIsOnline(true);
+      showToast('Koneksi internet terhubung kembali.', 'info');
     };
 
     const handleOffline = () => {
@@ -48,12 +49,18 @@ export function Topbar({ onOpenSidebar, title = 'RuangTenang', showBackButton, u
 
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
+    window.addEventListener('ruangtenang:outbox-updated', refreshOutboxSummary);
+    void refreshOutboxSummary();
 
     return () => {
+      active = false;
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('ruangtenang:outbox-updated', refreshOutboxSummary);
     };
-  }, [showToast]);
+  }, [showToast, user?.id, user?.role]);
+
+  const isSyncing = outboxSummary.syncing > 0;
 
   return (
     <div className="h-14 border-b border-default flex items-center justify-between px-3 sm:px-4 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md sticky top-0 z-10 w-full min-w-0 shrink-0 pt-safe">
@@ -96,6 +103,38 @@ export function Topbar({ onOpenSidebar, title = 'RuangTenang', showBackButton, u
           <div className="text-xs text-teal-600 dark:text-teal-400 flex items-center gap-1.5 shrink-0 ml-1 sm:ml-2 font-medium">
             <RefreshCw className="w-3.5 h-3.5 shrink-0 animate-spin" />
             <span className="hidden xs:inline">Menyinkronkan...</span>
+          </div>
+        )}
+
+        {outboxSummary.pending > 0 && (
+          <div className="text-xs text-teal-700 dark:text-teal-300 shrink-0 ml-1 sm:ml-2 font-medium" aria-live="polite">
+            {outboxSummary.pending} tertunda
+          </div>
+        )}
+
+        {outboxSummary.failed > 0 && (
+          <div className="text-xs text-rose-700 dark:text-rose-300 flex items-center gap-1 shrink-0 ml-1 sm:ml-2 font-medium" aria-live="polite">
+            <AlertCircle className="w-3.5 h-3.5" />
+            {outboxSummary.failed} gagal
+          </div>
+        )}
+
+        {outboxSummary.permanentlyRejected > 0 && (
+          <div className="text-xs text-rose-700 dark:text-rose-300 flex items-center gap-1 shrink-0 ml-1 sm:ml-2 font-medium" aria-live="polite">
+            <AlertCircle className="w-3.5 h-3.5" />
+            {outboxSummary.permanentlyRejected} perlu ditinjau
+          </div>
+        )}
+
+        {outboxSummary.authPaused > 0 && (
+          <div className="text-xs text-amber-700 dark:text-amber-300 shrink-0 ml-1 sm:ml-2 font-medium" aria-live="polite">
+            Sesi diperlukan ({outboxSummary.authPaused})
+          </div>
+        )}
+
+        {(outboxSummary.hasOwnerUnknown || outboxSummary.quarantined > 0) && user?.role === 'mahasiswa' && (
+          <div className="text-xs text-amber-700 dark:text-amber-300 shrink-0 ml-1 sm:ml-2 font-medium" title="Data offline lama dikarantina karena pemiliknya tidak dapat diverifikasi.">
+            Data lama dikarantina
           </div>
         )}
 

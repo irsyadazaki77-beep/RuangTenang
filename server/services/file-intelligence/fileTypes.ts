@@ -1,4 +1,4 @@
-import { SupportedFileKind, FileErrorCode, ProcessingStatus } from '../../../shared/contracts/files.js';
+import { FileErrorCode } from '../../../shared/contracts/files.js';
 import { MAX_UPLOAD_FILE_SIZE_BYTES } from '../../../shared/contracts/files.js';
 
 export interface FileProcessingLimits {

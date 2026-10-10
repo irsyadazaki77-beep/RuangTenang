@@ -16,7 +16,7 @@ import { prisma, serverDb } from '../database.js';
 import { runBackup } from './backupTool.js';
 import { retentionService, RetentionCleanupResult } from '../services/retentionService.js';
 import { encryptionService } from '../services/encryptionService.js';
-import { DistributedLockService } from '../services/distributedLockService.js';
+
 
 export interface DailyMaintenanceReport {
   timestamp: string;

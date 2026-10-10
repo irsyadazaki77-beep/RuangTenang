@@ -70,4 +70,59 @@ describe('Auth Session Race Conditions', () => {
     // The state should NOT be overwritten back to guest
     expect(currentContextUser?.role).toBe('mahasiswa');
   });
+
+  it('invalidates a stale tab and reloads identity from the server after another tab changes accounts', async () => {
+    const accountB = {
+      id: 'shared-browser-user-b',
+      role: 'mahasiswa',
+      name: 'User B',
+      email: 'user-b@test.com',
+      tier: 'Free',
+      usageStats: { chatMessagesSent: 0, appointmentsBooked: 0 },
+    };
+    let returnAccountB = false;
+    vi.mocked(apiClient.get).mockImplementation((url) => {
+      if (url === '/api/csrf-token') return Promise.resolve({ success: true }) as any;
+      if (url === '/api/auth/me' && returnAccountB) {
+        return Promise.resolve({ success: true, data: { user: accountB } }) as any;
+      }
+      return Promise.resolve({ success: false }) as any;
+    });
+
+    let currentContext: ReturnType<typeof useAuth> | undefined;
+    let triggerSetUser: ReturnType<typeof useAuth>['setUser'];
+    const TestComponent = () => {
+      currentContext = useAuth();
+      triggerSetUser = currentContext.setUser;
+      return null;
+    };
+
+    render(<AuthProvider><TestComponent /></AuthProvider>);
+    await waitFor(() => expect(currentContext?.loading).toBe(false));
+    act(() => {
+      triggerSetUser({
+        id: 'shared-browser-user-a',
+        role: 'mahasiswa',
+        name: 'User A',
+        email: 'user-a@test.com',
+        tier: 'Free',
+        usageStats: { chatMessagesSent: 0, appointmentsBooked: 0 },
+      });
+    });
+
+    returnAccountB = true;
+    act(() => {
+      window.dispatchEvent(new StorageEvent('storage', {
+        key: 'rt_active_user_id',
+        oldValue: 'shared-browser-user-a',
+        newValue: 'shared-browser-user-b',
+      }));
+    });
+
+    await waitFor(() => {
+      expect(currentContext?.user?.id).toBe('shared-browser-user-b');
+      expect(currentContext?.authLifecycle).toBe('authenticated');
+    });
+    expect(apiClient.get).toHaveBeenCalledWith('/api/auth/me');
+  });
 });

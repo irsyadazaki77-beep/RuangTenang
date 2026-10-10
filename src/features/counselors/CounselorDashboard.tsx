@@ -150,35 +150,40 @@ export const CounselorDashboard: React.FC = () => {
   }, [apptStatusFilter, apptPage]);
 
   const handleApproveAppointment = async (id: string) => {
-    // Optimistic update
-    setCounselorAppts(prev => prev.map(a => a.id === id ? { ...a, status: 'CONFIRMED', approvalStatus: 'APPROVED' } : a));
     try {
-      const res = await apiClient.put(`/api/v1/appointments/${id}`, { status: 'CONFIRMED', approvalStatus: 'APPROVED' });
+      const res = await apiClient.put(`/api/v1/appointments/${id}`, { status: 'CONFIRMED' });
       if (res.success) {
-        fetchCounselorAppointments();  
+        await fetchCounselorAppointments();
       } else {
-        // Revert on failure
-        fetchCounselorAppointments();
+        const message = ['APPOINTMENT_STATUS_CONFLICT', 'APPOINTMENT_CONCURRENT_UPDATE'].includes(res.error || '')
+          ? 'Jadwal berubah di sisi server. Status terbaru sudah dimuat ulang.'
+          : res.error || 'Gagal mengonfirmasi jadwal.';
+        await fetchCounselorAppointments();
+        setApptsError(message);
       }
     } catch (e) {
       console.warn('Approve appointment failed:', e);
-      fetchCounselorAppointments(); // Revert
+      await fetchCounselorAppointments();
+      setApptsError('Gagal mengonfirmasi jadwal. Memuat ulang status terbaru dari server.');
     }
   };
 
   const handleRejectAppointment = async (id: string) => {
-    // Optimistic update
-    setCounselorAppts(prev => prev.map(a => a.id === id ? { ...a, status: 'REJECTED', approvalStatus: 'REJECTED' } : a));
     try {
-      const res = await apiClient.put(`/api/v1/appointments/${id}`, { status: 'REJECTED', approvalStatus: 'REJECTED' });
+      const res = await apiClient.put(`/api/v1/appointments/${id}`, { status: 'REJECTED' });
       if (res.success) {
-        fetchCounselorAppointments();  
+        await fetchCounselorAppointments();
       } else {
-        fetchCounselorAppointments();
+        const message = ['APPOINTMENT_STATUS_CONFLICT', 'APPOINTMENT_CONCURRENT_UPDATE'].includes(res.error || '')
+          ? 'Jadwal berubah di sisi server. Status terbaru sudah dimuat ulang.'
+          : res.error || 'Gagal menolak jadwal.';
+        await fetchCounselorAppointments();
+        setApptsError(message);
       }
     } catch (e) {
       console.warn('Reject appointment failed:', e);
-      fetchCounselorAppointments();
+      await fetchCounselorAppointments();
+      setApptsError('Gagal menolak jadwal. Memuat ulang status terbaru dari server.');
     }
   };
 
@@ -617,7 +622,7 @@ export const CounselorDashboard: React.FC = () => {
                           ? 'bg-rose-50 text-rose-700 border-rose-200'
                           : 'bg-slate-100 text-slate-600 border-slate-200'
                       }`}>
-                        {appt.status === 'PENDING' ? '⏳ Menunggu Konfirmasi' : appt.status === 'CONFIRMED' ? '✅ Terkonfirmasi' : appt.status === 'COMPLETED' ? '✅ Selesai' : appt.status === 'REJECTED' ? '❌ Ditolak' : '🚫 Dibatalkan'}
+                        {appt.status === 'PENDING' ? '⏳ Menunggu Konfirmasi' : appt.status === 'CONFIRMED' ? '✅ Terkonfirmasi' : appt.status === 'IN_PROGRESS' ? '🔵 Sedang Berlangsung' : appt.status === 'COMPLETED' ? '✅ Selesai' : appt.status === 'REJECTED' ? '❌ Ditolak' : '🚫 Dibatalkan'}
                     </span>
                   </div>
                   
@@ -700,7 +705,7 @@ export const CounselorDashboard: React.FC = () => {
                             ? 'bg-rose-50 text-rose-700 border-rose-200'
                             : 'bg-slate-100 text-slate-600 border-slate-200'
                         }`}>
-                          {appt.status === 'PENDING' ? '⏳ Menunggu Konfirmasi' : appt.status === 'CONFIRMED' ? '✅ Terkonfirmasi' : appt.status === 'COMPLETED' ? '✅ Selesai' : appt.status === 'REJECTED' ? '❌ Ditolak' : '🚫 Dibatalkan'}
+                          {appt.status === 'PENDING' ? '⏳ Menunggu Konfirmasi' : appt.status === 'CONFIRMED' ? '✅ Terkonfirmasi' : appt.status === 'IN_PROGRESS' ? '🔵 Sedang Berlangsung' : appt.status === 'COMPLETED' ? '✅ Selesai' : appt.status === 'REJECTED' ? '❌ Ditolak' : '🚫 Dibatalkan'}
                         </span>
                       </td>
                       <td className="p-3 text-right">
