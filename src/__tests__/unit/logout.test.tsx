@@ -54,7 +54,12 @@ describe('Logout Flow Reliability', () => {
     const TestErrorComp = () => {
       const { logout, setUser } = useAuth();
       
+      // `setUser` from AuthProvider is re-created each render; depending on it re-ran this
+      // effect forever (unbounded render loop -> heap exhaustion). Seed the user exactly once.
+      const seeded = React.useRef(false);
       React.useEffect(() => {
+        if (seeded.current) return;
+        seeded.current = true;
         setUser({ id: 'u1', role: 'mahasiswa', name: 'Test', email: 'test@ui', tier: 'Free', usageStats: { chatMessagesSent: 0, appointmentsBooked: 0 } });
       }, [setUser]);
 

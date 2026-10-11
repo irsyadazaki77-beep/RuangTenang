@@ -349,11 +349,22 @@ export async function ensureDatabaseReady(): Promise<void> {
 
       try {
         await prisma.users.count();
+        // New SQLite tables may be introduced while the database already has users.
+        // Check the workspace agent tables too so existing installs are upgraded.
+        await prisma.workspacePlans.count();
+        await prisma.workspacePlanTasks.count();
+        await prisma.workspaceTaskDependencies.count();
+        await prisma.workspaceTaskExecutions.count();
       } catch {
         console.log('[DATABASE INIT] Initializing SQLite database schema...');
         try {
           const { execSync } = await import('child_process');
           execSync('npx prisma db push --schema prisma/schema.sqlite.prisma --skip-generate', { stdio: 'inherit' });
+          await prisma.users.count();
+          await prisma.workspacePlans.count();
+          await prisma.workspacePlanTasks.count();
+          await prisma.workspaceTaskDependencies.count();
+          await prisma.workspaceTaskExecutions.count();
           console.log('[DATABASE INIT] SQLite database schema initialized successfully.');
         } catch (err: any) {
           console.warn('[DATABASE INIT] Note on schema initialization:', err?.message || err);

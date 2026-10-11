@@ -372,7 +372,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
               </label>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                {availableModels.map((model) => {
+                {availableModels.filter(m => m.selectable).map((model) => {
                   const isSelected = aiModel === model.id;
                   return (
                     <div

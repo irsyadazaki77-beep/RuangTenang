@@ -528,6 +528,7 @@ model Workspaces {
   updatedAt       DateTime @updatedAt
   chat            Chats    @relation(fields: [chatId], references: [id], onDelete: Cascade)
   tasks           WorkspaceTasks[]
+  plans           WorkspacePlans[]
 
   @@index([updatedAt])
 }
@@ -543,6 +544,85 @@ model WorkspaceTasks {
   workspace   Workspaces @relation(fields: [workspaceId], references: [chatId], onDelete: Cascade)
 
   @@index([workspaceId, status, updatedAt])
+}
+
+/// AI-generated plans have a distinct lifecycle from the manual checklist above.
+/// Private goal, task text, execution snapshots and outputs are encrypted by the application.
+model WorkspacePlans {
+  id            String   @id
+  workspaceId   String
+  userId        String
+  titleEncrypted String
+  goalEncrypted String
+  status        String   @default("draft")
+  revision      Int      @default(1)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  completedAt   DateTime?
+  workspace     Workspaces @relation(fields: [workspaceId], references: [chatId], onDelete: Cascade)
+  tasks         WorkspacePlanTasks[]
+
+  @@index([workspaceId, status, updatedAt])
+  @@index([userId, workspaceId])
+}
+
+model WorkspacePlanTasks {
+  id                 String   @id
+  planId             String
+  titleEncrypted     String
+  descriptionEncrypted String?
+  taskType           String   @default("analysis")
+  position           Int
+  status             String   @default("todo")
+  modelId            String?
+  currentExecutionId String?
+  revision           Int      @default(1)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  plan               WorkspacePlans @relation(fields: [planId], references: [id], onDelete: Cascade)
+  dependencies       WorkspaceTaskDependencies[] @relation("TaskDependencies")
+  dependents         WorkspaceTaskDependencies[] @relation("DependencyTargets")
+  executions         WorkspaceTaskExecutions[]
+
+  @@unique([planId, position])
+  @@index([planId, status, position])
+  @@index([currentExecutionId])
+}
+
+model WorkspaceTaskDependencies {
+  taskId           String
+  dependsOnTaskId  String
+  createdAt        DateTime @default(now())
+  task             WorkspacePlanTasks @relation("TaskDependencies", fields: [taskId], references: [id], onDelete: Cascade)
+  dependsOnTask    WorkspacePlanTasks @relation("DependencyTargets", fields: [dependsOnTaskId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, dependsOnTaskId])
+  @@index([dependsOnTaskId])
+}
+
+model WorkspaceTaskExecutions {
+  id                String   @id
+  planTaskId        String
+  workspaceId       String
+  userId            String
+  status            String
+  modelId           String
+  requestFingerprint String
+  snapshotEncrypted String
+  outputEncrypted   String?
+  sourcesEncrypted  String?
+  outputArtifactId  String?
+  attemptNumber     Int
+  startedAt         DateTime @default(now())
+  heartbeatAt       DateTime?
+  finishedAt        DateTime?
+  errorCode         String?
+  task              WorkspacePlanTasks @relation(fields: [planTaskId], references: [id], onDelete: Cascade)
+
+  @@index([planTaskId, startedAt])
+  @@index([workspaceId, status])
+  @@index([userId, workspaceId])
+  @@index([outputArtifactId])
 }
 
 model ClinicalSoapNotes {

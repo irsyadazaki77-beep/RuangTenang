@@ -4,6 +4,9 @@ import { serverDb } from '../database.js';
 import { requireAuth, normalizeRole } from '../middleware/auth.js';
 
 import { canAccessHealthData } from '../services/healthDataAuth.js';
+import { buildAuthoritativeScreening, mapScreeningToResponse } from '../services/screeningSafetyService.js';
+import { calculatePhq9Severity, calculateGad7Severity, ScreeningValidationError } from '../../shared/clinical/scoring.js';
+import type { ScreeningResultDTO } from '../../shared/contracts/screening.js';
 import { validatePagination } from '../apiV1Helpers.js';
 import {
   ScreeningSubmissionSchema as createScreeningSchema,
@@ -14,51 +17,10 @@ export { createScreeningSchema, UpdateScreeningStatusSchema };
 
 const router = Router();
 
-export interface ScreeningResponseDTO {
-  id: string;
-  phq9Score: number;
-  gad7Score: number;
-  phq9Severity: string;
-  gad7Severity: string;
-  item9Score?: number;
-  hasSelfHarmRisk?: boolean;
-  riskLevel?: string;
-  status?: string;
-  riskIndicators?: any;
-  timestamp: string;
-  userId: string;
-}
-
-export function calculatePhq9Severity(score: number): 'Minimal' | 'Ringan' | 'Sedang' | 'Berat' {
-  if (score <= 4) return 'Minimal';
-  if (score <= 9) return 'Ringan';
-  if (score <= 14) return 'Sedang';
-  return 'Berat';
-}
-
-export function calculateGad7Severity(score: number): 'Minimal' | 'Ringan' | 'Sedang' | 'Berat' {
-  if (score <= 4) return 'Minimal';
-  if (score <= 9) return 'Ringan';
-  if (score <= 14) return 'Sedang';
-  return 'Berat';
-}
-
-export function mapScreeningToResponse(scr: any): ScreeningResponseDTO {
-  return {
-    id: scr.id,
-    phq9Score: scr.phq9Score,
-    gad7Score: scr.gad7Score,
-    phq9Severity: scr.phq9Severity,
-    gad7Severity: scr.gad7Severity,
-    item9Score: scr.item9Score ?? 0,
-    hasSelfHarmRisk: scr.hasSelfHarmRisk ?? (scr.item9Score ? scr.item9Score > 0 : false),
-    riskLevel: scr.riskLevel || 'Rendah',
-    status: scr.status || 'Menunggu Penanganan',
-    riskIndicators: scr.riskIndicators || null,
-    timestamp: scr.timestamp,
-    userId: scr.userId || ''
-  };
-}
+// Single scoring engine: re-exported for existing importers; no thresholds live here.
+export { calculatePhq9Severity, calculateGad7Severity };
+export type ScreeningResponseDTO = ScreeningResultDTO;
+export { mapScreeningToResponse };
 
 // Get Screenings
 router.get(['/', '/db/screenings'], requireAuth, async (req: Request, res: Response) => {
@@ -182,28 +144,27 @@ router.post(['/', '/db/screenings'], requireAuth, async (req: Request, res: Resp
       });
     }
 
-    const validated = parsed.data;
-    const phq9Severity = calculatePhq9Severity(validated.phq9Score);
-    const gad7Severity = calculateGad7Severity(validated.gad7Score);
-    const item9Score = validated.item9Score ?? 0;
-    const hasSelfHarmRisk = validated.hasSelfHarmRisk ?? (item9Score > 0);
+    let authoritative;
+    try {
+      authoritative = buildAuthoritativeScreening(parsed.data);
+    } catch (e) {
+      if (e instanceof ScreeningValidationError) {
+        return res.status(400).json({ error: 'Validasi gagal.', code: e.code, message: e.message });
+      }
+      throw e;
+    }
 
+    // Owner is always the authenticated user; any client-supplied userId is ignored.
     const record = await serverDb.addScreening({
-      phq9Score: validated.phq9Score,
-      gad7Score: validated.gad7Score,
-      phq9Severity,
-      gad7Severity,
-      item9Score,
-      hasSelfHarmRisk,
-      riskIndicators: validated.riskIndicators || {
-        item9Score,
-        hasSelfHarmRisk,
-        riskCategory: hasSelfHarmRisk ? 'RISIKO_MENYAKITI_DIRI' : 'STANDAR',
-        flaggedAt: new Date().toISOString()
-      },
+      phq9Score: authoritative.phq9Score,
+      gad7Score: authoritative.gad7Score,
+      phq9Severity: authoritative.phq9Severity,
+      gad7Severity: authoritative.gad7Severity,
+      item9Score: authoritative.item9Score ?? undefined,
+      hasSelfHarmRisk: authoritative.hasSelfHarmRisk,
+      riskIndicators: authoritative.riskIndicators as any,
       userId: req.user!.userId
-    });
-    res.json({ success: true, record: mapScreeningToResponse(record) });
+    });    res.json({ success: true, record: mapScreeningToResponse(record) });
   } catch (err: any) {
     console.error('Error creating screening:', err);
     res.status(500).json({ error: 'Gagal menyimpan riwayat skrining.' });

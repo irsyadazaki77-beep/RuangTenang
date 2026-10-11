@@ -16,7 +16,8 @@ import {
   AiModelDefinition, 
   AiModelError, 
   resolveAiModel, 
-  getConfiguredDefaultAiModelId 
+  getConfiguredDefaultAiModelId,
+  RESILIENT_FALLBACK_AI_MODEL_ID
 } from './aiModelRegistry.js';
 import { aiProviderConfig } from '../../config/aiProviderConfig.js';
 
@@ -359,7 +360,19 @@ export class SmartModelRouter {
           fallbackCandidates: []
         };
       }
-      throw new AiModelError('MODEL_UNAVAILABLE');
+
+      // Auto mode must remain usable without provider credentials. The request
+      // pipeline attempts this configured model and returns its guarded local
+      // response when the provider is unavailable. Manual selections still fail
+      // closed above so a user's explicit model choice is respected.
+      const localFallbackModel = resolveAiModel(RESILIENT_FALLBACK_AI_MODEL_ID, userTier);
+      return {
+        selectedModelId: localFallbackModel.id,
+        provider: localFallbackModel.provider,
+        routingMode: 'auto',
+        routingReason: 'Tidak ada penyedia AI yang tersedia; respons lokal digunakan.',
+        fallbackCandidates: []
+      };
     }
 
     // Rank candidates deterministically
@@ -401,6 +414,7 @@ export class SmartModelRouter {
 
     // Prioritize configured resilient fallbacks
     const fallbackCandidates = [
+      'gemini-3.5-flash-lite',
       'gemini-3.1-flash-lite',
       DEFAULT_AI_MODEL_ID,
       'groq-qwen-27b',

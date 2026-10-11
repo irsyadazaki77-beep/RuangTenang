@@ -1,3 +1,4 @@
+import { calculatePhq9Severity, calculateGad7Severity } from '../../shared/clinical/scoring.js';
 import PDFDocument from 'pdfkit';
 import fs from 'fs';
 import path from 'path';
@@ -224,8 +225,8 @@ export async function generateCounselingResumePdf(userId: string, studentName: s
         if (latestScreening) {
           const phqScore = latestScreening.phq9Score;
           const gadScore = latestScreening.gad7Score;
-          const phqSeverity = phqScore <= 4 ? 'Minimal' : phqScore <= 9 ? 'Ringan' : phqScore <= 14 ? 'Sedang' : 'Berat';
-          const gadSeverity = gadScore <= 4 ? 'Minimal' : gadScore <= 9 ? 'Ringan' : gadScore <= 14 ? 'Sedang' : 'Berat';
+          const phqSeverity = calculatePhq9Severity(phqScore);
+          const gadSeverity = calculateGad7Severity(gadScore);
 
           // Trend calculation
           let trendAnalysis = 'Evaluasi pertama kali, status stabil terpantau.';

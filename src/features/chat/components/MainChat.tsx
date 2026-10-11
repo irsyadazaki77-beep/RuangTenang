@@ -99,17 +99,19 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
     fetchMessages
   });
 
+  const hasStreamingContent = Boolean(streamingMessage?.content);
+
   // Sinkronisasi status AI streaming ke root ambient Aurora mesh 2.1
   useEffect(() => {
     if (isTyping) {
-      const phase: 'thinking' | 'streaming' = streamingMessage?.content ? 'streaming' : 'thinking';
+      const phase: 'thinking' | 'streaming' = hasStreamingContent ? 'streaming' : 'thinking';
       dispatchAuroraActivity({
         mode: 'RUANG_TENANG',
         phase,
         chatId,
       });
     }
-  }, [isTyping, Boolean(streamingMessage?.content), chatId]);
+  }, [isTyping, hasStreamingContent, chatId]);
 
   // Reset aurora ke idle saat unmount
   useEffect(() => {
@@ -592,7 +594,7 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
       />
 
       <div 
-        className="flex-1 flex flex-col h-full h-[100dvh] min-h-0 bg-transparent relative min-w-0 overflow-hidden"
+        className="flex-1 flex flex-col h-full min-h-0 bg-transparent relative min-w-0 overflow-hidden"
         style={viewportHeight ? { height: `${viewportHeight}px`, maxHeight: `${viewportHeight}px` } : undefined}
       >
         <div className="relative z-10 flex flex-col flex-1 h-full min-h-0 overflow-hidden bg-transparent">
@@ -642,7 +644,7 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
           <div className="relative flex-1 min-h-0 flex flex-col overflow-hidden bg-transparent">
             {upcomingAppointment && !isReminderDismissed && (
               <div className="px-3 sm:px-4 pt-2.5 pb-1 shrink-0 z-20 animate-fade-in">
-                <div className="max-w-3xl mx-auto surface-card/85 backdrop-blur-md rounded-2xl border border-teal-200/60 dark:border-teal-800/60 p-2.5 sm:p-3 shadow-md hover:shadow-lg transition-all flex items-center justify-between gap-3 bg-gradient-to-r from-teal-500/10 via-emerald-500/5 to-cyan-500/10">
+                <div className="max-w-3xl mx-auto surface-card/85 backdrop-blur-md rounded-2xl border border-teal-200/60 dark:border-teal-800/60 p-2.5 sm:p-3 shadow-md hover:shadow-lg transition-all flex items-center justify-between gap-3 bg-linear-to-r from-teal-500/10 via-emerald-500/5 to-cyan-500/10">
                   <div className="flex items-center gap-2.5 min-w-0">
                     <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-teal-600 text-white flex items-center justify-center shrink-0 shadow-xs">
                       <Video className="w-4 h-4 animate-pulse" />
@@ -666,7 +668,7 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
                     <button
                       type="button"
                       onClick={() => navigate('/counselors', { state: { selectedAppointment: upcomingAppointment.appointment } })}
-                      className="px-3 py-1.5 min-h-[34px] rounded-xl text-xs font-bold bg-teal-600 hover:bg-teal-700 text-white shadow-3xs hover:shadow-xs transition-all flex items-center gap-1 cursor-pointer whitespace-nowrap"
+                      className="px-3 py-1.5 min-h-8.5 rounded-xl text-xs font-bold bg-teal-600 hover:bg-teal-700 text-white shadow-3xs hover:shadow-xs transition-all flex items-center gap-1 cursor-pointer whitespace-nowrap"
                     >
                       <span>Masuk Ruang Sesi / Detail</span>
                     </button>
@@ -732,7 +734,7 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
                       <button 
                         onClick={handleLoadMore} 
                         disabled={isLoadingMore}
-                        className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-secondary rounded-full text-xs font-medium transition-colors disabled:opacity-50 flex items-center gap-1.5 min-h-[32px] cursor-pointer"
+                        className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-secondary rounded-full text-xs font-medium transition-colors disabled:opacity-50 flex items-center gap-1.5 min-h-8 cursor-pointer"
                       >
                         {isLoadingMore ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <ChevronDown className="w-3.5 h-3.5 rotate-180" />}
                         Muat pesan sebelumnya

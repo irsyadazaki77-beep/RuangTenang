@@ -6,13 +6,33 @@ import {
   UpdateWorkspaceSchema,
   UpdateWorkspaceTaskSchema,
   WorkspacePlanSchema,
-  WorkspaceTaskExecutionRequestSchema
+  WorkspacePlanTransitionRequestSchema,
+  WorkspacePlanReviewRequestSchema,
+  WorkspaceTaskModelRequestSchema,
+  WorkspaceTaskExecutionRequestSchema,
+  WorkspaceTaskExecutionResultRequestSchema,
+  type WorkspacePlan
 } from '../../shared/contracts/workspace.js';
 import { ResearchSourceMetadataSchema } from '../../shared/contracts/files.js';
 import { prisma } from '../database.js';
 import { requireAuth } from '../middleware/auth.js';
 import { encryptionService } from '../services/encryptionService.js';
 import { sanitizeInput } from '../security.js';
+import {
+  backfillLegacyPlan,
+  cancelWorkspaceTaskExecution,
+  createWorkspacePlan,
+  findWorkspacePlan,
+  finishWorkspaceTask,
+  linkWorkspaceTaskArtifact,
+  recoverWorkspaceTask,
+  reviewWorkspaceTask,
+  startWorkspaceTask,
+  setWorkspaceTaskModel,
+  transitionWorkspacePlan,
+  updateDraftPlan,
+  WorkspaceWorkflowError
+} from '../services/workspaceWorkflowService.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -51,7 +71,7 @@ function storeAgentWorkflow(settings: WorkspaceSettings, workflow: unknown): voi
   settings.agentWorkflow = { storage: 'encrypted-v1', payload };
 }
 
-function workspaceDto(row: any, includePlanDetails = true) {
+function workspaceDto(row: any, includePlanDetails = true, authoritativePlan?: WorkspacePlan | null) {
   const settings = parseWorkspaceSettings(row.settings);
   let workflow: any;
   try { workflow = readAgentWorkflow(settings); } catch { workflow = undefined; }
@@ -60,9 +80,11 @@ function workspaceDto(row: any, includePlanDetails = true) {
     if (workflow) settings.agentWorkflow = workflow;
     else delete settings.agentWorkflow;
   }
+  if (authoritativePlan !== undefined) delete settings.agentWorkflow;
   const planCandidate = (workflow as { plan?: unknown } | undefined)?.plan;
   const parsedPlan = WorkspacePlanSchema.safeParse(planCandidate);
-  const plan = parsedPlan.success ? parsedPlan.data : null;
+  const plan = authoritativePlan !== undefined ? authoritativePlan : parsedPlan.success ? parsedPlan.data : null;
+  const relationalSummary = row.workflowPlanSummary;
   return {
     id: row.chatId,
     chatId: row.chatId,
@@ -75,7 +97,7 @@ function workspaceDto(row: any, includePlanDetails = true) {
     defaultPreset: row.defaultPreset || null,
     settings,
     plan: includePlanDetails ? plan : null,
-    planSummary: plan ? { id: plan.id, title: plan.title, status: plan.status, taskCount: plan.tasks.length, completedCount: plan.tasks.filter(task => task.status === 'done').length } : null,
+    planSummary: relationalSummary || (plan ? { id: plan.id, title: plan.title, status: plan.status, taskCount: plan.tasks.length, completedCount: plan.tasks.filter(task => task.status === 'done').length } : null),
     createdAt: row.createdAt.toISOString(),
     updatedAt: (row.chat?.updatedAt || row.updatedAt).toISOString(),
     tasks: (row.tasks || []).map((task: any) => ({
@@ -102,15 +124,82 @@ async function ownedWorkspace(chatId: string, userId: string, ensureLegacy = fal
   return workspace ? { ...workspace, chat } : null;
 }
 
+async function ensureLegacyWorkflowEncrypted(workspace: any, userId: string) {
+  let current = workspace;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const settings = parseWorkspaceSettings(current.settings);
+    const workflow = readAgentWorkflow(settings);
+    if (!workflow || settings.agentWorkflow?.storage === 'encrypted-v1') return { row: current, settings, workflow };
+    const encryptedSettings = { ...settings };
+    storeAgentWorkflow(encryptedSettings, workflow);
+    const encryptedRaw = JSON.stringify(encryptedSettings);
+    const saved = await prisma.workspaces.updateMany({ where: { chatId: current.chatId, settings: current.settings }, data: { settings: encryptedRaw } });
+    if (saved.count) return { row: { ...current, settings: encryptedRaw }, settings: encryptedSettings, workflow };
+    const fresh = await ownedWorkspace(current.chatId, userId, false);
+    if (!fresh) throw new WorkspaceWorkflowError('WORKSPACE_NOT_FOUND', 404);
+    current = fresh;
+  }
+  throw new WorkspaceWorkflowError('WORKSPACE_SETTINGS_CONFLICT');
+}
+
+async function currentWorkspacePlan(workspace: any, userId: string): Promise<WorkspacePlan | null> {
+  const state = await ensureLegacyWorkflowEncrypted(workspace, userId);
+  const relational = await findWorkspacePlan(state.row.chatId, userId);
+  if (relational) return relational;
+  const legacy = state.workflow?.plan;
+  return legacy ? backfillLegacyPlan(state.row.chatId, userId, legacy) : null;
+}
+
+function sendWorkflowError(res: Response, error: unknown, fallbackCode: string, fallbackMessage: string) {
+  if (error instanceof WorkspaceWorkflowError) {
+    const messages: Record<string, string> = {
+      WORKSPACE_PLAN_ACTIVE: 'Selesaikan atau batalkan plan aktif sebelum membuat plan baru.',
+      WORKSPACE_PLAN_CREATE_INVALID: 'Plan baru harus berupa draft dan task-nya harus belum dijalankan.',
+      WORKSPACE_PLAN_CONFLICT: 'Plan berubah di sesi lain. Muat ulang sebelum menyimpan.',
+      WORKSPACE_PLAN_COMMAND_REQUIRED: 'Gunakan tindakan plan yang tersedia untuk mengubah status.',
+      WORKSPACE_PLAN_TRANSITION_INVALID: 'Perubahan status plan tidak diizinkan.',
+      WORKSPACE_TASK_DEPENDENCY_BLOCKED: 'Selesaikan dependency sebelum menjalankan task ini.',
+      WORKSPACE_TASK_ALREADY_RUNNING: 'Workspace sedang menjalankan task lain.',
+      WORKSPACE_TASK_EXECUTION_STALE: 'Eksekusi task sudah tidak aktif. Muat ulang sebelum melanjutkan.',
+      WORKSPACE_TASK_EXECUTION_ID_CONFLICT: 'ID eksekusi ini sudah terikat pada permintaan lain.',
+      WORKSPACE_TASK_ARTIFACT_CONFLICT: 'Eksekusi ini sudah tertaut ke artifact lain.',
+      WORKSPACE_TASK_NOT_RUNNABLE: 'Task ini tidak dapat dijalankan sekarang.',
+      WORKSPACE_TASK_NOT_WAITING_REVIEW: 'Task tidak sedang menunggu tinjauan.',
+      WORKSPACE_PLAN_INCOMPLETE: 'Semua task harus selesai sebelum plan dikonfirmasi.',
+      WORKSPACE_MODEL_NOT_FOUND: 'Model yang dipilih tidak tersedia.',
+      WORKSPACE_MODEL_UNAVAILABLE: 'Model yang dipilih sedang tidak tersedia.',
+      WORKSPACE_SOURCE_NOT_FOUND: 'Salah satu sumber Workspace tidak tersedia.',
+      WORKSPACE_ARTIFACT_NOT_FOUND: 'Artifact Workspace tidak ditemukan.',
+      WORKSPACE_EXECUTION_NOT_FOUND: 'Eksekusi tidak ditemukan.'
+    };
+    return res.status(error.status).json({ success: false, code: error.code, message: messages[error.code] || 'Perubahan workflow tidak dapat dilakukan.' });
+  }
+  console.error(`[${fallbackCode}]`, error);
+  return res.status(500).json({ success: false, code: fallbackCode, message: fallbackMessage });
+}
+
 router.get('/', async (req: Request, res: Response) => {
   try {
     const rows = await prisma.workspaces.findMany({
       where: { chat: { userId: req.user!.userId, workspaceMode: 'RUANG_KERJA', isArchived: false } },
-      include: { chat: true, tasks: { orderBy: { createdAt: 'asc' } } },
+      include: {
+        chat: true,
+        tasks: { orderBy: { createdAt: 'asc' } },
+        plans: { orderBy: { updatedAt: 'desc' }, take: 1, select: { id: true, titleEncrypted: true, status: true, tasks: { select: { status: true } } } }
+      },
       orderBy: { chat: { updatedAt: 'desc' } },
       take: 100
     });
-    return res.json({ success: true, data: rows.map(row => workspaceDto(row, false)) });
+    return res.json({ success: true, data: rows.map(row => {
+      const plan = row.plans[0];
+      return workspaceDto({ ...row, workflowPlanSummary: plan ? {
+        id: plan.id,
+        title: decrypt(plan.titleEncrypted) || 'Rencana pekerjaan',
+        status: plan.status,
+        taskCount: plan.tasks.length,
+        completedCount: plan.tasks.filter(task => task.status === 'done').length
+      } : undefined }, false);
+    }) });
   } catch (error) {
     console.error('[WORKSPACE_LIST_ERROR]', error);
     return res.status(500).json({ success: false, code: 'WORKSPACE_LIST_FAILED', message: 'Gagal memuat Workspace.' });
@@ -189,38 +278,14 @@ router.get('/:chatId', async (req: Request, res: Response) => {
   try {
     let row = await ownedWorkspace(req.params.chatId, req.user!.userId, true);
     if (!row) return res.status(404).json({ success: false, code: 'WORKSPACE_NOT_FOUND', message: 'Workspace tidak ditemukan.' });
-    // Workflow execution is request-scoped. A persisted "running" marker after a page reload
-    // cannot represent live background work, so expose it as resumable without claiming progress.
-    let settings = parseWorkspaceSettings(row.settings);
-    let workflow = readAgentWorkflow(settings);
-    if (workflow && settings.agentWorkflow?.storage !== 'encrypted-v1') {
-      const migratedSettings = { ...settings };
-      storeAgentWorkflow(migratedSettings, workflow);
-      const migratedRaw = JSON.stringify(migratedSettings);
-      const migrated = await prisma.workspaces.updateMany({ where: { chatId: req.params.chatId, settings: row.settings }, data: { settings: migratedRaw } });
-      if (migrated.count) {
-        row = { ...row, settings: migratedRaw };
-        settings = migratedSettings;
-      } else {
-        // Another tab won the CAS. Re-read so this GET never returns the stale plaintext plan.
-        const fresh = await ownedWorkspace(req.params.chatId, req.user!.userId, false);
-        if (!fresh) return res.status(404).json({ success: false, code: 'WORKSPACE_NOT_FOUND', message: 'Workspace tidak ditemukan.' });
-        row = fresh;
-        settings = parseWorkspaceSettings(row.settings);
-        workflow = readAgentWorkflow(settings);
-      }
-    }
-    const plan = workflow?.plan;
-    if (plan?.status === 'running' && Array.isArray(plan.tasks)) {
-      const recoveredAt = new Date().toISOString();
-      const recovered = { ...plan, status: 'approved', updatedAt: recoveredAt, tasks: plan.tasks.map((task: any) => task.status === 'running' ? { ...task, status: 'todo', executionHistory: (task.executionHistory || []).map((attempt: any) => attempt.status === 'running' ? { ...attempt, status: 'cancelled', completedAt: recoveredAt } : attempt), updatedAt: recoveredAt } : task) };
-      const recoveredSettings = { ...settings };
-      storeAgentWorkflow(recoveredSettings, { version: 1, plan: recovered });
-      const nextSettings = JSON.stringify(recoveredSettings);
-      const result = await prisma.workspaces.updateMany({ where: { chatId: req.params.chatId, settings: row.settings }, data: { settings: nextSettings } });
-      if (result.count) { row = { ...row, settings: nextSettings }; }
-    }
-    return res.json({ success: true, data: workspaceDto(row) });
+    // GET is read-only with respect to workflow lifecycle. A second tab loading this Workspace
+    // is not evidence that a client-bound provider request has stopped.
+    const legacyState = await ensureLegacyWorkflowEncrypted(row, req.user!.userId);
+    row = legacyState.row;
+    const workflow = legacyState.workflow;
+    let plan = await findWorkspacePlan(req.params.chatId, req.user!.userId);
+    if (!plan && workflow?.plan) plan = await backfillLegacyPlan(req.params.chatId, req.user!.userId, workflow.plan);
+    return res.json({ success: true, data: workspaceDto(row, true, plan) });
   } catch (error) {
     console.error('[WORKSPACE_GET_ERROR]', error);
     return res.status(500).json({ success: false, code: 'WORKSPACE_GET_FAILED', message: 'Gagal memuat Workspace.' });
@@ -231,8 +296,9 @@ router.put('/:chatId', async (req: Request, res: Response) => {
   const parsed = UpdateWorkspaceSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ success: false, code: 'WORKSPACE_INVALID', message: 'Perubahan Workspace tidak valid.' });
   try {
-    const current = await ownedWorkspace(req.params.chatId, req.user!.userId, true);
+    let current = await ownedWorkspace(req.params.chatId, req.user!.userId, true);
     if (!current) return res.status(404).json({ success: false, code: 'WORKSPACE_NOT_FOUND', message: 'Workspace tidak ditemukan.' });
+    current = (await ensureLegacyWorkflowEncrypted(current, req.user!.userId)).row;
     const update = parsed.data;
     const result = await prisma.$transaction(async tx => {
       const data = {
@@ -320,29 +386,19 @@ router.put('/:chatId/sources/:sourceId', async (req: Request, res: Response) => 
   }
 });
 
-// Workflow plans are persisted as a versioned, schema-validated workspace setting.
-// The task checklist remains independently addressable through WorkspaceTasks.
+// Agent plans/tasks/executions use normalized persistence. Manual checklist tasks remain separate.
 router.post('/:chatId/plans', async (req: Request, res: Response) => {
   const parsed = WorkspacePlanSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ success: false, code: 'WORKSPACE_PLAN_INVALID', message: parsed.error.issues[0]?.message || 'Plan tidak valid.' });
   try {
     const workspace = await ownedWorkspace(req.params.chatId, req.user!.userId, true);
     if (!workspace) return res.status(404).json({ success: false, code: 'WORKSPACE_NOT_FOUND', message: 'Workspace tidak ditemukan.' });
-    const settings = parseWorkspaceSettings(workspace.settings);
-    const workflow = readAgentWorkflow(settings);
-    const current = workflow?.plan;
-    if (current && current.status !== 'completed' && current.status !== 'cancelled') {
-      return res.status(409).json({ success: false, code: 'WORKSPACE_PLAN_ACTIVE', message: 'Selesaikan atau batalkan plan aktif sebelum membuat plan baru.' });
-    }
-    storeAgentWorkflow(settings, { version: 1, plan: parsed.data });
-    if (JSON.stringify(settings).length > 1_000_000) return res.status(413).json({ success: false, code: 'WORKSPACE_PLAN_TOO_LARGE', message: 'Plan terlalu besar untuk disimpan.' });
-    const saved = await prisma.workspaces.updateMany({ where: { chatId: req.params.chatId, settings: workspace.settings }, data: { settings: JSON.stringify(settings) } });
-    if (!saved.count) return res.status(409).json({ success: false, code: 'WORKSPACE_PLAN_CONFLICT', message: 'Plan berubah di sesi lain. Muat ulang sebelum menyimpan.' });
+    await currentWorkspacePlan(workspace, req.user!.userId);
+    const saved = await createWorkspacePlan(req.params.chatId, req.user!.userId, parsed.data);
     await prisma.chats.update({ where: { id: req.params.chatId }, data: { updatedAt: new Date() } });
-    return res.status(201).json({ success: true, data: parsed.data });
+    return res.status(201).json({ success: true, data: saved });
   } catch (error) {
-    console.error('[WORKSPACE_PLAN_CREATE_ERROR]', error);
-    return res.status(500).json({ success: false, code: 'WORKSPACE_PLAN_CREATE_FAILED', message: 'Plan gagal disimpan.' });
+    return sendWorkflowError(res, error, 'WORKSPACE_PLAN_CREATE_FAILED', 'Plan gagal disimpan.');
   }
 });
 
@@ -352,29 +408,12 @@ router.put('/:chatId/plans/:planId', async (req: Request, res: Response) => {
   try {
     const workspace = await ownedWorkspace(req.params.chatId, req.user!.userId, false);
     if (!workspace) return res.status(404).json({ success: false, code: 'WORKSPACE_NOT_FOUND', message: 'Workspace tidak ditemukan.' });
-    const settings = parseWorkspaceSettings(workspace.settings);
-    const workflow = readAgentWorkflow(settings);
-    const current = workflow?.plan;
-    if (!current || current.id !== req.params.planId) return res.status(404).json({ success: false, code: 'WORKSPACE_PLAN_NOT_FOUND', message: 'Plan tidak ditemukan.' });
-    if (current.status === 'cancelled' || current.status === 'completed') return res.status(409).json({ success: false, code: 'WORKSPACE_PLAN_FINAL', message: 'Plan sudah berakhir.' });
-    for (const currentTask of current.tasks || []) {
-      const submittedTask = parsed.data.tasks.find(task => task.id === currentTask.id);
-      if (currentTask.status === 'running' && (!submittedTask || submittedTask.executionId !== currentTask.executionId)) {
-        return res.status(409).json({ success: false, code: 'WORKSPACE_TASK_EXECUTION_STALE', message: 'Eksekusi task berubah. Muat ulang plan sebelum menyimpan hasil.' });
-      }
-    }
-    const transitions: Record<string, string[]> = { draft: ['draft', 'approved', 'cancelled'], approved: ['approved', 'running', 'paused', 'cancelled', 'completed'], running: ['running', 'approved', 'paused', 'cancelled'], paused: ['paused', 'approved', 'cancelled'] };
-    if (!transitions[current.status]?.includes(parsed.data.status)) return res.status(409).json({ success: false, code: 'WORKSPACE_PLAN_TRANSITION_INVALID', message: 'Perubahan status plan tidak diizinkan.' });
-    if (parsed.data.status === 'completed' && !parsed.data.tasks.every(task => task.status === 'done')) return res.status(409).json({ success: false, code: 'WORKSPACE_PLAN_INCOMPLETE', message: 'Semua task wajib selesai sebelum goal dikonfirmasi.' });
-    if (JSON.stringify({ ...settings, agentWorkflow: { version: 1, plan: parsed.data } }).length > 1_000_000) return res.status(413).json({ success: false, code: 'WORKSPACE_PLAN_TOO_LARGE', message: 'Plan terlalu besar untuk disimpan.' });
-    storeAgentWorkflow(settings, { version: 1, plan: parsed.data });
-    const saved = await prisma.workspaces.updateMany({ where: { chatId: req.params.chatId, settings: workspace.settings }, data: { settings: JSON.stringify(settings) } });
-    if (!saved.count) return res.status(409).json({ success: false, code: 'WORKSPACE_PLAN_CONFLICT', message: 'Plan berubah di sesi lain. Muat ulang sebelum menyimpan.' });
+    await currentWorkspacePlan(workspace, req.user!.userId);
+    const saved = await updateDraftPlan(req.params.chatId, req.user!.userId, parsed.data);
     await prisma.chats.update({ where: { id: req.params.chatId }, data: { updatedAt: new Date() } });
-    return res.json({ success: true, data: parsed.data });
+    return res.json({ success: true, data: saved });
   } catch (error) {
-    console.error('[WORKSPACE_PLAN_UPDATE_ERROR]', error);
-    return res.status(500).json({ success: false, code: 'WORKSPACE_PLAN_UPDATE_FAILED', message: 'Plan gagal diperbarui.' });
+    return sendWorkflowError(res, error, 'WORKSPACE_PLAN_UPDATE_FAILED', 'Plan gagal diperbarui.');
   }
 });
 
@@ -384,27 +423,105 @@ router.post('/:chatId/plans/:planId/tasks/:taskId/run', async (req: Request, res
   try {
     const workspace = await ownedWorkspace(req.params.chatId, req.user!.userId, false);
     if (!workspace) return res.status(404).json({ success: false, code: 'WORKSPACE_NOT_FOUND', message: 'Workspace tidak ditemukan.' });
-    const settings = parseWorkspaceSettings(workspace.settings);
-    const workflow = readAgentWorkflow(settings);
-    const current = workflow?.plan;
-    if (!current || current.id !== req.params.planId) return res.status(404).json({ success: false, code: 'WORKSPACE_PLAN_NOT_FOUND', message: 'Plan tidak ditemukan.' });
-    if (current.status !== 'approved' && current.status !== 'running') return res.status(409).json({ success: false, code: 'WORKSPACE_PLAN_NOT_APPROVED', message: 'Plan harus disetujui sebelum task dijalankan.' });
-    const task = current.tasks.find((item: any) => item.id === req.params.taskId);
-    if (!task) return res.status(404).json({ success: false, code: 'WORKSPACE_TASK_NOT_FOUND', message: 'Task tidak ditemukan.' });
-    if (task.status === 'running' && task.executionId === parsed.data.executionId) return res.json({ success: true, data: current });
-    if (task.status !== 'todo' && task.status !== 'failed' && task.status !== 'waiting_review') return res.status(409).json({ success: false, code: 'WORKSPACE_TASK_NOT_RUNNABLE', message: 'Task ini tidak dapat dijalankan sekarang.' });
-    if (!task.dependsOn.every((id: string) => current.tasks.some((candidate: any) => candidate.id === id && candidate.status === 'done'))) return res.status(409).json({ success: false, code: 'WORKSPACE_TASK_DEPENDENCY_BLOCKED', message: 'Selesaikan dependency sebelum menjalankan task ini.' });
-    if (current.tasks.some((candidate: any) => candidate.status === 'running')) return res.status(409).json({ success: false, code: 'WORKSPACE_TASK_ALREADY_RUNNING', message: 'Workspace sedang menjalankan task lain.' });
-    const now = new Date().toISOString();
-    const updated = { ...current, status: 'running', updatedAt: now, tasks: current.tasks.map((item: any) => item.id === task.id ? { ...item, status: 'running', executionId: parsed.data.executionId, snapshot: parsed.data.snapshot, modelId: parsed.data.snapshot.modelId, executionHistory: [...(item.executionHistory || []), { executionId: parsed.data.executionId, modelId: parsed.data.snapshot.modelId, startedAt: now, status: 'running' }].slice(-20), updatedAt: now } : item) };
-    storeAgentWorkflow(settings, { version: 1, plan: updated });
-    if (JSON.stringify(settings).length > 1_000_000) return res.status(413).json({ success: false, code: 'WORKSPACE_PLAN_TOO_LARGE', message: 'Snapshot task terlalu besar untuk disimpan.' });
-    const claimed = await prisma.workspaces.updateMany({ where: { chatId: req.params.chatId, settings: workspace.settings }, data: { settings: JSON.stringify(settings) } });
-    if (!claimed.count) return res.status(409).json({ success: false, code: 'WORKSPACE_TASK_ALREADY_RUNNING', message: 'Status Workspace berubah. Muat ulang plan sebelum menjalankan task.' });
-    return res.status(202).json({ success: true, data: updated });
+    await currentWorkspacePlan(workspace, req.user!.userId);
+    const result = await startWorkspaceTask(req.params.chatId, req.user!.userId, req.params.planId, req.params.taskId, parsed.data.executionId, parsed.data.snapshot, (req.user as any).tier || 'Free');
+    return res.status(result.claimed ? 202 : 200).json({ success: true, data: result });
   } catch (error) {
-    console.error('[WORKSPACE_TASK_RUN_ERROR]', error);
-    return res.status(500).json({ success: false, code: 'WORKSPACE_TASK_RUN_FAILED', message: 'Task gagal dimulai.' });
+    return sendWorkflowError(res, error, 'WORKSPACE_TASK_RUN_FAILED', 'Task gagal dimulai.');
+  }
+});
+
+router.post('/:chatId/plans/:planId/tasks/:taskId/model', async (req: Request, res: Response) => {
+  const parsed = WorkspaceTaskModelRequestSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ success: false, code: 'WORKSPACE_MODEL_INVALID', message: 'Pilihan model tidak valid.' });
+  try {
+    const workspace = await ownedWorkspace(req.params.chatId, req.user!.userId, false);
+    if (!workspace) return res.status(404).json({ success: false, code: 'WORKSPACE_NOT_FOUND', message: 'Workspace tidak ditemukan.' });
+    await currentWorkspacePlan(workspace, req.user!.userId);
+    const plan = await setWorkspaceTaskModel(req.params.chatId, req.user!.userId, req.params.planId, req.params.taskId, parsed.data.modelId, (req.user as any).tier || 'Free');
+    return res.json({ success: true, data: plan });
+  } catch (error) {
+    return sendWorkflowError(res, error, 'WORKSPACE_MODEL_UPDATE_FAILED', 'Model task gagal diperbarui.');
+  }
+});
+
+router.post('/:chatId/plans/:planId/tasks/:taskId/executions/:executionId/result', async (req: Request, res: Response) => {
+  const parsed = WorkspaceTaskExecutionResultRequestSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ success: false, code: 'WORKSPACE_TASK_RESULT_INVALID', message: parsed.error.issues[0]?.message || 'Hasil task tidak valid.' });
+  try {
+    const workspace = await ownedWorkspace(req.params.chatId, req.user!.userId, false);
+    if (!workspace) return res.status(404).json({ success: false, code: 'WORKSPACE_NOT_FOUND', message: 'Workspace tidak ditemukan.' });
+    await currentWorkspacePlan(workspace, req.user!.userId);
+    const plan = await finishWorkspaceTask(req.params.chatId, req.user!.userId, req.params.planId, req.params.taskId, req.params.executionId, parsed.data);
+    return res.json({ success: true, data: plan });
+  } catch (error) {
+    return sendWorkflowError(res, error, 'WORKSPACE_TASK_RESULT_SAVE_FAILED', 'Hasil task gagal disimpan.');
+  }
+});
+
+router.post('/:chatId/plans/:planId/tasks/:taskId/review', async (req: Request, res: Response) => {
+  const parsed = WorkspacePlanReviewRequestSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ success: false, code: 'WORKSPACE_TASK_REVIEW_INVALID', message: 'Keputusan tinjauan tidak valid.' });
+  try {
+    const workspace = await ownedWorkspace(req.params.chatId, req.user!.userId, false);
+    if (!workspace) return res.status(404).json({ success: false, code: 'WORKSPACE_NOT_FOUND', message: 'Workspace tidak ditemukan.' });
+    await currentWorkspacePlan(workspace, req.user!.userId);
+    const plan = await reviewWorkspaceTask(req.params.chatId, req.user!.userId, req.params.planId, req.params.taskId, parsed.data.decision);
+    return res.json({ success: true, data: plan });
+  } catch (error) {
+    return sendWorkflowError(res, error, 'WORKSPACE_TASK_REVIEW_FAILED', 'Keputusan tinjauan gagal disimpan.');
+  }
+});
+
+router.post('/:chatId/plans/:planId/tasks/:taskId/executions/:executionId/artifact', async (req: Request, res: Response) => {
+  const artifactId = typeof req.body?.artifactId === 'string' ? req.body.artifactId : '';
+  if (!artifactId || artifactId.length > 100) return res.status(400).json({ success: false, code: 'WORKSPACE_TASK_ARTIFACT_INVALID', message: 'Artifact task tidak valid.' });
+  try {
+    const workspace = await ownedWorkspace(req.params.chatId, req.user!.userId, false);
+    if (!workspace) return res.status(404).json({ success: false, code: 'WORKSPACE_NOT_FOUND', message: 'Workspace tidak ditemukan.' });
+    await currentWorkspacePlan(workspace, req.user!.userId);
+    const plan = await linkWorkspaceTaskArtifact(req.params.chatId, req.user!.userId, req.params.planId, req.params.taskId, req.params.executionId, artifactId);
+    return res.json({ success: true, data: plan });
+  } catch (error) {
+    return sendWorkflowError(res, error, 'WORKSPACE_TASK_ARTIFACT_SAVE_FAILED', 'Artifact task gagal ditautkan.');
+  }
+});
+
+router.post('/:chatId/plans/:planId/transition', async (req: Request, res: Response) => {
+  const parsed = WorkspacePlanTransitionRequestSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ success: false, code: 'WORKSPACE_PLAN_TRANSITION_INVALID', message: 'Tindakan plan tidak valid.' });
+  try {
+    const workspace = await ownedWorkspace(req.params.chatId, req.user!.userId, false);
+    if (!workspace) return res.status(404).json({ success: false, code: 'WORKSPACE_NOT_FOUND', message: 'Workspace tidak ditemukan.' });
+    await currentWorkspacePlan(workspace, req.user!.userId);
+    const plan = await transitionWorkspacePlan(req.params.chatId, req.user!.userId, req.params.planId, parsed.data.action);
+    return res.json({ success: true, data: plan });
+  } catch (error) {
+    return sendWorkflowError(res, error, 'WORKSPACE_PLAN_TRANSITION_FAILED', 'Perubahan status plan gagal disimpan.');
+  }
+});
+
+router.post('/:chatId/plans/:planId/tasks/:taskId/executions/:executionId/recover', async (req: Request, res: Response) => {
+  try {
+    const workspace = await ownedWorkspace(req.params.chatId, req.user!.userId, false);
+    if (!workspace) return res.status(404).json({ success: false, code: 'WORKSPACE_NOT_FOUND', message: 'Workspace tidak ditemukan.' });
+    await currentWorkspacePlan(workspace, req.user!.userId);
+    const plan = await recoverWorkspaceTask(req.params.chatId, req.user!.userId, req.params.planId, req.params.taskId, req.params.executionId);
+    return res.json({ success: true, data: plan });
+  } catch (error) {
+    return sendWorkflowError(res, error, 'WORKSPACE_EXECUTION_RECOVERY_FAILED', 'Eksekusi belum dapat dipulihkan.');
+  }
+});
+
+router.post('/:chatId/plans/:planId/tasks/:taskId/executions/:executionId/cancel', async (req: Request, res: Response) => {
+  try {
+    const workspace = await ownedWorkspace(req.params.chatId, req.user!.userId, false);
+    if (!workspace) return res.status(404).json({ success: false, code: 'WORKSPACE_NOT_FOUND', message: 'Workspace tidak ditemukan.' });
+    await currentWorkspacePlan(workspace, req.user!.userId);
+    const plan = await cancelWorkspaceTaskExecution(req.params.chatId, req.user!.userId, req.params.planId, req.params.taskId, req.params.executionId);
+    return res.json({ success: true, data: plan });
+  } catch (error) {
+    return sendWorkflowError(res, error, 'WORKSPACE_EXECUTION_CANCEL_FAILED', 'Task belum dapat dihentikan.');
   }
 });
 

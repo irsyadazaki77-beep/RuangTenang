@@ -187,6 +187,15 @@ describe('RuangKerja UX foundation', () => {
     expect(loadWorkspaceModelPreference(storage).modelId).toBe('auto');
   });
 
+  it('keeps manual model preferences separate between signed-in accounts', () => {
+    const values = new Map<string, string>();
+    const storage = { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { values.set(key, value); } };
+    saveWorkspaceModelPreference(storage, 'deepseek-chat', 'user-a');
+    saveWorkspaceModelPreference(storage, 'auto', 'user-b');
+    expect(loadWorkspaceModelPreference(storage, 'user-a').modelId).toBe('deepseek-chat');
+    expect(loadWorkspaceModelPreference(storage, 'user-b').modelId).toBe('auto');
+  });
+
   it('shows the actual selected Workspace context and opens compare controls from compare mode', () => {
     renderComposer({ workspaceContextSummary: '0 dokumen aktif · Canvas tidak disertakan' });
     expect(screen.getByRole('button', { name: /Buka panel konteks: 0 dokumen aktif/ })).toBeInTheDocument();

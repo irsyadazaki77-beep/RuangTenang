@@ -4,14 +4,16 @@ const keyNames: Record<ProviderId, string> = {
   gemini: 'GEMINI_API_KEY',
   deepseek: 'DEEPSEEK_API_KEY',
   groq: 'GROQ_API_KEY',
-  openrouter: 'OPENROUTER_API_KEY'
+  openrouter: 'OPENROUTER_API_KEY',
+  openai: 'OPENAI_API_KEY'
 };
 
 function isValidKey(provider: ProviderId, key: string): boolean {
   if (provider === 'gemini') return key.length > 0;
   if (provider === 'deepseek') return key.startsWith('sk-') && !key.includes('n123') && key.length >= 30;
   if (provider === 'groq') return key.startsWith('gsk_') && key.length >= 30;
-  return key.startsWith('sk-or-') && key.length >= 30;
+  if (provider === 'openrouter') return key.startsWith('sk-or-') && key.length >= 30;
+  return key.startsWith('sk-') && key.length >= 40;
 }
 
 /** Internal server-only provider credentials. Never serialize this object. */
@@ -28,3 +30,4 @@ export const aiProviderConfig = Object.freeze({
 export const DEEPSEEK_API_KEY = aiProviderConfig.getApiKey('deepseek');
 export const GROQ_API_KEY = aiProviderConfig.getApiKey('groq');
 export const OPENROUTER_API_KEY = aiProviderConfig.getApiKey('openrouter');
+export const OPENAI_API_KEY = aiProviderConfig.getApiKey('openai');

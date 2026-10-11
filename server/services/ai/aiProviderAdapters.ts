@@ -3,6 +3,7 @@ import type { AiRequestOptions } from './aiRequestService.js';
 import { deepseekService } from './deepseekService.js';
 import { groqService } from './groqService.js';
 import { openrouterService } from './openrouterService.js';
+import { openaiService } from './openaiService.js';
 
 export interface AiProviderAdapter {
   readonly provider: Exclude<ProviderId, 'gemini'>;
@@ -32,5 +33,11 @@ export const AI_PROVIDER_ADAPTERS: Readonly<Record<Exclude<ProviderId, 'gemini'>
     isAvailable: () => openrouterService.isAvailable(),
     generate: (options, modelId) => openrouterService.generateResponse(options, modelId),
     generateStream: (options, modelId) => openrouterService.generateStream(options, modelId)
+  },
+  openai: {
+    provider: 'openai',
+    isAvailable: () => openaiService.isAvailable(),
+    generate: (options, modelId) => openaiService.generateResponse(options, modelId),
+    generateStream: (options, modelId) => openaiService.generateStream(options, modelId)
   }
 };

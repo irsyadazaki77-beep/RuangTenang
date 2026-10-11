@@ -23,9 +23,29 @@ export default defineConfig(() => {
     ],
     test: {
       globals: true,
-      environment: 'jsdom',
-      setupFiles: ['./src/__tests__/setup.ts'],
-      include: ['src/__tests__/**/*.test.{ts,tsx}', 'server/__tests__/**/*.test.ts'],
+      // Frontend (jsdom) and backend (node) run as separate projects so server tests
+      // do not pay for a DOM. A backend file needing a DOM must opt in explicitly with
+      // a `// @vitest-environment jsdom` directive.
+      projects: [
+        {
+          extends: true,
+          test: {
+            name: 'frontend',
+            environment: 'jsdom',
+            setupFiles: ['./src/__tests__/setup.ts'],
+            include: ['src/__tests__/**/*.test.{ts,tsx}'],
+          },
+        },
+        {
+          extends: true,
+          test: {
+            name: 'backend',
+            environment: 'node',
+            setupFiles: ['./server/__tests__/setup.ts'],
+            include: ['server/__tests__/**/*.test.ts'],
+          },
+        },
+      ],
     },
     resolve: {
       alias: {

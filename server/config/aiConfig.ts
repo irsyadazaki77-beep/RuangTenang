@@ -1,6 +1,6 @@
 import { GoogleGenAI } from '@google/genai';
 import { DEFAULT_AI_MODEL_ID, RESILIENT_FALLBACK_AI_MODEL_ID } from '../services/ai/aiModelRegistry.js';
-import { aiProviderConfig, DEEPSEEK_API_KEY, GROQ_API_KEY, OPENROUTER_API_KEY } from './aiProviderConfig.js';
+import { aiProviderConfig, DEEPSEEK_API_KEY, GROQ_API_KEY, OPENROUTER_API_KEY, OPENAI_API_KEY } from './aiProviderConfig.js';
 
 /**
  * RuangTenang Centralized AI Configuration & Model Registry
@@ -9,7 +9,7 @@ import { aiProviderConfig, DEEPSEEK_API_KEY, GROQ_API_KEY, OPENROUTER_API_KEY } 
 export const DEFAULT_AI_MODEL = DEFAULT_AI_MODEL_ID;
 export const RESILIENT_FALLBACK_AI_MODEL = RESILIENT_FALLBACK_AI_MODEL_ID;
 
-export { DEEPSEEK_API_KEY, GROQ_API_KEY, OPENROUTER_API_KEY };
+export { DEEPSEEK_API_KEY, GROQ_API_KEY, OPENROUTER_API_KEY, OPENAI_API_KEY };
 
 export const CALMING_FALLBACK_MESSAGE = 'Aku sedang menyimak ceritamu, namun koneksi kita sempat terhenti sejenak 🌿. Tarik napas perlahan ya, kamu bisa mengirim ulang ceritamu atau beristirahat sejenak 🤍.';
 
@@ -57,5 +57,6 @@ export function getGenAIClient(): GoogleGenAI | null {
 export const getAiClient = getGenAIClient;
 
 export function isAiAvailable(): boolean {
-  return aiProviderConfig.isConfigured('gemini');
+  return (['openai', 'gemini', 'deepseek', 'groq', 'openrouter'] as const)
+    .some(provider => aiProviderConfig.isConfigured(provider));
 }

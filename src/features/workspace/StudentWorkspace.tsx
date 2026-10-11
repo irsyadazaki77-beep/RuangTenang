@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useLayoutEffect, useMemo, useReducer } from 'react';
+import React, { useState, useCallback, useEffect, useLayoutEffect, useMemo } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { FileText, Paperclip, Sparkles } from 'lucide-react';
 import { WorkspaceMode, WorkspaceArtifact, WorkspaceTab, WorkspaceComposerConfig, WorkspaceComparisonCandidate, WorkspaceComparisonRun, WorkspaceRequestSnapshot, WorkspaceArtifactSelection, ArtifactPatch } from './types';
@@ -43,10 +43,9 @@ import { WorkspacePlanSchema, type WorkspacePlan } from '../../../shared/contrac
 import { validateResearchCitations } from './utils/citationIntegrity';
 import { WorkspaceSourceLibrary } from './components/WorkspaceSourceLibrary';
 import { WorkspaceSourcePreview } from './components/WorkspaceSourcePreview';
-import { initialWorkspaceViewState, workspaceTabForInspector, workspaceViewReducer, type WorkspaceInspector } from './hooks/workspaceViewState';
+import { useWorkspaceViewController } from './hooks/useWorkspaceViewController';
 import { WORKSPACE_COMMAND_EVENT, type WorkspaceCommandId } from './utils/workspaceCommandEvents';
 import { readWorkspacePromptDraft, writeWorkspacePromptDraft } from './utils/workspacePromptDraft';
-import type { FileSourceReference } from '../../../shared/contracts/files';
 
 const WorkspaceFilePreviewModal = React.lazy(() => import('./components/WorkspaceFilePreviewModal').then(module => ({ default: module.WorkspaceFilePreviewModal })));
 
@@ -97,7 +96,14 @@ function parseGeneratedPlan(content: string, goal: string): WorkspacePlan | null
   } catch { return null; }
 }
 
-export function StudentWorkspace({ 
+export function StudentWorkspace(props: StudentWorkspaceProps) {
+  // Authentication can change while the route stays on the same chat. A keyed
+  // session boundary clears all in-memory Workspace state and runs hook cleanup
+  // (including aborting workspace loads and streams) for the previous account.
+  return <StudentWorkspaceSession key={props.user?.id || 'guest'} {...props} />;
+}
+
+function StudentWorkspaceSession({
   user, 
   chats,
   setChats,
@@ -118,6 +124,9 @@ export function StudentWorkspace({
   const updateWorkspacePlan = workspaceMetadata.updatePlan;
   const createWorkspacePlan = workspaceMetadata.createPlan;
   const startWorkspaceTaskExecution = workspaceMetadata.startTaskExecution;
+  const finishWorkspaceTaskExecution = workspaceMetadata.finishTaskExecution;
+  const cancelWorkspaceTaskExecution = workspaceMetadata.cancelTaskExecution;
+  const linkWorkspaceTaskArtifact = workspaceMetadata.linkTaskArtifact;
   const saveWorkspaceMetadata = workspaceMetadata.save;
   const workspacePlanRef = React.useRef(workspacePlan);
   workspacePlanRef.current = workspacePlan;
@@ -180,16 +189,20 @@ export function StudentWorkspace({
 
 
   // 3. UI Layout & View States
-  const [workspaceView, dispatchWorkspaceView] = useReducer(workspaceViewReducer, initialWorkspaceViewState);
-  const isCanvasOpen = workspaceView.inspector === 'canvas';
-  const isContextPanelOpen = workspaceView.inspector === 'context' || workspaceView.inspector === 'files' || workspaceView.inspector === 'sources' || workspaceView.inspector === 'plan';
-  const workspaceRightTab = workspaceView.inspector === 'files' || workspaceView.inspector === 'sources' || workspaceView.inspector === 'plan' ? workspaceView.inspector : 'context';
-  const mobileActiveTab = workspaceTabForInspector(workspaceView.inspector);
-  const previewAttachmentId = workspaceView.previewAttachmentId;
-  const focusedTaskId = workspaceView.focusedTaskId;
-  const workspaceViewRef = React.useRef(workspaceView);
-  workspaceViewRef.current = workspaceView;
-  const inspectorReturnFocusRef = React.useRef<HTMLElement | null>(null);
+  const {
+    workspaceView,
+    dispatchWorkspaceView,
+    isCanvasOpen,
+    isContextPanelOpen,
+    workspaceRightTab,
+    mobileActiveTab,
+    previewAttachmentId,
+    focusedTaskId,
+    openWorkspaceInspector,
+    closeWorkspaceInspector,
+    openWorkspaceSource,
+    openWorkspaceFilePreview
+  } = useWorkspaceViewController();
   const [isCanvasExpanded, setIsCanvasExpanded] = useState<boolean>(false);
   const [includeFilesInContext, setIncludeFilesInContext] = useState(true);
   const [selectedWorkspaceFileIds, setSelectedWorkspaceFileIds] = useState<string[]>([]);
@@ -198,10 +211,10 @@ export function StudentWorkspace({
   const promptDraftIdentity = `${user?.id || 'guest'}:${logicalWorkspaceIdentity}`;
   const [inputText, setInputText] = useState<string>(() => readWorkspacePromptDraft(getWorkspaceSessionStorage(), promptDraftIdentity));
   const [selectedModel, setSelectedModel] = useState<string>(() => {
-    return loadWorkspaceModelPreference(getWorkspaceSessionStorage()).modelId;
+    return loadWorkspaceModelPreference(getWorkspaceSessionStorage(), user?.id).modelId;
   });
   const [modelPreferenceNotice, setModelPreferenceNotice] = useState<string | null>(() =>
-    loadWorkspaceModelPreference(getWorkspaceSessionStorage()).wasReset
+    loadWorkspaceModelPreference(getWorkspaceSessionStorage(), user?.id).wasReset
       ? 'Pilihan model sebelumnya tidak tersedia; model default RuangKerja telah dipilih.'
       : null
   );
@@ -223,28 +236,6 @@ export function StudentWorkspace({
   const revisionRequestRef = React.useRef<{ scope: 'document' | 'selection'; artifactId: string; title: string; baseContent: string; baseVersion: number; workspaceId?: string; selection?: WorkspaceArtifactSelection } | null>(null);
   const requestSnapshotsRef = React.useRef(new Map<string, { snapshot: WorkspaceRequestSnapshot; attachments?: StoredAttachment[]; customSystemNote?: string; revisionRequest?: NonNullable<typeof revisionRequestRef.current> }>());
   const isStreamRequestCurrentRef = React.useRef<(identity: WorkspaceRequestIdentity) => boolean>(() => false);
-
-  const rememberInspectorFocus = useCallback(() => {
-    if (workspaceViewRef.current.inspector === 'closed') {
-      inspectorReturnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    }
-  }, []);
-  const openWorkspaceInspector = useCallback((inspector: Exclude<WorkspaceInspector, 'closed'>) => {
-    rememberInspectorFocus();
-    dispatchWorkspaceView({ type: 'open-inspector', inspector });
-  }, [rememberInspectorFocus]);
-  const closeWorkspaceInspector = useCallback(() => {
-    dispatchWorkspaceView({ type: 'close-inspector' });
-    requestAnimationFrame(() => inspectorReturnFocusRef.current?.focus());
-  }, []);
-  const openWorkspaceSource = useCallback((source: FileSourceReference) => {
-    rememberInspectorFocus();
-    dispatchWorkspaceView({ type: 'select-source', source });
-  }, [rememberInspectorFocus]);
-  const openWorkspaceFilePreview = useCallback((attachmentId: string) => {
-    rememberInspectorFocus();
-    dispatchWorkspaceView({ type: 'preview-attachment', attachmentId });
-  }, [rememberInspectorFocus]);
 
   const handleCompareModeChange = useCallback((enabled: boolean) => {
     setCompareMode(enabled);
@@ -302,7 +293,7 @@ export function StudentWorkspace({
       return;
     }
     clearTarget();
-  }, [artifacts, isLoadingArtifacts, isLoadingMessages, location.pathname, location.state, messages, navigate, openWorkspaceFilePreview, openWorkspaceInspector, setActiveArtifactId, setHasUnreadArtifact, showToast, workspaceMetadata.isLoading, workspacePlan]);
+  }, [artifacts, dispatchWorkspaceView, isLoadingArtifacts, isLoadingMessages, location.pathname, location.state, messages, navigate, openWorkspaceFilePreview, openWorkspaceInspector, setActiveArtifactId, setHasUnreadArtifact, showToast, workspaceMetadata.isLoading, workspacePlan]);
   useEffect(() => setInstructionsDraft(workspaceData?.instructions || ''), [workspaceData?.instructions]);
 
   useLayoutEffect(() => {
@@ -343,7 +334,7 @@ export function StudentWorkspace({
     setPendingCanvasTransfer(null);
     requestSnapshotsRef.current.clear();
     activeSendOperationRef.current = null;
-  }, [chatId, promptDraftIdentity, user?.id]);
+  }, [chatId, dispatchWorkspaceView, promptDraftIdentity, user?.id]);
 
   useEffect(() => {
     if (chatId && streamCreatedChatId === chatId) setStreamCreatedChatId(undefined);
@@ -352,9 +343,9 @@ export function StudentWorkspace({
   const handleModelChange = useCallback((modelId: string) => {
     const validModel = readWorkspaceModelPreference({ getItem: () => modelId });
     setSelectedModel(validModel);
-    saveWorkspaceModelPreference(getWorkspaceSessionStorage(), validModel);
+    saveWorkspaceModelPreference(getWorkspaceSessionStorage(), validModel, user?.id);
     setModelPreferenceNotice(null);
-  }, []);
+  }, [user?.id]);
 
   // F21 Preset Management Hook
   const {
@@ -471,12 +462,14 @@ export function StudentWorkspace({
     if (taskRun && taskRun.workspaceId === identity.workspaceId) {
       const latest = workspacePlanRef.current;
       if (latest?.id === taskRun.planId && latest.tasks.find(task => task.id === taskRun.taskId)?.executionId === taskRun.executionId) {
-        const taskType = latest.tasks.find(task => task.id === taskRun.taskId)?.type;
-        const resultStatus = assistantMsg.error ? 'failed' as const : taskType === 'writing' ? 'waiting_review' as const : 'done' as const;
-        const completedAt = new Date().toISOString();
-        const tasks = latest.tasks.map(task => task.id === taskRun.taskId ? { ...task, status: resultStatus, output: assistantMsg.error ? undefined : assistantMsg.content.slice(0, 20000), sources: assistantMsg.error ? undefined : assistantMsg.sources || [], executionHistory: (task.executionHistory || []).map(attempt => attempt.executionId === taskRun.executionId ? { ...attempt, status: assistantMsg.error ? 'failed' as const : 'completed' as const, completedAt } : attempt), updatedAt: completedAt } : task);
-        try { taskCompletionPlan = await updateWorkspacePlan({ ...latest, tasks, status: 'approved', updatedAt: new Date().toISOString() }); }
-        catch (error) { console.warn('[WorkspaceTasks] Task result persistence failed:', error); }
+        try {
+          taskCompletionPlan = await finishWorkspaceTaskExecution(taskRun.planId, taskRun.taskId, taskRun.executionId, assistantMsg.error
+            ? { errorCode: 'AI_REQUEST_FAILED' }
+            : { output: assistantMsg.content.slice(0, 20000), sources: assistantMsg.sources || [] });
+        } catch (error) {
+          console.warn('[WorkspaceTasks] Task result persistence failed:', error);
+          showToast('Hasil AI diterima, tetapi belum tersimpan. Status eksekusi tetap perlu dipulihkan atau dicoba ulang.', 'error');
+        }
       }
     }
     if (generatedTaskGoal && !assistantMsg.error) {
@@ -519,8 +512,7 @@ export function StudentWorkspace({
       if (!isCurrent()) return;
       setActiveArtifactId(extractedArtifacts[0].id);
       if (taskCompletionPlan && taskRun && artifactsPersisted) {
-        taskCompletionPlan = { ...taskCompletionPlan, tasks: taskCompletionPlan.tasks.map(task => task.id === taskRun.taskId ? { ...task, outputArtifactId: extractedArtifacts[0].id } : task) };
-        try { taskCompletionPlan = await updateWorkspacePlan(taskCompletionPlan); }
+        try { taskCompletionPlan = await linkWorkspaceTaskArtifact(taskRun.planId, taskRun.taskId, taskRun.executionId, extractedArtifacts[0].id); }
         catch (error) { console.warn('[WorkspaceTasks] Output artifact link did not persist:', error); }
       }
     }
@@ -531,7 +523,7 @@ export function StudentWorkspace({
       : citationAudit ? { ...assistantMsg, content: `${citationAudit.content}${citationAudit.removedUnknownCitationCount ? `\n\n${citationAudit.removedUnknownCitationCount} marker citation yang tidak cocok dengan evidence request ini dihapus.` : ''}${citationAudit.unreferencedSentenceCount ? `\n\n**Audit evidence:** ${citationAudit.unreferencedSentenceCount} kalimat panjang tidak memiliki marker sumber. Keterkaitan citation sudah divalidasi, tetapi dukungan makna belum diverifikasi otomatis.` : '\n\n**Audit evidence:** marker menunjuk ke sumber pada request ini. Dukungan makna tetap perlu ditinjau.'}` } : assistantMsg;
     if (!isCurrent()) return;
     setMessages(prev => prev.some(message => message.id === finalMessage.id) ? prev : [...prev, finalMessage]);
-  }, [openWorkspaceInspector, setMessages, setHasUnreadArtifact, syncParsedMessageArtifacts, setActiveArtifactId, updateWorkspacePlan, createWorkspacePlan, showToast]);
+  }, [openWorkspaceInspector, setMessages, setHasUnreadArtifact, syncParsedMessageArtifacts, setActiveArtifactId, finishWorkspaceTaskExecution, linkWorkspaceTaskArtifact, createWorkspacePlan, showToast]);
 
   const {
     isStreaming,
@@ -850,12 +842,8 @@ export function StudentWorkspace({
     }
     revisionRequestRef.current = null;
     abortStream();
-    if (taskRun && workspacePlanRef.current?.id === taskRun.planId) {
-      const plan = workspacePlanRef.current;
-      const cancelledAt = new Date().toISOString();
-      void updateWorkspacePlan({ ...plan, status: 'approved', tasks: plan.tasks.map(task => task.id === taskRun.taskId && task.executionId === taskRun.executionId ? { ...task, status: 'todo', output: undefined, executionHistory: (task.executionHistory || []).map(attempt => attempt.executionId === taskRun.executionId ? { ...attempt, status: 'cancelled', completedAt: cancelledAt } : attempt), updatedAt: cancelledAt } : task) }).catch(error => showToast(error instanceof Error ? error.message : 'Task belum dapat diperbarui.', 'error'));
-    }
-  }, [abortStream, showToast, updateWorkspacePlan]);
+    if (taskRun && workspacePlanRef.current?.id === taskRun.planId) void cancelWorkspaceTaskExecution(taskRun.planId, taskRun.taskId, taskRun.executionId).catch(error => showToast(error instanceof Error ? error.message : 'Task belum dapat dihentikan.', 'error'));
+  }, [abortStream, cancelWorkspaceTaskExecution, showToast]);
 
   const executeWorkspaceTool = useCallback(async (tool: WorkspaceToolDefinition, input: Record<string, unknown>, artifact: WorkspaceArtifact | null) => {
     const usableArtifact = artifact && artifact.id !== DEFAULT_WELCOME_ARTIFACT_ID ? artifact : null;
@@ -956,12 +944,19 @@ export function StudentWorkspace({
     rejectTaskReview: handleRejectTaskReview,
     generateTasks: handleGenerateWorkspaceTasks,
     cancelWorkflow: handleCancelWorkflow,
-    completeWorkflow: handleCompleteWorkflow
+    completeWorkflow: handleCompleteWorkflow,
+    pauseWorkflow: handlePauseWorkflow,
+    resumeWorkflow: handleResumeWorkflow,
+    recoverTask: handleRecoverWorkspaceTask
   } = useWorkspaceAgentController({
     plan: workspacePlan,
-    planRef: workspacePlanRef,
-    updatePlan: updateWorkspacePlan,
     startTaskExecution: startWorkspaceTaskExecution,
+    finishTaskExecution: finishWorkspaceTaskExecution,
+    reviewTask: workspaceMetadata.reviewTask,
+    linkTaskArtifact: linkWorkspaceTaskArtifact,
+    transitionPlan: workspaceMetadata.transitionPlan,
+    cancelTaskExecution: cancelWorkspaceTaskExecution,
+    recoverTaskExecution: workspaceMetadata.recoverTaskExecution,
     isStreaming,
     includeFilesInContext,
     selectedFileIds: selectedWorkspaceFileIds,
@@ -1241,6 +1236,9 @@ export function StudentWorkspace({
               onAcceptReview={handleAcceptTaskReview}
               onRejectReview={handleRejectTaskReview}
               onUpdate={updateWorkspacePlan}
+              onTransition={action => action === 'pause' ? handlePauseWorkflow() : handleResumeWorkflow()}
+              onRecover={handleRecoverWorkspaceTask}
+              onModelChange={(taskId, modelId) => void workspaceMetadata.updateTaskModel(workspacePlan!.id, taskId, modelId).catch(error => showToast(error instanceof Error ? error.message : 'Model task gagal diperbarui.', 'error'))}
               onRun={(taskId, feedback) => void handleRunWorkspaceTask(taskId, feedback)}
               onGenerate={handleGenerateWorkspaceTasks}
               onCancel={handleCancelWorkflow}

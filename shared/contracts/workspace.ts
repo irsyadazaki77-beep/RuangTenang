@@ -12,12 +12,12 @@ export const WorkspacePlanTaskSchema = z.object({
   dependsOn: z.array(z.string().min(1).max(100)).max(12).default([]),
   status: WorkspaceTaskStatusSchema.default('todo'),
   executionId: z.string().max(100).optional(),
-  snapshot: z.object({ inputPrompt: z.string().max(8000), contextSourceIds: z.array(z.string().max(100)).max(50), artifactContext: z.string().max(20000).optional(), workspaceInstructions: z.string().max(4000).optional(), modelId: z.string().max(100), createdAt: z.string() }).strict().optional(),
+  snapshot: z.object({ inputPrompt: z.string().max(8000), contextSourceIds: z.array(z.string().max(100)).max(50), artifactContext: z.string().max(20000).optional(), artifactId: z.string().max(100).optional(), workspaceInstructions: z.string().max(4000).optional(), modelId: z.string().max(100), createdAt: z.string() }).strict().optional(),
   output: z.string().max(20000).optional(),
   outputArtifactId: z.string().max(100).optional(),
   sources: z.array(z.object({ citationId: z.string().max(100).optional(), documentId: z.string().max(100), filename: z.string().max(500), page: z.number().int().positive().optional(), slide: z.number().int().positive().optional(), sheet: z.string().max(240).optional(), section: z.string().max(500).optional(), sourceRef: z.string().max(600), snippet: z.string().max(500).optional() }).strict()).max(50).optional(),
   modelId: z.string().max(100).optional(),
-  executionHistory: z.array(z.object({ executionId: z.string().max(100), modelId: z.string().max(100), startedAt: z.string(), completedAt: z.string().optional(), status: z.enum(['running', 'completed', 'failed', 'cancelled']) }).strict()).max(20).optional(),
+  executionHistory: z.array(z.object({ executionId: z.string().max(100), modelId: z.string().max(100), startedAt: z.string(), completedAt: z.string().optional(), status: z.enum(['running', 'completed', 'failed', 'cancelled', 'interrupted']) }).strict()).max(20).optional(),
   createdAt: z.string().optional(),
   updatedAt: z.string().optional()
 }).strict();
@@ -26,6 +26,7 @@ export const WorkspacePlanSchema = z.object({
   goal: z.string().trim().min(1).max(1000),
   title: z.string().trim().min(1).max(240),
   status: WorkspacePlanStatusSchema,
+  revision: z.number().int().positive().optional(),
   tasks: z.array(WorkspacePlanTaskSchema).min(1).max(12),
   createdAt: z.string(),
   updatedAt: z.string()
@@ -51,8 +52,18 @@ export const WorkspacePlanSchema = z.object({
 });
 export const WorkspaceTaskExecutionRequestSchema = z.object({
   executionId: z.string().min(1).max(100),
-  snapshot: z.object({ inputPrompt: z.string().max(8000), contextSourceIds: z.array(z.string().max(100)).max(50), artifactContext: z.string().max(20000).optional(), workspaceInstructions: z.string().max(4000).optional(), modelId: z.string().max(100), createdAt: z.string() }).strict()
+  snapshot: z.object({ inputPrompt: z.string().max(8000), contextSourceIds: z.array(z.string().max(100)).max(50), artifactContext: z.string().max(20000).optional(), artifactId: z.string().max(100).optional(), workspaceInstructions: z.string().max(4000).optional(), modelId: z.string().max(100), createdAt: z.string() }).strict()
 }).strict();
+
+export const WorkspacePlanTransitionRequestSchema = z.object({ action: z.enum(['approve', 'pause', 'resume', 'cancel', 'complete']) }).strict();
+export const WorkspacePlanReviewRequestSchema = z.object({ decision: z.enum(['accept', 'reject']) }).strict();
+export const WorkspaceTaskModelRequestSchema = z.object({ modelId: z.string().trim().max(100).nullable() }).strict();
+export const WorkspaceTaskExecutionResultRequestSchema = z.object({
+  output: z.string().max(20000).optional(),
+  sources: z.array(z.object({ citationId: z.string().max(100).optional(), documentId: z.string().max(100), filename: z.string().max(500), page: z.number().int().positive().optional(), slide: z.number().int().positive().optional(), sheet: z.string().max(240).optional(), section: z.string().max(500).optional(), sourceRef: z.string().max(600), snippet: z.string().max(500).optional() }).strict()).max(50).optional(),
+  outputArtifactId: z.string().max(100).optional(),
+  errorCode: z.string().max(100).optional()
+}).strict().refine(value => value.errorCode !== undefined || value.output !== undefined, 'Hasil task wajib tersedia.');
 
 export const CreateWorkspaceSchema = z.object({ name: z.string().trim().min(1).max(100).optional() }).strict();
 const WorkspaceSettingsSchema = z.record(z.string(), z.unknown()).refine(settings => {

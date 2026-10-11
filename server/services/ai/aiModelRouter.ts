@@ -6,7 +6,7 @@ export type ModelTier = 'PRIMARY' | 'FALLBACK' | 'COMPLEX' | 'FAST';
 
 /** Compatibility facade for existing internal AI tools; request policy lives in aiReliabilityService. */
 export const aiModelRouter = {
-  getCircuitState(provider: 'gemini' | 'deepseek' | 'groq' | 'openrouter' = 'gemini'): 'OPEN' | 'HALF-OPEN' | 'CLOSED' {
+  getCircuitState(provider: 'gemini' | 'deepseek' | 'groq' | 'openrouter' | 'openai' = 'gemini'): 'OPEN' | 'HALF-OPEN' | 'CLOSED' {
     return getProviderCircuitState(provider);
   },
   recordSuccess() {},

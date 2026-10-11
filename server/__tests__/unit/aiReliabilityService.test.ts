@@ -20,6 +20,7 @@ describe('AI reliability policy', () => {
     expect(classifyAiError(Object.assign(new Error('HTTP 429'), { statusCode: 429 })).retryable).toBe(true);
     expect(classifyAiError(Object.assign(new Error('HTTP 401'), { statusCode: 401 })).retryable).toBe(false);
     expect(classifyAiError(new Error('SAFETY_BLOCK')).category).toBe('SAFETY_BLOCK');
+    expect(classifyAiError(Object.assign(new Error('OPENAI_ERROR_429: credit_balance_exhausted'), { statusCode: 429 })).category).toBe('QUOTA_EXCEEDED');
   });
 
   it('bounds retries and returns on a later success', async () => {

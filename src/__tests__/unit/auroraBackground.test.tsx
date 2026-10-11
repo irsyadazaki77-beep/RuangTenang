@@ -45,7 +45,7 @@ describe('AuroraBackground Component Unit Tests — Unified Aurora 2.0', () => {
 
       expect(root).toBeDefined();
       expect(root.getAttribute('data-aurora-variant')).toBe('kerja');
-      expect(root.className).toContain('bg-[#f8fafc]');
+      expect(root.className).toContain('bg-secondary-50');
       expect(root.className).toContain('dark:bg-[#090e17]');
     });
 

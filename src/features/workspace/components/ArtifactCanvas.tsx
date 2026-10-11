@@ -39,6 +39,7 @@ import { WorkspaceToolRegistry } from '../tools/toolRegistry';
 import { WorkspaceToolDefinition } from '../tools/toolTypes';
 import { LazyMarkdown } from '../../../components/common/LazyMarkdown';
 import { useToast } from '../../../components/Toast';
+import { useArtifactAutosave } from '../hooks/useArtifactAutosave';
 
 interface SavedChartSpec {
   type: 'bar';
@@ -160,6 +161,8 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [titleInput, setTitleInput] = useState(artifact.title || '');
   const [editableContent, setEditableContent] = useState(initialDraftContent ?? artifact.content);
+  const editableContentRef = useRef(editableContent);
+  editableContentRef.current = editableContent;
   const contentScrollRef = useRef<HTMLDivElement>(null);
   const scrollSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savedChart = useMemo(() => {
@@ -216,7 +219,6 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
   const moreMenuRef = useRef<HTMLDivElement>(null);
-  const autosaveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const draftSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingDraftSyncRef = useRef<{ artifactId: string; content: string } | null>(null);
   const lastSavedContentRef = useRef<string>(artifact.content);
@@ -392,11 +394,13 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
       // Concurrency guard: Only set 'saved' if this was the latest save request
       if (currentSeq === saveSeqRef.current) {
         lastSavedContentRef.current = contentToSave;
+        lastKnownVersionRef.current = (saved as WorkspaceArtifact).version || lastKnownVersionRef.current;
         setSaveFailureMessage('Gagal simpan');
-        setIsDirty(false);
-        setSaveStatus((saved as WorkspaceArtifact).persistenceStatus === 'local' ? 'local' : 'saved');
+        const contentChangedDuringSave = editableContentRef.current !== contentToSave;
+        setIsDirty(contentChangedDuringSave);
+        setSaveStatus(contentChangedDuringSave ? 'unsaved' : (saved as WorkspaceArtifact).persistenceStatus === 'local' ? 'local' : 'saved');
         onUpdateArtifact?.({ ...saved as Partial<WorkspaceArtifact> });
-        return true;
+        return !contentChangedDuringSave;
       }
       return false;
     } catch (err) {
@@ -415,39 +419,26 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
     }
   }, [artifact.id, artifact.title, onSaveArtifact, onUpdateArtifact]);
 
-  // Debounced auto-save (800ms) with clean timer cleanup
-  useEffect(() => {
-    if (viewMode !== 'edit') return;
-
-    if (editableContent !== lastSavedContentRef.current) {
-      setIsDirty(true);
-      setSaveStatus('unsaved');
-
-      if (autosaveTimerRef.current) {
-        clearTimeout(autosaveTimerRef.current);
-      }
-
-      autosaveTimerRef.current = setTimeout(() => {
-        performSave(editableContent, artifact.title);
-      }, 800);
-    }
-
-    return () => {
-      if (autosaveTimerRef.current) {
-        clearTimeout(autosaveTimerRef.current);
-      }
-    };
-  }, [editableContent, viewMode, artifact.title, performSave]);
+  const markDraftDirty = useCallback(() => {
+    setIsDirty(true);
+    setSaveStatus('unsaved');
+  }, []);
+  const { cancelScheduledSave } = useArtifactAutosave({
+    content: editableContent,
+    title: artifact.title,
+    viewMode,
+    lastSavedContentRef,
+    onDirty: markDraftDirty,
+    save: performSave
+  });
 
   // Manual save trigger (e.g. Save button or Ctrl/Cmd + S)
   const handleManualSave = useCallback(() => {
     if (saveStatus === 'saving') return;
     flushDraftSync();
-    if (autosaveTimerRef.current) {
-      clearTimeout(autosaveTimerRef.current);
-    }
+    cancelScheduledSave();
     performSave(editableContent, artifact.title);
-  }, [editableContent, artifact.title, performSave, saveStatus, flushDraftSync]);
+  }, [editableContent, artifact.title, cancelScheduledSave, performSave, saveStatus, flushDraftSync]);
 
   const captureSelection = (target: HTMLTextAreaElement) => {
     const start = target.selectionStart;
@@ -494,7 +485,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
       setInlinePatchError('Penyimpanan Canvas tidak tersedia. Perubahan belum diterapkan.');
       return;
     }
-    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    cancelScheduledSave();
     saveSeqRef.current += 1;
     isApplyingInlinePatchRef.current = true;
     setSaveStatus('saving');
@@ -712,6 +703,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
 
   const handleContentChange = (newVal: string) => {
     saveSeqRef.current += 1;
+    editableContentRef.current = newVal;
     setEditableContent(newVal);
       scheduleDraftSync(artifact.id, newVal);
     if (newVal !== lastSavedContentRef.current) {

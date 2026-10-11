@@ -81,14 +81,14 @@ const MODEL_METADATA: AiModelMetadata[] = [
     allowedTiers: ['Pro', 'Premium']
   },
   {
-    id: 'gemini-2.5-pro',
-    name: 'Gemini 2.5 Pro',
+    id: 'gemini-3.5-pro',
+    name: 'Gemini 3.5 Pro',
     category: 'Penalaran Mendalam & Analisis',
-    tag: 'Refleksi Terstruktur',
-    description: 'Model berorientasi penalaran terstruktur untuk eksplorasi psikologis dan latihan pemikiran bertahap.',
+    tag: 'Pro • Analisis Mendalam',
+    description: 'Model penalaran mutakhir dari Google AI untuk analisis kognitif komprehensif, pemikiran reflektif mendalam, dan pemecahan masalah multi-langkah.',
     speed: 'Sedang',
-    reasoning: 'Tinggi',
-    recommendedFor: 'Latihan CBT terstruktur dan pemetaan pikiran bertahap',
+    reasoning: 'Sangat Tinggi',
+    recommendedFor: 'Restrukturisasi kognitif mendalam, analisis komprehensif, dan latihan refleksi terstruktur',
     allowedTiers: ['Pro', 'Premium']
   },
 
@@ -128,6 +128,17 @@ const MODEL_METADATA: AiModelMetadata[] = [
     allowedTiers: ['Free', 'Pro', 'Premium']
   },
   {
+    id: 'gemini-3.5-flash',
+    name: 'Gemini 3.5 Flash',
+    category: 'Model Utama & Seimbang',
+    tag: 'Stabil & Cepat',
+    description: 'Model generasi 3.5 berkecepatan tinggi dengan pemrosesan konsisten dan stabilitas respons pendampingan terpercaya.',
+    speed: 'Sangat Cepat',
+    reasoning: 'Tinggi',
+    recommendedFor: 'Pendampingan konseling umum yang stabil, cepat, dan teruji',
+    allowedTiers: ['Free', 'Pro', 'Premium']
+  },
+  {
     id: 'gemini-flash-latest',
     name: 'Gemini Flash Latest',
     category: 'Model Utama & Seimbang',
@@ -136,17 +147,6 @@ const MODEL_METADATA: AiModelMetadata[] = [
     speed: 'Sangat Cepat',
     reasoning: 'Tinggi',
     recommendedFor: 'Pengalaman AI yang selalu terbarukan dengan performa optimal',
-    allowedTiers: ['Free', 'Pro', 'Premium']
-  },
-  {
-    id: 'gemini-2.5-flash',
-    name: 'Gemini 2.5 Flash',
-    category: 'Model Utama & Seimbang',
-    tag: 'Stabil & Teruji',
-    description: 'Model generasi 2.5 dengan stabilitas tinggi dan konsistensi respon pendampingan terpercaya.',
-    speed: 'Cepat',
-    reasoning: 'Standar',
-    recommendedFor: 'Pendampingan konseling umum yang stabil dan teruji',
     allowedTiers: ['Free', 'Pro', 'Premium']
   },
   {
@@ -207,6 +207,17 @@ const MODEL_METADATA: AiModelMetadata[] = [
     allowedTiers: ['Free', 'Pro', 'Premium']
   },
   {
+    id: 'gemini-3.5-flash-lite',
+    name: 'Gemini 3.5 Flash Lite',
+    category: 'Ultra-Cepat & Ringan',
+    tag: 'Ringan & Efisien',
+    description: 'Model ringkas generasi 3.5 dengan efisiensi tinggi dan latensi rendah untuk obrolan santai, catatan harian cepat, dan penghematan kuota.',
+    speed: 'Sangat Cepat',
+    reasoning: 'Standar',
+    recommendedFor: 'Obrolan ringan, catatan harian cepat, dan penghematan bandwidth data',
+    allowedTiers: ['Free', 'Pro', 'Premium']
+  },
+  {
     id: 'gemini-3.1-flash-lite',
     name: 'Gemini 3.1 Flash Lite',
     category: 'Ultra-Cepat & Ringan',
@@ -216,21 +227,10 @@ const MODEL_METADATA: AiModelMetadata[] = [
     reasoning: 'Standar',
     recommendedFor: 'Percakapan sehari-hari, curhat santai, dan respon instan minim kuota',
     allowedTiers: ['Free', 'Pro', 'Premium']
-  },
-  {
-    id: 'gemini-2.5-flash-lite',
-    name: 'Gemini 2.5 Flash Lite',
-    category: 'Ultra-Cepat & Ringan',
-    tag: 'Ringan & Hemat Kuota',
-    description: 'Model ringkas hemat resource untuk obrolan santai dan catatan harian cepat.',
-    speed: 'Sangat Cepat',
-    reasoning: 'Standar',
-    recommendedFor: 'Obrolan ringan dan penghematan bandwidth data',
-    allowedTiers: ['Free', 'Pro', 'Premium']
   }
 ];
 
-export const RESILIENT_FALLBACK_AI_MODEL_ID = 'gemini-3.1-flash-lite';
+export const RESILIENT_FALLBACK_AI_MODEL_ID = 'gemini-3.5-flash-lite';
 
 const providerModels: Record<string, { provider: ProviderId; providerModelId: string }> = {
   'deepseek-reasoner': { provider: 'deepseek', providerModelId: 'deepseek-reasoner' },
@@ -243,6 +243,7 @@ const providerModels: Record<string, { provider: ProviderId; providerModelId: st
   'groq-gpt-120b': { provider: 'groq', providerModelId: 'openai/gpt-oss-120b' },
   'groq-gpt-20b': { provider: 'groq', providerModelId: 'openai/gpt-oss-20b' },
   'groq-qwen-27b': { provider: 'groq', providerModelId: 'qwen/qwen3.8-27b' },
+  'gemini-flash-latest': { provider: 'gemini', providerModelId: 'gemini-3.8-flash' },
 };
 
 export const AI_MODEL_REGISTRY: readonly AiModelDefinition[] = MODEL_METADATA.map(model => ({
@@ -254,6 +255,12 @@ export const AVAILABLE_AI_MODELS = AI_MODEL_REGISTRY;
 
 /** Only IDs observed in existing callers/preferences are accepted as aliases. */
 export const LEGACY_AI_MODEL_ALIASES: Readonly<Record<string, string>> = Object.freeze({
+  'openai-gpt-6-luna': 'gemini-3.8-flash',
+  'openai-gpt-4o': 'gemini-3.8-flash',
+  'openai-gpt-4o-mini': 'gemini-3.5-flash-lite',
+  'gpt-4o': 'gemini-3.8-flash',
+  'gpt-4o-mini': 'gemini-3.5-flash-lite',
+  'gpt-6-luna': 'gemini-3.8-flash',
   'deepseek-r1': 'deepseek-reasoner',
   'qwen/qwen3.8-27b': 'groq-qwen-27b',
   'openai/gpt-oss-120b': 'groq-gpt-120b',
@@ -263,10 +270,17 @@ export const LEGACY_AI_MODEL_ALIASES: Readonly<Record<string, string>> = Object.
   'nvidia/nemotron-3.5-lightning:free': 'openrouter-nemotron-lightning',
   'cohere/north-mini-code:free': 'openrouter-cohere-code',
   'inclusionai/ling-3.0-flash-sante:free': 'openrouter-ling-flash',
-  'gemini-2.0-flash': 'gemini-2.5-flash',
-  'gemini-2.5-pro': 'gemini-3.1-pro-preview',
-  'gemini-2.5-flash-lite': 'gemini-3.1-flash-lite',
-  'gemini-flash-latest': 'gemini-2.5-flash'
+  'gemini-1.5-flash': 'gemini-3.8-flash',
+  'gemini-1.5-pro': 'gemini-3.5-pro',
+  'gemini-1.5-flash-8b': 'gemini-3.5-flash-lite',
+  'gemini-2.0-flash': 'gemini-3.8-flash',
+  'gemini-2.0-flash-lite': 'gemini-3.5-flash-lite',
+  'gemini-2.0-flash-thinking-exp': 'gemini-3.1-pro-preview',
+  'gemini-2.0-pro-exp': 'gemini-3.5-pro',
+  'gemini-2.5-flash': 'gemini-3.5-flash',
+  'gemini-2.5-pro': 'gemini-3.5-pro',
+  'gemini-2.5-flash-lite': 'gemini-3.5-flash-lite',
+  'gemini-flash-latest': 'gemini-3.8-flash'
 });
 
 export function getModelDefinition(modelId: string): AiModelDefinition | undefined {
@@ -293,7 +307,7 @@ export function getConfiguredDefaultAiModelId(tier = 'Free'): string {
     AI_MODEL_REGISTRY.find(model => model.id === RESILIENT_FALLBACK_AI_MODEL_ID),
     ...AI_MODEL_REGISTRY
   ].filter((model): model is AiModelDefinition => Boolean(model));
-  return candidates.find(model => isTierAllowed(model, tier) && aiProviderConfig.isConfigured(model.provider))?.id
+  return candidates.find(model => isTierAllowed(model, tier) && aiProviderConfig.isConfigured(model.provider) && getProviderHealth(model.provider) !== 'unavailable')?.id
     || AUTO_ROUTING_MODEL_ID;
 }
 
@@ -315,6 +329,10 @@ function isProviderConfigured(provider: ProviderId): boolean {
   return aiProviderConfig.isConfigured(provider);
 }
 
+export function isOpenAiModel(modelId: string): boolean {
+  return getModelDefinition(modelId)?.provider === 'openai';
+}
+
 export function isDeepSeekModel(modelId: string): boolean {
   return getModelDefinition(modelId)?.provider === 'deepseek';
 }
@@ -329,7 +347,7 @@ export function isOpenRouterModel(modelId: string): boolean {
 
 export function getActualGeminiModel(modelId: string): string {
   const model = getModelDefinition(modelId);
-  return model?.provider === 'gemini' ? model.providerModelId : 'gemini-2.5-flash';
+  return model?.provider === 'gemini' ? model.providerModelId : DEFAULT_AI_MODEL_ID;
 }
 
 export function getModelInfo(modelId: string): AiModelDefinition {

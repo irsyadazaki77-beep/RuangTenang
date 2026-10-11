@@ -3,6 +3,7 @@ import { consentService } from '../consentService.js';
 import { scanAndSanitizePII } from '../piiService.js';
 import { sanitizeInput } from '../../security.js';
 import { getGenAIClient } from '../../config/aiConfig.js';
+import { DEFAULT_AI_MODEL_ID } from './aiModelRegistry.js';
 import { aiModelRouter } from './aiModelRouter.js';
 import { getVerifiedEmergencyContacts } from '../../config/emergencyRegistry.js';
 import { validateAndSanitizeToolCall } from './aiToolSchemas.js';
@@ -70,7 +71,7 @@ export const aiGateway = {
       pluginResult: params.pluginResult,
       chatMode: params.chatMode,
       responseStyle: params.responseStyle,
-      aiModel: params.aiModel || 'gemini-2.0-flash',
+      aiModel: params.aiModel || DEFAULT_AI_MODEL_ID,
       history: params.history || [],
       isStreaming: true
     };
@@ -91,7 +92,7 @@ export const aiGateway = {
       pluginResult: params.pluginResult,
       chatMode: params.chatMode,
       responseStyle: params.responseStyle,
-      aiModel: params.aiModel || 'gemini-2.0-flash',
+      aiModel: params.aiModel || DEFAULT_AI_MODEL_ID,
       history: params.history || [],
       isStreaming: false
     };

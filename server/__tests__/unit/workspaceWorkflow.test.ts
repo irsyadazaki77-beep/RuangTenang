@@ -5,6 +5,14 @@ import request from 'supertest';
 const db = vi.hoisted(() => ({
   chatsFindFirst: vi.fn(), workspaceFindUnique: vi.fn(), workspaceUpdate: vi.fn(), workspaceUpdateMany: vi.fn(), chatsUpdate: vi.fn(), attachmentsFindMany: vi.fn(), attachmentsFindFirst: vi.fn(), attachmentsUpdate: vi.fn()
 }));
+const workflow = vi.hoisted(() => ({
+  findWorkspacePlan: vi.fn(), backfillLegacyPlan: vi.fn(), createWorkspacePlan: vi.fn(), updateDraftPlan: vi.fn(), startWorkspaceTask: vi.fn(),
+  finishWorkspaceTask: vi.fn(), reviewWorkspaceTask: vi.fn(), linkWorkspaceTaskArtifact: vi.fn(), transitionWorkspacePlan: vi.fn(),
+  recoverWorkspaceTask: vi.fn(), cancelWorkspaceTaskExecution: vi.fn(), WorkspaceWorkflowError: class extends Error {
+    constructor(public code: string, public status = 409) { super(code); }
+  }
+}));
+vi.mock('../../services/workspaceWorkflowService.js', () => workflow);
 vi.mock('../../database.js', () => ({ prisma: {
   chats: { findFirst: db.chatsFindFirst, update: db.chatsUpdate },
   workspaces: { findUnique: db.workspaceFindUnique, update: db.workspaceUpdate, updateMany: db.workspaceUpdateMany },
@@ -32,6 +40,11 @@ let row: any;
 describe('Workspace workflow authorization and task execution', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    workflow.findWorkspacePlan.mockResolvedValue(null);
+    workflow.backfillLegacyPlan.mockImplementation(async (_workspaceId: string, _userId: string, value: any) => value);
+    workflow.createWorkspacePlan.mockImplementation(async (_workspaceId: string, _userId: string, value: any) => ({ ...value, revision: 1 }));
+    workflow.updateDraftPlan.mockImplementation(async (_workspaceId: string, _userId: string, value: any) => ({ ...value, revision: (value.revision || 1) + 1 }));
+    workflow.startWorkspaceTask.mockImplementation(async (_workspaceId: string, _userId: string, _planId: string, _taskId: string, _executionId: string, _snapshot: any) => ({ plan: plan('running'), claimed: true }));
     row = { chatId: 'chat-a', settings: JSON.stringify({ agentWorkflow: { version: 1, plan: plan('draft') } }), createdAt: new Date(now), updatedAt: new Date(now) };
     db.chatsFindFirst.mockImplementation(({ where }: any) => where.userId === 'user-a' && where.id === 'chat-a' ? { id: 'chat-a', title: 'Workspace', updatedAt: new Date(now) } : null);
     db.workspaceFindUnique.mockImplementation(({ where }: any) => where.chatId === 'chat-a' ? row : null);
@@ -44,36 +57,53 @@ describe('Workspace workflow authorization and task execution', () => {
   });
 
   it('rejects execution until the plan is approved', async () => {
+    workflow.startWorkspaceTask.mockRejectedValue(new workflow.WorkspaceWorkflowError('WORKSPACE_PLAN_NOT_APPROVED'));
     await request(app).post('/api/v1/workspace/chat-a/plans/p1/tasks/t1/run').set('x-test-user', 'user-a').send({ executionId: 'exec-a', snapshot: { inputPrompt: 'run', contextSourceIds: [], modelId: 'auto', createdAt: now } }).expect(409).expect(({ body }) => expect(body.code).toBe('WORKSPACE_PLAN_NOT_APPROVED'));
-    expect(db.workspaceUpdateMany).not.toHaveBeenCalled();
+    expect(workflow.startWorkspaceTask).toHaveBeenCalledOnce();
   });
 
   it('blocks tasks whose dependencies are incomplete', async () => {
     row.settings = JSON.stringify({ agentWorkflow: { version: 1, plan: plan('approved') } });
+    workflow.startWorkspaceTask.mockRejectedValue(new workflow.WorkspaceWorkflowError('WORKSPACE_TASK_DEPENDENCY_BLOCKED'));
     await request(app).post('/api/v1/workspace/chat-a/plans/p1/tasks/t2/run').set('x-test-user', 'user-a').send({ executionId: 'exec-b', snapshot: { inputPrompt: 'run', contextSourceIds: [], modelId: 'auto', createdAt: now } }).expect(409).expect(({ body }) => expect(body.code).toBe('WORKSPACE_TASK_DEPENDENCY_BLOCKED'));
   });
 
-  it('claims one approved task with an immutable execution snapshot', async () => {
+  it('returns the server claim disposition and sends the snapshot to the execution service', async () => {
     row.settings = JSON.stringify({ agentWorkflow: { version: 1, plan: plan('approved') } });
-    const snapshot = { inputPrompt: 'Analyze only source A', contextSourceIds: ['file-a'], artifactContext: 'Canvas v2', modelId: 'model-x', createdAt: now };
+    const snapshot = { inputPrompt: 'Analyze only source A', contextSourceIds: ['file-a'], artifactContext: 'Canvas v2', modelId: 'auto', createdAt: now };
+    const runningPlan = { ...plan('running'), tasks: plan('running').tasks.map(task => task.id === 't1' ? { ...task, status: 'running', executionId: 'exec-a', snapshot } : task) };
+    workflow.startWorkspaceTask.mockResolvedValue({ plan: runningPlan, claimed: true });
     const response = await request(app).post('/api/v1/workspace/chat-a/plans/p1/tasks/t1/run').set('x-test-user', 'user-a').send({ executionId: 'exec-a', snapshot }).expect(202);
-    expect(response.body.data.status).toBe('running');
-    expect(response.body.data.tasks[0]).toMatchObject({ status: 'running', executionId: 'exec-a', snapshot });
-    expect(JSON.stringify(JSON.parse(row.settings).agentWorkflow)).not.toContain('Analyze only source A');
-    expect(JSON.parse(row.settings).agentWorkflow.storage).toBe('encrypted-v1');
-    expect(db.workspaceUpdateMany).toHaveBeenCalledOnce();
+    expect(response.body.data.claimed).toBe(true);
+    expect(response.body.data.plan.status).toBe('running');
+    expect(response.body.data.plan.tasks[0]).toMatchObject({ status: 'running', executionId: 'exec-a', snapshot });
+    expect(workflow.startWorkspaceTask).toHaveBeenCalledWith('chat-a', 'user-a', 'p1', 't1', 'exec-a', snapshot, 'Free');
   });
 
   it('decrypts encrypted plan records for the owning Workspace API response', async () => {
     const savedPlan = plan('approved');
+    workflow.findWorkspacePlan.mockResolvedValue(savedPlan);
     const plaintext = JSON.stringify({ version: 1, plan: savedPlan });
     row.settings = JSON.stringify({ agentWorkflow: { storage: 'encrypted-v1', payload: `encrypted:${Buffer.from(plaintext).toString('base64')}` } });
 
     const response = await request(app).get('/api/v1/workspace/chat-a').set('x-test-user', 'user-a').expect(200);
 
     expect(response.body.data.plan).toMatchObject({ id: 'p1', title: 'Ringkasan sumber' });
-    expect(response.body.data.settings.agentWorkflow).toMatchObject({ version: 1, plan: { id: 'p1' } });
+    expect(response.body.data.settings).not.toHaveProperty('agentWorkflow');
     expect(JSON.stringify(response.body)).not.toContain('encrypted-v1');
+    expect(db.workspaceUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it('does not reset a running execution when a second tab reads the Workspace', async () => {
+    const running = plan('running', [{ id: 't1', title: 'Analisis sumber', type: 'analysis', dependsOn: [], status: 'running', executionId: 'exec-live', executionHistory: [{ executionId: 'exec-live', modelId: 'auto', startedAt: now, status: 'running' }] }]);
+    workflow.findWorkspacePlan.mockResolvedValue(running);
+    row.settings = JSON.stringify({ theme: 'minimal' });
+
+    const response = await request(app).get('/api/v1/workspace/chat-a').set('x-test-user', 'user-a').expect(200);
+
+    expect(response.body.data.plan.status).toBe('running');
+    expect(response.body.data.plan.tasks[0]).toMatchObject({ status: 'running', executionId: 'exec-live' });
+    expect(db.workspaceUpdateMany).not.toHaveBeenCalled();
   });
 
   it('upgrades a legacy plaintext plan on Workspace load without losing its contents', async () => {
@@ -87,6 +117,7 @@ describe('Workspace workflow authorization and task execution', () => {
     expect(persistedWorkflow.storage).toBe('encrypted-v1');
     expect(JSON.stringify(persistedWorkflow)).not.toContain('Buat ringkasan');
     expect(JSON.parse(row.settings).theme).toBe('minimal');
+    expect(workflow.backfillLegacyPlan).toHaveBeenCalledWith('chat-a', 'user-a', savedPlan);
   });
 
   it('rejects completion submitted by an obsolete task execution', async () => {
@@ -94,14 +125,16 @@ describe('Workspace workflow authorization and task execution', () => {
       { id: 't1', title: 'Analisis sumber', type: 'analysis', dependsOn: [], status: 'running', executionId: 'exec-new' },
       { id: 't2', title: 'Tulis ringkasan', type: 'writing', dependsOn: ['t1'], status: 'todo' }
     ]);
-    row.settings = JSON.stringify({ agentWorkflow: { version: 1, plan: currentPlan } });
+    const currentWorkflow = JSON.stringify({ version: 1, plan: currentPlan });
+    row.settings = JSON.stringify({ agentWorkflow: { storage: 'encrypted-v1', payload: `encrypted:${Buffer.from(currentWorkflow).toString('base64')}` } });
     const stalePlan = plan('running', [
       { id: 't1', title: 'Analisis sumber', type: 'analysis', dependsOn: [], status: 'done', executionId: 'exec-old' },
       { id: 't2', title: 'Tulis ringkasan', type: 'writing', dependsOn: ['t1'], status: 'todo' }
     ]);
 
+    workflow.updateDraftPlan.mockRejectedValue(new workflow.WorkspaceWorkflowError('WORKSPACE_PLAN_COMMAND_REQUIRED'));
     await request(app).put('/api/v1/workspace/chat-a/plans/p1').set('x-test-user', 'user-a').send(stalePlan).expect(409)
-      .expect(({ body }) => expect(body.code).toBe('WORKSPACE_TASK_EXECUTION_STALE'));
+      .expect(({ body }) => expect(body.code).toBe('WORKSPACE_PLAN_COMMAND_REQUIRED'));
     expect(db.workspaceUpdateMany).not.toHaveBeenCalled();
   });
 

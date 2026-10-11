@@ -7,6 +7,7 @@ import { parsePort } from './config/port.js';
 import { logger } from './utils/logger.js';
 import { metricsService } from './services/metricsService.js';
 import { isAiAvailable } from './config/aiConfig.js';
+import { aiProviderConfig } from './config/aiProviderConfig.js';
 
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
@@ -96,9 +97,9 @@ export function validateStartupEnvironment(): {
   const env = process.env.NODE_ENV || 'development';
   const port = parsePort(process.env.PORT, 3000).toString();
   const jwtSecret = process.env.JWT_SECRET;
-  const geminiKeyConfigured = isAiAvailable();
-  if (!geminiKeyConfigured) {
-    warnings.push('GEMINI_API_KEY tidak terkonfigurasi. Fitur obrolan AI akan menggunakan panduan reflektif lokal.');
+  const aiProviderConfigured = isAiAvailable();
+  if (!aiProviderConfigured) {
+    warnings.push('Tidak ada API key provider AI yang terkonfigurasi. Fitur obrolan akan menggunakan panduan reflektif lokal.');
   }
 
   console.log(`==========================================`);
@@ -106,7 +107,8 @@ export function validateStartupEnvironment(): {
   console.log(`- NODE_ENV        : ${env}`);
   console.log(`- PORT            : ${port}`);
   console.log(`- JWT_SECRET      : ${jwtSecret ? 'TERSEDIA' : 'NOT SET'}`);
-  console.log(`- GEMINI_API_KEY  : ${geminiKeyConfigured ? 'TERSEDIA' : 'TIDAK ADA (FALLBACK COMPANION)'}`);
+  console.log(`- AI PROVIDER     : ${aiProviderConfigured ? 'TERSEDIA' : 'TIDAK ADA (FALLBACK COMPANION)'}`);
+  console.log(`- OPENAI_API_KEY  : ${aiProviderConfig.isConfigured('openai') ? 'TERSEDIA' : 'TIDAK ADA'}`);
   if (warnings.length > 0) {
     warnings.forEach(w => console.warn(`  ⚠️  [PERINGATAN STARTUP]: ${w}`));
   }
@@ -119,7 +121,8 @@ export function validateStartupEnvironment(): {
       NODE_ENV: env,
       PORT: port,
       JWT_SECRET_SET: jwtSecret ? 'true' : 'false',
-      GEMINI_API_KEY_SET: geminiKeyConfigured ? 'true' : 'false'
+      AI_PROVIDER_CONFIGURED: aiProviderConfigured ? 'true' : 'false',
+      OPENAI_API_KEY_SET: aiProviderConfig.isConfigured('openai') ? 'true' : 'false'
     }
   };
 }

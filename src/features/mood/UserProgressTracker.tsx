@@ -1,3 +1,4 @@
+import { getPhq9Severity, getGad7Severity } from '../../lib/clinicalScoring';
 import React, { useState, useEffect, useMemo } from 'react';
 import { apiClient } from "../../lib/apiClient";
 import { safeLocalStorage } from "../../lib/storage";
@@ -443,7 +444,7 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
                   <p className="text-xs text-secondary mt-1 font-medium">
                     {screenHistory.length === 0 
                       ? 'Belum pernah tes' 
-                      : `Kategori: ${currentPhq9 <= 4 ? 'Minimal' : currentPhq9 <= 9 ? 'Ringan' : currentPhq9 <= 14 ? 'Sedang' : 'Berat'}`}
+                      : `Kategori: ${getPhq9Severity(currentPhq9)}`}
                   </p>
                 </div>
               </div>
@@ -470,7 +471,7 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
                   <p className="text-xs text-secondary mt-1 font-medium">
                     {screenHistory.length === 0 
                       ? 'Belum pernah tes' 
-                      : `Kategori: ${currentGad7 <= 4 ? 'Minimal' : currentGad7 <= 9 ? 'Ringan' : currentGad7 <= 14 ? 'Sedang' : 'Berat'}`}
+                      : `Kategori: ${getGad7Severity(currentGad7)}`}
                   </p>
                 </div>
               </div>

@@ -70,9 +70,57 @@ export class WorkspaceApiService {
     return res.data;
   }
 
-  static async startTaskExecution(chatId: string, planId: string, taskId: string, executionId: string, snapshot: NonNullable<WorkspacePlan['tasks'][number]['snapshot']>): Promise<WorkspacePlan> {
-    const res = await apiClient.post<WorkspacePlan>(`/api/v1/workspace/${encodeURIComponent(chatId)}/plans/${encodeURIComponent(planId)}/tasks/${encodeURIComponent(taskId)}/run`, { executionId, snapshot });
+  static async startTaskExecution(chatId: string, planId: string, taskId: string, executionId: string, snapshot: NonNullable<WorkspacePlan['tasks'][number]['snapshot']>): Promise<{ plan: WorkspacePlan; claimed: boolean }> {
+    const res = await apiClient.post<{ plan: WorkspacePlan; claimed: boolean }>(`/api/v1/workspace/${encodeURIComponent(chatId)}/plans/${encodeURIComponent(planId)}/tasks/${encodeURIComponent(taskId)}/run`, { executionId, snapshot });
     if (!res.success || !res.data) throw new Error(res.message || 'Task tidak dapat dijalankan.');
+    return res.data;
+  }
+
+  static async finishTaskExecution(chatId: string, planId: string, taskId: string, executionId: string, result: { output?: string; sources?: WorkspacePlan['tasks'][number]['sources']; errorCode?: string }): Promise<WorkspacePlan> {
+    const path = `/api/v1/workspace/${encodeURIComponent(chatId)}/plans/${encodeURIComponent(planId)}/tasks/${encodeURIComponent(taskId)}/executions/${encodeURIComponent(executionId)}/result`;
+    const res = await apiClient.post<WorkspacePlan>(path, result);
+    if (!res.success || !res.data) throw new Error(res.message || 'Hasil task gagal disimpan.');
+    return res.data;
+  }
+
+  static async reviewTask(chatId: string, planId: string, taskId: string, decision: 'accept' | 'reject'): Promise<WorkspacePlan> {
+    const path = `/api/v1/workspace/${encodeURIComponent(chatId)}/plans/${encodeURIComponent(planId)}/tasks/${encodeURIComponent(taskId)}/review`;
+    const res = await apiClient.post<WorkspacePlan>(path, { decision });
+    if (!res.success || !res.data) throw new Error(res.message || 'Keputusan tinjauan gagal disimpan.');
+    return res.data;
+  }
+
+  static async updateTaskModel(chatId: string, planId: string, taskId: string, modelId: string | null): Promise<WorkspacePlan> {
+    const path = `/api/v1/workspace/${encodeURIComponent(chatId)}/plans/${encodeURIComponent(planId)}/tasks/${encodeURIComponent(taskId)}/model`;
+    const res = await apiClient.post<WorkspacePlan>(path, { modelId });
+    if (!res.success || !res.data) throw new Error(res.message || 'Model task gagal diperbarui.');
+    return res.data;
+  }
+
+  static async linkTaskArtifact(chatId: string, planId: string, taskId: string, executionId: string, artifactId: string): Promise<WorkspacePlan> {
+    const path = `/api/v1/workspace/${encodeURIComponent(chatId)}/plans/${encodeURIComponent(planId)}/tasks/${encodeURIComponent(taskId)}/executions/${encodeURIComponent(executionId)}/artifact`;
+    const res = await apiClient.post<WorkspacePlan>(path, { artifactId });
+    if (!res.success || !res.data) throw new Error(res.message || 'Artifact task gagal ditautkan.');
+    return res.data;
+  }
+
+  static async transitionPlan(chatId: string, planId: string, action: 'approve' | 'pause' | 'resume' | 'cancel' | 'complete'): Promise<WorkspacePlan> {
+    const res = await apiClient.post<WorkspacePlan>(`/api/v1/workspace/${encodeURIComponent(chatId)}/plans/${encodeURIComponent(planId)}/transition`, { action });
+    if (!res.success || !res.data) throw new Error(res.message || 'Perubahan status plan gagal disimpan.');
+    return res.data;
+  }
+
+  static async cancelTaskExecution(chatId: string, planId: string, taskId: string, executionId: string): Promise<WorkspacePlan> {
+    const path = `/api/v1/workspace/${encodeURIComponent(chatId)}/plans/${encodeURIComponent(planId)}/tasks/${encodeURIComponent(taskId)}/executions/${encodeURIComponent(executionId)}/cancel`;
+    const res = await apiClient.post<WorkspacePlan>(path, {});
+    if (!res.success || !res.data) throw new Error(res.message || 'Task belum dapat dihentikan.');
+    return res.data;
+  }
+
+  static async recoverTaskExecution(chatId: string, planId: string, taskId: string, executionId: string): Promise<WorkspacePlan> {
+    const path = `/api/v1/workspace/${encodeURIComponent(chatId)}/plans/${encodeURIComponent(planId)}/tasks/${encodeURIComponent(taskId)}/executions/${encodeURIComponent(executionId)}/recover`;
+    const res = await apiClient.post<WorkspacePlan>(path, {});
+    if (!res.success || !res.data) throw new Error(res.message || 'Eksekusi belum dapat dipulihkan.');
     return res.data;
   }
 

@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { ArtifactCanvas } from '../../features/workspace/components/ArtifactCanvas';
 import { WorkspaceCanvasPane } from '../../features/workspace/components/WorkspaceCanvasPane';
 import { WorkspaceArtifact } from '../../features/workspace/types';
@@ -162,6 +162,25 @@ describe('Workspace Canvas 2.0 UX & Behavior', () => {
     // Click manual save
     fireEvent.click(saveBtn);
     expect(onSaveArtifact).toHaveBeenCalledWith('# Teks Draf Terupdate', mockArtifact.title);
+  });
+
+  it('keeps a newer edit dirty when an older save acknowledges', async () => {
+    let resolveSave!: (artifact: WorkspaceArtifact) => void;
+    const onSaveArtifact = vi.fn(() => new Promise<WorkspaceArtifact>(resolve => { resolveSave = resolve; }));
+    render(<ArtifactCanvas artifact={mockArtifact} onSaveArtifact={onSaveArtifact} />);
+
+    fireEvent.click(screen.getByTitle('Edit Dokumen Langsung (Autosave)'));
+    const editor = screen.getByPlaceholderText(/Ketik atau sesuaikan draf dokumen/);
+    fireEvent.change(editor, { target: { value: '# Draf A' } });
+    fireEvent.click(screen.getByRole('button', { name: /Simpan/ }));
+    fireEvent.change(editor, { target: { value: '# Draf B' } });
+
+    await act(async () => {
+      resolveSave({ ...mockArtifact, content: '# Draf A', version: mockArtifact.version + 1 });
+    });
+
+    expect(screen.getByPlaceholderText(/Ketik atau sesuaikan draf dokumen/)).toHaveValue('# Draf B');
+    expect(screen.getByText('Belum disimpan')).toBeInTheDocument();
   });
 
   it('proposes a scoped rewrite and applies it as a saved version only after acceptance', async () => {

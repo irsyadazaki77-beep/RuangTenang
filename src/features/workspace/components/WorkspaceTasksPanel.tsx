@@ -11,6 +11,9 @@ interface Props {
   isExecuting: boolean;
   onGenerate: (goal: string) => void;
   onUpdate: (plan: WorkspacePlan) => Promise<unknown>;
+  onTransition: (action: 'pause' | 'resume') => void;
+  onRecover: (taskId: string, executionId: string) => void;
+  onModelChange: (taskId: string, modelId: string | null) => void;
   onRun: (taskId: string, feedback?: string) => void;
   onCancel: () => void;
   onComplete: () => void;
@@ -23,7 +26,7 @@ interface Props {
   focusedTaskId?: string;
 }
 
-export const WorkspaceTasksPanel: React.FC<Props> = ({ plan, workspaceKey, isLoading = false, canPersist, isGenerating, isExecuting, onGenerate, onUpdate, onRun, onCancel, onComplete, modelOptions, onOpenArtifact, onOpenSource, onAcceptReview, onRejectReview, hideHeader = false, focusedTaskId }) => {
+export const WorkspaceTasksPanel: React.FC<Props> = ({ plan, workspaceKey, isLoading = false, canPersist, isGenerating, isExecuting, onGenerate, onUpdate, onTransition, onRecover, onModelChange, onRun, onCancel, onComplete, modelOptions, onOpenArtifact, onOpenSource, onAcceptReview, onRejectReview, hideHeader = false, focusedTaskId }) => {
   const [expanded, setExpanded] = useState(() => Boolean(plan));
   const [goal, setGoal] = useState('');
   const [titleEdits, setTitleEdits] = useState<Record<string, string>>({});
@@ -93,9 +96,10 @@ export const WorkspaceTasksPanel: React.FC<Props> = ({ plan, workspaceKey, isLoa
                 {task.status === 'waiting_review' && <div className="mt-2 flex flex-wrap gap-2"><button type="button" onClick={() => onAcceptReview(task.id)} className="h-7 rounded bg-emerald-700 px-2 text-[10px] font-semibold text-white">Terima hasil</button><button type="button" onClick={() => onRejectReview(task.id)} className="h-7 rounded px-2 text-[10px] text-rose-700">Tolak</button><div className="flex min-w-40 flex-1 gap-1"><input aria-label={`Instruksi revisi ${task.title}`} value={reviewFeedback[task.id] || ''} onChange={event => setReviewFeedback(current => ({ ...current, [task.id]: event.target.value.slice(0, 1000) }))} placeholder="Masukan revisi…" className="h-7 min-w-0 flex-1 rounded border border-slate-200 bg-transparent px-2 text-[10px] dark:border-slate-700" /><button type="button" disabled={!reviewFeedback[task.id]?.trim() || isExecuting} onClick={() => onRun(task.id, reviewFeedback[task.id])} className="h-7 rounded border border-slate-200 px-2 text-[10px] font-semibold text-slate-700 disabled:opacity-40 dark:border-slate-700 dark:text-slate-200">Minta revisi</button></div></div>}
               </div>
               {plan.status === 'draft' && <div className="flex shrink-0 items-center"><button type="button" aria-label={`Pindah task ${index + 1} ke atas`} onClick={() => reorder(index, -1)} className="p-1 text-slate-400"><ChevronUp className="h-3.5 w-3.5" /></button><button type="button" aria-label={`Pindah task ${index + 1} ke bawah`} onClick={() => reorder(index, 1)} className="p-1 text-slate-400"><ChevronDown className="h-3.5 w-3.5" /></button><button type="button" disabled={plan.tasks.length <= 1} aria-label={`Hapus task ${task.title}`} onClick={() => void persist({ ...plan, tasks: plan.tasks.filter(item => item.id !== task.id).map(item => ({ ...item, dependsOn: item.dependsOn.filter(id => id !== task.id) })) })} className="p-1 text-slate-400 hover:text-rose-600 disabled:opacity-30"><X className="h-3.5 w-3.5" /></button></div>}
-              {(plan.status === 'draft' || task.status === 'failed') && <select aria-label={`Model task ${index + 1}`} value={task.modelId || ''} onChange={event => updateTask(task.id, { modelId: event.target.value || undefined })} className="h-7 max-w-28 rounded border border-slate-200 bg-white px-1 text-[10px] dark:border-slate-700 dark:bg-slate-900"><option value="">Auto</option><option value="auto">Auto routing</option>{modelOptions.map(model => <option key={model.id} value={model.id}>{model.name}</option>)}</select>}
+              {(plan.status === 'draft' || task.status === 'failed') && <select aria-label={`Model task ${index + 1}`} value={task.modelId || ''} onChange={event => { const modelId = event.target.value || null; if (plan.status === 'draft') updateTask(task.id, { modelId: modelId || undefined }); else onModelChange(task.id, modelId); }} className="h-7 max-w-28 rounded border border-slate-200 bg-white px-1 text-[10px] dark:border-slate-700 dark:bg-slate-900"><option value="">Auto</option><option value="auto">Auto routing</option>{modelOptions.map(model => <option key={model.id} value={model.id}>{model.name}</option>)}</select>}
               {(plan.status === 'approved' || plan.status === 'running') && task.status === 'todo' && ready && <button type="button" disabled={isExecuting} onClick={() => onRun(task.id)} className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md bg-emerald-700 px-2 text-[10px] font-semibold text-white disabled:opacity-50"><Play className="h-3 w-3" />Jalankan</button>}
               {task.status === 'failed' && (plan.status === 'approved' || plan.status === 'running') && <button type="button" disabled={isExecuting || !ready} onClick={() => onRun(task.id)} className="text-[10px] font-semibold text-emerald-700 disabled:opacity-50">Coba lagi</button>}
+              {task.status === 'running' && task.executionId && !isExecuting && <button type="button" onClick={() => onRecover(task.id, task.executionId!)} className="text-[10px] font-semibold text-amber-700">Tandai terputus</button>}
             </li>;
           })}
         </ol>
@@ -108,10 +112,10 @@ export const WorkspaceTasksPanel: React.FC<Props> = ({ plan, workspaceKey, isLoa
             {nextTask && <button type="button" disabled={isExecuting} onClick={() => onRun(nextTask.id)} className="inline-flex h-8 items-center gap-1 rounded-lg bg-emerald-700 px-3 text-[11px] font-semibold text-white disabled:opacity-50"><Play className="h-3 w-3" />Jalankan berikutnya</button>}
             {isExecuting && <button type="button" onClick={onCancel} className="inline-flex h-8 items-center gap-1 rounded-lg border border-rose-200 px-3 text-[11px] font-semibold text-rose-700"><X className="h-3 w-3" />Stop task</button>}
             {doneCount === plan.tasks.length && <button type="button" onClick={onComplete} className="ml-auto h-8 rounded-lg bg-slate-800 px-3 text-[11px] font-semibold text-white">Konfirmasi selesai</button>}
-            {doneCount < plan.tasks.length && !isExecuting && <button type="button" onClick={() => void persist({ ...plan, status: 'paused' })} className="ml-auto inline-flex h-8 items-center gap-1 rounded-lg px-2.5 text-[11px] font-semibold text-slate-600"><Pause className="h-3 w-3" />Jeda</button>}
+            {doneCount < plan.tasks.length && <button type="button" onClick={() => onTransition('pause')} className="ml-auto inline-flex h-8 items-center gap-1 rounded-lg px-2.5 text-[11px] font-semibold text-slate-600"><Pause className="h-3 w-3" />Jeda</button>}
             <button type="button" onClick={onCancel} className="h-8 rounded-lg px-2 text-[11px] text-slate-500">Batalkan plan</button>
           </>}
-          {plan.status === 'paused' && <button type="button" onClick={() => void persist({ ...plan, status: 'approved' })} className="h-8 rounded-lg bg-emerald-700 px-3 text-[11px] font-semibold text-white">Lanjutkan plan</button>}
+          {plan.status === 'paused' && <button type="button" onClick={() => onTransition('resume')} className="h-8 rounded-lg bg-emerald-700 px-3 text-[11px] font-semibold text-white">Lanjutkan plan</button>}
           {plan.status === 'completed' && <p className="text-[11px] text-emerald-700">Hasil akhir dikonfirmasi.</p>}
         </div>
       </>}

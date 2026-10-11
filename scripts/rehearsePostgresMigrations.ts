@@ -97,7 +97,7 @@ async function assertSchemaAndRelations(url: string) {
   try {
     const models = [
       'users', 'chats', 'chatMessages', 'messageBookmarks', 'attachments', 'documentChunks', 'selfCareTasks', 'artifacts',
-      'artifactVersions', 'workspaces', 'workspaceTasks', 'appointments', 'appointmentSlot',
+      'artifactVersions', 'workspaces', 'workspaceTasks', 'workspacePlans', 'workspacePlanTasks', 'workspaceTaskDependencies', 'workspaceTaskExecutions', 'appointments', 'appointmentSlot',
       'screenings', 'clinicalSoapNotes', 'userSession', 'loginEvent', 'distributedState', 'distributedLock',
     ] as const;
     for (const model of models) await prisma[model].count();
@@ -108,14 +108,28 @@ async function assertSchemaAndRelations(url: string) {
     } });
     await prisma.chats.create({ data: {
       id: 'cascade-chat', userId: 'cascade-user', title: 'Cascade Chat', workspaceMode: 'RUANG_KERJA',
-      workspace: { create: { tasks: { create: { id: 'cascade-task', title: 'Cascade Task' } } } },
+      workspace: { create: {
+        tasks: { create: { id: 'cascade-task', title: 'Cascade Task' } },
+        plans: { create: { id: 'cascade-plan', userId: 'cascade-user', titleEncrypted: 'encrypted-title', goalEncrypted: 'encrypted-goal', tasks: { create: [
+          { id: 'cascade-agent-task', titleEncrypted: 'encrypted-task-a', position: 0 },
+          { id: 'cascade-agent-task-b', titleEncrypted: 'encrypted-task-b', position: 1 },
+        ] } } }
+      } },
     } });
     const workspaceBeforeDelete = await prisma.workspaces.count({ where: { chatId: 'cascade-chat' } });
     const taskBeforeDelete = await prisma.workspaceTasks.count({ where: { id: 'cascade-task' } });
     if (workspaceBeforeDelete !== 1 || taskBeforeDelete !== 1) throw new Error('Workspace relation chain was not created.');
+    await prisma.workspaceTaskDependencies.create({ data: { taskId: 'cascade-agent-task-b', dependsOnTaskId: 'cascade-agent-task' } });
+    await prisma.workspaceTaskExecutions.create({ data: {
+      id: 'cascade-execution', planTaskId: 'cascade-agent-task', workspaceId: 'cascade-chat', userId: 'cascade-user',
+      status: 'completed', modelId: 'auto', requestFingerprint: 'test', snapshotEncrypted: 'encrypted-snapshot', attemptNumber: 1,
+    } });
+    if (await prisma.workspaceTaskExecutions.count({ where: { id: 'cascade-execution' } }) !== 1) throw new Error('Agent execution relation was not created.');
     await prisma.chats.delete({ where: { id: 'cascade-chat' } });
     if (await prisma.workspaces.count({ where: { chatId: 'cascade-chat' } }) !== 0) throw new Error('Deleting a chat did not cascade to Workspaces.');
     if (await prisma.workspaceTasks.count({ where: { id: 'cascade-task' } }) !== 0) throw new Error('Deleting a chat did not cascade to WorkspaceTasks.');
+    if (await prisma.workspacePlans.count({ where: { id: 'cascade-plan' } }) !== 0) throw new Error('Deleting a chat did not cascade to WorkspacePlans.');
+    if (await prisma.workspacePlanTasks.count({ where: { id: 'cascade-agent-task' } }) !== 0 || await prisma.workspaceTaskExecutions.count({ where: { id: 'cascade-execution' } }) !== 0) throw new Error('Deleting a chat did not cascade through agent executions.');
 
     await prisma.attachments.create({ data: {
       id: 'cascade-attachment', userId: 'cascade-user', filename: 'cascade.txt', mimeType: 'text/plain', size: 5, data: 'uploads/cascade.txt',

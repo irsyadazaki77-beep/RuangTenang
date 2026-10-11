@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { ScreeningResult } from '../../types';
 import { getPhq9Severity, getGad7Severity } from '../../lib/clinicalScoring';
+import { calculatePhq9Total, calculateGad7Total, PHQ9_ITEM9_INDEX } from '../../../shared/clinical/scoring';
 import { apiClient } from '../../lib/apiClient';
 import { OPTIONS } from './constants';
 import { ALL_QUESTIONS, TOTAL_QUESTIONS } from './screeningQuestions';
@@ -184,8 +185,9 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
               score: s.phq9Score,
               severity: s.phq9Severity || getPhq9Severity(s.phq9Score),
               date: s.timestamp,
-              item9Score: s.item9Score ?? 0,
-              hasSelfHarmRisk: s.hasSelfHarmRisk ?? false
+              // Unknown item 9 stays undefined (not 0); server flag can only be raised.
+              item9Score: typeof s.item9Score === 'number' ? s.item9Score : undefined,
+              hasSelfHarmRisk: s.hasSelfHarmRisk === true || s.safety?.item9Positive === true
             },
             gad7: {
               score: s.gad7Score,
@@ -267,9 +269,19 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
     if (isSubmitting) return;
     setIsSubmitting(true);
 
-    const phqScore = latestPhq.reduce((a, b) => (b !== -1 ? a + b : a), 0);
-    const gadScore = latestGad.reduce((a, b) => (b !== -1 ? a + b : a), 0);
-    const item9Score = latestPhq[8] !== -1 ? latestPhq[8] : 0;
+    // Strict shared engine: an incomplete/invalid questionnaire never yields a final score.
+    let phqScore: number;
+    let gadScore: number;
+    try {
+      phqScore = calculatePhq9Total(latestPhq);
+      gadScore = calculateGad7Total(latestGad);
+    } catch (err) {
+      setPersistenceStatus('failed');
+      setPersistenceError(err instanceof Error ? err.message : 'Jawaban belum lengkap.');
+      setIsSubmitting(false);
+      return;
+    }
+    const item9Score = latestPhq[PHQ9_ITEM9_INDEX];
     const hasSelfHarmRisk = item9Score > 0;
 
     const riskCategory: 'KRISIS_SANGAT_TINGGI' | 'RISIKO_MENYAKITI_DIRI' | 'STANDAR' = (safetyAssessment.immediateDanger || safetyAssessment.planOrIntent)
@@ -337,6 +349,8 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
         gad7Score: gadScore,
         phq9Severity: getPhq9Severity(phqScore),
         gad7Severity: getGad7Severity(gadScore),
+        phq9Answers: latestPhq,
+        gad7Answers: latestGad,
         item9Score,
         hasSelfHarmRisk,
         riskIndicators

@@ -28,6 +28,11 @@ describe('AI model registry', () => {
   it('normalizes only explicitly registered legacy aliases', () => {
     expect(resolveAiModel('deepseek-r1', 'Free').id).toBe('deepseek-reasoner');
     expect(resolveAiModel('openai/gpt-oss-120b', 'Free').provider).toBe('groq');
+    expect(resolveAiModel('gemini-2.5-flash', 'Free').id).toBe('gemini-3.5-flash');
+    expect(resolveAiModel('gemini-2.5-flash-lite', 'Free').id).toBe('gemini-3.5-flash-lite');
+    expect(resolveAiModel('gemini-2.0-flash', 'Free').id).toBe('gemini-3.8-flash');
+    expect(resolveAiModel('gemini-1.5-flash', 'Free').id).toBe('gemini-3.8-flash');
+    expect(resolveAiModel('gemini-2.5-pro', 'Pro').id).toBe('gemini-3.5-pro');
     expect(() => resolveAiModel('nvidia/arbitrary-model', 'Free')).toThrowError('MODEL_NOT_FOUND');
     expect(Object.keys(LEGACY_AI_MODEL_ALIASES).length).toBeGreaterThan(0);
   });
@@ -35,8 +40,10 @@ describe('AI model registry', () => {
   it('chooses a configured tier-valid default when the canonical default provider is missing', () => {
     const originalGemini = process.env.GEMINI_API_KEY;
     const originalDeepSeek = process.env.DEEPSEEK_API_KEY;
+    const originalOpenAi = process.env.OPENAI_API_KEY;
     try {
       delete process.env.GEMINI_API_KEY;
+      delete process.env.OPENAI_API_KEY;
       process.env.DEEPSEEK_API_KEY = `sk-${'x'.repeat(32)}`;
       expect(getConfiguredDefaultAiModelId('Free')).toBe('deepseek-reasoner');
     } finally {
@@ -44,11 +51,13 @@ describe('AI model registry', () => {
       else process.env.GEMINI_API_KEY = originalGemini;
       if (originalDeepSeek === undefined) delete process.env.DEEPSEEK_API_KEY;
       else process.env.DEEPSEEK_API_KEY = originalDeepSeek;
+      if (originalOpenAi === undefined) delete process.env.OPENAI_API_KEY;
+      else process.env.OPENAI_API_KEY = originalOpenAi;
     }
   });
 
   it('uses automatic safe routing when no provider is configured', () => {
-    const keys = ['GEMINI_API_KEY', 'DEEPSEEK_API_KEY', 'GROQ_API_KEY', 'OPENROUTER_API_KEY'].map(key => [key, process.env[key]] as const);
+    const keys = ['GEMINI_API_KEY', 'DEEPSEEK_API_KEY', 'GROQ_API_KEY', 'OPENROUTER_API_KEY', 'OPENAI_API_KEY'].map(key => [key, process.env[key]] as const);
     try {
       for (const [key] of keys) delete process.env[key];
       expect(getConfiguredDefaultAiModelId('Free')).toBe('auto');

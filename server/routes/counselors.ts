@@ -1,3 +1,4 @@
+import { calculatePhq9Severity } from '../../shared/clinical/scoring.js';
 import { Router, Request, Response } from 'express';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 import { prisma } from '../database.js';
@@ -338,10 +339,11 @@ router.get(
       for (const s of allScreenings) {
         sumPhq9 += s.phq9Score;
         sumGad7 += s.gad7Score;
-        const sev = (s.phq9Severity || '').toLowerCase();
+        // Severity is derived from the score by the shared engine, not the stored (possibly legacy) label.
+        const sev = calculatePhq9Severity(s.phq9Score).toLowerCase();
         if (sev.includes('minimal')) dist.minimal++;
         else if (sev.includes('ringan') || sev.includes('mild')) dist.mild++;
-        else if (sev.includes('sedang') || sev.includes('moderate')) dist.moderate++;
+        else if (sev === 'sedang') dist.moderate++;
         else dist.severe++;
       }
 

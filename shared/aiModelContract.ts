@@ -1,4 +1,4 @@
-export type ProviderId = 'gemini' | 'deepseek' | 'groq' | 'openrouter';
+export type ProviderId = 'gemini' | 'deepseek' | 'groq' | 'openrouter' | 'openai';
 export type ModelCapability = 'chat' | 'streaming' | 'reasoning';
 export type ModelAvailability = 'configured' | 'temporarily_unavailable' | 'provider_not_configured';
 export type ModelTier = 'Free' | 'Pro' | 'Premium';

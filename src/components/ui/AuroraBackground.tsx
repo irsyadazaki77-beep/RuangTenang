@@ -15,8 +15,8 @@ export type { AuroraPhase };
 export interface AuroraBackgroundProps {
   /**
    * Identitas visual aurora:
-   * - 'tenang': Emerald, Teal, Mint, Cyan, Indigo (calming, sanctuary, atmospheric).
-   * - 'kerja': Indigo, Violet, Electric Blue, Cyan, Emerald accent (intelligent, futuristic, focused).
+   * - 'tenang': Emerald, Teal, Mint, Cyan (calming, sanctuary, atmospheric).
+   * - 'kerja': Indigo, Violet, Electric Blue, Cyan (intelligent, focused).
    */
   variant?: AuroraVariant;
   /**
@@ -42,11 +42,24 @@ export interface AuroraBackgroundProps {
 }
 
 /**
- * AuroraBackground - Unified Aurora Experience 2.1 (Vibrant Fluid Ambient Mesh)
+ * AuroraBackground — Aurora 2.2 Performance, Fluid Motion & Visual Quality Overhaul
  * 
- * Engine terpadu dengan 2 identitas visual (Ruang Tenang & Ruang Kerja),
- * dilengkapi Dynamic Color Morphing organik ala Google Gemini,
- * reaktif terhadap siklus hidup AI nyata (idle -> preparing -> thinking -> streaming -> finishing -> idle).
+ * Fitur Utama Aurora 2.2:
+ * 1. Dual-Vibrant Palette Engine:
+ *    - Ruang Tenang: Teal (#0d9488), Emerald (#10b981), Mint (#6ee7b7), Cyan (#22d3ee).
+ *    - Ruang Kerja: Indigo (#6366f1), Violet (#8b5cf6), Electric Blue (#3b82f6), Cyan (#06b6d4).
+ * 2. Optimized Compositing:
+ *    - Menggunakan blur terkalibrasi (36px mobile, 48px tablet, 60px desktop) dengan falloff gradien tegas
+ *      sehingga warna terlihat 100% kaya dan cerah tanpa penalti repaint berat.
+ * 3. Pure GPU Transform & Opacity Animations:
+ *    - Tanpa JavaScript timer per frame, tanpa re-render React berlebihan.
+ * 4. Micro-Grain Static SVG Dither:
+ *    - Menggunakan static noise data URI teroptimasi yang bebas beban continuous CPU feTurbulence.
+ * 5. Deterministic AI Lifecycle State Machine:
+ *    - Mengisolasi request ID dengan pembatalan otomatis untuk mencegah timer race conditions.
+ * 6. Responsive & Tab-Aware:
+ *    - Freeze otomatis saat tab disembunyikan untuk menghemat daya GPU.
+ *    - Reduced-motion mode menampilkan pendaran statis yang tetap estetik.
  */
 export const AuroraBackground: React.FC<AuroraBackgroundProps> = memo(({
   variant = 'tenang',
@@ -82,8 +95,9 @@ export const AuroraBackground: React.FC<AuroraBackgroundProps> = memo(({
     return () => observer.disconnect();
   }, []);
 
-  // Monitor visibility tab untuk menghemat 100% daya GPU saat tab tidak aktif
+  // Monitor visibility tab untuk menghentikan loop rendering saat tab tidak aktif
   useEffect(() => {
+    if (typeof document === 'undefined') return;
     const handleVisibility = () => {
       setIsTabHidden(document.hidden);
     };
@@ -91,17 +105,28 @@ export const AuroraBackground: React.FC<AuroraBackgroundProps> = memo(({
     return () => document.removeEventListener('visibilitychange', handleVisibility);
   }, []);
 
+  // Reset timer helper
+  const clearPendingTimers = () => {
+    if (finishingTimerRef.current) {
+      clearTimeout(finishingTimerRef.current);
+      finishingTimerRef.current = null;
+    }
+    if (errorTimerRef.current) {
+      clearTimeout(errorTimerRef.current);
+      errorTimerRef.current = null;
+    }
+  };
+
   // Tangani prop isStreaming legacy jika propPhase tidak didefinisikan secara langsung
   useEffect(() => {
     if (propPhase !== undefined) return;
     if (propIsStreaming !== undefined) {
+      clearPendingTimers();
       if (propIsStreaming) {
-        if (finishingTimerRef.current) clearTimeout(finishingTimerRef.current);
         setInternalPhase('streaming');
       } else {
         setInternalPhase(prev => {
           if (prev === 'streaming' || prev === 'thinking' || prev === 'preparing') {
-            if (finishingTimerRef.current) clearTimeout(finishingTimerRef.current);
             finishingTimerRef.current = setTimeout(() => {
               setInternalPhase('idle');
             }, 1800);
@@ -135,14 +160,7 @@ export const AuroraBackground: React.FC<AuroraBackgroundProps> = memo(({
       }
 
       // Bersihkan timer transisi sebelumnya
-      if (finishingTimerRef.current) {
-        clearTimeout(finishingTimerRef.current);
-        finishingTimerRef.current = null;
-      }
-      if (errorTimerRef.current) {
-        clearTimeout(errorTimerRef.current);
-        errorTimerRef.current = null;
-      }
+      clearPendingTimers();
 
       if (detail.phase === 'finishing') {
         setInternalPhase('finishing');
@@ -168,13 +186,12 @@ export const AuroraBackground: React.FC<AuroraBackgroundProps> = memo(({
       // Hanya tangani event legacy jika tidak dikontrol propPhase
       const customEvent = e as CustomEvent<AuroraStreamingEventDetail>;
       if (customEvent.detail && typeof customEvent.detail.isStreaming === 'boolean') {
+        clearPendingTimers();
         if (customEvent.detail.isStreaming) {
-          if (finishingTimerRef.current) clearTimeout(finishingTimerRef.current);
           setInternalPhase('streaming');
         } else {
           setInternalPhase(prev => {
             if (prev === 'streaming' || prev === 'thinking' || prev === 'preparing') {
-              if (finishingTimerRef.current) clearTimeout(finishingTimerRef.current);
               finishingTimerRef.current = setTimeout(() => {
                 setInternalPhase('idle');
               }, 1800);
@@ -192,25 +209,24 @@ export const AuroraBackground: React.FC<AuroraBackgroundProps> = memo(({
     return () => {
       window.removeEventListener(AURORA_ACTIVITY_EVENT, handleActivity);
       window.removeEventListener(AURORA_STREAMING_EVENT, handleLegacyStreaming);
-      if (finishingTimerRef.current) clearTimeout(finishingTimerRef.current);
-      if (errorTimerRef.current) clearTimeout(errorTimerRef.current);
+      clearPendingTimers();
     };
   }, [variant]);
 
   // Phase prioritas: propPhase > internalPhase
   const currentPhase: AuroraPhase = propPhase ?? internalPhase;
 
-  // Intensitas multiplier: default normal ditingkatkan agar benar-benar hidup
+  // Intensitas multiplier terkalibrasi agar warna selalu nyata & berkarakter
   const intensityMultiplier = useMemo(() => {
     switch (intensity) {
-      case 'subtle': return 0.72;
-      case 'vivid': return 1.30;
+      case 'subtle': return 0.78;
+      case 'vivid': return 1.32;
       case 'normal':
-      default: return 1.05;
+      default: return 1.08;
     }
   }, [intensity]);
 
-  // Harmonic fluid easing ala Google Gemini (ultra-smooth sinusoidal wave interpolation)
+  // Harmonic fluid easing: smooth acceleration, ultra-gentle deceleration
   const fluidEase: [number, number, number, number] = [0.44, 0.05, 0.22, 0.95];
 
   // Hitung durasi dan ritme pergerakan berdasarkan phase
@@ -221,21 +237,21 @@ export const AuroraBackground: React.FC<AuroraBackgroundProps> = memo(({
   const isError = currentPhase === 'error';
 
   const durationScale = isThinking
-    ? 0.48 // Aktif & hidup saat AI berpikir (gelombang aurora berdenyut lebih dinamis)
+    ? 0.46 // Lebih berdenyut & hidup saat berpikir
     : isStreaming
-    ? 0.68 // Aliran berirama dinamis & stabil saat streaming
+    ? 0.65 // Mengalir dinamis & stabil saat streaming
     : isPreparing
-    ? 0.80
+    ? 0.78
     : isFinishing
-    ? 1.25 // Perlambatan lembut (smooth decelerating exhale)
-    : 1.0;  // Siklus idle tenang
+    ? 1.30 // Decelerating exhale yang sangat halus
+    : 1.0;  // Idle calm
 
-  // Variasi durasi asinkron (prime-cycle) agar gelombang tidak pernah berulang kaku
+  // Prime-cycle asinkron (22s, 27s, 24s) agar 3 lapisan tidak pernah bergerak serempak
   const duration1 = 22 * durationScale;
   const duration2 = 27 * durationScale;
   const duration3 = 24 * durationScale;
 
-  // Hardware Layer Style (100% GPU Compositor Thread Execution)
+  // Hardware Layer Style (Compositor Thread Execution)
   const hardwareLayerStyle: React.CSSProperties = {
     transformOrigin: '50% 50%',
     willChange: shouldReduceMotion || isTabHidden ? 'auto' : 'transform, opacity',
@@ -244,48 +260,47 @@ export const AuroraBackground: React.FC<AuroraBackgroundProps> = memo(({
     WebkitTransform: 'translate3d(0, 0, 0)',
   };
 
-  // Palet & Lapisan Visual Berdasarkan Variant
   const isKerja = variant === 'kerja';
 
   // Opacity boost berdasarkan phase
   const opacityBoost = isThinking
-    ? 0.22
+    ? 0.24
     : isStreaming
-    ? 0.16
+    ? 0.18
     : isPreparing
-    ? 0.08
+    ? 0.10
     : isFinishing
-    ? 0.06
+    ? 0.08
     : isError
-    ? 0.04
+    ? 0.06
     : 0;
 
-  // Layer 1 Animation: Top-Left Primary Fluid Stream (Lissajous orbit + organic tilt)
-  const baseOp1 = (isKerja ? 0.76 : 0.80) * intensityMultiplier;
+  // Layer 1 Animation: Top-Left Primary Fluid Stream (Lissajous drift)
+  const baseOp1 = (isKerja ? 0.78 : 0.82) * intensityMultiplier;
   const targetOp1 = Math.min(0.98, baseOp1 + opacityBoost);
   const layer1Animation: TargetAndTransition = shouldReduceMotion || isTabHidden
     ? { opacity: targetOp1 }
     : {
         x: isThinking
-          ? ['-6%', '15%', '2%', '-12%', '-6%']
+          ? ['-6%', '14%', '2%', '-10%', '-6%']
           : isStreaming
-          ? ['-4%', '10%', '0%', '-7%', '-4%']
-          : ['-3%', '7%', '-1%', '-5%', '-3%'],
+          ? ['-4%', '9%', '0%', '-6%', '-4%']
+          : ['-3%', '6%', '-1%', '-4%', '-3%'],
         y: isThinking
-          ? ['-8%', '8%', '15%', '-5%', '-8%']
+          ? ['-7%', '7%', '14%', '-4%', '-7%']
           : isStreaming
-          ? ['-5%', '5%', '9%', '-3%', '-5%']
-          : ['-4%', '4%', '6%', '-2%', '-4%'],
+          ? ['-5%', '5%', '8%', '-3%', '-5%']
+          : ['-3%', '3%', '5%', '-2%', '-3%'],
         rotate: isThinking
-          ? [-8, 14, -6, 18, -8]
+          ? [-8, 14, -6, 16, -8]
           : isStreaming
-          ? [-5, 9, -3, 11, -5]
-          : [-4, 7, -2, 8, -4],
+          ? [-5, 9, -3, 10, -5]
+          : [-3, 6, -2, 7, -3],
         scale: isThinking
-          ? [1.02, 1.22, 1.08, 1.18, 1.02]
+          ? [1.02, 1.22, 1.06, 1.18, 1.02]
           : isStreaming
-          ? [1.01, 1.12, 1.04, 1.10, 1.01]
-          : [0.98, 1.07, 1.01, 1.06, 0.98],
+          ? [1.01, 1.12, 1.03, 1.10, 1.01]
+          : [0.98, 1.06, 1.01, 1.05, 0.98],
         opacity: [baseOp1, targetOp1, baseOp1 * 0.96, targetOp1 * 0.98, baseOp1],
       };
 
@@ -295,32 +310,32 @@ export const AuroraBackground: React.FC<AuroraBackgroundProps> = memo(({
     ease: fluidEase,
   };
 
-  // Layer 2 Animation: Bottom-Right Counter Oceanic Wave (Counter-rotational drift)
-  const baseOp2 = (isKerja ? 0.72 : 0.74) * intensityMultiplier;
-  const targetOp2 = Math.min(0.95, baseOp2 + opacityBoost);
+  // Layer 2 Animation: Bottom-Right Counter Oceanic Wave
+  const baseOp2 = (isKerja ? 0.74 : 0.76) * intensityMultiplier;
+  const targetOp2 = Math.min(0.96, baseOp2 + opacityBoost);
   const layer2Animation: TargetAndTransition = shouldReduceMotion || isTabHidden
     ? { opacity: targetOp2 }
     : {
         x: isThinking
-          ? ['12%', '-14%', '6%', '-10%', '12%']
+          ? ['10%', '-12%', '5%', '-8%', '10%']
           : isStreaming
-          ? ['8%', '-9%', '4%', '-6%', '8%']
-          : ['5%', '-6%', '2%', '-4%', '5%'],
+          ? ['7%', '-8%', '3%', '-5%', '7%']
+          : ['4%', '-5%', '2%', '-3%', '4%'],
         y: isThinking
-          ? ['9%', '-12%', '14%', '-8%', '9%']
+          ? ['8%', '-10%', '12%', '-6%', '8%']
           : isStreaming
-          ? ['6%', '-8%', '8%', '-5%', '6%']
-          : ['4%', '-5%', '5%', '-3%', '4%'],
+          ? ['5%', '-7%', '7%', '-4%', '5%']
+          : ['3%', '-4%', '4%', '-2%', '3%'],
         rotate: isThinking
-          ? [12, -15, 8, -12, 12]
+          ? [12, -14, 7, -10, 12]
           : isStreaming
-          ? [7, -10, 5, -8, 7]
-          : [5, -7, 3, -5, 5],
+          ? [7, -9, 4, -7, 7]
+          : [4, -6, 2, -4, 4],
         scale: isThinking
-          ? [1.04, 1.24, 1.06, 1.20, 1.04]
+          ? [1.04, 1.24, 1.05, 1.19, 1.04]
           : isStreaming
-          ? [1.02, 1.14, 1.01, 1.12, 1.02]
-          : [0.97, 1.08, 0.99, 1.06, 0.97],
+          ? [1.02, 1.14, 1.01, 1.11, 1.02]
+          : [0.97, 1.07, 0.99, 1.05, 0.97],
         opacity: [baseOp2, targetOp2, baseOp2 * 0.94, targetOp2 * 0.96, baseOp2],
       };
 
@@ -330,32 +345,32 @@ export const AuroraBackground: React.FC<AuroraBackgroundProps> = memo(({
     ease: fluidEase,
   };
 
-  // Layer 3 Animation: Top-Right Dynamic Accent Ribbon (Orbital weaving)
-  const baseOp3 = (isKerja ? 0.70 : 0.70) * intensityMultiplier;
-  const targetOp3 = Math.min(0.94, baseOp3 + opacityBoost);
+  // Layer 3 Animation: Top-Right Dynamic Accent Ribbon
+  const baseOp3 = (isKerja ? 0.72 : 0.72) * intensityMultiplier;
+  const targetOp3 = Math.min(0.95, baseOp3 + opacityBoost);
   const layer3Animation: TargetAndTransition = shouldReduceMotion || isTabHidden
     ? { opacity: targetOp3 }
     : {
         x: isThinking
-          ? ['-12%', '10%', '-6%', '14%', '-12%']
+          ? ['-10%', '9%', '-5%', '12%', '-10%']
           : isStreaming
-          ? ['-7%', '7%', '-4%', '9%', '-7%']
-          : ['-5%', '5%', '-2%', '6%', '-5%'],
+          ? ['-6%', '6%', '-3%', '8%', '-6%']
+          : ['-4%', '4%', '-2%', '5%', '-4%'],
         y: isThinking
-          ? ['10%', '-12%', '6%', '-14%', '10%']
+          ? ['9%', '-10%', '5%', '-12%', '9%']
           : isStreaming
-          ? ['6%', '-7%', '4%', '-9%', '6%']
-          : ['4%', '-5%', '2%', '-6%', '4%'],
+          ? ['5%', '-6%', '3%', '-8%', '5%']
+          : ['3%', '-4%', '2%', '-5%', '3%'],
         rotate: isThinking
-          ? [-14, 12, -10, 16, -14]
+          ? [-12, 11, -8, 14, -12]
           : isStreaming
-          ? [-8, 7, -5, 10, -8]
-          : [-6, 5, -3, 7, -6],
+          ? [-7, 6, -4, 9, -7]
+          : [-5, 4, -2, 6, -5],
         scale: isThinking
-          ? [0.99, 1.20, 1.04, 1.18, 0.99]
+          ? [0.99, 1.20, 1.03, 1.17, 0.99]
           : isStreaming
-          ? [0.98, 1.12, 1.01, 1.10, 0.98]
-          : [0.96, 1.06, 0.99, 1.05, 0.96],
+          ? [0.98, 1.11, 1.01, 1.09, 0.98]
+          : [0.96, 1.05, 0.99, 1.04, 0.96],
         opacity: [baseOp3, targetOp3, baseOp3 * 0.93, targetOp3 * 0.95, baseOp3],
       };
 
@@ -365,12 +380,12 @@ export const AuroraBackground: React.FC<AuroraBackgroundProps> = memo(({
     ease: fluidEase,
   };
 
-  // Dynamic Color Morph Transitions (Liquid In-Place Plasma Sheen)
-  const morphDuration = isThinking ? 11 : 20;
+  // Dynamic Color Morph Transitions (Liquid Plasma Sheen)
+  const morphDuration = isThinking ? 10 : 19;
   const morphAnimation: TargetAndTransition = shouldReduceMotion || isTabHidden
-    ? { opacity: 0.5 }
+    ? { opacity: 0.52 }
     : {
-        opacity: isThinking ? [0.28, 0.92, 0.42, 0.88, 0.28] : [0.20, 0.84, 0.32, 0.78, 0.20],
+        opacity: isThinking ? [0.32, 0.95, 0.46, 0.90, 0.32] : [0.24, 0.88, 0.36, 0.82, 0.24],
         rotate: isThinking ? [6, -10, 4, -8, 6] : [3, -5, 2, -4, 3],
         scale: isThinking ? [1.02, 1.12, 0.98, 1.10, 1.02] : [1.0, 1.05, 0.99, 1.04, 1.0],
       };
@@ -380,73 +395,73 @@ export const AuroraBackground: React.FC<AuroraBackgroundProps> = memo(({
     ease: fluidEase,
   };
 
-  // Vibrant Gradients Definition
-  // Tenang: Emerald #10B981, Teal #0D9488, Mint #6EE7B7, Cyan #22D3EE, Indigo #6366F1
-  // Kerja: Indigo #6366F1, Violet #8B5CF6, Electric Blue #3B82F6, Cyan #06B6D4, Emerald #10B981
+  // Vibrant Calibrated Gradients
+  // Tenang: Emerald #10B981, Teal #0D9488, Mint #6EE7B7, Cyan #22D3EE
+  // Kerja: Indigo #6366F1, Violet #8B5CF6, Electric Blue #3B82F6, Cyan #06B6D4
   const layer1Gradient = useMemo(() => {
     if (isKerja) {
       return isDark
-        ? 'radial-gradient(circle at 46% 46%, rgba(99, 102, 241, 0.48) 0%, rgba(139, 92, 246, 0.28) 42%, rgba(59, 130, 246, 0.12) 70%, transparent 86%)'
-        : 'radial-gradient(circle at 46% 46%, rgba(99, 102, 241, 0.62) 0%, rgba(139, 92, 246, 0.40) 40%, rgba(59, 130, 246, 0.18) 68%, transparent 86%)';
+        ? 'radial-gradient(circle at 46% 46%, rgba(99, 102, 241, 0.52) 0%, rgba(139, 92, 246, 0.32) 42%, rgba(59, 130, 246, 0.14) 70%, transparent 86%)'
+        : 'radial-gradient(circle at 46% 46%, rgba(99, 102, 241, 0.68) 0%, rgba(139, 92, 246, 0.44) 40%, rgba(59, 130, 246, 0.20) 68%, transparent 86%)';
     }
     return isDark
-      ? 'radial-gradient(circle at 46% 46%, rgba(13, 148, 136, 0.48) 0%, rgba(16, 185, 129, 0.28) 42%, rgba(13, 148, 136, 0.10) 70%, transparent 86%)'
-      : 'radial-gradient(circle at 46% 46%, rgba(13, 148, 136, 0.62) 0%, rgba(16, 185, 129, 0.42) 38%, rgba(110, 231, 183, 0.20) 66%, transparent 86%)';
+      ? 'radial-gradient(circle at 46% 46%, rgba(13, 148, 136, 0.52) 0%, rgba(16, 185, 129, 0.32) 42%, rgba(13, 148, 136, 0.12) 70%, transparent 86%)'
+      : 'radial-gradient(circle at 46% 46%, rgba(13, 148, 136, 0.68) 0%, rgba(16, 185, 129, 0.46) 38%, rgba(110, 231, 183, 0.22) 66%, transparent 86%)';
   }, [isDark, isKerja]);
 
   const layer1MorphGradient = useMemo(() => {
     if (isKerja) {
       return isDark
-        ? 'radial-gradient(circle at 50% 42%, rgba(59, 130, 246, 0.46) 0%, rgba(6, 182, 212, 0.28) 45%, rgba(99, 102, 241, 0.10) 72%, transparent 86%)'
-        : 'radial-gradient(circle at 50% 42%, rgba(59, 130, 246, 0.58) 0%, rgba(6, 182, 212, 0.42) 42%, rgba(99, 102, 241, 0.16) 68%, transparent 86%)';
+        ? 'radial-gradient(circle at 50% 42%, rgba(59, 130, 246, 0.50) 0%, rgba(6, 182, 212, 0.32) 45%, rgba(99, 102, 241, 0.12) 72%, transparent 86%)'
+        : 'radial-gradient(circle at 50% 42%, rgba(59, 130, 246, 0.62) 0%, rgba(6, 182, 212, 0.45) 42%, rgba(99, 102, 241, 0.18) 68%, transparent 86%)';
     }
     return isDark
-      ? 'radial-gradient(circle at 50% 42%, rgba(16, 185, 129, 0.46) 0%, rgba(34, 211, 238, 0.28) 45%, rgba(16, 185, 129, 0.10) 72%, transparent 86%)'
-      : 'radial-gradient(circle at 50% 42%, rgba(16, 185, 129, 0.58) 0%, rgba(34, 211, 238, 0.40) 42%, rgba(13, 148, 136, 0.16) 68%, transparent 86%)';
+      ? 'radial-gradient(circle at 50% 42%, rgba(16, 185, 129, 0.50) 0%, rgba(34, 211, 238, 0.32) 45%, rgba(16, 185, 129, 0.12) 72%, transparent 86%)'
+      : 'radial-gradient(circle at 50% 42%, rgba(16, 185, 129, 0.62) 0%, rgba(34, 211, 238, 0.44) 42%, rgba(13, 148, 136, 0.18) 68%, transparent 86%)';
   }, [isDark, isKerja]);
 
   const layer2Gradient = useMemo(() => {
     if (isKerja) {
       return isDark
-        ? 'radial-gradient(circle at 50% 50%, rgba(139, 92, 246, 0.42) 0%, rgba(59, 130, 246, 0.25) 42%, rgba(6, 182, 212, 0.10) 72%, transparent 86%)'
-        : 'radial-gradient(circle at 50% 50%, rgba(139, 92, 246, 0.54) 0%, rgba(59, 130, 246, 0.36) 42%, rgba(6, 182, 212, 0.15) 70%, transparent 86%)';
+        ? 'radial-gradient(circle at 50% 50%, rgba(139, 92, 246, 0.46) 0%, rgba(59, 130, 246, 0.28) 42%, rgba(6, 182, 212, 0.12) 72%, transparent 86%)'
+        : 'radial-gradient(circle at 50% 50%, rgba(139, 92, 246, 0.58) 0%, rgba(59, 130, 246, 0.39) 42%, rgba(6, 182, 212, 0.17) 70%, transparent 86%)';
     }
     return isDark
-      ? 'radial-gradient(circle at 50% 50%, rgba(99, 102, 241, 0.38) 0%, rgba(34, 211, 238, 0.24) 42%, rgba(99, 102, 241, 0.08) 70%, transparent 84%)'
-      : 'radial-gradient(circle at 50% 50%, rgba(99, 102, 241, 0.48) 0%, rgba(34, 211, 238, 0.36) 40%, rgba(16, 185, 129, 0.15) 68%, transparent 86%)';
+      ? 'radial-gradient(circle at 50% 50%, rgba(99, 102, 241, 0.42) 0%, rgba(34, 211, 238, 0.26) 42%, rgba(99, 102, 241, 0.10) 70%, transparent 84%)'
+      : 'radial-gradient(circle at 50% 50%, rgba(99, 102, 241, 0.52) 0%, rgba(34, 211, 238, 0.39) 40%, rgba(16, 185, 129, 0.17) 68%, transparent 86%)';
   }, [isDark, isKerja]);
 
   const layer2MorphGradient = useMemo(() => {
     if (isKerja) {
       return isDark
-        ? 'radial-gradient(circle at 48% 54%, rgba(6, 182, 212, 0.42) 0%, rgba(16, 185, 129, 0.22) 45%, rgba(139, 92, 246, 0.10) 72%, transparent 86%)'
-        : 'radial-gradient(circle at 48% 54%, rgba(6, 182, 212, 0.52) 0%, rgba(16, 185, 129, 0.32) 42%, rgba(139, 92, 246, 0.14) 70%, transparent 86%)';
+        ? 'radial-gradient(circle at 48% 54%, rgba(6, 182, 212, 0.46) 0%, rgba(16, 185, 129, 0.25) 45%, rgba(139, 92, 246, 0.12) 72%, transparent 86%)'
+        : 'radial-gradient(circle at 48% 54%, rgba(6, 182, 212, 0.56) 0%, rgba(16, 185, 129, 0.35) 42%, rgba(139, 92, 246, 0.16) 70%, transparent 86%)';
     }
     return isDark
-      ? 'radial-gradient(circle at 48% 54%, rgba(34, 211, 238, 0.42) 0%, rgba(110, 231, 183, 0.26) 45%, rgba(99, 102, 241, 0.10) 72%, transparent 86%)'
-      : 'radial-gradient(circle at 48% 54%, rgba(34, 211, 238, 0.54) 0%, rgba(110, 231, 183, 0.38) 42%, rgba(99, 102, 241, 0.15) 70%, transparent 86%)';
+      ? 'radial-gradient(circle at 48% 54%, rgba(34, 211, 238, 0.46) 0%, rgba(110, 231, 183, 0.28) 45%, rgba(99, 102, 241, 0.12) 72%, transparent 86%)'
+      : 'radial-gradient(circle at 48% 54%, rgba(34, 211, 238, 0.58) 0%, rgba(110, 231, 183, 0.42) 42%, rgba(99, 102, 241, 0.17) 70%, transparent 86%)';
   }, [isDark, isKerja]);
 
   const layer3Gradient = useMemo(() => {
     if (isKerja) {
       return isDark
-        ? 'radial-gradient(circle at 52% 48%, rgba(6, 182, 212, 0.42) 0%, rgba(16, 185, 129, 0.22) 45%, rgba(59, 130, 246, 0.10) 72%, transparent 86%)'
-        : 'radial-gradient(circle at 52% 48%, rgba(6, 182, 212, 0.54) 0%, rgba(16, 185, 129, 0.32) 42%, rgba(99, 102, 241, 0.16) 70%, transparent 86%)';
+        ? 'radial-gradient(circle at 52% 48%, rgba(6, 182, 212, 0.46) 0%, rgba(16, 185, 129, 0.25) 45%, rgba(59, 130, 246, 0.12) 72%, transparent 86%)'
+        : 'radial-gradient(circle at 52% 48%, rgba(6, 182, 212, 0.58) 0%, rgba(16, 185, 129, 0.35) 42%, rgba(99, 102, 241, 0.18) 70%, transparent 86%)';
     }
     return isDark
-      ? 'radial-gradient(circle at 52% 48%, rgba(6, 182, 212, 0.42) 0%, rgba(110, 231, 183, 0.24) 45%, rgba(6, 182, 212, 0.08) 72%, transparent 86%)'
-      : 'radial-gradient(circle at 52% 48%, rgba(6, 182, 212, 0.54) 0%, rgba(110, 231, 183, 0.36) 42%, rgba(16, 185, 129, 0.15) 70%, transparent 86%)';
+      ? 'radial-gradient(circle at 52% 48%, rgba(6, 182, 212, 0.46) 0%, rgba(110, 231, 183, 0.26) 45%, rgba(6, 182, 212, 0.10) 72%, transparent 86%)'
+      : 'radial-gradient(circle at 52% 48%, rgba(6, 182, 212, 0.58) 0%, rgba(110, 231, 183, 0.40) 42%, rgba(16, 185, 129, 0.17) 70%, transparent 86%)';
   }, [isDark, isKerja]);
 
   const layer3MorphGradient = useMemo(() => {
     if (isKerja) {
       return isDark
-        ? 'radial-gradient(circle at 48% 50%, rgba(99, 102, 241, 0.44) 0%, rgba(139, 92, 246, 0.26) 45%, rgba(6, 182, 212, 0.10) 70%, transparent 86%)'
-        : 'radial-gradient(circle at 48% 50%, rgba(99, 102, 241, 0.58) 0%, rgba(139, 92, 246, 0.38) 42%, rgba(6, 182, 212, 0.16) 68%, transparent 86%)';
+        ? 'radial-gradient(circle at 48% 50%, rgba(99, 102, 241, 0.48) 0%, rgba(139, 92, 246, 0.28) 45%, rgba(6, 182, 212, 0.12) 70%, transparent 86%)'
+        : 'radial-gradient(circle at 48% 50%, rgba(99, 102, 241, 0.62) 0%, rgba(139, 92, 246, 0.42) 42%, rgba(6, 182, 212, 0.18) 68%, transparent 86%)';
     }
     return isDark
-      ? 'radial-gradient(circle at 48% 50%, rgba(16, 185, 129, 0.44) 0%, rgba(13, 148, 136, 0.26) 45%, rgba(34, 211, 238, 0.10) 70%, transparent 86%)'
-      : 'radial-gradient(circle at 48% 50%, rgba(16, 185, 129, 0.56) 0%, rgba(13, 148, 136, 0.36) 42%, rgba(34, 211, 238, 0.16) 68%, transparent 86%)';
+      ? 'radial-gradient(circle at 48% 50%, rgba(16, 185, 129, 0.48) 0%, rgba(13, 148, 136, 0.28) 45%, rgba(34, 211, 238, 0.12) 70%, transparent 86%)'
+      : 'radial-gradient(circle at 48% 50%, rgba(16, 185, 129, 0.60) 0%, rgba(13, 148, 136, 0.40) 42%, rgba(34, 211, 238, 0.18) 68%, transparent 86%)';
   }, [isDark, isKerja]);
 
   return (
@@ -461,7 +476,7 @@ export const AuroraBackground: React.FC<AuroraBackgroundProps> = memo(({
       }}
       className={`fixed inset-0 z-0 overflow-hidden pointer-events-none select-none ${
         isKerja
-          ? 'bg-[#f8fafc] dark:bg-[#090e17]'
+          ? 'bg-secondary-50 dark:bg-[#090e17]'
           : 'bg-[#fafaf9] dark:bg-[#080d16]'
       } transition-colors duration-500 ease-in-out ${className}`}
     >
@@ -470,7 +485,7 @@ export const AuroraBackground: React.FC<AuroraBackgroundProps> = memo(({
         <div>
           {/* Layer 1: Wide Diffuse Flow (Top-Left) with Dynamic Morph */}
           <motion.div
-            className="absolute -top-[22%] -left-[16%] w-[98vw] sm:w-[72vw] h-[82vw] sm:h-[58vw] rounded-[48%_52%_64%_36%_/_45%_55%_45%_55%] blur-[44px] sm:blur-[60px] md:blur-[76px]"
+            className="absolute top-[-18%] left-[-14%] w-[84vw] sm:w-[68vw] md:w-[58vw] h-[72vw] sm:h-[56vw] md:h-[48vw] rounded-[48%_52%_64%_36%/45%_55%_45%_55%] blur-[36px] sm:blur-[48px] md:blur-[60px]"
             style={{
               ...hardwareLayerStyle,
               background: layer1Gradient,
@@ -481,7 +496,7 @@ export const AuroraBackground: React.FC<AuroraBackgroundProps> = memo(({
             transition={layer1Transition}
           >
             <motion.div
-              className="absolute inset-0 rounded-[48%_52%_64%_36%_/_45%_55%_45%_55%]"
+              className="absolute inset-0 rounded-[48%_52%_64%_36%/45%_55%_45%_55%]"
               style={{
                 background: layer1MorphGradient,
                 transform: 'translate3d(0, 0, 0)',
@@ -494,7 +509,7 @@ export const AuroraBackground: React.FC<AuroraBackgroundProps> = memo(({
 
           {/* Layer 2: Flowing Complementary Wave (Bottom-Right) with Dynamic Morph */}
           <motion.div
-            className="absolute -bottom-[18%] -right-[14%] w-[94vw] sm:w-[68vw] h-[84vw] sm:h-[60vw] rounded-[42%_58%_54%_46%_/_58%_44%_56%_42%] blur-[44px] sm:blur-[60px] md:blur-[76px]"
+            className="absolute bottom-[-16%] right-[-12%] w-[82vw] sm:w-[64vw] md:w-[54vw] h-[72vw] sm:h-[56vw] md:h-[48vw] rounded-[42%_58%_54%_46%/58%_44%_56%_42%] blur-[36px] sm:blur-[48px] md:blur-[60px]"
             style={{
               ...hardwareLayerStyle,
               background: layer2Gradient,
@@ -505,7 +520,7 @@ export const AuroraBackground: React.FC<AuroraBackgroundProps> = memo(({
             transition={layer2Transition}
           >
             <motion.div
-              className="absolute inset-0 rounded-[42%_58%_54%_46%_/_58%_44%_56%_42%]"
+              className="absolute inset-0 rounded-[42%_58%_54%_46%/58%_44%_56%_42%]"
               style={{
                 background: layer2MorphGradient,
                 transform: 'translate3d(0, 0, 0)',
@@ -521,7 +536,7 @@ export const AuroraBackground: React.FC<AuroraBackgroundProps> = memo(({
 
           {/* Layer 3: Reactive Accent Light (Top-Right / Center-Right) with Dynamic Morph */}
           <motion.div
-            className="absolute -top-[12%] -right-[14%] w-[90vw] sm:w-[64vw] h-[78vw] sm:h-[54vw] rounded-[52%_48%_42%_58%_/_44%_58%_42%_56%] blur-[44px] sm:blur-[60px] md:blur-[76px]"
+            className="absolute top-[-10%] right-[-12%] w-[78vw] sm:w-[60vw] md:w-[50vw] h-[68vw] sm:h-[52vw] md:h-[44vw] rounded-[52%_48%_42%_58%/44%_58%_42%_56%] blur-[36px] sm:blur-[48px] md:blur-[60px]"
             style={{
               ...hardwareLayerStyle,
               background: layer3Gradient,
@@ -532,7 +547,7 @@ export const AuroraBackground: React.FC<AuroraBackgroundProps> = memo(({
             transition={layer3Transition}
           >
             <motion.div
-              className="absolute inset-0 rounded-[52%_48%_42%_58%_/_44%_58%_42%_56%]"
+              className="absolute inset-0 rounded-[52%_48%_42%_58%/44%_58%_42%_56%]"
               style={{
                 background: layer3MorphGradient,
                 transform: 'translate3d(0, 0, 0)',
@@ -556,8 +571,8 @@ export const AuroraBackground: React.FC<AuroraBackgroundProps> = memo(({
             isDark ? 'opacity-0' : 'opacity-100'
           } ${
             isKerja
-              ? 'bg-[radial-gradient(ellipse_65%_55%_at_50%_48%,_rgba(248,250,252,0.18)_0%,_transparent_75%)]'
-              : 'bg-[radial-gradient(ellipse_65%_55%_at_50%_48%,_rgba(250,250,249,0.18)_0%,_transparent_75%)]'
+              ? 'bg-[radial-gradient(ellipse_65%_55%_at_50%_48%,rgba(248,250,252,0.16)_0%,transparent_75%)]'
+              : 'bg-[radial-gradient(ellipse_65%_55%_at_50%_48%,rgba(250,250,249,0.16)_0%,transparent_75%)]'
           }`}
         />
         {/* Dark Mode Diffusion Veil */}
@@ -566,8 +581,8 @@ export const AuroraBackground: React.FC<AuroraBackgroundProps> = memo(({
             isDark ? 'opacity-100' : 'opacity-0'
           } ${
             isKerja
-              ? 'bg-[radial-gradient(ellipse_65%_55%_at_50%_48%,_rgba(9,14,23,0.25)_0%,_transparent_80%)]'
-              : 'bg-[radial-gradient(ellipse_65%_55%_at_50%_48%,_rgba(8,13,22,0.25)_0%,_transparent_80%)]'
+              ? 'bg-[radial-gradient(ellipse_65%_55%_at_50%_48%,rgba(9,14,23,0.22)_0%,transparent_80%)]'
+              : 'bg-[radial-gradient(ellipse_65%_55%_at_50%_48%,rgba(8,13,22,0.22)_0%,transparent_80%)]'
           }`}
         />
       </div>
@@ -594,4 +609,3 @@ export const AuroraBackground: React.FC<AuroraBackgroundProps> = memo(({
 AuroraBackground.displayName = 'AuroraBackground';
 
 export default AuroraBackground;
-

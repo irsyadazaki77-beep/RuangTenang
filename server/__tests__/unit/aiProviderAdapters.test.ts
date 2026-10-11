@@ -3,6 +3,7 @@ import { AI_PROVIDER_ADAPTERS } from '../../services/ai/aiProviderAdapters.js';
 import { deepseekService } from '../../services/ai/deepseekService.js';
 import { groqService } from '../../services/ai/groqService.js';
 import { openrouterService } from '../../services/ai/openrouterService.js';
+import { openaiService } from '../../services/ai/openaiService.js';
 import { geminiAdapter } from '../../services/ai/geminiAdapter.js';
 
 const options = { requestedModelId: 'public-model', prompt: 'Hello' };
@@ -13,7 +14,8 @@ describe('AI provider adapters', () => {
   it.each([
     ['deepseek', deepseekService],
     ['groq', groqService],
-    ['openrouter', openrouterService]
+    ['openrouter', openrouterService],
+    ['openai', openaiService]
   ] as const)('%s adapter delegates generate and streaming through its existing service', async (provider, service) => {
     const generate = vi.spyOn(service, 'generateResponse').mockResolvedValue({ text: 'ok', modelUsed: 'public-model', isFallback: false });
     async function* chunks() { yield { text: 'ok' }; }
@@ -32,7 +34,7 @@ describe('AI provider adapters', () => {
     const generateContent = vi.fn().mockResolvedValue({ text: 'ok' });
     const generateContentStream = vi.fn().mockResolvedValue({ stream: true });
     const client = { models: { generateContent, generateContentStream } } as never;
-    const input = { model: 'gemini-2.5-flash', contents: 'hello' } as never;
+    const input = { model: 'gemini-3.8-flash', contents: 'hello' } as never;
 
     await geminiAdapter.generate(client, input);
     await geminiAdapter.generateStream(client, input);
@@ -46,22 +48,28 @@ describe('AI provider adapters', () => {
     expect(deepseekService.mapModelName('deepseek-reasoner')).toBe('deepseek-reasoner');
     expect(groqService.mapModelName('groq-qwen-27b')).toBe('qwen/qwen3.8-27b');
     expect(openrouterService.mapModelName('openrouter-nemotron-550b')).toBe('nvidia/nemotron-3-ultra-550b-a55b:free');
+    expect(() => openaiService.mapModelName('openai-gpt-6-luna')).toThrowError('MODEL_NOT_FOUND');
     expect(() => groqService.mapModelName('openai/arbitrary-model')).toThrowError('MODEL_NOT_FOUND');
   });
 
-  it('does not mark Groq and OpenRouter available without configured API keys', () => {
+  it('does not mark Groq, OpenRouter, and OpenAI available without configured API keys', () => {
     const groqKey = process.env.GROQ_API_KEY;
     const openRouterKey = process.env.OPENROUTER_API_KEY;
+    const openAiKey = process.env.OPENAI_API_KEY;
     try {
       delete process.env.GROQ_API_KEY;
       delete process.env.OPENROUTER_API_KEY;
+      delete process.env.OPENAI_API_KEY;
       expect(groqService.isAvailable()).toBe(false);
       expect(openrouterService.isAvailable()).toBe(false);
+      expect(openaiService.isAvailable()).toBe(false);
     } finally {
       if (groqKey === undefined) delete process.env.GROQ_API_KEY;
       else process.env.GROQ_API_KEY = groqKey;
       if (openRouterKey === undefined) delete process.env.OPENROUTER_API_KEY;
       else process.env.OPENROUTER_API_KEY = openRouterKey;
+      if (openAiKey === undefined) delete process.env.OPENAI_API_KEY;
+      else process.env.OPENAI_API_KEY = openAiKey;
     }
   });
 

@@ -56,9 +56,9 @@ test.describe('Reliability, Performance & Security', () => {
         window.clearTimeout(abortTimer);
       }
     });
-    // E2E runs without provider credentials; in that setup the router can fail
-    // before opening a stream, while configured environments must abort cleanly.
-    expect(['AbortError', 'status:500:INTERNAL_SERVER_ERROR', 'status:429:RATE_LIMITED']).toContain(result);
+    // E2E runs without provider credentials and must receive the guarded local
+    // response stream, which should still stop when the browser aborts it.
+    expect(result).toBe('AbortError');
   });
 
   test('should not store memory when chat is in temporary mode', async ({ request }) => {
@@ -74,9 +74,12 @@ test.describe('Reliability, Performance & Security', () => {
       }
     });
 
-    // Model providers are intentionally disabled in E2E; a chat generation failure
-    // must not prevent this privacy check from verifying that temporary chats add no memory.
-    expect([200, 401, 429, 500]).toContain(chatResp.status());
+    // Model providers are intentionally disabled in E2E; auto mode must use the
+    // guarded local fallback and continue to respect temporary-chat privacy.
+    expect(chatResp.status()).toBe(200);
+    const chatBody = await chatResp.json();
+    expect(chatBody).toMatchObject({ success: true, isFallback: true });
+    expect(chatBody.text).toBeTruthy();
 
     // Query memory extraction endpoint for temporary session
     const memoryResp = await request.get('/api/v1/chat/user-memories');

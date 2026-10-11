@@ -37,7 +37,7 @@ describe('Chat Streaming Client & Race Condition Tests', () => {
 
     const client = new ChatStreamingClient();
     await client.stream(
-      { message: 'Hai', aiModel: 'gemini-2.5-flash', chatMode: 'bebas', responseStyle: 'empati' },
+      { message: 'Hai', aiModel: 'gemini-3.8-flash', chatMode: 'bebas', responseStyle: 'empati' },
       { onChunk, onMessageComplete }
     );
 
@@ -68,7 +68,7 @@ describe('Chat Streaming Client & Race Condition Tests', () => {
 
     // 1. Start stream 1 in background
     const p1 = client.stream(
-      { message: 'Msg 1', aiModel: 'gemini-2.5-flash' },
+      { message: 'Msg 1', aiModel: 'gemini-3.8-flash' },
       {
         onChunk: (t) => stream1Chunks.push(t),
         onMessageComplete: (t) => { stream1CompletedText = t; }
@@ -83,7 +83,7 @@ describe('Chat Streaming Client & Race Condition Tests', () => {
 
     // 3. Immediately start stream 2
     const p2 = client.stream(
-      { message: 'Msg 2', aiModel: 'gemini-2.5-flash' },
+      { message: 'Msg 2', aiModel: 'gemini-3.8-flash' },
       {
         onChunk: (t) => stream2Chunks.push(t),
         onMessageComplete: (t) => { stream2CompletedText = t; }

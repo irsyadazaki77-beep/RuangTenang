@@ -103,7 +103,7 @@ export const chatSummarizer = {
           : `Buat ringkasan percakapan berikut secara sangat ringkas (maksimal 3 poin singkat dalam Bahasa Indonesia):\n${sanitizedInput}`;
 
         const response = await executeWithReliability('gemini', signal => geminiAdapter.generate(aiClient, {
-          model: getActualGeminiModel('gemini-2.5-flash-lite'),
+          model: getActualGeminiModel('gemini-3.5-flash-lite'),
           contents: [{ role: 'user', parts: [{ text: prompt }] }],
           config: { temperature: 0.3, maxOutputTokens: 250, abortSignal: signal }
         }));

@@ -36,6 +36,19 @@ interface UseWorkspaceStreamingOptions {
 const ARTIFACT_PARSE_INTERVAL_MS = 100;
 const STREAM_UI_FLUSH_INTERVAL_MS = 50;
 const ARTIFACT_OPEN_TAG = '<artifact';
+const AURORA_PHASE_BY_STREAM_STATUS: Record<
+  WorkspaceStreamingStatus,
+  'idle' | 'preparing' | 'thinking' | 'streaming' | 'finishing' | 'error'
+> = {
+  idle: 'idle',
+  preparing: 'preparing',
+  connecting: 'thinking',
+  streaming: 'streaming',
+  finalizing: 'finishing',
+  completed: 'finishing',
+  cancelled: 'idle',
+  error: 'error',
+};
 
 export function useWorkspaceStreaming({
   chatId,
@@ -70,30 +83,7 @@ export function useWorkspaceStreaming({
 
     // Sinkronisasi ke Aurora Engine untuk Ruang Kerja
     const currentIdentity = activeIdentityRef.current;
-    let auroraPhase: 'idle' | 'preparing' | 'thinking' | 'streaming' | 'finishing' | 'error' = 'idle';
-    switch (status) {
-      case 'preparing':
-        auroraPhase = 'preparing';
-        break;
-      case 'connecting':
-        auroraPhase = 'thinking';
-        break;
-      case 'streaming':
-        auroraPhase = 'streaming';
-        break;
-      case 'finalizing':
-      case 'completed':
-        auroraPhase = 'finishing';
-        break;
-      case 'error':
-        auroraPhase = 'error';
-        break;
-      case 'cancelled':
-      case 'idle':
-      default:
-        auroraPhase = 'idle';
-        break;
-    }
+    const auroraPhase = AURORA_PHASE_BY_STREAM_STATUS[status];
 
     dispatchAuroraActivity({
       mode: 'RUANG_KERJA',

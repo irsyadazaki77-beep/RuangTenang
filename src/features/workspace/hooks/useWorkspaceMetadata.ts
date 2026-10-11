@@ -107,12 +107,52 @@ export function useWorkspaceMetadata(chatId?: string) {
     return saved;
   }, [chatId]);
 
-  const startTaskExecution = useCallback(async (planId: string, taskId: string, executionId: string, snapshot: NonNullable<WorkspacePlan['tasks'][number]['snapshot']>) => {
-    if (!chatId) throw new Error('Workspace tidak tersedia.');
-    const saved = await WorkspaceApiService.startTaskExecution(chatId, planId, taskId, executionId, snapshot);
+  const applyPlanResult = useCallback((saved: WorkspacePlan) => {
     if (activeChatIdRef.current === chatId) setWorkspace(current => current ? { ...current, plan: saved } : current);
     return saved;
   }, [chatId]);
+
+  const startTaskExecution = useCallback(async (planId: string, taskId: string, executionId: string, snapshot: NonNullable<WorkspacePlan['tasks'][number]['snapshot']>) => {
+    if (!chatId) throw new Error('Workspace tidak tersedia.');
+    const saved = await WorkspaceApiService.startTaskExecution(chatId, planId, taskId, executionId, snapshot);
+    applyPlanResult(saved.plan);
+    return saved;
+  }, [applyPlanResult, chatId]);
+
+  const finishTaskExecution = useCallback(async (planId: string, taskId: string, executionId: string, result: { output?: string; sources?: WorkspacePlan['tasks'][number]['sources']; errorCode?: string }) => {
+    if (!chatId) throw new Error('Workspace tidak tersedia.');
+    return applyPlanResult(await WorkspaceApiService.finishTaskExecution(chatId, planId, taskId, executionId, result));
+  }, [applyPlanResult, chatId]);
+
+  const reviewTask = useCallback(async (planId: string, taskId: string, decision: 'accept' | 'reject') => {
+    if (!chatId) throw new Error('Workspace tidak tersedia.');
+    return applyPlanResult(await WorkspaceApiService.reviewTask(chatId, planId, taskId, decision));
+  }, [applyPlanResult, chatId]);
+
+  const updateTaskModel = useCallback(async (planId: string, taskId: string, modelId: string | null) => {
+    if (!chatId) throw new Error('Workspace tidak tersedia.');
+    return applyPlanResult(await WorkspaceApiService.updateTaskModel(chatId, planId, taskId, modelId));
+  }, [applyPlanResult, chatId]);
+
+  const linkTaskArtifact = useCallback(async (planId: string, taskId: string, executionId: string, artifactId: string) => {
+    if (!chatId) throw new Error('Workspace tidak tersedia.');
+    return applyPlanResult(await WorkspaceApiService.linkTaskArtifact(chatId, planId, taskId, executionId, artifactId));
+  }, [applyPlanResult, chatId]);
+
+  const transitionPlan = useCallback(async (planId: string, action: 'approve' | 'pause' | 'resume' | 'cancel' | 'complete') => {
+    if (!chatId) throw new Error('Workspace tidak tersedia.');
+    return applyPlanResult(await WorkspaceApiService.transitionPlan(chatId, planId, action));
+  }, [applyPlanResult, chatId]);
+
+  const cancelTaskExecution = useCallback(async (planId: string, taskId: string, executionId: string) => {
+    if (!chatId) throw new Error('Workspace tidak tersedia.');
+    return applyPlanResult(await WorkspaceApiService.cancelTaskExecution(chatId, planId, taskId, executionId));
+  }, [applyPlanResult, chatId]);
+
+  const recoverTaskExecution = useCallback(async (planId: string, taskId: string, executionId: string) => {
+    if (!chatId) throw new Error('Workspace tidak tersedia.');
+    return applyPlanResult(await WorkspaceApiService.recoverTaskExecution(chatId, planId, taskId, executionId));
+  }, [applyPlanResult, chatId]);
 
   const activeWorkspace = workspaceChatId === chatId ? workspace : null;
   return {
@@ -129,6 +169,13 @@ export function useWorkspaceMetadata(chatId?: string) {
     deleteTask,
     createPlan,
     updatePlan,
-    startTaskExecution
+    startTaskExecution,
+    finishTaskExecution,
+    reviewTask,
+    updateTaskModel,
+    linkTaskArtifact,
+    transitionPlan,
+    cancelTaskExecution,
+    recoverTaskExecution
   };
 }

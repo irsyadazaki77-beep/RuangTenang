@@ -1,10 +1,16 @@
 import { z } from 'zod';
+import type { PhqSeverity, GadSeverity } from '../clinical/scoring.js';
 
 export const ScreeningSubmissionSchema = z.object({
   phq9Score: z.number().int().min(0).max(27),
   gad7Score: z.number().int().min(0).max(21),
-  phq9Severity: z.enum(['Minimal', 'Ringan', 'Sedang', 'Berat']).optional(),
-  gad7Severity: z.enum(['Minimal', 'Ringan', 'Sedang', 'Berat']).optional(),
+  // DEPRECATED + IGNORED: severity is always recomputed on the server from the shared engine.
+  // Accepted (any label) only so legacy clients are not rejected; never stored or trusted.
+  phq9Severity: z.string().max(40).optional(),
+  gad7Severity: z.string().max(40).optional(),
+  // Structured answers (preferred). Entries must be integers 0-3; validated strictly server-side.
+  phq9Answers: z.array(z.number()).max(20).optional(),
+  gad7Answers: z.array(z.number()).max(20).optional(),
   item9Score: z.number().int().min(0).max(3).optional(),
   hasSelfHarmRisk: z.boolean().optional(),
   riskIndicators: z.object({
@@ -28,3 +34,36 @@ export const UpdateScreeningStatusSchema = z.object({
 export type UpdateScreeningStatusInput = z.infer<typeof UpdateScreeningStatusSchema>;
 
 export type ScreeningPersistenceStatus = 'idle' | 'pending' | 'saved' | 'local-only' | 'failed';
+
+/** How a stored result's numbers can be trusted. */
+export type ScreeningVerification = 'answers_verified' | 'total_only' | 'legacy_unknown';
+
+export interface ScreeningResultDTO {
+  id: string;
+  phq9Score: number;
+  gad7Score: number;
+  /** Always derived from the score by the shared engine. */
+  phq9Severity: PhqSeverity;
+  gad7Severity: GadSeverity;
+  /** Severity string that was stored before unification, only when it differs (legacy rows). */
+  legacyStoredPhq9Severity?: string;
+  legacyStoredGad7Severity?: string;
+  scoringVersion: string;
+  verification: ScreeningVerification;
+  safety: {
+    /** null = never answered/unknown. It is NOT the same as 0. */
+    item9Score: number | null;
+    item9Positive: boolean | null;
+    /** Always 'self_report_unverified': no professional assessment is implied. */
+    assessmentStatus: 'self_report_unverified';
+    clientReportedSelfHarmConcern: boolean;
+  };
+  // Legacy fields kept for existing clients.
+  item9Score?: number;
+  hasSelfHarmRisk?: boolean;
+  riskLevel?: string;
+  status?: string;
+  riskIndicators?: Record<string, unknown> | null;
+  timestamp: string;
+  userId: string;
+}

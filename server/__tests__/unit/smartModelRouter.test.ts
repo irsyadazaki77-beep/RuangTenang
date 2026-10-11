@@ -20,6 +20,7 @@ describe('SmartModelRouter unit tests', () => {
     process.env.DEEPSEEK_API_KEY = `sk-${'a'.repeat(32)}`;
     process.env.GROQ_API_KEY = `gsk_${'b'.repeat(32)}`;
     process.env.OPENROUTER_API_KEY = `sk-or-${'c'.repeat(32)}`;
+    process.env.OPENAI_API_KEY = `sk-${'d'.repeat(40)}`;
   });
 
   afterEach(() => {
@@ -164,6 +165,25 @@ describe('SmartModelRouter unit tests', () => {
 
       expect(candidates.every(c => c.provider !== 'deepseek' && c.provider !== 'groq')).toBe(true);
     });
+  });
+
+  it('routes auto mode to the guarded local fallback when no provider is configured', () => {
+    for (const key of ['GEMINI_API_KEY', 'DEEPSEEK_API_KEY', 'GROQ_API_KEY', 'OPENROUTER_API_KEY', 'OPENAI_API_KEY']) {
+      delete process.env[key];
+    }
+
+    const decision = smartModelRouter.routeModel({
+      manualModelId: AUTO_ROUTING_MODEL_ID,
+      userTier: 'Free'
+    }, 'Aku sedang merasa kewalahan.');
+
+    expect(decision).toMatchObject({
+      selectedModelId: 'gemini-3.5-flash-lite',
+      provider: 'gemini',
+      routingMode: 'auto',
+      routingReason: expect.stringContaining('respons lokal')
+    });
+    expect(decision.fallbackCandidates).toEqual([]);
   });
 
   describe('4. Deterministic Ranking & Scoring', () => {

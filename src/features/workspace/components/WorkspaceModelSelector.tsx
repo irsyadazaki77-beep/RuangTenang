@@ -33,7 +33,7 @@ export const WorkspaceModelSelector = React.memo(function WorkspaceModelSelector
 
   const filteredModels = useMemo(() => {
     const query = search.trim().toLocaleLowerCase();
-    return models.filter(model => !query ||
+    return models.filter(model => model.selectable).filter(model => !query ||
       `${model.name} ${model.id} ${model.category} ${model.provider}`.toLocaleLowerCase().includes(query));
   }, [models, search]);
 
