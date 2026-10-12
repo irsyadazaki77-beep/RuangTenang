@@ -86,6 +86,7 @@ export interface ExtractedDocument {
   sheetCount?: number;
   blocks: DocumentBlock[];
   normalizedText: string;
+  extractionWarnings?: string[];
   metadata?: Record<string, any>;
 }
 
@@ -106,7 +107,12 @@ export interface DocumentChunk {
 
 export interface FileSourceReference {
   citationId?: string;
+  retrievalSnapshotId?: string;
   documentId: string;
+  workspaceId?: string;
+  checksum?: string;
+  sourceVersion?: string;
+  fileKind?: SupportedFileKind;
   filename: string;
   page?: number;
   slide?: number;
@@ -152,7 +158,8 @@ export interface ResearchClaim {
   id: string;
   text: string;
   citationIds: string[];
-  verificationStatus: 'supported' | 'partially_supported' | 'unsupported' | 'conflicting' | 'unverified';
+  verificationStatus: 'supported' | 'partially_supported' | 'contradicted' | 'insufficient_evidence' | 'unsupported' | 'conflicting' | 'unverified';
+  evidence: Array<{ citationId: string; documentId: string; filename: string; sourceRef: string; excerpt: string; exactTextMatch: boolean }>;
 }
 
 /** Immutable document context selected for one Workspace model request. */
@@ -179,6 +186,7 @@ export interface AttachmentResponseDTO {
   pageCount?: number;
   slideCount?: number;
   sheetCount?: number;
+  extractionWarnings?: string[];
   errorMessage?: string;
   errorCode?: FileErrorCode;
   createdAt: string;

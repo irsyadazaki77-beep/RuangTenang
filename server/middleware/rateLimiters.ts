@@ -90,6 +90,7 @@ export const aiChatLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   validate: { keyGeneratorIpFallback: false },
+  skip: () => isTestEnv(),
   keyGenerator: (req: any) => req.user?.userId || req.ip || 'anonymous',
   message: {
     success: false,

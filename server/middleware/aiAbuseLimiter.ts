@@ -53,6 +53,7 @@ function updateAndCheckState(key: string, isAnonymous: boolean, now: number): { 
 }
 
 export async function aiAbuseLimiter(req: Request, res: Response, next: NextFunction) {
+  if (process.env.NODE_ENV === 'test' && process.env.E2E_RELAX_AI_LIMITS === '1') return next();
   const isAnonymous = !req.user || req.user.userId === 'guest';
   const clientIp = req.ip || '127.0.0.1';
   const clientFingerprint = req.headers['x-anonymous-id'] as string || '';

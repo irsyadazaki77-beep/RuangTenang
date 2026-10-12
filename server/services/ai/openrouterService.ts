@@ -71,7 +71,7 @@ export const openrouterService = {
     const openrouterModel = this.mapModelName(targetModel);
     const messages = this.buildMessages(options);
     const isAnonymous = !options.userId || options.userId === 'guest';
-    const maxTokens = isAnonymous ? 600 : 1200;
+    const maxTokens = Math.min(options.maxOutputTokens || (isAnonymous ? 600 : 1200), isAnonymous ? 600 : 1200);
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), AI_RELIABILITY_POLICY.connectTimeoutMs);

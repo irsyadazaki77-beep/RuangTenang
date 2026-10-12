@@ -4,6 +4,8 @@ import { WorkspacePlanSchema } from '../../shared/contracts/workspace.js';
 import { prisma } from '../database.js';
 import { encryptionService } from './encryptionService.js';
 import { getPublicModelCatalog } from './ai/aiModelRegistry.js';
+import type { AgentArtifactProposal } from './agent/agentContracts.js';
+import type { AgentExecutionEvent } from './agent/agentContracts.js';
 
 type WorkflowStatus = 'running' | 'completed' | 'failed' | 'cancelled' | 'interrupted';
 
@@ -47,6 +49,7 @@ function toPlanDto(row: any): WorkspacePlan {
       || (task.executions || [])[0];
     const snapshot = current ? decryptJson<any>(current.snapshotEncrypted) : undefined;
     const sources = current?.sourcesEncrypted ? decryptJson<any[]>(current.sourcesEncrypted) : undefined;
+    const executionEvents = current?.eventsEncrypted ? decryptJson<AgentExecutionEvent[]>(current.eventsEncrypted) : undefined;
     const history = (task.executions || []).map((execution: any) => ({
       executionId: execution.id,
       modelId: execution.modelId,
@@ -66,6 +69,7 @@ function toPlanDto(row: any): WorkspacePlan {
       ...(current?.outputEncrypted ? { output: decryptText(current.outputEncrypted) } : {}),
       ...(current?.outputArtifactId ? { outputArtifactId: current.outputArtifactId } : {}),
       ...(sources ? { sources } : {}),
+      ...(executionEvents ? { executionEvents } : {}),
       ...(task.modelId ? { modelId: task.modelId } : {}),
       ...(history.length ? { executionHistory: history } : {}),
       createdAt: task.createdAt.toISOString(),
@@ -153,6 +157,7 @@ async function createRelationalPlan(tx: any, workspaceId: string, userId: string
         snapshotEncrypted: encryptJson(snapshot),
         ...(task.executionId === attempt.executionId && task.output ? { outputEncrypted: encryptionService.encryptRequiredSensitive(task.output) } : {}),
         ...(task.executionId === attempt.executionId && task.sources ? { sourcesEncrypted: encryptJson(task.sources) } : {}),
+        ...(task.executionId === attempt.executionId && task.executionEvents ? { eventsEncrypted: encryptJson(task.executionEvents) } : {}),
         ...(task.executionId === attempt.executionId && task.outputArtifactId ? { outputArtifactId: task.outputArtifactId } : {}),
         attemptNumber: attemptNumber + 1,
         startedAt: dateOrNow(attempt.startedAt, createdAt),
@@ -325,7 +330,32 @@ export async function startWorkspaceTask(workspaceId: string, userId: string, pl
   return { plan, claimed: true };
 }
 
-export async function finishWorkspaceTask(workspaceId: string, userId: string, planId: string, taskId: string, executionId: string, result: { output?: string; sources?: unknown[]; outputArtifactId?: string; errorCode?: string }): Promise<WorkspacePlan> {
+/** Atomically claims the foreground Agent loop for a previously approved task execution. */
+export async function claimWorkspaceTaskAgentExecution(workspaceId: string, userId: string, planId: string, taskId: string, executionId: string): Promise<boolean> {
+  const current: any = await prisma.workspaceTaskExecutions.findFirst({
+    where: { id: executionId, planTaskId: taskId, workspaceId, userId, status: 'running' },
+    include: { task: { select: { planId: true, currentExecutionId: true, status: true } } }
+  });
+  if (!current || current.task.planId !== planId || current.task.currentExecutionId !== executionId || current.task.status !== 'running') {
+    throw new WorkspaceWorkflowError('WORKSPACE_TASK_EXECUTION_STALE');
+  }
+  const now = new Date();
+  const claimed = await prisma.$executeRaw`
+    UPDATE "WorkspaceTaskExecutions"
+    SET "agentClaimedAt" = ${now}, "heartbeatAt" = ${now}
+    WHERE "id" = ${executionId} AND "planTaskId" = ${taskId} AND "workspaceId" = ${workspaceId}
+      AND "userId" = ${userId} AND "status" = 'running' AND "agentClaimedAt" IS NULL
+  `;
+  return claimed === 1;
+}
+
+/** Creates a new, encrypted proposal artifact. The deterministic ID makes retries idempotent. */
+export function workspaceAgentProposalId(executionId: string): string {
+  return `agent_${createHash('sha256').update(executionId).digest('hex').slice(0, 32)}`;
+}
+
+export async function finishWorkspaceTask(workspaceId: string, userId: string, planId: string, taskId: string, executionId: string, result: { output?: string; sources?: unknown[]; executionEvents?: AgentExecutionEvent[]; outputArtifactId?: string; artifactProposal?: AgentArtifactProposal; errorCode?: string }): Promise<WorkspacePlan> {
+  if (result.artifactProposal && result.errorCode) throw new WorkspaceWorkflowError('WORKSPACE_TASK_RESULT_INVALID', 400);
   if (result.outputArtifactId) {
     const artifact = await prisma.artifacts.findFirst({ where: { id: result.outputArtifactId, chatId: workspaceId, userId }, select: { id: true } });
     if (!artifact) throw new WorkspaceWorkflowError('WORKSPACE_ARTIFACT_NOT_FOUND', 404);
@@ -336,12 +366,36 @@ export async function finishWorkspaceTask(workspaceId: string, userId: string, p
     const task = current.tasks.find((item: any) => item.id === taskId);
     if (!task) throw new WorkspaceWorkflowError('WORKSPACE_TASK_NOT_FOUND', 404);
     if (task.currentExecutionId !== executionId) throw new WorkspaceWorkflowError('WORKSPACE_TASK_EXECUTION_STALE');
+    let outputArtifactId = result.outputArtifactId;
+    if (result.artifactProposal) {
+      outputArtifactId = workspaceAgentProposalId(executionId);
+      const existing: any = await tx.artifacts.findUnique({ where: { id: outputArtifactId }, select: { userId: true, chatId: true, title: true, type: true, content: true } });
+      if (existing) {
+        const existingContent = encryptionService.decryptSensitive(existing.content) || existing.content;
+        if (existing.userId !== userId || existing.chatId !== workspaceId || existing.title !== result.artifactProposal.title || existing.type !== result.artifactProposal.type || existingContent !== result.artifactProposal.content) {
+          throw new WorkspaceWorkflowError('WORKSPACE_TASK_ARTIFACT_CONFLICT');
+        }
+      } else {
+        const now = new Date();
+        const encryptedContent = encryptionService.encryptRequiredSensitive(result.artifactProposal.content);
+        await tx.artifacts.create({
+          data: {
+            id: outputArtifactId, userId, chatId: workspaceId,
+            title: result.artifactProposal.title.slice(0, 200), type: result.artifactProposal.type,
+            language: result.artifactProposal.language?.slice(0, 80) || null,
+            content: encryptedContent, version: 1, createdAt: now, updatedAt: now,
+            versions: { create: [{ id: `ver_${createHash('sha256').update(executionId + ':v1').digest('hex').slice(0, 32)}`, version: 1, title: result.artifactProposal.title.slice(0, 200), content: encryptedContent, createdAt: now }] }
+          }
+        });
+      }
+    }
     const executionStatusValue = result.errorCode ? 'failed' : 'completed';
     const execution = await tx.workspaceTaskExecutions.updateMany({ where: { id: executionId, planTaskId: taskId, workspaceId, userId, status: 'running' }, data: {
       status: executionStatusValue,
       ...(result.output !== undefined ? { outputEncrypted: encryptionService.encryptRequiredSensitive(result.output) } : {}),
       ...(result.sources !== undefined ? { sourcesEncrypted: encryptJson(result.sources) } : {}),
-      ...(result.outputArtifactId ? { outputArtifactId: result.outputArtifactId } : {}),
+      ...(result.executionEvents !== undefined ? { eventsEncrypted: encryptJson(result.executionEvents) } : {}),
+      ...(outputArtifactId ? { outputArtifactId } : {}),
       errorCode: result.errorCode || null, finishedAt: new Date(), heartbeatAt: new Date()
     } });
     if (!execution.count) throw new WorkspaceWorkflowError('WORKSPACE_TASK_EXECUTION_STALE');

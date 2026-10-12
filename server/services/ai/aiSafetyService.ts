@@ -17,6 +17,7 @@ export interface CrisisDetectionResult {
 }
 
 import { FileSourceReference } from '../../../shared/contracts/files.js';
+import { ResponseQualityValidator } from './responseQualityValidator.js';
 import type { AiRoutingContext, RoutingDecision } from '../../../shared/aiModelContract.js';
 
 export interface UnifiedPipelineInput {
@@ -421,6 +422,17 @@ export const aiSafetyService = {
       return { isValid: false, reason: 'SELF_HARM_ENCOURAGEMENT_DETECTED' };
     }
 
+    // 8. Structural and quality assessment via ResponseQualityValidator
+    try {
+      // Uses ResponseQualityValidator imported above
+      const qualityResult = ResponseQualityValidator.assessQuality(output);
+      if (!qualityResult.isValid) {
+        return { isValid: false, reason: qualityResult.reasons.join('; ') };
+      }
+    } catch (qualityErr) {
+      // In non-blocking environment, do not crash if validator module loading is deferred
+    }
+
     return { isValid: true };
   },
 
@@ -574,7 +586,24 @@ WAJIB ubah gaya responsmu menjadi:
    Tanyakan: "Aku sudah siapkan 2 alternatif arah pembahasan di kanvas:
    - Opsi A: Fokus ke [pendekatan 1 yang lebih simpel].
    - Opsi B: Fokus ke [pendekatan 2 yang lebih luas].
-   Kira-kira mana yang lebih nyaman untuk kamu pilih sekarang? Cukup ketik A atau B saja."`;
+   Kira-kira mana yang lebih nyaman untuk kamu pilih sekarang? Cukup ketik A atau B saja.
+
+PEDOMAN KECERDASAN REASONING, KODING, & INTEGRITAS RISET:
+1. Penalaran Terstruktur & Validasi Asumsi:
+   - Pecah masalah kompleks langkah demi langkah (chain-of-thought yang terarah).
+   - Jangan berasumsi tanpa dasar; jelaskan asumsi eksplisit jika data belum lengkap.
+   - Hindari argumen melingkar (circular reasoning) atau klaim tanpa dukungan pembuktian.
+2. Integritas Riset & Sitasi (Anti-Halusinasi):
+   - Gunakan marker sitasi [cite:CITATION_ID] HANYA jika sumber tersedia di berkas rujukan.
+   - DILARANG memalsukan nama penulis, judul jurnal, statistik, atau DOI buatan sendiri.
+   - Jika data rujukan tidak mencukupi, akui ketidakpastian secara transparan: "Berdasarkan dokumen yang tersedia, informasi X belum ditemukan."
+3. Standar Rekayasa Kode (Coding Intelligence):
+   - Hasilkan kode yang benar secara sintaksis, modular, dan siap dijalankan.
+   - Analisis akar penyebab error (root cause) sebelum memberikan perbaikan kode.
+   - Dilarang mengklaim kode telah 'diuji sukses' jika belum ada hasil eksekusi nyata; gunakan frasa: "Solusi ini dirancang untuk mengatasi masalah X melalui perbaikan logika Y".
+4. Kedalaman Adaptif:
+   - Singkat untuk pertanyaan klarifikasi atau instruksi sederhana.
+   - Menyeluruh, metodologis, dan presisi untuk analisis kode, rancangan metodologi, dan telaah pustaka."`;
     } else if ((input.chatMode || '').toLowerCase().includes('refleksi') || (input.chatMode || '') === 'Refleksi Diri') {
       systemInstruction = `Kamu adalah Konsultan Refleksi Diri berbasis Cognitive-Behavioral di RuangTenang.
 Tugasmu adalah menganalisis catatan jurnal harian mahasiswa dan memberikan cermin refleksi yang objektif, menenangkan, dan membangun kesadaran kognitif.

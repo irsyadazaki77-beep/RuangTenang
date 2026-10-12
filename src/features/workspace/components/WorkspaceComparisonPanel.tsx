@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Check, Copy, FilePlus2, Square, SquareStop } from 'lucide-react';
+import { Check, Copy, FilePlus2, GitMerge, Sparkles, Square, SquareStop } from 'lucide-react';
 import { useAiModelCatalog } from '../../../lib/aiModelCatalog';
 import type { WorkspaceComparisonCandidate, WorkspaceComparisonRun } from '../types';
 
@@ -90,6 +90,10 @@ export const WorkspaceComparisonPanel = React.memo(function WorkspaceComparisonP
   const [notice, setNotice] = useState('');
   const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(null);
   const [selectionPending, setSelectionPending] = useState(false);
+  const [consensusAnalysis, setConsensusAnalysis] = useState<any | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [synthesizedResult, setSynthesizedResult] = useState<any | null>(null);
+  const [isSynthesizing, setIsSynthesizing] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const retryControllersRef = useRef(new Map<string, AbortController>());
   const candidateAttemptsRef = useRef(new Map<string, string>());
@@ -163,6 +167,8 @@ export const WorkspaceComparisonPanel = React.memo(function WorkspaceComparisonP
     setNotice('');
     setSelectedCandidateId(null);
     setSelectionPending(false);
+    setConsensusAnalysis(null);
+    setSynthesizedResult(null);
     setIsRunning(true);
 
     const start = async () => {
@@ -337,13 +343,165 @@ export const WorkspaceComparisonPanel = React.memo(function WorkspaceComparisonP
     }).finally(() => setSelectionPending(false));
   }, [onUseResponse, selectedCandidateId, selectionPending]);
 
+  const handleAnalyzeConsensus = useCallback(async () => {
+    if (!run || isAnalyzing) return;
+    setIsAnalyzing(true);
+    try {
+      const res = await fetch('/api/v1/chat/compare/analyze', {
+        method: 'POST',
+        credentials: 'include',
+        headers: csrfHeaders(),
+        body: JSON.stringify({
+          prompt: run.prompt,
+          candidates,
+          snapshotId: run.snapshotId,
+          comparisonId: run.comparisonId
+        })
+      });
+      if (!res.ok) throw new Error('Evaluasi perbandingan gagal');
+      const data = await res.json();
+      if (data.analysis) setConsensusAnalysis(data.analysis);
+    } catch (err: any) {
+      setNotice(err?.message || 'Gagal menganalisis konsensus');
+    } finally {
+      setIsAnalyzing(false);
+    }
+  }, [run, candidates, isAnalyzing]);
+
+  const handleSynthesizeConsensus = useCallback(async () => {
+    if (!run || isSynthesizing) return;
+    setIsSynthesizing(true);
+    try {
+      const res = await fetch('/api/v1/chat/compare/synthesize', {
+        method: 'POST',
+        credentials: 'include',
+        headers: csrfHeaders(),
+        body: JSON.stringify({
+          prompt: run.prompt,
+          candidates,
+          snapshotId: run.snapshotId,
+          comparisonId: run.comparisonId
+        })
+      });
+      if (!res.ok) throw new Error('Sintesis jawaban gagal');
+      const data = await res.json();
+      if (data.synthesis) setSynthesizedResult(data.synthesis);
+    } catch (err: any) {
+      setNotice(err?.message || 'Gagal menyusun sintesis');
+    } finally {
+      setIsSynthesizing(false);
+    }
+  }, [run, candidates, isSynthesizing]);
+
+  const completedCount = candidates.filter(c => c.status === 'completed' && c.output).length;
+
   if (!run) return null;
   return <section aria-label="Hasil comparison AI" className="mx-auto w-full max-w-6xl px-3 pb-4 sm:px-5">
     <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
       <div><h3 className="text-xs font-semibold text-slate-700 dark:text-slate-200">Perbandingan jawaban</h3><p className="text-[10px] text-slate-500">{selectedCandidateId ? 'Jawaban terpilih masuk ke percakapan; kandidat lain tetap di panel ini.' : 'Satu prompt · hasil belum ditambahkan ke riwayat percakapan'}</p></div>
-      <div className="flex items-center gap-2">{isRunning && <button type="button" onClick={stopAll} className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-[10px] text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"><SquareStop className="h-3 w-3" />Stop All</button>}<button type="button" disabled={isRunning} onClick={() => onCompareAgain(run)} className="h-7 rounded-md px-2 text-[10px] text-slate-600 hover:bg-slate-100 disabled:opacity-40 dark:text-slate-300 dark:hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">Compare Again</button></div>
+      <div className="flex items-center gap-2">
+        {completedCount >= 2 && (
+          <>
+            <button
+              type="button"
+              disabled={isAnalyzing || isRunning}
+              onClick={handleAnalyzeConsensus}
+              className="inline-flex h-7 items-center gap-1 rounded-md border border-slate-200 px-2.5 text-[10px] font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+            >
+              <Sparkles className="h-3 w-3 text-amber-500" />
+              {isAnalyzing ? 'Menganalisis…' : 'Analisis Konsensus'}
+            </button>
+            <button
+              type="button"
+              disabled={isSynthesizing || isRunning}
+              onClick={handleSynthesizeConsensus}
+              className="inline-flex h-7 items-center gap-1 rounded-md bg-emerald-700 px-2.5 text-[10px] font-medium text-white hover:bg-emerald-800 disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+            >
+              <GitMerge className="h-3 w-3" />
+              {isSynthesizing ? 'Menyintesis…' : 'Gabungkan Jawaban Terbaik'}
+            </button>
+          </>
+        )}
+        {isRunning && <button type="button" onClick={stopAll} className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-[10px] text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"><SquareStop className="h-3 w-3" />Stop All</button>}
+        <button type="button" disabled={isRunning} onClick={() => onCompareAgain(run)} className="h-7 rounded-md px-2 text-[10px] text-slate-600 hover:bg-slate-100 disabled:opacity-40 dark:text-slate-300 dark:hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">Compare Again</button>
+      </div>
     </div>
     {notice && <p role="alert" className="mb-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300">{notice}</p>}
+
+    {/* Consensus & Agreement Panel */}
+    {consensusAnalysis && consensusAnalysis.status === 'evaluated' && (
+      <div className="mb-3 rounded-xl border border-emerald-200 bg-emerald-50/50 p-3 text-xs dark:border-emerald-900/60 dark:bg-emerald-950/20">
+        <div className="flex items-center justify-between gap-2 border-b border-emerald-100 pb-2 dark:border-emerald-900/40">
+          <div className="flex items-center gap-1.5 font-semibold text-emerald-900 dark:text-emerald-200">
+            <Sparkles className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+            Evaluasi Konsensus & Kesepakatan Model
+          </div>
+          <span className="text-[10px] text-emerald-700 dark:text-emerald-300">
+            {consensusAnalysis.totalEvaluatedCandidates} Model Dievaluasi
+          </span>
+        </div>
+        <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <div>
+            <span className="font-medium text-slate-700 dark:text-slate-300">Poin Kesepakatan (Consensus):</span>
+            <ul className="mt-1 list-inside list-disc space-y-0.5 text-[11px] text-slate-600 dark:text-slate-300">
+              {consensusAnalysis.agreements.length > 0 ? (
+                consensusAnalysis.agreements.slice(0, 2).map((a: any, i: number) => <li key={i}>{a.claim}</li>)
+              ) : (
+                <li className="list-none text-slate-400">Tidak ada kalimat identik mayoritas; pendekatan model bervariasi.</li>
+              )}
+            </ul>
+          </div>
+          <div>
+            <span className="font-medium text-slate-700 dark:text-slate-300">Perbedaan Sudut Pandang:</span>
+            <ul className="mt-1 list-inside list-disc space-y-0.5 text-[11px] text-slate-600 dark:text-slate-300">
+              {consensusAnalysis.disagreements.length > 0 ? (
+                consensusAnalysis.disagreements.slice(0, 2).map((d: any, i: number) => <li key={i}>{d.topic}</li>)
+              ) : (
+                <li className="list-none text-slate-400">Tidak ada kontradiksi tajam yang terdeteksi.</li>
+              )}
+            </ul>
+          </div>
+        </div>
+        <div className="mt-2 border-t border-emerald-100/80 pt-1.5 text-[10px] text-emerald-700 dark:text-emerald-400">
+          {consensusAnalysis.evidenceVerificationSummary?.disclaimer}
+        </div>
+      </div>
+    )}
+
+    {/* Synthesized Output Banner */}
+    {synthesizedResult && (
+      <div className="mb-3 rounded-xl border border-indigo-200 bg-indigo-50/40 p-3 text-xs dark:border-indigo-900/60 dark:bg-indigo-950/20">
+        <div className="flex items-center justify-between gap-2 border-b border-indigo-100 pb-2 dark:border-indigo-900/40">
+          <div className="flex items-center gap-1.5 font-semibold text-indigo-900 dark:text-indigo-200">
+            <GitMerge className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+            Sintesis Multi-Model Terbaik
+          </div>
+          <div className="flex gap-1.5">
+            <button
+              type="button"
+              onClick={() => onSendToCanvas({
+                candidateId: 'synthesis',
+                modelId: 'consensus-synthesizer',
+                modelName: 'Sintesis Multi-Model',
+                status: 'completed',
+                output: synthesizedResult.synthesizedText
+              })}
+              className="inline-flex h-6 items-center gap-1 rounded bg-indigo-600 px-2 text-[10px] font-medium text-white hover:bg-indigo-700"
+            >
+              <FilePlus2 className="h-3 w-3" />
+              Kirim Sintesis ke Canvas
+            </button>
+          </div>
+        </div>
+        <div className="mt-2 max-h-48 overflow-y-auto whitespace-pre-wrap rounded bg-white/70 p-2 text-[11px] leading-relaxed text-slate-700 dark:bg-slate-900/70 dark:text-slate-200">
+          {synthesizedResult.synthesizedText}
+        </div>
+        <div className="mt-1.5 text-[9px] text-slate-400">
+          {synthesizedResult.disclaimer}
+        </div>
+      </div>
+    )}
+
     <div role="tablist" aria-label="Pilih model jawaban" className="mb-2 flex gap-1 overflow-x-auto md:hidden">
       {candidates.map((candidate, index) => <button key={candidate.candidateId} id={`comparison-tab-${candidate.candidateId}`} ref={node => { if (node) mobileTabRefs.current.set(candidate.candidateId, node); else mobileTabRefs.current.delete(candidate.candidateId); }} role="tab" aria-controls={`comparison-candidate-${candidate.candidateId}`} aria-selected={candidate.candidateId === activeMobileId} tabIndex={candidate.candidateId === activeMobileId ? 0 : -1} onClick={() => setActiveMobileId(candidate.candidateId)} onKeyDown={event => {
         if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') return;

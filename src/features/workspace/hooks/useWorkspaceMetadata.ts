@@ -119,6 +119,13 @@ export function useWorkspaceMetadata(chatId?: string) {
     return saved;
   }, [applyPlanResult, chatId]);
 
+  const executeAgentTask = useCallback(async (planId: string, taskId: string, executionId: string, signal?: AbortSignal) => {
+    if (!chatId) throw new Error('Workspace tidak tersedia.');
+    const result = await WorkspaceApiService.executeAgentTask(chatId, planId, taskId, executionId, signal);
+    applyPlanResult(result.plan);
+    return result;
+  }, [applyPlanResult, chatId]);
+
   const finishTaskExecution = useCallback(async (planId: string, taskId: string, executionId: string, result: { output?: string; sources?: WorkspacePlan['tasks'][number]['sources']; errorCode?: string }) => {
     if (!chatId) throw new Error('Workspace tidak tersedia.');
     return applyPlanResult(await WorkspaceApiService.finishTaskExecution(chatId, planId, taskId, executionId, result));
@@ -170,6 +177,7 @@ export function useWorkspaceMetadata(chatId?: string) {
     createPlan,
     updatePlan,
     startTaskExecution,
+    executeAgentTask,
     finishTaskExecution,
     reviewTask,
     updateTaskModel,

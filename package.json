@@ -66,6 +66,7 @@
     "pdf-parse": "^2.4.5",
     "pdfkit": "^0.20.2",
     "pg": "^8.23.0",
+    "pptxgenjs": "^4.0.0",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
     "react-is": "^19.3.0",
@@ -118,5 +119,10 @@
     "typescript": "~5.8.2",
     "typescript-eslint": "^8.25.0",
     "vitest": "^4.1.11"
+  },
+  "overrides": {
+    "pptxgenjs": {
+      "image-size": "^2.0.4"
+    }
   }
 }

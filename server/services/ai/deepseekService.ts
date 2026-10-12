@@ -74,7 +74,7 @@ export const deepseekService = {
     const deepseekModel = this.mapModelName(targetModel);
     const messages = this.buildMessages(options);
     const isAnonymous = !options.userId || options.userId === 'guest';
-    const maxTokens = isAnonymous ? 500 : (AI_CONFIG.MAX_OUTPUT_TOKENS || 1000);
+    const maxTokens = Math.min(options.maxOutputTokens || (isAnonymous ? 500 : (AI_CONFIG.MAX_OUTPUT_TOKENS || 1000)), isAnonymous ? 500 : (AI_CONFIG.MAX_OUTPUT_TOKENS || 1000));
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), AI_RELIABILITY_POLICY.connectTimeoutMs);

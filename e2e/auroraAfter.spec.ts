@@ -1,14 +1,23 @@
 import { test, expect } from '@playwright/test';
+import { mkdir } from 'node:fs/promises';
+import path from 'node:path';
 
 test.describe('Aurora 2.2 After Visual Capture & Verification', () => {
-  test('Capture Ruang Tenang & Ruang Kerja after optimization', async ({ page }) => {
+  test('Capture Ruang Tenang & Ruang Kerja after optimization', async ({ page }, testInfo) => {
+    test.setTimeout(90_000);
+    const capture = async (name: string) => {
+      const directory = path.join('test-artifacts', 'after', testInfo.project.name);
+      await mkdir(directory, { recursive: true });
+      await page.screenshot({ path: path.join(directory, `${name}.png`), animations: 'disabled' });
+    };
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto('http://localhost:3005');
+    await page.goto('/');
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(2000);
+    await expect(page).toHaveURL(/\/$/);
 
     // 1. Ruang Tenang Light Idle
-    await page.screenshot({ path: 'test-artifacts/after/rt-light-idle.png' });
+    await capture('rt-light-idle');
 
     // Simulate thinking state via event dispatch
     await page.evaluate(() => {
@@ -18,7 +27,7 @@ test.describe('Aurora 2.2 After Visual Capture & Verification', () => {
     });
     await page.waitForTimeout(1000);
     // 2. Ruang Tenang Light Thinking
-    await page.screenshot({ path: 'test-artifacts/after/rt-light-thinking.png' });
+    await capture('rt-light-thinking');
 
     // Switch to dark theme
     await page.evaluate(() => {
@@ -28,7 +37,7 @@ test.describe('Aurora 2.2 After Visual Capture & Verification', () => {
     await page.waitForTimeout(1000);
 
     // 3. Ruang Tenang Dark Thinking
-    await page.screenshot({ path: 'test-artifacts/after/rt-dark-thinking.png' });
+    await capture('rt-dark-thinking');
 
     // Back to idle in dark
     await page.evaluate(() => {
@@ -38,15 +47,16 @@ test.describe('Aurora 2.2 After Visual Capture & Verification', () => {
     });
     await page.waitForTimeout(1000);
     // 4. Ruang Tenang Dark Idle
-    await page.screenshot({ path: 'test-artifacts/after/rt-dark-idle.png' });
+    await capture('rt-dark-idle');
 
     // Switch to Ruang Kerja
-    await page.goto('http://localhost:3005/workspace');
+    await page.goto('/workspace');
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(2000);
+    await expect(page).toHaveURL(/\/workspace/);
 
     // 5. Ruang Kerja Dark Idle
-    await page.screenshot({ path: 'test-artifacts/after/rk-dark-idle.png' });
+    await capture('rk-dark-idle');
 
     // Ruang Kerja Dark Streaming
     await page.evaluate(() => {
@@ -56,7 +66,7 @@ test.describe('Aurora 2.2 After Visual Capture & Verification', () => {
     });
     await page.waitForTimeout(1000);
     // 6. Ruang Kerja Dark Streaming
-    await page.screenshot({ path: 'test-artifacts/after/rk-dark-streaming.png' });
+    await capture('rk-dark-streaming');
 
     // Switch to Light Mode in Ruang Kerja
     await page.evaluate(() => {
@@ -72,13 +82,13 @@ test.describe('Aurora 2.2 After Visual Capture & Verification', () => {
       }));
     });
     await page.waitForTimeout(1000);
-    await page.screenshot({ path: 'test-artifacts/after/rk-light-thinking.png' });
+    await capture('rk-light-thinking');
 
     // 8. Mobile 390px Ruang Tenang Light Idle
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto('http://localhost:3005');
+    await page.goto('/');
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(1500);
-    await page.screenshot({ path: 'test-artifacts/after/rt-mobile-light-idle.png' });
+    await capture('rt-mobile-light-idle');
   });
 });

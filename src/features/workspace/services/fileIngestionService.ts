@@ -66,6 +66,7 @@ export interface AttachmentStatusResponseDTO {
   pageCount?: number;
   slideCount?: number;
   sheetCount?: number;
+  extractionWarnings?: string[];
   errorMessage?: string;
   errorCode?: string;
 }
@@ -303,6 +304,7 @@ export async function processFileForWorkspace(
       pageCount: att.pageCount,
       slideCount: att.slideCount,
       sheetCount: att.sheetCount,
+      extractionWarnings: att.extractionWarnings,
       url: att.url || `/api/v1/chat/attachments/${att.id}`,
       checksum: att.checksum
     };
@@ -362,7 +364,8 @@ export async function retryWorkspaceFile(attachmentId: string, signal?: AbortSig
         checksum: attachment.checksum,
         pageCount: attachment.pageCount,
         slideCount: attachment.slideCount,
-        sheetCount: attachment.sheetCount
+        sheetCount: attachment.sheetCount,
+        extractionWarnings: attachment.extractionWarnings
       }
     };
   } catch (error) {

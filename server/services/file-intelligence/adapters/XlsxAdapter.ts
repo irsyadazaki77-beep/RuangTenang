@@ -31,6 +31,7 @@ export class XlsxAdapter implements DocumentExtractorAdapter {
 
       const blocks: DocumentBlock[] = [];
       let totalChars = 0;
+      const extractionWarnings = new Set<string>();
 
       for (let sIdx = 0; sIdx < worksheets.length; sIdx++) {
         if (input.abortSignal?.aborted) {
@@ -60,8 +61,17 @@ export class XlsxAdapter implements DocumentExtractorAdapter {
             const val = cell.value;
             if (val === null || val === undefined) {
               cells.push('');
+            } else if (typeof val === 'object' && ('formula' in val || 'sharedFormula' in val)) {
+              const formulaValue = val as { formula?: string; sharedFormula?: string; result?: unknown };
+              const formula = formulaValue.formula || (formulaValue.sharedFormula ? `shared:${formulaValue.sharedFormula}` : '');
+              if (formulaValue.result === undefined || formulaValue.result === null) {
+                cells.push(`=${formula} [cached result unavailable]`);
+                extractionWarnings.add('One or more spreadsheet formulas have no cached result; formula text is preserved and no value was inferred.');
+              } else {
+                cells.push(`${String(formulaValue.result)} [formula: =${formula}]`);
+              }
             } else if (typeof val === 'object' && 'result' in val) {
-              // formula result
+              // Shared formula cached result; preserve the stored result only.
               cells.push(String(val.result ?? ''));
             } else if (typeof val === 'object' && 'text' in val) {
               // rich text
@@ -89,6 +99,12 @@ export class XlsxAdapter implements DocumentExtractorAdapter {
         if (dataRows.length <= batchSize) {
           const content = rowsText.join('\n');
           totalChars += content.length;
+          if (totalChars > DEFAULT_FILE_LIMITS.maxExtractedChars) {
+            throw new DocumentProcessingException(
+              'EXTRACTION_LIMIT',
+              `Ekstraksi spreadsheet melebihi batas ${DEFAULT_FILE_LIMITS.maxExtractedChars} karakter.`
+            );
+          }
           blocks.push({
             blockId: `${input.documentId}_sh${sIdx}_b0`,
             text: content,
@@ -129,7 +145,8 @@ export class XlsxAdapter implements DocumentExtractorAdapter {
         checksum: input.checksum,
         sheetCount: worksheets.length,
         blocks,
-        normalizedText: blocks.map(b => `[Sheet: ${b.sheetName}]\n\n${b.text}`).join('\n\n')
+        normalizedText: blocks.map(b => `[Sheet: ${b.sheetName}]\n\n${b.text}`).join('\n\n'),
+        ...(extractionWarnings.size ? { extractionWarnings: [...extractionWarnings] } : {})
       };
     } catch (err: any) {
       if (err instanceof DocumentProcessingException) throw err;

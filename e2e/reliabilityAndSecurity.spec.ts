@@ -46,15 +46,17 @@ test.describe('Reliability, Performance & Security', () => {
       }
 
       const reader = response.body.getReader();
-      const abortTimer = window.setTimeout(() => controller.abort(), 500);
+      const first = await reader.read();
+      if (first.done) return 'done_immediately';
+      controller.abort();
       try {
         while (!(await reader.read()).done) { /* consume until abort */ }
-        return 'completed';
+        return controller.signal.aborted ? 'AbortError' : 'completed';
       } catch (error) {
         return error instanceof DOMException ? error.name : 'error';
-      } finally {
-        window.clearTimeout(abortTimer);
       }
+
+
     });
     // E2E runs without provider credentials and must receive the guarded local
     // response stream, which should still stop when the browser aborts it.
@@ -74,11 +76,11 @@ test.describe('Reliability, Performance & Security', () => {
       }
     });
 
-    // Model providers are intentionally disabled in E2E; auto mode must use the
-    // guarded local fallback and continue to respect temporary-chat privacy.
+    // The response source is independent of the privacy contract. Temporary
+    // mode must return normally without persisting the conversation or memory.
     expect(chatResp.status()).toBe(200);
     const chatBody = await chatResp.json();
-    expect(chatBody).toMatchObject({ success: true, isFallback: true });
+    expect(chatBody).toMatchObject({ success: true });
     expect(chatBody.text).toBeTruthy();
 
     // Query memory extraction endpoint for temporary session

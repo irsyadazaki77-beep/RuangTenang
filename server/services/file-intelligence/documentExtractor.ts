@@ -11,6 +11,7 @@ export interface ExtractedDocResult {
     pageCount?: number;
     slideCount?: number;
     sheetCount?: number;
+    extractionWarnings?: string[];
     [key: string]: any;
   };
   documentId?: string;
@@ -22,6 +23,7 @@ export interface ExtractedDocResult {
   pageCount?: number;
   slideCount?: number;
   sheetCount?: number;
+  extractionWarnings?: string[];
   blocks?: DocumentBlock[];
 }
 
@@ -61,6 +63,7 @@ export class DocumentExtractor {
           pageCount: extraction.pageCount,
           slideCount: extraction.slideCount,
           sheetCount: extraction.sheetCount,
+          extractionWarnings: extraction.extractionWarnings,
           size: buffer.length,
           checksum: verified.checksum,
           fileKind: verified.fileKind
@@ -74,6 +77,7 @@ export class DocumentExtractor {
         pageCount: extraction.pageCount,
         slideCount: extraction.slideCount,
         sheetCount: extraction.sheetCount,
+        extractionWarnings: extraction.extractionWarnings,
         blocks: extraction.blocks
       };
     } catch (error: any) {

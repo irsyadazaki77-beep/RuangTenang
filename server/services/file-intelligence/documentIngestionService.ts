@@ -88,6 +88,7 @@ export const documentIngestionService = {
         pageCount: meta.pageCount,
         slideCount: meta.slideCount,
         sheetCount: meta.sheetCount,
+        extractionWarnings: Array.isArray(meta.extractionWarnings) ? meta.extractionWarnings : undefined,
         createdAt: existing.createdAt.toISOString(),
         processedAt: existing.processedAt ? existing.processedAt.toISOString() : undefined
       };
@@ -204,6 +205,7 @@ export const documentIngestionService = {
         pageCount: extraction.pageCount,
         slideCount: extraction.slideCount,
         sheetCount: extraction.sheetCount,
+        extractionWarnings: extraction.extractionWarnings || [],
         chunkCount: chunks.length,
         extractedChars: normalized.normalizedFullText.length
       };
@@ -232,6 +234,7 @@ export const documentIngestionService = {
         pageCount: extraction.pageCount,
         slideCount: extraction.slideCount,
         sheetCount: extraction.sheetCount,
+        extractionWarnings: extraction.extractionWarnings,
         createdAt: updated.createdAt.toISOString(),
         processedAt: updated.processedAt ? updated.processedAt.toISOString() : undefined
       };
@@ -402,6 +405,7 @@ export const documentIngestionService = {
         pageCount: extraction.pageCount,
         slideCount: extraction.slideCount,
         sheetCount: extraction.sheetCount,
+        extractionWarnings: extraction.extractionWarnings || [],
         chunkCount: chunks.length,
         extractedChars: normalized.normalizedFullText.length
       };
@@ -430,6 +434,7 @@ export const documentIngestionService = {
         pageCount: extraction.pageCount,
         slideCount: extraction.slideCount,
         sheetCount: extraction.sheetCount,
+        extractionWarnings: extraction.extractionWarnings,
         createdAt: updated.createdAt.toISOString(),
         processedAt: updated.processedAt?.toISOString()
       };
@@ -516,6 +521,7 @@ export const documentIngestionService = {
       pageCount: meta.pageCount,
       slideCount: meta.slideCount,
       sheetCount: meta.sheetCount,
+      extractionWarnings: Array.isArray(meta.extractionWarnings) ? meta.extractionWarnings : undefined,
       errorMessage: attachment.processingError || undefined,
       createdAt: attachment.createdAt.toISOString(),
       processedAt: attachment.processedAt?.toISOString()

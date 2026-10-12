@@ -467,6 +467,7 @@ async function startServer() {
   app.use('/api/v1/workspace/artifacts', workspaceArtifactsRouter);
   app.use('/api/v1/workspace', workspaceRouter);
   app.use('/api/workspace/artifacts', workspaceArtifactsRouter);
+  app.use('/api/workspace', workspaceRouter);
 
   // Dedicated 404 handler for unhandled /api/* routes before SPA fallback
   app.all('/api/*', (_req, res) => {

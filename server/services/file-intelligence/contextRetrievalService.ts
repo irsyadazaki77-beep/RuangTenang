@@ -1,5 +1,5 @@
 import { prisma } from '../../database.js';
-import { DocumentChunk, FileSourceReference, WorkspaceContextSnapshot } from '../../../shared/contracts/files.js';
+import { DocumentChunk, FileSourceReference, SupportedFileKind, WorkspaceContextSnapshot } from '../../../shared/contracts/files.js';
 import { scanAndSanitizePII } from '../piiService.js';
 import { detectPromptInjection } from '../../security.js';
 import { encryptionService } from '../encryptionService.js';
@@ -20,6 +20,8 @@ export interface ContextRetrievalOptions {
   userQuery?: string;
   maxTokens?: number;
   maxChunks?: number;
+  fileKinds?: string[];
+  section?: string;
 }
 
 const STOP_WORDS = new Set([
@@ -30,28 +32,46 @@ const STOP_WORDS = new Set([
   'the', 'and', 'or', 'in', 'on', 'at', 'to', 'for', 'with', 'by', 'from', 'an', 'a'
 ]);
 
-function scoreChunk(chunkText: string, queryTerms: string[], section?: string): number {
-  if (queryTerms.length === 0) return 1;
+function normalizeSearchText(text: string): string {
+  return text.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase();
+}
 
-  const lowerText = chunkText.toLowerCase();
-  const lowerSec = (section || '').toLowerCase();
-  let score = 0;
-  const exactPhrase = queryTerms.join(' ');
-  if (exactPhrase.length > 5 && lowerText.includes(exactPhrase)) score += 8;
+function tokenize(text: string): string[] {
+  return normalizeSearchText(text).match(/[\p{L}\p{N}_]+/gu) || [];
+}
 
-  for (const term of queryTerms) {
-    if (lowerSec.includes(term)) {
-      score += 5; // Heavy weight for section heading match
-    }
-    // Count occurrences in chunk body
-    let idx = 0;
-    while ((idx = lowerText.indexOf(term, idx)) !== -1) {
-      score += 1;
-      idx += term.length;
-    }
+function scoreChunksWithBM25<T extends { content: string; section?: string | null }>(chunks: T[], queryTerms: string[]): number[] {
+  if (queryTerms.length === 0) return chunks.map(() => 1);
+  const tokenized = chunks.map(chunk => tokenize(chunk.content));
+  const averageLength = tokenized.reduce((sum, tokens) => sum + tokens.length, 0) / Math.max(1, tokenized.length);
+  const documentFrequency = new Map<string, number>();
+  for (const term of new Set(queryTerms)) {
+    documentFrequency.set(term, tokenized.reduce((count, tokens) => count + (tokens.includes(term) ? 1 : 0), 0));
   }
+  const queryPhrase = queryTerms.join(' ');
+  const k1 = 1.2;
+  const b = 0.75;
 
-  return score;
+  return chunks.map((chunk, index) => {
+    const frequencies = new Map<string, number>();
+    for (const term of tokenized[index]) frequencies.set(term, (frequencies.get(term) || 0) + 1);
+    let score = 0;
+    for (const term of queryTerms) {
+      const frequency = frequencies.get(term) || 0;
+      if (!frequency) continue;
+      const df = documentFrequency.get(term) || 0;
+      const inverseDocumentFrequency = Math.log(1 + (chunks.length - df + 0.5) / (df + 0.5));
+      const normalizedFrequency = (frequency * (k1 + 1)) /
+        (frequency + k1 * (1 - b + b * tokenized[index].length / Math.max(1, averageLength)));
+      score += inverseDocumentFrequency * normalizedFrequency;
+    }
+
+    const normalizedBody = normalizeSearchText(chunk.content);
+    const normalizedSection = normalizeSearchText(chunk.section || '');
+    if (queryPhrase.length > 5 && normalizedBody.includes(queryPhrase)) score += 3;
+    for (const term of new Set(queryTerms)) if (normalizedSection.includes(term)) score += 2;
+    return score;
+  });
 }
 
 export const contextRetrievalService = {
@@ -65,7 +85,9 @@ export const contextRetrievalService = {
       attachmentIds,
       userQuery = '',
       maxTokens = 2500,
-      maxChunks = 8
+      maxChunks = 8,
+      fileKinds,
+      section
     } = options;
 
     const emptyResult = (): RetrievedDocumentContext => ({
@@ -102,18 +124,34 @@ export const contextRetrievalService = {
     } else {
       return emptyResult();
     }
+    if (fileKinds?.length) attachmentWhere.fileKind = { in: fileKinds };
 
     const readyAttachments = await prisma.attachments.findMany({
       where: attachmentWhere,
-      select: { id: true, filename: true, mimeType: true, fileKind: true }
+      select: { id: true, chatId: true, filename: true, mimeType: true, fileKind: true, checksum: true, updatedAt: true }
     });
 
     if (readyAttachments.length === 0) {
       return emptyResult();
     }
 
+    const { documentContextCacheService } = await import('./documentContextCacheService.js');
+    const sourceChecksums = readyAttachments.map(a => a.checksum || a.updatedAt?.toISOString() || a.id);
+    const cacheKey = documentContextCacheService.createCacheKey({
+      userId,
+      chatId,
+      attachmentIds: readyAttachments.map(a => a.id),
+      userQuery,
+      sourceChecksums
+    });
+
+    const cachedContext = documentContextCacheService.get(cacheKey);
+    if (cachedContext) {
+      return cachedContext;
+    }
+
     const targetAttachmentIds = readyAttachments.map(a => a.id);
-    const filenameMap = new Map<string, string>(readyAttachments.map((a: any) => [String(a.id), String(a.filename || 'Dokumen')]));
+    const attachmentMap = new Map<string, typeof readyAttachments[number]>(readyAttachments.map((attachment: any) => [String(attachment.id), attachment]));
 
     // 2. Fetch all chunks for these attachments
     const rawChunks = await prisma.documentChunks.findMany({
@@ -132,10 +170,12 @@ export const contextRetrievalService = {
     }
 
     // 3. Score chunks against user query terms
-    const queryTerms = userQuery
-      .toLowerCase()
-      .replace(/[^\w\s]/g, '')
-      .split(/\s+/)
+    const queryTerms: string[] = userQuery
+      .normalize('NFKD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLocaleLowerCase()
+      .match(/[\p{L}\p{N}_]+/gu) || [];
+    const filteredQueryTerms = queryTerms
       .filter(t => t.length > 2 && !STOP_WORDS.has(t));
 
     // Decrypt old plaintext and new encrypted rows only in memory for ranking and retrieval.
@@ -143,13 +183,13 @@ export const contextRetrievalService = {
       ...chunk,
       content: chunk.isEncrypted ? (encryptionService.decryptSensitive(chunk.content) || '') : chunk.content
     }));
-    const scored = plaintextChunks.map(chunk => ({
-      chunk,
-      score: scoreChunk(chunk.content, queryTerms, chunk.section || undefined)
-    }));
+    const chunkScores = scoreChunksWithBM25(plaintextChunks, filteredQueryTerms);
+    const scored = plaintextChunks.map((chunk, index) => ({ chunk, score: chunkScores[index] || 0 }));
+    const sectionFilter = section ? normalizeSearchText(section.trim()) : '';
+    const eligible = scored.filter(item => !sectionFilter || normalizeSearchText(item.chunk.section || '').includes(sectionFilter));
 
     // Sort by score desc, then by chunkIndex asc.
-    scored.sort((a, b) => {
+    eligible.sort((a, b) => {
       if (b.score !== a.score) return b.score - a.score;
       return a.chunk.chunkIndex - b.chunk.chunkIndex;
     });
@@ -161,9 +201,11 @@ export const contextRetrievalService = {
     const useSourceDiversity = targetAttachmentIds.length > 1;
     let currentTokens = 0;
 
-    for (const item of scored) {
+    const selectedChunkIds = new Set<string>();
+    const addChunk = (item: typeof eligible[number]) => {
       const c = item.chunk;
-      if (useSourceDiversity && (selectedPerSource.get(c.attachmentId) || 0) >= 3) continue;
+      if (selectedChunkIds.has(c.id) || (useSourceDiversity && (selectedPerSource.get(c.attachmentId) || 0) >= 3)) return false;
+      if (filteredQueryTerms.length && item.score <= 0) return false;
       let textContent = c.content;
       let tokenEst = c.tokenCount || Math.ceil(textContent.length / 4);
 
@@ -174,11 +216,12 @@ export const contextRetrievalService = {
           textContent = textContent.substring(0, maxChars) + '...';
           tokenEst = Math.ceil(textContent.length / 4);
         } else {
-          continue;
+          return false;
         }
       }
 
-      const filename: string = filenameMap.get(c.attachmentId) || 'Dokumen';
+      const attachment = attachmentMap.get(c.attachmentId);
+      const filename: string = attachment?.filename || 'Dokumen';
       // Never turn a storage chunk index into a user-visible page/section citation.
       const parsedLocation = [c.pageStart ? `p. ${c.pageStart}${c.pageEnd && c.pageEnd !== c.pageStart ? `–${c.pageEnd}` : ''}` : '', c.slideNumber ? `slide ${c.slideNumber}` : '', c.sheetName ? `sheet ${c.sheetName}` : '', c.section || ''].filter(Boolean).join(' · ');
       const storedSourceRef = c.sourceRef && !/\[(?:Bagian|Section)\s+\d+\]/i.test(c.sourceRef) ? c.sourceRef : undefined;
@@ -202,12 +245,17 @@ export const contextRetrievalService = {
       };
 
       selectedChunks.push(chunkDoc);
+      selectedChunkIds.add(c.id);
       selectedPerSource.set(c.attachmentId, (selectedPerSource.get(c.attachmentId) || 0) + 1);
       currentTokens += tokenEst;
 
       sourceRefs.push({
         citationId,
         documentId: c.attachmentId,
+        workspaceId: attachment?.chatId || undefined,
+        ...(attachment?.checksum ? { checksum: attachment.checksum, sourceVersion: attachment.checksum } : {}),
+        ...(!attachment?.checksum && attachment?.updatedAt ? { sourceVersion: attachment.updatedAt.toISOString() } : {}),
+        ...(attachment?.fileKind ? { fileKind: attachment.fileKind as SupportedFileKind } : {}),
         filename,
         page: c.pageStart ?? undefined,
         slide: c.slideNumber ?? undefined,
@@ -217,9 +265,19 @@ export const contextRetrievalService = {
         snippet: textContent.substring(0, 140) + '...'
       });
 
-      if (selectedChunks.length >= maxChunks) {
-        break;
+      return true;
+    };
+
+    // Reserve the best matching excerpt from each selected source before filling the remaining budget.
+    if (useSourceDiversity && filteredQueryTerms.length) {
+      for (const attachmentId of targetAttachmentIds) {
+        const best = eligible.find(item => item.chunk.attachmentId === attachmentId && item.score > 0);
+        if (best && selectedChunks.length < maxChunks) addChunk(best);
       }
+    }
+    for (const item of eligible) {
+      if (selectedChunks.length >= maxChunks) break;
+      addChunk(item);
     }
 
     if (selectedChunks.length === 0) {
@@ -245,7 +303,7 @@ export const contextRetrievalService = {
 ${chunkBlocks.join('\n---\n\n')}
 </untrusted_document_context>`;
 
-    return {
+    const result: RetrievedDocumentContext = {
       contextBlock,
       sourceReferences: sourceRefs,
       chunksSelected: selectedChunks,
@@ -261,5 +319,8 @@ ${chunkBlocks.join('\n---\n\n')}
         totalTokensUsed: currentTokens
       }
     };
+
+    documentContextCacheService.set(cacheKey, result);
+    return result;
   }
 };

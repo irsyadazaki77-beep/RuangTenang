@@ -20,6 +20,7 @@ import {
   RESILIENT_FALLBACK_AI_MODEL_ID
 } from './aiModelRegistry.js';
 import { aiProviderConfig } from '../../config/aiProviderConfig.js';
+import { getProviderHealth } from './aiReliabilityService.js';
 
 export interface ClassificationSignal {
   category: TaskCategory;
@@ -127,20 +128,30 @@ export function classifyRequest(context: AiRoutingContext, promptText?: string):
     };
   }
 
-  // 3. Workspace mode / Academic writing signals
-  if (context.workspaceMode) {
-    // Check coding keywords in workspace
-    if (/\b(function|def |class |import |const |let |var |console\.log|print\(|return |public static|void main)\b/.test(text)) {
-      return {
-        category: 'coding',
-        latencyPreference: 'balanced',
-        qualityPreference: 'high',
-        requiredCapabilities: ['chat'],
-        reasonHint: 'Tugas penulisan atau analisis kode pemrograman'
-      };
-    }
+  // 3. Structured reasoning & technical/coding signals (Applies universally)
+  if (/\b(debug|refactor|error|bug|stack trace|syntax|typescript|javascript|python|sql|api|function|def |class |import |const |let |var |console\.log|print\(|return |public static|void main)\b/i.test(text)) {
+    return {
+      category: 'coding',
+      latencyPreference: 'balanced',
+      qualityPreference: 'high',
+      requiredCapabilities: ['chat'],
+      reasonHint: 'Tugas penulisan, perbaikan, atau analisis kode pemrograman'
+    };
+  }
 
-    if (/\b(skripsi|tesis|jurnal|metodologi|latar belakang|rumusan masalah|bab 1|bab 2|kajian pustaka|sitasi|daftar pustaka)\b/.test(text)) {
+  if (/\b(bukti|proof|logika|deduksi|probabilitas|persamaan|matematika|analisis mendalam|step by step proof|alasan logis)\b/i.test(text)) {
+    return {
+      category: 'structured_reasoning',
+      latencyPreference: 'deep',
+      qualityPreference: 'very_high',
+      requiredCapabilities: ['chat'],
+      reasonHint: 'Kebutuhan penalaran analitis, logika, atau pemecahan masalah bertahap'
+    };
+  }
+
+  // 4. Workspace mode / Academic writing signals
+  if (context.workspaceMode) {
+    if (/\b(skripsi|tesis|jurnal|metodologi|latar belakang|rumusan masalah|bab 1|bab 2|kajian pustaka|sitasi|daftar pustaka)\b/i.test(text)) {
       return {
         category: 'academic_writing',
         latencyPreference: 'deep',
@@ -159,8 +170,8 @@ export function classifyRequest(context: AiRoutingContext, promptText?: string):
     };
   }
 
-  // 4. Content heuristic without sensitive inference
-  if (/\b(ringkas|rangkum|intisarikan|summarize|tldr)\b/.test(text)) {
+  // 5. Content heuristic without sensitive inference
+  if (/\b(ringkas|rangkum|intisarikan|summarize|tldr)\b/i.test(text)) {
     return {
       category: 'summarization',
       latencyPreference: 'fast',
@@ -170,7 +181,7 @@ export function classifyRequest(context: AiRoutingContext, promptText?: string):
     };
   }
 
-  if (/\b(terjemahkan|translate|artikan ke|bahasa inggris|bahasa indonesia)\b/.test(text)) {
+  if (/\b(terjemahkan|translate|artikan ke|bahasa inggris|bahasa indonesia)\b/i.test(text)) {
     return {
       category: 'translation',
       latencyPreference: 'fast',
@@ -180,7 +191,7 @@ export function classifyRequest(context: AiRoutingContext, promptText?: string):
     };
   }
 
-  if (/\b(ide|brainstorm|gagasan|opsi inovatif|topik)\b/.test(text)) {
+  if (/\b(ide|brainstorm|gagasan|opsi inovatif|topik)\b/i.test(text)) {
     return {
       category: 'brainstorming',
       latencyPreference: 'balanced',
@@ -303,6 +314,24 @@ export function scoreCandidate(
 
   // 3. Provider priority / stability (Gemini & DeepSeek & Groq first-party)
   if (model.isDefault) score += 10;
+
+  // 4. Cost Efficiency factor
+  // Highly efficient models (Groq/OpenRouter free tier, or Flash-lite) gain cost-efficiency bonus
+  // especially for fast/standard requests or summarization/translation
+  if (model.id.includes('free') || model.id.includes('flash-lite') || model.id.includes('gpt-20b')) {
+    if (targetLatency === 'fast' || targetCategory === 'summarization' || targetCategory === 'translation') {
+      score += 15;
+    } else {
+      score += 5;
+    }
+  }
+
+  // 5. Reliability / Health penalty
+  // Check provider health; if degraded, down-weight score by 30 to favor healthier providers
+  const health = getProviderHealth(model.provider);
+  if (health === 'degraded') {
+    score -= 30;
+  }
 
   return score;
 }

@@ -172,7 +172,7 @@ export const CitationSearchModal: React.FC<CitationSearchModalProps> = ({
                       <span className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 truncate max-w-[160px]">
                         {paper.journal}
                       </span>
-                  {paper.verified && <span className="text-[9.5px] font-semibold text-emerald-700 dark:text-emerald-300">Crossref terverifikasi</span>}
+                  {paper.verified && <span className="text-[9.5px] font-semibold text-emerald-700 dark:text-emerald-300">Metadata Crossref</span>}
                   {paper.doi && (
                         <span className="text-[9.5px] font-mono text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-1.5 py-0.5 rounded">
                           DOI
@@ -191,6 +191,7 @@ export const CitationSearchModal: React.FC<CitationSearchModalProps> = ({
               <div className="space-y-4">
                 {/* Selected Paper Meta */}
                 <div className="space-y-2">
+                  <p className="text-[10px] text-slate-500">Metadata bibliografis ditemukan di Crossref; dukungan isi artikel terhadap klaim tidak diperiksa.</p>
                   <div className="flex items-center gap-2">
                     <span className="px-2.5 py-0.5 rounded-full text-[10.5px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-200 border border-emerald-300 dark:border-emerald-800">
                       Tahun {selectedPaper.year}

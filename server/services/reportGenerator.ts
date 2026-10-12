@@ -7,10 +7,86 @@ import { prisma } from '../database';
 import { encryptionService } from './encryptionService';
 
 export interface ReportMetrics {
-  totalSessions: number;
-  crisisRatio: string;
-  mostCommonConcern: string;
   dateRange: string;
+  completedAppointments: number;
+  totalScreenings: number;
+  selfHarmRiskScreenings: number;
+  minimumGroupSize?: number;
+}
+
+export interface RectorateReportRow {
+  category: string;
+  value: string;
+  details: string;
+}
+
+const DEFAULT_MINIMUM_GROUP_SIZE = 5;
+
+export function buildRectorateReportRows(metrics: ReportMetrics): RectorateReportRow[] {
+  const minimum = metrics.minimumGroupSize ?? DEFAULT_MINIMUM_GROUP_SIZE;
+  const totalScreenings = Math.max(0, metrics.totalScreenings);
+  const riskScreenings = Math.min(totalScreenings, Math.max(0, metrics.selfHarmRiskScreenings));
+  const nonRiskScreenings = totalScreenings - riskScreenings;
+  const isCountReportable = (value: number) => value >= minimum;
+  const safeCount = (value: number) => isCountReportable(value) ? String(value) : `Disembunyikan (n < ${minimum})`;
+  const riskCanBeReported = totalScreenings >= minimum && riskScreenings >= minimum && nonRiskScreenings >= minimum;
+  const riskValue = riskCanBeReported
+    ? `${riskScreenings} dari ${totalScreenings} (${(riskScreenings / totalScreenings * 100).toFixed(1)}%)`
+    : `Disembunyikan (kelompok minimum ${minimum})`;
+
+  return [
+    { category: 'Periode laporan', value: metrics.dateRange, details: 'Rentang data yang dihitung.' },
+    {
+      category: 'Janji temu selesai', value: safeCount(metrics.completedAppointments),
+      details: isCountReportable(metrics.completedAppointments)
+        ? 'Jumlah janji temu berstatus COMPLETED berdasarkan jadwal pada periode laporan.'
+        : `Jumlah janji temu berada di bawah ambang pelaporan ${minimum} dan disembunyikan.`
+    },
+    {
+      category: 'Jumlah screening', value: safeCount(totalScreenings),
+      details: isCountReportable(totalScreenings)
+        ? 'Jumlah rekam screening pada periode laporan.'
+        : `Jumlah screening berada di bawah ambang pelaporan ${minimum} dan disembunyikan.`
+    },
+    {
+      category: 'Screening dengan indikator risiko menyakiti diri', value: riskValue,
+      details: riskCanBeReported
+        ? `Pembilang ${riskScreenings}; penyebut ${totalScreenings}; dihitung dari hasSelfHarmRisk = true. Ini adalah indikator tercatat, bukan diagnosis.`
+        : `Disembunyikan karena sel agregat harus memenuhi minimum ${minimum}; tidak ditafsirkan sebagai tidak ada risiko.`
+    },
+    {
+      category: 'Keluhan dominan', value: 'Data tidak tersedia',
+      details: 'Skema saat ini tidak menyimpan kategori keluhan terstruktur untuk agregasi yang dapat dipertanggungjawabkan.'
+    },
+    {
+      category: 'Tren dan perubahan skor klinis', value: 'Data tidak tersedia',
+      details: 'Tidak dihitung: data saat ini belum menyediakan kohort dan pasangan pengukuran yang diperlukan untuk perbandingan ini.'
+    },
+    {
+      category: 'Privasi agregat', value: `Sel dengan n < ${minimum} disembunyikan`,
+      details: 'Ekspor ini tidak memuat nama, email, NIM, catatan, atau baris sumber. Penyaringan agregat mengurangi paparan, tetapi bukan jaminan anonimitas atau penilaian risiko identifikasi ulang.'
+    }
+  ];
+}
+
+export async function loadRectorateReportMetrics(now = new Date()): Promise<ReportMetrics> {
+  const periodEnd = new Date(now);
+  const periodStart = new Date(now);
+  periodStart.setUTCDate(periodStart.getUTCDate() - 30);
+  const range = { gte: periodStart, lte: periodEnd };
+  const [completedAppointments, totalScreenings, selfHarmRiskScreenings] = await Promise.all([
+    prisma.appointments.count({ where: { status: 'COMPLETED', scheduledAt: range } }),
+    prisma.screenings.count({ where: { timestamp: range } }),
+    prisma.screenings.count({ where: { timestamp: range, hasSelfHarmRisk: true } })
+  ]);
+
+  return {
+    dateRange: `${periodStart.toISOString().slice(0, 10)} – ${periodEnd.toISOString().slice(0, 10)}`,
+    completedAppointments,
+    totalScreenings,
+    selfHarmRiskScreenings,
+    minimumGroupSize: DEFAULT_MINIMUM_GROUP_SIZE
+  };
 }
 
 export async function generateRectorateReport(metrics: ReportMetrics): Promise<string> {
@@ -29,60 +105,27 @@ export async function generateRectorateReport(metrics: ReportMetrics): Promise<s
       
       doc.pipe(writeStream);
 
+      const rows = buildRectorateReportRows(metrics);
+
       // Header
-      doc.fontSize(22).fillColor('#0f172a').font('Helvetica-Bold').text('Laporan Kesehatan Mental Kampus (Agregat)', { align: 'center' });
+      doc.fontSize(22).fillColor('#0f172a').font('Helvetica-Bold').text('Laporan Layanan Kesehatan Mental Kampus', { align: 'center' });
       doc.moveDown(0.5);
       doc.fontSize(12).fillColor('#64748b').font('Helvetica').text(`Periode: ${metrics.dateRange}`, { align: 'center' });
       doc.moveDown(2);
 
-      // Metrik Utama
-      doc.fontSize(16).fillColor('#0f172a').font('Helvetica-Bold').text('1. Ringkasan Kinerja & Kondisi Umum');
+      doc.fontSize(16).fillColor('#0f172a').font('Helvetica-Bold').text('Ringkasan metrik');
+      doc.moveDown(0.7);
+      for (const row of rows.slice(1, 6)) {
+        doc.fontSize(11).fillColor('#0f172a').font('Helvetica-Bold').text(row.category);
+        doc.fontSize(11).fillColor('#334155').font('Helvetica').text(row.value);
+        doc.fontSize(9).fillColor('#64748b').text(row.details, { width: 495 });
+        doc.moveDown(0.8);
+      }
+
       doc.moveDown(0.5);
-      
-      doc.fontSize(12).fillColor('#334155').font('Helvetica')
-         .text(`• Total Sesi Konseling Terfasilitasi: ${metrics.totalSessions} sesi`)
-         .text(`• Rasio Identifikasi Krisis: ${metrics.crisisRatio} (Tren Penurunan 12%)`)
-         .text(`• Keluhan Dominan: ${metrics.mostCommonConcern}`);
-      
-      doc.moveDown(1.5);
-
-      // Stressor Breakdown
-      doc.fontSize(16).fillColor('#0f172a').font('Helvetica-Bold').text('2. Pemetaan Topik Pemicu Stres (Stressor Breakdown)');
-      doc.moveDown(0.5);
-      doc.fontSize(12).fillColor('#334155').font('Helvetica').text('Distribusi berdasarkan topik yang paling sering muncul dalam catatan log agregat:');
-      doc.moveDown();
-
-      // Fake Chart / Bars
-      const stressors = [
-        { name: 'Tugas Akademik & Skripsi', pct: 45, color: '#ef4444' },
-        { name: 'Masalah Finansial/UKT', pct: 25, color: '#f59e0b' },
-        { name: 'Hubungan & Pertemanan', pct: 20, color: '#10b981' },
-        { name: 'Persiapan Karir & Magang', pct: 10, color: '#3b82f6' },
-      ];
-
-      stressors.forEach(s => {
-        doc.fontSize(10).fillColor('#475569').text(`${s.name} (${s.pct}%)`);
-        const barWidth = (s.pct / 100) * 400;
-        doc.roundedRect(doc.x, doc.y + 2, barWidth, 12, 4).fill(s.color);
-        doc.moveDown(1.5);
-      });
-
-      doc.moveDown(1);
-      
-      // Efektivitas Intervensi
-      doc.fontSize(16).fillColor('#0f172a').font('Helvetica-Bold').text('3. Efektivitas Intervensi Konselor Kampus');
-      doc.moveDown(0.5);
-      doc.fontSize(12).fillColor('#334155').font('Helvetica')
-         .text('• Rata-rata penurunan skor kecemasan (GAD-7) setelah 3 sesi: -4.5 Poin')
-         .text('• Rata-rata penurunan skor depresi (PHQ-9) setelah 3 sesi: -5.2 Poin')
-         .text('• Tindak lanjut rujukan psikiatri (Luar Kampus): 3.2% dari total kasus');
-         
-      doc.moveDown(3);
-
-      // Keterangan / Footer
-      doc.rect(50, doc.y, 495, 60).fill('#f8fafc');
-      doc.fontSize(10).fillColor('#94a3b8').font('Helvetica-Oblique').text('Pernyataan Kepatuhan UU PDP No. 27/2022:', 60, doc.y - 50);
-      doc.fontSize(9).text('Laporan ini 100% anonim dan di-generate berdasarkan data agregat tanpa memuat nama, NIM, atau PII (Personally Identifiable Information) mahasiswa. Laporan ini ditujukan khusus untuk perencanaan kebijakan rektorat.', 60, doc.y);
+      const privacyRow = rows[6];
+      doc.fontSize(10).fillColor('#475569').font('Helvetica-Bold').text(privacyRow.value);
+      doc.fontSize(9).font('Helvetica').text(privacyRow.details, { width: 495 });
 
       doc.end();
 
@@ -321,35 +364,9 @@ export async function generateRectorateExcel(metrics: ReportMetrics): Promise<st
   // Header styling
   sheet.getRow(1).font = { name: 'Arial', family: 4, size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
   sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F172A' } };
-
-  // Basic Metrics
-  sheet.addRow({ kategori: 'Periode Laporan', nilai: metrics.dateRange, ket: 'Agregat bulanan' });
-  sheet.addRow({ kategori: 'Total Sesi Konseling', nilai: `${metrics.totalSessions} Sesi`, ket: 'Sesi terselesaikan' });
-  sheet.addRow({ kategori: 'Rasio Krisis Darurat', nilai: metrics.crisisRatio, ket: 'Menurun 12% dari bulan lalu' });
-  sheet.addRow({ kategori: 'Keluhan Dominan', nilai: metrics.mostCommonConcern, ket: 'Paling sering disebut mahasiswa' });
-  
-  sheet.addRow({}); // Empty row
-
-  // Breakdown Section
-  sheet.addRow({ kategori: 'Distribusi Stresor Akademik' }).font = { bold: true };
-  sheet.addRow({ kategori: 'Tugas & Skripsi', nilai: '45%', ket: 'Faktor pemicu utama' });
-  sheet.addRow({ kategori: 'Finansial / UKT', nilai: '25%', ket: 'Faktor pendukung stres' });
-  sheet.addRow({ kategori: 'Hubungan / Teman', nilai: '20%', ket: 'Konflik sosial' });
-  sheet.addRow({ kategori: 'Karir & Magang', nilai: '10%', ket: 'Kecemasan masa depan' });
-
-  sheet.addRow({});
-
-  // Effectiveness Section
-  sheet.addRow({ kategori: 'Efektivitas Intervensi' }).font = { bold: true };
-  sheet.addRow({ kategori: 'Penurunan GAD-7', nilai: '-4.5 Poin', ket: 'Rata-rata setelah 3 sesi' });
-  sheet.addRow({ kategori: 'Penurunan PHQ-9', nilai: '-5.2 Poin', ket: 'Rata-rata setelah 3 sesi' });
-  sheet.addRow({ kategori: 'Rujukan Luar (Psikiatri)', nilai: '3.2%', ket: 'Dari total kasus yang ditangani' });
-
-  sheet.addRow({});
-
-  // Compliance Disclaimer
-  sheet.addRow({ kategori: 'Kepatuhan Data' }).font = { bold: true, color: { argb: 'FF94A3B8' } };
-  sheet.addRow({ kategori: 'UU PDP No. 27/2022', nilai: '100% Anonim. Bebas PII.', ket: 'Hanya metrik statistik agregat yang diekspor.' }).font = { color: { argb: 'FF94A3B8' } };
+  for (const row of buildRectorateReportRows(metrics)) {
+    sheet.addRow({ kategori: row.category, nilai: row.value, ket: row.details });
+  }
 
   const reportsDir = path.join(process.cwd(), 'reports');
   if (!fs.existsSync(reportsDir)) {

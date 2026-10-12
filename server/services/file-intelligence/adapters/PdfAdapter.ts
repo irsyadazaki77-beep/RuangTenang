@@ -46,13 +46,13 @@ export class PdfAdapter implements DocumentExtractorAdapter {
           kind: 'pdf',
           size: input.buffer.length,
           checksum: input.checksum,
-          pageCount: 1,
+          pageCount: Number.isInteger(textResult?.total) && textResult.total > 0 ? textResult.total : undefined,
           blocks: [{
-            blockId: `${input.documentId}_p1_b0`,
-            text: rawText,
-            pageNumber: 1
+            blockId: `${input.documentId}_b0`,
+            text: rawText
           }],
-          normalizedText: rawText
+          normalizedText: rawText,
+          extractionWarnings: ['PDF parser tidak memberikan lokasi per halaman. OCR tidak tersedia; teks dari halaman pindaian atau konten visual mungkin tidak ikut diekstrak.']
         };
       }
 
@@ -66,6 +66,17 @@ export class PdfAdapter implements DocumentExtractorAdapter {
 
       const blocks: DocumentBlock[] = [];
       let totalChars = 0;
+      const extractionWarnings: string[] = [];
+      const pagesWithoutText = textResult.pages.filter((page: any) => !(page?.text || '').trim()).length;
+      if (pagesWithoutText > 0) {
+        extractionWarnings.push(`${pagesWithoutText} halaman PDF tidak menghasilkan teks. Halaman pindaian atau konten visual mungkin tidak teranalisis; OCR tidak tersedia.`);
+      }
+      if (textResult.pages.length < totalPages) {
+        extractionWarnings.push(`Parser hanya mengembalikan ${textResult.pages.length} dari ${totalPages} halaman PDF.`);
+      }
+      if (textResult.pages.some((page: any) => !Number.isInteger(page?.num) || page.num < 1)) {
+        extractionWarnings.push('Nomor halaman asli tidak tersedia untuk sebagian halaman; lokasi tersebut tidak diberi nomor buatan.');
+      }
 
       for (let i = 0; i < textResult.pages.length; i++) {
         if (input.abortSignal?.aborted) {
@@ -73,7 +84,7 @@ export class PdfAdapter implements DocumentExtractorAdapter {
         }
 
         const pageItem = textResult.pages[i];
-        const pageNum = pageItem.num || (i + 1);
+        const pageNum = Number.isInteger(pageItem.num) && pageItem.num > 0 ? pageItem.num : undefined;
         const pageText = (pageItem.text || '').trim();
         if (!pageText) continue;
 
@@ -92,7 +103,7 @@ export class PdfAdapter implements DocumentExtractorAdapter {
             blockId: `${input.documentId}_p${pageNum}_b0`,
             text: pageText,
             pageNumber: pageNum,
-            section: `Halaman ${pageNum}`
+            ...(pageNum ? { section: `Halaman ${pageNum}` } : {})
           });
         } else {
           paragraphs.forEach((p: string, pIdx: number) => {
@@ -100,7 +111,7 @@ export class PdfAdapter implements DocumentExtractorAdapter {
               blockId: `${input.documentId}_p${pageNum}_b${pIdx}`,
               text: p.trim(),
               pageNumber: pageNum,
-              section: `Halaman ${pageNum}`
+              ...(pageNum ? { section: `Halaman ${pageNum}` } : {})
             });
           });
         }
@@ -136,7 +147,8 @@ export class PdfAdapter implements DocumentExtractorAdapter {
         checksum: input.checksum,
         pageCount: totalPages,
         blocks,
-        normalizedText
+        normalizedText,
+        ...(extractionWarnings.length ? { extractionWarnings } : {})
       };
     } catch (err: any) {
       if (err instanceof DocumentProcessingException) throw err;

@@ -56,9 +56,11 @@ export const chatSummarizer = {
 
     const lastOlderMsg = olderMessages[olderMessages.length - 1];
     const targetMsgId = lastOlderMsg.id || `idx_${olderMessages.length}`;
+    const userScope = _options?.userId ? `${_options.userId}:` : '';
+    const cacheKey = `${userScope}${chatId}`;
 
     // 1. Check Cache
-    const cached = summaryCache.get(chatId);
+    const cached = summaryCache.get(cacheKey);
     if (cached && cached.lastSummarizedMsgId === targetMsgId && (Date.now() - cached.timestamp) < MAX_CACHE_AGE_MS) {
       const rawOlderText = olderMessages.map(m => m.content).join(' ');
       const rawTokens = aiMetricsService.estimateTokens(rawOlderText);
@@ -133,7 +135,7 @@ export const chatSummarizer = {
     const tokensSaved = Math.max(0, rawTokens - summaryTokens);
 
     // Save to Cache
-    summaryCache.set(chatId, {
+    summaryCache.set(cacheKey, {
       summary: generatedSummary,
       lastSummarizedMsgId: targetMsgId,
       msgCount: olderMessages.length,

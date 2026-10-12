@@ -19,8 +19,8 @@ describe('Workspace document context retrieval', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     findAttachments.mockResolvedValue([
-      { id: 'file-agile', filename: 'Agile.pdf', mimeType: 'application/pdf', fileKind: 'pdf' },
-      { id: 'file-waterfall', filename: 'Waterfall.pdf', mimeType: 'application/pdf', fileKind: 'pdf' }
+      { id: 'file-agile', chatId: 'workspace-1', filename: 'Agile.pdf', mimeType: 'application/pdf', fileKind: 'pdf', checksum: 'sha-agile', updatedAt: new Date('2026-10-01T00:00:00Z') },
+      { id: 'file-waterfall', chatId: 'workspace-1', filename: 'Waterfall.pdf', mimeType: 'application/pdf', fileKind: 'pdf', checksum: 'sha-waterfall', updatedAt: new Date('2026-10-02T00:00:00Z') }
     ]);
   });
 
@@ -37,6 +37,7 @@ describe('Workspace document context retrieval', () => {
     expect(result.chunksSelected[0]?.documentId).toBe('file-waterfall');
     expect(result.snapshot.selectedAttachmentIds).toContain('file-waterfall');
     expect(result.sourceReferences[0]).toMatchObject({ filename: 'Waterfall.pdf', page: 4, documentId: 'file-waterfall' });
+    expect(result.sourceReferences[0]).toMatchObject({ workspaceId: 'workspace-1', checksum: 'sha-waterfall', sourceVersion: 'sha-waterfall', fileKind: 'pdf' });
     expect(result.contextBlock).toContain('[SUMBER: p. 4]');
     expect(result.contextBlock).toContain('[cite:SRC_1]');
     expect(findAttachments).toHaveBeenCalledWith(expect.objectContaining({
@@ -58,10 +59,22 @@ describe('Workspace document context retrieval', () => {
     expect(result.snapshot.totalTokensUsed).toBeLessThanOrEqual(60);
   });
 
+  it('uses BM25 length normalization and diacritic normalization for lexical ranking', async () => {
+    findChunks.mockResolvedValue([
+      { id: 'long', attachmentId: 'file-agile', chunkIndex: 0, content: `café ${'background '.repeat(160)}`, tokenCount: 220, isEncrypted: false },
+      { id: 'short', attachmentId: 'file-agile', chunkIndex: 1, content: 'café cohort effect size', tokenCount: 5, isEncrypted: false }
+    ]);
+    const result = await contextRetrievalService.retrieveContext({
+      userId: 'user-a', chatId: 'workspace-1', attachmentIds: ['file-agile'],
+      userQuery: 'café cohort', maxTokens: 300
+    });
+    expect(result.chunksSelected[0]?.id).toBe('short');
+  });
+
   it('does not invent a section/page from an internal chunk index and diversifies multi-source retrieval', async () => {
     findChunks.mockResolvedValue([
       ...Array.from({ length: 5 }, (_, index) => ({ id: `a-${index}`, attachmentId: 'file-agile', chunkIndex: index, content: `Agile iterative sprint planning process evidence ${index}.`, tokenCount: 10, isEncrypted: false })),
-      { id: 'b-0', attachmentId: 'file-waterfall', chunkIndex: 0, content: 'General discussion of a second source and software process.', tokenCount: 10, isEncrypted: false, sourceRef: 'Waterfall.pdf [Bagian 1]' }
+      { id: 'b-0', attachmentId: 'file-waterfall', chunkIndex: 0, content: 'Agile iterative sprint planning evidence from this second source.', tokenCount: 10, isEncrypted: false, sourceRef: 'Waterfall.pdf [Bagian 1]' }
     ]);
     const result = await contextRetrievalService.retrieveContext({ userId: 'user-a', chatId: 'workspace-1', attachmentIds: ['file-agile', 'file-waterfall'], userQuery: 'Agile iterative sprint planning', maxTokens: 200, maxChunks: 6 });
     expect(result.chunksSelected.filter(chunk => chunk.documentId === 'file-agile')).toHaveLength(3);

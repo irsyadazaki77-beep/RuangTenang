@@ -24,6 +24,10 @@ export interface AiRequestOptions {
   fallbackCandidates?: string[];
   /** Preserve the requested candidate identity and report provider failures as-is. */
   comparisonMode?: boolean;
+  /** Optional hard cap for bounded agent decisions. */
+  maxOutputTokens?: number;
+  /** Request provider JSON mode where supported; other adapters receive a validated JSON-only prompt. */
+  responseFormat?: 'json';
 }
 
 export function selectReliableModelCandidates(options: AiRequestOptions, primaryModelId: string, requirements: { capability: ModelCapability; hasAttachments?: boolean }): string[] {
@@ -91,7 +95,7 @@ export const aiRequestService = {
     }
 
     const isAnonymous = !userId || userId === 'guest';
-    const outputTokens = isAnonymous ? 300 : 800;
+    const outputTokens = Math.min(options.maxOutputTokens || (isAnonymous ? 300 : 800), isAnonymous ? 500 : 1200);
     
 
     let fullSystemInstruction = systemInstruction || `Kamu adalah 'RuangTenang Companion', pendamping reflektif dan suportif untuk mahasiswa Indonesia.
@@ -135,7 +139,7 @@ Pedoman Interaksi:
           const response = await executeWithReliability(model.provider, signal => geminiAdapter.generate(client, {
             model: getActualGeminiModel(modelId),
             contents: [...sanitizedHistory, { role: 'user', parts: userParts }],
-            config: { systemInstruction: fullSystemInstruction, temperature: 0.6, maxOutputTokens: outputTokens, abortSignal: signal }
+            config: { systemInstruction: fullSystemInstruction, temperature: 0.6, maxOutputTokens: outputTokens, ...(options.responseFormat === 'json' ? { responseMimeType: 'application/json' } : {}), abortSignal: signal }
           }), abortSignal, requestId);
           outputText = response.text || '';
         } else {

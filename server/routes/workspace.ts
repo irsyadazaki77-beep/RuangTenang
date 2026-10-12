@@ -10,6 +10,7 @@ import {
   WorkspacePlanReviewRequestSchema,
   WorkspaceTaskModelRequestSchema,
   WorkspaceTaskExecutionRequestSchema,
+  WorkspaceAgentExecutionRequestSchema,
   WorkspaceTaskExecutionResultRequestSchema,
   type WorkspacePlan
 } from '../../shared/contracts/workspace.js';
@@ -18,6 +19,7 @@ import { prisma } from '../database.js';
 import { requireAuth } from '../middleware/auth.js';
 import { encryptionService } from '../services/encryptionService.js';
 import { sanitizeInput } from '../security.js';
+import { aiChatLimiter } from '../middleware/rateLimiters.js';
 import {
   backfillLegacyPlan,
   cancelWorkspaceTaskExecution,
@@ -31,8 +33,12 @@ import {
   setWorkspaceTaskModel,
   transitionWorkspacePlan,
   updateDraftPlan,
-  WorkspaceWorkflowError
+  WorkspaceWorkflowError,
+  claimWorkspaceTaskAgentExecution,
+  workspaceAgentProposalId
 } from '../services/workspaceWorkflowService.js';
+import { runWorkspaceAgent, AgentExecutionError } from '../services/agent/agentOrchestrator.js';
+import { AgentExecutionResultSchema } from '../services/agent/agentContracts.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -428,6 +434,80 @@ router.post('/:chatId/plans/:planId/tasks/:taskId/run', async (req: Request, res
     return res.status(result.claimed ? 202 : 200).json({ success: true, data: result });
   } catch (error) {
     return sendWorkflowError(res, error, 'WORKSPACE_TASK_RUN_FAILED', 'Task gagal dimulai.');
+  }
+});
+
+/** Run the approved task as a bounded server-side Agent loop. */
+router.post('/:chatId/plans/:planId/tasks/:taskId/agent', aiChatLimiter, async (req: Request, res: Response) => {
+  const parsed = WorkspaceAgentExecutionRequestSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ success: false, code: 'WORKSPACE_AGENT_EXECUTION_INVALID', message: 'Identitas eksekusi Agent tidak valid.' });
+  const { executionId } = parsed.data;
+  const workspaceId = req.params.chatId;
+  const userId = req.user!.userId;
+  const planId = req.params.planId;
+  const taskId = req.params.taskId;
+  const abortController = new AbortController();
+  const onResponseClose = () => { if (!res.writableEnded) abortController.abort(); };
+  res.once('close', onResponseClose);
+
+  try {
+    const workspace = await ownedWorkspace(workspaceId, userId, false);
+    if (!workspace) return res.status(404).json({ success: false, code: 'WORKSPACE_NOT_FOUND', message: 'Workspace tidak ditemukan.' });
+    await currentWorkspacePlan(workspace, userId);
+    const claimed = await claimWorkspaceTaskAgentExecution(workspaceId, userId, planId, taskId, executionId);
+    if (!claimed) return res.status(409).json({ success: false, code: 'WORKSPACE_AGENT_ALREADY_RUNNING', message: 'Agent untuk task ini sudah berjalan atau sudah selesai.' });
+
+    const plan = await findWorkspacePlan(workspaceId, userId, planId);
+    if (!plan) return res.status(404).json({ success: false, code: 'WORKSPACE_PLAN_NOT_FOUND', message: 'Plan tidak ditemukan.' });
+    let result = await runWorkspaceAgent({
+      executionId, workspaceId, userId, userTier: (req.user as any).tier || 'Free',
+      plan, taskId, abortSignal: abortController.signal
+    });
+    if (abortController.signal.aborted) throw new AgentExecutionError('AGENT_CANCELLED', 'Eksekusi dihentikan.');
+    const artifactId = result.artifactProposal ? workspaceAgentProposalId(executionId) : undefined;
+    const savedPlan = await finishWorkspaceTask(workspaceId, userId, planId, taskId, executionId, {
+      output: result.output,
+      sources: result.sources,
+      executionEvents: result.events,
+      ...(result.artifactProposal ? { artifactProposal: result.artifactProposal } : {})
+    });
+    result = AgentExecutionResultSchema.parse({ ...result, ...(artifactId ? { artifactId } : {}) });
+    return res.json({ success: true, data: { execution: result, plan: savedPlan } });
+  } catch (error) {
+    if (abortController.signal.aborted || (error instanceof AgentExecutionError && error.code === 'AGENT_CANCELLED')) {
+      try { await cancelWorkspaceTaskExecution(workspaceId, userId, planId, taskId, executionId); }
+      catch { /* The explicit client cancel route may already have marked the execution. */ }
+      if (!res.headersSent && !res.destroyed) return res.status(499).json({ success: false, code: 'AGENT_CANCELLED', message: 'Eksekusi Agent dihentikan.' });
+      return;
+    }
+
+    const agentError = error instanceof AgentExecutionError
+      ? error
+      : new AgentExecutionError('AGENT_EXECUTION_FAILED', 'Agent tidak dapat menyelesaikan task ini.');
+    try {
+      const savedPlan = await finishWorkspaceTask(workspaceId, userId, planId, taskId, executionId, {
+        output: agentError.partialOutput || undefined,
+        sources: agentError.sources,
+        executionEvents: agentError.events,
+        errorCode: agentError.code
+      });
+      const plan = await findWorkspacePlan(workspaceId, userId, planId);
+      const stats = agentError.stats;
+      const failedResult = AgentExecutionResultSchema.parse({
+        executionId, status: 'failed', output: agentError.partialOutput || '', sources: agentError.sources,
+        modelId: stats?.modelId || plan?.tasks.find(task => task.id === taskId)?.modelId || 'unknown',
+        steps: stats?.steps || 0, toolCalls: stats?.toolCalls || 0, events: agentError.events,
+        estimatedInputTokens: stats?.estimatedInputTokens || 0, estimatedOutputTokens: stats?.estimatedOutputTokens || 0,
+        error: { code: agentError.code, message: agentError.message }
+      });
+      return res.json({ success: true, data: { execution: failedResult, plan: plan || savedPlan } });
+    } catch (persistError) {
+      if (persistError instanceof WorkspaceWorkflowError) return sendWorkflowError(res, persistError, 'WORKSPACE_AGENT_EXECUTION_FAILED', 'Status eksekusi Agent tidak dapat disimpan.');
+      console.warn('[WORKSPACE_AGENT_EXECUTION_PERSIST_FAILED]', JSON.stringify({ executionId, code: agentError.code }));
+      return res.status(500).json({ success: false, code: 'WORKSPACE_AGENT_EXECUTION_FAILED', message: 'Hasil eksekusi Agent tidak dapat disimpan.' });
+    }
+  } finally {
+    res.removeListener('close', onResponseClose);
   }
 });
 

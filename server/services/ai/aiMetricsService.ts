@@ -1,3 +1,6 @@
+import { aiCostCalculator } from './aiCostCalculator.js';
+import type { ProviderId } from '../../../shared/aiModelContract.js';
+
 export interface RequestMetric {
   requestId: string;
   timestamp: number;
@@ -9,10 +12,15 @@ export interface RequestMetric {
   estimatedOutputTokens: number;
   contextSavedTokens: number;
   modelUsed: string;
+  provider?: ProviderId | string;
   isFallback: boolean;
   aborted: boolean;
   routingMode?: 'manual' | 'auto';
   routeReason?: string;
+  estimatedCostUsd?: number;
+  actualInputTokens?: number;
+  actualOutputTokens?: number;
+  isUsageEstimated?: boolean;
 }
 
 export interface MetricsSummary {
@@ -22,6 +30,7 @@ export interface MetricsSummary {
   totalInputTokens: number;
   totalOutputTokens: number;
   totalContextSavedTokens: number;
+  totalEstimatedCostUsd: number;
   abortCount: number;
   fallbackCount: number;
   recentMetricsCount: number;
@@ -38,8 +47,14 @@ export const aiMetricsService = {
   },
 
   recordRequestMetric(metric: Omit<RequestMetric, 'timestamp'>): void {
+    const inputTokens = metric.actualInputTokens ?? metric.estimatedInputTokens;
+    const outputTokens = metric.actualOutputTokens ?? metric.estimatedOutputTokens;
+    const costInfo = aiCostCalculator.calculateCost(metric.modelUsed, inputTokens, outputTokens);
+
     const fullMetric: RequestMetric = {
       ...metric,
+      estimatedCostUsd: metric.estimatedCostUsd ?? costInfo.estimatedCostUsd,
+      isUsageEstimated: metric.actualInputTokens == null,
       timestamp: Date.now()
     };
 
@@ -54,12 +69,15 @@ export const aiMetricsService = {
       ttfbMs: fullMetric.ttfbMs,
       totalLatencyMs: fullMetric.totalLatencyMs,
       modelUsed: fullMetric.modelUsed,
+      provider: fullMetric.provider,
       routingMode: fullMetric.routingMode,
       routeReason: fullMetric.routeReason,
       aborted: fullMetric.aborted,
       isFallback: fullMetric.isFallback,
       inputTokens: fullMetric.estimatedInputTokens,
-      outputTokens: fullMetric.estimatedOutputTokens
+      outputTokens: fullMetric.estimatedOutputTokens,
+      estimatedCostUsd: fullMetric.estimatedCostUsd,
+      isUsageEstimated: fullMetric.isUsageEstimated
     }));
   },
 
@@ -72,6 +90,7 @@ export const aiMetricsService = {
         totalInputTokens: 0,
         totalOutputTokens: 0,
         totalContextSavedTokens: 0,
+        totalEstimatedCostUsd: 0,
         abortCount: 0,
         fallbackCount: 0,
         recentMetricsCount: 0
@@ -83,15 +102,17 @@ export const aiMetricsService = {
     let totalInputTokens = 0;
     let totalOutputTokens = 0;
     let totalContextSaved = 0;
+    let totalCost = 0;
     let abortCount = 0;
     let fallbackCount = 0;
 
     for (const m of metricsBuffer) {
       sumTTFB += m.ttfbMs;
       sumLatency += m.totalLatencyMs;
-      totalInputTokens += m.estimatedInputTokens;
-      totalOutputTokens += m.estimatedOutputTokens;
+      totalInputTokens += m.actualInputTokens ?? m.estimatedInputTokens;
+      totalOutputTokens += m.actualOutputTokens ?? m.estimatedOutputTokens;
       totalContextSaved += m.contextSavedTokens;
+      totalCost += m.estimatedCostUsd || 0;
       if (m.aborted) abortCount++;
       if (m.isFallback) fallbackCount++;
     }
@@ -105,6 +126,7 @@ export const aiMetricsService = {
       totalInputTokens,
       totalOutputTokens,
       totalContextSavedTokens: totalContextSaved,
+      totalEstimatedCostUsd: Number(totalCost.toFixed(6)),
       abortCount,
       fallbackCount,
       recentMetricsCount: count

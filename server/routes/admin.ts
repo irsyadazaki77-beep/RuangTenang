@@ -263,13 +263,9 @@ router.post(
 // PDF & Excel Reports
 router.get('/reports/pdf', requireAuth, requireRole(['admin']), async (req: Request, res: Response) => {
   try {
-    const { generateRectorateReport } = await import('../services/reportGenerator.js');
-    const filePath = await generateRectorateReport({
-      totalSessions: 125,
-      crisisRatio: "4.5%",
-      mostCommonConcern: "Tugas Akademik & Skripsi",
-      dateRange: "Oktober 2023"
-    });
+    const { generateRectorateReport, loadRectorateReportMetrics } = await import('../services/reportGenerator.js');
+    const metrics = await loadRectorateReportMetrics();
+    const filePath = await generateRectorateReport(metrics);
     
     await serverDb.logAudit('GENERATE_REPORT', 'Laporan rektorat bulanan (PDF) dihasilkan.', req.user!.role);
     
@@ -282,13 +278,9 @@ router.get('/reports/pdf', requireAuth, requireRole(['admin']), async (req: Requ
 
 router.get('/reports/excel', requireAuth, requireRole(['admin']), async (req: Request, res: Response) => {
   try {
-    const { generateRectorateExcel } = await import('../services/reportGenerator.js');
-    const filePath = await generateRectorateExcel({
-      totalSessions: 125,
-      crisisRatio: "4.5%",
-      mostCommonConcern: "Tugas Akademik & Skripsi",
-      dateRange: "Oktober 2023"
-    });
+    const { generateRectorateExcel, loadRectorateReportMetrics } = await import('../services/reportGenerator.js');
+    const metrics = await loadRectorateReportMetrics();
+    const filePath = await generateRectorateExcel(metrics);
     
     await serverDb.logAudit('GENERATE_REPORT', 'Laporan rektorat bulanan (Excel) dihasilkan.', req.user!.role);
     

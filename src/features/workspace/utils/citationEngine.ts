@@ -23,7 +23,8 @@ export const DOI_REGEX = /\b(10\.\d{4,9}\/[-._;()/A-Za-z0-9]+)\b/i;
 const CROSSREF_TIMEOUT_MS = 8_000;
 
 export function normalizeDoi(value: string): string {
-  return value.trim().replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, '').replace(/^doi:\s*/i, '').replace(/[.,;]+$/, '');
+  const candidate = value.trim().replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, '').replace(/^doi:\s*/i, '').replace(/[.,;]+$/, '');
+  try { return decodeURIComponent(candidate); } catch { return candidate; }
 }
 
 function textField(value: unknown): string | undefined {
@@ -40,7 +41,7 @@ function validYear(value: unknown): number | undefined {
 function parseCrossrefItem(item: any, retrievedAt: string): AcademicPaper | null {
   const doi = typeof item?.DOI === 'string' ? normalizeDoi(item.DOI) : '';
   const title = textField(item?.title);
-  const journal = textField(item?.['container-title']) || textField(item?.publisher);
+  const journal = textField(item?.['container-title']);
   const authors = Array.isArray(item?.author)
     ? item.author.map((author: any) => {
         const family = typeof author?.family === 'string' ? author.family.trim() : '';
@@ -139,13 +140,13 @@ export function formatHarvard(paper: AcademicPaper): string {
 }
 
 export function formatBibTeX(paper: AcademicPaper): string {
-  const firstAuthor = (paper.authors[0] || 'author').split(',')[0].toLowerCase().replace(/[^a-z0-9]/g, '');
+  const firstAuthor = (paper.authors[0] || '').split(',')[0].toLowerCase().replace(/[^a-z0-9]/g, '') || 'ref';
   const citeKey = `${firstAuthor}${paper.year}${paper.title.slice(0, 6).toLowerCase().replace(/[^a-z0-9]/g, '')}`;
   return `@article{${citeKey},\n  author = {${paper.authors.join(' and ')}},\n  title = {${paper.title}},\n  journal = {${paper.journal}},\n  year = {${paper.year}}${paper.doi ? `,\n  doi = {${paper.doi}}` : ''}\n}`;
 }
 
 function formatAuthorsAPA(authors: string[]): string {
-  if (authors.length === 0) return 'Penulis tidak teridentifikasi';
+  if (authors.length === 0) return '';
   if (authors.length === 1) return authors[0];
   if (authors.length === 2) return `${authors[0]} & ${authors[1]}`;
   if (authors.length <= 20) return `${authors.slice(0, -1).join(', ')}, & ${authors[authors.length - 1]}`;

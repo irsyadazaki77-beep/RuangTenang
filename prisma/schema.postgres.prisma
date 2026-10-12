@@ -611,10 +611,12 @@ model WorkspaceTaskExecutions {
   snapshotEncrypted String
   outputEncrypted   String?
   sourcesEncrypted  String?
+  eventsEncrypted   String?
   outputArtifactId  String?
   attemptNumber     Int
   startedAt         DateTime @default(now())
   heartbeatAt       DateTime?
+  agentClaimedAt    DateTime?
   finishedAt        DateTime?
   errorCode         String?
   task              WorkspacePlanTasks @relation(fields: [planTaskId], references: [id], onDelete: Cascade)

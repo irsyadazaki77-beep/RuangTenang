@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   X,
   Download,
@@ -17,12 +17,16 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { WorkspaceArtifact } from '../types';
-import { exportToAcademicDocx, validateAcademicCompleteness } from '../utils/exportDocx';
+import { createAcademicStylePreset, exportToAcademicDocx, validateAcademicCompleteness, type AcademicStyleProfile } from '../utils/exportDocx';
+import type { PresentationTheme, PresentationOutlineSlide } from '../utils/exportPptx';
+import { parseCitations } from '../utils/citationExport';
 
 export type ExportFormatType = 
   | 'docx_skripsi' 
   | 'docx_ieee_apa' 
   | 'docx_makalah' 
+  | 'pptx'
+  | 'xlsx'
   | 'pdf_print' 
   | 'markdown' 
   | 'text' 
@@ -51,11 +55,51 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   const [selectedFormat, setSelectedFormat] = useState<ExportFormatType>('docx_skripsi');
   const [isExporting, setIsExporting] = useState(false);
   const [showChecklistDetails, setShowChecklistDetails] = useState(false);
+  const [styleProfile, setStyleProfile] = useState<AcademicStyleProfile>(() => createAcademicStylePreset('skripsi'));
+  const [presentationTheme, setPresentationTheme] = useState<PresentationTheme>('academic_minimal');
+  const [pptxOutline, setPptxOutline] = useState<{ slides: PresentationOutlineSlide[]; error: string; loading: boolean }>({ slides: [], error: '', loading: false });
+
+  const hasTabularData = useMemo(() => {
+    try {
+      const parsed = JSON.parse(content);
+      if (parsed && Array.isArray(parsed.rows) && parsed.rows.length > 0) return true;
+    } catch { /* not JSON; fall back to markdown tables */ }
+    return /\|[ \t]*:?-+:?[ \t]*\|/.test(content);
+  }, [content]);
 
   // Compute academic completeness validation in real-time
   const validation = useMemo(() => {
     return validateAcademicCompleteness(content, artifact.title);
   }, [content, artifact.title]);
+  const referenceAudit = useMemo(() => {
+    const referenceHeading = /^\s*(?:#{1,6}\s*)?(?:DAFTAR\s+(?:PUSTAKA|REFERENSI)|REFERENCES|BIBLIOGRAPHY)\b[^\n]*\n([\s\S]*?)(?=\n\s*#{1,6}\s+|$)/im.exec(content);
+    const references = referenceHeading ? parseCitations(referenceHeading[1]) : [];
+    const dois = references.map(reference => reference.doi?.toLowerCase()).filter((doi): doi is string => Boolean(doi));
+    return {
+      count: references.length,
+      missingMetadata: references.filter(reference => !reference.title || !reference.authors.length || !reference.year || !reference.journal && !reference.doi && !reference.url).length,
+      duplicateDois: dois.length - new Set(dois).size
+    };
+  }, [content]);
+  useEffect(() => {
+    if (selectedFormat !== 'pptx') { setPptxOutline({ slides: [], error: '', loading: false }); return; }
+    let active = true;
+    setPptxOutline({ slides: [], error: '', loading: true });
+    void import('../utils/exportPptx').then(({ buildPresentationOutline }) => {
+      if (!active) return;
+      setPptxOutline({ slides: buildPresentationOutline({ title: artifact.title, content, artifactType: artifact.type, theme: presentationTheme }), error: '', loading: false });
+    }).catch(error => {
+      if (active) setPptxOutline({ slides: [], error: error instanceof Error ? error.message : 'Outline tidak dapat disusun.', loading: false });
+    });
+    return () => { active = false; };
+  }, [selectedFormat, artifact.title, artifact.type, content, presentationTheme]);
+
+  const selectFormat = (format: ExportFormatType) => {
+    setSelectedFormat(format);
+    if (format === 'docx_skripsi') setStyleProfile(createAcademicStylePreset('skripsi'));
+    else if (format === 'docx_ieee_apa') setStyleProfile(createAcademicStylePreset('ieee_apa'));
+    else if (format === 'docx_makalah') setStyleProfile(createAcademicStylePreset('makalah'));
+  };
 
   if (!isOpen) return null;
 
@@ -70,36 +114,45 @@ export const ExportModal: React.FC<ExportModalProps> = ({
         .substring(0, 35);
 
       if (formatToUse === 'docx_skripsi') {
-        showToast('Menyusun dokumen Word format Skripsi Baku (Margin 4-4-3-3)...', 'info');
+        showToast('Menyusun dokumen Word dengan profil yang dipilih...', 'info');
         await exportToAcademicDocx({
-          title: artifact.title || 'Naskah Skripsi',
+          title: artifact.title || 'Naskah Akademik',
           content,
           templateType: 'skripsi',
-          authorName: 'Mahasiswa',
-          university: 'Universitas Indonesia'
+          style: styleProfile
         });
-        showToast('Dokumen Word Format Skripsi Baku (Margin 4-4-3-3, Times New Roman 12pt, Spasi 1.5) berhasil diunduh!', 'success');
+        showToast('Dokumen Word (.docx) berhasil diunduh dengan profil yang dipilih.', 'success');
         onClose();
       } else if (formatToUse === 'docx_ieee_apa') {
-        showToast('Menyusun dokumen Word format Paper Ilmiah IEEE / APA...', 'info');
+        showToast('Menyusun dokumen Word dengan profil paper...', 'info');
         await exportToAcademicDocx({
           title: artifact.title || 'Academic Paper',
           content,
           templateType: 'ieee_apa',
-          authorName: 'Peneliti Mahasiswa',
-          university: 'Fakultas Riset'
+          style: styleProfile
         });
-        showToast('Dokumen Word Format Paper IEEE/APA (Margin 2.54 cm) berhasil diunduh!', 'success');
+        showToast('Dokumen Word (.docx) berhasil diunduh dengan profil yang dipilih.', 'success');
         onClose();
       } else if (formatToUse === 'docx_makalah') {
-        showToast('Menyusun dokumen Word Format Makalah Umum...', 'info');
+        showToast('Menyusun dokumen Word dengan profil makalah...', 'info');
         await exportToAcademicDocx({
           title: artifact.title || 'Makalah Akademik',
           content,
           templateType: 'makalah',
-          authorName: 'Mahasiswa'
+          style: styleProfile
         });
-        showToast('Dokumen Word Format Makalah Umum berhasil diunduh!', 'success');
+        showToast('Dokumen Word (.docx) berhasil diunduh dengan profil yang dipilih.', 'success');
+        onClose();
+      } else if (formatToUse === 'pptx') {
+        const { buildPresentationOutline, exportEditablePptx } = await import('../utils/exportPptx');
+        const outline = buildPresentationOutline({ title: artifact.title, content, artifactType: artifact.type, theme: presentationTheme });
+        await exportEditablePptx({ title: artifact.title || 'Presentasi Akademik', content, artifactType: artifact.type, theme: presentationTheme });
+        showToast(`PowerPoint editable berhasil diunduh (${outline.length} slide).`, 'success');
+        onClose();
+      } else if (formatToUse === 'xlsx') {
+        const { exportToXlsx } = await import('../utils/exportXlsx');
+        await exportToXlsx({ title: artifact.title || 'Data Ruang Kerja', content, artifactType: artifact.type });
+        showToast('Excel (.xlsx) berhasil diunduh.', 'success');
         onClose();
       } else if (formatToUse === 'pdf_print') {
         showToast('Membuka dialog cetak PDF browser...', 'info');
@@ -188,7 +241,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
               <h2 id="export-modal-title" className="text-base font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
                 Pusat Ekspor Dokumen Ilmiah
                 <span className="px-2 py-0.5 text-[10px] font-semibold bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 rounded-full border border-emerald-300/60 dark:border-emerald-700/60">
-                  Standar Skripsi & Paper
+                  Dokumen dan presentasi editable
                 </span>
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400 truncate max-w-sm">
@@ -220,7 +273,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-xs font-mono font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/60 px-2.5 py-0.5 rounded-full">
-                  Kesiapan: {validation.score}%
+                  Tinjauan awal
                 </span>
                 <button
                   type="button"
@@ -240,7 +293,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
               </div>
               <div className="bg-white/80 dark:bg-slate-800/80 rounded-xl p-2 border border-slate-200/60 dark:border-slate-800">
                 <span className="text-[10.5px] text-slate-500 dark:text-slate-400 block">Estimasi Halaman</span>
-                <span className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200">~{validation.estimatedPages} hal (A4)</span>
+                <span className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200">~{validation.estimatedPages} hal (perkiraan)</span>
               </div>
               <div className="bg-white/80 dark:bg-slate-800/80 rounded-xl p-2 border border-slate-200/60 dark:border-slate-800">
                 <span className="text-[10.5px] text-slate-500 dark:text-slate-400 block">Sitasi Rujukan</span>
@@ -249,7 +302,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
               <div className="bg-white/80 dark:bg-slate-800/80 rounded-xl p-2 border border-slate-200/60 dark:border-slate-800">
                 <span className="text-[10.5px] text-slate-500 dark:text-slate-400 block">Daftar Pustaka</span>
                 <span className={`text-xs sm:text-sm font-bold ${validation.hasReferences ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
-                  {validation.hasReferences ? 'Lengkap' : 'Belum Ada'}
+                  {validation.hasReferences ? `${referenceAudit.count} entri` : 'Belum Ada'}
                 </span>
               </div>
             </div>
@@ -271,9 +324,9 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                       <div className="font-semibold text-slate-800 dark:text-slate-200 flex items-center justify-between">
                         <span className="truncate">{check.label}</span>
                         {check.passed ? (
-                          <span className="text-[10px] text-emerald-600 font-medium">Valid</span>
+                          <span className="text-[10px] text-emerald-600 font-medium">Terdeteksi</span>
                         ) : (
-                          <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">Opsional</span>
+                          <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">Perlu ditinjau</span>
                         )}
                       </div>
                       <p className="text-[10.5px] text-slate-500 dark:text-slate-400 truncate">{check.description}</p>
@@ -281,6 +334,9 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                   </div>
                 ))}
               </div>
+            </div>
+            <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white/70 dark:bg-slate-800/50 px-3 py-2 text-[11px] text-slate-600 dark:text-slate-300">
+              Struktur: {validation.structuralStatus === 'passed' ? 'terdeteksi' : 'perlu ditinjau'} · Referensi: {referenceAudit.count} entri, {referenceAudit.missingMetadata} metadata belum lengkap, {referenceAudit.duplicateDois} DOI duplikat · {validation.citationCount} penanda sitasi terdeteksi. Format, kecocokan identitas, dukungan semantik, dan integritas file keluaran belum diperiksa di panel ini.
             </div>
           </div>
 
@@ -304,7 +360,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                   name="export_format"
                   value="docx_skripsi"
                   checked={selectedFormat === 'docx_skripsi'}
-                  onChange={() => setSelectedFormat('docx_skripsi')}
+                  onChange={() => selectFormat('docx_skripsi')}
                   className="mt-1 text-emerald-600 focus:ring-emerald-500 shrink-0"
                 />
                 <div className="flex-1 min-w-0">
@@ -312,20 +368,89 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                     <div className="flex items-center gap-2">
                       <FileCheck2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                       <span className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100">
-                        Unduh Format Skripsi (.docx) — Standar Baku 4-4-3-3
+                        Unduh profil skripsi (.docx)
                       </span>
                     </div>
                     <span className="px-2 py-0.5 text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-200 rounded-full shrink-0">
-                      Baku Kampus
+                      Preset contoh
                     </span>
                   </div>
                   <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 leading-relaxed">
-                    Kertas A4, Margin Baku <strong>Kiri 4 cm, Atas 4 cm, Kanan 3 cm, Bawah 3 cm</strong>, Times New Roman 12pt Justify, Spasi 1.5, Indentasi Paragraf 1 cm, dan judul BAB 14pt Kapital Bold.
+                    Preset awal A4 dengan margin 4-4-3-3 cm, Times New Roman 12pt, dan spasi 1.5. Sesuaikan dengan pedoman tugas atau kampus.
                   </p>
                   <div className="flex flex-wrap items-center gap-2 mt-2 text-[10.5px] font-mono text-emerald-700 dark:text-emerald-400 bg-emerald-100/60 dark:bg-emerald-900/30 px-2 py-1 rounded-lg w-fit">
                     <ShieldCheck className="w-3 h-3 text-emerald-600" />
-                    Mematuhi Pedoman Penulisan Karya Ilmiah & Skripsi Nasional
+                    Profil dapat disesuaikan sebelum ekspor
                   </div>
+                </div>
+              </label>
+
+              {selectedFormat.startsWith('docx_') && (
+                <details className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-800/40 p-3.5">
+                  <summary className="cursor-pointer text-xs font-semibold text-slate-800 dark:text-slate-200">Sesuaikan profil Word</summary>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mt-3 text-xs">
+                    <label className="space-y-1">Kertas
+                      <select value={styleProfile.paperSize} onChange={event => setStyleProfile({ ...styleProfile, paperSize: event.target.value as AcademicStyleProfile['paperSize'] })} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 p-2">
+                        <option value="A4">A4</option><option value="LETTER">Letter</option>
+                      </select>
+                    </label>
+                    {(['marginTopCm', 'marginBottomCm', 'marginLeftCm', 'marginRightCm'] as const).map((key, index) => (
+                      <label key={key} className="space-y-1">{['Atas', 'Bawah', 'Kiri', 'Kanan'][index]} (cm)
+                        <input type="number" min="1" max="7" step="0.1" value={styleProfile[key]} onChange={event => setStyleProfile({ ...styleProfile, [key]: Number(event.target.value) })} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 p-2" />
+                      </label>
+                    ))}
+                    <label className="space-y-1">Font
+                      <input value={styleProfile.fontFamily} maxLength={80} onChange={event => setStyleProfile({ ...styleProfile, fontFamily: event.target.value })} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 p-2" />
+                    </label>
+                    <label className="space-y-1">Ukuran (pt)
+                      <input type="number" min="9" max="16" step="0.5" value={styleProfile.fontSizePt} onChange={event => setStyleProfile({ ...styleProfile, fontSizePt: Number(event.target.value) })} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 p-2" />
+                    </label>
+                    <label className="space-y-1">Spasi baris
+                      <select value={styleProfile.lineSpacing} onChange={event => setStyleProfile({ ...styleProfile, lineSpacing: Number(event.target.value) as AcademicStyleProfile['lineSpacing'] })} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 p-2">
+                        <option value={1}>1.0</option><option value={1.15}>1.15</option><option value={1.5}>1.5</option><option value={2}>2.0</option>
+                      </select>
+                    </label>
+                    <label className="space-y-1">Gaya referensi
+                      <select value={styleProfile.citationStyle} onChange={event => setStyleProfile({ ...styleProfile, citationStyle: event.target.value as AcademicStyleProfile['citationStyle'] })} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 p-2">
+                        <option value="APA7">APA 7</option><option value="IEEE">IEEE</option>
+                      </select>
+                    </label>
+                    <label className="space-y-1">Nomor halaman
+                      <select value={styleProfile.pageNumbering} onChange={event => setStyleProfile({ ...styleProfile, pageNumbering: event.target.value as AcademicStyleProfile['pageNumbering'] })} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 p-2">
+                        <option value="roman_front_arabic_main">Romawi awal, Arab isi</option><option value="arabic_top_right">Arab kanan atas</option><option value="roman_bottom_center">Romawi bawah tengah</option><option value="none">Tanpa nomor</option>
+                      </select>
+                    </label>
+                  </div>
+                  <p className="mt-2 text-[10px] text-slate-500">Ekspor menerapkan pilihan ini; verifikasi aturan akhir dengan pedoman pengajar atau penerbit.</p>
+                </details>
+              )}
+
+              <label className={`flex items-start gap-3.5 p-3.5 rounded-2xl border transition-all cursor-pointer ${selectedFormat === 'pptx' ? 'bg-emerald-50/90 dark:bg-emerald-950/40 border-emerald-500' : 'bg-white dark:bg-slate-800/60 border-slate-200 dark:border-slate-800'}`}>
+                <input type="radio" name="export_format" value="pptx" checked={selectedFormat === 'pptx'} onChange={() => selectFormat('pptx')} className="mt-1 text-emerald-600" />
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100">PowerPoint editable (.pptx)</div>
+                  <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">Teks, bentuk, dan grafik native disusun dari konten artifact.</p>
+                  {selectedFormat === 'pptx' && <div className="mt-2 space-y-2">
+                    <label className="block text-xs text-slate-600 dark:text-slate-300">Tema
+                      <select value={presentationTheme} onChange={event => setPresentationTheme(event.target.value as PresentationTheme)} className="ml-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 p-1.5">
+                        <option value="academic_minimal">Academic minimal</option><option value="professional">Professional</option><option value="technology">Technology</option><option value="clean_corporate">Clean corporate</option>
+                      </select>
+                    </label>
+                    <div className="rounded-lg bg-white/80 dark:bg-slate-900/70 p-2 text-[11px]">
+                      <div className="font-semibold">Pratinjau outline{pptxOutline.loading ? ' · memuat' : ` · ${pptxOutline.slides.length} slide`}</div>
+                      {pptxOutline.error ? <p className="mt-1 text-rose-600">{pptxOutline.error}</p> : <ol className="mt-1 list-decimal pl-4 text-slate-600 dark:text-slate-300">{pptxOutline.slides.slice(0, 8).map((slide, index) => <li key={`${slide.title}-${index}`}>{slide.title} · {slide.layout}</li>)}</ol>}
+                      {pptxOutline.slides.length > 8 && <p className="text-slate-500">+ {pptxOutline.slides.length - 8} slide lainnya</p>}
+                      <p className="mt-1 text-slate-500">Outline ini memeriksa susunan konten; tidak mewakili render visual akhir.</p>
+                    </div>
+                  </div>}
+                </div>
+              </label>
+
+              <label className={`flex items-start gap-3.5 p-3.5 rounded-2xl border transition-all ${hasTabularData ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'} ${selectedFormat === 'xlsx' ? 'bg-emerald-50/90 dark:bg-emerald-950/40 border-emerald-500' : 'bg-white dark:bg-slate-800/60 border-slate-200 dark:border-slate-800'}`}>
+                <input type="radio" name="export_format" value="xlsx" disabled={!hasTabularData} checked={selectedFormat === 'xlsx'} onChange={() => selectFormat('xlsx')} className="mt-1 text-emerald-600" />
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100">Excel (.xlsx)</div>
+                  <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">{hasTabularData ? 'Setiap tabel menjadi satu sheet; data grafik menyertakan sheet sumber data.' : 'Tidak tersedia: artifact ini tidak berisi tabel atau data terstruktur.'}</p>
                 </div>
               </label>
 
@@ -342,7 +467,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                   name="export_format"
                   value="docx_ieee_apa"
                   checked={selectedFormat === 'docx_ieee_apa'}
-                  onChange={() => setSelectedFormat('docx_ieee_apa')}
+                  onChange={() => selectFormat('docx_ieee_apa')}
                   className="mt-1 text-emerald-600 focus:ring-emerald-500 shrink-0"
                 />
                 <div className="flex-1 min-w-0">
@@ -354,11 +479,11 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                       </span>
                     </div>
                     <span className="px-2 py-0.5 text-[10px] font-bold bg-teal-100 text-teal-800 dark:bg-teal-900/60 dark:text-teal-200 rounded-full shrink-0">
-                      Jurnal Ilmiah
+                      Preset contoh
                     </span>
                   </div>
                   <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 leading-relaxed">
-                    Kertas A4 / Letter, Margin 1 inci (2.54 cm) keliling, tipografi terstandar untuk submisi jurnal, prosiding seminar, dan paper konferensi.
+                    Preset paper A4 dengan margin 2.54 cm. Cocokkan format akhir dengan pedoman penerbit.
                   </p>
                 </div>
               </label>
@@ -376,7 +501,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                   name="export_format"
                   value="pdf_print"
                   checked={selectedFormat === 'pdf_print'}
-                  onChange={() => setSelectedFormat('pdf_print')}
+                  onChange={() => selectFormat('pdf_print')}
                   className="mt-1 text-emerald-600 focus:ring-emerald-500 shrink-0"
                 />
                 <div className="flex-1 min-w-0">
@@ -471,7 +596,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
         <div className="px-5 sm:px-6 py-4 bg-slate-50 dark:bg-slate-900/90 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 shrink-0">
           <div className="text-[11px] text-slate-500 flex items-center gap-1.5">
             <Sparkles className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-            <span>Format otomatis tersusun rapi sesuai kaidah akademik.</span>
+            <span>Periksa hasil dan cocokkan dengan pedoman akademik yang berlaku.</span>
           </div>
 
           <div className="flex items-center gap-2">
@@ -485,7 +610,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
             <button
               type="button"
               onClick={() => handleDownload()}
-              disabled={isExporting}
+              disabled={isExporting || (selectedFormat === 'pptx' && (pptxOutline.loading || Boolean(pptxOutline.error) || pptxOutline.slides.length === 0))}
               className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs sm:text-sm shadow-md hover:shadow-lg transition-all cursor-pointer disabled:opacity-50 active:scale-95"
             >
               {isExporting ? (

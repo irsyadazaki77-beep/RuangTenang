@@ -293,11 +293,17 @@ export function useWorkspaceStreaming({
         onChunk: chunk => {
           if (!isCurrentRequest(identity)) return;
           setStatus('streaming');
+          const isFirstChunk = accumulatedText.length === 0;
           accumulatedText += chunk;
           const scanText = artifactScanTail + chunk.toLowerCase();
           if (!artifactCandidateSeen && scanText.includes(ARTIFACT_OPEN_TAG)) artifactCandidateSeen = true;
           artifactScanTail = scanText.slice(-(ARTIFACT_OPEN_TAG.length - 1));
-          scheduleStreamingMessageFlush();
+          
+          if (isFirstChunk) {
+            flushStreamingMessage();
+          } else {
+            scheduleStreamingMessageFlush();
+          }
           scheduleArtifactPreview();
         },
         onMessageComplete: async finalText => {

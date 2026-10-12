@@ -630,7 +630,6 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
         title: artifact.title || 'Naskah Akademik',
         content: editableContent,
         templateType,
-        authorName: 'Mahasiswa'
       });
       showToast(`Dokumen Word (.docx) format ${typeLabel} berhasil diunduh!`, 'success');
     } catch (err: any) {

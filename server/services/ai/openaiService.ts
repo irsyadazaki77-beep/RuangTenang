@@ -24,12 +24,9 @@ function getRetryAfterMs(response: Response): number | undefined {
 }
 
 async function providerError(response: Response, streaming = false) {
-  let errorDetail = '';
-  try {
-    errorDetail = await response.text();
-  } catch {}
+  const errorDetail = await response.text().catch(() => '');
 
-  let parsedMsg = '';
+  let parsedMsg: string;
   try {
     const json = JSON.parse(errorDetail);
     parsedMsg = json.error?.message || json.message || errorDetail;
@@ -80,7 +77,7 @@ export const openaiService = {
         body: JSON.stringify({
           model,
           messages: buildMessages(options),
-          max_completion_tokens: !options.userId || options.userId === 'guest' ? 500 : 1000,
+          max_completion_tokens: Math.min(options.maxOutputTokens || (!options.userId || options.userId === 'guest' ? 500 : 1000), !options.userId || options.userId === 'guest' ? 500 : 1000),
           stream: false,
           store: false
         }),

@@ -72,7 +72,7 @@ export const groqService = {
     const messages = this.buildMessages(options);
     const isAnonymous = !options.userId || options.userId === 'guest';
     // Groq free on_demand tier token limits: 500 (anon) / 1000 (user) to give room for reasoning models
-    const maxTokens = isAnonymous ? 500 : 1000;
+    const maxTokens = Math.min(options.maxOutputTokens || (isAnonymous ? 500 : 1000), isAnonymous ? 500 : 1000);
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), AI_RELIABILITY_POLICY.connectTimeoutMs);

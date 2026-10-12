@@ -28,12 +28,14 @@ export default defineConfig({
     url: process.env.PORT ? `http://localhost:${process.env.PORT}/api/health` : 'http://localhost:3000/api/health',
     env: {
       NODE_ENV: 'test',
+      E2E_RELAX_AI_LIMITS: '1',
+      PORT: process.env.PORT || '3000',
       GEMINI_API_KEY: '',
       DEEPSEEK_API_KEY: '',
       GROQ_API_KEY: '',
       OPENROUTER_API_KEY: '',
     },
-    reuseExistingServer: true,
+    reuseExistingServer: !process.env.CI,
     timeout: 30000,
   },
 });

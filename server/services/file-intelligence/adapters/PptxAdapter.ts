@@ -15,6 +15,16 @@ export class PptxAdapter implements DocumentExtractorAdapter {
 
     try {
       const zip = await JSZip.loadAsync(input.buffer);
+      const extractionWarnings: string[] = [];
+      const hasImages = Object.keys(zip.files).some(name => /^ppt\/media\//i.test(name));
+      const hasCharts = Object.keys(zip.files).some(name => /^ppt\/charts\/chart\d+\.xml$/i.test(name));
+      const hasSpeakerNotes = Object.keys(zip.files).some(name => /^ppt\/notesSlides\/notesSlide\d+\.xml$/i.test(name));
+      if (hasImages || hasCharts) {
+        extractionWarnings.push('Teks slide diekstrak, tetapi gambar dan grafik tertanam belum dianalisis secara visual.');
+      }
+      if (hasSpeakerNotes) {
+        extractionWarnings.push('File memiliki speaker notes; notes belum diekstrak.');
+      }
       const slideEntries: { name: string; slideNum: number; file: JSZip.JSZipObject }[] = [];
 
       for (const [filename, fileObj] of Object.entries(zip.files)) {
@@ -51,13 +61,22 @@ export class PptxAdapter implements DocumentExtractorAdapter {
 
         const xmlContent = await entry.file.async('text');
         
-        // Extract text inside <a:t>...</a:t> tags
-        const textMatches = Array.from(xmlContent.matchAll(/<a:t(?:\s[^>]*)?>([\s\S]*?)<\/a:t>/gi));
-        const textSnippets = textMatches.map(m => m[1].trim()).filter(Boolean);
-        
+        // Preserve text order by shape and use title placeholders when available.
+        const shapeXml = Array.from(xmlContent.matchAll(/<p:sp\b[\s\S]*?<\/p:sp>/gi)).map(match => match[0]);
+        const decodeXml = (text: string) => text
+          .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+          .replace(/&quot;/g, '"').replace(/&apos;/g, "'");
+        const shapeText = shapeXml.map(shape => ({
+          text: Array.from(shape.matchAll(/<a:t(?:\s[^>]*)?>([\s\S]*?)<\/a:t>/gi)).map(match => decodeXml(match[1])).join('').trim(),
+          isTitle: /<p:ph\b[^>]*\btype=["'](?:title|ctrTitle)["']/i.test(shape)
+        })).filter(shape => shape.text);
+        const textSnippets = shapeText.length
+          ? shapeText.map(shape => shape.text)
+          : Array.from(xmlContent.matchAll(/<a:t(?:\s[^>]*)?>([\s\S]*?)<\/a:t>/gi)).map(match => decodeXml(match[1]).trim()).filter(Boolean);
+
         if (textSnippets.length === 0) continue;
 
-        const slideText = textSnippets.join(' ');
+        const slideText = textSnippets.join('\n');
         totalChars += slideText.length;
         if (totalChars > DEFAULT_FILE_LIMITS.maxExtractedChars) {
           throw new DocumentProcessingException(
@@ -66,13 +85,13 @@ export class PptxAdapter implements DocumentExtractorAdapter {
           );
         }
 
-        const title = textSnippets[0] ? textSnippets[0].substring(0, 80) : `Slide ${entry.slideNum}`;
+        const title = shapeText.find(shape => shape.isTitle)?.text?.substring(0, 160);
 
         blocks.push({
           blockId: `${input.documentId}_s${entry.slideNum}`,
           text: slideText,
           slideNumber: entry.slideNum,
-          section: title
+          ...(title ? { section: title } : {})
         });
       }
 
@@ -89,7 +108,8 @@ export class PptxAdapter implements DocumentExtractorAdapter {
         checksum: input.checksum,
         slideCount: slideEntries.length,
         blocks,
-        normalizedText: blocks.map(b => `Slide ${b.slideNumber}\n---\n${b.text}`).join('\n\n')
+        normalizedText: blocks.map(b => `Slide ${b.slideNumber}\n---\n${b.text}`).join('\n\n'),
+        ...(extractionWarnings.length ? { extractionWarnings } : {})
       };
     } catch (err: any) {
       if (err instanceof DocumentProcessingException) throw err;

@@ -21,6 +21,7 @@ import { WorkspaceHeader } from './components/WorkspaceHeader';
 import { WorkspaceConversation } from './components/WorkspaceConversation';
 import { WorkspaceComposer } from './components/WorkspaceComposer';
 import { WorkspaceCanvasPane } from './components/WorkspaceCanvasPane';
+import { WorkspaceWorkflowPipeline } from './components/WorkspaceWorkflowPipeline';
 import { WorkspaceTemplateModal } from './components/WorkspaceTemplateModal';
 import { MicroBreathingModal } from './components/MicroBreathingModal';
 import { StoredAttachment } from '../chat/types';
@@ -46,8 +47,10 @@ import { WorkspaceSourcePreview } from './components/WorkspaceSourcePreview';
 import { useWorkspaceViewController } from './hooks/useWorkspaceViewController';
 import { WORKSPACE_COMMAND_EVENT, type WorkspaceCommandId } from './utils/workspaceCommandEvents';
 import { readWorkspacePromptDraft, writeWorkspacePromptDraft } from './utils/workspacePromptDraft';
+import type { AgentExecutionResult } from '../../../shared/contracts/agent';
 
 const WorkspaceFilePreviewModal = React.lazy(() => import('./components/WorkspaceFilePreviewModal').then(module => ({ default: module.WorkspaceFilePreviewModal })));
+const ExportModal = React.lazy(() => import('./components/ExportModal').then(module => ({ default: module.ExportModal })));
 
 export interface StudentWorkspaceProps {
   user: UserSession | null;
@@ -124,9 +127,6 @@ function StudentWorkspaceSession({
   const updateWorkspacePlan = workspaceMetadata.updatePlan;
   const createWorkspacePlan = workspaceMetadata.createPlan;
   const startWorkspaceTaskExecution = workspaceMetadata.startTaskExecution;
-  const finishWorkspaceTaskExecution = workspaceMetadata.finishTaskExecution;
-  const cancelWorkspaceTaskExecution = workspaceMetadata.cancelTaskExecution;
-  const linkWorkspaceTaskArtifact = workspaceMetadata.linkTaskArtifact;
   const saveWorkspaceMetadata = workspaceMetadata.save;
   const workspacePlanRef = React.useRef(workspacePlan);
   workspacePlanRef.current = workspacePlan;
@@ -141,7 +141,6 @@ function StudentWorkspaceSession({
   const clearInProgressRef = React.useRef(false);
   const activeSendOperationRef = React.useRef<string | null>(null);
   const taskGenerationRequestsRef = React.useRef(new Map<string, string>());
-  const taskRunRequestsRef = React.useRef(new Map<string, { taskId: string; planId: string; executionId: string; workspaceId?: string }>());
   effectiveChatIdRef.current = effectiveChatId;
 
   // 1. Domain Persistence Hook
@@ -232,6 +231,7 @@ function StudentWorkspaceSession({
   const [inlineEditPatch, setInlineEditPatch] = useState<ArtifactPatch | null>(null);
   const [revisionCommit, setRevisionCommit] = useState<{ artifactId: string; content: string; version: number } | null>(null);
   const [isCreatingArtifact, setIsCreatingArtifact] = useState(false);
+  const [isWorkflowExportOpen, setIsWorkflowExportOpen] = useState(false);
   const [pendingCanvasTransfer, setPendingCanvasTransfer] = useState<{ id: string; content: string; title: string } | null>(null);
   const revisionRequestRef = React.useRef<{ scope: 'document' | 'selection'; artifactId: string; title: string; baseContent: string; baseVersion: number; workspaceId?: string; selection?: WorkspaceArtifactSelection } | null>(null);
   const requestSnapshotsRef = React.useRef(new Map<string, { snapshot: WorkspaceRequestSnapshot; attachments?: StoredAttachment[]; customSystemNote?: string; revisionRequest?: NonNullable<typeof revisionRequestRef.current> }>());
@@ -456,22 +456,6 @@ function StudentWorkspaceSession({
     setIsCreatingArtifact(false);
     const generatedTaskGoal = taskGenerationRequestsRef.current.get(identity.requestId);
     taskGenerationRequestsRef.current.delete(identity.requestId);
-    const taskRun = taskRunRequestsRef.current.get(identity.requestId);
-    taskRunRequestsRef.current.delete(identity.requestId);
-    let taskCompletionPlan: WorkspacePlan | undefined;
-    if (taskRun && taskRun.workspaceId === identity.workspaceId) {
-      const latest = workspacePlanRef.current;
-      if (latest?.id === taskRun.planId && latest.tasks.find(task => task.id === taskRun.taskId)?.executionId === taskRun.executionId) {
-        try {
-          taskCompletionPlan = await finishWorkspaceTaskExecution(taskRun.planId, taskRun.taskId, taskRun.executionId, assistantMsg.error
-            ? { errorCode: 'AI_REQUEST_FAILED' }
-            : { output: assistantMsg.content.slice(0, 20000), sources: assistantMsg.sources || [] });
-        } catch (error) {
-          console.warn('[WorkspaceTasks] Task result persistence failed:', error);
-          showToast('Hasil AI diterima, tetapi belum tersimpan. Status eksekusi tetap perlu dipulihkan atau dicoba ulang.', 'error');
-        }
-      }
-    }
     if (generatedTaskGoal && !assistantMsg.error) {
       const plan = parseGeneratedPlan(assistantMsg.content, generatedTaskGoal);
       try {
@@ -511,19 +495,50 @@ function StudentWorkspaceSession({
       artifactsPersisted = await syncParsedMessageArtifacts(extractedArtifacts, identity.chatId || effectiveChatIdRef.current);
       if (!isCurrent()) return;
       setActiveArtifactId(extractedArtifacts[0].id);
-      if (taskCompletionPlan && taskRun && artifactsPersisted) {
-        try { taskCompletionPlan = await linkWorkspaceTaskArtifact(taskRun.planId, taskRun.taskId, taskRun.executionId, extractedArtifacts[0].id); }
-        catch (error) { console.warn('[WorkspaceTasks] Output artifact link did not persist:', error); }
-      }
     }
-    const citationAudit = taskRun && workspacePlanRef.current?.tasks.find(task => task.id === taskRun.taskId)?.type === 'research'
-      ? validateResearchCitations(assistantMsg.content, assistantMsg.sources || []) : null;
     const finalMessage = !artifactsPersisted && extractedArtifacts.length
       ? { ...assistantMsg, content: `${assistantMsg.content.replace(/Artefak Aktif[^\n]*/g, 'Draf dokumen dibuat secara lokal')}\n\nDokumen belum tersimpan ke server. Draf tetap tersedia di Canvas; coba simpan lagi.` }
-      : citationAudit ? { ...assistantMsg, content: `${citationAudit.content}${citationAudit.removedUnknownCitationCount ? `\n\n${citationAudit.removedUnknownCitationCount} marker citation yang tidak cocok dengan evidence request ini dihapus.` : ''}${citationAudit.unreferencedSentenceCount ? `\n\n**Audit evidence:** ${citationAudit.unreferencedSentenceCount} kalimat panjang tidak memiliki marker sumber. Keterkaitan citation sudah divalidasi, tetapi dukungan makna belum diverifikasi otomatis.` : '\n\n**Audit evidence:** marker menunjuk ke sumber pada request ini. Dukungan makna tetap perlu ditinjau.'}` } : assistantMsg;
+      : assistantMsg;
     if (!isCurrent()) return;
     setMessages(prev => prev.some(message => message.id === finalMessage.id) ? prev : [...prev, finalMessage]);
-  }, [openWorkspaceInspector, setMessages, setHasUnreadArtifact, syncParsedMessageArtifacts, setActiveArtifactId, finishWorkspaceTaskExecution, linkWorkspaceTaskArtifact, createWorkspacePlan, showToast]);
+  }, [openWorkspaceInspector, setMessages, setHasUnreadArtifact, syncParsedMessageArtifacts, setActiveArtifactId, createWorkspacePlan, showToast]);
+
+  const handleAgentTaskCompleted = useCallback(async (result: AgentExecutionResult, identity: { workspaceId: string; planId: string; taskId: string }) => {
+    if (identity.workspaceId !== logicalWorkspaceIdentityRef.current || workspacePlanRef.current?.id !== identity.planId) return;
+    const task = workspacePlanRef.current.tasks.find(item => item.id === identity.taskId);
+    let content = result.output;
+    if (task?.type === 'research') {
+      const audit = validateResearchCitations(content, result.sources);
+      content = `${audit.content}${audit.removedUnknownCitationCount ? `\n\n${audit.removedUnknownCitationCount} citation marker yang tidak berasal dari hasil pencarian task ini dihapus.` : ''}${audit.unreferencedSentenceCount ? `\n\n**Audit evidence:** ${audit.unreferencedSentenceCount} kalimat panjang belum memiliki marker sumber. Identitas sumber sudah diperiksa; dukungan makna belum diverifikasi otomatis.` : '\n\n**Audit evidence:** marker menunjuk ke sumber yang ditemukan untuk task ini. Dukungan makna tetap perlu ditinjau.'}`;
+    }
+    if (result.artifactProposal && result.artifactId) {
+      const now = new Date().toISOString();
+      const artifact: WorkspaceArtifact = {
+        id: result.artifactId,
+        chatId: effectiveChatIdRef.current,
+        title: result.artifactProposal.title,
+        type: result.artifactProposal.type,
+        ...(result.artifactProposal.language ? { language: result.artifactProposal.language } : {}),
+        content: result.artifactProposal.content,
+        version: 1,
+        createdAt: now,
+        updatedAt: now,
+        persistenceStatus: 'persistent'
+      };
+      setArtifacts(current => [artifact, ...current.filter(item => item.id !== artifact.id)]);
+      setActiveArtifactId(artifact.id);
+      setHasUnreadArtifact(true);
+      openWorkspaceInspector('canvas');
+    }
+    const assistantMessage: Message = {
+      id: `agent-${result.executionId}`,
+      role: 'assistant',
+      content,
+      createdAt: new Date(),
+      sources: result.sources
+    };
+    setMessages(previous => [...previous.filter(message => message.id !== assistantMessage.id), assistantMessage]);
+  }, [openWorkspaceInspector, setActiveArtifactId, setArtifacts, setHasUnreadArtifact, setMessages]);
 
   const {
     isStreaming,
@@ -835,15 +850,12 @@ function StudentWorkspaceSession({
 
   const handleAbortWorkspaceRequest = useCallback(() => {
     const requestId = activeSendOperationRef.current;
-    const taskRun = requestId ? taskRunRequestsRef.current.get(requestId) : undefined;
     if (requestId) {
-      taskRunRequestsRef.current.delete(requestId);
       taskGenerationRequestsRef.current.delete(requestId);
     }
     revisionRequestRef.current = null;
     abortStream();
-    if (taskRun && workspacePlanRef.current?.id === taskRun.planId) void cancelWorkspaceTaskExecution(taskRun.planId, taskRun.taskId, taskRun.executionId).catch(error => showToast(error instanceof Error ? error.message : 'Task belum dapat dihentikan.', 'error'));
-  }, [abortStream, cancelWorkspaceTaskExecution, showToast]);
+  }, [abortStream]);
 
   const executeWorkspaceTool = useCallback(async (tool: WorkspaceToolDefinition, input: Record<string, unknown>, artifact: WorkspaceArtifact | null) => {
     const usableArtifact = artifact && artifact.id !== DEFAULT_WELCOME_ARTIFACT_ID ? artifact : null;
@@ -947,30 +959,28 @@ function StudentWorkspaceSession({
     completeWorkflow: handleCompleteWorkflow,
     pauseWorkflow: handlePauseWorkflow,
     resumeWorkflow: handleResumeWorkflow,
-    recoverTask: handleRecoverWorkspaceTask
+    recoverTask: handleRecoverWorkspaceTask,
+    isAgentExecuting
   } = useWorkspaceAgentController({
     plan: workspacePlan,
     startTaskExecution: startWorkspaceTaskExecution,
-    finishTaskExecution: finishWorkspaceTaskExecution,
+    executeAgentTask: workspaceMetadata.executeAgentTask,
     reviewTask: workspaceMetadata.reviewTask,
-    linkTaskArtifact: linkWorkspaceTaskArtifact,
     transitionPlan: workspaceMetadata.transitionPlan,
-    cancelTaskExecution: cancelWorkspaceTaskExecution,
     recoverTaskExecution: workspaceMetadata.recoverTaskExecution,
     isStreaming,
     includeFilesInContext,
     selectedFileIds: selectedWorkspaceFileIds,
     includeCanvasInContext,
     activeArtifact: visibleActiveArtifact,
-    canvasDraft,
     workspaceInstructions: workspaceData?.instructions,
     selectedModel,
     workspaceId: logicalWorkspaceIdentity,
     activeSendOperationRef,
     taskGenerationRequestsRef,
-    taskRunRequestsRef,
     sendMessage: handleExecuteSendMessage,
     abortStream,
+    onAgentTaskCompleted: handleAgentTaskCompleted,
     showToast
   });
   const handleSaveWorkspaceInstructions = useCallback(async () => {
@@ -1082,6 +1092,35 @@ function StudentWorkspaceSession({
         onConfirmClearWorkspace={handleClearWorkspaceConversation}
         isClearingConversation={isClearingConversation}
         isPreparingConversation={isStreaming && !effectiveChatId && Boolean(user && user.role !== 'guest')}
+      />
+
+      {/* Unified Guided Workflow Ribbon: Unggah -> Analisis -> Draft -> Ekspor */}
+      <WorkspaceWorkflowPipeline
+        uploadedFilesCount={workspaceAttachments.length}
+        readyFilesCount={selectedReadyWorkspaceFileCount}
+        isAnalyzing={isStreaming || isAgentExecuting}
+        activeArtifact={visibleActiveArtifact}
+        isCanvasOpen={isCanvasOpen}
+        onUploadClick={() => {
+          if (fileInputRef.current) {
+            fileInputRef.current.click();
+          } else {
+            openWorkspaceInspector('files');
+          }
+        }}
+        onAnalysisClick={() => {
+          openWorkspaceInspector(workspacePlan?.tasks?.length ? 'plan' : 'context');
+        }}
+        onCanvasClick={() => {
+          if (!isCanvasOpen) handleOpenCanvas();
+        }}
+        onExportClick={() => {
+          if (visibleActiveArtifact) {
+            setIsWorkflowExportOpen(true);
+          } else {
+            showToast('Belum ada draf artefak yang dapat diekspor.', 'info');
+          }
+        }}
       />
 
       {/* Floating Notification for Mobile when Artifact Updates */}
@@ -1229,7 +1268,7 @@ function StudentWorkspaceSession({
               isLoading={workspaceMetadata.isLoading}
               canPersist={Boolean(workspaceData)}
               isGenerating={taskGenerationRequestsRef.current.size > 0 && isStreaming}
-              isExecuting={Boolean(workspacePlan?.tasks.some(task => task.status === 'running')) && isStreaming}
+              isExecuting={Boolean(workspacePlan?.tasks.some(task => task.status === 'running')) && (isStreaming || isAgentExecuting)}
               modelOptions={models.map(model => ({ id: model.id, name: model.name }))}
               onOpenArtifact={id => { handleSelectCanvasArtifact(id); handleOpenCanvas(); }}
               onOpenSource={openWorkspaceSource}
@@ -1359,6 +1398,17 @@ function StudentWorkspaceSession({
       {previewAttachmentId && <React.Suspense fallback={<div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4"><div role="status" className="rounded-xl bg-white px-4 py-3 text-sm text-slate-600 shadow-xl dark:bg-slate-900 dark:text-slate-300">Memuat pratinjau file…</div></div>}>
         <WorkspaceFilePreviewModal attachmentId={previewAttachmentId} onClose={() => dispatchWorkspaceView({ type: 'close-file-preview' })} onArtifactCreated={artifact => { dispatchWorkspaceView({ type: 'close-file-preview' }); setArtifacts(current => [artifact, ...current.filter(item => item.id !== artifact.id)]); setActiveArtifactId(artifact.id); setHasUnreadArtifact(false); openWorkspaceInspector('canvas'); }} />
       </React.Suspense>}
+      {isWorkflowExportOpen && visibleActiveArtifact && (
+        <React.Suspense fallback={null}>
+          <ExportModal
+            isOpen={isWorkflowExportOpen}
+            onClose={() => setIsWorkflowExportOpen(false)}
+            artifact={visibleActiveArtifact}
+            content={canvasDraft?.artifactId === visibleActiveArtifact.id ? canvasDraft.content : visibleActiveArtifact.content}
+            showToast={showToast}
+          />
+        </React.Suspense>
+      )}
     </div>
   );
 }

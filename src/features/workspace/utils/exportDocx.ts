@@ -1,20 +1,25 @@
 /**
  * Academic Standard .docx Exporter for RuangKerja (RuangTenang Kampus)
- * Adheres strictly to Indonesian Thesis & Academic Paper Guidelines (Pedoman Penulisan Skripsi / Tesis):
- * - Paper: A4 (11906 x 16838 twips)
- * - Margins: Left 4 cm (2268 twips), Top 4 cm (2268 twips), Right 3 cm (1701 twips), Bottom 3 cm (1701 twips) (Format 4-4-3-3 Baku)
- * - Typography: Times New Roman
- *   - Judul BAB: 14 pt, Tebal (Bold), Rata Tengah (Centered), Huruf Kapital (Uppercase)
- *   - Sub-bab / Judul Bagian: 12 pt, Tebal (Bold), Rata Kiri
- *   - Sub-sub-bab: 12 pt, Regular/Italic, Rata Kiri
- *   - Isi Paragraf: 12 pt, Rata Kanan-Kiri (Justified), Spasi 1.5 Baris, Indentasi Baris Pertama 1 cm (567 twips)
- * - Format Paper IEEE/APA:
- *   - Margin: 2.54 cm / 1 inch (1440 twips) keliling
- *   - Typography: Times New Roman 12 pt (APA) / 10 pt (IEEE)
- * - Penomoran Halaman Otomatis:
- *   - Bagian Awal (Abstrak, Kata Pengantar, Daftar Isi): Angka Romawi Kecil (i, ii, iii) di tengah bawah.
- *   - Bagian Utama (BAB I s.d. Selesai): Angka Arab (1, 2, 3) di kanan atas.
+ * Editable academic DOCX generation with selectable campus-style presets.
  */
+
+import { formatAsAPA7, formatAsIEEE, parseCitations } from './citationExport';
+
+export type AcademicCitationStyle = 'APA7' | 'IEEE';
+export type AcademicPageNumbering = 'arabic_top_right' | 'roman_bottom_center' | 'roman_front_arabic_main' | 'none';
+
+export interface AcademicStyleProfile {
+  paperSize: 'A4' | 'LETTER';
+  marginTopCm: number;
+  marginBottomCm: number;
+  marginLeftCm: number;
+  marginRightCm: number;
+  fontFamily: string;
+  fontSizePt: number;
+  lineSpacing: 1 | 1.15 | 1.5 | 2;
+  citationStyle: AcademicCitationStyle;
+  pageNumbering: AcademicPageNumbering;
+}
 
 export interface ExportDocxOptions {
   title: string;
@@ -23,10 +28,58 @@ export interface ExportDocxOptions {
   authorName?: string;
   university?: string;
   faculty?: string;
+  style?: AcademicStyleProfile;
+}
+
+export function createAcademicStylePreset(templateType: ExportDocxOptions['templateType'] = 'skripsi'): AcademicStyleProfile {
+  if (templateType === 'skripsi') {
+    return { paperSize: 'A4', marginTopCm: 4, marginBottomCm: 3, marginLeftCm: 4, marginRightCm: 3, fontFamily: 'Times New Roman', fontSizePt: 12, lineSpacing: 1.5, citationStyle: 'APA7', pageNumbering: 'roman_front_arabic_main' };
+  }
+  if (templateType === 'ieee_apa') {
+    return { paperSize: 'A4', marginTopCm: 2.54, marginBottomCm: 2.54, marginLeftCm: 2.54, marginRightCm: 2.54, fontFamily: 'Times New Roman', fontSizePt: 12, lineSpacing: 2, citationStyle: 'APA7', pageNumbering: 'arabic_top_right' };
+  }
+  return { paperSize: 'A4', marginTopCm: 3, marginBottomCm: 3, marginLeftCm: 3, marginRightCm: 3, fontFamily: 'Times New Roman', fontSizePt: 12, lineSpacing: 1.5, citationStyle: 'APA7', pageNumbering: 'arabic_top_right' };
+}
+
+function normalizeAcademicStyle(style: AcademicStyleProfile): AcademicStyleProfile {
+  const boundMargin = (value: number) => Math.min(7, Math.max(1, Number.isFinite(value) ? value : 2.54));
+  const fontSizePt = Math.min(16, Math.max(9, Number.isFinite(style.fontSizePt) ? style.fontSizePt : 12));
+  const allowedLineSpacing: AcademicStyleProfile['lineSpacing'][] = [1, 1.15, 1.5, 2];
+  return {
+    ...style,
+    paperSize: style.paperSize === 'LETTER' ? 'LETTER' : 'A4',
+    marginTopCm: boundMargin(style.marginTopCm),
+    marginBottomCm: boundMargin(style.marginBottomCm),
+    marginLeftCm: boundMargin(style.marginLeftCm),
+    marginRightCm: boundMargin(style.marginRightCm),
+    fontFamily: style.fontFamily.trim().slice(0, 80) || 'Times New Roman',
+    fontSizePt,
+    lineSpacing: allowedLineSpacing.includes(style.lineSpacing) ? style.lineSpacing : 1.5,
+    citationStyle: style.citationStyle === 'IEEE' ? 'IEEE' : 'APA7'
+  };
+}
+
+function formatBibliographyForStyle(content: string, style: AcademicCitationStyle): string {
+  const heading = /^((?:#{1,6}\s*)?(?:DAFTAR\s+(?:PUSTAKA|REFERENSI)|REFERENCES|BIBLIOGRAPHY)\b[^\n]*)/im.exec(content);
+  if (!heading || heading.index === undefined) return content;
+  const bodyStart = heading.index + heading[0].length;
+  const tail = content.slice(bodyStart);
+  const nextHeading = /\n(?=\s*#{1,6}\s+)/.exec(tail);
+  const bodyEnd = nextHeading?.index ?? tail.length;
+  const rawReferences = tail.slice(0, bodyEnd).trim();
+  const references = parseCitations(rawReferences);
+  if (!references.length) return content;
+  const formatted = style === 'IEEE' ? formatAsIEEE(references) : formatAsAPA7(references);
+  if (!formatted) return content;
+  return `${content.slice(0, bodyStart)}\n\n${formatted}${tail.slice(bodyEnd)}`;
 }
 
 export interface AcademicCompletenessCheck {
-  score: number; // 0 - 100
+  structuralStatus: 'passed' | 'needs_review';
+  formattingStatus: 'not_checked';
+  referenceStatus: 'passed' | 'needs_review';
+  evidenceStatus: 'not_checked';
+  outputIntegrityStatus: 'not_checked';
   wordCount: number;
   estimatedPages: number;
   hasTitle: boolean;
@@ -50,7 +103,8 @@ export interface AcademicCompletenessCheck {
 export function validateAcademicCompleteness(content: string, title?: string): AcademicCompletenessCheck {
   if (!content || !content.trim()) {
     return {
-      score: 0,
+      structuralStatus: 'needs_review', formattingStatus: 'not_checked', referenceStatus: 'needs_review',
+      evidenceStatus: 'not_checked', outputIntegrityStatus: 'not_checked',
       wordCount: 0,
       estimatedPages: 0,
       hasTitle: false,
@@ -78,7 +132,7 @@ export function validateAcademicCompleteness(content: string, title?: string): A
   const hasBabStructure = /^(?:#+\s*)?(BAB\s+[IVXLCDM\d]+|BAB\s+1\b|1\.\s+PENDAHULUAN)/im.test(content);
   
   // Deteksi sitasi format (Author, Year), (Author et al., Year), atau [1], [2]
-  const citationMatches = content.match(/\((?:[A-Z][a-zA-Z\s]+,\s*(?:19|20)\d{2}|[A-Z][a-zA-Z\s]+(?:\s+et\s+al\.?|\s+dkk\.?),\s*(?:19|20)\d{2})\)|\[\d+\]/g) || [];
+  const citationMatches = content.match(/\((?:[A-Z][a-zA-Z\s]+,\s*(?:19|20)\d{2}|[A-Z][a-zA-Z\s]+(?:\s+et\s+al\.?|\s+dkk\.?),\s*(?:19|20)\d{2})\)|\[\d+\]|\[cite:[A-Za-z0-9_-]+\]/g) || [];
   const citationCount = citationMatches.length;
   const hasCitations = citationCount > 0;
 
@@ -123,15 +177,12 @@ export function validateAcademicCompleteness(content: string, title?: string): A
     }
   ];
 
-  let passedPoints = 0;
-  if (hasTitle) passedPoints += 20;
-  if (hasAbstract) passedPoints += 20;
-  if (hasBabStructure) passedPoints += 20;
-  if (hasCitations) passedPoints += 20;
-  if (hasReferences) passedPoints += 20;
-
   return {
-    score: passedPoints,
+    structuralStatus: hasTitle && hasAbstract ? 'passed' : 'needs_review',
+    formattingStatus: 'not_checked',
+    referenceStatus: hasReferences && hasCitations ? 'passed' : 'needs_review',
+    evidenceStatus: 'not_checked',
+    outputIntegrityStatus: 'not_checked',
     wordCount,
     estimatedPages,
     hasTitle,
@@ -144,12 +195,10 @@ export function validateAcademicCompleteness(content: string, title?: string): A
   };
 }
 
-export async function exportToAcademicDocx(options: ExportDocxOptions): Promise<void> {
-  const {
-    title,
-    content,
-    templateType = 'skripsi'
-  } = options;
+async function buildAcademicDocxDocument(options: ExportDocxOptions) {
+  const { templateType = 'skripsi' } = options;
+  const style = normalizeAcademicStyle(options.style || createAcademicStylePreset(templateType));
+  const content = formatBibliographyForStyle(options.content, style.citationStyle);
 
   // Dynamic import of docx library to keep initial bundle size lean
   const {
@@ -170,29 +219,22 @@ export async function exportToAcademicDocx(options: ExportDocxOptions): Promise<
     Footer
   } = await import('docx');
 
-  // Convert CM to Twips (1 cm = 567 twips, 1 inch = 1440 twips)
-  // Format Skripsi: Kiri 4cm (2268 twips), Atas 4cm (2268 twips), Kanan 3cm (1701 twips), Bawah 3cm (1701 twips)
-  // Format IEEE/APA: 1 inch (1440 twips) keliling
-  // Format Makalah: Kiri 3cm (1701 twips), Atas 3cm (1701 twips), Kanan 3cm (1701 twips), Bawah 3cm (1701 twips)
   const isSkripsi = templateType === 'skripsi';
-  const isIeeeApa = templateType === 'ieee_apa';
+  const cmToTwips = (cm: number) => Math.round(cm * 567);
+  const MARGIN_LEFT_TWIPS = cmToTwips(style.marginLeftCm);
+  const MARGIN_TOP_TWIPS = cmToTwips(style.marginTopCm);
+  const MARGIN_RIGHT_TWIPS = cmToTwips(style.marginRightCm);
+  const MARGIN_BOTTOM_TWIPS = cmToTwips(style.marginBottomCm);
+  const A4_WIDTH_TWIPS = style.paperSize === 'A4' ? 11906 : 12240;
+  const A4_HEIGHT_TWIPS = style.paperSize === 'A4' ? 16838 : 15840;
 
-  const MARGIN_LEFT_TWIPS = isSkripsi ? 2268 : isIeeeApa ? 1440 : 1701;
-  const MARGIN_TOP_TWIPS = isSkripsi ? 2268 : isIeeeApa ? 1440 : 1701;
-  const MARGIN_RIGHT_TWIPS = isSkripsi ? 1701 : isIeeeApa ? 1440 : 1701;
-  const MARGIN_BOTTOM_TWIPS = isSkripsi ? 1701 : isIeeeApa ? 1440 : 1701;
-
-  // A4 dimensions in twips: 210mm x 297mm -> 11906 x 16838 twips
-  const A4_WIDTH_TWIPS = 11906;
-  const A4_HEIGHT_TWIPS = 16838;
-
-  const FONT_FAMILY = 'Times New Roman';
-  const BODY_FONT_SIZE = isIeeeApa ? 22 : 24; // 11 pt (IEEE/APA) or 12 pt (Skripsi)
-  const HEADING1_FONT_SIZE = 28; // 14 pt
-  const HEADING2_FONT_SIZE = 24; // 12 pt
-  const LINE_SPACING_1_5 = 360; // 1.5 lines (240 * 1.5 = 360)
-  const LINE_SPACING_SINGLE = 240; // 1.0 line
-  const FIRST_LINE_INDENT_TWIPS = isIeeeApa ? 720 : 567; // 1.27 cm (0.5 in) APA or 1 cm (567 twips) Skripsi
+  const FONT_FAMILY = style.fontFamily;
+  const BODY_FONT_SIZE = Math.round(style.fontSizePt * 2);
+  const HEADING1_FONT_SIZE = Math.round((style.fontSizePt + 2) * 2);
+  const HEADING2_FONT_SIZE = BODY_FONT_SIZE;
+  const LINE_SPACING_1_5 = Math.round(240 * style.lineSpacing);
+  const LINE_SPACING_SINGLE = Math.round(240 * style.lineSpacing);
+  const FIRST_LINE_INDENT_TWIPS = style.citationStyle === 'APA7' ? 720 : 567;
 
   /**
    * Helper function: parse inline Markdown (**bold**, *italic*, `code`) into safe TextRun array
@@ -574,8 +616,24 @@ export async function exportToAcademicDocx(options: ExportDocxOptions): Promise<
   const hasBab = babRegex.test(content);
 
   const docSections: any[] = [];
+  const commonPageProperties = {
+    size: { width: A4_WIDTH_TWIPS, height: A4_HEIGHT_TWIPS },
+    margin: { top: MARGIN_TOP_TWIPS, bottom: MARGIN_BOTTOM_TWIPS, left: MARGIN_LEFT_TWIPS, right: MARGIN_RIGHT_TWIPS }
+  };
+  const createPageNumberHeader = () => new Header({
+    children: [new Paragraph({
+      alignment: AlignmentType.RIGHT,
+      children: [new TextRun({ font: FONT_FAMILY, size: BODY_FONT_SIZE - 4, children: [PageNumber.CURRENT] })]
+    })]
+  });
+  const createPageNumberFooter = () => new Footer({
+    children: [new Paragraph({
+      alignment: AlignmentType.CENTER,
+      children: [new TextRun({ font: FONT_FAMILY, size: BODY_FONT_SIZE - 4, children: [PageNumber.CURRENT] })]
+    })]
+  });
 
-  if (hasFrontMatter && hasBab && isSkripsi) {
+  if (hasFrontMatter && hasBab && isSkripsi && style.pageNumbering === 'roman_front_arabic_main') {
     // Split into Section 1 (Front Matter) and Section 2 (Main Body)
     const babIndex = content.search(babRegex);
     const frontMatterText = content.substring(0, babIndex).trim();
@@ -585,26 +643,12 @@ export async function exportToAcademicDocx(options: ExportDocxOptions): Promise<
     docSections.push({
       properties: {
         page: {
-          size: { width: A4_WIDTH_TWIPS, height: A4_HEIGHT_TWIPS },
-          margin: { top: MARGIN_TOP_TWIPS, bottom: MARGIN_BOTTOM_TWIPS, left: MARGIN_LEFT_TWIPS, right: MARGIN_RIGHT_TWIPS },
+          ...commonPageProperties,
           pageNumbers: { start: 1, formatType: NumberFormat.LOWER_ROMAN }
         }
       },
       footers: {
-        default: new Footer({
-          children: [
-            new Paragraph({
-              alignment: AlignmentType.CENTER,
-              children: [
-                new TextRun({
-                  font: FONT_FAMILY,
-                  size: BODY_FONT_SIZE - 4, // 10 pt
-                  children: [PageNumber.CURRENT]
-                })
-              ]
-            })
-          ]
-        })
+        default: createPageNumberFooter()
       },
       children: parseContentToElements(frontMatterText)
     });
@@ -613,76 +657,35 @@ export async function exportToAcademicDocx(options: ExportDocxOptions): Promise<
     docSections.push({
       properties: {
         page: {
-          size: { width: A4_WIDTH_TWIPS, height: A4_HEIGHT_TWIPS },
-          margin: { top: MARGIN_TOP_TWIPS, bottom: MARGIN_BOTTOM_TWIPS, left: MARGIN_LEFT_TWIPS, right: MARGIN_RIGHT_TWIPS },
+          ...commonPageProperties,
           pageNumbers: { start: 1, formatType: NumberFormat.DECIMAL }
         }
       },
       headers: {
-        default: new Header({
-          children: [
-            new Paragraph({
-              alignment: AlignmentType.RIGHT,
-              children: [
-                new TextRun({
-                  font: FONT_FAMILY,
-                  size: BODY_FONT_SIZE - 4, // 10 pt
-                  children: [PageNumber.CURRENT]
-                })
-              ]
-            })
-          ]
-        })
+        default: createPageNumberHeader()
       },
       children: parseContentToElements(mainBodyText)
     });
   } else {
-    // Standard Single Section with Top-Right Arabic page numbering
+    const page = {
+      ...commonPageProperties,
+      ...(style.pageNumbering === 'none' ? {} : {
+        pageNumbers: {
+          start: 1,
+          formatType: style.pageNumbering === 'roman_bottom_center' ? NumberFormat.LOWER_ROMAN : NumberFormat.DECIMAL
+        }
+      })
+    };
     docSections.push({
       properties: {
-        page: {
-          size: { width: A4_WIDTH_TWIPS, height: A4_HEIGHT_TWIPS },
-          margin: { top: MARGIN_TOP_TWIPS, bottom: MARGIN_BOTTOM_TWIPS, left: MARGIN_LEFT_TWIPS, right: MARGIN_RIGHT_TWIPS },
-          pageNumbers: { start: 1, formatType: NumberFormat.DECIMAL }
-        }
+        page
       },
-      headers: {
-        default: new Header({
-          children: [
-            new Paragraph({
-              alignment: AlignmentType.RIGHT,
-              children: [
-                new TextRun({
-                  font: FONT_FAMILY,
-                  size: BODY_FONT_SIZE - 4,
-                  children: [PageNumber.CURRENT]
-                })
-              ]
-            })
-          ]
-        })
-      },
-      footers: {
-        default: new Footer({
-          children: [
-            new Paragraph({
-              alignment: AlignmentType.CENTER,
-              children: [
-                new TextRun({
-                  font: FONT_FAMILY,
-                  size: BODY_FONT_SIZE - 6,
-                  color: '888888',
-                  text: isSkripsi
-                    ? 'Draf Skripsi Standar Baku 4-4-3-3 • Disusun via RuangKerja RuangTenang'
-                    : isIeeeApa
-                    ? 'Academic Paper Format (IEEE/APA) • RuangKerja'
-                    : 'Naskah Akademik • RuangKerja RuangTenang'
-                })
-              ]
-            })
-          ]
-        })
-      },
+      ...(style.pageNumbering === 'arabic_top_right' || style.pageNumbering === 'roman_front_arabic_main'
+        ? { headers: { default: createPageNumberHeader() } }
+        : {}),
+      ...(style.pageNumbering === 'roman_bottom_center'
+        ? { footers: { default: createPageNumberFooter() } }
+        : {}),
       children: parseContentToElements(content)
     });
   }
@@ -692,8 +695,18 @@ export async function exportToAcademicDocx(options: ExportDocxOptions): Promise<
     sections: docSections
   });
 
-  // Generate Blob and Trigger Browser Download
-  const blob = await Packer.toBlob(doc);
+  return { doc, Packer };
+}
+
+export async function createAcademicDocxBlob(options: ExportDocxOptions): Promise<Blob> {
+  const { doc, Packer } = await buildAcademicDocxDocument(options);
+  return Packer.toBlob(doc);
+}
+
+export async function exportToAcademicDocx(options: ExportDocxOptions): Promise<void> {
+  const blob = await createAcademicDocxBlob(options);
+  const { title, templateType = 'skripsi' } = options;
+  const style = normalizeAcademicStyle(options.style || createAcademicStylePreset(templateType));
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
@@ -701,7 +714,7 @@ export async function exportToAcademicDocx(options: ExportDocxOptions): Promise<
     .toLowerCase()
     .replace(/[^a-z0-9]/g, '_')
     .substring(0, 40);
-  const suffix = isSkripsi ? 'standar_skripsi_4433' : isIeeeApa ? 'paper_ieee_apa' : 'standar_makalah_id';
+  const suffix = `${style.paperSize.toLowerCase()}_${style.fontSizePt}pt_${style.citationStyle.toLowerCase()}`;
   link.download = `${safeFilename}_${suffix}.docx`;
   document.body.appendChild(link);
   link.click();

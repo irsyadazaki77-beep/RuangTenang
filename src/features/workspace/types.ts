@@ -188,6 +188,7 @@ export interface WorkspaceFileAttachment {
   pageCount?: number;
   slideCount?: number;
   sheetCount?: number;
+  extractionWarnings?: string[];
   url?: string;
   checksum?: string;
 }

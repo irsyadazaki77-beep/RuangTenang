@@ -19,6 +19,7 @@ export interface ParsedReference {
   publisher?: string;
   institution?: string;
   raw?: string;
+  metadataProvenance: Partial<Record<'title' | 'authors' | 'year' | 'journal' | 'doi', 'parsed' | 'missing'>>;
 }
 
 /**
@@ -32,6 +33,10 @@ function sanitizeFilename(title: string, ext: string): string {
     .replace(/\s+/g, '-')
     .slice(0, 50);
   return `${clean || 'daftar-pustaka'}.${ext}`;
+}
+
+function escapeBibTeX(value: string): string {
+  return value.replace(/[{}]/g, '\\$&');
 }
 
 /**
@@ -55,7 +60,8 @@ export function triggerFileDownload(content: string, filename: string, mimeType:
  */
 export function cleanDOI(doiStr?: string): string | undefined {
   if (!doiStr) return undefined;
-  return doiStr.replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, '').replace(/^doi:\s*/i, '').trim();
+  const normalized = doiStr.replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, '').replace(/^doi:\s*/i, '').trim().replace(/[.,;]+$/, '');
+  return /^10\.\d{4,9}\/[-._;()/:A-Za-z0-9]+$/i.test(normalized) ? normalized : undefined;
 }
 
 /**
@@ -85,6 +91,7 @@ export function parseCitations(rawText: string): ParsedReference[] {
       title: '',
       authors: [],
       year: '',
+      metadataProvenance: { title: 'missing', authors: 'missing', year: 'missing', journal: 'missing', doi: 'missing' },
       raw: bibMatch[0]
     };
 
@@ -95,21 +102,21 @@ export function parseCitations(rawText: string): ParsedReference[] {
       const field = fieldMatch[1].toLowerCase();
       const value = fieldMatch[2].trim();
 
-      if (field === 'title') ref.title = value;
+      if (field === 'title') { ref.title = value; ref.metadataProvenance.title = value ? 'parsed' : 'missing'; }
       else if (field === 'author') {
         ref.authors = value.split(/\s+and\s+/i).map(a => a.trim()).filter(Boolean);
-      } else if (field === 'year') ref.year = value;
-      else if (field === 'journal' || field === 'booktitle') ref.journal = value;
+        ref.metadataProvenance.authors = ref.authors.length ? 'parsed' : 'missing';
+      } else if (field === 'year') { ref.year = value; ref.metadataProvenance.year = value ? 'parsed' : 'missing'; }
+      else if (field === 'journal' || field === 'booktitle') { ref.journal = value; ref.metadataProvenance.journal = value ? 'parsed' : 'missing'; }
       else if (field === 'volume') ref.volume = value;
       else if (field === 'number' || field === 'issue') ref.issue = value;
       else if (field === 'pages') ref.pages = value;
-      else if (field === 'doi') ref.doi = cleanDOI(value);
+      else if (field === 'doi') { ref.doi = cleanDOI(value); ref.metadataProvenance.doi = ref.doi ? 'parsed' : 'missing'; }
       else if (field === 'url') ref.url = value;
       else if (field === 'publisher') ref.publisher = value;
       else if (field === 'institution' || field === 'school') ref.institution = value;
     }
 
-    if (!ref.title) ref.title = citeKey;
     results.push(ref);
   }
 
@@ -125,21 +132,23 @@ export function parseCitations(rawText: string): ParsedReference[] {
 
   lines.forEach((line, idx) => {
     // Regex deteksi pola umum: Penulis (Tahun). Judul. Jurnal/Penerbit. DOI/URL
-    const yearMatch = line.match(/\((\d{4}[a-z]?)\)|(?:^|\s)(\d{4})(?:\.|,)/);
-    const year = yearMatch ? (yearMatch[1] || yearMatch[2]) : new Date().getFullYear().toString();
+    const yearMatch = line.match(/\((\d{4}[a-z]?|n\.d\.)\)|(?:^|\s)(\d{4})(?:\.|,)/i);
+    const matchedYear = yearMatch ? (yearMatch[1] || yearMatch[2]) : '';
+    const year = /^n\.d\.$/i.test(matchedYear) ? '' : matchedYear;
 
     // Deteksi DOI atau URL
     const doiMatch = line.match(/(?:doi\.org\/|doi:\s*)(10\.\d{4,9}\/[-._;()/:A-Za-z0-9]+)/i);
+    const parsedDOI = doiMatch ? cleanDOI(doiMatch[1]) : undefined;
     const urlMatch = line.match(/https?:\/\/[^\s)]+/i);
 
     // Ambil perkiraan nama penulis & judul
     let authorsStr = '';
-    let title = line;
+    let title = '';
     let journal = '';
 
     if (yearMatch && yearMatch.index !== undefined) {
       authorsStr = line.substring(0, yearMatch.index).trim().replace(/\.$/, '');
-      const remainder = line.substring(yearMatch.index + yearMatch[0].length).trim();
+      const remainder = line.substring(yearMatch.index + yearMatch[0].length).replace(/^[\s.]+/, '').trim();
       const parts = remainder.split(/\.\s+/);
       if (parts.length > 0) {
         title = parts[0].replace(/^[:.\s]+/, '').trim();
@@ -149,21 +158,28 @@ export function parseCitations(rawText: string): ParsedReference[] {
       }
     }
 
-    const rawAuthors = authorsStr ? authorsStr.split(/,|&| dan /i).map(a => a.trim()).filter(Boolean) : ['Penulis'];
-    const citeKeyBase = (rawAuthors[0] || 'referensi').split(/\s+/).pop()?.toLowerCase().replace(/[^\w]/g, '') || 'ref';
-    const citeKey = `${citeKeyBase}${year}_${idx + 1}`;
+    const rawAuthors = authorsStr ? authorsStr.split(/\s*;\s*|\s+&\s+|\s+dan\s+/i).map(a => a.trim()).filter(Boolean) : [];
+    const citeKeyBase = (rawAuthors[0] || 'ref').split(/\s+/).pop()?.toLowerCase().replace(/[^\w]/g, '') || 'ref';
+    const citeKey = `${citeKeyBase}${year || ''}_${idx + 1}`;
 
     results.push({
       id: `ref_parsed_${idx + 1}`,
-      type: 'article',
+      type: 'misc',
       citeKey,
-      title: title || `Sitasi Ilmiah ${idx + 1}`,
-      authors: rawAuthors.length ? rawAuthors : ['Penulis'],
+      title,
+      authors: rawAuthors,
       year,
       journal: journal || undefined,
-      doi: doiMatch ? cleanDOI(doiMatch[1]) : undefined,
+      doi: parsedDOI,
       url: urlMatch ? urlMatch[0] : undefined,
-      raw: line
+      raw: line,
+      metadataProvenance: {
+        title: title ? 'parsed' : 'missing',
+        authors: rawAuthors.length ? 'parsed' : 'missing',
+        year: year ? 'parsed' : 'missing',
+        journal: journal ? 'parsed' : 'missing',
+        doi: parsedDOI ? 'parsed' : 'missing'
+      }
     });
   });
 
@@ -173,39 +189,31 @@ export function parseCitations(rawText: string): ParsedReference[] {
 /**
  * Menghasilkan teks format BibTeX (.bib) lengkap & valid
  */
-export function generateBibTeX(content: string, defaultTitle = 'Daftar Pustaka'): string {
+export function generateBibTeX(content: string, _defaultTitle = 'Daftar Pustaka'): string {
   // Jika konten sudah valid BibTeX utuh, format dan bersihkan sedikit
   if (/@\w+\s*\{/i.test(content) && content.includes('}')) {
     return content.trim();
   }
 
   const refs = parseCitations(content);
-  if (refs.length === 0) {
-    const safeKey = defaultTitle.toLowerCase().replace(/[^\w]/g, '') || 'ruangkerja';
-    return `@misc{${safeKey}_${new Date().getFullYear()},
-  title = {${defaultTitle}},
-  author = {RuangKerja Mahasiswa},
-  year = {${new Date().getFullYear()}},
-  note = {Disusun melalui Asisten RuangKerja RuangTenang}
-}`;
-  }
+  if (refs.length === 0) return '';
 
   return refs.map(ref => {
-    const authorStr = ref.authors.length > 0 ? ref.authors.join(' and ') : 'Anonim';
-    const fields: string[] = [
-      `  title = {${ref.title}}`,
-      `  author = {${authorStr}}`,
-      `  year = {${ref.year || new Date().getFullYear()}}`
-    ];
+    const fields: string[] = [];
 
-    if (ref.journal) fields.push(`  journal = {${ref.journal}}`);
-    if (ref.volume) fields.push(`  volume = {${ref.volume}}`);
-    if (ref.issue) fields.push(`  number = {${ref.issue}}`);
-    if (ref.pages) fields.push(`  pages = {${ref.pages}}`);
-    if (ref.doi) fields.push(`  doi = {${ref.doi}}`);
-    if (ref.url) fields.push(`  url = {${ref.url}}`);
-    if (ref.publisher) fields.push(`  publisher = {${ref.publisher}}`);
-    if (ref.institution) fields.push(`  institution = {${ref.institution}}`);
+    if (ref.title) fields.push(`  title = {${escapeBibTeX(ref.title)}}`);
+    if (ref.authors.length) fields.push(`  author = {${escapeBibTeX(ref.authors.join(' and '))}}`);
+    if (ref.year) fields.push(`  year = {${escapeBibTeX(ref.year)}}`);
+
+    if (ref.journal) fields.push(`  journal = {${escapeBibTeX(ref.journal)}}`);
+    if (ref.volume) fields.push(`  volume = {${escapeBibTeX(ref.volume)}}`);
+    if (ref.issue) fields.push(`  number = {${escapeBibTeX(ref.issue)}}`);
+    if (ref.pages) fields.push(`  pages = {${escapeBibTeX(ref.pages)}}`);
+    if (ref.doi) fields.push(`  doi = {${escapeBibTeX(ref.doi)}}`);
+    if (ref.url) fields.push(`  url = {${escapeBibTeX(ref.url)}}`);
+    if (ref.publisher) fields.push(`  publisher = {${escapeBibTeX(ref.publisher)}}`);
+    if (ref.institution) fields.push(`  institution = {${escapeBibTeX(ref.institution)}}`);
+    if (!ref.title && ref.raw) fields.push(`  note = {Original source text: ${escapeBibTeX(ref.raw)}}`);
 
     return `@${ref.type || 'article'}{${ref.citeKey},
 ${fields.join(',\n')}
@@ -216,17 +224,10 @@ ${fields.join(',\n')}
 /**
  * Menghasilkan teks format RIS (.ris) untuk Zotero, Mendeley, EndNote
  */
-export function generateRIS(content: string, defaultTitle = 'Daftar Pustaka'): string {
+export function generateRIS(content: string, _defaultTitle = 'Daftar Pustaka'): string {
   const refs = parseCitations(content);
 
-  if (refs.length === 0) {
-    return `TY  - GEN
-TI  - ${defaultTitle}
-AU  - RuangKerja Mahasiswa
-PY  - ${new Date().getFullYear()}
-N1  - Disusun via RuangKerja RuangTenang
-ER  - `;
-  }
+  if (refs.length === 0) return '';
 
   return refs.map(ref => {
     const lines: string[] = [];
@@ -240,14 +241,12 @@ ER  - `;
 
     lines.push(`TY  - ${risType}`);
     lines.push(`ID  - ${ref.citeKey}`);
-    lines.push(`TI  - ${ref.title}`);
+    if (ref.title) lines.push(`TI  - ${ref.title}`);
 
     if (ref.authors && ref.authors.length > 0) {
       ref.authors.forEach(auth => {
         lines.push(`AU  - ${auth}`);
       });
-    } else {
-      lines.push(`AU  - Anonim`);
     }
 
     if (ref.year) lines.push(`PY  - ${ref.year}`);
@@ -265,6 +264,7 @@ ER  - `;
     if (ref.url) lines.push(`UR  - ${ref.url}`);
     if (ref.publisher) lines.push(`PB  - ${ref.publisher}`);
     if (ref.institution) lines.push(`PB  - ${ref.institution}`);
+    if (!ref.title && ref.raw) lines.push(`N1  - Original source text: ${ref.raw}`);
 
     lines.push(`ER  - `);
     return lines.join('\n');
@@ -279,11 +279,17 @@ export function formatAsAPA7(refs: ParsedReference[]): string {
   return refs.map(ref => {
     const authors = ref.authors.join(', ');
     const year = ref.year ? `(${ref.year})` : '(n.d.)';
+    if (!ref.title) return ref.raw || '';
     const title = ref.title;
-    const journal = ref.journal ? `*${ref.journal}*` : '';
+    if (!title) return '';
+    const publication = [
+      ref.journal ? `*${ref.journal}*` : '',
+      ref.volume ? `*${ref.volume}*${ref.issue ? `(${ref.issue})` : ''}` : ref.issue ? `(${ref.issue})` : '',
+      ref.pages ? ref.pages.replace(/--?/g, '–') : ''
+    ].filter(Boolean).join(', ');
     const doi = ref.doi ? `https://doi.org/${ref.doi}` : (ref.url || '');
-    return `${authors} ${year}. ${title}. ${journal}${doi ? ' ' + doi : ''}`.trim();
-  }).join('\n\n');
+    return `${authors ? `${authors} ` : ''}${year}. ${title}.${publication ? ` ${publication}.` : ''}${doi ? ' ' + doi : ''}`.trim();
+  }).filter(Boolean).join('\n\n');
 }
 
 /**
@@ -293,12 +299,17 @@ export function formatAsIEEE(refs: ParsedReference[]): string {
   if (refs.length === 0) return '';
   return refs.map((ref, i) => {
     const authors = ref.authors.join(', ');
+    if (!ref.title) return ref.raw || '';
     const title = `"${ref.title},"`;
-    const journal = ref.journal ? `*${ref.journal}*,` : '';
-    const year = ref.year ? ` ${ref.year}.` : '.';
+    if (!title) return '';
+    const publication = [
+      ref.journal ? `*${ref.journal}*` : '',
+      ref.volume ? `vol. ${ref.volume}` : '', ref.issue ? `no. ${ref.issue}` : '',
+      ref.pages ? `pp. ${ref.pages.replace(/--?/g, '–')}` : '', ref.year
+    ].filter(Boolean).join(', ');
     const doi = ref.doi ? ` doi: ${ref.doi}.` : (ref.url ? ` [Online]. Tersedia: ${ref.url}` : '');
-    return `[${i + 1}] ${authors}, ${title} ${journal}${year}${doi}`.trim();
-  }).join('\n\n');
+    return `[${i + 1}] ${authors ? `${authors}, ` : ''}${title}${publication ? ` ${publication}.` : ''}${doi}`.trim();
+  }).filter(Boolean).join('\n\n');
 }
 
 /**
@@ -309,11 +320,13 @@ export function formatAsHarvard(refs: ParsedReference[]): string {
   return refs.map(ref => {
     const authors = ref.authors.join(', ');
     const year = ref.year ? `${ref.year}.` : 'n.d.';
-    const title = `'${ref.title}',`;
+    if (!ref.title) return ref.raw || '';
+    const titleValue = ref.title;
+    const title = `'${titleValue}',`;
     const journal = ref.journal ? `*${ref.journal}*,` : '';
     const url = ref.url ? `Tersedia di: <${ref.url}>` : (ref.doi ? `https://doi.org/${ref.doi}` : '');
-    return `${authors} ${year} ${title} ${journal} ${url}`.trim();
-  }).join('\n\n');
+    return `${authors ? `${authors} ` : ''}${year} ${title} ${journal} ${url}`.trim();
+  }).filter(Boolean).join('\n\n');
 }
 
 /**

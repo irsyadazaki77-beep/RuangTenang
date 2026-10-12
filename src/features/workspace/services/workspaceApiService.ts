@@ -4,6 +4,7 @@ import { WorkspaceArtifact, ArtifactType, WorkspaceFileKind } from '../types';
 import type { WorkspaceContract, WorkspaceTaskContract, WorkspaceTaskStatus, WorkspaceTaskSource, WorkspacePlan } from '../../../../shared/contracts/workspace';
 import type { ResearchSource, ResearchSourceMetadata } from '../../../../shared/contracts/files';
 import type { TabularAnalysisRequest, TabularAnalysisResult, TabularDataset, TabularTransformPreview, TabularTransformRequest } from '../../../../shared/contracts/tabular';
+import type { AgentExecutionResult } from '../../../../shared/contracts/agent';
 
 export interface CreateArtifactPayload {
   id?: string;
@@ -37,6 +38,7 @@ export interface WorkspaceAttachmentDto {
   pageCount?: number;
   slideCount?: number;
   sheetCount?: number;
+  extractionWarnings?: string[];
   chunkCount?: number;
   errorMessage?: string;
   createdAt?: string;
@@ -73,6 +75,15 @@ export class WorkspaceApiService {
   static async startTaskExecution(chatId: string, planId: string, taskId: string, executionId: string, snapshot: NonNullable<WorkspacePlan['tasks'][number]['snapshot']>): Promise<{ plan: WorkspacePlan; claimed: boolean }> {
     const res = await apiClient.post<{ plan: WorkspacePlan; claimed: boolean }>(`/api/v1/workspace/${encodeURIComponent(chatId)}/plans/${encodeURIComponent(planId)}/tasks/${encodeURIComponent(taskId)}/run`, { executionId, snapshot });
     if (!res.success || !res.data) throw new Error(res.message || 'Task tidak dapat dijalankan.');
+    return res.data;
+  }
+
+  static async executeAgentTask(chatId: string, planId: string, taskId: string, executionId: string, signal?: AbortSignal): Promise<{ execution: AgentExecutionResult; plan: WorkspacePlan }> {
+    const url = `/api/v1/workspace/${encodeURIComponent(chatId)}/plans/${encodeURIComponent(planId)}/tasks/${encodeURIComponent(taskId)}/agent`;
+    const res = await apiClient.request<{ execution: AgentExecutionResult; plan: WorkspacePlan }>(url, {
+      method: 'POST', body: JSON.stringify({ executionId }), signal
+    }, 0, 120_000);
+    if (!res.success || !res.data) throw new Error(res.message || 'Agent tidak dapat menjalankan task.');
     return res.data;
   }
 

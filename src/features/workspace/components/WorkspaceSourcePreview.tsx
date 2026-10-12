@@ -15,6 +15,7 @@ export const WorkspaceSourcePreview: React.FC<Props> = ({ source, onOpenDocument
       <div className="min-w-0 flex-1">
         <h3 tabIndex={-1} data-workspace-source-preview className="truncate text-xs font-semibold text-slate-900 outline-none dark:text-slate-100">{source.filename}</h3>
         <p className="mt-1 text-[10px] text-slate-600 dark:text-slate-300">Lokasi yang tersedia: {source.sourceRef}</p>
+        {source.sourceVersion && <p className="mt-1 text-[10px] text-slate-500">Versi sumber: {source.checksum ? `SHA-256 ${source.checksum.slice(0, 12)}` : source.sourceVersion.slice(0, 24)}{source.retrievalSnapshotId ? ` · snapshot ${source.retrievalSnapshotId.slice(0, 8)}` : ''}</p>}
       </div>
       <button type="button" onClick={onClose} aria-label="Tutup pratinjau sumber" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-500 hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:hover:bg-slate-900"><X className="h-4 w-4" aria-hidden="true" /></button>
     </div>

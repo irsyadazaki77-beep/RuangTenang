@@ -39,6 +39,7 @@ export const WorkspaceAttachmentList: React.FC<WorkspaceAttachmentListProps> = R
             <span className="shrink-0 text-[9px] text-slate-500 dark:text-slate-400" title={attachment.mimeType}>{fileType}</span>
             <span className="shrink-0 text-slate-400">{attachment.size ? `${Math.max(1, Math.round(attachment.size / 1024))} KB` : ''}</span>
             <span className="shrink-0">{status}</span>
+            {attachment.extractionWarnings?.length ? <span title={attachment.extractionWarnings.join('\n')} className="flex shrink-0 items-center gap-1 text-amber-700 dark:text-amber-300"><AlertCircle className="h-3 w-3" />Ekstraksi parsial</span> : null}
             {attachment.status === 'failed' && <button type="button" disabled={disabled} onClick={() => onRetry(attachment)} className="rounded p-0.5 text-slate-500 hover:bg-slate-200 disabled:opacity-40 dark:hover:bg-slate-700" aria-label={`Coba lagi ${attachment.name}`} title="Coba lagi"><RotateCw className="h-3 w-3" /></button>}
             <button type="button" disabled={disabled} onClick={() => onRemove(attachment)} className="rounded p-0.5 text-slate-500 hover:bg-slate-200 hover:text-rose-600 disabled:opacity-40 dark:hover:bg-slate-700" aria-label={`Hapus ${attachment.name}`} title="Hapus dokumen"><X className="h-3.5 w-3.5" /></button>
           </li>

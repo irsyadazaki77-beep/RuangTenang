@@ -354,4 +354,80 @@ router.post('/chat/compare/select', optionalAuth, async (req: Request, res: Resp
   return res.json({ success: true, promptId, responseId, chatId });
 });
 
+router.post('/chat/compare/analyze', optionalAuth, async (req: Request, res: Response) => {
+  const body = z.object({
+    prompt: z.string().min(1).max(2000),
+    candidates: z.array(z.object({
+      candidateId: z.string().min(1),
+      modelId: z.string().min(1),
+      modelName: z.string().min(1),
+      output: z.string(),
+      status: z.enum(['completed', 'failed', 'cancelled', 'streaming', 'queued']),
+      latencyMs: z.number().optional()
+    })).min(1).max(3),
+    snapshotId: z.string().uuid().optional(),
+    comparisonId: z.string().uuid().optional()
+  }).safeParse(req.body);
+
+  if (!body.success) {
+    return res.status(400).json({ success: false, code: 'INVALID_ANALYSIS_REQUEST' });
+  }
+
+  const userId = req.user?.userId || 'guest';
+  let sources: any[] = [];
+  if (body.data.snapshotId) {
+    const lookup = getComparisonSnapshot(body.data.snapshotId, userId);
+    if (lookup.status === 'found' && lookup.snapshot.documentContext?.sourceReferences) {
+      sources = lookup.snapshot.documentContext.sourceReferences;
+    }
+  }
+
+  const { ComparisonConsensusService } = await import('../services/ai/comparisonConsensusService.js');
+  const analysis = ComparisonConsensusService.analyzeCandidates(
+    body.data.prompt,
+    body.data.candidates,
+    sources
+  );
+
+  return res.json({ success: true, analysis });
+});
+
+router.post('/chat/compare/synthesize', optionalAuth, async (req: Request, res: Response) => {
+  const body = z.object({
+    prompt: z.string().min(1).max(2000),
+    candidates: z.array(z.object({
+      candidateId: z.string().min(1),
+      modelId: z.string().min(1),
+      modelName: z.string().min(1),
+      output: z.string(),
+      status: z.enum(['completed', 'failed', 'cancelled', 'streaming', 'queued']),
+      latencyMs: z.number().optional()
+    })).min(1).max(3),
+    snapshotId: z.string().uuid().optional(),
+    comparisonId: z.string().uuid().optional()
+  }).safeParse(req.body);
+
+  if (!body.success) {
+    return res.status(400).json({ success: false, code: 'INVALID_SYNTHESIS_REQUEST' });
+  }
+
+  const userId = req.user?.userId || 'guest';
+  let sources: any[] = [];
+  if (body.data.snapshotId) {
+    const lookup = getComparisonSnapshot(body.data.snapshotId, userId);
+    if (lookup.status === 'found' && lookup.snapshot.documentContext?.sourceReferences) {
+      sources = lookup.snapshot.documentContext.sourceReferences;
+    }
+  }
+
+  const { ComparisonConsensusService } = await import('../services/ai/comparisonConsensusService.js');
+  const synthesis = ComparisonConsensusService.synthesizeBestAnswer(
+    body.data.prompt,
+    body.data.candidates,
+    sources
+  );
+
+  return res.json({ success: true, synthesis });
+});
+
 export default router;

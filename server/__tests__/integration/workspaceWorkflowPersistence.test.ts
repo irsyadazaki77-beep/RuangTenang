@@ -9,7 +9,9 @@ import {
   startWorkspaceTask,
   transitionWorkspacePlan,
   updateDraftPlan,
-  backfillLegacyPlan
+  backfillLegacyPlan,
+  claimWorkspaceTaskAgentExecution,
+  workspaceAgentProposalId
 } from '../../services/workspaceWorkflowService.js';
 
 const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -65,16 +67,22 @@ describe('Workspace Agent normalized persistence integration', () => {
     const duplicateStart = await startWorkspaceTask(workspaceId, userId, planId, firstTaskId, `exec-a-${suffix}`, snapshot);
     expect(duplicateStart.claimed).toBe(false);
     expect(await prisma.workspaceTaskExecutions.count({ where: { planTaskId: firstTaskId } })).toBe(1);
+    await expect(claimWorkspaceTaskAgentExecution(workspaceId, userId, planId, firstTaskId, `exec-a-${suffix}`)).resolves.toBe(true);
+    await expect(claimWorkspaceTaskAgentExecution(workspaceId, userId, planId, firstTaskId, `exec-a-${suffix}`)).resolves.toBe(false);
     await expect(startWorkspaceTask(workspaceId, userId, planId, firstTaskId, `exec-a-${suffix}`, { ...snapshot, inputPrompt: 'different request' }))
       .rejects.toMatchObject({ code: 'WORKSPACE_TASK_EXECUTION_ID_CONFLICT' });
 
     const encryptedAttempt = await prisma.workspaceTaskExecutions.findUnique({ where: { id: `exec-a-${suffix}` } });
     expect(encryptedAttempt?.snapshotEncrypted).not.toContain(taskPrompt);
     expect(encryptionService.decryptSensitive(encryptedAttempt!.snapshotEncrypted)).toContain(taskPrompt);
-    await finishWorkspaceTask(workspaceId, userId, planId, firstTaskId, `exec-a-${suffix}`, { output: taskOutput });
+    const executionEvents = [{ step: 1, kind: 'model_decision' as const, status: 'completed' as const, durationMs: 15 }];
+    await finishWorkspaceTask(workspaceId, userId, planId, firstTaskId, `exec-a-${suffix}`, { output: taskOutput, executionEvents });
     const waitingReview = await findWorkspacePlan(workspaceId, userId, planId);
-    expect(waitingReview?.tasks[0]).toMatchObject({ status: 'waiting_review', output: taskOutput });
-    expect(await prisma.workspaceTaskExecutions.findUnique({ where: { id: `exec-a-${suffix}` } })).toMatchObject({ status: 'completed' });
+    expect(waitingReview?.tasks[0]).toMatchObject({ status: 'waiting_review', output: taskOutput, executionEvents });
+    const finishedExecution = await prisma.workspaceTaskExecutions.findUnique({ where: { id: `exec-a-${suffix}` } });
+    expect(finishedExecution).toMatchObject({ status: 'completed' });
+    expect(finishedExecution?.eventsEncrypted).not.toContain('model_decision');
+    expect(JSON.parse(encryptionService.decryptSensitive(finishedExecution!.eventsEncrypted)!)).toEqual(executionEvents);
     await expect(transitionWorkspacePlan(workspaceId, userId, planId, 'complete')).rejects.toMatchObject({ code: 'WORKSPACE_PLAN_INCOMPLETE' });
     const firstAccepted = await reviewWorkspaceTask(workspaceId, userId, planId, firstTaskId, 'accept');
     expect(firstAccepted.tasks[0].status).toBe('done');
@@ -89,11 +97,22 @@ describe('Workspace Agent normalized persistence integration', () => {
     expect(rejected.tasks[1]).toMatchObject({ status: 'todo', output: 'first draft remains in history' });
 
     await startWorkspaceTask(workspaceId, userId, planId, secondTaskId, `exec-b2-${suffix}`, { ...snapshot, inputPrompt: `${taskPrompt} retry`, createdAt: new Date(Date.now() + 1).toISOString() });
-    await expect(finishWorkspaceTask(workspaceId, userId, planId, secondTaskId, `exec-b1-${suffix}`, { output: 'stale response' }))
+    const staleProposalId = workspaceAgentProposalId(`exec-b1-${suffix}`);
+    await expect(finishWorkspaceTask(workspaceId, userId, planId, secondTaskId, `exec-b1-${suffix}`, {
+      output: 'stale response', artifactProposal: { title: 'Stale proposal', type: 'DOCUMENT', content: 'must not persist' }
+    }))
       .rejects.toMatchObject({ code: 'WORKSPACE_TASK_EXECUTION_STALE' });
-    await finishWorkspaceTask(workspaceId, userId, planId, secondTaskId, `exec-b2-${suffix}`, { output: 'reviewed final draft' });
+    await expect(prisma.artifacts.findUnique({ where: { id: staleProposalId } })).resolves.toBeNull();
+    const proposal = { title: 'Reviewed Agent proposal', type: 'DOCUMENT' as const, content: 'proposal content with verified evidence' };
+    await finishWorkspaceTask(workspaceId, userId, planId, secondTaskId, `exec-b2-${suffix}`, {
+      output: 'reviewed final draft', artifactProposal: proposal
+    });
     const accepted = await reviewWorkspaceTask(workspaceId, userId, planId, secondTaskId, 'accept');
-    expect(accepted.tasks[1]).toMatchObject({ status: 'done', output: 'reviewed final draft' });
+    const proposalArtifactId = workspaceAgentProposalId(`exec-b2-${suffix}`);
+    expect(accepted.tasks[1]).toMatchObject({ status: 'done', output: 'reviewed final draft', outputArtifactId: proposalArtifactId });
+    const storedProposal = await prisma.artifacts.findUnique({ where: { id: proposalArtifactId } });
+    expect(storedProposal).toMatchObject({ userId, chatId: workspaceId, title: proposal.title, type: proposal.type });
+    expect(encryptionService.decryptSensitive(storedProposal!.content)).toBe(proposal.content);
     expect(accepted.tasks[1].executionHistory).toHaveLength(2);
     const completed = await transitionWorkspacePlan(workspaceId, userId, planId, 'complete');
     expect(completed.status).toBe('completed');

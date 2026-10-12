@@ -311,7 +311,7 @@ export function useWorkspaceArtifacts({
       content: type === 'CODE' 
         ? `# Tulis kode program di sini\ndef main():\n    print("Hello RuangKerja")\n\nif __name__ == "__main__":\n    main()` 
         : type === 'CITATION' 
-        ? `# Daftar Sitasi & Bibliografi\n\n[1] Nama Penulis, "Judul Artikel Ilmiah," Nama Jurnal, vol. 1, no. 1, pp. 1-10, 2026. DOI: 10.1000/182` 
+        ? `# Daftar Sitasi & Bibliografi\n\nTambahkan referensi yang memiliki metadata sumber, atau pilih sumber dari Perpustakaan Sumber.` 
         : `# Draf Dokumen Baru\n\nTulis catatan atau draf akademik Anda di sini...`,
       version: 1,
       updatedAt: new Date().toISOString()

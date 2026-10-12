@@ -24,7 +24,7 @@ async function createPdfBuffer(pagesText: string[]): Promise<Buffer> {
   });
 }
 
-async function createXlsxBuffer(sheetName: string, rows: (string | number)[][]): Promise<Buffer> {
+async function createXlsxBuffer(sheetName: string, rows: unknown[][]): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet(sheetName);
   ws.addRows(rows);
@@ -83,6 +83,7 @@ describe('FASE 9 — Document Extraction Pipeline Unit Tests', () => {
     expect(result.text).toContain('Ini adalah teks halaman kedua.');
     expect(result.metadata.pageCount).toBe(2);
     expect(result.metadata.filename).toBe('akademik.pdf');
+    expect(result.blocks?.map(block => block.pageNumber)).toEqual([1, 2]);
   });
 
   // 2. DOCX berhasil diekstrak
@@ -138,6 +139,23 @@ describe('FASE 9 — Document Extraction Pipeline Unit Tests', () => {
     expect(result.text).toContain('01/09/2026 | A | 10');
     expect(result.text).toContain('02/09/2026 | B | 15');
     expect(result.metadata.sheetCount).toBe(1);
+  });
+
+  it('preserves formula expressions and warns when a cached result is unavailable', async () => {
+    const xlsxBuffer = await createXlsxBuffer('Perhitungan', [
+      ['Nilai A', 'Nilai B', 'Total'],
+      [10, 15, { formula: 'SUM(A2:B2)' }],
+      [20, 25, { formula: 'SUM(A3:B3)', result: 45 }]
+    ]);
+    const result = await DocumentExtractor.extractDocument({
+      buffer: xlsxBuffer,
+      filename: 'formula.xlsx',
+      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    });
+
+    expect(result.text).toContain('=SUM(A2:B2) [cached result unavailable]');
+    expect(result.text).toContain('45 [formula: =SUM(A3:B3)]');
+    expect(result.metadata.extractionWarnings).toContain('One or more spreadsheet formulas have no cached result; formula text is preserved and no value was inferred.');
   });
 
   // 5. TXT tetap berjalan

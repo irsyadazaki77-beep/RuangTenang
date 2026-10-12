@@ -29,6 +29,7 @@ function fromDto(dto: WorkspaceAttachmentDto): WorkspaceFileAttachment {
     pageCount: dto.pageCount,
     slideCount: dto.slideCount,
     sheetCount: dto.sheetCount,
+    extractionWarnings: dto.extractionWarnings,
     url: dto.url,
     createdAt: dto.createdAt
   };

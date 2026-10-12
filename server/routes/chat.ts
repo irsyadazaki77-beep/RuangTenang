@@ -742,7 +742,7 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
     res.on('close', cleanupKeepAlive);
 
     const runLocalFallback = async () => {
-      if (isWorkspace && (clientDisconnected || reqAbortController.signal.aborted)) {
+      if (clientDisconnected || reqAbortController.signal.aborted) {
         if (!res.writableEnded) res.end();
         return;
       }
@@ -762,7 +762,7 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
       if (fallbackResponse.tool_call) {
         res.write(`data: ${JSON.stringify({ tool_call: fallbackResponse.tool_call, parameters: { reason: fallbackResponse.text } })}\n\n`);
         
-        if (!activeIsTemporary && userId && currentChatId && !(isWorkspace && (clientDisconnected || reqAbortController.signal.aborted))) {
+        if (!activeIsTemporary && userId && currentChatId && !(clientDisconnected || reqAbortController.signal.aborted)) {
           try {
             await prisma.chatMessages.create({
               data: {
@@ -779,14 +779,14 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
         const words = fallbackResponse.text.split(' ');
         let currentFullText = '';
         for (const word of words) {
-          if (isWorkspace && (clientDisconnected || reqAbortController.signal.aborted)) break;
+          if (clientDisconnected || reqAbortController.signal.aborted) break;
           const chunk = word + ' ';
           currentFullText += chunk;
           res.write(`data: ${JSON.stringify({ text: chunk })}\n\n`);
           await new Promise(resolve => setTimeout(resolve, 30));
         }
         
-        if (!activeIsTemporary && userId && currentChatId && !(isWorkspace && (clientDisconnected || reqAbortController.signal.aborted))) {
+        if (!activeIsTemporary && userId && currentChatId && !(clientDisconnected || reqAbortController.signal.aborted)) {
           try {
             await prisma.chatMessages.create({
               data: {
@@ -1009,6 +1009,7 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
         estimatedOutputTokens: aiMetricsService.estimateTokens(fullResponseText),
         contextSavedTokens: 0,
         modelUsed: pipelineRes.modelUsed || aiModel,
+        provider: getModelDefinition(pipelineRes.modelUsed || aiModel)?.provider,
         isFallback: Boolean(pipelineRes.isFallback),
         aborted: clientDisconnected || reqAbortController.signal.aborted,
         routingMode: pipelineRes.routingDecision?.routingMode,
