@@ -15,6 +15,9 @@ interface WorkspaceWorkflowPipelineProps {
   uploadedFilesCount: number;
   readyFilesCount: number;
   isAnalyzing: boolean;
+  hasWaitingReview?: boolean;
+  isContinuousRunning?: boolean;
+  activePlanTitle?: string;
   activeArtifact: WorkspaceArtifact | null;
   isCanvasOpen: boolean;
   onUploadClick: () => void;
@@ -29,6 +32,9 @@ export const WorkspaceWorkflowPipeline: React.FC<WorkspaceWorkflowPipelineProps>
   uploadedFilesCount,
   readyFilesCount,
   isAnalyzing,
+  hasWaitingReview = false,
+  isContinuousRunning = false,
+  activePlanTitle,
   activeArtifact,
   isCanvasOpen,
   onUploadClick,
@@ -51,7 +57,9 @@ export const WorkspaceWorkflowPipeline: React.FC<WorkspaceWorkflowPipelineProps>
         {/* Left Badge: Workflow Indicator */}
         <div className="flex items-center gap-1.5 shrink-0 text-[11px] font-semibold text-slate-700 dark:text-slate-300">
           <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-          <span className="hidden sm:inline font-mono text-[10px] uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Workflow</span>
+          <span className="hidden sm:inline font-mono text-[10px] uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+            {activePlanTitle ? activePlanTitle.slice(0, 20) : 'Workflow'}
+          </span>
           <span className="hidden md:inline text-slate-400 dark:text-slate-600">•</span>
         </div>
 
@@ -88,16 +96,18 @@ export const WorkspaceWorkflowPipeline: React.FC<WorkspaceWorkflowPipelineProps>
             className={`group inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 ${
               isAnalyzing 
                 ? 'bg-amber-50 text-amber-800 border border-amber-300 animate-pulse dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-700' 
-                : hasFiles 
-                  ? 'bg-teal-50 text-teal-800 border border-teal-200/80 dark:bg-teal-950/40 dark:text-teal-300 dark:border-teal-800/60'
-                  : 'bg-white/80 text-slate-600 border border-slate-200 hover:border-teal-300 dark:bg-slate-800/80 dark:text-slate-400 dark:border-slate-700'
+                : hasWaitingReview
+                  ? 'bg-indigo-50 text-indigo-800 border border-indigo-300 dark:bg-indigo-950/40 dark:text-indigo-300 dark:border-indigo-700'
+                  : hasFiles 
+                    ? 'bg-teal-50 text-teal-800 border border-teal-200/80 dark:bg-teal-950/40 dark:text-teal-300 dark:border-teal-800/60'
+                    : 'bg-white/80 text-slate-600 border border-slate-200 hover:border-teal-300 dark:bg-slate-800/80 dark:text-slate-400 dark:border-slate-700'
             }`}
-            title="Langkah 2: Analisis dokumen, perbandingan, atau riset web AI"
+            title={hasWaitingReview ? "Tahap selesai: Memerlukan persetujuan pengguna untuk melanjutkan" : "Langkah 2: Analisis dokumen, perbandingan, atau riset web AI"}
             aria-label="Langkah 2: Analisis AI dan Riset"
           >
-            <Sparkles className={`h-3.5 w-3.5 shrink-0 ${isAnalyzing ? 'text-amber-600 animate-spin' : 'text-teal-600 dark:text-teal-400'}`} />
+            <Sparkles className={`h-3.5 w-3.5 shrink-0 ${isAnalyzing ? 'text-amber-600 animate-spin' : hasWaitingReview ? 'text-indigo-600 dark:text-indigo-400' : 'text-teal-600 dark:text-teal-400'}`} />
             <span className="truncate max-w-[90px] sm:max-w-none">
-              2. {isAnalyzing ? 'Menganalisis…' : 'Analisis'}
+              2. {isAnalyzing ? (isContinuousRunning ? 'Eksekusi beruntun…' : 'Menganalisis…') : hasWaitingReview ? 'Perlu Tinjauan' : 'Analisis'}
             </span>
           </button>
 

@@ -22,6 +22,77 @@ export interface RectorateReportRow {
 
 const DEFAULT_MINIMUM_GROUP_SIZE = 5;
 
+export interface ScreeningTrendEvaluation {
+  phqAnalysis: string;
+  gadAnalysis: string;
+  overallSummary: string;
+}
+
+export function evaluateScreeningTrends(
+  latest: { phq9Score: number; gad7Score: number },
+  previous?: { phq9Score: number; gad7Score: number } | null
+): ScreeningTrendEvaluation {
+  const phqSev = calculatePhq9Severity(latest.phq9Score);
+  const gadSev = calculateGad7Severity(latest.gad7Score);
+
+  if (!previous) {
+    return {
+      phqAnalysis: `Skor awal tercatat (${latest.phq9Score}/27, derajat: ${phqSev}). Belum ada data skrining pembanding untuk analisis tren depresi.`,
+      gadAnalysis: `Skor awal tercatat (${latest.gad7Score}/21, derajat: ${gadSev}). Belum ada data skrining pembanding untuk analisis tren kecemasan.`,
+      overallSummary: 'Evaluasi baseline/pertama kali; belum tersedia data pembanding historis untuk menentukan arah perubahan klinis.'
+    };
+  }
+
+  const phqDiff = latest.phq9Score - previous.phq9Score;
+  const gadDiff = latest.gad7Score - previous.gad7Score;
+  const prevPhqSev = calculatePhq9Severity(previous.phq9Score);
+  const prevGadSev = calculateGad7Severity(previous.gad7Score);
+
+  const phqSign = phqDiff > 0 ? `+${phqDiff}` : `${phqDiff}`;
+  const gadSign = gadDiff > 0 ? `+${gadDiff}` : `${gadDiff}`;
+
+  let phqAnalysis: string;
+  if (phqDiff < 0) {
+    phqAnalysis = `Skor depresi menunjukkan penurunan (${phqSign} poin: ${previous.phq9Score} [${prevPhqSev}] -> ${latest.phq9Score} [${phqSev}]).`;
+  } else if (phqDiff > 0) {
+    phqAnalysis = `Skor depresi menunjukkan peningkatan (${phqSign} poin: ${previous.phq9Score} [${prevPhqSev}] -> ${latest.phq9Score} [${phqSev}]).`;
+  } else {
+    phqAnalysis = `Skor depresi stabil tanpa perubahan (${latest.phq9Score}/27 [${phqSev}]).`;
+  }
+
+  let gadAnalysis: string;
+  if (gadDiff < 0) {
+    gadAnalysis = `Skor kecemasan menunjukkan penurunan (${gadSign} poin: ${previous.gad7Score} [${prevGadSev}] -> ${latest.gad7Score} [${gadSev}]).`;
+  } else if (gadDiff > 0) {
+    gadAnalysis = `Skor kecemasan menunjukkan peningkatan (${gadSign} poin: ${previous.gad7Score} [${prevGadSev}] -> ${latest.gad7Score} [${gadSev}]).`;
+  } else {
+    gadAnalysis = `Skor kecemasan stabil tanpa perubahan (${latest.gad7Score}/21 [${gadSev}]).`;
+  }
+
+  let overallSummary: string;
+  if (phqDiff < 0 && gadDiff < 0) {
+    overallSummary = 'Kedua indikator (depresi dan kecemasan) menunjukkan penurunan skor secara searah dibanding evaluasi sebelumnya.';
+  } else if (phqDiff > 0 && gadDiff > 0) {
+    overallSummary = 'Kedua indikator (depresi dan kecemasan) menunjukkan peningkatan skor secara searah; disarankan konsultasi dan pendampingan profesional.';
+  } else if (phqDiff === 0 && gadDiff === 0) {
+    overallSummary = 'Skor depresi dan kecemasan tetap stabil tanpa perubahan dibanding evaluasi sebelumnya.';
+  } else if (phqDiff < 0 && gadDiff > 0) {
+    overallSummary = 'Dinamika berlawanan arah: skor depresi menurun sementara skor kecemasan meningkat. Perlu evaluasi terpisah oleh konselor profesional.';
+  } else if (phqDiff > 0 && gadDiff < 0) {
+    overallSummary = 'Dinamika berlawanan arah: skor depresi meningkat sementara skor kecemasan menurun. Perlu evaluasi terpisah oleh konselor profesional.';
+  } else if (phqDiff < 0 && gadDiff === 0) {
+    overallSummary = 'Skor depresi menunjukkan penurunan, sementara skor kecemasan stabil.';
+  } else if (phqDiff > 0 && gadDiff === 0) {
+    overallSummary = 'Skor depresi menunjukkan peningkatan, sementara skor kecemasan stabil.';
+  } else if (phqDiff === 0 && gadDiff < 0) {
+    overallSummary = 'Skor kecemasan menunjukkan penurunan, sementara skor depresi stabil.';
+  } else {
+    overallSummary = 'Skor kecemasan menunjukkan peningkatan, sementara skor depresi stabil.';
+  }
+
+  return { phqAnalysis, gadAnalysis, overallSummary };
+}
+
 export function buildRectorateReportRows(metrics: ReportMetrics): RectorateReportRow[] {
   const minimum = metrics.minimumGroupSize ?? DEFAULT_MINIMUM_GROUP_SIZE;
   const totalScreenings = Math.max(0, metrics.totalScreenings);
@@ -271,25 +342,17 @@ export async function generateCounselingResumePdf(userId: string, studentName: s
           const phqSeverity = calculatePhq9Severity(phqScore);
           const gadSeverity = calculateGad7Severity(gadScore);
 
-          // Trend calculation
-          let trendAnalysis = 'Evaluasi pertama kali, status stabil terpantau.';
-          if (previousScreening) {
-            const phqDiff = phqScore - previousScreening.phq9Score;
-            const gadDiff = gadScore - previousScreening.gad7Score;
-
-            if (phqDiff < 0 || gadDiff < 0) {
-              trendAnalysis = `Kondisi menunjukkan tren membaik (Perubahan skor: PHQ-9 ${phqDiff > 0 ? `+${phqDiff}` : phqDiff}, GAD-7 ${gadDiff > 0 ? `+${gadDiff}` : gadDiff}).`;
-            } else if (phqDiff === 0 && gadDiff === 0) {
-              trendAnalysis = 'Kondisi stabil tanpa perubahan signifikan dari tes sebelumnya.';
-            } else {
-              trendAnalysis = `Terdeteksi peningkatan tekanan emosional (Perubahan skor: PHQ-9 +${phqDiff}, GAD-7 +${gadDiff}). Dianjurkan sesi konseling langsung.`;
-            }
-          }
+          const trends = evaluateScreeningTrends(
+            { phq9Score: latestScreening.phq9Score, gad7Score: latestScreening.gad7Score },
+            previousScreening ? { phq9Score: previousScreening.phq9Score, gad7Score: previousScreening.gad7Score } : null
+          );
 
           doc.fontSize(9.5).fillColor('#334155').font('Helvetica')
              .text(`• Tanggal Evaluasi Terakhir: ${new Date(latestScreening.timestamp).toLocaleDateString('id-ID', { dateStyle: 'medium' })}`)
              .text(`• Skor Depresi (PHQ-9): ${phqScore} / 27 (${phqSeverity}) | Skor Kecemasan (GAD-7): ${gadScore} / 21 (${gadSeverity})`)
-             .text(`• Analisis Tren: ${trendAnalysis}`)
+             .text(`• Analisis PHQ-9: ${trends.phqAnalysis}`)
+             .text(`• Analisis GAD-7: ${trends.gadAnalysis}`)
+             .text(`• Ringkasan Perubahan: ${trends.overallSummary}`)
              .text(`• Status Triase Sistem: ${latestScreening.triageLevel || 'Manajemen Stres Mandiri & Konseling Berkala'}`);
         } else {
           doc.fontSize(9.5).fillColor('#475569').font('Helvetica')

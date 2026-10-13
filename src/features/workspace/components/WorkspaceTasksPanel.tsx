@@ -16,6 +16,9 @@ interface Props {
   canPersist: boolean;
   isGenerating: boolean;
   isExecuting: boolean;
+  isContinuousRunning?: boolean;
+  onStartContinuous?: () => void;
+  onStopContinuous?: () => void;
   onGenerate: (goal: string) => void;
   onUpdate: (plan: WorkspacePlan) => Promise<unknown>;
   onTransition: (action: 'pause' | 'resume') => void;
@@ -33,7 +36,7 @@ interface Props {
   focusedTaskId?: string;
 }
 
-export const WorkspaceTasksPanel: React.FC<Props> = ({ plan, workspaceKey, isLoading = false, canPersist, isGenerating, isExecuting, onGenerate, onUpdate, onTransition, onRecover, onModelChange, onRun, onCancel, onComplete, modelOptions, onOpenArtifact, onOpenSource, onAcceptReview, onRejectReview, hideHeader = false, focusedTaskId }) => {
+export const WorkspaceTasksPanel: React.FC<Props> = ({ plan, workspaceKey, isLoading = false, canPersist, isGenerating, isExecuting, isContinuousRunning = false, onStartContinuous, onStopContinuous, onGenerate, onUpdate, onTransition, onRecover, onModelChange, onRun, onCancel, onComplete, modelOptions, onOpenArtifact, onOpenSource, onAcceptReview, onRejectReview, hideHeader = false, focusedTaskId }) => {
   const [expanded, setExpanded] = useState(() => Boolean(plan));
   const [goal, setGoal] = useState('');
   const [titleEdits, setTitleEdits] = useState<Record<string, string>>({});
@@ -117,7 +120,30 @@ export const WorkspaceTasksPanel: React.FC<Props> = ({ plan, workspaceKey, isLoa
             <button type="button" disabled={plan.tasks.length === 0 || plan.tasks.some(task => !(titleEdits[task.id] ?? task.title).trim())} onClick={() => void persist({ ...plan, status: 'approved', tasks: plan.tasks.map(task => ({ ...task, title: titleEdits[task.id]?.trim() || task.title })) })} className="ml-auto h-8 rounded-lg bg-emerald-700 px-3 text-[11px] font-semibold text-white disabled:opacity-50">Setujui plan</button>
           </>}
           {(plan.status === 'approved' || plan.status === 'running') && <>
-            {nextTask && <button type="button" disabled={isExecuting} onClick={() => onRun(nextTask.id)} className="inline-flex h-8 items-center gap-1 rounded-lg bg-emerald-700 px-3 text-[11px] font-semibold text-white disabled:opacity-50"><Play className="h-3 w-3" />Jalankan berikutnya</button>}
+            {onStartContinuous && nextTask && !isContinuousRunning && (
+              <button
+                type="button"
+                disabled={isExecuting}
+                onClick={onStartContinuous}
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 px-3 text-[11px] font-semibold text-white shadow-xs hover:from-emerald-700 hover:to-teal-700 disabled:opacity-50"
+                title="Jalankan seluruh langkah secara bertahap otomatis hingga tinjauan user"
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                Jalankan otomatis
+              </button>
+            )}
+            {onStopContinuous && isContinuousRunning && (
+              <button
+                type="button"
+                onClick={onStopContinuous}
+                className="inline-flex h-8 items-center gap-1 rounded-lg border border-amber-300 bg-amber-50 px-2.5 text-[11px] font-semibold text-amber-800 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-300"
+                title="Hentikan eksekusi beruntun otomatis"
+              >
+                <Pause className="h-3 w-3" />
+                Otomatis aktif (jeda)
+              </button>
+            )}
+            {nextTask && !isContinuousRunning && <button type="button" disabled={isExecuting} onClick={() => onRun(nextTask.id)} className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-200 px-3 text-[11px] font-semibold text-slate-700 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200"><Play className="h-3 w-3" />Jalankan berikutnya</button>}
             {isExecuting && <button type="button" onClick={onCancel} className="inline-flex h-8 items-center gap-1 rounded-lg border border-rose-200 px-3 text-[11px] font-semibold text-rose-700"><X className="h-3 w-3" />Stop task</button>}
             {doneCount === plan.tasks.length && <button type="button" onClick={onComplete} className="ml-auto h-8 rounded-lg bg-slate-800 px-3 text-[11px] font-semibold text-white">Konfirmasi selesai</button>}
             {doneCount < plan.tasks.length && <button type="button" onClick={() => onTransition('pause')} className="ml-auto inline-flex h-8 items-center gap-1 rounded-lg px-2.5 text-[11px] font-semibold text-slate-600"><Pause className="h-3 w-3" />Jeda</button>}

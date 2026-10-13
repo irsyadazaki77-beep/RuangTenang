@@ -14,12 +14,17 @@ import {
   WorkspaceTaskExecutionResultRequestSchema,
   type WorkspacePlan
 } from '../../shared/contracts/workspace.js';
+import {
+  CreateWorkspaceMemorySchema,
+  UpdateWorkspaceMemorySchema
+} from '../../shared/contracts/workspaceMemory.js';
 import { ResearchSourceMetadataSchema } from '../../shared/contracts/files.js';
 import { prisma } from '../database.js';
 import { requireAuth } from '../middleware/auth.js';
 import { encryptionService } from '../services/encryptionService.js';
 import { sanitizeInput } from '../security.js';
 import { aiChatLimiter } from '../middleware/rateLimiters.js';
+import { WorkspaceMemoryService } from '../services/workspaceMemoryService.js';
 import {
   backfillLegacyPlan,
   cancelWorkspaceTaskExecution,
@@ -658,6 +663,101 @@ router.delete('/:chatId/tasks/:taskId', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('[WORKSPACE_TASK_DELETE_ERROR]', error);
     return res.status(500).json({ success: false, code: 'WORKSPACE_TASK_DELETE_FAILED', message: 'Gagal menghapus task.' });
+  }
+});
+
+// ==========================================
+// WORKSPACE MEMORY ENDPOINTS (FASE 14)
+// ==========================================
+
+router.get('/:chatId/memories', async (req: Request, res: Response) => {
+  try {
+    const workspace = await ownedWorkspace(req.params.chatId, req.user!.userId, false);
+    if (!workspace) return res.status(404).json({ success: false, code: 'WORKSPACE_NOT_FOUND', message: 'Workspace tidak ditemukan.' });
+
+    const memories = await WorkspaceMemoryService.listMemories(req.user!.userId, req.params.chatId);
+    return res.json({ success: true, data: memories });
+  } catch (error: any) {
+    console.error('[WORKSPACE_MEMORY_LIST_ERROR]', error);
+    return res.status(500).json({ success: false, code: 'WORKSPACE_MEMORY_LIST_FAILED', message: 'Gagal memuat memori workspace.' });
+  }
+});
+
+router.post('/:chatId/memories', async (req: Request, res: Response) => {
+  const parsed = CreateWorkspaceMemorySchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ success: false, code: 'INVALID_PAYLOAD', message: 'Format memori tidak valid.', errors: parsed.error.issues });
+  }
+
+  try {
+    const workspace = await ownedWorkspace(req.params.chatId, req.user!.userId, false);
+    if (!workspace) return res.status(404).json({ success: false, code: 'WORKSPACE_NOT_FOUND', message: 'Workspace tidak ditemukan.' });
+
+    const created = await WorkspaceMemoryService.addMemory({
+      userId: req.user!.userId,
+      workspaceId: req.params.chatId,
+      category: parsed.data.category,
+      content: parsed.data.content,
+      provenance: parsed.data.provenance || 'Input Pengguna'
+    });
+
+    return res.status(201).json({ success: true, data: created });
+  } catch (error: any) {
+    if (error.message?.includes('MEMORY_CONSENT_REQUIRED')) {
+      return res.status(403).json({ success: false, code: 'MEMORY_CONSENT_REQUIRED', message: error.message });
+    }
+    if (error.message?.includes('PROMPT_INJECTION_DETECTED')) {
+      return res.status(400).json({ success: false, code: 'PROMPT_INJECTION_DETECTED', message: error.message });
+    }
+    console.error('[WORKSPACE_MEMORY_CREATE_ERROR]', error);
+    return res.status(500).json({ success: false, code: 'WORKSPACE_MEMORY_CREATE_FAILED', message: 'Gagal menyimpan memori.' });
+  }
+});
+
+router.put('/:chatId/memories/:memoryId', async (req: Request, res: Response) => {
+  const parsed = UpdateWorkspaceMemorySchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ success: false, code: 'INVALID_PAYLOAD', message: 'Format pembaruan memori tidak valid.', errors: parsed.error.issues });
+  }
+
+  try {
+    const workspace = await ownedWorkspace(req.params.chatId, req.user!.userId, false);
+    if (!workspace) return res.status(404).json({ success: false, code: 'WORKSPACE_NOT_FOUND', message: 'Workspace tidak ditemukan.' });
+
+    const updated = await WorkspaceMemoryService.updateMemory({
+      userId: req.user!.userId,
+      workspaceId: req.params.chatId,
+      memoryId: req.params.memoryId,
+      ...parsed.data
+    });
+
+    return res.json({ success: true, data: updated });
+  } catch (error: any) {
+    if (error.message?.includes('MEMORY_NOT_FOUND')) {
+      return res.status(404).json({ success: false, code: 'MEMORY_NOT_FOUND', message: error.message });
+    }
+    if (error.message?.includes('PROMPT_INJECTION_DETECTED')) {
+      return res.status(400).json({ success: false, code: 'PROMPT_INJECTION_DETECTED', message: error.message });
+    }
+    console.error('[WORKSPACE_MEMORY_UPDATE_ERROR]', error);
+    return res.status(500).json({ success: false, code: 'WORKSPACE_MEMORY_UPDATE_FAILED', message: 'Gagal memperbarui memori.' });
+  }
+});
+
+router.delete('/:chatId/memories/:memoryId', async (req: Request, res: Response) => {
+  try {
+    const workspace = await ownedWorkspace(req.params.chatId, req.user!.userId, false);
+    if (!workspace) return res.status(404).json({ success: false, code: 'WORKSPACE_NOT_FOUND', message: 'Workspace tidak ditemukan.' });
+
+    const deleted = await WorkspaceMemoryService.deleteMemory(req.user!.userId, req.params.chatId, req.params.memoryId);
+    if (!deleted) {
+      return res.status(404).json({ success: false, code: 'MEMORY_NOT_FOUND', message: 'Memori tidak ditemukan.' });
+    }
+
+    return res.json({ success: true });
+  } catch (error: any) {
+    console.error('[WORKSPACE_MEMORY_DELETE_ERROR]', error);
+    return res.status(500).json({ success: false, code: 'WORKSPACE_MEMORY_DELETE_FAILED', message: 'Gagal menghapus memori.' });
   }
 });
 

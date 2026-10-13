@@ -19,9 +19,11 @@ export interface WorkspaceComparisonSnapshot {
 };
 
 interface Entry { userId: string; snapshot: WorkspaceComparisonSnapshot; expiresAt: number; }
+interface CandidateOutputEntry { userId: string; output: string; expiresAt: number; }
 const TTL_MS = 20 * 60 * 1000;
 const MAX_SNAPSHOTS = 500;
 const entries = new Map<string, Entry>();
+const candidateOutputs = new Map<string, CandidateOutputEntry>();
 
 function stableJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
@@ -42,6 +44,8 @@ function deepFreeze<T>(value: T): T {
 function cleanup(now = Date.now()) {
   for (const [id, entry] of entries) if (entry.expiresAt <= now) entries.delete(id);
   while (entries.size >= MAX_SNAPSHOTS) entries.delete(entries.keys().next().value!);
+  for (const [key, entry] of candidateOutputs) if (entry.expiresAt <= now) candidateOutputs.delete(key);
+  while (candidateOutputs.size >= MAX_SNAPSHOTS * 4) candidateOutputs.delete(candidateOutputs.keys().next().value!);
 }
 
 export function storeComparisonSnapshot(userId: string, input: WorkspaceComparisonSnapshot): WorkspaceComparisonSnapshot {
@@ -80,4 +84,21 @@ export function hasComparisonSnapshot(comparisonId: string, userId: string): boo
   return [...entries.values()].some(entry => entry.userId === userId && entry.snapshot.comparisonId === comparisonId);
 }
 
-export function __clearComparisonSnapshotsForTests() { entries.clear(); }
+export function __clearComparisonSnapshotsForTests() {
+  entries.clear();
+  candidateOutputs.clear();
+}
+
+export function recordCandidateOutput(snapshotId: string, candidateId: string, attemptId: string, userId: string, output: string): void {
+  cleanup();
+  const key = `${snapshotId}:${candidateId}:${attemptId}`;
+  candidateOutputs.set(key, { userId, output, expiresAt: Date.now() + TTL_MS });
+}
+
+export function getRecordedCandidateOutput(snapshotId: string, candidateId: string, attemptId: string, userId: string): string | null {
+  cleanup();
+  const key = `${snapshotId}:${candidateId}:${attemptId}`;
+  const entry = candidateOutputs.get(key);
+  if (!entry || entry.userId !== userId) return null;
+  return entry.output;
+}

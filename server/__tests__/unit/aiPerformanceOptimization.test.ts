@@ -41,6 +41,33 @@ describe('FASE 11 Performance, Token & Cost Optimization Benchmark Suite', () =>
       // Groq Qwen (0.20 / 0.20)
       const groqCost = aiCostCalculator.calculateCost('groq-qwen-27b', 1000, 1000);
       expect(groqCost.estimatedCostUsd).toBeCloseTo(0.0004, 6);
+      expect(groqCost.actualCostUsd).toBeCloseTo(0.0004, 6);
+      expect(groqCost.pricingStatus).toBe('verified');
+      expect(groqCost.pricingSource).toContain('Groq Cloud');
+      expect(groqCost.validatedDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    });
+
+    it('distinguishes verified, estimated, and unknown models, preventing fallback from acting as actual cost', () => {
+      // Verified model
+      const verified = aiCostCalculator.calculateCost('gemini-3.8-flash', 1000, 1000);
+      expect(verified.pricingStatus).toBe('verified');
+      expect(verified.isPricingKnown).toBe(true);
+      expect(verified.actualCostUsd).not.toBeNull();
+      expect(verified.pricingSource).toContain('Google AI Studio');
+
+      // Estimated preview model
+      const estimated = aiCostCalculator.calculateCost('gemini-3.1-pro-preview', 1000, 1000);
+      expect(estimated.pricingStatus).toBe('estimated');
+      expect(estimated.isPricingKnown).toBe(true);
+      expect(estimated.actualCostUsd).not.toBeNull();
+
+      // Unknown / Unregistered model
+      const unknown = aiCostCalculator.calculateCost('unregistered-custom-llm-v9', 1000, 1000);
+      expect(unknown.pricingStatus).toBe('unknown');
+      expect(unknown.isPricingKnown).toBe(false);
+      expect(unknown.actualCostUsd).toBeNull(); // Must never display fallback as actual spend
+      expect(unknown.estimatedCostUsd).toBeGreaterThan(0);
+      expect(unknown.pricingSource).toContain('Fallback');
     });
 
     it('records request metrics with provider, model, actual vs estimated usage, and cost', () => {

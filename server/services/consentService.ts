@@ -211,9 +211,12 @@ export class ConsentService {
     const newAiConsent = updates.consentForAI !== undefined ? updates.consentForAI : current.consentForAI;
     const newMemoryConsent = updates.consentForAIMemory !== undefined ? updates.consentForAIMemory : current.consentForAIMemory;
 
-    // If AI Memory consent was turned off, delete all stored AI memories for this user
+    // If AI Memory consent was turned off, delete all stored AI memories and workspace memories for this user
     if ((!newAiConsent || !newMemoryConsent) && (current.consentForAI && current.consentForAIMemory)) {
       await prisma.userMemories.deleteMany({
+        where: { userId }
+      });
+      await prisma.workspaceMemories.deleteMany({
         where: { userId }
       });
     }

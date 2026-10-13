@@ -95,16 +95,25 @@ describe('Workspace comparison immutable snapshot lifecycle', () => {
   });
 
   it('persists a selected result once and creates a chat for a new Workspace', async () => {
-    await request(app).post('/api/v1/chat/compare/stream').set('x-test-user', 'user-a').send({
+    const streamRes = await request(app).post('/api/v1/chat/compare/stream').set('x-test-user', 'user-a').send({
       comparisonId, snapshotId, workspaceIdentity: 'local:user-a:workspace-1', prompt: 'prompt', selectedModelIds: ['gemini-3.8-flash', 'deepseek-chat']
     }).expect(200);
+
+    const streamEvents = streamRes.text.split('\n').filter(line => line.startsWith('data: ')).map(line => JSON.parse(line.slice(6)));
+    const startedEvent = streamEvents.find((e: any) => e.type === 'candidate_started' && e.candidateId === 'gemini-3.8-flash');
+    const attemptId = startedEvent ? startedEvent.attemptId : '33333333-3333-4333-8333-333333333333';
+
     mocks.chatsFindFirst.mockResolvedValue(null);
-    const body = { workspaceIdentity: 'local:user-a:workspace-1', prompt: 'prompt', response: 'selected answer', modelId: 'gemini-3.8-flash', candidateId: 'gemini-3.8-flash', comparisonId, snapshotId, attemptId: '33333333-3333-4333-8333-333333333333' };
+    const body = { workspaceIdentity: 'local:user-a:workspace-1', prompt: 'prompt', response: 'answer-gemini-3.8-flash', modelId: 'gemini-3.8-flash', candidateId: 'gemini-3.8-flash', comparisonId, snapshotId, attemptId };
     const first = await request(app).post('/api/v1/chat/compare/select').set('x-test-user', 'user-a').send(body).expect(200);
     const second = await request(app).post('/api/v1/chat/compare/select').set('x-test-user', 'user-a').send(body).expect(200);
     expect(first.body.chatId).toMatch(/^chat_cmp_/);
     expect(second.body).toMatchObject({ chatId: first.body.chatId, idempotent: true });
     expect(mocks.savedMessages).toHaveLength(2);
     expect(mocks.chatsCreate).toHaveBeenCalledTimes(1);
+
+    // Tampered output rejection check
+    const tamperedBody = { ...body, attemptId, response: 'TAMPERED MALICIOUS CLIENT TEXT' };
+    await request(app).post('/api/v1/chat/compare/select').set('x-test-user', 'user-a').send(tamperedBody).expect(400);
   });
 });

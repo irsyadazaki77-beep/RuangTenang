@@ -51,6 +51,7 @@ model Users {
   soapNotesAsStudent        ClinicalSoapNotes[]   @relation("StudentSoapNotes")
   soapNotesAsCounselor      ClinicalSoapNotes[]   @relation("CounselorSoapNotes")
   artifacts                 Artifacts[]
+  workspaceMemories         WorkspaceMemories[]
 }
 
 model Appointments {
@@ -529,6 +530,7 @@ model Workspaces {
   chat            Chats    @relation(fields: [chatId], references: [id], onDelete: Cascade)
   tasks           WorkspaceTasks[]
   plans           WorkspacePlans[]
+  memories        WorkspaceMemories[]
 
   @@index([updatedAt])
 }
@@ -707,4 +709,26 @@ model DistributedLock {
   expiresAt  DateTime
 
   @@index([expiresAt])
+}
+
+model WorkspaceMemories {
+  id          String   @id
+  workspaceId String
+  userId      String
+  category    String   @default("decision")
+  content     String
+  provenance  String?
+  status      String   @default("active")
+  version     Int      @default(1)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  isActive    Boolean  @default(true)
+
+  workspace   Workspaces @relation(fields: [workspaceId], references: [chatId], onDelete: Cascade)
+  user        Users      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, isActive, status])
+  @@index([userId, workspaceId])
+  @@index([workspaceId, category])
+  @@index([createdAt])
 }

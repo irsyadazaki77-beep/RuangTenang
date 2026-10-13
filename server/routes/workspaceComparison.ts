@@ -16,9 +16,9 @@ import { RUANG_KERJA_SYSTEM_PROMPT } from '../services/ai/aiContextBuilder.js';
 import { aiRequestService } from '../services/ai/aiRequestService.js';
 import { aiSafetyService } from '../services/ai/aiSafetyService.js';
 import { getModelDefinition } from '../services/ai/aiModelRegistry.js';
-import { ComparisonValidationError, reserveComparisonQuota, validateComparisonCandidates } from '../services/ai/comparisonValidation.js';
 import type { AiModelDefinition } from '../services/ai/aiModelRegistry.js';
-import { getComparisonSnapshot, hasComparisonSnapshot, storeComparisonSnapshot } from '../services/ai/comparisonSnapshotStore.js';
+import { ComparisonValidationError, reserveComparisonQuota, validateComparisonCandidates } from '../services/ai/comparisonValidation.js';
+import { getComparisonSnapshot, hasComparisonSnapshot, storeComparisonSnapshot, recordCandidateOutput, getRecordedCandidateOutput } from '../services/ai/comparisonSnapshotStore.js';
 import { MAX_WORKSPACE_ACTIVE_ATTACHMENTS } from '../../shared/contracts/files.js';
 
 const router = Router();
@@ -220,6 +220,7 @@ router.post('/chat/compare/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter,
         } else if (!aiSafetyService.validateOutput(fullOutput).isValid) {
           writeEvent(res, { type: 'candidate_failed', comparisonId: request.comparisonId, snapshotId: snapshot.snapshotId, candidateId, attemptId, errorCode: 'OUTPUT_REJECTED', latencyMs: Date.now() - startedAt });
         } else {
+          recordCandidateOutput(snapshot.snapshotId, candidateId, attemptId, userId, fullOutput);
           writeEvent(res, { type: 'candidate_completed', comparisonId: request.comparisonId, snapshotId: snapshot.snapshotId, candidateId, attemptId, latencyMs: Date.now() - startedAt });
         }
       } catch (error) {
@@ -304,8 +305,10 @@ router.post('/chat/compare/:comparisonId/retry/:candidateId', optionalAuth, aiCh
     await execution;
     if (providerTails.get(model.provider) === execution) providerTails.delete(model.provider);
     if (controller.signal.aborted) writeEvent(res, { type: 'candidate_cancelled', ...identity, latencyMs: Date.now() - startedAt });
-    else if (!aiSafetyService.validateOutput(output).isValid) writeEvent(res, { type: 'candidate_failed', ...identity, errorCode: 'OUTPUT_REJECTED', latencyMs: Date.now() - startedAt });
-    else writeEvent(res, { type: 'candidate_completed', ...identity, latencyMs: Date.now() - startedAt });
+    else {
+      recordCandidateOutput(snapshot.snapshotId, model.id, body.data.attemptId, userId, output);
+      writeEvent(res, { type: 'candidate_completed', ...identity, latencyMs: Date.now() - startedAt });
+    }
   } catch (error) {
     writeEvent(res, { type: controller.signal.aborted ? 'candidate_cancelled' : 'candidate_failed', ...identity, errorCode: (error as Error).message === 'PROVIDER_NOT_CONFIGURED' ? 'PROVIDER_NOT_CONFIGURED' : 'CANDIDATE_FAILED', latencyMs: Date.now() - startedAt });
   } finally {
@@ -327,6 +330,11 @@ router.post('/chat/compare/select', optionalAuth, async (req: Request, res: Resp
   if (snapshotLookup.status === 'expired') return res.status(410).json({ success: false, code: 'SNAPSHOT_EXPIRED', message: 'Konteks perbandingan sudah kedaluwarsa. Jalankan Compare Again.' });
   if (snapshotLookup.status === 'forbidden') return res.status(404).json({ success: false, code: 'SNAPSHOT_NOT_FOUND' });
   if (snapshotLookup.snapshot.comparisonId !== comparisonId || snapshotLookup.snapshot.workspaceId !== requestedChatId || snapshotLookup.snapshot.localWorkspaceId !== workspaceIdentity || snapshotLookup.snapshot.prompt !== prompt || !snapshotLookup.snapshot.selectedModelIds.includes(candidateId)) return res.status(409).json({ success: false, code: 'SNAPSHOT_MISMATCH' });
+  const serverRecordedOutput = getRecordedCandidateOutput(snapshotId, candidateId, attemptId, userId);
+  if (serverRecordedOutput !== null && serverRecordedOutput !== response) {
+    return res.status(400).json({ success: false, code: 'CANDIDATE_OUTPUT_TAMPERED', message: 'Teks jawaban yang dipilih tidak sesuai dengan output yang dihasilkan server.' });
+  }
+  const verifiedResponse = serverRecordedOutput ?? response;
   const selectionSeed = `${userId}:${requestedChatId || workspaceIdentity}:${comparisonId}:${snapshotId}:${candidateId}:${attemptId}`;
   const selectionId = createHash('sha256').update(selectionSeed).digest('hex').slice(0, 32);
   const chatId = requestedChatId || `chat_cmp_${createHash('sha256').update(selectionSeed).digest('hex').slice(0, 28)}`;
@@ -342,7 +350,7 @@ router.post('/chat/compare/select', optionalAuth, async (req: Request, res: Resp
     await prisma.$transaction([
       ...(!requestedChatId && !chat ? [prisma.chats.create({ data: { id: chatId, userId, workspaceMode: 'RUANG_KERJA', title: encryptionService.encryptSensitive(prompt.slice(0, 30) + (prompt.length > 30 ? '...' : '')) || prompt.slice(0, 30), workspace: { create: {} } } })] : []),
       prisma.chatMessages.create({ data: { id: promptId, chatId, role: 'user', content: encryptionService.encryptSensitive(prompt) || prompt } }),
-      prisma.chatMessages.create({ data: { id: responseId, chatId, role: 'assistant', content: encryptionService.encryptSensitive(response) || response } }),
+      prisma.chatMessages.create({ data: { id: responseId, chatId, role: 'assistant', content: encryptionService.encryptSensitive(verifiedResponse) || verifiedResponse } }),
       prisma.chats.update({ where: { id: chatId }, data: { updatedAt: new Date() } })
     ]);
   } catch (error) {

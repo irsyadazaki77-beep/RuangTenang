@@ -109,13 +109,32 @@ export async function runWorkspaceAgent(input: WorkspaceAgentRunInput): Promise<
   let estimatedInputTokens = 0;
   let estimatedOutputTokens = 0;
 
+  let workspaceMemories: Array<{ category: string; content: string; provenance?: string | null }> = [];
+  try {
+    const { WorkspaceMemoryService } = await import('../workspaceMemoryService.js');
+    const memoryRes = await WorkspaceMemoryService.getRelevantMemories({
+      userId: input.userId,
+      workspaceId: input.workspaceId,
+      currentMessage: task.snapshot.inputPrompt,
+      maxTokens: 400,
+      maxItems: 4
+    });
+    workspaceMemories = memoryRes.memories.map(m => ({
+      category: m.category,
+      content: m.content,
+      provenance: m.provenance
+    }));
+  } catch (err) {
+    // Non-blocking fallback if memory retrieval fails
+  }
+
   try {
   for (let step = 0; step < AGENT_EXECUTION_LIMITS.maxSteps; step += 1) {
     if (input.abortSignal.aborted) throw new AgentExecutionError('AGENT_CANCELLED', 'Eksekusi dihentikan.');
     if (Date.now() - startedAt >= AGENT_EXECUTION_LIMITS.maxDurationMs) {
       throw budgetFailure(results, modelId, steps, estimatedInputTokens, estimatedOutputTokens, 'AGENT_BUDGET_EXHAUSTED', 'batas durasi Agent tercapai');
     }
-    const context = buildAgentTurnContext({ plan: input.plan, task, workspaceId: input.workspaceId, userId: input.userId, recentResults: results });
+    const context = buildAgentTurnContext({ plan: input.plan, task, workspaceId: input.workspaceId, userId: input.userId, recentResults: results, workspaceMemories });
     const prompt = JSON.stringify({
       step: step + 1,
       maxSteps: AGENT_EXECUTION_LIMITS.maxSteps,

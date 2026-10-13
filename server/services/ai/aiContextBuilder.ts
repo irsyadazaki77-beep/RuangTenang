@@ -262,6 +262,26 @@ ${memoryLines.join('\n')}
       }
     }
 
+    // 5c. Workspace Project Long-Term Memory (Isolated to this specific workspaceId & userId)
+    if (isAcademicWorkspace && chatId && userId && userId !== 'guest' && !isTemporary) {
+      try {
+        const { WorkspaceMemoryService } = await import('../workspaceMemoryService.js');
+        const memoryRes = await WorkspaceMemoryService.getRelevantMemories({
+          userId,
+          workspaceId: chatId,
+          currentMessage,
+          maxTokens: 500,
+          maxItems: 5
+        });
+        if (memoryRes.promptBlock) {
+          contextParts.push(memoryRes.promptBlock);
+          tokensSavedTotal += Math.max(0, 100);
+        }
+      } catch (err: any) {
+        console.warn('[AI_CONTEXT_WORKSPACE_MEMORY_WARN] Workspace memory retrieval failed:', err?.message || err);
+      }
+    }
+
     // 6. Format recent history for model prompt payload with PII scrubbing and prompt-injection sanitization
     const formattedRecentHistory = recentHistoryItems.map(h => {
       let text = (h.content || '').substring(0, 1000);

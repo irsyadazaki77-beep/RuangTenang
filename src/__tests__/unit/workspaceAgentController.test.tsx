@@ -85,4 +85,79 @@ describe('useWorkspaceAgentController', () => {
     expect(executeAgentTask).not.toHaveBeenCalled();
     expect(sendMessage).not.toHaveBeenCalled();
   });
+
+  it('pauses continuous workflow execution at human review gate', async () => {
+    const planWithReview = {
+      id: 'plan-review',
+      goal: 'Write draft',
+      title: 'Drafting Workflow',
+      status: 'approved',
+      tasks: [
+        { id: 'task-1', title: 'Analysis', type: 'analysis', status: 'waiting_review', dependsOn: [] },
+        { id: 'task-2', title: 'Draft', type: 'writing', status: 'todo', dependsOn: ['task-1'] }
+      ]
+    } as WorkspacePlan;
+    const showToast = vi.fn();
+    const executeAgentTask = vi.fn();
+    const { result } = renderHook(() => useWorkspaceAgentController({
+      plan: planWithReview,
+      startTaskExecution: vi.fn(async () => ({ plan: planWithReview, claimed: true })),
+      executeAgentTask,
+      reviewTask: vi.fn(async () => planWithReview),
+      transitionPlan: vi.fn(async () => planWithReview),
+      recoverTaskExecution: vi.fn(async () => planWithReview),
+      isStreaming: false,
+      includeFilesInContext: false,
+      selectedFileIds: [],
+      includeCanvasInContext: false,
+      activeArtifact: null,
+      selectedModel: 'gemini-3.8-flash',
+      workspaceId: 'chat:workspace-a',
+      activeSendOperationRef: { current: null },
+      taskGenerationRequestsRef: { current: new Map() },
+      sendMessage: vi.fn(() => true),
+      abortStream: vi.fn(),
+      onAgentTaskCompleted: vi.fn(async () => undefined),
+      showToast
+    }));
+
+    await act(async () => {
+      result.current.startContinuousWorkflow();
+    });
+
+    // Since task-1 is waiting_review, continuous loop should stop and notify user to review
+    expect(result.current.isContinuousRunning).toBe(false);
+    expect(executeAgentTask).not.toHaveBeenCalled();
+  });
+
+  it('allows stopping continuous workflow execution', async () => {
+    const showToast = vi.fn();
+    const { result } = renderHook(() => useWorkspaceAgentController({
+      plan,
+      startTaskExecution: vi.fn(async () => ({ plan, claimed: true })),
+      executeAgentTask: vi.fn(async () => ({ execution: completed, plan })),
+      reviewTask: vi.fn(async () => plan),
+      transitionPlan: vi.fn(async () => plan),
+      recoverTaskExecution: vi.fn(async () => plan),
+      isStreaming: false,
+      includeFilesInContext: false,
+      selectedFileIds: [],
+      includeCanvasInContext: false,
+      activeArtifact: null,
+      selectedModel: 'gemini-3.8-flash',
+      workspaceId: 'chat:workspace-a',
+      activeSendOperationRef: { current: null },
+      taskGenerationRequestsRef: { current: new Map() },
+      sendMessage: vi.fn(() => true),
+      abortStream: vi.fn(),
+      onAgentTaskCompleted: vi.fn(async () => undefined),
+      showToast
+    }));
+
+    await act(async () => {
+      result.current.stopContinuousWorkflow();
+    });
+
+    expect(result.current.isContinuousRunning).toBe(false);
+  });
 });

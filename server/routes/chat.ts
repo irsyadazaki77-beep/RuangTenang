@@ -1036,13 +1036,24 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
                const memContent = validToolCallParsed.parameters.content;
                if (memContent && userId && !activeIsTemporary) {
                   try {
-                    await prisma.userMemories.create({
-                      data: {
-                        id: `mem_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-                        userId: userId,
-                        content: encryptionService.encryptSensitive(memContent) || memContent
-                      }
-                    });
+                    if (isWorkspace && currentChatId) {
+                      const { WorkspaceMemoryService } = await import('../services/workspaceMemoryService.js');
+                      await WorkspaceMemoryService.addMemory({
+                        userId,
+                        workspaceId: currentChatId,
+                        category: (validToolCallParsed.parameters.category as any) || 'decision',
+                        content: memContent,
+                        provenance: 'Percakapan AI Workspace'
+                      });
+                    } else {
+                      await prisma.userMemories.create({
+                        data: {
+                          id: `mem_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+                          userId: userId,
+                          content: encryptionService.encryptSensitive(memContent) || memContent
+                        }
+                      });
+                    }
                   } catch(e) {}
                }
             }

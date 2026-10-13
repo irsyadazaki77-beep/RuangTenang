@@ -51,6 +51,7 @@ import type { AgentExecutionResult } from '../../../shared/contracts/agent';
 
 const WorkspaceFilePreviewModal = React.lazy(() => import('./components/WorkspaceFilePreviewModal').then(module => ({ default: module.WorkspaceFilePreviewModal })));
 const ExportModal = React.lazy(() => import('./components/ExportModal').then(module => ({ default: module.ExportModal })));
+const WorkspaceMemorySection = React.lazy(() => import('./components/WorkspaceMemorySection').then(module => ({ default: module.WorkspaceMemorySection })));
 
 export interface StudentWorkspaceProps {
   user: UserSession | null;
@@ -952,6 +953,9 @@ function StudentWorkspaceSession({
   }, [handleExecuteSendMessage]);
   const {
     runTask: handleRunWorkspaceTask,
+    startContinuousWorkflow: handleStartContinuousWorkflow,
+    stopContinuousWorkflow: handleStopContinuousWorkflow,
+    isContinuousRunning,
     acceptTaskReview: handleAcceptTaskReview,
     rejectTaskReview: handleRejectTaskReview,
     generateTasks: handleGenerateWorkspaceTasks,
@@ -1099,6 +1103,9 @@ function StudentWorkspaceSession({
         uploadedFilesCount={workspaceAttachments.length}
         readyFilesCount={selectedReadyWorkspaceFileCount}
         isAnalyzing={isStreaming || isAgentExecuting}
+        hasWaitingReview={Boolean(workspacePlan?.tasks.some(task => task.status === 'waiting_review'))}
+        isContinuousRunning={isContinuousRunning}
+        activePlanTitle={workspacePlan?.title}
         activeArtifact={visibleActiveArtifact}
         isCanvasOpen={isCanvasOpen}
         onUploadClick={() => {
@@ -1247,6 +1254,9 @@ function StudentWorkspaceSession({
               <div className="mt-4 border-t border-slate-100 pt-3 dark:border-slate-800"><div className="flex items-start justify-between gap-2"><div className="min-w-0"><p className="text-xs font-semibold text-slate-700 dark:text-slate-200">Instruksi Workspace</p><p className="mt-1 text-[11px] text-slate-500">{workspaceData?.instructions || 'Belum ada instruksi khusus.'}</p></div><button type="button" disabled={!workspaceData || workspaceMetadata.pendingIds.includes('workspace')} onClick={() => setIsInstructionsEditing(open => !open)} className="shrink-0 rounded-md px-2 py-1 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:text-emerald-300 dark:hover:bg-emerald-950">{isInstructionsEditing ? 'Batal' : 'Ubah'}</button></div>
                 {isInstructionsEditing && <div className="mt-2 grid gap-2"><textarea value={instructionsDraft} onChange={event => setInstructionsDraft(event.target.value.slice(0, 4000))} maxLength={4000} rows={4} aria-label="Instruksi Workspace" placeholder="Contoh: Gunakan IEEE dan bahasa Indonesia formal." className="w-full resize-y rounded-md border border-slate-200 bg-white p-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:border-slate-700 dark:bg-slate-950" /><div className="flex items-center justify-between"><span className="text-[10px] text-slate-500">{instructionsDraft.length}/4000</span><button type="button" disabled={isInstructionsSaving} onClick={() => void handleSaveWorkspaceInstructions()} className="rounded-md bg-emerald-700 px-2.5 py-1.5 text-[11px] font-semibold text-white disabled:opacity-50">{isInstructionsSaving ? 'Menyimpan…' : 'Simpan'}</button></div></div>}
               </div>
+              <React.Suspense fallback={null}>
+                <WorkspaceMemorySection chatId={effectiveChatId} canPersist={Boolean(workspaceData)} />
+              </React.Suspense>
               {workspaceMetadata.error && <p role="status" className="mt-3 text-[11px] text-amber-700 dark:text-amber-300">{workspaceMetadata.error}</p>}
             </div>
           ) : workspaceRightTab === 'files' ? (
@@ -1269,6 +1279,9 @@ function StudentWorkspaceSession({
               canPersist={Boolean(workspaceData)}
               isGenerating={taskGenerationRequestsRef.current.size > 0 && isStreaming}
               isExecuting={Boolean(workspacePlan?.tasks.some(task => task.status === 'running')) && (isStreaming || isAgentExecuting)}
+              isContinuousRunning={isContinuousRunning}
+              onStartContinuous={handleStartContinuousWorkflow}
+              onStopContinuous={handleStopContinuousWorkflow}
               modelOptions={models.map(model => ({ id: model.id, name: model.name }))}
               onOpenArtifact={id => { handleSelectCanvasArtifact(id); handleOpenCanvas(); }}
               onOpenSource={openWorkspaceSource}

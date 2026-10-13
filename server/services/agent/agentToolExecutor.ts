@@ -260,6 +260,7 @@ function safeToolError(error: unknown): { code: string; message: string } {
     TOOL_NOT_FOUND: 'Tool tidak tersedia.',
     TOOL_OUTPUT_INVALID: 'Hasil tool tidak lolos validasi.',
     TOOL_OUTPUT_TOO_LARGE: 'Hasil tool melebihi batas ukuran.',
+    TOOL_TIMEOUT: 'Batas waktu eksekusi tool tercapai.',
     WEB_SEARCH_NOT_CONFIGURED: 'Pencarian web belum dikonfigurasi.',
     WEB_SEARCH_FAILED: 'Pencarian web gagal; tidak ada sumber eksternal yang digunakan.',
     WEB_SEARCH_TIMEOUT: 'Pencarian web melebihi batas waktu; tidak ada sumber eksternal yang digunakan.'
@@ -291,28 +292,48 @@ export async function executeAuthorizedAgentTool(
     return AgentToolResultSchema.parse({ executionId: context.executionId, toolCallId, toolId, status: 'cancelled', error: { code: 'ABORTED', message: 'Eksekusi dihentikan.' }, durationMs: Date.now() - startedAt });
   }
 
+  // Create scoped abort controller linked to parent abortSignal and tool timeout
+  const toolAbortController = new AbortController();
+  const onParentAbort = () => toolAbortController.abort();
+  if (context.abortSignal.aborted) {
+    toolAbortController.abort();
+  } else {
+    context.abortSignal.addEventListener('abort', onParentAbort, { once: true });
+  }
+
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const scopedContext: AgentToolExecutionContext = {
+    ...context,
+    abortSignal: toolAbortController.signal
+  };
+
   try {
     const timeout = new Promise<never>((_, reject) => {
-      timeoutId = setTimeout(() => reject(new Error('TOOL_TIMEOUT')), definition.timeoutMs);
+      timeoutId = setTimeout(() => {
+        toolAbortController.abort();
+        reject(new Error('TOOL_TIMEOUT'));
+      }, definition.timeoutMs);
     });
-    const data = await Promise.race([executeRegisteredTool(toolId, parsed.data, context), timeout]);
+
+    const data = await Promise.race([executeRegisteredTool(toolId, parsed.data, scopedContext), timeout]);
     const outputValidation = definition.outputSchema.safeParse(data);
     if (!outputValidation.success) throw new Error('TOOL_OUTPUT_INVALID');
     const serialized = JSON.stringify(outputValidation.data);
     if (serialized.length > AGENT_EXECUTION_LIMITS.maxToolOutputChars) throw new Error('TOOL_OUTPUT_TOO_LARGE');
-    if (context.abortSignal.aborted) {
+    if (context.abortSignal.aborted || toolAbortController.signal.aborted) {
       return AgentToolResultSchema.parse({ executionId: context.executionId, toolCallId, toolId, status: 'cancelled', error: { code: 'ABORTED', message: 'Eksekusi dihentikan.' }, durationMs: Date.now() - startedAt });
     }
     const result = AgentToolResultSchema.parse({ executionId: context.executionId, toolCallId, toolId, status: 'completed', data: outputValidation.data, durationMs: Date.now() - startedAt });
     console.info('[WORKSPACE_AGENT_TOOL]', JSON.stringify({ executionId: context.executionId, toolCallId, toolId, status: 'completed', durationMs: result.durationMs }));
     return result;
   } catch (error) {
+    const isCancelled = context.abortSignal.aborted || (error instanceof Error && error.message === 'ABORTED');
     const safe = safeToolError(error);
-    const result = AgentToolResultSchema.parse({ executionId: context.executionId, toolCallId, toolId, status: context.abortSignal.aborted ? 'cancelled' : 'failed', error: context.abortSignal.aborted ? { code: 'ABORTED', message: 'Eksekusi dihentikan.' } : safe, durationMs: Date.now() - startedAt });
+    const result = AgentToolResultSchema.parse({ executionId: context.executionId, toolCallId, toolId, status: isCancelled ? 'cancelled' : 'failed', error: isCancelled ? { code: 'ABORTED', message: 'Eksekusi dihentikan.' } : safe, durationMs: Date.now() - startedAt });
     console.info('[WORKSPACE_AGENT_TOOL]', JSON.stringify({ executionId: context.executionId, toolCallId, toolId, status: result.status, durationMs: result.durationMs, errorCode: result.status === 'failed' ? result.error.code : 'ABORTED' }));
     return result;
   } finally {
     if (timeoutId) clearTimeout(timeoutId);
+    context.abortSignal.removeEventListener('abort', onParentAbort);
   }
 }

@@ -343,5 +343,30 @@ export class WorkspaceApiService {
     const res = await apiClient.delete<any>(`/api/v1/workspace/artifacts/${encodeURIComponent(id)}${query}`, { signal });
     if (!res.success) throw new Error(res.message || 'Gagal menghapus artefak');
   }
-}
+  // ==========================================
+  // WORKSPACE MEMORY API (FASE 14)
+  // ==========================================
 
+  static async fetchWorkspaceMemories(chatId: string, signal?: AbortSignal): Promise<any[]> {
+    const res = await apiClient.get<any[]>(`/api/v1/workspace/${encodeURIComponent(chatId)}/memories`, { signal });
+    if (!res.success || !Array.isArray(res.data)) throw new Error(res.message || 'Memori workspace gagal dimuat.');
+    return res.data;
+  }
+
+  static async createWorkspaceMemory(chatId: string, payload: { category: string; content: string; provenance?: string }, signal?: AbortSignal): Promise<any> {
+    const res = await apiClient.post<any>(`/api/v1/workspace/${encodeURIComponent(chatId)}/memories`, payload, { signal });
+    if (!res.success || !res.data) throw new Error(res.message || 'Memori workspace gagal disimpan.');
+    return res.data;
+  }
+
+  static async updateWorkspaceMemory(chatId: string, memoryId: string, payload: { content?: string; category?: string; status?: string; isActive?: boolean }, signal?: AbortSignal): Promise<any> {
+    const res = await apiClient.put<any>(`/api/v1/workspace/${encodeURIComponent(chatId)}/memories/${encodeURIComponent(memoryId)}`, payload, { signal });
+    if (!res.success || !res.data) throw new Error(res.message || 'Memori workspace gagal diperbarui.');
+    return res.data;
+  }
+
+  static async deleteWorkspaceMemory(chatId: string, memoryId: string, signal?: AbortSignal): Promise<void> {
+    const res = await apiClient.delete<any>(`/api/v1/workspace/${encodeURIComponent(chatId)}/memories/${encodeURIComponent(memoryId)}`, { signal });
+    if (!res.success) throw new Error(res.message || 'Memori workspace gagal dihapus.');
+  }
+}

@@ -41,11 +41,15 @@ export function useWorkspaceAgentController(options: UseWorkspaceAgentController
     activeAgentExecutionRef.current?.controller.abort();
   }, [workspaceId]);
 
-  const runTask = useCallback(async (taskId: string, feedback?: string) => {
+  const [isContinuousRunning, setIsContinuousRunning] = useState(false);
+  const isContinuousRunningRef = useRef(false);
+  isContinuousRunningRef.current = isContinuousRunning;
+
+  const runTask = useCallback(async (taskId: string, feedback?: string): Promise<boolean> => {
     const currentPlan = plan;
     const task = currentPlan?.tasks.find(item => item.id === taskId);
-    if (!currentPlan || currentPlan.status !== 'approved' || !task || !['todo', 'failed', 'waiting_review', 'cancelled'].includes(task.status) || !task.dependsOn.every(id => currentPlan.tasks.find(dependency => dependency.id === id)?.status === 'done') || currentPlan.tasks.some(item => item.status === 'running') || isStreaming) return;
-    if (activeAgentExecutionRef.current) return;
+    if (!currentPlan || currentPlan.status !== 'approved' || !task || !['todo', 'failed', 'waiting_review', 'cancelled'].includes(task.status) || !task.dependsOn.every(id => currentPlan.tasks.find(dependency => dependency.id === id)?.status === 'done') || currentPlan.tasks.some(item => item.status === 'running') || isStreaming) return false;
+    if (activeAgentExecutionRef.current) return false;
     const researchInstructions = task.type === 'research' ? '\nGunakan evidence dari dokumen yang dipilih jika tersedia. Kutip hanya marker sumber yang benar-benar diberikan oleh tool. Jangan membuat author, tahun, DOI, nomor halaman, atau bibliography yang tidak diberikan sumber. Jika bukti tidak cukup, nyatakan belum terverifikasi.' : '';
     const basePrompt = task.snapshot?.inputPrompt || `Kerjakan hanya langkah yang disetujui ini untuk tujuan “${currentPlan.goal}”.\nTask: ${task.title}\n${task.description || ''}${researchInstructions}\n\nBerikan hasil yang bisa ditinjau. Jangan menandai task lain selesai atau mengubah artifact yang ada. Jika membuat artifact, kembalikan sebagai proposal baru.`;
     const prompt = feedback ? `${basePrompt}\n\nMasukan user untuk revisi hasil: ${feedback}` : basePrompt;
@@ -65,22 +69,28 @@ export function useWorkspaceAgentController(options: UseWorkspaceAgentController
       const start = await startTaskExecution(currentPlan.id, task.id, executionId, snapshot);
       if (!start.claimed) {
         showToast('Eksekusi ini sudah diklaim. Hasilnya tetap mengikuti sesi yang sedang berjalan.', 'info');
-        return;
+        return false;
       }
       controller = new AbortController();
       activeAgentExecutionRef.current = { executionId, planId: currentPlan.id, taskId: task.id, workspaceId, controller };
       setIsAgentExecuting(true);
       const result = await executeAgentTask(currentPlan.id, task.id, executionId, controller.signal);
-      if (activeAgentExecutionRef.current?.executionId !== executionId || currentPlan.id !== result.plan.id) return;
+      if (activeAgentExecutionRef.current?.executionId !== executionId || currentPlan.id !== result.plan.id) return false;
       if (result.execution.status === 'completed') {
         await onAgentTaskCompleted(result.execution, { workspaceId, planId: currentPlan.id, taskId: task.id });
+        return true;
       } else if (result.execution.status === 'failed') {
         showToast(result.execution.error?.message || 'Agent tidak dapat menyelesaikan task ini.', 'error');
+        setIsContinuousRunning(false);
+        return false;
       }
+      return false;
     } catch (error) {
       if (activeAgentExecutionRef.current?.executionId === executionId && !controller?.signal.aborted && !(error instanceof Error && error.name === 'AbortError')) {
         showToast(error instanceof Error ? error.message : 'Task gagal dimulai. Muat ulang status sebelum mencoba lagi.', 'error');
       }
+      setIsContinuousRunning(false);
+      return false;
     } finally {
       if (activeAgentExecutionRef.current?.executionId === executionId) {
         activeAgentExecutionRef.current = null;
@@ -89,14 +99,77 @@ export function useWorkspaceAgentController(options: UseWorkspaceAgentController
     }
   }, [activeArtifact, executeAgentTask, includeCanvasInContext, includeFilesInContext, isStreaming, onAgentTaskCompleted, plan, selectedFileIds, selectedModel, showToast, startTaskExecution, workspaceId, workspaceInstructions]);
 
+  // Check and run next ready task if in continuous auto mode and not waiting for review
+  useEffect(() => {
+    if (!isContinuousRunning || isAgentExecuting || !plan || plan.status !== 'approved') return;
+
+    // Check if any task is waiting for user review (Human Approval Gate)
+    const hasWaitingReview = plan.tasks.some(task => task.status === 'waiting_review');
+    if (hasWaitingReview) {
+      // Pause automated loop at human review gate to ensure safety
+      setIsContinuousRunning(false);
+      showToast('Tahap selesai. Silakan periksa hasil dan berikan persetujuan untuk melanjutkan.', 'info');
+      return;
+    }
+
+    // Check if all tasks are completed
+    if (plan.tasks.length > 0 && plan.tasks.every(task => task.status === 'done')) {
+      setIsContinuousRunning(false);
+      showToast('Seluruh tahapan rencana telah selesai dijalankan.', 'success');
+      return;
+    }
+
+    // Find next runnable task whose dependencies are all satisfied
+    const nextTask = plan.tasks.find(
+      task => task.status === 'todo' && task.dependsOn.every(id => plan.tasks.find(d => d.id === id)?.status === 'done')
+    );
+
+    if (nextTask) {
+      void runTask(nextTask.id);
+    } else {
+      // No runnable task found (either blocked by failed tasks or circular deps)
+      const hasFailed = plan.tasks.some(task => task.status === 'failed');
+      if (hasFailed) {
+        setIsContinuousRunning(false);
+        showToast('Alur kerja terhenti karena ada task yang gagal. Silakan tinjau atau coba lagi.', 'warning');
+      }
+    }
+  }, [isContinuousRunning, isAgentExecuting, plan, runTask, showToast]);
+
+  const startContinuousWorkflow = useCallback(() => {
+    if (!plan || plan.status !== 'approved') return;
+    const nextTask = plan.tasks.find(
+      task => task.status === 'todo' && task.dependsOn.every(id => plan.tasks.find(d => d.id === id)?.status === 'done')
+    );
+    if (!nextTask) {
+      showToast('Tidak ada task berikutnya yang siap dijalankan.', 'info');
+      return;
+    }
+    setIsContinuousRunning(true);
+    void runTask(nextTask.id);
+  }, [plan, runTask, showToast]);
+
+  const stopContinuousWorkflow = useCallback(() => {
+    setIsContinuousRunning(false);
+  }, []);
+
   const acceptTaskReview = useCallback((taskId: string) => {
     if (!plan) return;
-    void reviewTask(plan.id, taskId, 'accept').catch(error => showToast(error instanceof Error ? error.message : 'Hasil belum dapat diterima.', 'error'));
+    void reviewTask(plan.id, taskId, 'accept')
+      .then(() => {
+        showToast('Hasil task diterima.', 'success');
+      })
+      .catch(error => showToast(error instanceof Error ? error.message : 'Hasil belum dapat diterima.', 'error'));
   }, [plan, reviewTask, showToast]);
 
   const rejectTaskReview = useCallback((taskId: string) => {
     if (!plan) return;
-    void reviewTask(plan.id, taskId, 'reject').catch(error => showToast(error instanceof Error ? error.message : 'Hasil belum dapat ditolak.', 'error'));
+    setIsContinuousRunning(false);
+    void reviewTask(plan.id, taskId, 'reject')
+      .then(() => {
+        showToast('Hasil task ditolak dan siap direvisi.', 'info');
+      })
+      .catch(error => showToast(error instanceof Error ? error.message : 'Hasil belum dapat ditolak.', 'error'));
   }, [plan, reviewTask, showToast]);
 
   const generateTasks = useCallback((goal: string) => {
@@ -106,6 +179,7 @@ export function useWorkspaceAgentController(options: UseWorkspaceAgentController
   }, [activeSendOperationRef, selectedModel, sendMessage, taskGenerationRequestsRef]);
 
   const cancelWorkflow = useCallback(() => {
+    setIsContinuousRunning(false);
     if (!plan) return;
     if (activeAgentExecutionRef.current) activeAgentExecutionRef.current.controller.abort();
     if (plan.tasks.some(task => task.status === 'running') && isStreaming) abortStream();
@@ -113,14 +187,37 @@ export function useWorkspaceAgentController(options: UseWorkspaceAgentController
   }, [abortStream, isStreaming, plan, showToast, transitionPlan]);
 
   const completeWorkflow = useCallback(() => {
+    setIsContinuousRunning(false);
     if (plan && plan.tasks.length > 0 && plan.tasks.every(task => task.status === 'done')) void transitionPlan(plan.id, 'complete').catch(error => showToast(error instanceof Error ? error.message : 'Plan gagal diselesaikan.', 'error'));
   }, [plan, showToast, transitionPlan]);
 
-  const pauseWorkflow = useCallback(() => { if (plan) void transitionPlan(plan.id, 'pause').catch(error => showToast(error instanceof Error ? error.message : 'Plan gagal dijeda.', 'error')); }, [plan, showToast, transitionPlan]);
-  const resumeWorkflow = useCallback(() => { if (plan) void transitionPlan(plan.id, 'resume').catch(error => showToast(error instanceof Error ? error.message : 'Plan gagal dilanjutkan.', 'error')); }, [plan, showToast, transitionPlan]);
+  const pauseWorkflow = useCallback(() => {
+    setIsContinuousRunning(false);
+    if (plan) void transitionPlan(plan.id, 'pause').catch(error => showToast(error instanceof Error ? error.message : 'Plan gagal dijeda.', 'error'));
+  }, [plan, showToast, transitionPlan]);
+
+  const resumeWorkflow = useCallback(() => {
+    if (plan) void transitionPlan(plan.id, 'resume').catch(error => showToast(error instanceof Error ? error.message : 'Plan gagal dilanjutkan.', 'error'));
+  }, [plan, showToast, transitionPlan]);
+
   const recoverTask = useCallback((taskId: string, executionId: string) => {
+    setIsContinuousRunning(false);
     if (plan) void recoverTaskExecution(plan.id, taskId, executionId).then(() => showToast('Eksekusi ditandai terputus. Task dapat dicoba ulang.', 'info')).catch(error => showToast(error instanceof Error ? error.message : 'Eksekusi belum dapat dipulihkan.', 'error'));
   }, [plan, recoverTaskExecution, showToast]);
 
-  return { runTask, acceptTaskReview, rejectTaskReview, generateTasks, cancelWorkflow, completeWorkflow, pauseWorkflow, resumeWorkflow, recoverTask, isAgentExecuting };
+  return {
+    runTask,
+    startContinuousWorkflow,
+    stopContinuousWorkflow,
+    isContinuousRunning,
+    acceptTaskReview,
+    rejectTaskReview,
+    generateTasks,
+    cancelWorkflow,
+    completeWorkflow,
+    pauseWorkflow,
+    resumeWorkflow,
+    recoverTask,
+    isAgentExecuting
+  };
 }

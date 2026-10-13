@@ -119,7 +119,8 @@ export class ComparisonConsensusService {
       const hasStructure = text.includes('\n') || text.includes('- ') || text.includes('1.');
       const instructionAdherenceScore = isTooShort ? 0.3 : hasStructure ? 0.9 : 0.7;
 
-      // Evidence check
+      // Evidence check: Verify citation format alignment against provided active sources.
+      // Important: Having a valid citation ID verifies format alignment with active documents, NOT independent factual truth.
       const citedIds = [...text.matchAll(/\[cite:([A-Za-z0-9_-]+)\]/g)].map(m => m[1]);
       let verifiedCount = 0;
       let unverifiedCount = 0;
@@ -128,22 +129,33 @@ export class ComparisonConsensusService {
         else unverifiedCount++;
       }
 
-      const evidenceSupportScore = citedIds.length > 0
-        ? Math.max(0.2, (verifiedCount / citedIds.length))
-        : (sources.length > 0 ? 0.5 : 0.8);
+      // If no sources exist at all, evidenceSupportScore is strictly 0.0 (no factual support score granted)
+      const evidenceSupportScore = sources.length === 0
+        ? 0.0
+        : citedIds.length > 0
+          ? Math.min(1.0, verifiedCount / citedIds.length)
+          : 0.0;
 
-      const overallScore = Number(
-        (relevanceScore * 0.35 + instructionAdherenceScore * 0.35 + evidenceSupportScore * 0.3).toFixed(2)
-      );
+      // When sources are present, evidence weight applies. When sources are absent, score is based purely on relevance & instruction adherence.
+      const overallScore = sources.length > 0
+        ? Number((relevanceScore * 0.4 + instructionAdherenceScore * 0.35 + evidenceSupportScore * 0.25).toFixed(2))
+        : Number((relevanceScore * 0.5 + instructionAdherenceScore * 0.5).toFixed(2));
 
       const strengths: string[] = [];
       const caveats: string[] = [];
 
       if (relevanceScore >= 0.8) strengths.push('Sangat selaras dengan pokok pertanyaan');
       if (hasStructure) strengths.push('Struktur penjelasan runtut dan metodologis');
-      if (verifiedCount > 0) strengths.push(`${verifiedCount} klaim didukung rujukan dokumen aktif`);
+      if (sources.length > 0 && verifiedCount > 0) {
+        strengths.push(`${verifiedCount} sitasi cocok dengan ID dokumen referensi (format terverifikasi)`);
+      }
 
-      if (unverifiedCount > 0) caveats.push(`${unverifiedCount} sitasi tidak terverifikasi dalam dokumen`);
+      if (unverifiedCount > 0) {
+        caveats.push(`${unverifiedCount} sitasi tidak cocok dengan dokumen aktif`);
+      }
+      if (sources.length === 0 && citedIds.length > 0) {
+        caveats.push('Sitasi dicantumkan tetapi tidak ada dokumen sumber aktif untuk memvalidasi');
+      }
       if (isTooShort) caveats.push('Jawaban terlalu ringkas untuk pertanyaan ini');
 
       return {
@@ -233,7 +245,7 @@ export class ComparisonConsensusService {
         supportedClaimsCount,
         unverifiedClaimsCount,
         unsupportedClaimsCount: 0,
-        disclaimer: 'Peringatan: Kesepakatan antar-model AI bukan merupakan bukti validitas fakta independen. Selalu rujuk naskah dokumen primer.'
+        disclaimer: 'Peringatan: Kecocokan ID sitasi atau kesepakatan antar-model AI hanya memverifikasi keselarasan format dengan dokumen referensi aktif, bukan merupakan bukti validitas kebenaran faktual secara independen. Selalu rujuk naskah dokumen primer.'
       },
       synthesisRecommendation: bestCandidate ? {
         suggestedBaseModelId: bestCandidate.modelId,

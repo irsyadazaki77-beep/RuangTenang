@@ -18,6 +18,8 @@ export interface RequestMetric {
   routingMode?: 'manual' | 'auto';
   routeReason?: string;
   estimatedCostUsd?: number;
+  actualCostUsd?: number | null;
+  pricingStatus?: 'verified' | 'estimated' | 'unknown';
   actualInputTokens?: number;
   actualOutputTokens?: number;
   isUsageEstimated?: boolean;
@@ -31,6 +33,7 @@ export interface MetricsSummary {
   totalOutputTokens: number;
   totalContextSavedTokens: number;
   totalEstimatedCostUsd: number;
+  totalActualCostUsd: number;
   abortCount: number;
   fallbackCount: number;
   recentMetricsCount: number;
@@ -54,6 +57,8 @@ export const aiMetricsService = {
     const fullMetric: RequestMetric = {
       ...metric,
       estimatedCostUsd: metric.estimatedCostUsd ?? costInfo.estimatedCostUsd,
+      actualCostUsd: metric.actualCostUsd !== undefined ? metric.actualCostUsd : costInfo.actualCostUsd,
+      pricingStatus: metric.pricingStatus ?? costInfo.pricingStatus,
       isUsageEstimated: metric.actualInputTokens == null,
       timestamp: Date.now()
     };
@@ -91,6 +96,7 @@ export const aiMetricsService = {
         totalOutputTokens: 0,
         totalContextSavedTokens: 0,
         totalEstimatedCostUsd: 0,
+        totalActualCostUsd: 0,
         abortCount: 0,
         fallbackCount: 0,
         recentMetricsCount: 0
@@ -103,6 +109,7 @@ export const aiMetricsService = {
     let totalOutputTokens = 0;
     let totalContextSaved = 0;
     let totalCost = 0;
+    let totalActualCost = 0;
     let abortCount = 0;
     let fallbackCount = 0;
 
@@ -113,6 +120,7 @@ export const aiMetricsService = {
       totalOutputTokens += m.actualOutputTokens ?? m.estimatedOutputTokens;
       totalContextSaved += m.contextSavedTokens;
       totalCost += m.estimatedCostUsd || 0;
+      if (m.actualCostUsd != null) totalActualCost += m.actualCostUsd;
       if (m.aborted) abortCount++;
       if (m.isFallback) fallbackCount++;
     }
@@ -127,6 +135,7 @@ export const aiMetricsService = {
       totalOutputTokens,
       totalContextSavedTokens: totalContextSaved,
       totalEstimatedCostUsd: Number(totalCost.toFixed(6)),
+      totalActualCostUsd: Number(totalActualCost.toFixed(6)),
       abortCount,
       fallbackCount,
       recentMetricsCount: count

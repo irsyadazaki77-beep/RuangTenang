@@ -8,14 +8,24 @@ export interface AgentContextInput {
   userId: string;
   recentResults: AgentToolResult[];
   latestUserFeedback?: string;
+  workspaceMemories?: Array<{ category: string; content: string; provenance?: string | null }>;
 }
 
 export function buildAgentTurnContext(input: AgentContextInput): string {
   const { plan, task } = input;
+  const dependencyTasks = plan.tasks
+    .filter(item => task.dependsOn.includes(item.id) && item.status === 'done' && Boolean(item.output))
+    .map(item => ({
+      title: item.title,
+      type: item.type,
+      outputSummary: (item.output || '').slice(0, 1500),
+      ...(item.outputArtifactId ? { outputArtifactId: item.outputArtifactId } : {})
+    }));
   const approvedPlan = {
     title: plan.title,
     goal: plan.goal,
-    tasks: plan.tasks.map(item => ({ title: item.title, type: item.type, status: item.status }))
+    tasks: plan.tasks.map(item => ({ title: item.title, type: item.type, status: item.status })),
+    completedDependencies: dependencyTasks
   };
   const relevantResults = input.recentResults.slice(-6).map(result => ({
     toolCallId: result.toolCallId,
@@ -30,6 +40,7 @@ export function buildAgentTurnContext(input: AgentContextInput): string {
     selectedWorkspaceFileIds: task.snapshot?.contextSourceIds || [],
     savedArtifactId: task.snapshot?.artifactId || null,
     workspaceInstructions: task.snapshot?.workspaceInstructions || '',
+    workspaceMemories: input.workspaceMemories || [],
     userRevisionFeedback: input.latestUserFeedback || '',
     recentToolResults: relevantResults
   });

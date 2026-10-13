@@ -54,7 +54,31 @@ describe('FASE 13: Multi-Model Comparison & Consensus Service', () => {
     expect(result.evaluations.length).toBe(2);
     expect(result.evaluations[0].verifiedCitationsCount).toBe(1);
     expect(result.evaluations[0].unverifiedCitationsCount).toBe(0);
-    expect(result.evidenceVerificationSummary.disclaimer).toContain('bukan merupakan bukti validitas fakta independen');
+    expect(result.evidenceVerificationSummary.disclaimer).toContain('bukan merupakan bukti validitas kebenaran faktual secara independen');
+  });
+
+  it('assigns 0 evidence support score and notes caveats when citations exist but no active sources are provided', () => {
+    const candidates = [
+      {
+        candidateId: 'gemini-3.8-flash',
+        modelId: 'gemini-3.8-flash',
+        modelName: 'Gemini 3.8 Flash',
+        output: 'Klaim dengan sitasi fiktif [cite:GHOST_SOURCE] tanpa dokumen.',
+        status: 'completed' as const
+      },
+      {
+        candidateId: 'deepseek-chat',
+        modelId: 'deepseek-chat',
+        modelName: 'DeepSeek V3',
+        output: 'Klaim model lain tanpa dokumen sumber aktif.',
+        status: 'completed' as const
+      }
+    ];
+
+    const result = ComparisonConsensusService.analyzeCandidates('Bahas topik bebas', candidates, []);
+    expect(result.status).toBe('evaluated');
+    expect(result.evaluations[0].evidenceSupportScore).toBe(0);
+    expect(result.evaluations[0].caveats.some(c => c.includes('tidak ada dokumen sumber'))).toBe(true);
   });
 
   it('detects disagreements when models express diverging views', () => {
