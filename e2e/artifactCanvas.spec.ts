@@ -12,7 +12,7 @@ for (const viewport of [{ name: 'desktop', width: 1280, height: 900 }, { name: '
     if (await openCanvas.isVisible()) await openCanvas.click();
     else await page.getByRole('button', { name: 'Canvas', exact: true }).click();
     await page.getByRole('button', { name: /Buat Draf Baru/ }).click();
-    await page.locator('[title=\"Edit Dokumen Langsung (Autosave)\"]').click();
+    await page.locator('[title="Edit Dokumen Langsung (Autosave)"]').click();
     await expect(page.getByText('Editor Draf Dokumen')).toBeVisible({ timeout: 15_000 });
     await page.waitForTimeout(500);
     const updateNotice = page.getByRole('button', { name: 'Tutup Notifikasi' });

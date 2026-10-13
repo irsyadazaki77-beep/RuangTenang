@@ -19,12 +19,14 @@ vi.mock('../../components/common/LazyMarkdown', () => ({ LazyMarkdown: () => nul
 import { WorkspaceConversation } from '../../features/workspace/components/WorkspaceConversation';
 
 describe('Workspace conversation rendering', () => {
-  it('keeps completed message rows stable while a streaming bubble changes', () => {
+  it('keeps 500 completed message rows stable while a streaming bubble changes', () => {
     rowRenderSpy.mockClear();
-    const messages: Message[] = [
-      { id: 'user-1', role: 'user', content: 'Question', createdAt: new Date('2026-01-01T00:00:00Z') },
-      { id: 'assistant-1', role: 'assistant', content: 'Completed answer', createdAt: new Date('2026-01-01T00:00:01Z') }
-    ];
+    const messages: Message[] = Array.from({ length: 500 }, (_, index) => ({
+      id: `message-${index}`,
+      role: index % 2 === 0 ? 'user' : 'assistant',
+      content: `Message ${index}`,
+      createdAt: new Date(`2026-01-01T00:${String(Math.floor(index / 60)).padStart(2, '0')}:${String(index % 60).padStart(2, '0')}Z`)
+    }));
     const commonProps = {
       messages,
       isLoading: false,
@@ -38,9 +40,9 @@ describe('Workspace conversation rendering', () => {
     };
     const { rerender } = render(<WorkspaceConversation {...commonProps} activeStreamingMessage={{ id: 'live', role: 'assistant', content: 'First chunk', createdAt: new Date() }} />);
 
-    expect(rowRenderSpy.mock.calls.map(([id]) => id)).toEqual(['user-1', 'assistant-1']);
+    expect(rowRenderSpy).toHaveBeenCalledTimes(500);
     rerender(<WorkspaceConversation {...commonProps} activeStreamingMessage={{ id: 'live', role: 'assistant', content: 'More streamed text', createdAt: new Date() }} />);
 
-    expect(rowRenderSpy).toHaveBeenCalledTimes(2);
+    expect(rowRenderSpy).toHaveBeenCalledTimes(500);
   });
 });

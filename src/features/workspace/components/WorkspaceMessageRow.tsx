@@ -54,7 +54,7 @@ export const WorkspaceMessageRow = React.memo(function WorkspaceMessageRow({
       initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 4 }}
       animate={{ opacity: 1, y: 0 }}
       transition={shouldReduceMotion ? { duration: 0.1 } : { duration: 0.15 }}
-      className={`mx-auto flex w-full max-w-4xl flex-col items-start rounded-lg transition-colors ${isHighlighted ? 'bg-emerald-50/70 ring-1 ring-emerald-300 dark:bg-emerald-950/30 dark:ring-emerald-800' : ''}`}
+      className={`workspace-message-row mx-auto flex w-full max-w-4xl flex-col items-start rounded-lg transition-colors ${isHighlighted ? 'bg-emerald-50/70 ring-1 ring-emerald-300 dark:bg-emerald-950/30 dark:ring-emerald-800' : ''}`}
     >
       {msg.role === 'assistant' && (
         <div className="flex items-center gap-1.5 mb-1 px-1 select-none text-xs text-slate-500 dark:text-slate-400 flex-wrap">

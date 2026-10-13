@@ -91,9 +91,9 @@ export default defineConfig(() => {
               if (/\/node_modules\/docx\//.test(id)) {
                 return 'vendor-docx';
               }
-              if (/\/node_modules\/mermaid\//.test(id)) {
-                return 'vendor-mermaid';
-              }
+              // Leave Mermaid under Rollup's async graph. Forcing it into a manual
+              // vendor chunk also pulled Vite's preload helper into that chunk, so
+              // unrelated lazy routes downloaded Mermaid during Workspace startup.
               if (/\/node_modules\/lucide-react\//.test(id)) {
                 return 'vendor-icons';
               }

@@ -10,6 +10,7 @@ import type { WorkspaceComparisonCandidate, WorkspaceComparisonRun } from '../ty
 import type { FileSourceReference } from '../../../../shared/contracts/files';
 
 const noopOpenSource = (_source: FileSourceReference) => undefined;
+const noop = () => undefined;
 const WorkspaceComparisonPanel = React.lazy(() => import('./WorkspaceComparisonPanel').then(module => ({ default: module.WorkspaceComparisonPanel })));
 
 interface WorkspaceConversationProps {
@@ -71,18 +72,28 @@ export const WorkspaceConversation: React.FC<WorkspaceConversationProps> = React
   onOpenCanvas,
   onSendToCanvas,
   comparisonRun = null,
-  onUseComparisonResponse = () => undefined,
-  onComparisonSendToCanvas = () => undefined,
-  onCompareAgain = () => undefined,
+  onUseComparisonResponse = noop,
+  onComparisonSendToCanvas = noop,
+  onCompareAgain = noop,
   onOpenSource = noopOpenSource,
   scrollToMessageId
 }) => {
   const shouldReduceMotion = useReducedMotion();
   const scrollRafRef = useRef<number | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const isNearBottomRef = useRef(true);
+  const copyTimersRef = useRef(new Map<string, number>());
   const [copiedMessageId, setCopiedMessageId] = React.useState<string | null>(null);
 
-  const hasUserSentMessage = messages.some(m => m.role === 'user') || isStreaming || messages.length > 1;
+  const hasUserSentMessage = useMemo(
+    () => isStreaming || messages.length > 1 || messages.some(message => message.role === 'user'),
+    [isStreaming, messages]
+  );
+
+  useEffect(() => () => {
+    for (const timer of copyTimersRef.current.values()) window.clearTimeout(timer);
+    copyTimersRef.current.clear();
+  }, []);
 
   // Follow new messages only while the reader is already near the bottom.
   useEffect(() => {
@@ -92,12 +103,10 @@ export const WorkspaceConversation: React.FC<WorkspaceConversationProps> = React
     }
 
     scrollRafRef.current = requestAnimationFrame(() => {
-      const end = messagesEndRef.current;
-      const scroller = end?.parentElement;
-      if (!end || !scroller) return;
-      const isNearBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 120;
-      if (!isNearBottom) return;
+      const scroller = scrollContainerRef.current;
+      if (!scroller || !isNearBottomRef.current) return;
       scroller.scrollTo({ top: scroller.scrollHeight, behavior: 'auto' });
+      isNearBottomRef.current = true;
     });
 
     return () => {
@@ -125,14 +134,25 @@ export const WorkspaceConversation: React.FC<WorkspaceConversationProps> = React
     try {
       await navigator.clipboard.writeText(message.content);
       setCopiedMessageId(message.id);
-      window.setTimeout(() => setCopiedMessageId(current => current === message.id ? null : current), 1400);
+      const previousTimer = copyTimersRef.current.get(message.id);
+      if (previousTimer) window.clearTimeout(previousTimer);
+      const timer = window.setTimeout(() => {
+        copyTimersRef.current.delete(message.id);
+        setCopiedMessageId(current => current === message.id ? null : current);
+      }, 1400);
+      copyTimersRef.current.set(message.id, timer);
     } catch {
       setCopiedMessageId(null);
     }
   }, []);
 
-  const lastUserPrompt = useMemo(() => [...messages].reverse().find(message => message.role === 'user')?.content, [messages]);
-  const persistedMessageRows = messages.map(message => (
+  const lastUserPrompt = useMemo(() => {
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      if (messages[index].role === 'user') return messages[index].content;
+    }
+    return undefined;
+  }, [messages]);
+  const persistedMessageRows = useMemo(() => messages.map(message => (
     <WorkspaceMessageRow
       key={message.id}
       message={message}
@@ -147,10 +167,15 @@ export const WorkspaceConversation: React.FC<WorkspaceConversationProps> = React
       onCopyMessage={copyMessage}
       formatMessageTime={formatMessageTime}
     />
-  ));
+  )), [artifacts, copiedMessageId, copyMessage, formatMessageTime, lastUserPrompt, messages, onOpenCanvas, onOpenSource, onRetryMessage, onSendToCanvas, scrollToMessageId]);
+
+  const handleConversationScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
+    const scroller = event.currentTarget;
+    isNearBottomRef.current = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 120;
+  }, []);
 
   return (
-    <div role="log" aria-label="Percakapan RuangKerja" aria-live={isStreaming ? 'off' : 'polite'} className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-3.5 sm:p-5 space-y-4 custom-scrollbar flex flex-col">
+    <div ref={scrollContainerRef} role="log" aria-label="Percakapan RuangKerja" aria-live={isStreaming ? 'off' : 'polite'} onScroll={handleConversationScroll} className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-3.5 sm:p-5 space-y-4 custom-scrollbar flex flex-col">
       {isLoading ? (
         <div role="status" aria-label="Memuat percakapan" className="my-auto w-full max-w-lg mx-auto space-y-3 px-2">
           <div className="h-3 w-28 rounded bg-slate-200 dark:bg-slate-800 animate-pulse" />
@@ -237,7 +262,6 @@ export const WorkspaceConversation: React.FC<WorkspaceConversationProps> = React
         <WorkspaceComparisonPanel run={comparisonRun} onUseResponse={onUseComparisonResponse} onSendToCanvas={onComparisonSendToCanvas} onCompareAgain={onCompareAgain} />
       </React.Suspense>}
 
-      <div ref={messagesEndRef} />
     </div>
   );
 });

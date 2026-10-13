@@ -1,8 +1,9 @@
-import { execFileSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { Client } from 'pg';
+import { assertNoPrismaSchemaDrift } from './prismaDiffStatus';
 
 const root = process.cwd();
 const migrationRoot = path.join(root, 'prisma', 'migrations');
@@ -41,23 +42,37 @@ async function createDatabase(name: string): Promise<string> {
   return databaseUrl(name);
 }
 
-function runPrisma(args: string[], env: NodeJS.ProcessEnv): string {
-  try {
-    return execFileSync(process.execPath, [
-      path.join(root, 'node_modules', 'prisma', 'build', 'index.js'),
-      ...args,
-    ], { cwd: root, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
-  } catch (error) {
-    if (error && typeof error === 'object' && ('stdout' in error || 'stderr' in error)) {
-      const output = [error.stdout, error.stderr]
-        .map((value) => Buffer.isBuffer(value) ? value.toString('utf8') : String(value ?? ''))
-        .filter(Boolean)
-        .join('\n')
-        .trim();
-      if (output) throw new Error(`${error.message}\n${output}`);
-    }
-    throw error;
+interface PrismaCommandResult {
+  status: number | null;
+  stdout: string;
+  stderr: string;
+}
+
+function runPrisma(args: string[], env: NodeJS.ProcessEnv): PrismaCommandResult {
+  const result = spawnSync(process.execPath, [
+    path.join(root, 'node_modules', 'prisma', 'build', 'index.js'),
+    ...args,
+  ], { cwd: root, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+
+  if (result.error) throw result.error;
+  return {
+    status: result.status,
+    stdout: result.stdout || '',
+    stderr: result.stderr || '',
+  };
+}
+
+function prismaOutput(result: PrismaCommandResult): string {
+  return [result.stdout, result.stderr].filter(Boolean).join('\n').trim();
+}
+
+function runPrismaSuccessfully(args: string[], env: NodeJS.ProcessEnv): string {
+  const result = runPrisma(args, env);
+  if (result.status !== 0) {
+    const output = prismaOutput(result);
+    throw new Error(`Prisma ${args.join(' ')} exited with code ${result.status ?? 'unknown'}${output ? `:\n${output}` : '.'}`);
   }
+  return prismaOutput(result);
 }
 
 function migrationWorkspace(upTo: string): string {
@@ -159,14 +174,19 @@ async function assertSchemaAndRelations(url: string) {
 }
 
 async function deploy(url: string, schema = schemaPath) {
-  return runPrisma(['migrate', 'deploy', '--schema', schema], { ...process.env, DATABASE_URL: url });
+  return runPrismaSuccessfully(['migrate', 'deploy', '--schema', schema], { ...process.env, DATABASE_URL: url });
 }
 
 async function checkDrift(url: string) {
-  const diff = runPrisma([
-    'migrate', 'diff', '--from-url', url, '--to-schema-datamodel', schemaPath,
-  ], { ...process.env, DATABASE_URL: url }).trim();
-  if (diff) throw new Error(`Database schema drift detected:\n${diff}`);
+  const args = [
+    'migrate', 'diff', '--from-url', url, '--to-schema-datamodel', schemaPath, '--exit-code',
+  ];
+  const result = runPrisma(args, { ...process.env, DATABASE_URL: url });
+  const output = prismaOutput(result);
+
+  // Prisma migrate diff uses 0 for no changes, 2 for a non-empty diff, and 1 for an error.
+  // Its successful no-drift response still writes "No difference detected." to stdout.
+  assertNoPrismaSchemaDrift(result.status, output);
 }
 
 function assertProviderModelParity() {

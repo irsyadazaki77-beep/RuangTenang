@@ -74,6 +74,24 @@ describe('Workspace Canvas 2.0 UX & Behavior', () => {
     expect(screen.getByText('Riwayat Versi')).toBeInTheDocument();
   });
 
+  it('renders a long raw document gutter as text instead of one element per line', async () => {
+    const longContent = Array.from({ length: 2000 }, (_, index) => `Line ${index + 1}`).join('\n');
+    render(
+      <ArtifactCanvas
+        artifact={{ ...mockArtifact, content: longContent }}
+        onSaveArtifact={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Menu Opsi Lainnya' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Lihat Markdown atau kode' }));
+    expect(await screen.findByText('2000 baris')).toBeInTheDocument();
+    const gutter = document.querySelector('pre[aria-hidden="true"]');
+    expect(gutter).toBeInTheDocument();
+    expect(gutter).toHaveTextContent(/^1\s+2[\s\S]*2000$/);
+    expect(gutter?.childElementCount).toBe(0);
+  });
+
   it('restores an unsaved document draft after closing and reopening Canvas', async () => {
     render(<CanvasDraftHarness />);
     fireEvent.click(await screen.findByTitle('Edit Dokumen Langsung (Autosave)'));

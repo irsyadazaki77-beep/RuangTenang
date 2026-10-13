@@ -1,11 +1,10 @@
-import React, { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback, useDeferredValue } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { modalBackdropVariants, modalPanelVariants } from '../../../lib/motionTokens';
 import { 
   Code2, 
   FileText, 
   Quote, 
-  ListTree, 
   Copy, 
   Check, 
   Download, 
@@ -19,9 +18,7 @@ import {
   GitCompare,
   CopyPlus,
   Trash2,
-  AlertTriangle,
-  BarChart3,
-  Table2
+  AlertTriangle
 } from 'lucide-react';
 import { WorkspaceArtifact, CitationStyle, ArtifactVersionRecord, ArtifactPatch, WorkspaceArtifactSelection } from '../types';
 import { applyArtifactPatch } from '../utils/artifactPatch';
@@ -84,7 +81,7 @@ export interface ArtifactCanvasProps {
 export type CanvasViewMode = 'preview' | 'edit' | 'raw' | 'diff';
 export type SaveState = 'idle' | 'saving' | 'saved' | 'unsaved' | 'failed' | 'local';
 
-export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
+export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
   artifact,
   initialDraftContent,
   scrollStorageKey,
@@ -524,14 +521,26 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
            trimmed.startsWith('mindmap');
   }, [artifact.type, artifact.language, editableContent]);
 
-  const wordCount = useMemo(() => {
-    if (!editableContent) return 0;
-    return editableContent.trim().split(/\s+/).filter(Boolean).length;
-  }, [editableContent]);
+  const deferredContent = useDeferredValue(editableContent);
+  const { wordCount, lineCount } = useMemo(() => {
+    let wordCount = 0;
+    let previousWasWhitespace = true;
+    let lineCount = 1;
+    const whitespacePattern = /\s/u;
+    for (let index = 0; index < deferredContent.length; index += 1) {
+      const character = deferredContent[index];
+      if (character === '\n') lineCount += 1;
+      const isWhitespace = whitespacePattern.test(character);
+      if (!isWhitespace && previousWasWhitespace) wordCount += 1;
+      previousWasWhitespace = isWhitespace;
+    }
+    return { wordCount, lineCount };
+  }, [deferredContent]);
 
-  const readingTime = useMemo(() => {
-    return Math.max(1, Math.ceil(wordCount / 200));
-  }, [wordCount]);
+  const lineNumbers = useMemo(() => viewMode === 'raw'
+    ? Array.from({ length: lineCount }, (_, index) => String(index + 1)).join('\n')
+    : '', [lineCount, viewMode]);
+  const readingTime = Math.max(1, Math.ceil(wordCount / 200));
 
   const handleCopy = async () => {
     try {
@@ -959,7 +968,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
                 </span>
               </div>
               <div className="flex items-center gap-3">
-                <span>{editableContent.split('\n').length} baris</span>
+                <span>{lineCount} baris</span>
                 <button
                   type="button"
                   onClick={handleCopy}
@@ -973,11 +982,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
             </div>
 
             <div className="p-4 sm:p-6 overflow-x-auto text-xs sm:text-sm font-mono leading-relaxed select-text flex">
-              <div className="pr-4 select-none text-slate-600 dark:text-slate-500 text-right font-mono text-xs leading-relaxed border-r border-slate-800 mr-4 shrink-0">
-                {editableContent.split('\n').map((_, i) => (
-                  <div key={i}>{i + 1}</div>
-                ))}
-              </div>
+              <pre aria-hidden="true" className="m-0 pr-4 select-none text-slate-600 dark:text-slate-500 text-right font-mono text-xs leading-relaxed border-r border-slate-800 mr-4 shrink-0">{lineNumbers}</pre>
               <pre className="flex-1 custom-scrollbar text-slate-100 overflow-x-auto">
                 <code>{editableContent}</code>
               </pre>
@@ -1032,7 +1037,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
                   <div className="flex items-center gap-3">
                     <span>{artifact.language || 'code'}</span>
                     <span>•</span>
-                    <span>{editableContent.split('\n').length} baris</span>
+                    <span>{lineCount} baris</span>
                   </div>
                 </div>
                 <div className="p-4 sm:p-6 overflow-x-auto text-xs sm:text-sm font-mono leading-relaxed select-text">
@@ -1178,7 +1183,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
             <>
               <span className="font-mono">{artifact.language || 'code'}</span>
               <span>•</span>
-              <span>{editableContent.split('\n').length} baris</span>
+              <span>{lineCount} baris</span>
               {viewMode === 'preview' && (
                 <div className="flex items-center gap-1.5 ml-2">
                   <button
@@ -1322,4 +1327,4 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
       )}
     </div>
   );
-};
+});
