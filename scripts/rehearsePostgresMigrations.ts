@@ -42,10 +42,22 @@ async function createDatabase(name: string): Promise<string> {
 }
 
 function runPrisma(args: string[], env: NodeJS.ProcessEnv): string {
-  return execFileSync(process.execPath, [
-    path.join(root, 'node_modules', 'prisma', 'build', 'index.js'),
-    ...args,
-  ], { cwd: root, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  try {
+    return execFileSync(process.execPath, [
+      path.join(root, 'node_modules', 'prisma', 'build', 'index.js'),
+      ...args,
+    ], { cwd: root, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  } catch (error) {
+    if (error && typeof error === 'object' && ('stdout' in error || 'stderr' in error)) {
+      const output = [error.stdout, error.stderr]
+        .map((value) => Buffer.isBuffer(value) ? value.toString('utf8') : String(value ?? ''))
+        .filter(Boolean)
+        .join('\n')
+        .trim();
+      if (output) throw new Error(`${error.message}\n${output}`);
+    }
+    throw error;
+  }
 }
 
 function migrationWorkspace(upTo: string): string {
@@ -97,7 +109,7 @@ async function assertSchemaAndRelations(url: string) {
   try {
     const models = [
       'users', 'chats', 'chatMessages', 'messageBookmarks', 'attachments', 'documentChunks', 'selfCareTasks', 'artifacts',
-      'artifactVersions', 'workspaces', 'workspaceTasks', 'workspacePlans', 'workspacePlanTasks', 'workspaceTaskDependencies', 'workspaceTaskExecutions', 'appointments', 'appointmentSlot',
+      'artifactVersions', 'workspaces', 'workspaceTasks', 'workspacePlans', 'workspacePlanTasks', 'workspaceTaskDependencies', 'workspaceTaskExecutions', 'workspaceMemories', 'appointments', 'appointmentSlot',
       'screenings', 'clinicalSoapNotes', 'userSession', 'loginEvent', 'distributedState', 'distributedLock',
     ] as const;
     for (const model of models) await prisma[model].count();
@@ -110,6 +122,7 @@ async function assertSchemaAndRelations(url: string) {
       id: 'cascade-chat', userId: 'cascade-user', title: 'Cascade Chat', workspaceMode: 'RUANG_KERJA',
       workspace: { create: {
         tasks: { create: { id: 'cascade-task', title: 'Cascade Task' } },
+        memories: { create: { id: 'cascade-memory', userId: 'cascade-user', category: 'decision', content: 'Cascade memory item' } },
         plans: { create: { id: 'cascade-plan', userId: 'cascade-user', titleEncrypted: 'encrypted-title', goalEncrypted: 'encrypted-goal', tasks: { create: [
           { id: 'cascade-agent-task', titleEncrypted: 'encrypted-task-a', position: 0 },
           { id: 'cascade-agent-task-b', titleEncrypted: 'encrypted-task-b', position: 1 },
@@ -118,7 +131,8 @@ async function assertSchemaAndRelations(url: string) {
     } });
     const workspaceBeforeDelete = await prisma.workspaces.count({ where: { chatId: 'cascade-chat' } });
     const taskBeforeDelete = await prisma.workspaceTasks.count({ where: { id: 'cascade-task' } });
-    if (workspaceBeforeDelete !== 1 || taskBeforeDelete !== 1) throw new Error('Workspace relation chain was not created.');
+    const memoryBeforeDelete = await prisma.workspaceMemories.count({ where: { id: 'cascade-memory' } });
+    if (workspaceBeforeDelete !== 1 || taskBeforeDelete !== 1 || memoryBeforeDelete !== 1) throw new Error('Workspace relation chain was not created.');
     await prisma.workspaceTaskDependencies.create({ data: { taskId: 'cascade-agent-task-b', dependsOnTaskId: 'cascade-agent-task' } });
     await prisma.workspaceTaskExecutions.create({ data: {
       id: 'cascade-execution', planTaskId: 'cascade-agent-task', workspaceId: 'cascade-chat', userId: 'cascade-user',
@@ -128,6 +142,7 @@ async function assertSchemaAndRelations(url: string) {
     await prisma.chats.delete({ where: { id: 'cascade-chat' } });
     if (await prisma.workspaces.count({ where: { chatId: 'cascade-chat' } }) !== 0) throw new Error('Deleting a chat did not cascade to Workspaces.');
     if (await prisma.workspaceTasks.count({ where: { id: 'cascade-task' } }) !== 0) throw new Error('Deleting a chat did not cascade to WorkspaceTasks.');
+    if (await prisma.workspaceMemories.count({ where: { id: 'cascade-memory' } }) !== 0) throw new Error('Deleting a chat did not cascade to WorkspaceMemories.');
     if (await prisma.workspacePlans.count({ where: { id: 'cascade-plan' } }) !== 0) throw new Error('Deleting a chat did not cascade to WorkspacePlans.');
     if (await prisma.workspacePlanTasks.count({ where: { id: 'cascade-agent-task' } }) !== 0 || await prisma.workspaceTaskExecutions.count({ where: { id: 'cascade-execution' } }) !== 0) throw new Error('Deleting a chat did not cascade through agent executions.');
 
@@ -148,9 +163,10 @@ async function deploy(url: string, schema = schemaPath) {
 }
 
 async function checkDrift(url: string) {
-  runPrisma([
-    'migrate', 'diff', '--from-url', url, '--to-schema-datamodel', schemaPath, '--exit-code',
-  ], { ...process.env, DATABASE_URL: url });
+  const diff = runPrisma([
+    'migrate', 'diff', '--from-url', url, '--to-schema-datamodel', schemaPath,
+  ], { ...process.env, DATABASE_URL: url }).trim();
+  if (diff) throw new Error(`Database schema drift detected:\n${diff}`);
 }
 
 function assertProviderModelParity() {

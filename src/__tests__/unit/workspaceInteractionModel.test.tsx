@@ -30,8 +30,13 @@ describe('Workspace interaction model', () => {
     expect(withPlan.selectedSource).toEqual(source);
     expect(workspaceTabForInspector(withPlan.inspector)).toBe('context');
 
-    const withFilePreview = workspaceViewReducer(withPlan, { type: 'preview-attachment', attachmentId: 'attachment-2' });
-    expect(withFilePreview.inspector).toBe('plan');
+    const withMemory = workspaceViewReducer(withPlan, { type: 'open-inspector', inspector: 'memory' });
+    expect(withMemory.inspector).toBe('memory');
+    expect(withMemory.selectedSource).toEqual(source);
+    expect(workspaceTabForInspector(withMemory.inspector)).toBe('context');
+
+    const withFilePreview = workspaceViewReducer(withMemory, { type: 'preview-attachment', attachmentId: 'attachment-2' });
+    expect(withFilePreview.inspector).toBe('memory');
     expect(withFilePreview.previewAttachmentId).toBe('attachment-2');
     expect(workspaceViewReducer(withFilePreview, { type: 'reset-workspace-view' })).toEqual(initialWorkspaceViewState);
   });

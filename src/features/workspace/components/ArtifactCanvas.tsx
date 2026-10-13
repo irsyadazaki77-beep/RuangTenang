@@ -9,30 +9,21 @@ import {
   Copy, 
   Check, 
   Download, 
-  Maximize2, 
-  Minimize2, 
-  X, 
   Play, 
-  Edit3, 
-  Eye, 
   Sparkles, 
   BookMarked,
   Workflow,
   History,
-  RotateCcw,
-  Clock,
   Loader2,
   Pencil,
   GitCompare,
-  Save,
-  MoreHorizontal,
   CopyPlus,
   Trash2,
   AlertTriangle,
   BarChart3,
   Table2
 } from 'lucide-react';
-import { WorkspaceArtifact, ArtifactType, CitationStyle, ArtifactVersionRecord, ArtifactPatch, WorkspaceArtifactSelection } from '../types';
+import { WorkspaceArtifact, CitationStyle, ArtifactVersionRecord, ArtifactPatch, WorkspaceArtifactSelection } from '../types';
 import { applyArtifactPatch } from '../utils/artifactPatch';
 import { WorkspaceToolSelector } from './WorkspaceToolSelector';
 import { WorkspaceToolRegistry } from '../tools/toolRegistry';
@@ -40,49 +31,14 @@ import { WorkspaceToolDefinition } from '../tools/toolTypes';
 import { LazyMarkdown } from '../../../components/common/LazyMarkdown';
 import { useToast } from '../../../components/Toast';
 import { useArtifactAutosave } from '../hooks/useArtifactAutosave';
-
-interface SavedChartSpec {
-  type: 'bar';
-  title: string;
-  xColumn: string;
-  yColumn: string;
-  aggregation: string;
-  groupBy: string;
-  datasetVersion: string;
-  provenance: { filename: string; sheetName: string; sourceFileId: string };
-  rows: Array<Record<string, unknown>>;
-}
-
-interface SavedTableSpec {
-  type: 'table';
-  title: string;
-  columns: string[];
-  rows: Array<Record<string, unknown>>;
-  sourceVersion: string;
-  sourceFileId: string;
-  filename: string;
-  sheetName: string;
-  transformations: unknown[];
-}
-
-const ChartArtifactPreview: React.FC<{ chart: SavedChartSpec }> = ({ chart }) => {
-  const points = chart.rows.map(row => ({ label: String(row[chart.xColumn] ?? '(kosong)'), value: Number(row[chart.yColumn]) || 0 }));
-  const maxValue = Math.max(1, ...points.map(point => Math.abs(point.value)));
-  return <section className="mx-auto my-4 max-w-4xl space-y-4 rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900" aria-label={chart.title}>
-    <header><h2 className="text-base font-semibold text-slate-900 dark:text-white">{chart.title}</h2><p className="mt-1 text-[11px] text-slate-500">Bar chart · {chart.aggregation} · X: {chart.xColumn} · Y: {chart.yColumn}</p><p className="text-[10px] text-slate-400">{chart.provenance.filename} · {chart.provenance.sheetName} · versi {chart.datasetVersion.slice(0, 12)}</p></header>
-    <div role="img" aria-label={`Grafik batang ${chart.title}. Tabel data di bawah`} className="space-y-2 rounded-xl border border-slate-100 p-4 dark:border-slate-800">{points.map((point, index) => <div key={`${point.label}-${index}`} className="grid grid-cols-[minmax(5rem,10rem)_1fr_auto] items-center gap-3 text-xs"><span className="truncate text-slate-600 dark:text-slate-300">{point.label}</span><span className="h-4 overflow-hidden rounded bg-slate-100 dark:bg-slate-800"><span className="block h-full rounded bg-emerald-600" style={{ width: `${Math.min(100, Math.abs(point.value) / maxValue * 100)}%` }} /></span><span className="tabular-nums text-slate-600 dark:text-slate-300">{point.value.toLocaleString()}</span></div>)}</div>
-    <div className="overflow-auto rounded-xl border border-slate-200 dark:border-slate-800"><table className="min-w-full text-left text-xs"><caption className="sr-only">Tabel data grafik {chart.title}</caption><thead className="bg-slate-100 dark:bg-slate-800"><tr><th scope="col" className="px-3 py-2">{chart.xColumn}</th><th scope="col" className="px-3 py-2">{chart.yColumn}</th></tr></thead><tbody>{points.map((point, index) => <tr key={`${point.label}-${index}`} className="border-t border-slate-100 dark:border-slate-800"><td className="px-3 py-2">{point.label}</td><td className="px-3 py-2 tabular-nums">{point.value}</td></tr>)}</tbody></table></div>
-  </section>;
-};
-
-const TableArtifactPreview: React.FC<{ table: SavedTableSpec }> = ({ table }) => <section className="mx-auto my-4 max-w-5xl space-y-3 rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900" aria-label={table.title}>
-  <header><h2 className="text-base font-semibold text-slate-900 dark:text-white">{table.title}</h2><p className="mt-1 text-[11px] text-slate-500">Dataset turunan · {table.rows.length.toLocaleString()} baris · {table.columns.length} kolom</p><p className="text-[10px] text-slate-400">Sumber: {table.filename} · {table.sheetName} · versi {table.sourceVersion.slice(0, 12)}</p></header>
-  <div className="max-h-[60vh] overflow-auto rounded-xl border border-slate-200 dark:border-slate-800"><table className="min-w-full text-left text-xs"><caption className="sr-only">Preview dataset turunan</caption><thead className="sticky top-0 bg-slate-100 dark:bg-slate-800"><tr>{table.columns.map(column => <th key={column} scope="col" className="whitespace-nowrap px-3 py-2 font-semibold">{column}</th>)}</tr></thead><tbody>{table.rows.slice(0, 200).map((row, index) => <tr key={index} className="border-t border-slate-100 dark:border-slate-800">{table.columns.map(column => <td key={column} className="max-w-64 truncate px-3 py-2">{String(row[column] ?? '')}</td>)}</tr>)}</tbody></table></div>
-  {table.rows.length > 200 && <p className="text-[10px] text-slate-500">Menampilkan 200 baris pertama. Unduh JSON untuk seluruh dataset.</p>}
-</section>;
+import { ArtifactCanvasToolbar } from './ArtifactCanvasToolbar';
+import { ArtifactCanvasEditor } from './ArtifactCanvasEditor';
+import { ArtifactVersionHistoryModal } from './ArtifactVersionHistoryModal';
+import { ArtifactExportHost } from './ArtifactExportHost';
+import { ChartArtifactPreview, TableArtifactPreview } from './ArtifactDataPreview';
+import type { SavedChartSpec, SavedTableSpec } from './ArtifactDataPreview';
 
 const MermaidRenderer = React.lazy(() => import('./MermaidRenderer').then(m => ({ default: m.MermaidRenderer })));
-const ExportModal = React.lazy(() => import('./ExportModal').then(m => ({ default: m.ExportModal })));
 const ArtifactDiffViewer = React.lazy(() => import('./ArtifactDiffViewer').then(m => ({ default: m.ArtifactDiffViewer })));
 const CitationSearchModal = React.lazy(() => import('./CitationSearchModal').then(m => ({ default: m.CitationSearchModal })));
 import { CodeExecutionResultPanel } from './CodeExecutionResultPanel';
@@ -199,7 +155,6 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
   const [isExportingDocx, setIsExportingDocx] = useState(false);
   const [showVersionHistoryModal, setShowVersionHistoryModal] = useState(false);
   const [previewingVersion, setPreviewingVersion] = useState<ArtifactVersionRecord | null>(null);
-  const [isRollingBack, setIsRollingBack] = useState(false);
   const [isSavingTitle, setIsSavingTitle] = useState(false);
   const [titleSaveError, setTitleSaveError] = useState('');
   const [isDuplicating, setIsDuplicating] = useState(false);
@@ -431,6 +386,16 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
     onDirty: markDraftDirty,
     save: performSave
   });
+
+  useEffect(() => {
+    if (!isDirty && saveStatus !== 'saving' && saveStatus !== 'failed') return;
+    const warnBeforeLeaving = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warnBeforeLeaving);
+    return () => window.removeEventListener('beforeunload', warnBeforeLeaving);
+  }, [isDirty, saveStatus]);
 
   // Manual save trigger (e.g. Save button or Ctrl/Cmd + S)
   const handleManualSave = useCallback(() => {
@@ -825,18 +790,6 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
     }
   }, [editableContent, artifact.language, isStreaming, handleRunStaticCheck]);
 
-  const getArtifactIcon = (type: ArtifactType) => {
-    switch (type) {
-      case 'CODE': return <Code2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />;
-      case 'DOCUMENT': return <FileText className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />;
-      case 'CITATION': return <Quote className="w-4 h-4 text-amber-500" />;
-      case 'OUTLINE': return <ListTree className="w-4 h-4 text-teal-500" />;
-      case 'CHART': return <BarChart3 className="w-4 h-4 text-sky-600 dark:text-sky-400" />;
-      case 'TABLE': return <Table2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />;
-      default: return <Sparkles className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />;
-    }
-  };
-
   const quickRevisions = useMemo(() => {
     // Ambil tool yang relevan dengan tipe artefak saat ini dari WorkspaceToolRegistry
     const tools = WorkspaceToolRegistry.getToolsForArtifact(artifact.type);
@@ -895,420 +848,32 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
         isExpanded ? 'fixed inset-0 z-50 bg-white dark:bg-slate-950' : 'relative w-full'
       }`}
     >
-      {/* 1. CANVAS HEADER (CLEAN HIERARCHY: Identity & Save State -> View Modes -> Primary Action -> Secondary) */}
-      <header className="h-12 px-3 sm:px-4 py-1.5 border-b border-slate-200/70 dark:border-slate-800/80 bg-white dark:bg-secondary-900 flex items-center justify-between gap-2 shrink-0 z-20">
-        
-        {/* Sisi Kiri: Ikon Tipe + Judul (Editable) + Badge Versi + Indikator Save State */}
-        <div className="flex items-center gap-2 min-w-0 flex-1 max-w-[36%] 2xl:max-w-[40%]">
-          <div 
-            className="text-slate-500 dark:text-slate-400 shrink-0"
-            title={`Tipe Dokumen: ${artifact.type}`}
-          >
-            {getArtifactIcon(artifact.type)}
-          </div>
-
-          <div className="min-w-0 flex items-center gap-1.5 flex-1">
-            {isEditingTitle ? (
-              <div className="min-w-0">
-              <input
-                ref={titleInputRef}
-                type="text"
-                value={titleInput}
-                onChange={(e) => setTitleInput(e.target.value)}
-                onBlur={() => { if (!isSavingTitle) void handleSaveTitle(); }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') { e.preventDefault(); void handleSaveTitle(); }
-                  if (e.key === 'Escape') {
-                    setTitleInput(artifact.title || '');
-                    setIsEditingTitle(false);
-                  }
-                }}
-                disabled={isSavingTitle}
-                autoFocus
-                className="h-7 text-xs sm:text-sm font-semibold px-2 py-0 bg-white dark:bg-slate-900 border border-emerald-500 rounded-lg text-slate-900 dark:text-slate-100 focus:outline-none ring-2 ring-emerald-500/20 w-full max-w-45"
-              />
-              {isSavingTitle && <span className="ml-1 text-[10px] text-amber-600">Menyimpan…</span>}
-              {titleSaveError && <span role="alert" className="ml-1 text-[10px] text-rose-600">{titleSaveError}</span>}
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setIsEditingTitle(true)}
-                className="group flex items-center gap-1.5 min-w-0 text-left cursor-pointer truncate"
-                title="Klik untuk mengubah judul dokumen (Enter untuk simpan, Esc batal)"
-              >
-                <h2 className="font-semibold text-xs sm:text-sm text-slate-900 dark:text-slate-100 truncate leading-tight group-hover:text-emerald-700 dark:group-hover:text-emerald-400 transition-colors">
-                  {artifact.title || 'Artefak RuangKerja'}
-                </h2>
-                <Pencil className="w-3 h-3 text-slate-400 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 opacity-60 group-hover:opacity-100 transition-opacity shrink-0" />
-              </button>
-            )}
-
-            {/* Save Status Badge */}
-            <div className="hidden lg:flex items-center ml-1 shrink-0">
-              {saveStatus === 'saving' ? (
-                <span className="flex items-center gap-1 text-[11px] font-medium text-amber-600 dark:text-amber-400 animate-pulse">
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                  <span>Menyimpan...</span>
-                </span>
-              ) : saveStatus === 'unsaved' ? (
-                <span className="flex items-center gap-1 text-[11px] font-medium text-amber-600 dark:text-amber-500">
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                  <span>Belum disimpan</span>
-                </span>
-              ) : saveStatus === 'failed' ? (
-                <span className="flex items-center gap-1 text-[11px] font-semibold text-rose-600 dark:text-rose-400">
-                  <AlertTriangle className="w-3 h-3" />
-                  <span>{saveFailureMessage}</span>
-                  <button type="button" onClick={handleManualSave} className="ml-1 underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500">Coba lagi</button>
-                </span>
-              ) : (
-                <span className="flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                  <span>{saveStatus === 'local' ? 'Draf lokal' : 'Tersimpan'}</span>
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Sisi Tengah: View Modes [ Pratinjau | Edit | Kode | Diff ] */}
-        <div className="h-8 p-0.5 bg-slate-100 dark:bg-slate-800/90 rounded-xl flex items-center border border-slate-200/80 dark:border-slate-700/80 shrink-0 relative">
-          <button
-            type="button"
-            onClick={() => setViewMode('preview')}
-            className={`h-full px-2.5 sm:px-3 rounded-lg text-[11px] transition-colors cursor-pointer flex items-center gap-1.5 relative z-10 ${
-              viewMode === 'preview'
-                ? 'text-emerald-800 dark:text-emerald-300 font-semibold'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 font-medium'
-            }`}
-            title="Pratinjau Dokumen Rapi (Paper Sheet View)"
-          >
-            {viewMode === 'preview' && (
-              <motion.div
-                layoutId="canvasViewModePill"
-                className="absolute inset-0 bg-white dark:bg-slate-900 rounded-lg shadow-2xs -z-10 ring-1 ring-black/5 dark:ring-white/10"
-                transition={{ type: 'spring', stiffness: 450, damping: 32 }}
-              />
-            )}
-            <Eye className="w-3 h-3" />
-            <span>Pratinjau</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setViewMode('edit');
-              setTimeout(() => editorRef.current?.focus(), 50);
-            }}
-            className={`h-full px-2.5 sm:px-3 rounded-lg text-[11px] transition-colors cursor-pointer flex items-center gap-1.5 relative z-10 ${
-              viewMode === 'edit'
-                ? 'text-emerald-800 dark:text-emerald-300 font-semibold'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 font-medium'
-            }`}
-            title="Edit Dokumen Langsung (Autosave)"
-          >
-            {viewMode === 'edit' && (
-              <motion.div
-                layoutId="canvasViewModePill"
-                className="absolute inset-0 bg-white dark:bg-slate-900 rounded-lg shadow-2xs -z-10 ring-1 ring-black/5 dark:ring-white/10"
-                transition={{ type: 'spring', stiffness: 450, damping: 32 }}
-              />
-            )}
-            <Edit3 className="w-3 h-3" />
-            <span>Edit</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setViewMode('raw')}
-            className={`hidden sm:flex h-full px-2.5 sm:px-3 rounded-lg text-[11px] transition-colors cursor-pointer items-center gap-1.5 relative z-10 ${
-              viewMode === 'raw'
-                ? 'text-emerald-800 dark:text-emerald-300 font-semibold'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 font-medium'
-            }`}
-            title="Tampilan Mentah Kode / Markdown Sumber"
-          >
-            {viewMode === 'raw' && (
-              <motion.div
-                layoutId="canvasViewModePill"
-                className="absolute inset-0 bg-white dark:bg-slate-900 rounded-lg shadow-2xs -z-10 ring-1 ring-black/5 dark:ring-white/10"
-                transition={{ type: 'spring', stiffness: 450, damping: 32 }}
-              />
-            )}
-            <Code2 className="w-3 h-3" />
-            <span className="hidden 2xl:inline">Kode</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setViewMode('diff')}
-            className={`hidden sm:flex h-full px-2.5 sm:px-3 rounded-lg text-[11px] transition-colors cursor-pointer items-center gap-1.5 relative z-10 ${
-              viewMode === 'diff'
-                ? 'text-emerald-800 dark:text-emerald-300 font-semibold'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 font-medium'
-            }`}
-            title="Bandingkan Perubahan Versi (Visual Diff)"
-          >
-            {viewMode === 'diff' && (
-              <motion.div
-                layoutId="canvasViewModePill"
-                className="absolute inset-0 bg-white dark:bg-slate-900 rounded-lg shadow-2xs -z-10 ring-1 ring-black/5 dark:ring-white/10"
-                transition={{ type: 'spring', stiffness: 450, damping: 32 }}
-              />
-            )}
-            <GitCompare className="w-3 h-3" />
-            <span className="hidden 2xl:inline">Diff</span>
-          </button>
-        </div>
-
-        {/* Sisi Kanan: Tools + Primary Action (Simpan / Edit) + Fullscreen + More Menu */}
-        <div className="flex items-center gap-1.5 shrink-0">
-          {/* Primary Action Button: Context-Aware */}
-          {viewMode === 'edit' && isDirty ? (
-            <button
-              type="button"
-              onClick={handleManualSave}
-              disabled={saveStatus === 'saving'}
-              className="h-8 px-3 rounded-xl text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs disabled:opacity-50"
-              title="Simpan Perubahan Dokumen (Ctrl+S)"
-            >
-              <Save className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Simpan</span>
-            </button>
-          ) : viewMode === 'preview' ? (
-            <button
-              type="button"
-              onClick={() => {
-                setViewMode('edit');
-                setTimeout(() => editorRef.current?.focus(), 50);
-              }}
-              className="h-8 px-3 rounded-xl text-xs font-semibold text-emerald-800 dark:text-emerald-300 bg-emerald-50 hover:bg-emerald-100/90 dark:bg-emerald-950/70 dark:hover:bg-emerald-900/80 border border-emerald-200/80 dark:border-emerald-800/80 transition-colors flex items-center gap-1.5 cursor-pointer shadow-3xs"
-              title="Mulai Edit Dokumen Ini"
-            >
-              <Edit3 className="w-3.5 h-3.5" />
-              <span className="hidden 2xl:inline">Edit Dokumen</span>
-            </button>
-          ) : null}
-
-          {/* Fullscreen Toggle */}
-          <button
-            type="button"
-            onClick={toggleExpand}
-            className="h-8 w-8 rounded-xl text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 bg-white dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 hidden sm:flex items-center justify-center transition-colors cursor-pointer shadow-3xs"
-            title={isExpanded ? 'Kembalikan Ukuran Layar' : 'Mode Layar Penuh (Fokus)'}
-            aria-label="Toggle Fullscreen"
-          >
-            {isExpanded ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
-          </button>
-
-          {/* Secondary Actions: More Menu (...) */}
-          <div className="relative" ref={moreMenuRef}>
-            <button
-              type="button"
-              onClick={() => setShowMoreMenu(!showMoreMenu)}
-              className="h-8 px-2 rounded-xl text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center gap-1 cursor-pointer shadow-3xs"
-              title="Opsi & Tindakan Tambahan"
-              aria-label="Menu Opsi Lainnya"
-              aria-expanded={showMoreMenu}
-            >
-              <MoreHorizontal className="w-4 h-4 text-slate-600 dark:text-slate-300" />
-            </button>
-
-            {showMoreMenu && (
-              <div className="absolute right-0 top-full mt-1.5 w-60 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl p-1.5 z-50 animate-scale-up space-y-0.5">
-                <div className="px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Dokumen</div>
-                <button type="button" onClick={() => { setShowMoreMenu(false); setViewMode('raw'); }} className="w-full rounded-xl px-2.5 py-2 text-left text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"><Code2 className="mr-2 inline h-3.5 w-3.5 text-slate-500" />Lihat Markdown atau kode</button>
-                <button type="button" onClick={() => { setShowMoreMenu(false); setViewMode('diff'); }} className="w-full rounded-xl px-2.5 py-2 text-left text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"><GitCompare className="mr-2 inline h-3.5 w-3.5 text-slate-500" />Bandingkan perubahan</button>
-                <div className="relative z-20 px-1.5 py-1"><WorkspaceToolSelector artifactType={artifact.type} hasArtifact={artifact.id !== 'art_welcome'} disabled={isStreaming} onSelectTool={handleExecuteTool} triggerVariant="header" /></div>
-                <div className="border-t border-slate-100 dark:border-slate-800 my-1" />
-                {/* 1. Riwayat Versi */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowMoreMenu(false);
-                    setShowVersionHistoryModal(true);
-                  }}
-                  className="w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/50 hover:text-emerald-700 transition-colors flex items-center justify-between cursor-pointer"
-                >
-                  <span className="flex items-center gap-2">
-                    <History className="w-3.5 h-3.5 text-emerald-600" />
-                    Riwayat Versi
-                  </span>
-                  <span className="text-[10px] font-mono text-slate-400">v{artifact.version || 1}</span>
-                </button>
-
-                {/* 2. Ekspor Dokumen */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowMoreMenu(false);
-                    setShowExportModal(true);
-                  }}
-                  className="w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/50 hover:text-emerald-700 transition-colors flex items-center justify-between cursor-pointer"
-                >
-                  <span className="flex items-center gap-2">
-                    <Download className="w-3.5 h-3.5 text-emerald-600" />
-                    Ekspor dokumen
-                  </span>
-                  <span className="text-[10px] font-mono text-slate-400">Word/PDF</span>
-                </button>
-
-                {/* 3. Salin Seluruh Konten */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowMoreMenu(false);
-                    handleCopy();
-                  }}
-                  className="w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/50 hover:text-emerald-700 transition-colors flex items-center justify-between cursor-pointer"
-                >
-                  <span className="flex items-center gap-2">
-                    <Copy className="w-3.5 h-3.5 text-slate-500" />
-                    Salin Seluruh Konten
-                  </span>
-                </button>
-
-                {/* 4. Duplikasi Dokumen */}
-                {onDuplicateArtifact && (
-                  <button
-                    type="button"
-                    disabled={isDuplicating}
-                    onClick={async () => {
-                      if (isDuplicating) return;
-                      setIsDuplicating(true);
-                      try {
-                        await onDuplicateArtifact(artifact.id);
-                        setShowMoreMenu(false);
-                      } catch {
-                        showToast('Dokumen belum berhasil diduplikasi.', 'error');
-                      } finally {
-                        setIsDuplicating(false);
-                      }
-                    }}
-                    className="w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/50 hover:text-emerald-700 transition-colors flex items-center justify-between cursor-pointer disabled:opacity-50"
-                  >
-                    <span className="flex items-center gap-2">
-                      <CopyPlus className="w-3.5 h-3.5 text-emerald-600" />
-                      {isDuplicating ? 'Menduplikasi…' : 'Duplikat Dokumen'}
-                    </span>
-                  </button>
-                )}
-
-                {/* Contextual actions: Citation or Paraphrase */}
-                <div className="border-t border-slate-100 dark:border-slate-800 my-1" />
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowMoreMenu(false);
-                    setShowCitationModal(true);
-                  }}
-                  className="w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/50 hover:text-emerald-700 transition-colors flex items-center justify-between cursor-pointer"
-                >
-                  <span className="flex items-center gap-2">
-                    <Quote className="w-3.5 h-3.5 text-amber-500" />
-                    Cari Sitasi DOI
-                  </span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowMoreMenu(false);
-                    handleOpenParaphraseWithSelection();
-                  }}
-                  className="w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/50 hover:text-emerald-700 transition-colors flex items-center justify-between cursor-pointer"
-                >
-                  <span className="flex items-center gap-2">
-                    <Pencil className="w-3.5 h-3.5 text-indigo-500" />
-                    Parafrase Akademis
-                  </span>
-                </button>
-
-                {/* Quick Downloads */}
-                <div className="border-t border-slate-100 dark:border-slate-800 my-1" />
-                <button
-                  type="button"
-                  onClick={() => handleDownloadDocx('skripsi')}
-                  disabled={isExportingDocx}
-                  className="w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-between cursor-pointer disabled:opacity-50"
-                >
-                  <span className="flex items-center gap-2">
-                    <FileText className="w-3.5 h-3.5 text-emerald-600" />
-                    Unduh Word Skripsi (.docx)
-                  </span>
-                  <span className="text-[10px] font-mono text-slate-400">4-4-3-3</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleDownload('md')}
-                  className="w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-between cursor-pointer"
-                >
-                  <span className="flex items-center gap-2">
-                    <FileText className="w-3.5 h-3.5 text-slate-400" />
-                    Unduh Markdown (.md)
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleDownload('txt')}
-                  className="w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-between cursor-pointer"
-                >
-                  <span className="flex items-center gap-2">
-                    <FileText className="w-3.5 h-3.5 text-slate-400" />
-                    Unduh Teks Polos (.txt)
-                  </span>
-                </button>
-                {artifact.type === 'CITATION' && (
-                  <button
-                    type="button"
-                    onClick={handleDownloadRIS}
-                    className="w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-between cursor-pointer"
-                  >
-                    <span className="flex items-center gap-2">
-                      <FileText className="w-3.5 h-3.5 text-amber-500" />
-                      Unduh RIS (.ris)
-                    </span>
-                    <span className="text-[10px] font-mono text-amber-600">Zotero</span>
-                  </button>
-                )}
-
-                {/* Destructive: Hapus Dokumen */}
-                {onDeleteArtifact && (
-                  <>
-                    <div className="border-t border-slate-100 dark:border-slate-800 my-1" />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowMoreMenu(false);
-                        setShowDeleteConfirm(true);
-                      }}
-                      className="w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition-colors flex items-center gap-2 cursor-pointer"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                      <span>Hapus Artefak Ini</span>
-                    </button>
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Close Canvas */}
-          {onClose && (
-            <button
-              type="button"
-              onClick={onClose}
-              className="h-8 w-8 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 bg-white dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center transition-colors cursor-pointer shadow-3xs"
-              title="Tutup Canvas (Kembali ke Obrolan)"
-              aria-label="Tutup Canvas"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          )}
-        </div>
-      </header>
+      <ArtifactCanvasToolbar
+        artifact={artifact} viewMode={viewMode} setViewMode={setViewMode}
+        isEditingTitle={isEditingTitle} setIsEditingTitle={setIsEditingTitle}
+        titleInput={titleInput} setTitleInput={setTitleInput} titleInputRef={titleInputRef}
+        isSavingTitle={isSavingTitle} titleSaveError={titleSaveError} handleSaveTitle={handleSaveTitle}
+        saveStatus={saveStatus} saveFailureMessage={saveFailureMessage} handleManualSave={handleManualSave}
+        isDirty={isDirty} editorRef={editorRef} showMoreMenu={showMoreMenu} setShowMoreMenu={setShowMoreMenu}
+        moreMenuRef={moreMenuRef} showHistory={() => setShowVersionHistoryModal(true)}
+        showExport={() => setShowExportModal(true)} isExpanded={isExpanded} toggleExpand={toggleExpand} onClose={onClose}
+      >
+        <button type="button" onClick={() => { setShowMoreMenu(false); setShowVersionHistoryModal(true); }} className="w-full rounded-xl px-2.5 py-2 text-left text-xs text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"><History className="mr-2 inline h-3.5 w-3.5" />Riwayat Versi</button>
+        <button type="button" onClick={() => { setShowMoreMenu(false); setShowExportModal(true); }} className="w-full rounded-xl px-2.5 py-2 text-left text-xs text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"><Download className="mr-2 inline h-3.5 w-3.5" />Ekspor dokumen</button>
+        <div className="px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Dokumen</div>
+        <button type="button" onClick={() => { setShowMoreMenu(false); setViewMode('raw'); }} className="w-full rounded-xl px-2.5 py-2 text-left text-xs text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"><Code2 className="mr-2 inline h-3.5 w-3.5" />Lihat Markdown atau kode</button>
+        <button type="button" onClick={() => { setShowMoreMenu(false); setViewMode('diff'); }} className="w-full rounded-xl px-2.5 py-2 text-left text-xs text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"><GitCompare className="mr-2 inline h-3.5 w-3.5" />Bandingkan perubahan</button>
+        <div className="relative z-20 px-1.5 py-1"><WorkspaceToolSelector artifactType={artifact.type} hasArtifact={artifact.id !== 'art_welcome'} disabled={isStreaming} onSelectTool={handleExecuteTool} triggerVariant="header" /></div>
+        <button type="button" onClick={handleCopy} className="w-full rounded-xl px-2.5 py-2 text-left text-xs text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"><Copy className="mr-2 inline h-3.5 w-3.5" />Salin Seluruh Konten</button>
+        <button type="button" onClick={() => { setShowMoreMenu(false); setShowCitationModal(true); }} className="w-full rounded-xl px-2.5 py-2 text-left text-xs text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"><Quote className="mr-2 inline h-3.5 w-3.5" />Cari Sitasi DOI</button>
+        <button type="button" onClick={() => { setShowMoreMenu(false); handleOpenParaphraseWithSelection(); }} className="w-full rounded-xl px-2.5 py-2 text-left text-xs text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"><Pencil className="mr-2 inline h-3.5 w-3.5" />Parafrase Akademis</button>
+        <button type="button" onClick={() => void handleDownloadDocx('skripsi')} disabled={isExportingDocx} className="w-full rounded-xl px-2.5 py-2 text-left text-xs text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:text-slate-200 dark:hover:bg-slate-800"><FileText className="mr-2 inline h-3.5 w-3.5" />Unduh Word Skripsi (.docx)</button>
+        <button type="button" onClick={() => handleDownload('md')} className="w-full rounded-xl px-2.5 py-2 text-left text-xs text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"><FileText className="mr-2 inline h-3.5 w-3.5" />Unduh Markdown (.md)</button>
+        <button type="button" onClick={() => handleDownload('txt')} className="w-full rounded-xl px-2.5 py-2 text-left text-xs text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"><FileText className="mr-2 inline h-3.5 w-3.5" />Unduh Teks Polos (.txt)</button>
+        {artifact.type === 'CITATION' && <button type="button" onClick={handleDownloadRIS} className="w-full rounded-xl px-2.5 py-2 text-left text-xs text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800">Unduh RIS (.ris)</button>}
+        {onDuplicateArtifact && <button type="button" disabled={isDuplicating} onClick={async () => { setIsDuplicating(true); try { await onDuplicateArtifact(artifact.id); setShowMoreMenu(false); } catch { showToast('Dokumen belum berhasil diduplikasi.', 'error'); } finally { setIsDuplicating(false); } }} className="w-full rounded-xl px-2.5 py-2 text-left text-xs text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:text-slate-200 dark:hover:bg-slate-800"><CopyPlus className="mr-2 inline h-3.5 w-3.5" />{isDuplicating ? 'Menduplikasi…' : 'Duplikat Dokumen'}</button>}
+        {onDeleteArtifact && <button type="button" onClick={() => { setShowMoreMenu(false); setShowDeleteConfirm(true); }} className="w-full rounded-xl px-2.5 py-2 text-left text-xs text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50"><Trash2 className="mr-2 inline h-3.5 w-3.5" />Hapus Artefak Ini</button>}
+      </ArtifactCanvasToolbar>
 
       {/* CONFLICT BANNER: Retain Local Draft with Choice */}
       {hasExternalConflict && (
@@ -1368,71 +933,18 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
           </div>
         )}
 
-        {/* MODE 2: EDIT (EDITOR BERSIH BERGAYA PAPER SHEET) */}
-        {viewMode === 'edit' && (
-          <div className="max-w-3xl mx-auto bg-white dark:bg-slate-900/70 rounded-lg p-4 sm:p-6 space-y-3 min-h-145 flex flex-col">
-            <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-800 pb-2.5">
-              <div className="flex items-center gap-2">
-                <Edit3 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                <span className="font-semibold text-slate-800 dark:text-slate-200">
-                  {artifact.type === 'CODE' ? 'Editor Kode Program' : 'Editor Draf Dokumen'}
-                </span>
-              </div>
-              <div className="flex items-center gap-3 text-[11px] text-slate-400">
-                <span>Ctrl + S untuk simpan</span>
-                <span>•</span>
-                <span>{wordCount} kata</span>
-              </div>
-            </div>
-
-            {selection && (
-              <div role="toolbar" aria-label="Aksi AI untuk teks terpilih" className="flex flex-wrap items-center gap-1.5 rounded-xl border border-emerald-200/80 bg-emerald-50/70 px-2.5 py-2 dark:border-emerald-900/60 dark:bg-emerald-950/25">
-                <span className="mr-1 flex items-center gap-1 text-[11px] font-medium text-emerald-800 dark:text-emerald-300"><Sparkles className="h-3.5 w-3.5" />Teks dipilih</span>
-                {inlineActions.map(([label, instruction]) => (
-                  <button key={label} type="button" disabled={isStreaming} onClick={() => requestInlineEdit(instruction)} className="rounded-lg border border-emerald-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 hover:border-emerald-400 hover:text-emerald-800 disabled:opacity-50 dark:border-emerald-900 dark:bg-slate-900 dark:text-slate-200" aria-label={`${label} teks terpilih`}>{label}</button>
-                ))}
-                <button type="button" disabled={isStreaming} onClick={() => setShowInlineAsk(value => !value)} className="rounded-lg px-2 py-1 text-[11px] font-semibold text-emerald-800 hover:bg-emerald-100 disabled:opacity-50 dark:text-emerald-300 dark:hover:bg-emerald-900/50" aria-expanded={showInlineAsk}>Ask AI</button>
-                {showInlineAsk && <form className="flex w-full gap-1.5 pt-1" onSubmit={event => { event.preventDefault(); if (inlineInstruction.trim()) requestInlineEdit(inlineInstruction.trim()); }}>
-                  <input autoFocus value={inlineInstruction} onChange={event => setInlineInstruction(event.target.value)} placeholder="Instruksi untuk teks ini…" aria-label="Instruksi revisi teks terpilih" className="min-w-0 flex-1 rounded-lg border border-emerald-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 outline-none focus:border-emerald-500 dark:border-emerald-900 dark:bg-slate-950 dark:text-slate-100" />
-                  <button type="submit" disabled={!inlineInstruction.trim() || isStreaming} className="rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-semibold text-white disabled:opacity-50">Buat usulan</button>
-                </form>}
-              </div>
-            )}
-
-            {visibleInlineEditPatch && (
-              <section aria-label="Usulan perubahan AI" className="rounded-xl border border-violet-200 bg-white p-3 dark:border-violet-900/70 dark:bg-slate-950">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <h3 className="flex items-center gap-1.5 text-xs font-semibold text-slate-800 dark:text-slate-100"><Sparkles className="h-3.5 w-3.5 text-violet-600" />Usulan perubahan</h3>
-                  <span className="text-[10px] text-slate-500">Hanya bagian terpilih</span>
-                </div>
-                <div className="space-y-1.5 text-xs">
-                  <div className="rounded-lg border-l-2 border-rose-400 bg-rose-50 px-2.5 py-2 text-rose-900 dark:bg-rose-950/30 dark:text-rose-200"><span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide">Dihapus</span><pre className="whitespace-pre-wrap font-sans">{visibleInlineEditPatch.originalText || '(kosong)'}</pre></div>
-                  <div className="rounded-lg border-l-2 border-emerald-500 bg-emerald-50 px-2.5 py-2 text-emerald-950 dark:bg-emerald-950/30 dark:text-emerald-200"><span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide">Ditambahkan</span><pre className="whitespace-pre-wrap font-sans">{visibleInlineEditPatch.replacementText || '(kosong)'}</pre></div>
-                </div>
-                {inlinePatchError && <p role="alert" className="mt-2 text-xs text-rose-700 dark:text-rose-300">{inlinePatchError}</p>}
-                <div className="mt-2.5 flex justify-end gap-2">
-                  <button type="button" onClick={() => { onDismissInlineEdit?.(); setInlinePatchError(''); }} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">Tolak</button>
-                  <button type="button" onClick={() => void acceptInlinePatch()} disabled={saveStatus === 'saving'} className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50">{saveStatus === 'saving' ? 'Menyimpan…' : 'Terapkan'}</button>
-                </div>
-              </section>
-            )}
-
-            <textarea
-              ref={editorRef}
-              value={editableContent}
-              onChange={(e) => handleContentChange(e.target.value)}
-              onBlur={flushDraftSync}
-              onSelect={(e) => {
-                const target = e.currentTarget;
-                captureSelection(target);
-              }}
-              onMouseUp={(e) => captureSelection(e.currentTarget)}
-              onKeyUp={(e) => captureSelection(e.currentTarget)}
-              placeholder="Ketik atau sesuaikan draf dokumen Anda di sini..."
-              className="w-full flex-1 min-h-125 p-3 bg-transparent resize-none focus:outline-none font-mono text-xs sm:text-sm leading-relaxed text-slate-900 dark:text-slate-100 selection:bg-emerald-500/20"
-            />
-          </div>
-        )}
+        {viewMode === 'edit' && <ArtifactCanvasEditor
+          artifactType={artifact.type} content={editableContent} editorRef={editorRef}
+          onChange={handleContentChange} onBlur={flushDraftSync} selection={selection}
+          onSelect={captureSelection} inlineActions={inlineActions} isStreaming={isStreaming}
+          onRequestInlineEdit={requestInlineEdit} showInlineAsk={showInlineAsk}
+          setShowInlineAsk={value => setShowInlineAsk(value)} inlineInstruction={inlineInstruction}
+          setInlineInstruction={setInlineInstruction}
+          onRequestAsk={() => { if (inlineInstruction.trim()) requestInlineEdit(inlineInstruction.trim()); }}
+          patch={visibleInlineEditPatch} patchError={inlinePatchError}
+          onDismissPatch={() => { onDismissInlineEdit?.(); setInlinePatchError(''); }}
+          onAcceptPatch={() => void acceptInlinePatch()} isSaving={saveStatus === 'saving'} wordCount={wordCount}
+        />}
 
         {/* MODE 3: KODE / MARKDOWN (RAW SOURCE DENGAN GUTTER NOMOR BARIS) */}
         {viewMode === 'raw' && (
@@ -1701,191 +1213,12 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
         </div>
       </footer>
 
-      {/* 4. MODAL RIWAYAT VERSI DENGAN PRATINJAU & RESTORE AMAN */}
-      <AnimatePresence>
-        {showVersionHistoryModal && (
-          <motion.div 
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs select-none"
-            variants={modalBackdropVariants}
-            initial="hidden"
-            animate="visible"
-            exit="exit"
-            onClick={() => setShowVersionHistoryModal(false)}
-          >
-            <motion.div 
-              className="w-full max-w-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]"
-              variants={modalPanelVariants}
-              initial="hidden"
-              animate="visible"
-              exit="exit"
-              onClick={e => e.stopPropagation()}
-            >
-              {/* Modal Header */}
-              <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 flex items-center justify-center text-emerald-700 dark:text-emerald-300 shrink-0">
-                    <History className="w-4.5 h-4.5" />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm sm:text-base">
-                      Riwayat Versi Artefak
-                    </h3>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                      {artifact.title} • {artifact.versions?.length || 1} snapshot tersimpan
-                    </p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowVersionHistoryModal(false);
-                    setPreviewingVersion(null);
-                  }}
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-                  aria-label="Tutup"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              {/* Modal Body - Version List */}
-              <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3 custom-scrollbar">
-                {artifact.versions && artifact.versions.length > 0 ? (
-                  artifact.versions.map((ver) => {
-                    const isActive = ver.version === artifact.version;
-                    const formattedDate = ver.createdAt
-                      ? new Date(ver.createdAt).toLocaleString('id-ID', {
-                          day: 'numeric',
-                          month: 'short',
-                          year: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        })
-                      : 'Waktu tidak tercatat';
-
-                    const charCount = ver.content ? ver.content.length : 0;
-                    const previewSnippet = ver.content ? ver.content.trim().substring(0, 140) : '';
-
-                    return (
-                      <div
-                        key={ver.id || `ver_${ver.version}`}
-                        className={`p-3.5 sm:p-4 rounded-xl border transition-all ${
-                          isActive
-                            ? 'bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/80 shadow-2xs'
-                            : 'bg-slate-50/70 dark:bg-slate-800/50 border-slate-200/80 dark:border-slate-700/80 hover:border-slate-300 dark:hover:border-slate-600'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between gap-3 mb-2">
-                          <div className="flex items-center gap-2">
-                            <span className={`px-2 py-0.5 rounded-md text-xs font-mono font-bold ${
-                              isActive
-                                ? 'bg-emerald-600 text-white'
-                                : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200'
-                            }`}>
-                              v{ver.version}
-                            </span>
-                            {isActive && (
-                              <span className="px-2 py-0.5 text-[10.5px] font-semibold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 rounded-md">
-                                Versi Aktif
-                              </span>
-                            )}
-                            <span className="text-[11.5px] text-slate-500 dark:text-slate-400 flex items-center gap-1">
-                              <Clock className="w-3 h-3 text-slate-400" />
-                              {formattedDate}
-                            </span>
-                          </div>
-
-                          <div className="flex items-center gap-2">
-                            {/* Compare / Diff Version */}
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setPreviewingVersion(ver);
-                                setViewMode('diff');
-                                setShowVersionHistoryModal(false);
-                              }}
-                              className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 transition-all cursor-pointer"
-                              title="Bandingkan diff dengan versi aktif saat ini"
-                            >
-                              <GitCompare className="w-3 h-3" />
-                              <span>Diff</span>
-                            </button>
-
-                            {!isActive && (
-                              <button
-                                type="button"
-                                onClick={async () => {
-                                  if (isRollingBack) return;
-                                  const confirmed = window.confirm(`Pulihkan dokumen ke versi v${ver.version}? Snapshot baru akan dicatat untuk versi saat ini.`);
-                                  if (!confirmed) return;
-                                  setIsRollingBack(true);
-                                  try {
-                                    if (!onRollbackVersion) throw new Error('Pemulihan tidak tersedia');
-                                    await onRollbackVersion(ver.version);
-                                    setShowVersionHistoryModal(false);
-                                  } catch {
-                                    showToast('Versi belum berhasil dipulihkan.', 'error');
-                                  } finally {
-                                    setIsRollingBack(false);
-                                  }
-                                }}
-                                disabled={isRollingBack}
-                                className="flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-semibold bg-white dark:bg-slate-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-slate-200 dark:border-slate-700 hover:border-emerald-300 shadow-2xs transition-all cursor-pointer disabled:opacity-50"
-                              >
-                                <RotateCcw className="w-3 h-3" />
-                                <span>Pulihkan</span>
-                              </button>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="text-xs font-medium text-slate-800 dark:text-slate-200 line-clamp-1 mb-1">
-                          {ver.title || artifact.title}
-                        </div>
-
-                        {previewSnippet && (
-                          <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono bg-white/80 dark:bg-slate-900/80 p-2 rounded-lg border border-slate-100 dark:border-slate-800/80 line-clamp-2 leading-relaxed">
-                            {previewSnippet}...
-                          </p>
-                        )}
-
-                        <div className="flex items-center gap-2 text-[10.5px] text-slate-400 mt-2">
-                          <span>{charCount} karakter</span>
-                        </div>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <div className="text-center py-8 text-slate-400">
-                    <Clock className="w-8 h-8 mx-auto mb-2 text-slate-300 dark:text-slate-700" />
-                    <p className="text-xs font-medium">Hanya terdapat 1 versi aktif saat ini (v1).</p>
-                    <p className="text-[11px] mt-1 text-slate-400">
-                      Setiap revisi AI atau penyimpanan berkala akan otomatis membuat snapshot versi baru.
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              {/* Modal Footer */}
-              <div className="p-3.5 sm:p-4 bg-slate-50 dark:bg-slate-950 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
-                <span className="text-[11px] text-slate-400">
-                  Memulihkan versi akan menyalin isi snapshot ke dokumen aktif secara aman.
-                </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowVersionHistoryModal(false);
-                    setPreviewingVersion(null);
-                  }}
-                  className="px-4 py-1.5 rounded-xl text-xs font-semibold bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors cursor-pointer"
-                >
-                  Tutup
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <ArtifactVersionHistoryModal
+        isOpen={showVersionHistoryModal} artifact={artifact} setPreviewingVersion={setPreviewingVersion}
+        onClose={() => setShowVersionHistoryModal(false)}
+        onCompare={version => { setPreviewingVersion(version); setViewMode('diff'); setShowVersionHistoryModal(false); }}
+        onRollback={onRollbackVersion} showToast={showToast}
+      />
 
       {/* 5. MODAL KONFIRMASI HAPUS DOKUMEN */}
       <AnimatePresence>
@@ -1960,20 +1293,10 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({
         )}
       </AnimatePresence>
 
-      {/* 6. MODAL EKSPOR DOKUMEN BAKU AKADEMIK */}
-      {showExportModal && (
-        <React.Suspense fallback={null}>
-          <ExportModal
-            isOpen={showExportModal}
-            onClose={() => setShowExportModal(false)}
-            artifact={artifact}
-            content={editableContent}
-            showToast={showToast}
-            onGenerateBibTeX={generateBibTeX}
-            onGenerateRIS={generateRIS}
-          />
-        </React.Suspense>
-      )}
+      <ArtifactExportHost
+        isOpen={showExportModal} onClose={() => setShowExportModal(false)} artifact={artifact}
+        content={editableContent} showToast={showToast} onGenerateBibTeX={generateBibTeX} onGenerateRIS={generateRIS}
+      />
 
       {/* 7. MODAL PENCARI & GENERATOR SITASI DOI ILMIAH */}
       {showCitationModal && (

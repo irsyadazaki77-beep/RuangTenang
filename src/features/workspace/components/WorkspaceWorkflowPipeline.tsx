@@ -49,7 +49,7 @@ export const WorkspaceWorkflowPipeline: React.FC<WorkspaceWorkflowPipelineProps>
 
   return (
     <div 
-      className="w-full shrink-0 border-b border-slate-200/70 bg-gradient-to-r from-emerald-500/5 via-teal-500/5 to-cyan-500/5 px-3 py-1.5 backdrop-blur-xs transition-all dark:border-slate-800/80 dark:from-emerald-950/20 dark:via-teal-950/20 dark:to-cyan-950/20"
+      className="w-full shrink-0 border-b border-slate-200/70 bg-white/75 px-3 py-1.5 backdrop-blur-xs transition-all dark:border-slate-800/80 dark:bg-slate-950/45"
       role="region"
       aria-label="Alur Kerja Terintegrasi RuangKerja"
     >

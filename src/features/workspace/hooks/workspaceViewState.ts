@@ -1,7 +1,7 @@
 import type { FileSourceReference } from '../../../../shared/contracts/files';
 import type { WorkspaceTab } from '../types';
 
-export type WorkspaceInspector = 'closed' | 'canvas' | 'context' | 'files' | 'sources' | 'plan';
+export type WorkspaceInspector = 'closed' | 'canvas' | 'context' | 'files' | 'sources' | 'memory' | 'plan';
 
 export interface WorkspaceViewState {
   inspector: WorkspaceInspector;

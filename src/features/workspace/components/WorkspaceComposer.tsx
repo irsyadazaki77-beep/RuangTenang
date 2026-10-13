@@ -277,8 +277,8 @@ export const WorkspaceComposer: React.FC<WorkspaceComposerProps> = React.memo(({
             >
               <Paperclip className="w-4 h-4" />
             </button>
-            <WorkspaceModelSelector value={selectedModel} onChange={onModelChange} disabled={isStreaming || isDisabled} overlayPlacement="viewport" />
-            <button type="button" onClick={onOpenContext} aria-label={`Buka panel konteks: ${displayedContextSummary}`} title={displayedContextSummary} className="inline-flex h-8 max-w-[min(24vw,10rem)] min-w-0 items-center gap-1.5 rounded-lg px-2 text-xs text-slate-500 transition hover:bg-slate-200/70 hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"><span className="truncate">{displayedContextSummary}</span></button>
+            <WorkspaceModelSelector value={selectedModel} onChange={onModelChange} disabled={isStreaming || isDisabled} overlayPlacement="anchored" />
+            <button type="button" onClick={onOpenContext} aria-label={`Buka panel konteks: ${displayedContextSummary}`} title={displayedContextSummary} className="inline-flex h-8 max-w-[min(22vw,8.5rem)] min-w-0 items-center gap-1.5 rounded-lg px-2 text-xs text-slate-500 transition hover:bg-slate-200/70 hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"><span className="truncate">{displayedContextSummary}</span></button>
             <div className="relative shrink-0">
               <button type="button" disabled={isStreaming || isDisabled} aria-label="AI & Opsi" aria-expanded={optionsOpen} aria-haspopup="dialog" aria-controls="workspace-composer-options" onClick={() => setOptionsOpen(value => !value)} className={`inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${optionsOpen ? 'relative z-50 bg-slate-200 text-slate-800 dark:bg-slate-800 dark:text-slate-100' : 'text-slate-500 hover:bg-slate-200/70 dark:hover:bg-slate-800'}`}>
                 <SlidersHorizontal className="h-3.5 w-3.5" />
@@ -286,7 +286,7 @@ export const WorkspaceComposer: React.FC<WorkspaceComposerProps> = React.memo(({
               </button>
               {optionsOpen && <>
                 <button type="button" className="fixed inset-0 z-30 cursor-default" aria-label="Tutup opsi composer" onClick={() => setOptionsOpen(false)} />
-                <div id="workspace-composer-options" role="dialog" aria-label="AI & Opsi" onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); setOptionsOpen(false); } }} className="absolute bottom-full left-0 z-40 mb-2 w-[min(22rem,calc(100vw-2rem))] max-h-[min(65dvh,32rem)] overflow-y-auto rounded-xl border border-slate-200 bg-white p-3 shadow-xl dark:border-slate-700 dark:bg-slate-900">
+                <div id="workspace-composer-options" role="dialog" aria-label="AI & Opsi" onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); setOptionsOpen(false); } }} className="fixed inset-x-2 bottom-16 z-50 max-h-[min(65dvh,32rem)] overflow-y-auto rounded-xl border border-slate-200 bg-white p-3 shadow-2xl dark:border-slate-700 dark:bg-slate-900 sm:absolute sm:inset-auto sm:bottom-full sm:left-auto sm:right-0 sm:mb-2 sm:w-[min(22rem,calc(100vw-2rem))]">
                   <div className="flex flex-col gap-2 border-b border-slate-100 pb-2 dark:border-slate-800">
                     <div className="flex items-start justify-between gap-3">
                       <div><p className="text-xs font-semibold text-slate-800 dark:text-slate-100">Cara bekerja</p><p className="mt-0.5 text-[11px] text-slate-500">Pilih satu jawaban atau bandingkan model.</p></div>

@@ -107,7 +107,7 @@ export const WorkspaceMemorySection: React.FC<Props> = ({ chatId, canPersist }) 
   };
 
   return (
-    <div className="mt-4 border-t border-slate-100 pt-3 dark:border-slate-800">
+    <div className="w-full">
       <div className="flex items-center justify-between gap-2 mb-2">
         <div className="flex items-center gap-1.5">
           <Bookmark className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />

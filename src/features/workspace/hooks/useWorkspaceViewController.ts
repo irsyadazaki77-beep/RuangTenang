@@ -40,8 +40,8 @@ export function useWorkspaceViewController() {
   }, [rememberInspectorFocus]);
 
   const isCanvasOpen = workspaceView.inspector === 'canvas';
-  const isContextPanelOpen = workspaceView.inspector === 'context' || workspaceView.inspector === 'files' || workspaceView.inspector === 'sources' || workspaceView.inspector === 'plan';
-  const workspaceRightTab = workspaceView.inspector === 'files' || workspaceView.inspector === 'sources' || workspaceView.inspector === 'plan' ? workspaceView.inspector : 'context';
+  const isContextPanelOpen = workspaceView.inspector === 'context' || workspaceView.inspector === 'files' || workspaceView.inspector === 'sources' || workspaceView.inspector === 'memory' || workspaceView.inspector === 'plan';
+  const workspaceRightTab = workspaceView.inspector === 'files' || workspaceView.inspector === 'sources' || workspaceView.inspector === 'memory' || workspaceView.inspector === 'plan' ? workspaceView.inspector : 'context';
 
   return {
     workspaceView,
