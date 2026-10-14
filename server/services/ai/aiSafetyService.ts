@@ -468,17 +468,10 @@ export const aiSafetyService = {
 
     if (!hasAiConsent) {
       console.warn(`[SAFETY_PIPELINE] User ${userId || 'guest'} has not provided AI processing consent. Running safe fallback.`);
-      const localFallback = await import('../../routes/fallbackAi.js').then(m => 
-        m.getLocalFallbackResponse(rawInput, input.chatMode, input.responseStyle)
-      );
-      return {
-        text: localFallback.text,
-        modelUsed: 'local-fallback-no-consent',
-        isFallback: true,
-        isCrisisOverride: false,
-        isPromptInjectionOverride: false,
-        isConsentFallback: true
-      };
+      throw Object.assign(new Error('AI processing consent is required.'), {
+        category: 'AI_CONSENT_REQUIRED',
+        retryable: false
+      });
     }
 
     // 2. Normalize input
@@ -824,19 +817,8 @@ Konteks Pengguna:
           routingDecision
         };
       } catch (chatErr: any) {
-        console.warn(`[SAFETY_PIPELINE] Non-streaming execution failed, falling back to local:`, chatErr?.message || chatErr);
-        const localFallback = await import('../../routes/fallbackAi.js').then(m => 
-          m.getLocalFallbackResponse(rawInput, input.chatMode, input.responseStyle)
-        );
-        return {
-          text: localFallback.text,
-          modelUsed: 'local-fallback-error',
-          isFallback: true,
-          isCrisisOverride: false,
-          isPromptInjectionOverride: false,
-          isConsentFallback: false,
-          routingDecision
-        };
+        console.warn(`[SAFETY_PIPELINE] Non-streaming execution failed category=${chatErr?.category || 'INTERNAL_ERROR'}`);
+        throw chatErr;
       }
     } else {
       // Streaming execution
@@ -866,19 +848,8 @@ Konteks Pengguna:
           routingDecision
         };
       } catch (streamErr: any) {
-        console.warn(`[SAFETY_PIPELINE] Streaming execution failed, falling back to local:`, streamErr?.message || streamErr);
-        const localFallback = await import('../../routes/fallbackAi.js').then(m => 
-          m.getLocalFallbackResponse(rawInput, input.chatMode, input.responseStyle)
-        );
-        return {
-          text: localFallback.text,
-          modelUsed: 'local-fallback-stream-error',
-          isFallback: true,
-          isCrisisOverride: false,
-          isPromptInjectionOverride: false,
-          isConsentFallback: false,
-          routingDecision
-        };
+        console.warn(`[SAFETY_PIPELINE] Streaming execution failed category=${streamErr?.category || 'INTERNAL_ERROR'}`);
+        throw streamErr;
       }
     }
   }

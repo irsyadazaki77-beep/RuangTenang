@@ -420,6 +420,15 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
     onSelectionChange?.(nextSelection);
   };
 
+  const captureTextSelection = (selected: { start: number; end: number; text: string } | null) => {
+    const nextSelection = selected?.text.trim()
+      ? { artifactId: artifact.id, start: selected.start, end: selected.end, text: selected.text }
+      : null;
+    setSelection(nextSelection);
+    onSelectedTextChange?.(nextSelection?.text || '');
+    onSelectionChange?.(nextSelection);
+  };
+
   const inlineActions = artifact.type === 'CODE' ? [
     ['Explain', 'Jelaskan kode terpilih dengan ringkas.'],
     ['Refactor', 'Refactor kode terpilih tanpa mengubah perilaku yang diharapkan.'],
@@ -956,7 +965,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
         {viewMode === 'edit' && artifact.type !== 'TABLE' && !isPresentationStudio && <React.Suspense fallback={<div role="status" className="mx-auto max-w-4xl p-6 text-xs text-slate-500">Memuat editor…</div>}><ArtifactCanvasEditor
           artifactType={artifact.type} artifact={artifact} onRequestRevision={onRequestRevision} content={editableContent} editorRef={editorRef}
           onChange={handleContentChange} onBlur={flushDraftSync} selection={selection}
-          onSelect={captureSelection} inlineActions={inlineActions} isStreaming={isStreaming}
+          onSelect={captureSelection} onSelectText={captureTextSelection} inlineActions={inlineActions} isStreaming={isStreaming}
           onRequestInlineEdit={requestInlineEdit} showInlineAsk={showInlineAsk}
           setShowInlineAsk={value => setShowInlineAsk(value)} inlineInstruction={inlineInstruction}
           setInlineInstruction={setInlineInstruction}

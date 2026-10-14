@@ -5,7 +5,7 @@ import path from 'node:path';
 test('public AI selectors expose only the three profiles for the active mode', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('rt_onboarding_completed_guest', 'true'));
   await page.setViewportSize({ width: 1440, height: 900 });
-  const screenshotDir = path.join('test-artifacts', 'ai-profile-selectors');
+  const screenshotDir = path.join(process.env.E2E_ARTIFACTS_DIR || 'test-artifacts', 'ai-profile-selectors');
   await mkdir(screenshotDir, { recursive: true });
 
   await page.goto('/?__test__=true', { waitUntil: 'domcontentloaded' });

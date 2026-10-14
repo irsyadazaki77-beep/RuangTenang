@@ -17,7 +17,7 @@ for (const viewport of [{ name: 'desktop', width: 1280, height: 900 }, { name: '
     await expect(page.getByRole('button', { name: 'Tebal' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Markdown' })).toBeVisible();
     await page.waitForTimeout(3500);
-    const directory = path.join('test-artifacts', 'fase25');
+    const directory = path.join(process.env.E2E_ARTIFACTS_DIR || 'test-artifacts', 'fase25');
     await mkdir(directory, { recursive: true });
     await page.screenshot({ path: path.join(directory, `artifact-studio-${viewport.name}.png`), animations: 'disabled', fullPage: false, scale: 'css' });
   });

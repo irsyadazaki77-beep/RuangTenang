@@ -11,7 +11,6 @@ import { checkUserAiUsageLimit, rollbackUserAiQuota } from '../services/aiUsageL
 import { serverDb } from '../database.js';
 
 import { encryptionService } from '../services/encryptionService.js';
-import { getLocalFallbackResponse } from './fallbackAi.js';
 
 
 import { aiSafetyService } from '../services/ai/aiSafetyService.js';
@@ -819,119 +818,41 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
     res.on('finish', cleanupKeepAlive);
     res.on('close', cleanupKeepAlive);
 
-    const runLocalFallback = async () => {
+    const runLocalFallback = async (cause?: unknown) => {
       if (clientDisconnected || reqAbortController.signal.aborted) {
         if (!res.writableEnded) res.end();
         return;
       }
-      console.warn('Executing Local Fallback AI stream response');
-
-      // Official profiles must preserve their stated model capability. An
-      // outage is surfaced as a retryable error, never as a fabricated answer.
-      if (effectiveProfileId) {
-        if (!res.writableEnded) {
-          res.write(`data: ${JSON.stringify({
-            error: true,
-            code: 'PROVIDER_UNAVAILABLE',
-            retryable: true,
-            message: 'Model AI sedang tidak tersedia untuk profil ini. Silakan coba lagi.'
-          })}\n\n`);
-          res.write(`data: ${JSON.stringify({ done: true, chatId: currentChatId })}\n\n`);
-          res.write('data: [DONE]\n\n');
-          res.end();
-        }
-        return;
-      }
-
-      // For Ruang Kerja or document-grounded requests, never fabricate generic academic drafts.
-      // Send an honest error so the user can retry.
-      if (isWorkspace || (requestedWorkspaceAttachmentIds && requestedWorkspaceAttachmentIds.length > 0)) {
-        if (!res.writableEnded) {
-          res.write(`data: ${JSON.stringify({
-            error: true,
-            code: 'PROVIDER_ERROR',
-            message: 'Model AI sedang tidak dapat dihubungi untuk menganalisis dokumen saat ini. Silakan coba lagi sebentar lagi.'
-          })}\n\n`);
-          res.write(`data: ${JSON.stringify({ done: true, chatId: currentChatId })}\n\n`);
-          res.write('data: [DONE]\n\n');
-          res.end();
-        }
-        return;
-      }
-
-      const fallbackResponse = getLocalFallbackResponse(cleanMessage || pluginResult || '', chatMode, responseStyle);
+      const category = typeof cause === 'object' && cause && 'category' in cause && typeof cause.category === 'string'
+        ? cause.category
+        : 'PROVIDER_UNAVAILABLE';
+      const retryable = category !== 'AI_CONSENT_REQUIRED' && category !== 'PROMPT_INJECTION_DETECTED';
+      const message = category === 'AI_CONSENT_REQUIRED'
+        ? 'Aktifkan persetujuan pemrosesan AI untuk menggunakan fitur ini.'
+        : category === 'TIMEOUT'
+          ? 'Provider AI terlalu lama merespons. Coba ulangi permintaan.'
+          : category === 'QUOTA_EXCEEDED' || category === 'RATE_LIMIT'
+            ? 'Batas penggunaan provider AI tercapai. Coba lagi setelah batasnya pulih.'
+            : 'Provider AI tidak dapat menyelesaikan permintaan. Tidak ada jawaban yang dibuat; silakan coba lagi.';
+      console.warn(`[CHAT_STREAM] Request failed category=${category}`);
       if (!res.writableEnded) {
-        res.write(`data: ${JSON.stringify({
-          type: 'routing',
-          modelUsed: 'local-empathetic-fallback',
-          modelName: getModelDisplayName('local-empathetic-fallback'),
-          isFallback: true,
-          fallbackFrom: aiModel,
-          fallbackFromName: getModelDisplayName(aiModel),
-          routingMode: routingDecision.routingMode,
-          routingReason: 'Model penyedia tidak menyelesaikan respons; jawaban lokal digunakan.'
-        })}\n\n`);
+        res.write(`data: ${JSON.stringify({ error: true, code: category, retryable, message })}\n\n`);
+        res.write(`data: ${JSON.stringify({ done: true, chatId: currentChatId })}\n\n`);
+        res.write('data: [DONE]\n\n');
+        res.end();
       }
-      
-      if (fallbackResponse.tool_call) {
-        res.write(`data: ${JSON.stringify({ tool_call: fallbackResponse.tool_call, parameters: { reason: fallbackResponse.text } })}\n\n`);
-        
-        if (!activeIsTemporary && userId && currentChatId && !(clientDisconnected || reqAbortController.signal.aborted)) {
-          try {
-            await prisma.chatMessages.create({
-              data: {
-                id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
-                chatId: currentChatId,
-                role: 'assistant',
-                content: encryptionService.encryptSensitive(`Memanggil ${fallbackResponse.tool_call}`) || `Memanggil ${fallbackResponse.tool_call}`,
-                plugin: fallbackResponse.tool_call
-              }
-            });
-          } catch(e) {}
-        }
-      } else {
-        const words = fallbackResponse.text.split(' ');
-        let currentFullText = '';
-        for (const word of words) {
-          if (clientDisconnected || reqAbortController.signal.aborted) break;
-          const chunk = word + ' ';
-          currentFullText += chunk;
-          res.write(`data: ${JSON.stringify({ text: chunk })}\n\n`);
-          await new Promise(resolve => setTimeout(resolve, 30));
-        }
-        
-        if (!activeIsTemporary && userId && currentChatId && !(clientDisconnected || reqAbortController.signal.aborted)) {
-          try {
-            await prisma.chatMessages.create({
-              data: {
-                id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
-                chatId: currentChatId,
-                role: 'assistant',
-                content: encryptionService.encryptSensitive(currentFullText.trim()) || currentFullText.trim()
-              }
-            });
-          } catch(e) {}
-        }
-      }
-
-      if (isNewChat && !activeIsTemporary && userId) {
-        try {
-          const title = (cleanMessage || 'Percakapan').substring(0, 30) + ((cleanMessage && cleanMessage.length > 30) ? '...' : '');
-          res.write(`data: ${JSON.stringify({ newTitle: title })}\n\n`);
-        } catch(e) {}
-      }
-
-      res.write(`data: ${JSON.stringify({ done: true, chatId: currentChatId })}\n\n`);
-      res.write('data: [DONE]\n\n');
-      res.end();
     };
 
     const reqAbortController = new AbortController();
     let clientDisconnected = false;
 
     req.on('close', () => {
-      clientDisconnected = true;
-      reqAbortController.abort();
+      // IncomingMessage also emits `close` after a successfully received body.
+      // Only treat it as a disconnect when the request ended prematurely.
+      if (!req.complete) {
+        clientDisconnected = true;
+        reqAbortController.abort();
+      }
     });
     req.on('aborted', () => {
       clientDisconnected = true;
@@ -1001,16 +922,16 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
       });
     } catch (err: any) {
       console.warn('[CHAT_STREAM] Unified safety pipeline threw error, switching to fallback:', err?.message || err);
-      return await runLocalFallback();
+      return await runLocalFallback(err);
     }
 
     if (!pipelineRes) {
-      return await runLocalFallback();
+      return await runLocalFallback(Object.assign(new Error('Pipeline did not return a result.'), { category: 'PROVIDER_ERROR' }));
     }
 
     if (pipelineRes.isConsentFallback || pipelineRes.modelUsed?.startsWith('local-')) {
       console.log('Fallback triggered from pipeline result!');
-      return await runLocalFallback();
+      return await runLocalFallback(Object.assign(new Error('Pipeline did not return a provider response.'), { category: 'PROVIDER_ERROR' }));
     }
 
     if (pipelineRes.isPromptInjectionOverride) {
@@ -1063,7 +984,7 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
 
     if (!responseStream) {
       console.log('Stream falsy, executing fallback!');
-      await runLocalFallback();
+      await runLocalFallback(Object.assign(new Error('Provider did not create a response stream.'), { category: 'PROVIDER_ERROR' }));
       return;
     }
 
@@ -1273,7 +1194,7 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
         if (!hasStreamedAnyText && !fullResponseText) {
           // Stream produced nothing, fallback to local response
           console.warn('[CHAT_STREAM] Stream produced no output, running fallback');
-          return await runLocalFallback();
+          return await runLocalFallback(Object.assign(new Error('Provider returned an empty response.'), { category: 'EMPTY_PROVIDER_RESPONSE' }));
         }
 
         if (!activeIsTemporary && userId && currentChatId && fullResponseText) {
@@ -1340,6 +1261,7 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
     }
   } catch (error: any) {
     console.error('[CHAT_STREAM] Outer unhandled error:', error);
+    if (sendModelSelectionError(res, error)) return;
     if (!res.headersSent) {
       sendError(res, 'INTERNAL_SERVER_ERROR', 'Terjadi kesalahan pada server saat memproses pesan.');
     } else if (!res.writableEnded) {

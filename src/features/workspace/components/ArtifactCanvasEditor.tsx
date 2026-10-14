@@ -7,6 +7,39 @@ import { Bold, Heading2, Italic, List, ListOrdered, Redo2, Sparkles, Table2, Und
 import type { WorkspaceArtifactSelection, ArtifactPatch } from '../types';
 import type { WorkspaceArtifact } from '../types';
 
+export function mapMarkdownTextSelection(markdown: string, text: string, expectedVisibleOffset: number): { start: number; end: number } | null {
+  const visible: string[] = [];
+  const offsets: number[] = [];
+  let lineStart = true;
+  for (let index = 0; index < markdown.length;) {
+    if (lineStart) {
+      const marker = markdown.slice(index).match(/^(?:#{1,6}|[-+*]|\d+[.)])\s+/);
+      if (marker) { index += marker[0].length; lineStart = false; continue; }
+    }
+    if (markdown[index] === '\\' && index + 1 < markdown.length) {
+      visible.push(markdown[index + 1]); offsets.push(index + 1); index += 2; lineStart = false; continue;
+    }
+    if ('`*_~'.includes(markdown[index])) {
+      const marker = markdown[index];
+      let end = index + 1;
+      while (markdown[end] === marker) end += 1;
+      if (end - index <= 3) { index = end; continue; }
+    }
+    const character = markdown[index];
+    visible.push(character); offsets.push(index); index += 1;
+    lineStart = character === '\n';
+  }
+  const rendered = visible.join('');
+  let matchAt = -1;
+  let closest = Number.POSITIVE_INFINITY;
+  for (let index = rendered.indexOf(text); index >= 0; index = rendered.indexOf(text, index + 1)) {
+    const distance = Math.abs(index - expectedVisibleOffset);
+    if (distance < closest) { closest = distance; matchAt = index; }
+  }
+  if (!text || matchAt < 0 || offsets[matchAt] === undefined) return null;
+  return { start: offsets[matchAt], end: offsets[matchAt + text.length - 1] + 1 };
+}
+
 interface ArtifactCanvasEditorProps {
   artifactType: string;
   content: string;
@@ -15,6 +48,7 @@ interface ArtifactCanvasEditorProps {
   onBlur: () => void;
   selection: WorkspaceArtifactSelection | null;
   onSelect: (target: HTMLTextAreaElement) => void;
+  onSelectText: (selection: { start: number; end: number; text: string } | null) => void;
   inlineActions: string[][];
   isStreaming: boolean;
   onRequestInlineEdit: (instruction: string) => void;
@@ -34,20 +68,34 @@ interface ArtifactCanvasEditorProps {
 }
 
 export const ArtifactCanvasEditor: React.FC<ArtifactCanvasEditorProps> = ({
-  artifactType, content, editorRef, onChange, onBlur, selection, onSelect, inlineActions, isStreaming,
+  artifactType, content, editorRef, onChange, onBlur, selection, onSelect, onSelectText, inlineActions, isStreaming,
   onRequestInlineEdit, showInlineAsk, setShowInlineAsk, inlineInstruction, setInlineInstruction,
   onRequestAsk, patch, patchError, onDismissPatch, onAcceptPatch, isSaving, wordCount, artifact, onRequestRevision
 }) => {
   const [mode, setMode] = useState<'visual' | 'markdown'>('visual');
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
+  const onSelectTextRef = useRef(onSelectText);
+  onSelectTextRef.current = onSelectText;
   const isRichText = artifactType === 'DOCUMENT' || artifactType === 'OUTLINE';
+
+  const captureRichTextSelection = (current: NonNullable<ReturnType<typeof useEditor>>) => {
+    const { from, to } = current.state.selection;
+    const text = current.state.doc.textBetween(from, to, '\n').trim();
+    if (!text) { onSelectTextRef.current(null); return; }
+
+    const expected = current.state.doc.textBetween(0, from, '\n').length;
+    const range = mapMarkdownTextSelection(current.getMarkdown(), text, expected);
+    onSelectTextRef.current(range ? { ...range, text } : null);
+  };
+
   const editor = useEditor({
     extensions: [StarterKit, TableKit, Markdown],
     content,
     contentType: 'markdown',
     immediatelyRender: false,
-    onUpdate: ({ editor: current }) => onChangeRef.current(current.getMarkdown())
+    onUpdate: ({ editor: current }) => onChangeRef.current(current.getMarkdown()),
+    onSelectionUpdate: ({ editor: current }) => captureRichTextSelection(current)
   }, []);
 
   useEffect(() => {

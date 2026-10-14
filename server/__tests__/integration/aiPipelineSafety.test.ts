@@ -141,17 +141,13 @@ describe('FASE 8: Unified AI Gateway & Safety Pipeline Tests', () => {
   });
 
   describe('5. Unified AI Gateway Consent Governance', () => {
-    it('routes to safe local deterministic fallback when AI consent is not granted', async () => {
+    it('does not generate a chat response when AI consent is not granted', async () => {
       vi.spyOn(consentService, 'canUseAI').mockResolvedValue(false);
 
-      const res = await aiGateway.chat({
+      await expect(aiGateway.chat({
         userId: 'user_without_ai_consent',
         message: 'Bagaimana cara mengatasi rasa cemas?'
-      });
-
-      expect(res.isConsentFallback).toBe(true);
-      expect(res.modelUsed).toBe('local-fallback-no-consent');
-      expect(res.text).toBeDefined();
+      })).rejects.toMatchObject({ category: 'AI_CONSENT_REQUIRED', retryable: false });
     });
 
     it('intercepts prompt injection via safety pipeline in chat gateway', async () => {

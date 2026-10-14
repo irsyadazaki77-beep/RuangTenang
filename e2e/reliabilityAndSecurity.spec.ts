@@ -33,34 +33,31 @@ test.describe('Reliability, Performance & Security', () => {
   test('should cancel stream gracefully when stopped', async ({ page }) => {
     await page.goto('/?__test__=true');
     const result = await page.evaluate(async () => {
-      const controller = new AbortController();
-      const response = await fetch('/api/v1/chat/stream', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: 'Ceritakan kisah panjang tentang ketenangan jiwa...', isStreaming: true }),
-        signal: controller.signal
-      });
-      if (!response.ok || !response.body) {
-        const body = await response.json().catch(() => ({}));
-        return `status:${response.status}:${body.code || body.error || 'UNKNOWN'}`;
-      }
-
-      const reader = response.body.getReader();
-      const first = await reader.read();
-      if (first.done) return 'done_immediately';
-      controller.abort();
+      const { ChatStreamingClient } = await import('/src/features/chat/services/chatStreamingClient.ts');
+      const originalFetch = window.fetch;
+      const client = new ChatStreamingClient();
+      let completed = false;
+      const errors: string[] = [];
+      window.fetch = async (_input, init) => new Response(new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('data: {"text":"potongan parsial"}\n\n'));
+          init?.signal?.addEventListener('abort', () => controller.error(new DOMException('Aborted', 'AbortError')), { once: true });
+        }
+      }), { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
       try {
-        while (!(await reader.read()).done) { /* consume until abort */ }
-        return controller.signal.aborted ? 'AbortError' : 'completed';
-      } catch (error) {
-        return error instanceof DOMException ? error.name : 'error';
+        const pending = client.stream({ message: 'Tes pembatalan' }, {
+          onMessageComplete: () => { completed = true; },
+          onError: error => errors.push(error)
+        });
+        await new Promise(resolve => setTimeout(resolve, 10));
+        client.abort();
+        await pending;
+        return { state: (client as unknown as { state: string }).state, completed, errors };
+      } finally {
+        window.fetch = originalFetch;
       }
-
-
     });
-    // E2E runs without provider credentials and must receive the guarded local
-    // response stream, which should still stop when the browser aborts it.
-    expect(result).toBe('AbortError');
+    expect(result).toEqual({ state: 'aborted', completed: false, errors: [] });
   });
 
   test('should not store memory when chat is in temporary mode', async ({ request }) => {
@@ -76,12 +73,16 @@ test.describe('Reliability, Performance & Security', () => {
       }
     });
 
-    // The response source is independent of the privacy contract. Temporary
-    // mode must return normally without persisting the conversation or memory.
-    expect(chatResp.status()).toBe(200);
     const chatBody = await chatResp.json();
-    expect(chatBody).toMatchObject({ success: true });
-    expect(chatBody.text).toBeTruthy();
+    if (chatResp.status() === 200) {
+      expect(chatBody.success).toBe(true);
+      expect(chatBody.text).toBeTruthy();
+      expect(chatBody.modelUsed).toBeTruthy();
+      expect(['gemini', 'groq', 'deepseek', 'openrouter', 'openai', 'local']).toContain(chatBody.providerUsed);
+    } else {
+      expect(chatResp.status()).toBe(503);
+      expect(chatBody.text || chatBody.response || chatBody.content).toBeFalsy();
+    }
 
     // Query memory extraction endpoint for temporary session
     const memoryResp = await request.get('/api/v1/chat/user-memories');
@@ -127,7 +128,7 @@ test.describe('Security & Privacy', () => {
       }
     });
 
-    expect([200, 400, 401, 429, 500]).toContain(injectionResp.status());
+    expect([200, 400, 401, 429, 500, 503]).toContain(injectionResp.status());
     if (injectionResp.status() === 500) {
       const body = await injectionResp.json();
       expect(JSON.stringify(body)).not.toContain(canary);
@@ -136,6 +137,11 @@ test.describe('Security & Privacy', () => {
       const body = await injectionResp.json();
       expect(body.text).toBeTruthy();
       expect(body.text).not.toContain(canary);
+    }
+    if (injectionResp.status() === 503) {
+      const body = await injectionResp.json();
+      expect(JSON.stringify(body)).not.toContain(canary);
+      expect(body.text || body.response || body.content).toBeFalsy();
     }
   });
 

@@ -17,7 +17,7 @@ for (const viewport of [{ name: 'desktop', width: 1280, height: 900 }, { name: '
     await page.waitForTimeout(500);
     const updateNotice = page.getByRole('button', { name: 'Tutup Notifikasi' });
     if (await updateNotice.count()) await updateNotice.last().click();
-    const directory = path.join('test-artifacts', 'artifact-canvas', 'after');
+    const directory = path.join(process.env.E2E_ARTIFACTS_DIR || 'test-artifacts', 'artifact-canvas', 'after');
     await mkdir(directory, { recursive: true });
     await page.screenshot({ path: path.join(directory, `${viewport.name}.png`), animations: 'disabled', fullPage: false, scale: 'css' });
   });

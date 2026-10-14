@@ -94,7 +94,10 @@ describe('AI Quota Concurrency & IP Anti-Spoofing Tests', () => {
       return res.json({ success: true, usage: check.dailyUsage });
     });
 
-    const proxyIp = `203.0.113.${Math.floor(Math.random() * 200 + 10)}`;
+    // Quota reservations persist in the test database for the day. Use a large
+    // deterministic fixture space so reruns cannot inherit a prior test's IP quota.
+    const ipSeed = Math.floor(Math.random() * 16_777_214) + 1;
+    const proxyIp = `198.${Math.floor(ipSeed / 65_536)}.${Math.floor((ipSeed % 65_536) / 256)}.${ipSeed % 256}`;
 
     // Send 2 legitimate requests from same proxy IP
     const res1 = await request(app).post('/api/test-chat').set('X-Forwarded-For', proxyIp);

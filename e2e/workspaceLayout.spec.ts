@@ -26,7 +26,7 @@ test('workspace layout captures and viewport safety', async ({ page }) => {
       if (await closeNotification.isVisible()) await closeNotification.click();
       const dimensions = await page.evaluate(() => ({ viewport: document.documentElement.clientWidth, content: document.documentElement.scrollWidth }));
       expect(dimensions.content, `horizontal overflow at ${width}px (${theme})`).toBeLessThanOrEqual(dimensions.viewport + 1);
-      const directory = path.join('test-artifacts', 'workspace-layout', phase, theme);
+      const directory = path.join(process.env.E2E_ARTIFACTS_DIR || 'test-artifacts', 'workspace-layout', phase, theme);
       await mkdir(directory, { recursive: true });
       await page.screenshot({ path: path.join(directory, `${width}px.png`), animations: 'disabled', fullPage: false, scale: 'css' });
       if (width >= 1280) {

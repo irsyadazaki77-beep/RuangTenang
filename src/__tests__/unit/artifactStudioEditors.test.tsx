@@ -2,8 +2,21 @@ import React, { useState } from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { ArtifactPresentationEditor, ArtifactTableEditor } from '../../features/workspace/components/ArtifactDataEditors';
+import { mapMarkdownTextSelection } from '../../features/workspace/components/ArtifactCanvasEditor';
 
 describe('Artifact Studio data editors', () => {
+  it('maps visual selections through Markdown formatting and duplicate text to the correct source range', () => {
+    const markdown = '# Title\n\nA **repeat** and repeat';
+    const visible = 'Title\n\nA repeat and repeat';
+    const expectedVisibleOffset = visible.lastIndexOf('repeat');
+    const selection = mapMarkdownTextSelection(markdown, 'repeat', expectedVisibleOffset);
+
+    expect(selection).not.toBeNull();
+    expect(markdown.slice(selection!.start, selection!.end)).toBe('repeat');
+    expect(selection!.start).toBe(markdown.lastIndexOf('repeat'));
+    expect(mapMarkdownTextSelection(markdown, 'missing selection', 0)).toBeNull();
+  });
+
   it('edits spreadsheet cells and adds/removes rows without evaluating formulas', () => {
     const onChange = vi.fn();
     const content = JSON.stringify({ type: 'table', title: 'Scores', columns: ['Group', 'Score'], rows: [{ Group: 'A', Score: 3 }], columnTypes: { Group: 'text', Score: 'number' }, sourceVersion: 'local' });

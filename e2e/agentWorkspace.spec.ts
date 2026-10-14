@@ -17,7 +17,7 @@ test('Agent plan panel is compact and exposes plan creation controls', async ({ 
   await expect(page.getByRole('tabpanel', { name: 'Rencana' })).toBeVisible();
   await expect(page.getByRole('textbox', { name: 'Tujuan workflow' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Buat plan' })).toBeVisible();
-  const output = path.join('test-artifacts', 'agent-workspace');
+  const output = path.join(process.env.E2E_ARTIFACTS_DIR || 'test-artifacts', 'agent-workspace');
   await mkdir(output, { recursive: true });
   await page.screenshot({ path: path.join(output, 'agent-plan-panel.png'), animations: 'disabled', fullPage: false, scale: 'css' });
 });

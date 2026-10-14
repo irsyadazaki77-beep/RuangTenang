@@ -163,6 +163,7 @@ export class ChatStreamingClient {
       const decoder = new TextDecoder();
       let buffer = '';
       let done = false;
+      let receivedDoneMarker = false;
       const readLoop = async () => {
         while (!done) {
           if (token !== this.activeToken) {
@@ -195,6 +196,7 @@ export class ChatStreamingClient {
                 if (trimmed.startsWith('data: ')) {
                   const dataStr = trimmed.substring(6).trim();
                   if (dataStr === '[DONE]') {
+                    receivedDoneMarker = true;
                     done = true;
                     break;
                   }
@@ -266,7 +268,9 @@ export class ChatStreamingClient {
           const trimmed = buffer.trim();
           if (trimmed.startsWith('data: ')) {
             const dataStr = trimmed.substring(6).trim();
-            if (dataStr !== '[DONE]') {
+            if (dataStr === '[DONE]') {
+              receivedDoneMarker = true;
+            } else {
               try {
                 const parsed = JSON.parse(dataStr);
                 if (parsed.text || (parsed.type === 'text' && parsed.content)) {
@@ -288,6 +292,12 @@ export class ChatStreamingClient {
         return;
       }
 
+      if (!receivedDoneMarker) {
+        throw new Error(currentText.trim()
+          ? 'Respons terputus sebelum selesai. Coba ulangi permintaan.'
+          : 'Koneksi ke provider AI terputus sebelum respons diterima. Coba ulangi permintaan.');
+      }
+
       this.changeState(token, 'completed', callbacks.onStateChange);
 
       if (!pluginName && callbacks.onMessageComplete) {
@@ -302,10 +312,6 @@ export class ChatStreamingClient {
       if (err.name === 'AbortError' || (err.message && err.message.toLowerCase().includes('abort'))) {
         console.info('Stream aborted by client');
         this.changeState(token, 'aborted', callbacks.onStateChange);
-        // Only trigger completion with existing text if there was content streamed
-        if (callbacks.onMessageComplete && currentText.trim()) {
-          await callbacks.onMessageComplete(currentText);
-        }
       } else {
         console.error('Streaming client error:', err);
         this.changeState(token, 'failed', callbacks.onStateChange);
