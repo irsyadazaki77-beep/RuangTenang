@@ -1,5 +1,7 @@
 import { aiRequestService } from '../ai/aiRequestService.js';
 import { AiModelError, getModelDefinition, resolveAiModel } from '../ai/aiModelRegistry.js';
+import { isAiProfile, isKerjaProfile, type ModelTier } from '../../../shared/aiModelContract.js';
+import { smartModelRouter } from '../ai/smartModelRouter.js';
 import { z } from 'zod';
 import type { AgentDecision } from './agentContracts.js';
 import { AgentDecisionSchema } from './agentContracts.js';
@@ -41,7 +43,22 @@ export function estimateAgentDecisionInputTokens(prompt: string, allowedToolIds:
 
 export async function requestAgentDecision(input: AgentModelDecisionInput): Promise<AgentModelDecisionOutput> {
   let model;
-  try { model = resolveAiModel(input.requestedModelId, input.userTier); }
+  let routingDecision;
+  const profileRequest = isAiProfile(input.requestedModelId);
+  try {
+    if (profileRequest) {
+      if (!isKerjaProfile(input.requestedModelId)) throw new AgentModelError('AGENT_MODEL_UNAVAILABLE');
+      routingDecision = smartModelRouter.routeProfile(input.requestedModelId, {
+        workspaceMode: true,
+        userTier: input.userTier as ModelTier,
+        taskCategory: 'structured_reasoning',
+        requestedCapabilities: ['chat']
+      }, input.prompt);
+      model = getModelDefinition(routingDecision.selectedModelId);
+    } else {
+      model = resolveAiModel(input.requestedModelId, input.userTier);
+    }
+  }
   catch (error) {
     if (error instanceof AiModelError) throw new AgentModelError('AGENT_MODEL_UNAVAILABLE', 'Model yang dipilih tidak tersedia untuk akun ini.');
     throw new AgentModelError('AGENT_MODEL_UNAVAILABLE', 'Model yang dipilih tidak tersedia untuk Agent.');
@@ -62,7 +79,7 @@ export async function requestAgentDecision(input: AgentModelDecisionInput): Prom
     prompt,
     systemInstruction: AGENT_SYSTEM_INSTRUCTION,
     abortSignal: input.abortSignal,
-    comparisonMode: true,
+    ...(routingDecision ? { routingDecision, comparisonMode: false } : { comparisonMode: true }),
     responseFormat: 'json',
     maxOutputTokens: Math.min(input.maxOutputTokens || AGENT_EXECUTION_LIMITS.maxOutputTokens, AGENT_EXECUTION_LIMITS.maxOutputTokens)
   });

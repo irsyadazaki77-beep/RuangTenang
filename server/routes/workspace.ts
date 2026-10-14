@@ -40,7 +40,6 @@ import {
   updateDraftPlan,
   WorkspaceWorkflowError,
   claimWorkspaceTaskAgentExecution,
-  workspaceAgentProposalId
 } from '../services/workspaceWorkflowService.js';
 import { runWorkspaceAgent, AgentExecutionError } from '../services/agent/agentOrchestrator.js';
 import { AgentExecutionResultSchema } from '../services/agent/agentContracts.js';
@@ -435,7 +434,9 @@ router.post('/:chatId/plans/:planId/tasks/:taskId/run', async (req: Request, res
     const workspace = await ownedWorkspace(req.params.chatId, req.user!.userId, false);
     if (!workspace) return res.status(404).json({ success: false, code: 'WORKSPACE_NOT_FOUND', message: 'Workspace tidak ditemukan.' });
     await currentWorkspacePlan(workspace, req.user!.userId);
-    const result = await startWorkspaceTask(req.params.chatId, req.user!.userId, req.params.planId, req.params.taskId, parsed.data.executionId, parsed.data.snapshot, (req.user as any).tier || 'Free');
+    const allowInternalModel = req.user!.role === 'admin' || (req.user as any).tier === 'Developer';
+    const args = [req.params.chatId, req.user!.userId, req.params.planId, req.params.taskId, parsed.data.executionId, parsed.data.snapshot, (req.user as any).tier || 'Free'] as const;
+    const result = allowInternalModel ? await startWorkspaceTask(...args, true) : await startWorkspaceTask(...args);
     return res.status(result.claimed ? 202 : 200).json({ success: true, data: result });
   } catch (error) {
     return sendWorkflowError(res, error, 'WORKSPACE_TASK_RUN_FAILED', 'Task gagal dimulai.');
@@ -464,19 +465,17 @@ router.post('/:chatId/plans/:planId/tasks/:taskId/agent', aiChatLimiter, async (
 
     const plan = await findWorkspacePlan(workspaceId, userId, planId);
     if (!plan) return res.status(404).json({ success: false, code: 'WORKSPACE_PLAN_NOT_FOUND', message: 'Plan tidak ditemukan.' });
-    let result = await runWorkspaceAgent({
+    const result = await runWorkspaceAgent({
       executionId, workspaceId, userId, userTier: (req.user as any).tier || 'Free',
       plan, taskId, abortSignal: abortController.signal
     });
     if (abortController.signal.aborted) throw new AgentExecutionError('AGENT_CANCELLED', 'Eksekusi dihentikan.');
-    const artifactId = result.artifactProposal ? workspaceAgentProposalId(executionId) : undefined;
     const savedPlan = await finishWorkspaceTask(workspaceId, userId, planId, taskId, executionId, {
       output: result.output,
       sources: result.sources,
       executionEvents: result.events,
       ...(result.artifactProposal ? { artifactProposal: result.artifactProposal } : {})
     });
-    result = AgentExecutionResultSchema.parse({ ...result, ...(artifactId ? { artifactId } : {}) });
     return res.json({ success: true, data: { execution: result, plan: savedPlan } });
   } catch (error) {
     if (abortController.signal.aborted || (error instanceof AgentExecutionError && error.code === 'AGENT_CANCELLED')) {
@@ -523,7 +522,9 @@ router.post('/:chatId/plans/:planId/tasks/:taskId/model', async (req: Request, r
     const workspace = await ownedWorkspace(req.params.chatId, req.user!.userId, false);
     if (!workspace) return res.status(404).json({ success: false, code: 'WORKSPACE_NOT_FOUND', message: 'Workspace tidak ditemukan.' });
     await currentWorkspacePlan(workspace, req.user!.userId);
-    const plan = await setWorkspaceTaskModel(req.params.chatId, req.user!.userId, req.params.planId, req.params.taskId, parsed.data.modelId, (req.user as any).tier || 'Free');
+    const allowInternalModel = req.user!.role === 'admin' || (req.user as any).tier === 'Developer';
+    const args = [req.params.chatId, req.user!.userId, req.params.planId, req.params.taskId, parsed.data.modelId, (req.user as any).tier || 'Free'] as const;
+    const plan = allowInternalModel ? await setWorkspaceTaskModel(...args, true) : await setWorkspaceTaskModel(...args);
     return res.json({ success: true, data: plan });
   } catch (error) {
     return sendWorkflowError(res, error, 'WORKSPACE_MODEL_UPDATE_FAILED', 'Model task gagal diperbarui.');

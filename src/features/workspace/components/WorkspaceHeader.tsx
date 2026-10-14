@@ -20,6 +20,7 @@ interface WorkspaceHeaderProps {
   workspaceTitle?: string;
   activeArtifact: WorkspaceArtifact | null;
   isCanvasOpen: boolean;
+  isContextOpen?: boolean;
   mobileActiveTab: WorkspaceTab;
   hasUnreadArtifact: boolean;
   onOpenSidebar?: () => void;
@@ -38,6 +39,7 @@ export const WorkspaceHeader: React.FC<WorkspaceHeaderProps> = React.memo(({
   workspaceTitle = 'Workspace baru',
   activeArtifact,
   isCanvasOpen,
+  isContextOpen = false,
   mobileActiveTab,
   hasUnreadArtifact,
   onOpenSidebar,
@@ -155,14 +157,35 @@ export const WorkspaceHeader: React.FC<WorkspaceHeaderProps> = React.memo(({
           <button type="button" onClick={() => onSetMobileActiveTab('context')} aria-label="Panel" title="Panel" aria-pressed={mobileActiveTab === 'context' || mobileActiveTab === 'sources'} className={`flex min-h-10 min-w-10 items-center justify-center gap-1.5 rounded-md px-2 sm:px-2.5 text-xs font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${mobileActiveTab === 'context' || mobileActiveTab === 'sources' ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-semibold shadow-2xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'}`}><Sparkles className="h-4 w-4 sm:hidden" aria-hidden="true" /><span className="hidden sm:inline">Panel</span></button>
         </div>
 
-        {onToggleContext && <button type="button" onClick={onToggleContext} aria-label="Buka panel" title="Files, sumber, rencana, dan konteks" className="hidden xl:inline-flex h-9 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:hover:bg-slate-800 dark:hover:text-slate-100"><Sparkles className="h-3.5 w-3.5" /><span>Panel</span></button>}
+        {onToggleContext && (
+          <button
+            type="button"
+            onClick={onToggleContext}
+            aria-label={isContextOpen ? 'Tutup panel' : 'Buka panel'}
+            aria-pressed={isContextOpen}
+            title={isContextOpen ? 'Tutup panel' : 'Files, sumber, rencana, dan konteks'}
+            className={`hidden xl:inline-flex h-9 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
+              isContextOpen
+                ? 'bg-slate-200/90 text-slate-900 font-semibold dark:bg-slate-800 dark:text-slate-100 shadow-2xs'
+                : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100'
+            }`}
+          >
+            <Sparkles className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+            <span>Panel</span>
+          </button>
+        )}
 
         {/* Primary Action: + Draf Baru Dropdown */}
         {/* Desktop Canvas Toggle */}
         <button
           type="button"
           onClick={onToggleCanvas}
-          className="hidden xl:flex h-9 px-2.5 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-medium items-center gap-1.5 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+          aria-pressed={isCanvasOpen}
+          className={`hidden xl:flex h-9 px-2.5 rounded-lg text-xs font-medium items-center gap-1.5 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
+            isCanvasOpen
+              ? 'bg-slate-200/90 text-slate-900 font-semibold dark:bg-slate-800 dark:text-slate-100 shadow-2xs'
+              : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
           title={isCanvasOpen ? 'Sembunyikan Panel Canvas' : 'Tampilkan Panel Canvas'}
           aria-label={isCanvasOpen ? 'Tutup Canvas' : 'Buka Canvas'}
         >

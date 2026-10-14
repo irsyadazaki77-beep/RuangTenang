@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect, useLayoutEffect, useMemo } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { Bookmark, FileText, Paperclip, Sparkles } from 'lucide-react';
+import { Paperclip, Sparkles } from 'lucide-react';
 import { WorkspaceMode, WorkspaceArtifact, WorkspaceTab, WorkspaceComposerConfig, WorkspaceComparisonCandidate, WorkspaceComparisonRun, WorkspaceRequestSnapshot, WorkspaceArtifactSelection, ArtifactPatch } from './types';
 import { UserSession } from '../../types';
 import { Chat, Message } from '../chat/types';
@@ -21,6 +21,7 @@ import { WorkspaceHeader } from './components/WorkspaceHeader';
 import { WorkspaceConversation } from './components/WorkspaceConversation';
 import { WorkspaceComposer } from './components/WorkspaceComposer';
 import { WorkspaceCanvasPane } from './components/WorkspaceCanvasPane';
+import { WorkspaceInspectorPanel } from './components/WorkspaceInspectorPanel';
 import { WorkspaceWorkflowPipeline } from './components/WorkspaceWorkflowPipeline';
 import { WorkspaceTemplateModal } from './components/WorkspaceTemplateModal';
 import { MicroBreathingModal } from './components/MicroBreathingModal';
@@ -29,12 +30,10 @@ import { getWorkspaceSessionStorage, loadWorkspaceModelPreference, readWorkspace
 import { useWorkspacePresets } from './hooks/useWorkspacePresets';
 import { WorkspaceToolDefinition } from './tools/toolTypes';
 import { WorkspaceToolExecutor } from './tools/toolExecutor';
-import { AUTO_ROUTING_MODEL_ID } from '../../lib/aiModels';
-import { useAiModelCatalog } from '../../lib/aiModelCatalog';
+import { DEFAULT_KERJA_PROFILE_ID, isKerjaProfile } from '../../lib/aiModels';
 import { DEFAULT_WELCOME_ARTIFACT_ID } from './constants/workspaceConstants';
 import { parseArtifactsFromText } from './utils/artifactParser';
 import { WorkspaceToolConfigModal } from './components/WorkspaceToolConfigModal';
-import { WorkspaceTasksPanel } from './components/WorkspaceTasksPanel';
 import { useToast } from '../../components/Toast';
 import { getModeChatPath } from './utils/workspaceRouting';
 import { apiClient } from '../../lib/apiClient';
@@ -42,8 +41,6 @@ import { buildWorkspaceContextNote, buildWorkspaceRequestSnapshot } from './util
 import { getArtifactSelectionContext } from './utils/artifactPatch';
 import { WorkspacePlanSchema, type WorkspacePlan } from '../../../shared/contracts/workspace';
 import { validateResearchCitations } from './utils/citationIntegrity';
-import { WorkspaceSourceLibrary } from './components/WorkspaceSourceLibrary';
-import { WorkspaceSourcePreview } from './components/WorkspaceSourcePreview';
 import { useWorkspaceViewController } from './hooks/useWorkspaceViewController';
 import { WORKSPACE_COMMAND_EVENT, type WorkspaceCommandId } from './utils/workspaceCommandEvents';
 import { readWorkspacePromptDraft, writeWorkspacePromptDraft } from './utils/workspacePromptDraft';
@@ -51,7 +48,6 @@ import type { AgentExecutionResult } from '../../../shared/contracts/agent';
 
 const WorkspaceFilePreviewModal = React.lazy(() => import('./components/WorkspaceFilePreviewModal').then(module => ({ default: module.WorkspaceFilePreviewModal })));
 const ExportModal = React.lazy(() => import('./components/ExportModal').then(module => ({ default: module.ExportModal })));
-const WorkspaceMemorySection = React.lazy(() => import('./components/WorkspaceMemorySection').then(module => ({ default: module.WorkspaceMemorySection })));
 
 export interface StudentWorkspaceProps {
   user: UserSession | null;
@@ -117,7 +113,6 @@ function StudentWorkspaceSession({
   const { chatId } = useParams<{ chatId?: string }>();
   const location = useLocation();
   const navigate = useNavigate();
-  const { models, defaultModel } = useAiModelCatalog();
   const { showToast } = useToast();
   const [streamCreatedChatId, setStreamCreatedChatId] = useState<string>();
   const [workspaceIdentity, setWorkspaceIdentity] = useState(() => chatId ? `chat:${chatId}` : getLocalWorkspaceIdentity(user?.id));
@@ -228,6 +223,7 @@ function StudentWorkspaceSession({
   const [selectedText, setSelectedText] = useState('');
   const [canvasSelection, setCanvasSelection] = useState<WorkspaceArtifactSelection | null>(null);
   const [canvasDraft, setCanvasDraft] = useState<{ artifactId: string; content: string } | null>(null);
+  const [agentProposalPreview, setAgentProposalPreview] = useState<{ taskId: string; proposal: NonNullable<WorkspacePlan['tasks'][number]['artifactProposal']> } | null>(null);
   const [pendingRevision, setPendingRevision] = useState<{ artifactId: string; title: string; baseContent: string; baseVersion: number; proposedContent: string } | null>(null);
   const [inlineEditPatch, setInlineEditPatch] = useState<ArtifactPatch | null>(null);
   const [revisionCommit, setRevisionCommit] = useState<{ artifactId: string; content: string; version: number } | null>(null);
@@ -241,12 +237,10 @@ function StudentWorkspaceSession({
   const handleCompareModeChange = useCallback((enabled: boolean) => {
     setCompareMode(enabled);
     if (!enabled || selectedCompareModels.length >= 2) return;
-    const selectable = models.filter(model => model.selectable && model.capabilities.includes('chat') && model.capabilities.includes('streaming'));
-    const preferred = selectedModel !== AUTO_ROUTING_MODEL_ID ? selectedModel : defaultModel;
-    const first = selectable.find(model => model.id === preferred)?.id || selectable.find(model => model.id === defaultModel)?.id || selectable[0]?.id || preferred;
-    const second = selectable.find(model => model.id !== first)?.id;
-    setSelectedCompareModels([first, ...(second ? [second] : [])]);
-  }, [defaultModel, models, selectedCompareModels.length, selectedModel]);
+    const first = isKerjaProfile(selectedModel) ? selectedModel : DEFAULT_KERJA_PROFILE_ID;
+    const second = first === 'kerja-hard' ? 'kerja-santai' : 'kerja-hard';
+    setSelectedCompareModels([first, second]);
+  }, [selectedCompareModels.length, selectedModel]);
 
   useEffect(() => {
     const state = location.state as { initialPrompt?: unknown; initialCompareMode?: unknown } | null;
@@ -687,7 +681,7 @@ function StudentWorkspaceSession({
     setMessages(previous => [...previous,
       ...(previous.some(message => message.id === persistedPromptId || message.id === persistedResponseId || message.id === selectionKey) ? [] : [
         { id: persistedPromptId, role: 'user' as const, content: run.prompt, createdAt: messageTime },
-        { id: persistedResponseId, role: 'assistant' as const, content: !artifactsPersisted && selectedArtifacts.length ? `${responseText}\n\nDokumen belum tersimpan ke server. Draf tetap tersedia di Canvas; coba simpan lagi.` : responseText, modelUsed: candidate.modelId, createdAt: new Date() }
+        { id: persistedResponseId, role: 'assistant' as const, content: !artifactsPersisted && selectedArtifacts.length ? `${responseText}\n\nDokumen belum tersimpan ke server. Draf tetap tersedia di Canvas; coba simpan lagi.` : responseText, modelUsed: candidate.modelId, modelName: candidate.modelName, createdAt: new Date() }
       ])
     ]);
     if (selectedArtifacts.length && !artifactsPersisted) showToast('Jawaban tersimpan, tetapi dokumen Canvas belum tersimpan. Draf tetap tersedia; coba simpan lagi.', 'error');
@@ -825,16 +819,16 @@ function StudentWorkspaceSession({
   }, [abortStream, chatId, clearWorkspaceConversation, navigate, showToast]);
 
   const handleRequestRevision = useCallback((revisionPrompt: string, currentArt: WorkspaceArtifact) => {
-    const baseContent = canvasDraft?.artifactId === currentArt.id ? canvasDraft.content : currentArt.content;
+    const baseContent = currentArt.content;
     const workspaceId = effectiveChatIdRef.current;
     revisionRequestRef.current = { scope: 'document', artifactId: currentArt.id, title: currentArt.title, baseContent, baseVersion: currentArt.version, workspaceId };
     const safeTitle = currentArt.title.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
     const outputContract = `Instruksi revisi dokumen "${currentArt.title}": ${revisionPrompt}. Gunakan dokumen Canvas aktif sebagai sumber. Kembalikan versi lengkap hasil revisi hanya dalam satu blok <artifact type="${currentArt.type.toLowerCase()}" title="${safeTitle}"${currentArt.language ? ` language="${currentArt.language}"` : ''}>...isi...</artifact>. Jangan mengubah dokumen secara langsung.`;
     handleExecuteSendMessage(`Tolong revisi dokumen aktif: ${revisionPrompt}`, outputContract);
-  }, [canvasDraft, handleExecuteSendMessage]);
+  }, [handleExecuteSendMessage]);
 
   const handleRequestInlineEdit = useCallback((selection: WorkspaceArtifactSelection, instruction: string, currentArt: WorkspaceArtifact) => {
-    const baseContent = canvasDraft?.artifactId === currentArt.id ? canvasDraft.content : currentArt.content;
+    const baseContent = currentArt.content;
     if (!canvasSelection || canvasSelection.artifactId !== selection.artifactId || canvasSelection.start !== selection.start || canvasSelection.end !== selection.end || selection.artifactId !== currentArt.id || baseContent.slice(selection.start, selection.end) !== selection.text) {
       showToast('Teks yang dipilih sudah berubah. Pilih kembali lalu coba revisi.', 'error');
       return;
@@ -845,7 +839,7 @@ function StudentWorkspaceSession({
     const safeTitle = currentArt.title.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
     const outputContract = `Instruksi revisi inline untuk dokumen Canvas "${safeTitle}": ${instruction}. Ubah hanya teks di dalam <selected_text>, gunakan konteks sekitar hanya untuk memahami makna. Kembalikan hanya teks pengganti (tanpa penjelasan dan tanpa mengulang konteks) di dalam satu blok <artifact type="${currentArt.type.toLowerCase()}" title="Inline suggestion">...teks pengganti...</artifact>. Jangan mengubah dokumen secara langsung.`;
     handleExecuteSendMessage(`Perbaiki teks terpilih: ${instruction}`, outputContract, undefined, undefined, undefined, false, selection);
-  }, [canvasDraft, canvasSelection, handleExecuteSendMessage, showToast]);
+  }, [canvasSelection, handleExecuteSendMessage, showToast]);
 
   const handleDismissInlineEdit = useCallback(() => setInlineEditPatch(null), []);
 
@@ -947,6 +941,36 @@ function StudentWorkspaceSession({
     openWorkspaceInspector('canvas');
     setHasUnreadArtifact(false);
   }, [openWorkspaceInspector, setHasUnreadArtifact]);
+  const handlePreviewAgentProposal = useCallback((taskId: string, proposal: NonNullable<WorkspacePlan['tasks'][number]['artifactProposal']>) => {
+    setAgentProposalPreview({ taskId, proposal });
+    openWorkspaceInspector('canvas');
+  }, [openWorkspaceInspector]);
+  const handleAcceptedAgentTask = useCallback((task: WorkspacePlan['tasks'][number]) => {
+    if (!task.outputArtifactId || !task.artifactProposal) return;
+    const now = new Date().toISOString();
+    const artifact: WorkspaceArtifact = {
+      id: task.outputArtifactId,
+      chatId: effectiveChatIdRef.current,
+      title: task.artifactProposal.title,
+      type: task.artifactProposal.type,
+      ...(task.artifactProposal.language ? { language: task.artifactProposal.language } : {}),
+      content: task.artifactProposal.content,
+      version: 1,
+      createdAt: now,
+      updatedAt: now,
+      persistenceStatus: 'persistent'
+    };
+    setAgentProposalPreview(null);
+    setArtifacts(current => [artifact, ...current.filter(item => item.id !== artifact.id)]);
+    setActiveArtifactId(artifact.id);
+    setHasUnreadArtifact(true);
+    openWorkspaceInspector('canvas');
+  }, [openWorkspaceInspector, setActiveArtifactId, setArtifacts, setHasUnreadArtifact]);
+  useEffect(() => {
+    if (!agentProposalPreview) return;
+    const task = workspacePlan?.tasks.find(item => item.id === agentProposalPreview.taskId);
+    if (!task || task.status !== 'waiting_review' || task.artifactProposal?.content !== agentProposalPreview.proposal.content) setAgentProposalPreview(null);
+  }, [agentProposalPreview, workspacePlan]);
   const handleSelectStarterTask = useCallback((prompt: string) => { handleExecuteSendMessage(prompt); }, [handleExecuteSendMessage]);
   const handleComposerSend = useCallback((prompt: string, attachments?: StoredAttachment[], config?: WorkspaceComposerConfig) => {
     return handleExecuteSendMessage(prompt, undefined, attachments, config);
@@ -985,6 +1009,7 @@ function StudentWorkspaceSession({
     sendMessage: handleExecuteSendMessage,
     abortStream,
     onAgentTaskCompleted: handleAgentTaskCompleted,
+    onTaskAccepted: handleAcceptedAgentTask,
     showToast
   });
   const handleSaveWorkspaceInstructions = useCallback(async () => {
@@ -1238,78 +1263,73 @@ function StudentWorkspaceSession({
           />
         </section>
 
-        <aside aria-label="Panel RuangKerja" className={`${mobileActiveTab === 'context' || mobileActiveTab === 'sources' ? 'flex' : 'hidden'} ${isContextPanelOpen ? 'xl:flex' : ''} ${workspaceView.inspector === 'sources' ? 'absolute inset-x-0 bottom-0 z-40 h-[min(65dvh,36rem)] rounded-t-2xl shadow-2xl xl:relative xl:inset-auto xl:z-auto xl:h-auto xl:rounded-none xl:shadow-none' : ''} min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white/95 dark:bg-slate-900/95 backdrop-blur-xs xl:border-l xl:border-slate-200/80 xl:dark:border-slate-800 ${isCanvasExpanded ? 'xl:flex-1' : 'xl:flex-[0_0_46%] 2xl:flex-[0_0_48%]'}`}>
-          <div className="flex h-10 shrink-0 items-center justify-between border-b border-slate-200/80 px-3 dark:border-slate-800">
-            <div className="flex h-full items-center gap-1 overflow-x-auto" role="tablist" aria-label="Panel Workspace">
-              <button type="button" role="tab" aria-selected={workspaceRightTab === 'context'} onClick={() => openWorkspaceInspector('context')} className={`inline-flex min-h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-semibold transition-colors ${workspaceRightTab === 'context' ? 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-100' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}><Sparkles className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />Konteks</button>
-              <button type="button" role="tab" aria-selected={workspaceRightTab === 'files'} onClick={() => openWorkspaceInspector('files')} className={`min-h-8 rounded-md px-2.5 text-xs font-semibold transition-colors ${workspaceRightTab === 'files' ? 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-100' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}>File{workspaceAttachments.length > 0 && <span className="ml-1 text-[10px] text-slate-500">({workspaceAttachments.length})</span>}</button>
-              <button type="button" role="tab" aria-selected={workspaceRightTab === 'sources'} onClick={() => openWorkspaceInspector('sources')} className={`min-h-8 rounded-md px-2.5 text-xs font-semibold transition-colors ${workspaceRightTab === 'sources' ? 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-100' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}>Sumber</button>
-              <button type="button" role="tab" aria-selected={workspaceRightTab === 'memory'} onClick={() => openWorkspaceInspector('memory')} className={`inline-flex min-h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-semibold transition-colors ${workspaceRightTab === 'memory' ? 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-100' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}><Bookmark className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />Memori</button>
-              <button type="button" role="tab" aria-selected={workspaceRightTab === 'plan'} onClick={() => openWorkspaceInspector('plan')} className={`min-h-8 rounded-md px-2.5 text-xs font-semibold transition-colors ${workspaceRightTab === 'plan' ? 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-100' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}>Rencana{workspacePlan?.tasks.some(task => task.status === 'running' || task.status === 'waiting_review') && <span className="ml-1.5 inline-block h-1.5 w-1.5 rounded-full bg-amber-500" />}</button>
-            </div>
-            <button type="button" aria-label="Tutup panel" onClick={closeWorkspaceInspector} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:hover:bg-slate-800"><span aria-hidden="true">×</span></button>
-          </div>
-          {workspaceRightTab === 'context' ? (
-            <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
-              <p className="mb-3 text-[11px] text-slate-500">Konteks untuk respons berikutnya. File dan Canvas hanya dikirim jika siap dan diaktifkan.</p>
-              <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700"><p className="text-xs font-semibold text-slate-800 dark:text-slate-100">Konteks aktif</p><p className="mt-1 text-[11px] text-slate-500">{selectedReadyWorkspaceFileCount} dokumen siap · {includeCanvasInContext && visibleActiveArtifact ? visibleActiveArtifact.title : 'Canvas tidak disertakan'} · {selectedText.trim() ? 'teks dipilih disertakan' : 'tanpa teks terpilih'}</p><button type="button" onClick={() => openWorkspaceInspector('files')} className="mt-2 min-h-8 rounded-md px-2 text-[11px] font-semibold text-emerald-800 hover:bg-emerald-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:text-emerald-200 dark:hover:bg-emerald-950/40">Kelola file konteks</button></div>
-              <label className="flex items-center gap-2 border-b border-slate-100 py-3 text-xs font-medium text-slate-700 dark:border-slate-800 dark:text-slate-200"><input type="checkbox" checked={includeCanvasInContext} onChange={event => setIncludeCanvasInContext(event.target.checked)} className="accent-emerald-600" />Gunakan Canvas aktif <span className="ml-auto max-w-[55%] truncate text-[10px] font-normal text-slate-500">{visibleActiveArtifact?.title || 'Belum ada Canvas'}</span></label>
-              <div className="mt-4 border-t border-slate-100 pt-3 dark:border-slate-800"><div className="flex items-start justify-between gap-2"><div className="min-w-0"><p className="text-xs font-semibold text-slate-700 dark:text-slate-200">Instruksi Workspace</p><p className="mt-1 text-[11px] text-slate-500">{workspaceData?.instructions || 'Belum ada instruksi khusus.'}</p></div><button type="button" disabled={!workspaceData || workspaceMetadata.pendingIds.includes('workspace')} onClick={() => setIsInstructionsEditing(open => !open)} className="shrink-0 rounded-md px-2 py-1 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:text-emerald-300 dark:hover:bg-emerald-950">{isInstructionsEditing ? 'Batal' : 'Ubah'}</button></div>
-                {isInstructionsEditing && <div className="mt-2 grid gap-2"><textarea value={instructionsDraft} onChange={event => setInstructionsDraft(event.target.value.slice(0, 4000))} maxLength={4000} rows={4} aria-label="Instruksi Workspace" placeholder="Contoh: Gunakan IEEE dan bahasa Indonesia formal." className="w-full resize-y rounded-md border border-slate-200 bg-white p-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:border-slate-700 dark:bg-slate-950" /><div className="flex items-center justify-between"><span className="text-[10px] text-slate-500">{instructionsDraft.length}/4000</span><button type="button" disabled={isInstructionsSaving} onClick={() => void handleSaveWorkspaceInstructions()} className="rounded-md bg-emerald-700 px-2.5 py-1.5 text-[11px] font-semibold text-white disabled:opacity-50">{isInstructionsSaving ? 'Menyimpan…' : 'Simpan'}</button></div></div>}
-              </div>
-              {workspaceMetadata.error && <p role="status" className="mt-3 text-[11px] text-amber-700 dark:text-amber-300">{workspaceMetadata.error}</p>}
-            </div>
-          ) : workspaceRightTab === 'files' ? (
-            <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3" role="tabpanel" aria-label="File Workspace">
-              <div className="mb-3 flex items-center justify-between gap-3"><div><h2 className="text-xs font-semibold text-slate-800 dark:text-slate-100">Dokumen konteks</h2><p className="mt-1 text-[11px] text-slate-500">File hanya digunakan setelah statusnya Siap dan disertakan.</p></div><button type="button" onClick={() => fileInputRef.current?.click()} className="min-h-9 shrink-0 rounded-lg bg-emerald-700 px-3 text-[11px] font-semibold text-white hover:bg-emerald-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">Tambah file</button></div>
-              {isLoadingAttachments ? <p role="status" className="rounded-lg border border-slate-200 px-3 py-5 text-center text-xs text-slate-500 dark:border-slate-700">Memuat dokumen Workspace…</p> : workspaceAttachments.length === 0 ? <div className="rounded-lg border border-dashed border-slate-300 px-4 py-6 text-center dark:border-slate-700"><p className="text-xs font-medium text-slate-700 dark:text-slate-200">Belum ada dokumen</p><p className="mt-1 text-[11px] text-slate-500">Tambahkan file untuk dianalisis bersama AI.</p></div> : <ul className="divide-y divide-slate-100 dark:divide-slate-800">{workspaceAttachments.map(file => {
-                const ready = file.status === 'ready' && Boolean(file.id);
-                const status = file.status === 'ready' ? 'Siap' : file.status === 'uploading' ? 'Mengunggah…' : file.status === 'processing' ? 'Memproses…' : file.status === 'unsupported' ? 'Tidak didukung' : 'Gagal';
-                return <li key={file.id || file.clientId || file.name} className="flex min-w-0 items-center gap-2 py-2.5"><input type="checkbox" aria-label={`Gunakan ${file.name} sebagai konteks`} disabled={!ready} checked={ready && selectedWorkspaceFileIds.includes(file.id!)} onChange={event => { if (event.target.checked) setIncludeFilesInContext(true); setSelectedWorkspaceFileIds(current => event.target.checked ? [...new Set([...current, file.id!])] : current.filter(id => id !== file.id)); }} className="accent-emerald-600 disabled:opacity-40" /><FileText className="h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" /><span className="min-w-0 flex-1"><span className="block truncate text-xs text-slate-700 dark:text-slate-200">{file.name}</span><span className={`text-[10px] ${ready ? 'text-emerald-700 dark:text-emerald-300' : 'text-slate-500'}`}>{status}{file.status === 'ready' && includeFilesInContext ? selectedWorkspaceFileIds.includes(file.id!) ? ' · Disertakan' : ' · Tidak disertakan' : ''}{file.status === 'ready' && !includeFilesInContext ? ' · Konteks dinonaktifkan' : ''}{file.errorMessage ? ` · ${file.errorMessage}` : ''}</span></span>{ready && <button type="button" aria-label={`Pratinjau ${file.name}`} onClick={() => openWorkspaceFilePreview(file.id!)} className="min-h-8 rounded px-2 text-[11px] font-medium text-emerald-700 hover:bg-emerald-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:text-emerald-300 dark:hover:bg-emerald-950/40">Preview</button>}</li>;
-              })}</ul>}
-              <label className="mt-3 flex min-h-10 items-center gap-2 border-t border-slate-100 pt-2 text-xs font-medium text-slate-700 dark:border-slate-800 dark:text-slate-200"><input type="checkbox" checked={includeFilesInContext} onChange={event => setIncludeFilesInContext(event.target.checked)} className="accent-emerald-600" />Sertakan file terpilih pada respons berikutnya <span className="ml-auto text-[10px] text-slate-500">{selectedReadyWorkspaceFileCount} aktif</span></label>
-            </div>
-          ) : workspaceRightTab === 'sources' ? (
-            <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2" role="tabpanel" aria-label="Sumber">{workspaceView.selectedSource && <WorkspaceSourcePreview source={workspaceView.selectedSource} onOpenDocument={openWorkspaceFilePreview} onClose={() => dispatchWorkspaceView({ type: 'clear-source-preview' })} />}<WorkspaceSourceLibrary chatId={effectiveChatId} onPreview={openWorkspaceFilePreview} /></div>
-          ) : workspaceRightTab === 'plan' ? (
-            <div className="min-h-0 flex-1 overflow-y-auto" role="tabpanel" aria-label="Rencana"><WorkspaceTasksPanel
-              plan={workspacePlan}
-              workspaceKey={logicalWorkspaceIdentity}
-              isLoading={workspaceMetadata.isLoading}
-              canPersist={Boolean(workspaceData)}
-              isGenerating={taskGenerationRequestsRef.current.size > 0 && isStreaming}
-              isExecuting={Boolean(workspacePlan?.tasks.some(task => task.status === 'running')) && (isStreaming || isAgentExecuting)}
-              isContinuousRunning={isContinuousRunning}
-              onStartContinuous={handleStartContinuousWorkflow}
-              onStopContinuous={handleStopContinuousWorkflow}
-              modelOptions={models.map(model => ({ id: model.id, name: model.name }))}
-              onOpenArtifact={id => { handleSelectCanvasArtifact(id); handleOpenCanvas(); }}
-              onOpenSource={openWorkspaceSource}
-              onAcceptReview={handleAcceptTaskReview}
-              onRejectReview={handleRejectTaskReview}
-              onUpdate={updateWorkspacePlan}
-              onTransition={action => action === 'pause' ? handlePauseWorkflow() : handleResumeWorkflow()}
-              onRecover={handleRecoverWorkspaceTask}
-              onModelChange={(taskId, modelId) => void workspaceMetadata.updateTaskModel(workspacePlan!.id, taskId, modelId).catch(error => showToast(error instanceof Error ? error.message : 'Model task gagal diperbarui.', 'error'))}
-              onRun={(taskId, feedback) => void handleRunWorkspaceTask(taskId, feedback)}
-              onGenerate={handleGenerateWorkspaceTasks}
-              onCancel={handleCancelWorkflow}
-              onComplete={handleCompleteWorkflow}
-              focusedTaskId={focusedTaskId || undefined}
-              hideHeader
-            /></div>
-          ) : null}
-          <div className={`min-h-0 flex-1 overflow-y-auto px-3 py-3 ${workspaceRightTab === 'memory' ? 'flex flex-col' : 'hidden'}`} role="tabpanel" aria-label="Memori Workspace" aria-hidden={workspaceRightTab !== 'memory'}>
-            <React.Suspense fallback={null}>
-              <WorkspaceMemorySection key={effectiveChatId || logicalWorkspaceIdentity} chatId={effectiveChatId} canPersist={Boolean(workspaceData) && workspaceRightTab === 'memory'} />
-            </React.Suspense>
-          </div>
-        </aside>
+        <WorkspaceInspectorPanel
+          isOpen={(mobileActiveTab === 'context' || mobileActiveTab === 'sources') || isContextPanelOpen}
+          activeInspectorTab={workspaceRightTab}
+          onSelectTab={openWorkspaceInspector}
+          onClose={closeWorkspaceInspector}
+          isExpanded={isCanvasExpanded}
+          selectedReadyWorkspaceFileCount={selectedReadyWorkspaceFileCount}
+          includeCanvasInContext={includeCanvasInContext}
+          onToggleIncludeCanvasInContext={setIncludeCanvasInContext}
+          visibleActiveArtifactTitle={visibleActiveArtifact?.title}
+          selectedText={selectedText}
+          workspaceInstructions={workspaceData?.instructions}
+          isInstructionsEditing={isInstructionsEditing}
+          onToggleInstructionsEditing={() => setIsInstructionsEditing(open => !open)}
+          instructionsDraft={instructionsDraft}
+          onChangeInstructionsDraft={draft => setInstructionsDraft(draft)}
+          onSaveInstructions={handleSaveWorkspaceInstructions}
+          isInstructionsSaving={isInstructionsSaving}
+          canEditInstructions={Boolean(workspaceData) && !workspaceMetadata.pendingIds.includes('workspace')}
+          workspaceMetadataError={workspaceMetadata.error}
+          workspaceAttachments={workspaceAttachments}
+          isLoadingAttachments={isLoadingAttachments}
+          selectedWorkspaceFileIds={selectedWorkspaceFileIds}
+          includeFilesInContext={includeFilesInContext}
+          onToggleIncludeFilesInContext={setIncludeFilesInContext}
+          onSelectFileCheckbox={(fileId, checked) => {
+            if (checked) setIncludeFilesInContext(true);
+            setSelectedWorkspaceFileIds(current => checked ? [...new Set([...current, fileId])] : current.filter(id => id !== fileId));
+          }}
+          onOpenFilePreview={openWorkspaceFilePreview}
+          onAddFileClick={() => fileInputRef.current?.click()}
+          selectedSource={workspaceView.selectedSource}
+          onClearSelectedSource={() => dispatchWorkspaceView({ type: 'clear-source-preview' })}
+          chatId={effectiveChatId}
+          workspacePlan={workspacePlan}
+          logicalWorkspaceIdentity={logicalWorkspaceIdentity}
+          isPlanLoading={workspaceMetadata.isLoading}
+          canPersistPlan={Boolean(workspaceData)}
+          isTaskGenerating={taskGenerationRequestsRef.current.size > 0 && isStreaming}
+          isPlanExecuting={Boolean(workspacePlan?.tasks.some(task => task.status === 'running')) && (isStreaming || isAgentExecuting)}
+          isContinuousRunning={isContinuousRunning}
+          onStartContinuous={handleStartContinuousWorkflow}
+          onStopContinuous={handleStopContinuousWorkflow}
+          onOpenArtifact={id => { handleSelectCanvasArtifact(id); handleOpenCanvas(); }}
+          onPreviewProposal={handlePreviewAgentProposal}
+          onOpenSource={openWorkspaceSource}
+          onAcceptTaskReview={handleAcceptTaskReview}
+          onRejectTaskReview={handleRejectTaskReview}
+          onUpdatePlan={updateWorkspacePlan}
+          onPauseWorkflow={handlePauseWorkflow}
+          onResumeWorkflow={handleResumeWorkflow}
+          onRecoverTask={handleRecoverWorkspaceTask}
+          onTaskModelChange={(taskId, modelId) => void workspaceMetadata.updateTaskModel(workspacePlan!.id, taskId, modelId).catch(error => showToast(error instanceof Error ? error.message : 'Model task gagal diperbarui.', 'error'))}
+          onRunTask={(taskId, feedback) => void handleRunWorkspaceTask(taskId, feedback)}
+          onGenerateTasks={handleGenerateWorkspaceTasks}
+          onCancelWorkflow={handleCancelWorkflow}
+          onCompleteWorkflow={handleCompleteWorkflow}
+          focusedTaskId={focusedTaskId || undefined}
+          canPersistMemory={Boolean(workspaceData) && workspaceRightTab === 'memory'}
+        />
 
         {/* RIGHT PANE: LIVE ARTIFACT CANVAS */}
         <WorkspaceCanvasPane
           artifacts={canvasArtifacts}
           activeArtifact={visibleActiveArtifact}
+          proposalPreview={agentProposalPreview ? { ...agentProposalPreview.proposal, taskId: agentProposalPreview.taskId } : null}
+          onDismissProposalPreview={() => setAgentProposalPreview(null)}
           draftContent={visibleActiveArtifact && canvasDraft?.artifactId === visibleActiveArtifact.id ? canvasDraft?.content : undefined}
           scrollStorageKey={canvasScrollStorageKey}
           activeArtifactId={activeArtifactId}

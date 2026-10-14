@@ -86,6 +86,8 @@ describe('Workspace Agent normalized persistence integration', () => {
     await expect(transitionWorkspacePlan(workspaceId, userId, planId, 'complete')).rejects.toMatchObject({ code: 'WORKSPACE_PLAN_INCOMPLETE' });
     const firstAccepted = await reviewWorkspaceTask(workspaceId, userId, planId, firstTaskId, 'accept');
     expect(firstAccepted.tasks[0].status).toBe('done');
+    await expect(reviewWorkspaceTask(workspaceId, userId, planId, firstTaskId, 'accept')).resolves.toMatchObject({ revision: firstAccepted.revision });
+    await expect(reviewWorkspaceTask(workspaceId, userId, planId, firstTaskId, 'reject')).rejects.toMatchObject({ code: 'WORKSPACE_TASK_NOT_WAITING_REVIEW' });
 
     await expect(findWorkspacePlan(workspaceId, otherUserId, planId)).resolves.toBeNull();
     await expect(startWorkspaceTask(workspaceId, otherUserId, planId, secondTaskId, `cross-${suffix}`, snapshot))
@@ -95,6 +97,7 @@ describe('Workspace Agent normalized persistence integration', () => {
     await finishWorkspaceTask(workspaceId, userId, planId, secondTaskId, `exec-b1-${suffix}`, { output: 'first draft remains in history' });
     const rejected = await reviewWorkspaceTask(workspaceId, userId, planId, secondTaskId, 'reject');
     expect(rejected.tasks[1]).toMatchObject({ status: 'todo', output: 'first draft remains in history' });
+    await expect(reviewWorkspaceTask(workspaceId, userId, planId, secondTaskId, 'reject')).resolves.toMatchObject({ revision: rejected.revision });
 
     await startWorkspaceTask(workspaceId, userId, planId, secondTaskId, `exec-b2-${suffix}`, { ...snapshot, inputPrompt: `${taskPrompt} retry`, createdAt: new Date(Date.now() + 1).toISOString() });
     const staleProposalId = workspaceAgentProposalId(`exec-b1-${suffix}`);
@@ -107,6 +110,10 @@ describe('Workspace Agent normalized persistence integration', () => {
     await finishWorkspaceTask(workspaceId, userId, planId, secondTaskId, `exec-b2-${suffix}`, {
       output: 'reviewed final draft', artifactProposal: proposal
     });
+    const pendingProposal = await findWorkspacePlan(workspaceId, userId, planId);
+    expect(pendingProposal?.tasks[1]).toMatchObject({ status: 'waiting_review', artifactProposal: proposal });
+    const uncommittedProposal = await prisma.artifacts.findUnique({ where: { id: workspaceAgentProposalId(`exec-b2-${suffix}`) } });
+    expect(uncommittedProposal).toBeNull();
     const accepted = await reviewWorkspaceTask(workspaceId, userId, planId, secondTaskId, 'accept');
     const proposalArtifactId = workspaceAgentProposalId(`exec-b2-${suffix}`);
     expect(accepted.tasks[1]).toMatchObject({ status: 'done', output: 'reviewed final draft', outputArtifactId: proposalArtifactId });

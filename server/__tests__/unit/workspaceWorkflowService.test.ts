@@ -6,7 +6,7 @@ const db = vi.hoisted(() => ({
   workspaceTaskDependencies: { createMany: vi.fn() },
   workspaceTaskExecutions: { findUnique: vi.fn(), count: vi.fn(), create: vi.fn(), updateMany: vi.fn(), findFirst: vi.fn() },
   attachments: { findMany: vi.fn() },
-  artifacts: { findFirst: vi.fn() },
+  artifacts: { findFirst: vi.fn(), findUnique: vi.fn(), create: vi.fn() },
   $transaction: vi.fn()
 }));
 
@@ -34,6 +34,7 @@ describe('normalized Workspace workflow execution service', () => {
     db.$transaction.mockImplementation(async (callback: (client: typeof db) => unknown) => callback(db));
     db.workspacePlans.findFirst.mockResolvedValue(planRecord());
     db.workspaceTaskExecutions.findUnique.mockResolvedValue(null);
+    db.workspaceTaskExecutions.updateMany.mockResolvedValue({ count: 1 });
     db.workspacePlans.updateMany.mockResolvedValue({ count: 1 });
     db.workspacePlanTasks.updateMany.mockResolvedValue({ count: 1 });
     db.workspaceTaskExecutions.count.mockResolvedValue(0);
@@ -89,6 +90,20 @@ describe('normalized Workspace workflow execution service', () => {
     await expect(finishWorkspaceTask('workspace-a', 'user-a', 'plan-a', 'task-a', 'execution-old', { output: 'stale' }))
       .rejects.toMatchObject({ code: 'WORKSPACE_TASK_EXECUTION_STALE' });
     expect(db.workspaceTaskExecutions.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('stores an artifact proposal encrypted without committing it before review', async () => {
+    db.workspacePlans.findFirst.mockResolvedValue({ ...planRecord(), status: 'running', tasks: [{ ...planRecord().tasks[0], status: 'running', currentExecutionId: 'execution-a' }] });
+
+    await finishWorkspaceTask('workspace-a', 'user-a', 'plan-a', 'task-a', 'execution-a', {
+      output: 'Review this draft', artifactProposal: { title: 'Draft report', type: 'DOCUMENT', content: 'Draft content' }
+    });
+
+    const update = db.workspaceTaskExecutions.updateMany.mock.calls[0][0].data;
+    expect(update.proposalEncrypted).toContain('cipher:');
+    expect(Buffer.from(update.proposalEncrypted.slice('cipher:'.length), 'base64').toString()).toContain('Draft content');
+    expect(update.outputArtifactId).toBeUndefined();
+    expect(db.artifacts.create).not.toHaveBeenCalled();
   });
 
   it('backfills a legacy running attempt without resetting it and skips a duplicate backfill', async () => {

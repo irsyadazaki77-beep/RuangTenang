@@ -3,7 +3,8 @@ import type { WorkspacePlan } from '../../shared/contracts/workspace.js';
 import { WorkspacePlanSchema } from '../../shared/contracts/workspace.js';
 import { prisma } from '../database.js';
 import { encryptionService } from './encryptionService.js';
-import { getPublicModelCatalog } from './ai/aiModelRegistry.js';
+import { getPublicModelCatalog, getPublicProfileCatalog } from './ai/aiModelRegistry.js';
+import { isAiProfile, isKerjaProfile } from '../../shared/aiModelContract.js';
 import type { AgentArtifactProposal } from './agent/agentContracts.js';
 import type { AgentExecutionEvent } from './agent/agentContracts.js';
 
@@ -67,6 +68,7 @@ function toPlanDto(row: any): WorkspacePlan {
       ...(task.currentExecutionId ? { executionId: task.currentExecutionId } : {}),
       ...(snapshot ? { snapshot } : {}),
       ...(current?.outputEncrypted ? { output: decryptText(current.outputEncrypted) } : {}),
+      ...(current?.proposalEncrypted ? { artifactProposal: decryptJson<AgentArtifactProposal>(current.proposalEncrypted) } : {}),
       ...(current?.outputArtifactId ? { outputArtifactId: current.outputArtifactId } : {}),
       ...(sources ? { sources } : {}),
       ...(executionEvents ? { executionEvents } : {}),
@@ -245,11 +247,19 @@ export async function updateDraftPlan(workspaceId: string, userId: string, input
   return (await findWorkspacePlan(workspaceId, userId, plan.id))!;
 }
 
-export async function setWorkspaceTaskModel(workspaceId: string, userId: string, planId: string, taskId: string, modelId: string | null, tier = 'Free'): Promise<WorkspacePlan> {
+export async function setWorkspaceTaskModel(workspaceId: string, userId: string, planId: string, taskId: string, modelId: string | null, tier = 'Free', allowInternalModel = false): Promise<WorkspacePlan> {
   if (modelId && modelId !== 'auto') {
-    const model = getPublicModelCatalog(tier).find(item => item.id === modelId);
-    if (!model) throw new WorkspaceWorkflowError('WORKSPACE_MODEL_NOT_FOUND', 400);
-    if (!model.selectable) throw new WorkspaceWorkflowError('WORKSPACE_MODEL_UNAVAILABLE', 409);
+    if (isAiProfile(modelId)) {
+      if (!isKerjaProfile(modelId)) throw new WorkspaceWorkflowError('WORKSPACE_MODEL_NOT_FOUND', 400);
+      const profile = getPublicProfileCatalog(tier, 'kerja').find(item => item.id === modelId);
+      if (!profile) throw new WorkspaceWorkflowError('WORKSPACE_MODEL_NOT_FOUND', 400);
+      if (!profile.selectable) throw new WorkspaceWorkflowError('WORKSPACE_MODEL_UNAVAILABLE', 409);
+    } else {
+      if (!allowInternalModel) throw new WorkspaceWorkflowError('WORKSPACE_MODEL_NOT_FOUND', 400);
+      const model = getPublicModelCatalog(tier).find(item => item.id === modelId);
+      if (!model) throw new WorkspaceWorkflowError('WORKSPACE_MODEL_NOT_FOUND', 400);
+      if (!model.selectable) throw new WorkspaceWorkflowError('WORKSPACE_MODEL_UNAVAILABLE', 409);
+    }
   }
   await prisma.$transaction(async tx => {
     const plan: any = await tx.workspacePlans.findFirst({ where: { id: planId, workspaceId, userId }, include: { tasks: true } });
@@ -268,7 +278,7 @@ export async function setWorkspaceTaskModel(workspaceId: string, userId: string,
 
 export interface StartTaskResult { plan: WorkspacePlan; claimed: boolean }
 
-export async function startWorkspaceTask(workspaceId: string, userId: string, planId: string, taskId: string, executionId: string, snapshot: NonNullable<WorkspacePlan['tasks'][number]['snapshot']>, tier = 'Free'): Promise<StartTaskResult> {
+export async function startWorkspaceTask(workspaceId: string, userId: string, planId: string, taskId: string, executionId: string, snapshot: NonNullable<WorkspacePlan['tasks'][number]['snapshot']>, tier = 'Free', allowInternalModel = false): Promise<StartTaskResult> {
   const fingerprint = createHash('sha256').update(JSON.stringify({ workspaceId, userId, planId, taskId, snapshot })).digest('hex');
   const matchesExisting = (execution: any) => execution.workspaceId === workspaceId && execution.userId === userId && execution.planTaskId === taskId && execution.requestFingerprint === fingerprint;
   const existingExecution = await prisma.workspaceTaskExecutions.findUnique({ where: { id: executionId }, include: { task: { select: { planId: true } } } });
@@ -279,9 +289,17 @@ export async function startWorkspaceTask(workspaceId: string, userId: string, pl
     return { plan, claimed: false };
   }
   if (snapshot.modelId !== 'auto') {
-    const model = getPublicModelCatalog(tier).find(item => item.id === snapshot.modelId);
-    if (!model) throw new WorkspaceWorkflowError('WORKSPACE_MODEL_NOT_FOUND', 400);
-    if (!model.selectable) throw new WorkspaceWorkflowError('WORKSPACE_MODEL_UNAVAILABLE', 409);
+    if (isAiProfile(snapshot.modelId)) {
+      if (!isKerjaProfile(snapshot.modelId)) throw new WorkspaceWorkflowError('WORKSPACE_MODEL_NOT_FOUND', 400);
+      const profile = getPublicProfileCatalog(tier, 'kerja').find(item => item.id === snapshot.modelId);
+      if (!profile) throw new WorkspaceWorkflowError('WORKSPACE_MODEL_NOT_FOUND', 400);
+      if (!profile.selectable) throw new WorkspaceWorkflowError('WORKSPACE_MODEL_UNAVAILABLE', 409);
+    } else {
+      if (!allowInternalModel) throw new WorkspaceWorkflowError('WORKSPACE_MODEL_NOT_FOUND', 400);
+      const model = getPublicModelCatalog(tier).find(item => item.id === snapshot.modelId);
+      if (!model) throw new WorkspaceWorkflowError('WORKSPACE_MODEL_NOT_FOUND', 400);
+      if (!model.selectable) throw new WorkspaceWorkflowError('WORKSPACE_MODEL_UNAVAILABLE', 409);
+    }
   }
   if (snapshot.contextSourceIds.length) {
     const sources = await prisma.attachments.findMany({ where: { id: { in: snapshot.contextSourceIds }, chatId: workspaceId, userId, status: 'ready' }, select: { id: true } });
@@ -349,7 +367,7 @@ export async function claimWorkspaceTaskAgentExecution(workspaceId: string, user
   return claimed === 1;
 }
 
-/** Creates a new, encrypted proposal artifact. The deterministic ID makes retries idempotent. */
+/** Stable ID used only when a user accepts and commits the proposal. */
 export function workspaceAgentProposalId(executionId: string): string {
   return `agent_${createHash('sha256').update(executionId).digest('hex').slice(0, 32)}`;
 }
@@ -366,33 +384,12 @@ export async function finishWorkspaceTask(workspaceId: string, userId: string, p
     const task = current.tasks.find((item: any) => item.id === taskId);
     if (!task) throw new WorkspaceWorkflowError('WORKSPACE_TASK_NOT_FOUND', 404);
     if (task.currentExecutionId !== executionId) throw new WorkspaceWorkflowError('WORKSPACE_TASK_EXECUTION_STALE');
-    let outputArtifactId = result.outputArtifactId;
-    if (result.artifactProposal) {
-      outputArtifactId = workspaceAgentProposalId(executionId);
-      const existing: any = await tx.artifacts.findUnique({ where: { id: outputArtifactId }, select: { userId: true, chatId: true, title: true, type: true, content: true } });
-      if (existing) {
-        const existingContent = encryptionService.decryptSensitive(existing.content) || existing.content;
-        if (existing.userId !== userId || existing.chatId !== workspaceId || existing.title !== result.artifactProposal.title || existing.type !== result.artifactProposal.type || existingContent !== result.artifactProposal.content) {
-          throw new WorkspaceWorkflowError('WORKSPACE_TASK_ARTIFACT_CONFLICT');
-        }
-      } else {
-        const now = new Date();
-        const encryptedContent = encryptionService.encryptRequiredSensitive(result.artifactProposal.content);
-        await tx.artifacts.create({
-          data: {
-            id: outputArtifactId, userId, chatId: workspaceId,
-            title: result.artifactProposal.title.slice(0, 200), type: result.artifactProposal.type,
-            language: result.artifactProposal.language?.slice(0, 80) || null,
-            content: encryptedContent, version: 1, createdAt: now, updatedAt: now,
-            versions: { create: [{ id: `ver_${createHash('sha256').update(executionId + ':v1').digest('hex').slice(0, 32)}`, version: 1, title: result.artifactProposal.title.slice(0, 200), content: encryptedContent, createdAt: now }] }
-          }
-        });
-      }
-    }
+    const outputArtifactId = result.outputArtifactId;
     const executionStatusValue = result.errorCode ? 'failed' : 'completed';
     const execution = await tx.workspaceTaskExecutions.updateMany({ where: { id: executionId, planTaskId: taskId, workspaceId, userId, status: 'running' }, data: {
       status: executionStatusValue,
       ...(result.output !== undefined ? { outputEncrypted: encryptionService.encryptRequiredSensitive(result.output) } : {}),
+      ...(result.artifactProposal !== undefined ? { proposalEncrypted: encryptJson(result.artifactProposal) } : {}),
       ...(result.sources !== undefined ? { sourcesEncrypted: encryptJson(result.sources) } : {}),
       ...(result.executionEvents !== undefined ? { eventsEncrypted: encryptJson(result.executionEvents) } : {}),
       ...(outputArtifactId ? { outputArtifactId } : {}),
@@ -413,9 +410,42 @@ export async function reviewWorkspaceTask(workspaceId: string, userId: string, p
     if (!current) throw new WorkspaceWorkflowError('WORKSPACE_PLAN_NOT_FOUND', 404);
     const task = current.tasks.find((item: any) => item.id === taskId);
     if (!task) throw new WorkspaceWorkflowError('WORKSPACE_TASK_NOT_FOUND', 404);
-    if (task.status !== 'waiting_review' || !task.currentExecutionId) throw new WorkspaceWorkflowError('WORKSPACE_TASK_NOT_WAITING_REVIEW');
-    const execution = await tx.workspaceTaskExecutions.findFirst({ where: { id: task.currentExecutionId, planTaskId: taskId, workspaceId, userId, status: 'completed' }, select: { id: true } });
+    if (!task.currentExecutionId) throw new WorkspaceWorkflowError('WORKSPACE_TASK_NOT_WAITING_REVIEW');
+    // A client may retry after the database committed but before the response arrived.
+    // Treat the same completed decision as an idempotent success; never reinterpret a
+    // retry as a different decision or commit a proposal on the retry path.
+    if (task.status !== 'waiting_review') {
+      const completedExecution: any = await tx.workspaceTaskExecutions.findFirst({
+        where: { id: task.currentExecutionId, planTaskId: taskId, workspaceId, userId, status: 'completed' }
+      });
+      if (!completedExecution) throw new WorkspaceWorkflowError('WORKSPACE_TASK_NOT_WAITING_REVIEW');
+      const accepted = task.status === 'done' && decision === 'accept'
+        && (!completedExecution.proposalEncrypted || completedExecution.outputArtifactId === workspaceAgentProposalId(completedExecution.id));
+      const rejected = task.status === 'todo' && decision === 'reject' && !completedExecution.outputArtifactId;
+      if (accepted || rejected) return;
+      throw new WorkspaceWorkflowError('WORKSPACE_TASK_NOT_WAITING_REVIEW');
+    }
+    const execution: any = await tx.workspaceTaskExecutions.findFirst({ where: { id: task.currentExecutionId, planTaskId: taskId, workspaceId, userId, status: 'completed' } });
     if (!execution) throw new WorkspaceWorkflowError('WORKSPACE_TASK_EXECUTION_STALE');
+    if (decision === 'accept' && execution.proposalEncrypted) {
+      const proposal = decryptJson<AgentArtifactProposal>(execution.proposalEncrypted);
+      const proposalId = workspaceAgentProposalId(execution.id);
+      const existing: any = await tx.artifacts.findUnique({ where: { id: proposalId }, select: { userId: true, chatId: true, title: true, type: true, content: true } });
+      if (existing) {
+        const existingContent = encryptionService.decryptSensitive(existing.content) || existing.content;
+        if (existing.userId !== userId || existing.chatId !== workspaceId || existing.title !== proposal.title || existing.type !== proposal.type || existingContent !== proposal.content) throw new WorkspaceWorkflowError('WORKSPACE_TASK_ARTIFACT_CONFLICT');
+      } else {
+        const now = new Date();
+        const encryptedContent = encryptionService.encryptRequiredSensitive(proposal.content);
+        await tx.artifacts.create({ data: {
+          id: proposalId, userId, chatId: workspaceId, title: proposal.title.slice(0, 200), type: proposal.type,
+          language: proposal.language?.slice(0, 80) || null, content: encryptedContent, version: 1, createdAt: now, updatedAt: now,
+          versions: { create: [{ id: `ver_${createHash('sha256').update(execution.id + ':v1').digest('hex').slice(0, 32)}`, version: 1, title: proposal.title.slice(0, 200), content: encryptedContent, createdAt: now }] }
+        } });
+      }
+      const linked = await tx.workspaceTaskExecutions.updateMany({ where: { id: execution.id, planTaskId: taskId, workspaceId, userId, status: 'completed', OR: [{ outputArtifactId: null }, { outputArtifactId: proposalId }] }, data: { outputArtifactId: proposalId } });
+      if (!linked.count) throw new WorkspaceWorkflowError('WORKSPACE_TASK_ARTIFACT_CONFLICT');
+    }
     const status = decision === 'accept' ? 'done' : 'todo';
     const taskChanged = await tx.workspacePlanTasks.updateMany({ where: { id: taskId, planId, status: 'waiting_review', currentExecutionId: task.currentExecutionId, revision: task.revision }, data: { status, revision: { increment: 1 }, updatedAt: new Date() } });
     if (!taskChanged.count) throw new WorkspaceWorkflowError('WORKSPACE_TASK_EXECUTION_STALE');

@@ -29,7 +29,6 @@ import { LazyMarkdown } from '../../../components/common/LazyMarkdown';
 import { useToast } from '../../../components/Toast';
 import { useArtifactAutosave } from '../hooks/useArtifactAutosave';
 import { ArtifactCanvasToolbar } from './ArtifactCanvasToolbar';
-import { ArtifactCanvasEditor } from './ArtifactCanvasEditor';
 import { ArtifactVersionHistoryModal } from './ArtifactVersionHistoryModal';
 import { ArtifactExportHost } from './ArtifactExportHost';
 import { ChartArtifactPreview, TableArtifactPreview } from './ArtifactDataPreview';
@@ -43,6 +42,9 @@ import { validateCodeStatically } from '../services/codeValidationService';
 import { runJavaScriptInSandbox, SandboxExecutionHandle } from '../services/sandboxExecutionService';
 import { CodeValidationResult, CodeExecutionStatus } from '../services/codeExecutionTypes';
 const AcademicParaphraseModal = React.lazy(() => import('./AcademicParaphraseModal').then(m => ({ default: m.AcademicParaphraseModal })));
+const ArtifactCanvasEditor = React.lazy(() => import('./ArtifactCanvasEditor').then(m => ({ default: m.ArtifactCanvasEditor })));
+const ArtifactTableEditor = React.lazy(() => import('./ArtifactDataEditors').then(m => ({ default: m.ArtifactTableEditor })));
+const ArtifactPresentationEditor = React.lazy(() => import('./ArtifactDataEditors').then(m => ({ default: m.ArtifactPresentationEditor })));
 import { 
   downloadBibTeXFile, 
   downloadRISFile, 
@@ -81,6 +83,10 @@ export interface ArtifactCanvasProps {
 export type CanvasViewMode = 'preview' | 'edit' | 'raw' | 'diff';
 export type SaveState = 'idle' | 'saving' | 'saved' | 'unsaved' | 'failed' | 'local';
 
+function isPresentationContent(content: string): boolean {
+  try { return (JSON.parse(content) as { format?: string }).format === 'ruangtenang-presentation-v1'; } catch { return false; }
+}
+
 export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
   artifact,
   initialDraftContent,
@@ -111,6 +117,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
   const toggleExpand = controlledToggleExpand || (() => setInternalExpanded(prev => !prev));
 
   const [viewMode, setViewMode] = useState<CanvasViewMode>('preview');
+  const [isPresentationStudio, setIsPresentationStudio] = useState(artifact.language === 'presentation' || isPresentationContent(artifact.content));
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [titleInput, setTitleInput] = useState(artifact.title || '');
   const [editableContent, setEditableContent] = useState(initialDraftContent ?? artifact.content);
@@ -246,6 +253,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
 
       // If switching to another artifact, reset all local session states
       setTitleInput(artifact.title || '');
+      setIsPresentationStudio(artifact.language === 'presentation' || isPresentationContent(artifact.content));
       setEditableContent(initialDraftContent ?? artifact.content);
       lastSavedContentRef.current = artifact.content;
       lastKnownVersionRef.current = artifact.version || 1;
@@ -426,7 +434,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
 
   const requestInlineEdit = (instruction: string) => {
     if (!selection || !onRequestInlineEdit || isStreaming) return;
-    onRequestInlineEdit(selection, instruction, artifact);
+    onRequestInlineEdit(selection, instruction, { ...artifact, content: editableContent });
     setShowInlineAsk(false);
     setInlineInstruction('');
   };
@@ -872,6 +880,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
         <div className="px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Dokumen</div>
         <button type="button" onClick={() => { setShowMoreMenu(false); setViewMode('raw'); }} className="w-full rounded-xl px-2.5 py-2 text-left text-xs text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"><Code2 className="mr-2 inline h-3.5 w-3.5" />Lihat Markdown atau kode</button>
         <button type="button" onClick={() => { setShowMoreMenu(false); setViewMode('diff'); }} className="w-full rounded-xl px-2.5 py-2 text-left text-xs text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"><GitCompare className="mr-2 inline h-3.5 w-3.5" />Bandingkan perubahan</button>
+        {artifact.type === 'DOCUMENT' && <button type="button" onClick={() => { setIsPresentationStudio(true); setShowMoreMenu(false); setViewMode('edit'); if (!isPresentationContent(editableContent)) void import('./ArtifactDataEditors').then(({ createPresentationFromMarkdown }) => handleContentChange(JSON.stringify(createPresentationFromMarkdown(editableContent, artifact.title)))); }} className="w-full rounded-xl px-2.5 py-2 text-left text-xs text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"><Workflow className="mr-2 inline h-3.5 w-3.5" />Buka PowerPoint Studio</button>}
         <div className="relative z-20 px-1.5 py-1"><WorkspaceToolSelector artifactType={artifact.type} hasArtifact={artifact.id !== 'art_welcome'} disabled={isStreaming} onSelectTool={handleExecuteTool} triggerVariant="header" /></div>
         <button type="button" onClick={handleCopy} className="w-full rounded-xl px-2.5 py-2 text-left text-xs text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"><Copy className="mr-2 inline h-3.5 w-3.5" />Salin Seluruh Konten</button>
         <button type="button" onClick={() => { setShowMoreMenu(false); setShowCitationModal(true); }} className="w-full rounded-xl px-2.5 py-2 text-left text-xs text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"><Quote className="mr-2 inline h-3.5 w-3.5" />Cari Sitasi DOI</button>
@@ -942,8 +951,10 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
           </div>
         )}
 
-        {viewMode === 'edit' && <ArtifactCanvasEditor
-          artifactType={artifact.type} content={editableContent} editorRef={editorRef}
+        {viewMode === 'edit' && artifact.type === 'TABLE' && <React.Suspense fallback={<div role="status" className="mx-auto max-w-4xl p-6 text-xs text-slate-500">Memuat Spreadsheet Studio…</div>}><ArtifactTableEditor content={editableContent} onChange={handleContentChange} onBlur={flushDraftSync} /></React.Suspense>}
+        {viewMode === 'edit' && isPresentationStudio && <React.Suspense fallback={<div role="status" className="mx-auto max-w-4xl p-6 text-xs text-slate-500">Memuat PowerPoint Studio…</div>}><ArtifactPresentationEditor content={editableContent} title={artifact.title} onChange={handleContentChange} onBlur={flushDraftSync} /></React.Suspense>}
+        {viewMode === 'edit' && artifact.type !== 'TABLE' && !isPresentationStudio && <React.Suspense fallback={<div role="status" className="mx-auto max-w-4xl p-6 text-xs text-slate-500">Memuat editor…</div>}><ArtifactCanvasEditor
+          artifactType={artifact.type} artifact={artifact} onRequestRevision={onRequestRevision} content={editableContent} editorRef={editorRef}
           onChange={handleContentChange} onBlur={flushDraftSync} selection={selection}
           onSelect={captureSelection} inlineActions={inlineActions} isStreaming={isStreaming}
           onRequestInlineEdit={requestInlineEdit} showInlineAsk={showInlineAsk}
@@ -953,7 +964,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
           patch={visibleInlineEditPatch} patchError={inlinePatchError}
           onDismissPatch={() => { onDismissInlineEdit?.(); setInlinePatchError(''); }}
           onAcceptPatch={() => void acceptInlinePatch()} isSaving={saveStatus === 'saving'} wordCount={wordCount}
-        />}
+        /></React.Suspense>}
 
         {/* MODE 3: KODE / MARKDOWN (RAW SOURCE DENGAN GUTTER NOMOR BARIS) */}
         {viewMode === 'raw' && (
@@ -992,7 +1003,9 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
 
         {/* MODE 1: PRATINJAU (PAPER SHEET AESTHETIC FOR DOCUMENTS) */}
         {viewMode === 'preview' && (
-          artifact.type === 'TABLE' ? (
+          artifact.type === 'DOCUMENT' && isPresentationStudio ? (
+            <div className="mx-auto my-4 max-w-5xl space-y-4">{(() => { try { const deck = JSON.parse(editableContent) as { slides?: Array<{ title?: string; body?: string; notes?: string }>; theme?: string }; if (!Array.isArray(deck.slides)) return <p role="alert" className="rounded-lg bg-amber-50 p-4 text-sm text-amber-800">Format slide tidak valid.</p>; return <><div className="flex items-center justify-between text-xs text-slate-500"><span>Presentasi · {deck.slides.length} slide</span><span>Tema: {deck.theme || 'academic_minimal'}</span></div>{deck.slides.map((slide, index) => <article key={`${index}-${slide.title}`} className="aspect-video overflow-hidden rounded-xl border border-slate-200 bg-white p-[6%] shadow-sm dark:border-slate-800 dark:bg-slate-900"><p className="mb-4 text-[10px] uppercase tracking-wide text-emerald-600">Slide {index + 1}</p><h2 className="mb-4 text-xl font-bold text-slate-900 dark:text-slate-100">{slide.title}</h2><p className="whitespace-pre-wrap text-sm leading-7 text-slate-700 dark:text-slate-300">{slide.body}</p><details className="mt-4 text-[10px] text-slate-500"><summary>Speaker notes</summary><p className="mt-1 whitespace-pre-wrap">{slide.notes}</p></details></article>)}</>; } catch { return <p role="alert" className="rounded-lg bg-amber-50 p-4 text-sm text-amber-800">Format slide tidak valid.</p>; } })()}</div>
+          ) : artifact.type === 'TABLE' ? (
             savedTable ? <TableArtifactPreview table={savedTable} /> : <p role="alert" className="m-6 rounded-lg bg-amber-50 p-4 text-xs text-amber-800">Dataset tabel ini tidak valid.</p>
           ) : artifact.type === 'CHART' ? (
             savedChart ? <ChartArtifactPreview chart={savedChart} /> : <p role="alert" className="m-6 rounded-lg bg-amber-50 p-4 text-xs text-amber-800">Spesifikasi grafik ini tidak valid.</p>
@@ -1004,7 +1017,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
                   title={artifact.title}
                   onRequestFixDiagram={(rawCode) => {
                     if (onRequestRevision) {
-                      onRequestRevision(`Tolong perbaiki sintaks diagram Mermaid berikut agar valid dan dapat dirender secara visual:\n\`\`\`mermaid\n${rawCode}\n\`\`\``, artifact);
+                      onRequestRevision(`Tolong perbaiki sintaks diagram Mermaid berikut agar valid dan dapat dirender secara visual:\n\`\`\`mermaid\n${rawCode}\n\`\`\``, { ...artifact, content: editableContent });
                     }
                   }}
                 />
@@ -1073,7 +1086,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
                         onClick={() => {
                           setCitationStyle(style);
                           if (onRequestRevision) {
-                            onRequestRevision(`Tolong konversi seluruh sitasi ini ke format standar ${style}.`, artifact);
+                            onRequestRevision(`Tolong konversi seluruh sitasi ini ke format standar ${style}.`, { ...artifact, content: editableContent });
                           }
                         }}
                         className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-colors cursor-pointer ${

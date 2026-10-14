@@ -3,7 +3,7 @@ import { TabularAnalysisRequestSchema } from '../../../shared/contracts/tabular.
 import { isWebSearchConfigured } from '../webSearchService.js';
 
 export type AgentTaskType = 'analysis' | 'writing' | 'research' | 'coding' | 'review' | 'transform';
-export type AgentToolPermission = 'read' | 'propose';
+export type AgentToolPermission = 'read' | 'propose' | 'write';
 
 export interface AgentToolDefinition {
   id: string;

@@ -194,6 +194,19 @@ function parseChartArtifact(content: string): ChartArtifact {
 
 export function buildPresentationOutline(input: EditablePptxOptions): PresentationOutlineSlide[] {
   if (!input.content.trim()) throw new Error('Konten presentasi masih kosong.');
+  try {
+    const deck = JSON.parse(input.content) as { format?: string; slides?: Array<{ title?: unknown; body?: unknown; notes?: unknown }> };
+    if (deck.format === 'ruangtenang-presentation-v1') {
+      if (!Array.isArray(deck.slides) || deck.slides.length === 0 || deck.slides.length > 300) throw new Error('Presentasi memerlukan 1–300 slide.');
+      return deck.slides.map((slide, index) => {
+        if (typeof slide.title !== 'string' || typeof slide.body !== 'string' || typeof slide.notes !== 'string') throw new Error(`Konten slide ${index + 1} tidak valid.`);
+        return { title: slide.title.trim() || `Slide ${index + 1}`, layout: index === 0 ? 'title' : 'content', bullets: slide.body.split(/\r?\n/).map(line => line.replace(/^\s*(?:[-*+]\s+|\d+[.)]\s+)/, '').trim()).filter(Boolean), notes: slide.notes };
+      });
+    }
+  } catch (error) {
+    if (error instanceof SyntaxError) { /* Markdown is also a supported source format. */ }
+    else throw error;
+  }
   const title = input.title.trim() || 'Presentasi Akademik';
   const slides: PresentationOutlineSlide[] = [{ title, layout: 'title' }];
 
@@ -289,7 +302,12 @@ function addBulletList(slide: PresentationSlide, bullets: string[], x: number, y
 }
 
 function buildPptx(input: EditablePptxOptions) {
-  const theme = THEMES[input.theme || 'academic_minimal'];
+  let selectedTheme = input.theme || 'academic_minimal';
+  try {
+    const deck = JSON.parse(input.content) as { format?: string; theme?: PresentationTheme };
+    if (deck.format === 'ruangtenang-presentation-v1' && deck.theme && deck.theme in THEMES) selectedTheme = deck.theme;
+  } catch { /* Markdown presentation */ }
+  const theme = THEMES[selectedTheme];
   const outline = buildPresentationOutline(input);
   const pptx = new pptxgen();
   pptx.layout = 'LAYOUT_WIDE';
@@ -309,7 +327,7 @@ function buildPptx(input: EditablePptxOptions) {
         x: 0.95, y: 2.45, w: 10.8, h: 1.55, fontFace: 'Aptos Display', fontSize: 34,
         bold: true, color: 'F8FAFC', margin: 0, valign: 'middle', breakLine: false, fit: 'shrink'
       });
-      slide.addText('Disusun dari konten Workspace', {
+      slide.addText(item.bullets?.join('\n') || 'Disusun dari konten Workspace', {
         x: 0.98, y: 4.25, w: 10.0, h: 0.42, fontFace: 'Aptos', fontSize: 15,
         color: 'CBD5E1', margin: 0, fit: 'shrink'
       });
@@ -362,9 +380,8 @@ function buildPptx(input: EditablePptxOptions) {
         align: 'right', color: theme.muted, margin: 0
       });
     }
-    if (item.layout !== 'chart' && item.layout !== 'title' && item.layout !== 'section') {
-      slide.addNotes(item.bullets?.join('\n') || item.columns?.map(column => `${column.title}: ${column.bullets.join('; ')}`).join('\n') || item.title);
-    }
+    if (item.notes) slide.addNotes(item.notes);
+    else if (item.layout !== 'chart' && item.layout !== 'title' && item.layout !== 'section') slide.addNotes(item.bullets?.join('\n') || item.columns?.map(column => `${column.title}: ${column.bullets.join('; ')}`).join('\n') || item.title);
   });
   return pptx;
 }

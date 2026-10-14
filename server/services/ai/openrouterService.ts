@@ -111,8 +111,9 @@ export const openrouterService = {
       const data = await response.json();
       const choice = data.choices?.[0];
       const content = typeof choice?.message?.content === 'string' ? choice.message.content.trim() : '';
-      const reasoning = typeof choice?.message?.reasoning === 'string' ? choice.message.reasoning.trim() : '';
-      const outputText = content || reasoning;
+      // OpenRouter may return private chain-of-thought in `reasoning`.
+      // Only `content` is intended for the user-facing chat.
+      const outputText = content;
       if (!outputText) throw Object.assign(new Error('AI_PROVIDER_CONTENT_ERROR_INVALID_RESPONSE'), { category: 'CONTENT_ERROR', retryable: false });
       clearTimeout(timeoutId);
 
@@ -207,7 +208,8 @@ export const openrouterService = {
                 if (!jsonStr) continue;
                 const parsed = JSON.parse(jsonStr);
                 const delta = parsed.choices?.[0]?.delta;
-                const textContent = delta?.content || delta?.reasoning || '';
+                // Never forward private reasoning tokens to the client.
+                const textContent = delta?.content || '';
 
                 if (textContent) {
                   yield { text: textContent };
@@ -225,7 +227,7 @@ export const openrouterService = {
             const jsonStr = buffer.trim().slice(6).trim();
             const parsed = JSON.parse(jsonStr);
             const delta = parsed.choices?.[0]?.delta;
-            const textContent = delta?.content || delta?.reasoning || '';
+            const textContent = delta?.content || '';
             if (textContent) {
               yield { text: textContent };
             }

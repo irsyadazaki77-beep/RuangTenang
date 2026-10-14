@@ -54,3 +54,41 @@ test('keeps one contextual inspector active while switching its tabs', async ({ 
   await page.getByRole('button', { name: 'Tutup panel' }).click();
   await expect(page.getByRole('button', { name: 'Panel', exact: true })).toBeFocused();
 });
+
+test('panel switching retains chat draft and prevents modal overlap on mobile', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('rt_onboarding_completed_guest', 'true');
+    localStorage.setItem('ruangtenang_last_seen_version', 'v3.4.0');
+  });
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto('/workspace/new?__test__=true', { waitUntil: 'domcontentloaded' });
+
+  const closeNotification = page.getByRole('button', { name: 'Tutup Notifikasi' });
+  if (await closeNotification.isVisible()) await closeNotification.click();
+
+  const composerInput = page.getByRole('textbox', { name: 'Pesan untuk Asisten RuangKerja' });
+  await expect(composerInput).toBeVisible({ timeout: 20_000 });
+
+  // 1. Enter draft text in composer
+  await composerInput.fill('Draf pesan penting untuk analisis literatur mahasiswa.');
+
+  // 2. Switch to Canvas tab on mobile
+  await page.getByRole('button', { name: 'Canvas', exact: true }).click();
+  await expect(page.getByText('Belum Ada Artefak Aktif')).toBeVisible();
+
+  // Close canvas drawer via Tutup button
+  await page.getByRole('button', { name: 'Kembali ke Obrolan' }).click();
+  await expect(composerInput).toBeVisible();
+
+  // 3. Switch to Panel tab on mobile
+  await page.getByRole('button', { name: 'Panel', exact: true }).click();
+  await expect(page.getByRole('tab', { name: 'Konteks' })).toBeVisible();
+
+  // 4. Switch back to Chat (Obrolan) tab
+  await page.getByRole('button', { name: 'Obrolan', exact: true }).click();
+  await expect(composerInput).toBeVisible();
+
+  // 5. Verify draft content was completely preserved without data loss
+  await expect(composerInput).toHaveValue('Draf pesan penting untuk analisis literatur mahasiswa.');
+});
+

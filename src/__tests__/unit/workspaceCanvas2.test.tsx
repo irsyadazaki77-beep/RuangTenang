@@ -74,6 +74,23 @@ describe('Workspace Canvas 2.0 UX & Behavior', () => {
     expect(screen.getByText('Riwayat Versi')).toBeInTheDocument();
   });
 
+  it('shows an Agent proposal in Canvas as an unsaved preview without invoking persistence', () => {
+    const save = vi.fn();
+    render(<WorkspaceCanvasPane
+      artifacts={[mockArtifact]} activeArtifact={mockArtifact}
+      proposalPreview={{ taskId: 'task-1', title: 'Value Chain Report', type: 'DOCUMENT', content: '# Evidence-backed draft' }}
+      activeArtifactId={mockArtifact.id} isCanvasOpen isCanvasExpanded={false} isStreaming={false} mobileActiveTab="chat"
+      onSelectArtifact={vi.fn()} onCloseCanvas={vi.fn()} onToggleExpand={vi.fn()} onUpdateActiveArtifact={vi.fn()}
+      onSaveArtifact={save} onRollbackVersion={vi.fn()} onRequestRevision={vi.fn()} onCreateNewArtifact={vi.fn()}
+      onSetMobileActiveTab={vi.fn()} onDismissProposalPreview={vi.fn()}
+    />);
+
+    expect(screen.getByRole('region', { name: 'Preview proposal Agent' })).toBeInTheDocument();
+    expect(screen.getByText('Proposal Agent · belum disimpan')).toBeInTheDocument();
+    expect(screen.getByText('# Evidence-backed draft')).toBeInTheDocument();
+    expect(save).not.toHaveBeenCalled();
+  });
+
   it('renders a long raw document gutter as text instead of one element per line', async () => {
     const longContent = Array.from({ length: 2000 }, (_, index) => `Line ${index + 1}`).join('\n');
     render(
@@ -95,11 +112,13 @@ describe('Workspace Canvas 2.0 UX & Behavior', () => {
   it('restores an unsaved document draft after closing and reopening Canvas', async () => {
     render(<CanvasDraftHarness />);
     fireEvent.click(await screen.findByTitle('Edit Dokumen Langsung (Autosave)'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Markdown' }));
     const textarea = screen.getByPlaceholderText(/Ketik atau sesuaikan draf dokumen/) as HTMLTextAreaElement;
     fireEvent.change(textarea, { target: { value: '# Draf yang belum disimpan' } });
     fireEvent.click(screen.getByRole('button', { name: 'Tutup Canvas' }));
     fireEvent.click(screen.getByRole('button', { name: 'Buka Canvas' }));
     fireEvent.click(screen.getByTitle('Edit Dokumen Langsung (Autosave)'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Markdown' }));
     expect(screen.getByPlaceholderText(/Ketik atau sesuaikan draf dokumen/)).toHaveValue('# Draf yang belum disimpan');
     expect(screen.getByText('Belum disimpan')).toBeInTheDocument();
   });
@@ -127,7 +146,7 @@ describe('Workspace Canvas 2.0 UX & Behavior', () => {
     expect(onSaveArtifact).toHaveBeenCalledWith(mockArtifact.content, 'Metodologi Penelitian Baru');
   });
 
-  it('switches seamlessly between view modes: preview, edit, raw, and diff', () => {
+  it('switches seamlessly between view modes: preview, edit, raw, and diff', async () => {
     render(
       <ArtifactCanvas
         artifact={mockArtifact}
@@ -141,6 +160,7 @@ describe('Workspace Canvas 2.0 UX & Behavior', () => {
 
     // Switch to edit mode via mode segmented control
     fireEvent.click(screen.getByTitle('Edit Dokumen Langsung (Autosave)'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Markdown' }));
     const textarea = screen.getByPlaceholderText(/Ketik atau sesuaikan draf dokumen/);
     expect(textarea).toBeInTheDocument();
 
@@ -167,6 +187,7 @@ describe('Workspace Canvas 2.0 UX & Behavior', () => {
 
     // Switch to Edit
     fireEvent.click(screen.getByTitle('Edit Dokumen Langsung (Autosave)'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Markdown' }));
     const textarea = screen.getByPlaceholderText(/Ketik atau sesuaikan draf dokumen/);
 
     // Type new text
@@ -188,6 +209,7 @@ describe('Workspace Canvas 2.0 UX & Behavior', () => {
     render(<ArtifactCanvas artifact={mockArtifact} onSaveArtifact={onSaveArtifact} />);
 
     fireEvent.click(screen.getByTitle('Edit Dokumen Langsung (Autosave)'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Markdown' }));
     const editor = screen.getByPlaceholderText(/Ketik atau sesuaikan draf dokumen/);
     fireEvent.change(editor, { target: { value: '# Draf A' } });
     fireEvent.click(screen.getByRole('button', { name: /Simpan/ }));
@@ -219,6 +241,7 @@ describe('Workspace Canvas 2.0 UX & Behavior', () => {
     const { rerender } = render(<ArtifactCanvas artifact={mockArtifact} onRequestInlineEdit={onRequestInlineEdit} onSaveArtifact={onSaveArtifact} />);
 
     fireEvent.click(screen.getByTitle('Edit Dokumen Langsung (Autosave)'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Markdown' }));
     const textarea = screen.getByPlaceholderText(/Ketik atau sesuaikan draf dokumen/) as HTMLTextAreaElement;
     textarea.setSelectionRange(start, start + selected.length);
     fireEvent.select(textarea);
@@ -251,13 +274,14 @@ describe('Workspace Canvas 2.0 UX & Behavior', () => {
     };
     render(<ArtifactCanvas artifact={mockArtifact} onSaveArtifact={onSaveArtifact} inlineEditPatch={stalePatch} />);
     fireEvent.click(screen.getByTitle('Edit Dokumen Langsung (Autosave)'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Markdown' }));
     fireEvent.change(screen.getByPlaceholderText(/Ketik atau sesuaikan draf dokumen/), { target: { value: `${mockArtifact.content}\nPerubahan manual` } });
     fireEvent.click(screen.getByRole('button', { name: 'Terapkan' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Dokumen telah berubah sejak revisi dibuat');
     expect(onSaveArtifact).not.toHaveBeenCalled();
   });
 
-  it('rejects a proposed edit without changing or saving the artifact', () => {
+  it('rejects a proposed edit without changing or saving the artifact', async () => {
     const onSaveArtifact = vi.fn();
     const onDismissInlineEdit = vi.fn();
     const patch: ArtifactPatch = {
@@ -271,7 +295,7 @@ describe('Workspace Canvas 2.0 UX & Behavior', () => {
     };
     render(<ArtifactCanvas artifact={mockArtifact} onSaveArtifact={onSaveArtifact} inlineEditPatch={patch} onDismissInlineEdit={onDismissInlineEdit} />);
     fireEvent.click(screen.getByTitle('Edit Dokumen Langsung (Autosave)'));
-    fireEvent.click(screen.getByRole('button', { name: 'Tolak' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Tolak' }));
     expect(onDismissInlineEdit).toHaveBeenCalledOnce();
     expect(onSaveArtifact).not.toHaveBeenCalled();
   });

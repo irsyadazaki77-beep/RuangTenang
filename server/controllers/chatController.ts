@@ -1,15 +1,25 @@
 import { Request, Response } from 'express';
 import { ChatService } from '../services/chatService.js';
-import { getConfiguredDefaultAiModelId, getPublicModelCatalog } from '../services/ai/aiModelRegistry.js';
+import {
+  getConfiguredDefaultAiModelId,
+  getPublicModelCatalog,
+  getPublicProfileCatalog,
+  DEFAULT_TENANG_PROFILE_ID,
+  DEFAULT_KERJA_PROFILE_ID
+} from '../services/ai/aiModelRegistry.js';
 
 export class ChatController {
   static getModels(req: Request, res: Response) {
     const tier = req.user?.tier || 'Free';
     return res.json({
       defaultModel: getConfiguredDefaultAiModelId(tier),
-      models: getPublicModelCatalog(tier)
+      models: getPublicModelCatalog(tier),
+      profiles: getPublicProfileCatalog(tier),
+      defaultTenangProfile: DEFAULT_TENANG_PROFILE_ID,
+      defaultKerjaProfile: DEFAULT_KERJA_PROFILE_ID
     });
   }
+
 
   static async getHistory(req: Request, res: Response) {
     try {

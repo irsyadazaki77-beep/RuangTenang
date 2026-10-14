@@ -4,6 +4,8 @@ import type { StoredAttachment } from '../../chat/types';
 import type { WorkspaceArtifact, WorkspaceComposerConfig, WorkspaceRequestSnapshot } from '../types';
 import type { WorkspacePlan } from '../../../../shared/contracts/workspace';
 import type { AgentExecutionResult } from '../../../../shared/contracts/agent';
+import { AUTO_ROUTING_MODEL_ID, isKerjaProfile } from '../../../lib/aiModels';
+import { migrateLegacyWorkspaceModelToProfile } from '../utils/workspaceModelPreference';
 
 interface UseWorkspaceAgentControllerOptions {
   plan?: WorkspacePlan | null;
@@ -25,6 +27,7 @@ interface UseWorkspaceAgentControllerOptions {
   sendMessage: (prompt: string, customSystemNote?: string, attachments?: StoredAttachment[], config?: WorkspaceComposerConfig, snapshot?: WorkspaceRequestSnapshot) => boolean;
   abortStream: () => void;
   onAgentTaskCompleted: (result: AgentExecutionResult, identity: { workspaceId: string; planId: string; taskId: string }) => Promise<void>;
+  onTaskAccepted?: (task: WorkspacePlan['tasks'][number]) => void;
   showToast: (message: string, type?: 'success' | 'error' | 'info' | 'warning') => void;
 }
 
@@ -33,7 +36,7 @@ export function useWorkspaceAgentController(options: UseWorkspaceAgentController
     plan, startTaskExecution, executeAgentTask, reviewTask, transitionPlan, recoverTaskExecution,
     isStreaming, includeFilesInContext, selectedFileIds, includeCanvasInContext, activeArtifact,
     workspaceInstructions, selectedModel, workspaceId, activeSendOperationRef, taskGenerationRequestsRef,
-    sendMessage, abortStream, onAgentTaskCompleted, showToast
+    sendMessage, abortStream, onAgentTaskCompleted, onTaskAccepted, showToast
   } = options;
   const [isAgentExecuting, setIsAgentExecuting] = useState(false);
   const activeAgentExecutionRef = useRef<{ executionId: string; planId: string; taskId: string; workspaceId: string; controller: AbortController } | null>(null);
@@ -50,19 +53,23 @@ export function useWorkspaceAgentController(options: UseWorkspaceAgentController
     const task = currentPlan?.tasks.find(item => item.id === taskId);
     if (!currentPlan || currentPlan.status !== 'approved' || !task || !['todo', 'failed', 'waiting_review', 'cancelled'].includes(task.status) || !task.dependsOn.every(id => currentPlan.tasks.find(dependency => dependency.id === id)?.status === 'done') || currentPlan.tasks.some(item => item.status === 'running') || isStreaming) return false;
     if (activeAgentExecutionRef.current) return false;
-    const researchInstructions = task.type === 'research' ? '\nGunakan evidence dari dokumen yang dipilih jika tersedia. Kutip hanya marker sumber yang benar-benar diberikan oleh tool. Jangan membuat author, tahun, DOI, nomor halaman, atau bibliography yang tidak diberikan sumber. Jika bukti tidak cukup, nyatakan belum terverifikasi.' : '';
+    const researchInstructions = task.type === 'research' ? '\nGunakan evidence dari dokumen yang dipilih dan web search jika relevan. Ikuti workflow riset bukti: Plan → Search → Read → Analyze → Cross-Check → Synthesize. Kutip hanya marker sumber [cite:...] yang benar-benar diberikan oleh tool. Sertakan URL atau nomor halaman/bagian sumber yang nyata. Jangan mengarang author, tahun, DOI, nomor halaman, atau bibliografi fiktif. Jika bukti tidak cukup, secara eksplisit nyatakan bukti belum mencukupi. Buat artifact proposal terstruktur (misal DOCUMENT atau TABLE) untuk hasil riset komprehensif.' : '';
     const basePrompt = task.snapshot?.inputPrompt || `Kerjakan hanya langkah yang disetujui ini untuk tujuan “${currentPlan.goal}”.\nTask: ${task.title}\n${task.description || ''}${researchInstructions}\n\nBerikan hasil yang bisa ditinjau. Jangan menandai task lain selesai atau mengubah artifact yang ada. Jika membuat artifact, kembalikan sebagai proposal baru.`;
     const prompt = feedback ? `${basePrompt}\n\nMasukan user untuk revisi hasil: ${feedback}` : basePrompt;
     const executionId = crypto.randomUUID();
     let controller: AbortController | undefined;
+    const chosenModel = task.modelId || task.snapshot?.modelId || selectedModel;
+    const modelProfile = chosenModel === AUTO_ROUTING_MODEL_ID || chosenModel === 'auto'
+      ? 'auto'
+      : isKerjaProfile(chosenModel) ? chosenModel : migrateLegacyWorkspaceModelToProfile(chosenModel);
     const snapshot = task.snapshot
-      ? { inputPrompt: prompt.slice(0, 8000), contextSourceIds: task.snapshot.contextSourceIds, ...(task.snapshot.artifactId ? { artifactId: task.snapshot.artifactId } : {}), ...(task.snapshot.workspaceInstructions ? { workspaceInstructions: task.snapshot.workspaceInstructions } : {}), modelId: task.modelId || task.snapshot.modelId, createdAt: new Date().toISOString() }
+      ? { inputPrompt: prompt.slice(0, 8000), contextSourceIds: task.snapshot.contextSourceIds, ...(task.snapshot.artifactId ? { artifactId: task.snapshot.artifactId } : {}), ...(task.snapshot.workspaceInstructions ? { workspaceInstructions: task.snapshot.workspaceInstructions } : {}), modelId: modelProfile, createdAt: new Date().toISOString() }
       : {
         inputPrompt: prompt.slice(0, 8000),
         contextSourceIds: (includeFilesInContext ? selectedFileIds : []).slice(0, 50),
         ...(includeCanvasInContext && activeArtifact ? { artifactId: activeArtifact.id } : {}),
         ...(workspaceInstructions ? { workspaceInstructions } : {}),
-        modelId: task.modelId || selectedModel,
+        modelId: modelProfile,
         createdAt: new Date().toISOString()
       };
     try {
@@ -156,11 +163,13 @@ export function useWorkspaceAgentController(options: UseWorkspaceAgentController
   const acceptTaskReview = useCallback((taskId: string) => {
     if (!plan) return;
     void reviewTask(plan.id, taskId, 'accept')
-      .then(() => {
+      .then(updatedPlan => {
+        const acceptedTask = updatedPlan.tasks.find(task => task.id === taskId);
+        if (acceptedTask) onTaskAccepted?.(acceptedTask);
         showToast('Hasil task diterima.', 'success');
       })
       .catch(error => showToast(error instanceof Error ? error.message : 'Hasil belum dapat diterima.', 'error'));
-  }, [plan, reviewTask, showToast]);
+  }, [onTaskAccepted, plan, reviewTask, showToast]);
 
   const rejectTaskReview = useCallback((taskId: string) => {
     if (!plan) return;

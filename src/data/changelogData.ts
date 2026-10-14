@@ -26,14 +26,52 @@ export { CURRENT_APP_VERSION, LAST_UPDATED_DATE, isNewUpdateAvailable, markUpdat
 
 export const APP_CHANGELOG: ReleaseNote[] = [
   {
-    version: 'v3.3.1',
-    date: '2026-09-27',
-    releaseTime: 'Hari Ini, 11:38 WIB',
+    version: 'v3.4.0',
+    date: '2026-10-14',
+    releaseTime: '14 Oktober 2026, 06:50 WIB',
     periodLabel: 'Hari Ini',
-    title: 'Pemeliharaan Rutin Harian & Pembaruan Web Resmi v3.3.1',
-    tagline: 'Pemeliharaan harian sistem 27 September 2026: Verifikasi integritas AES-256-GCM, pencadangan otomatis snapshot DB, pembersihan retensi data, hygiene purge, dan pembaruan versi web app.',
+    title: 'Pembaruan Web Resmi v3.4.0 — Workspace Navigation & Adaptive Architecture',
+    tagline: 'Penyempurnaan arsitektur antarmuka Ruang Kerja: navigasi terpadu (Chat, Canvas, Files, Sources, Memory, dan Agent Plan), layout responsif adaptif bebas tumpukan modal, dan peningkatan performa.',
     badge: 'Terbaru',
     isLatest: true,
+    highlights: [
+      'Pembaruan versi web resmi v3.4.0 (14 Oktober 2026)',
+      'Arsitektur navigasi adaptif baru dengan modularisasi WorkspaceInspectorPanel',
+      'Unified layout controls untuk Chat, Canvas, dan Panel Kontekstual',
+      'Peningkatan resiliensi draf, autosave, dan perlindungan bebas modal-overlap pada mobile'
+    ],
+    changes: [
+      {
+        id: 'ch-340-1',
+        category: 'feature',
+        title: 'Arsitektur Navigasi Terpadu & Modular WorkspaceInspectorPanel',
+        description: 'Pemisahan modul rendering inspector ke komponen modular terstruktur yang mengelola Konteks, Dokumen File, Sumber Sitasi, Memori AI, dan Rencana Tugas Agent secara adaptif.',
+        impact: 'Mengurangi ukuran bundle StudentWorkspace dan menyajikan hierarki navigasi yang jelas dan konsisten.'
+      },
+      {
+        id: 'ch-340-2',
+        category: 'improvement',
+        title: 'Adaptive Workspace Layout & Stacking Safety',
+        description: 'Penataan ulang z-index dan nesting drawer mobile di bawah header utama, menghilangkan pointer event interception dan memudahkan perpindahan antar panel.',
+        impact: 'Pengalaman penggunaan di layar ponsel dan tablet kini mulus, responsif, dan bebas hambatan tumpukan modal.'
+      },
+      {
+        id: 'ch-340-3',
+        category: 'fix',
+        title: 'Release Gate Recovery & Migration Drift Verification',
+        description: 'Penyempurnaan deteksi schema drift pada PostgreSQL migration rehearsal dengan penanganan exit-code yang akurat.',
+        impact: 'Menjamin integritas skema database tanpa false positive pada deployment CI/CD.'
+      }
+    ]
+  },
+  {
+    version: 'v3.3.1',
+    date: '2026-09-27',
+    releaseTime: '27 September 2026, 11:38 WIB',
+    periodLabel: 'Arsip Terdahulu',
+    title: 'Pemeliharaan Rutin Harian & Pembaruan Web Resmi v3.3.1',
+    tagline: 'Pemeliharaan harian sistem 27 September 2026: Verifikasi integritas AES-256-GCM, pencadangan otomatis snapshot DB, pembersihan retensi data, hygiene purge, dan pembaruan versi web app.',
+    isLatest: false,
     highlights: [
       'Pembaruan versi web resmi v3.3.1 (27 September 2026)',
       'Pelaksanaan pemeliharaan harian sistem: Health check DB, verifikasi kriptografi & pencadangan otomatis',
@@ -216,9 +254,9 @@ export const APP_CHANGELOG: ReleaseNote[] = [
   {
     version: 'v3.1.0',
     date: '2026-09-03',
-    releaseTime: 'Kemarin, 09:30 WIB',
+    releaseTime: '3 September 2026, 09:30 WIB',
     periodLabel: 'Kemarin',
-    title: 'Pembaruan Web Terbaru Hari Ini: Optimasi Kinerja AI, Keamanan Sesi & Sinkronisasi Antarmuka',
+    title: 'Pembaruan Web Resmi 3 September 2026: Optimasi Kinerja AI, Keamanan Sesi & Sinkronisasi Antarmuka',
     tagline: 'Pembaruan harian terkini 3 September 2026 dengan perbaikan kecepatan respons AI Gemini, penyempurnaan UI/UX responsif, dan peningkatan keamanan data privat.',
     badge: 'Pembaruan Sistem',
     isLatest: false,
@@ -263,7 +301,7 @@ export const APP_CHANGELOG: ReleaseNote[] = [
   {
     version: 'v3.0.0',
     date: '2026-09-02',
-    releaseTime: '2 Hari Lalu, 18:43 WIB',
+    releaseTime: '2 September 2026, 18:43 WIB',
     periodLabel: 'Minggu Ini',
     title: 'Sistem Notifikasi Terpadu, Alur "Mood-to-Chat" Otomatis, dan Penyempurnaan Sesi Konseling',
     tagline: 'Integrasi preferensi notifikasi terperinci, alur pembahasan mood harian di ruang obrolan, visualisasi penjadwalan multi-step, dan profil konselor komprehensif.',
@@ -311,7 +349,7 @@ export const APP_CHANGELOG: ReleaseNote[] = [
   {
     version: 'v2.8.0',
     date: '2026-09-02',
-    releaseTime: '2 Hari Lalu, 09:00 WIB',
+    releaseTime: '2 September 2026, 09:00 WIB',
     periodLabel: 'Minggu Ini',
     title: 'UI/UX & Motion Design Overhaul, Sistem "Calm Motion", dan Penguatan Keamanan Klinis',
     tagline: 'Standardisasi visual yang tenang, transisi antarmuka yang lembut, sistem darurat non-blocking, dan perbaikan logika zona waktu lokal.',
@@ -366,7 +404,7 @@ export const APP_CHANGELOG: ReleaseNote[] = [
   {
     version: 'v2.7.0',
     date: '2026-08-31',
-    releaseTime: 'Minggu Lalu, 10:30 WIB',
+    releaseTime: '31 Agustus 2026, 10:30 WIB',
     periodLabel: 'Minggu Lalu',
     title: 'Pusat Catatan Pembaruan Harian & Peningkatan Kestabilan AI',
     tagline: 'Transparansi penuh pembaruan fitur setiap hari, pelacak versi interaktif, dan optimalisasi koneksi server.',
@@ -412,7 +450,7 @@ export const APP_CHANGELOG: ReleaseNote[] = [
   {
     version: 'v2.6.4',
     date: '2026-08-30',
-    releaseTime: '2 Hari Lalu',
+    releaseTime: '30 Agustus 2026, 17:00 WIB',
     periodLabel: 'Minggu Ini',
     title: 'Peningkatan Manajemen Sesi Multi-Perangkat & Proteksi Kunci',
     tagline: 'Audit keamanan perangkat aktif, fitur cabut sesi dari jarak jauh, dan penataan ulang rute server.',
@@ -450,7 +488,7 @@ export const APP_CHANGELOG: ReleaseNote[] = [
   {
     version: 'v2.6.0',
     date: '2026-08-28',
-    releaseTime: '3 Hari Lalu',
+    releaseTime: '28 Agustus 2026, 14:00 WIB',
     periodLabel: 'Minggu Ini',
     title: 'Peluncuran Skrining Mandiri Klinis PHQ-9 & GAD-7',
     tagline: 'Instrumen evaluasi mandiri tingkat depresi dan kecemasan dengan interpretasi berbasis panduan medis.',
@@ -488,7 +526,7 @@ export const APP_CHANGELOG: ReleaseNote[] = [
   {
     version: 'v2.5.0',
     date: '2026-08-24',
-    releaseTime: 'Minggu Lalu',
+    releaseTime: '24 Agustus 2026, 11:00 WIB',
     periodLabel: 'Minggu Lalu',
     title: 'Sistem Penjadwalan Konselor Kampus & Konsultasi Video',
     tagline: 'Jadwal tatap muka atau daring dengan psikolog kampus berlisensi tanpa antrean fisik.',
@@ -526,7 +564,7 @@ export const APP_CHANGELOG: ReleaseNote[] = [
   {
     version: 'v2.4.0',
     date: '2026-08-18',
-    releaseTime: '2 Minggu Lalu',
+    releaseTime: '18 Agustus 2026, 10:00 WIB',
     periodLabel: 'Arsip Terdahulu',
     title: 'Pusat Privasi, Ekspor Data GDPR & Kuota AI Realtime',
     tagline: 'Hak kendali data penuh, penghapusan akun mandiri, dan transparansi kuota pesan AI harian.',

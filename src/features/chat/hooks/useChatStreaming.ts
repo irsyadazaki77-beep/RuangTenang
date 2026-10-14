@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { ChatStreamingClient, StreamPayload } from '../services/chatStreamingClient';
+import { ChatStreamingClient, StreamPayload, RoutingEventData } from '../services/chatStreamingClient';
 import { playCompletionChime } from '../../../lib/soundEffects';
 
 export function useChatStreaming() {
@@ -47,7 +47,7 @@ export function useChatStreaming() {
       onFollowUps?: (followUps: string[]) => void;
       onChatCreated?: (chatId: string) => void;
       onQuotaExceeded?: (data: { message: string; resetAt?: string; suggestedActions?: string[] }) => void;
-      onRoutingMetadata?: (data: { modelUsed: string; routingMode: 'manual' | 'auto'; routingReason: string; isFallback?: boolean; fallbackFrom?: string }) => void;
+      onRoutingMetadata?: (data: RoutingEventData) => void;
     }
   ) => {
     const token = ++currentTokenRef.current;

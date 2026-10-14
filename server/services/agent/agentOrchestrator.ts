@@ -6,7 +6,8 @@ import type { WorkspacePlan } from '../../../shared/contracts/workspace.js';
 import { getAllowedAgentToolIds } from './agentToolRegistry.js';
 import { AgentModelError, estimateAgentDecisionInputTokens, requestAgentDecision } from './agentModelAdapter.js';
 import { executeAuthorizedAgentTool } from './agentToolExecutor.js';
-import { getConfiguredDefaultAiModelId } from '../ai/aiModelRegistry.js';
+import { DEFAULT_KERJA_PROFILE_ID, isAiProfile, isKerjaProfile } from '../../../shared/aiModelContract.js';
+import { mapLegacyModelToProfile } from '../ai/aiModelRegistry.js';
 
 export interface AgentExecutionStats {
   modelId: string;
@@ -52,6 +53,7 @@ function uniqueSources(results: AgentToolResult[]) {
         ...(typeof item.sourceVersion === 'string' ? { sourceVersion: item.sourceVersion } : {}),
         ...(typeof item.fileKind === 'string' ? { fileKind: item.fileKind as AgentExecutionResult['sources'][number]['fileKind'] } : {}),
         filename: String(item.filename || 'Dokumen'),
+        ...(typeof item.url === 'string' ? { url: item.url } : {}),
         ...(typeof item.page === 'number' ? { page: item.page } : {}),
         ...(typeof item.slide === 'number' ? { slide: item.slide } : {}),
         ...(typeof item.sheet === 'string' ? { sheet: item.sheet } : {}),
@@ -102,8 +104,17 @@ export async function runWorkspaceAgent(input: WorkspaceAgentRunInput): Promise<
   const events: AgentExecutionEvent[] = [];
   const seenCalls = new Set<string>();
   const startedAt = Date.now();
-  let modelId = task.snapshot.modelId === 'auto' ? getConfiguredDefaultAiModelId(input.userTier) : task.snapshot.modelId;
-  if (modelId === 'auto') throw new AgentExecutionError('AGENT_MODEL_UNAVAILABLE', 'Belum ada provider AI yang dikonfigurasi untuk Agent.');
+  const requestedModelId = task.snapshot.modelId === 'auto'
+    ? DEFAULT_KERJA_PROFILE_ID
+    : task.snapshot.modelId;
+  const profileId = isAiProfile(requestedModelId)
+    ? (isKerjaProfile(requestedModelId) ? requestedModelId : undefined)
+    : mapLegacyModelToProfile(requestedModelId, true);
+  if (isAiProfile(requestedModelId) && !profileId) {
+    throw new AgentExecutionError('AGENT_MODEL_UNAVAILABLE', 'Profil AI tidak sesuai dengan Ruang Kerja.');
+  }
+  let modelId = profileId || requestedModelId;
+  if (!modelId || modelId === 'auto') throw new AgentExecutionError('AGENT_MODEL_UNAVAILABLE', 'Belum ada provider AI yang dikonfigurasi untuk Agent.');
   let steps = 0;
   let toolCalls = 0;
   let estimatedInputTokens = 0;
@@ -156,7 +167,7 @@ export async function runWorkspaceAgent(input: WorkspaceAgentRunInput): Promise<
     estimatedInputTokens += turnTokens;
     try {
       modelDecision = await requestAgentDecision({
-        userId: input.userId, userTier: input.userTier, requestedModelId: modelId,
+        userId: input.userId, userTier: input.userTier, requestedModelId: profileId || modelId,
         prompt, allowedToolIds, abortSignal: decisionController.signal
       });
     } catch (error) {

@@ -11,11 +11,16 @@ export interface QuotaExceededData {
 
 export interface RoutingEventData {
   modelUsed: string;
+  modelName?: string;
   routingMode: 'manual' | 'auto';
   routingReason: string;
   presetId?: string;
   isFallback?: boolean;
   fallbackFrom?: string;
+  fallbackFromName?: string;
+  profileId?: string;
+  isDegraded?: boolean;
+  degradationNotice?: string;
 }
 
 export interface StreamCallbacks {
@@ -208,7 +213,7 @@ export class ChatStreamingClient {
                         throw new Error(parsed.message || parsed.text || parsed.error || 'Gagal memproses respons');
                       }
                     } else if (parsed.error) {
-                      throw new Error(parsed.text || parsed.error || 'Gagal memproses respons');
+                      throw new Error(parsed.message || parsed.text || (typeof parsed.error === 'string' ? parsed.error : 'Gagal memproses respons'));
                     } else if (parsed.tool_call || (parsed.type === 'plugin' && parsed.plugin)) {
                       pluginName = parsed.tool_call || parsed.plugin;
                       if (token === this.activeToken && callbacks.onPluginSwitch) {
@@ -218,10 +223,15 @@ export class ChatStreamingClient {
                       if (token === this.activeToken && callbacks.onRoutingMetadata) {
                         callbacks.onRoutingMetadata({
                           modelUsed: parsed.modelUsed,
+                          modelName: parsed.modelName,
                           routingMode: parsed.routingMode,
                           routingReason: parsed.routingReason,
                           isFallback: Boolean(parsed.isFallback),
-                          fallbackFrom: parsed.fallbackFrom
+                          fallbackFrom: parsed.fallbackFrom,
+                          fallbackFromName: parsed.fallbackFromName,
+                          profileId: parsed.profileId,
+                          isDegraded: Boolean(parsed.isDegraded),
+                          degradationNotice: parsed.degradationNotice
                         });
                       }
                     } else if (Array.isArray(parsed.sources)) {
@@ -300,7 +310,11 @@ export class ChatStreamingClient {
         console.error('Streaming client error:', err);
         this.changeState(token, 'failed', callbacks.onStateChange);
         if (callbacks.onError) {
-          await callbacks.onError(err.message || 'Koneksi terputus.');
+          const rawMessage = typeof err?.message === 'string' ? err.message : '';
+          const isNetworkFailure = err instanceof TypeError && /failed to fetch|networkerror|load failed/i.test(rawMessage);
+          await callbacks.onError(isNetworkFailure
+            ? 'Tidak dapat terhubung ke server. Periksa koneksi internet lalu coba lagi.'
+            : rawMessage || 'Koneksi terputus.');
         }
       }
     } finally {

@@ -45,7 +45,7 @@ describe('AI provider adapters', () => {
   });
 
   it('resolves external provider model slugs only from canonical IDs', () => {
-    expect(deepseekService.mapModelName('deepseek-reasoner')).toBe('deepseek-reasoner');
+    expect(deepseekService.mapModelName('deepseek-reasoner')).toBe('deepseek-v4-pro');
     expect(groqService.mapModelName('groq-qwen-27b')).toBe('qwen/qwen3.8-27b');
     expect(openrouterService.mapModelName('openrouter-nemotron-550b')).toBe('nvidia/nemotron-3-ultra-550b-a55b:free');
     expect(() => openaiService.mapModelName('openai-gpt-6-luna')).toThrowError('MODEL_NOT_FOUND');

@@ -109,7 +109,9 @@ export const groqService = {
 
       const data = await response.json();
       const choice = data.choices?.[0];
-      const outputText = (choice?.message?.content || choice?.message?.reasoning || '').trim();
+      // Groq may return private chain-of-thought in `reasoning`. Only `content`
+      // is the user-facing answer and must ever be returned to the chat.
+      const outputText = (choice?.message?.content || '').trim();
       if (typeof outputText !== 'string' || !outputText) throw Object.assign(new Error('AI_PROVIDER_CONTENT_ERROR_INVALID_RESPONSE'), { category: 'CONTENT_ERROR', retryable: false });
       clearTimeout(timeoutId);
 
@@ -202,7 +204,8 @@ export const groqService = {
                 if (!jsonStr) continue;
                 const parsed = JSON.parse(jsonStr);
                 const delta = parsed.choices?.[0]?.delta;
-                const textContent = delta?.content || delta?.reasoning || '';
+                // Do not forward Groq's private reasoning field to the client.
+                const textContent = delta?.content || '';
 
                 if (textContent) {
                   yield { text: textContent };
@@ -220,7 +223,7 @@ export const groqService = {
             const jsonStr = buffer.trim().slice(6).trim();
             const parsed = JSON.parse(jsonStr);
             const delta = parsed.choices?.[0]?.delta;
-            const textContent = delta?.content || delta?.reasoning || '';
+            const textContent = delta?.content || '';
             if (textContent) {
               yield { text: textContent };
             }

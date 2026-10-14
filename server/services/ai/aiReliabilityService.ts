@@ -52,7 +52,7 @@ export function classifyAiError(error: unknown): AiProviderError {
   else if (/content/.test(raw)) category = 'CONTENT_ERROR';
   else if ([500, 502, 503, 504].includes(status) || /unavailable|overloaded/.test(raw)) category = 'PROVIDER_UNAVAILABLE';
   else if (/fetch failed|network|econn|socket|connection/.test(raw)) category = 'NETWORK_ERROR';
-  const retryable = ['TIMEOUT', 'NETWORK_ERROR', 'PROVIDER_UNAVAILABLE', 'RATE_LIMIT'].includes(category);
+  const retryable = ['TIMEOUT', 'NETWORK_ERROR', 'PROVIDER_UNAVAILABLE', 'RATE_LIMIT', 'MODEL_NOT_FOUND'].includes(category);
   return Object.assign(err, { category, retryable, statusCode: Number.isFinite(status) ? status : undefined });
 }
 

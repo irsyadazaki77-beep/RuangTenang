@@ -227,7 +227,7 @@ export function useWorkspaceStreaming({
       if (!streamUiTimerRef.current) streamUiTimerRef.current = setTimeout(flushStreamingMessage, STREAM_UI_FLUSH_INTERVAL_MS);
     };
 
-    const finishWithError = async () => {
+    const finishWithError = async (customErrorMessage?: string) => {
       if (!isCurrentRequest(identity) || completionHandled || completedRequestsRef.current.has(identity.requestId)) return;
       completionHandled = true;
       completedRequestsRef.current.add(identity.requestId);
@@ -239,7 +239,7 @@ export function useWorkspaceStreaming({
         await onStreamCompleted?.({
           id: `err_${identity.requestId}`,
           role: 'assistant',
-          content: 'Respons belum berhasil dibuat karena koneksi atau layanan terputus. Silakan kirim ulang pesan Anda.',
+          content: customErrorMessage || 'Respons belum berhasil dibuat karena koneksi atau layanan terputus. Silakan kirim ulang pesan Anda.',
           error: true,
           retryRequestId: requestSnapshotId,
           createdAt: new Date()
@@ -338,7 +338,7 @@ export function useWorkspaceStreaming({
           if (!isCurrentRequest(identity)) return;
           if (createdChatId) onChatIdReceived?.(createdChatId, identity);
         },
-        onError: async () => { await finishWithError(); }
+        onError: async (err?: string) => { await finishWithError(err); }
       });
 
       if (!isCurrentRequest(identity)) return;
