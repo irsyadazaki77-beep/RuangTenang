@@ -68,6 +68,7 @@ export interface WorkspaceComparisonCandidate {
   comparisonId?: string;
   snapshotId?: string;
   modelName: string;
+  profileId?: string;
   status: WorkspaceComparisonCandidateStatus;
   output: string;
   attemptId?: string;

@@ -114,6 +114,7 @@ export interface FileSourceReference {
   sourceVersion?: string;
   fileKind?: SupportedFileKind;
   filename: string;
+  url?: string;
   page?: number;
   slide?: number;
   sheet?: string;

@@ -36,12 +36,17 @@ export interface Message {
   createdAt?: string | Date;
   attachments?: StoredAttachment[];
   modelUsed?: string;
+  modelName?: string;
   isFallback?: boolean;
   fallbackFrom?: string;
+  fallbackFromName?: string;
   routingMode?: 'manual' | 'auto';
   routingReason?: string;
   presetId?: string;
   sources?: FileSourceReference[];
+  profileId?: string;
+  isDegraded?: boolean;
+  degradationNotice?: string;
 }
 
 export interface Chat {

@@ -6,9 +6,15 @@ vi.mock('../../services/file-intelligence/contextRetrievalService.js', () => ({
 vi.mock('../../services/attachmentStorageService.js', () => ({
   attachmentStorageService: { getAttachmentForUser: vi.fn() }
 }));
+vi.mock('../../services/webSearchService.js', () => ({
+  isWebSearchConfigured: () => true,
+  searchWeb: vi.fn(),
+  webCitationDocumentId: () => 'web-doc-1'
+}));
 
 import { contextRetrievalService } from '../../services/file-intelligence/contextRetrievalService.js';
 import { attachmentStorageService } from '../../services/attachmentStorageService.js';
+import { searchWeb } from '../../services/webSearchService.js';
 import { executeAuthorizedAgentTool } from '../../services/agent/agentToolExecutor.js';
 import { getAllowedAgentToolIds } from '../../services/agent/agentToolRegistry.js';
 import type { WorkspacePlan } from '../../../shared/contracts/workspace.js';
@@ -124,5 +130,18 @@ describe('server Agent tool authorization', () => {
 
     expect(result).toMatchObject({ status: 'failed', error: { code: 'SOURCE_NOT_FOUND' } });
     expect(attachmentStorageService.getAttachmentForUser).toHaveBeenCalledWith('file-a', 'user-1', false);
+  });
+
+  it('retries a transient web research failure with the bounded idempotent retry policy', async () => {
+    const researchContext = { ...context, allowedToolIds: new Set(['search_web']) };
+    vi.mocked(searchWeb)
+      .mockRejectedValueOnce(new Error('WEB_SEARCH_FAILED'))
+      .mockResolvedValueOnce([{ title: 'Value chain overview', url: 'https://example.org/value-chain', excerpt: 'A source snippet.', publishedDate: '2025-01-01' }]);
+
+    const result = await executeAuthorizedAgentTool('search_web', { query: 'Porter value chain evidence', maxResults: 1 }, researchContext);
+
+    expect(result.status).toBe('completed');
+    expect(result).toMatchObject({ data: { provider: 'tavily', verificationStatus: 'external_unverified', results: [{ url: 'https://example.org/value-chain' }] } });
+    expect(searchWeb).toHaveBeenCalledTimes(2);
   });
 });

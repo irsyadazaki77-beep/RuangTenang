@@ -1,6 +1,15 @@
 import { useEffect, useState } from 'react';
 import { apiClient } from './apiClient';
-import { AiModelCatalogResponse, AiModelOption, DEFAULT_AI_MODEL_ID } from './aiModels';
+import { 
+  AiModelCatalogResponse, 
+  AiModelOption, 
+  AiProfileOption,
+  DEFAULT_AI_MODEL_ID,
+  DEFAULT_TENANG_PROFILE_ID,
+  DEFAULT_KERJA_PROFILE_ID,
+  TenangProfileId,
+  KerjaProfileId
+} from './aiModels';
 
 let cachedCatalog: AiModelCatalogResponse | null = null;
 let pendingRequest: Promise<AiModelCatalogResponse | null> | null = null;
@@ -21,7 +30,10 @@ export async function loadAiModelCatalog(): Promise<AiModelCatalogResponse | nul
 
 export function useAiModelCatalog() {
   const [models, setModels] = useState<AiModelOption[]>(cachedCatalog?.models ?? []);
+  const [profiles, setProfiles] = useState<AiProfileOption[]>(cachedCatalog?.profiles ?? []);
   const [defaultModel, setDefaultModel] = useState(cachedCatalog?.defaultModel ?? DEFAULT_AI_MODEL_ID);
+  const [defaultTenangProfile, setDefaultTenangProfile] = useState<TenangProfileId>(cachedCatalog?.defaultTenangProfile ?? DEFAULT_TENANG_PROFILE_ID);
+  const [defaultKerjaProfile, setDefaultKerjaProfile] = useState<KerjaProfileId>(cachedCatalog?.defaultKerjaProfile ?? DEFAULT_KERJA_PROFILE_ID);
   const [loading, setLoading] = useState(!cachedCatalog);
   const [error, setError] = useState(false);
 
@@ -31,7 +43,10 @@ export function useAiModelCatalog() {
       if (!active) return;
       if (catalog) {
         setModels(catalog.models);
+        setProfiles(catalog.profiles ?? []);
         setDefaultModel(catalog.defaultModel);
+        if (catalog.defaultTenangProfile) setDefaultTenangProfile(catalog.defaultTenangProfile);
+        if (catalog.defaultKerjaProfile) setDefaultKerjaProfile(catalog.defaultKerjaProfile);
         setError(false);
       } else {
         setError(true);
@@ -41,5 +56,14 @@ export function useAiModelCatalog() {
     return () => { active = false; };
   }, []);
 
-  return { models, defaultModel, loading, error };
+  return { 
+    models, 
+    profiles, 
+    defaultModel, 
+    defaultTenangProfile, 
+    defaultKerjaProfile, 
+    loading, 
+    error 
+  };
 }
+

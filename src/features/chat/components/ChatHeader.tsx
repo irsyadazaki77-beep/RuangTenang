@@ -15,13 +15,20 @@ import {
   Eye, 
   EyeOff, 
   Shield, 
-  Lock 
+  Lock,
+  Check,
+  Zap
 } from 'lucide-react';
-import { ChatMode, ResponseStyle } from '../types';
 import { UserSession } from '../../../types';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { usePrivacyVault } from '../../../contexts/PrivacyVaultContext';
-import { useAiModelCatalog } from '../../../lib/aiModelCatalog';
+import { 
+  DEFAULT_TENANG_PROFILE_ID,
+  TENANG_PROFILES,
+  isTenangProfile,
+  migrateLegacyTenangModelToProfile,
+  type TenangProfileId
+} from '../../../lib/aiModels';
 import { BrandLogo } from '../../../components/ui/BrandLogo';
 
 interface ChatHeaderProps {
@@ -32,10 +39,6 @@ interface ChatHeaderProps {
   onOpenSidebar?: () => void;
   onOpenSettings?: () => void;
   onOpenChangelog?: () => void;
-  chatMode: ChatMode;
-  setChatMode: (mode: ChatMode) => void;
-  responseStyle: ResponseStyle;
-  setResponseStyle: (style: ResponseStyle) => void;
   aiModel: string;
   setAiModel: (model: string) => void;
   isTemporary: boolean;
@@ -55,7 +58,6 @@ interface ChatHeaderProps {
 
 export function ChatHeader({
   user, chatId, isBranch, parentChatTitle, onOpenSidebar,
-  chatMode, setChatMode, responseStyle, setResponseStyle,
   aiModel, setAiModel,
   isTemporary, setIsTemporary,
   activePlugin, setActivePlugin,
@@ -67,17 +69,20 @@ export function ChatHeader({
 }: ChatHeaderProps) {
   const { actualTheme, toggleTheme } = useTheme();
   const { isIncognitoMode, toggleIncognito, triggerPanicScreen } = usePrivacyVault();
-  const { models: catalogModels, loading: modelsLoading, error: modelsError, defaultModel } = useAiModelCatalog();
-  const availableModels = catalogModels.filter(model => model.available && model.selectable);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const currentModel = availableModels.find(m => m.id === aiModel);
   const isSettingsOpen = activePlugin === 'chat_settings';
 
+  const activeProfileId: TenangProfileId = isTenangProfile(aiModel)
+    ? aiModel
+    : migrateLegacyTenangModelToProfile(aiModel);
+
+  const activeProfile = TENANG_PROFILES.find(p => p.id === activeProfileId) ?? TENANG_PROFILES[1];
+
   useEffect(() => {
-    if (!modelsLoading && !modelsError && aiModel !== 'auto' && !availableModels.some(model => model.id === aiModel)) {
-      setAiModel(defaultModel);
+    if (aiModel && !isTenangProfile(aiModel)) {
+      setAiModel(activeProfileId);
     }
-  }, [aiModel, availableModels, defaultModel, modelsError, modelsLoading, setAiModel]);
+  }, [aiModel, activeProfileId, setAiModel]);
 
   return (
     <header className="sticky top-0 z-20 w-full shrink-0 flex items-center justify-between px-2.5 sm:px-4 pt-safe pt-[env(safe-area-inset-top,0px)] min-h-[calc(3rem+env(safe-area-inset-top,0px))] bg-stone-50/80 dark:bg-slate-950/70 backdrop-blur-2xl border-b border-stone-200/40 dark:border-slate-800/40 transition-colors">
@@ -105,7 +110,7 @@ export function ChatHeader({
               RuangTenang
             </span>
             <span className="hidden md:inline-flex text-[11px] text-stone-400 dark:text-slate-500 font-normal truncate">
-              · {aiModel === 'auto' ? 'Auto (Pilih otomatis)' : (currentModel?.tag || (modelsLoading ? 'Memuat model…' : 'Model otomatis'))}
+              · {activeProfile.name}
             </span>
             <ChevronDown className={`w-3 h-3 text-stone-400 transition-transform duration-150 shrink-0 ${isSettingsOpen ? 'rotate-180 text-teal-600 dark:text-teal-400' : 'group-hover:text-stone-600 dark:group-hover:text-slate-300'}`} />
           </button>
@@ -125,70 +130,64 @@ export function ChatHeader({
                   </span>
                 </div>
 
-                {/* Model Selection */}
-                <div className="space-y-1">
-                  <label className="text-[10.5px] font-medium text-stone-500 dark:text-slate-400">
-                    Model AI
-                  </label>
-                  <select
-                    value={aiModel}
-                    onChange={e => setAiModel(e.target.value)}
-                    className="w-full text-xs bg-stone-50 dark:bg-slate-800 border border-stone-200/70 dark:border-slate-700 rounded-lg px-2 py-1.5 text-stone-800 dark:text-slate-200 outline-none focus:border-teal-500 cursor-pointer"
-                  >
-                    <option value="auto" className="font-semibold text-teal-700 dark:text-teal-400">
-                      Auto — Pilih otomatis (Rekomendasi)
-                    </option>
-                    {Array.from(new Set(availableModels.map(m => m.category))).map(category => (
-                      <optgroup key={category} label={category} className="font-semibold text-stone-500 dark:text-slate-400">
-                        {availableModels.filter(m => m.category === category).map(m => {
-                          const tier = user?.tier;
-                          const isAllowed = m.allowedTiers.includes(tier === 'Free' ? 'Free' : 'Pro');
-                          return (
-                            <option key={m.id} value={m.id} disabled={!isAllowed || !m.selectable} className="font-normal text-stone-800 dark:text-slate-200">
-                              {m.name} {!isAllowed ? '(Tier tidak tersedia)' : ''}
-                            </option>
-                          );
-                        })}
-                      </optgroup>
-                    ))}
-                    {modelsLoading && <option disabled>Memuat model...</option>}
-                    {modelsError && <option disabled>Daftar model belum tersedia; menggunakan rute default server.</option>}
-                    {!modelsLoading && !modelsError && availableModels.length === 0 && <option disabled>{defaultModel} (rute default server)</option>}
-                  </select>
-                </div>
+                {/* Model Selection -> 3 Official Ruang Tenang Profiles */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[10.5px] font-semibold text-stone-600 dark:text-slate-300">
+                      Tingkat Kemampuan AI
+                    </label>
+                    <span className="text-[9.5px] text-teal-650 dark:text-teal-400 font-medium">
+                      Otomatis dirutekan
+                    </span>
+                  </div>
+                  <div role="radiogroup" aria-label="Profil AI RuangTenang" className="space-y-1">
+                    {TENANG_PROFILES.map(profile => {
+                      const isSelected = profile.id === activeProfileId;
+                      const IconComp = profile.id === 'tenang-turbo' ? Brain : profile.id === 'tenang-low' ? Zap : Sparkles;
+                      const isDefault = profile.id === DEFAULT_TENANG_PROFILE_ID;
 
-                {/* Focus mode */}
-                <div className="space-y-1">
-                  <label className="text-[10.5px] font-medium text-stone-500 dark:text-slate-400">
-                    Fokus Pendampingan
-                  </label>
-                  <select
-                    value={chatMode}
-                    onChange={e => setChatMode(e.target.value as ChatMode)}
-                    className="w-full text-xs bg-stone-50 dark:bg-slate-800 border border-stone-200/70 dark:border-slate-700 rounded-lg px-2 py-1.5 text-stone-800 dark:text-slate-200 outline-none focus:border-teal-500 cursor-pointer"
-                  >
-                    <option value="Teman Cerita">Teman Cerita (Santai & Empatik)</option>
-                    <option value="Refleksi Diri">Refleksi Diri (Pertanyaan Pemantik)</option>
-                    <option value="Fokus Solusi">Fokus Solusi (Langkah Konkret)</option>
-                    <option value="Produktivitas">Produktivitas (Manajemen Waktu)</option>
-                  </select>
-                </div>
-
-                {/* Response style */}
-                <div className="space-y-1">
-                  <label className="text-[10.5px] font-medium text-stone-500 dark:text-slate-400">
-                    Gaya Respons
-                  </label>
-                  <select
-                    value={responseStyle}
-                    onChange={e => setResponseStyle(e.target.value as ResponseStyle)}
-                    className="w-full text-xs bg-stone-50 dark:bg-slate-800 border border-stone-200/70 dark:border-slate-700 rounded-lg px-2 py-1.5 text-stone-800 dark:text-slate-200 outline-none focus:border-teal-500 cursor-pointer"
-                  >
-                    <option value="Singkat">Singkat & Ringkas</option>
-                    <option value="Seimbang">Seimbang</option>
-                    <option value="Mendalam">Mendalam & Komprehensif</option>
-                    <option value="Fokus mendengarkan">Fokus Mendengarkan (Minimal Solusi)</option>
-                  </select>
+                      return (
+                        <button
+                          key={profile.id}
+                          type="button"
+                          role="radio"
+                          aria-checked={isSelected}
+                          onClick={() => setAiModel(profile.id)}
+                          className={`flex w-full items-start gap-2 rounded-lg p-2 text-left transition-colors cursor-pointer ${
+                            isSelected
+                              ? 'bg-teal-50 dark:bg-teal-950/50 ring-1 ring-teal-500/50'
+                              : 'hover:bg-stone-100 dark:hover:bg-slate-800'
+                          }`}
+                        >
+                          <div className={`p-1 rounded-md mt-0.5 shrink-0 ${
+                            isSelected
+                              ? 'bg-teal-100 dark:bg-teal-900/60 text-teal-700 dark:text-teal-300'
+                              : 'bg-stone-100 dark:bg-slate-800 text-stone-500 dark:text-slate-400'
+                          }`}>
+                            <IconComp className="w-3.5 h-3.5" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[11.5px] font-semibold text-stone-800 dark:text-stone-200">
+                                {profile.name}
+                              </span>
+                              {isDefault && (
+                                <span className="text-[9px] font-medium px-1 py-0.2 rounded bg-teal-100/70 dark:bg-teal-900/60 text-teal-800 dark:text-teal-300">
+                                  Default
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[10px] text-stone-500 dark:text-slate-400 mt-0.5 leading-snug">
+                              {profile.description}
+                            </p>
+                          </div>
+                          {isSelected && (
+                            <Check className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 mt-1 shrink-0" />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
 
                 {/* Temporary Chat Toggle inside Popover */}

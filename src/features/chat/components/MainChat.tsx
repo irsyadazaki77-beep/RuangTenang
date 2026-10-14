@@ -8,8 +8,11 @@ import { UserSession } from '../../../types';
 import { ChatModalContainer } from './ChatModalContainer';
 import { RefreshCw, ChevronDown, Sparkles, Clock, Wind, Calendar, ArrowDown, Shield, Eye, X, Video } from 'lucide-react';
 import { useToast } from '../../../components/Toast';
-import { useAiModelCatalog } from '../../../lib/aiModelCatalog';
 import { safeLocalStorage } from '../../../lib/storage';
+import {
+  isTenangProfile,
+  migrateLegacyTenangModelToProfile
+} from '../../../lib/aiModels';
 
 import { useChatHistory } from '../hooks/useChatHistory';
 import { useChatStreaming } from '../hooks/useChatStreaming';
@@ -56,16 +59,20 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
   // Persistence of preferences
   const [chatMode, setChatMode] = useState<ChatMode>(() => safeLocalStorage.getItem('chatMode') as ChatMode || 'Teman Cerita');
   const [responseStyle, setResponseStyle] = useState<ResponseStyle>(() => safeLocalStorage.getItem('responseStyle') as ResponseStyle || 'Seimbang');
-  const [aiModel, setAiModel] = useState(() => safeLocalStorage.getItem('aiModel') || '');
-  const { models: modelCatalog, defaultModel } = useAiModelCatalog();
+  const [aiModel, setAiModel] = useState<string>(() => {
+    const saved = safeLocalStorage.getItem('aiModel');
+    return migrateLegacyTenangModelToProfile(saved);
+  });
   const [isTemporary, setIsTemporary] = useState(() => !user || user?.role === 'guest');
 
   useEffect(() => { safeLocalStorage.setItem('chatMode', chatMode); }, [chatMode]);
   useEffect(() => { safeLocalStorage.setItem('responseStyle', responseStyle); }, [responseStyle]);
   useEffect(() => { if (aiModel) safeLocalStorage.setItem('aiModel', aiModel); }, [aiModel]);
   useEffect(() => {
-    if (modelCatalog.length && (!aiModel || !modelCatalog.some(model => model.id === aiModel && model.selectable))) setAiModel(defaultModel);
-  }, [modelCatalog, defaultModel, aiModel]);
+    if (!isTenangProfile(aiModel)) {
+      setAiModel(migrateLegacyTenangModelToProfile(aiModel));
+    }
+  }, [aiModel]);
 
   const [followUps, setFollowUps] = useState<string[]>([]);
   const [streamingMessage, setStreamingMessage] = useState<Message | null>(null);
@@ -182,13 +189,13 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
     navigate(`/c/${newChat.id}`);
   };
 
-  const handleSend = useCallback(async (content: string, pluginResult?: string, attachments?: Attachment[]) => {
+  const handleSend = useCallback(async (content: string, pluginResult?: string, attachments?: Attachment[], preserveUserMessage = false) => {
     if (!content.trim() && !pluginResult && (!attachments || attachments.length === 0)) return;
     
     const tempId = `msg_${Date.now()}`;
     const distressCheck = content ? detectAcademicDistress(content) : null;
 
-    if (!pluginResult) {
+    if (!pluginResult && !preserveUserMessage) {
       setMessages(prev => [...prev, {
         id: tempId,
         role: 'user',
@@ -205,7 +212,7 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
     
     setFollowUps([]);
     let assistantMsgId = `assistant_${Date.now()}`;
-    let routingMeta: { modelUsed?: string; routingMode?: 'manual' | 'auto'; routingReason?: string } = {};
+    let routingMeta: { modelUsed?: string; modelName?: string; routingMode?: 'manual' | 'auto'; routingReason?: string; fallbackFrom?: string; fallbackFromName?: string } = {};
     dispatchAuroraActivity({
       mode: 'RUANG_TENANG',
       phase: 'preparing',
@@ -412,7 +419,8 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
       if (chatId) {
         handleEditMessage(lastUser.id, lastUser.content);
       } else {
-        handleSend(lastUser.content);
+        if (messageId) setMessages(prev => prev.filter(message => message.id !== messageId));
+        handleSend(lastUser.content, undefined, undefined, true);
       }
     }
   }, [messages, chatId, handleEditMessage, handleSend]);
@@ -606,10 +614,6 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
             onOpenSidebar={onOpenSidebar}
             onOpenSettings={onOpenSettings}
             onOpenChangelog={onOpenChangelog}
-            chatMode={chatMode}
-            setChatMode={setChatMode}
-            responseStyle={responseStyle}
-            setResponseStyle={setResponseStyle}
             aiModel={aiModel}
             setAiModel={setAiModel}
             isTemporary={isTemporary}

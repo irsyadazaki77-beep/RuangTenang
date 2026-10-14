@@ -276,7 +276,7 @@ export const AuroraBackground: React.FC<AuroraBackgroundProps> = memo(({
     : 0;
 
   // Layer 1 Animation: Top-Left Primary Fluid Stream (Lissajous drift)
-  const baseOp1 = (isKerja ? 0.78 : 0.82) * intensityMultiplier;
+  const baseOp1 = (isKerja ? 0.42 : 0.82) * intensityMultiplier;
   const targetOp1 = Math.min(0.98, baseOp1 + opacityBoost);
   const layer1Animation: TargetAndTransition = shouldReduceMotion || isTabHidden
     ? { opacity: targetOp1 }
@@ -311,7 +311,7 @@ export const AuroraBackground: React.FC<AuroraBackgroundProps> = memo(({
   };
 
   // Layer 2 Animation: Bottom-Right Counter Oceanic Wave
-  const baseOp2 = (isKerja ? 0.74 : 0.76) * intensityMultiplier;
+  const baseOp2 = (isKerja ? 0.38 : 0.76) * intensityMultiplier;
   const targetOp2 = Math.min(0.96, baseOp2 + opacityBoost);
   const layer2Animation: TargetAndTransition = shouldReduceMotion || isTabHidden
     ? { opacity: targetOp2 }
@@ -346,7 +346,7 @@ export const AuroraBackground: React.FC<AuroraBackgroundProps> = memo(({
   };
 
   // Layer 3 Animation: Top-Right Dynamic Accent Ribbon
-  const baseOp3 = (isKerja ? 0.72 : 0.72) * intensityMultiplier;
+  const baseOp3 = (isKerja ? 0.35 : 0.72) * intensityMultiplier;
   const targetOp3 = Math.min(0.95, baseOp3 + opacityBoost);
   const layer3Animation: TargetAndTransition = shouldReduceMotion || isTabHidden
     ? { opacity: targetOp3 }

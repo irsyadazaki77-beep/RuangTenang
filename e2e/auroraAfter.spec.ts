@@ -6,7 +6,7 @@ test.describe('Aurora 2.2 After Visual Capture & Verification', () => {
   test('Capture Ruang Tenang & Ruang Kerja after optimization', async ({ page }, testInfo) => {
     test.setTimeout(90_000);
     const capture = async (name: string) => {
-      const directory = path.join('test-artifacts', 'after', testInfo.project.name);
+      const directory = path.join(process.env.E2E_ARTIFACTS_DIR || 'test-artifacts', 'after', testInfo.project.name);
       await mkdir(directory, { recursive: true });
       await page.screenshot({ path: path.join(directory, `${name}.png`), animations: 'disabled' });
     };

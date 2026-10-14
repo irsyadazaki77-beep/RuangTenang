@@ -268,6 +268,21 @@ function safeToolError(error: unknown): { code: string; message: string } {
   return { code: safeMessages[code] ? code : 'TOOL_EXECUTION_FAILED', message: safeMessages[code] || 'Tool gagal dijalankan.' };
 }
 
+function isRetryableToolError(error: unknown): boolean {
+  // Retry only transient failures from idempotent external research. Missing
+  // sources, invalid input, timeouts, and deterministic parser failures fail closed.
+  return error instanceof Error && error.message === 'WEB_SEARCH_FAILED';
+}
+
+function waitForRetry(delayMs: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) return reject(new Error('ABORTED'));
+    const timeoutId = setTimeout(() => { signal.removeEventListener('abort', onAbort); resolve(); }, delayMs);
+    const onAbort = () => { clearTimeout(timeoutId); signal.removeEventListener('abort', onAbort); reject(new Error('ABORTED')); };
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
 export async function executeAuthorizedAgentTool(
   toolId: string,
   rawArguments: unknown,
@@ -315,7 +330,16 @@ export async function executeAuthorizedAgentTool(
       }, definition.timeoutMs);
     });
 
-    const data = await Promise.race([executeRegisteredTool(toolId, parsed.data, scopedContext), timeout]);
+    const executeWithRetry = async () => {
+      for (let attempt = 0; ; attempt += 1) {
+        try { return await executeRegisteredTool(toolId, parsed.data, scopedContext); }
+        catch (error) {
+          if (!definition.isIdempotent || attempt >= AGENT_EXECUTION_LIMITS.maxToolRetries || !isRetryableToolError(error)) throw error;
+          await waitForRetry(AGENT_EXECUTION_LIMITS.toolRetryBaseDelayMs * (2 ** attempt), toolAbortController.signal);
+        }
+      }
+    };
+    const data = await Promise.race([executeWithRetry(), timeout]);
     const outputValidation = definition.outputSchema.safeParse(data);
     if (!outputValidation.success) throw new Error('TOOL_OUTPUT_INVALID');
     const serialized = JSON.stringify(outputValidation.data);

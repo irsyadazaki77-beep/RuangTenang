@@ -280,6 +280,72 @@ export const contextRetrievalService = {
       addChunk(item);
     }
 
+    // Fallback for general summarization/analysis requests:
+    // If explicit attachments were requested but query words had no lexical overlap (score <= 0),
+    // supply leading document chunks so the AI has real document context instead of failing.
+    if (selectedChunks.length === 0 && targetAttachmentIds.length > 0) {
+      const sortedByOrder = [...eligible].sort((a, b) => a.chunk.chunkIndex - b.chunk.chunkIndex);
+      for (const item of sortedByOrder) {
+        if (selectedChunks.length >= maxChunks) break;
+        const c = item.chunk;
+        if (selectedChunkIds.has(c.id) || (useSourceDiversity && (selectedPerSource.get(c.attachmentId) || 0) >= 3)) continue;
+        let textContent = c.content;
+        let tokenEst = c.tokenCount || Math.ceil(textContent.length / 4);
+
+        if (currentTokens + tokenEst > maxTokens) {
+          if (selectedChunks.length === 0) {
+            const maxChars = Math.max(0, maxTokens * 4 - 3);
+            textContent = textContent.substring(0, maxChars) + '...';
+            tokenEst = Math.ceil(textContent.length / 4);
+          } else {
+            break;
+          }
+        }
+
+        const attachment = attachmentMap.get(c.attachmentId);
+        const filename: string = attachment?.filename || 'Dokumen';
+        const parsedLocation = [c.pageStart ? `p. ${c.pageStart}${c.pageEnd && c.pageEnd !== c.pageStart ? `–${c.pageEnd}` : ''}` : '', c.slideNumber ? `slide ${c.slideNumber}` : '', c.sheetName ? `sheet ${c.sheetName}` : '', c.section || ''].filter(Boolean).join(' · ');
+        const storedSourceRef = c.sourceRef && !/\[(?:Bagian|Section)\s+\d+\]/i.test(c.sourceRef) ? c.sourceRef : undefined;
+        const sourceRef = storedSourceRef || parsedLocation;
+        const formattedSourceRef = sourceRef && sourceRef !== filename ? sourceRef : filename;
+        const citationId = `SRC_${selectedChunks.length + 1}`;
+
+        selectedChunks.push({
+          id: c.id,
+          documentId: c.attachmentId,
+          index: c.chunkIndex,
+          text: textContent,
+          tokenEstimate: tokenEst,
+          pageStart: c.pageStart ?? undefined,
+          pageEnd: c.pageEnd ?? undefined,
+          slideNumber: c.slideNumber ?? undefined,
+          sheetName: c.sheetName ?? undefined,
+          section: c.section ?? undefined,
+          sourceRef: formattedSourceRef,
+          checksum: c.checksum || ''
+        });
+        selectedChunkIds.add(c.id);
+        selectedPerSource.set(c.attachmentId, (selectedPerSource.get(c.attachmentId) || 0) + 1);
+        currentTokens += tokenEst;
+
+        sourceRefs.push({
+          citationId,
+          documentId: c.attachmentId,
+          workspaceId: attachment?.chatId || undefined,
+          ...(attachment?.checksum ? { checksum: attachment.checksum, sourceVersion: attachment.checksum } : {}),
+          ...(!attachment?.checksum && attachment?.updatedAt ? { sourceVersion: attachment.updatedAt.toISOString() } : {}),
+          ...(attachment?.fileKind ? { fileKind: attachment.fileKind as SupportedFileKind } : {}),
+          filename,
+          page: c.pageStart ?? undefined,
+          slide: c.slideNumber ?? undefined,
+          sheet: c.sheetName ?? undefined,
+          section: c.section ?? undefined,
+          sourceRef: formattedSourceRef,
+          snippet: textContent.substring(0, 140) + '...'
+        });
+      }
+    }
+
     if (selectedChunks.length === 0) {
       return emptyResult();
     }

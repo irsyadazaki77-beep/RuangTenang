@@ -4,7 +4,7 @@ export interface ExportXlsxOptions {
   artifactType?: string;
 }
 
-export interface XlsxTable { name: string; headers: string[]; rows: Array<Array<string | number | null>> }
+export interface XlsxTable { name: string; headers: string[]; rows: Array<Array<string | number | Date | null>> }
 
 const MAX_SHEETS = 20;
 const MAX_ROWS = 50_000;
@@ -53,6 +53,34 @@ export function extractMarkdownTables(content: string): XlsxTable[] {
 
 interface ChartPayload { rows: Array<Record<string, unknown>>; xColumn?: string; yColumn?: string; title?: string; datasetVersion?: string; aggregation?: string; provenance?: Record<string, unknown> }
 
+interface StructuredTablePayload { type: 'table'; title?: string; columns: string[]; rows: Array<Record<string, unknown>>; columnTypes?: Record<string, 'text' | 'number' | 'date'> }
+
+function parseStructuredTable(content: string): StructuredTablePayload | null {
+  try {
+    const value = JSON.parse(content) as Partial<StructuredTablePayload>;
+    if (value.type !== 'table' || !Array.isArray(value.columns) || !Array.isArray(value.rows)) return null;
+    return value as StructuredTablePayload;
+  } catch { return null; }
+}
+
+function coerceStructuredCell(value: unknown, type: 'text' | 'number' | 'date' = 'text'): string | number | Date | null {
+  if (value === null || value === undefined || value === '') return null;
+  if (type === 'number') {
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    const raw = String(value).trim();
+    if (!/^-?\d+(?:[.,]\d+)?$/.test(raw)) throw new Error(`Nilai "${raw.slice(0, 32)}" bukan angka yang valid.`);
+    return Number(raw.replace(',', '.'));
+  }
+  if (type === 'date') {
+    const raw = String(value).trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) throw new Error(`Tanggal "${raw.slice(0, 32)}" harus memakai format YYYY-MM-DD.`);
+    const date = new Date(`${raw}T00:00:00.000Z`);
+    if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== raw) throw new Error(`Tanggal "${raw}" tidak valid.`);
+    return date;
+  }
+  return safeCell(value);
+}
+
 function parseChartPayload(content: string): ChartPayload | null {
   try {
     const parsed = JSON.parse(content) as ChartPayload;
@@ -69,9 +97,13 @@ function sheetName(raw: string, used: Set<string>): string {
 }
 
 export async function createXlsxBuffer(input: ExportXlsxOptions): Promise<Uint8Array> {
+  const structured = parseStructuredTable(input.content);
   const chart = parseChartPayload(input.content);
   const tables: XlsxTable[] = [];
-  if (chart) {
+  if (structured) {
+    const headers = structured.columns.map(String);
+    tables.push({ name: structured.title || input.title || 'Tabel', headers, rows: structured.rows.map(row => headers.map(header => coerceStructuredCell(row[header], structured.columnTypes?.[header] || 'text'))) });
+  } else if (chart) {
     const headers = [...new Set(chart.rows.flatMap(row => Object.keys(row)))];
     tables.push({ name: chart.title || 'Data grafik', headers, rows: chart.rows.map(row => headers.map(header => safeCell(row[header]))) });
   } else {

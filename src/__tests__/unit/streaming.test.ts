@@ -46,6 +46,27 @@ describe('Chat Streaming Client & Race Condition Tests', () => {
     expect(onMessageComplete).toHaveBeenCalledWith('Halo dunia!');
   });
 
+  it('reports EOF before the done marker as a failed, retryable response', async () => {
+    const encoder = new TextEncoder();
+    const onChunk = vi.fn();
+    const onMessageComplete = vi.fn();
+    const onError = vi.fn();
+    const body = new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text: 'Potongan belum lengkap' })}\n\n`));
+        controller.close();
+      }
+    });
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, body });
+
+    const client = new ChatStreamingClient();
+    await client.stream({ message: 'Analisis ini' }, { onChunk, onMessageComplete, onError });
+
+    expect(onChunk).toHaveBeenCalledWith('Potongan belum lengkap');
+    expect(onMessageComplete).not.toHaveBeenCalled();
+    expect(onError).toHaveBeenCalledWith(expect.stringContaining('Respons terputus sebelum selesai'));
+  });
+
   it('handles race condition: start stream 1 -> abort -> start stream 2 with only stream 2 output retained', async () => {
     const stream1Chunks: string[] = [];
     const stream2Chunks: string[] = [];

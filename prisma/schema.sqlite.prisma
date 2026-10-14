@@ -612,6 +612,7 @@ model WorkspaceTaskExecutions {
   requestFingerprint String
   snapshotEncrypted String
   outputEncrypted   String?
+  proposalEncrypted String?
   sourcesEncrypted  String?
   eventsEncrypted   String?
   outputArtifactId  String?

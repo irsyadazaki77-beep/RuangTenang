@@ -21,9 +21,24 @@ function CanvasLoadingFallback() {
   return <div className="flex min-h-40 flex-1 items-center justify-center text-xs text-slate-500" role="status">Memuat Canvas…</div>;
 }
 
+function ProposalPreview({ proposal, onDismiss }: {
+  proposal: { title: string; type: ArtifactType; content: string; language?: string };
+  onDismiss?: () => void;
+}) {
+  return <section className="flex min-h-0 flex-1 flex-col overflow-hidden" aria-label="Preview proposal Agent">
+    <div className="flex shrink-0 items-center justify-between gap-3 border-b border-amber-200 bg-amber-50 px-4 py-2 dark:border-amber-900/60 dark:bg-amber-950/30">
+      <div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-200">Proposal Agent · belum disimpan</p><h3 className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">{proposal.title}</h3><p className="text-[10px] text-slate-600 dark:text-slate-400">{proposal.type}{proposal.language ? ` · ${proposal.language}` : ''} · Menunggu persetujuan di panel Rencana</p></div>
+      {onDismiss && <button type="button" onClick={onDismiss} className="shrink-0 rounded-md px-2 py-1 text-xs font-medium text-slate-600 hover:bg-amber-100 dark:text-slate-300 dark:hover:bg-amber-900/40">Kembali ke Canvas</button>}
+    </div>
+    <pre className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words p-5 font-sans text-sm leading-7 text-slate-800 dark:text-slate-200">{proposal.content}</pre>
+  </section>;
+}
+
 interface WorkspaceCanvasPaneProps {
   artifacts: WorkspaceArtifact[];
   activeArtifact: WorkspaceArtifact | null;
+  proposalPreview?: { taskId: string; title: string; type: ArtifactType; content: string; language?: string } | null;
+  onDismissProposalPreview?: () => void;
   draftContent?: string;
   scrollStorageKey?: string;
   activeArtifactId: string;
@@ -57,6 +72,8 @@ interface WorkspaceCanvasPaneProps {
 export const WorkspaceCanvasPane: React.FC<WorkspaceCanvasPaneProps> = React.memo(({
   artifacts,
   activeArtifact,
+  proposalPreview = null,
+  onDismissProposalPreview,
   draftContent,
   scrollStorageKey,
   activeArtifactId,
@@ -225,7 +242,7 @@ export const WorkspaceCanvasPane: React.FC<WorkspaceCanvasPaneProps> = React.mem
             </div>
           )}
 
-          {activeArtifact ? (
+          {proposalPreview ? <ProposalPreview proposal={proposalPreview} onDismiss={onDismissProposalPreview} /> : activeArtifact ? (
             <Suspense fallback={<CanvasLoadingFallback />}>
             <ArtifactCanvas
               artifact={activeArtifact}
@@ -306,7 +323,7 @@ export const WorkspaceCanvasPane: React.FC<WorkspaceCanvasPaneProps> = React.mem
             animate={{ x: 0 }}
             exit={shouldReduceMotion ? { opacity: 0 } : { x: '100%' }}
             transition={{ duration: 0.18 }}
-            className="xl:hidden fixed inset-0 z-40 bg-white dark:bg-secondary-900 flex flex-col shadow-2xl pt-safe pb-safe"
+            className="xl:hidden absolute inset-0 z-10 bg-white dark:bg-secondary-900 flex flex-col shadow-2xl pb-safe"
           >
             {/* Mobile Drawer Top Bar */}
             <div className="flex items-center justify-between px-3 py-2 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 shrink-0">
@@ -329,7 +346,7 @@ export const WorkspaceCanvasPane: React.FC<WorkspaceCanvasPaneProps> = React.mem
 
             {/* Drawer Body */}
             <div className="flex-1 overflow-hidden">
-              {activeArtifact ? (
+              {proposalPreview ? <ProposalPreview proposal={proposalPreview} onDismiss={onDismissProposalPreview} /> : activeArtifact ? (
                 <Suspense fallback={<CanvasLoadingFallback />}>
                 <ArtifactCanvas
                   artifact={activeArtifact}

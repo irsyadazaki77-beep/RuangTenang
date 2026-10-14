@@ -11,7 +11,6 @@ import { checkUserAiUsageLimit, rollbackUserAiQuota } from '../services/aiUsageL
 import { serverDb } from '../database.js';
 
 import { encryptionService } from '../services/encryptionService.js';
-import { getLocalFallbackResponse } from './fallbackAi.js';
 
 
 import { aiSafetyService } from '../services/ai/aiSafetyService.js';
@@ -23,8 +22,19 @@ import { attachmentStorageService } from '../services/attachmentStorageService.j
 import { documentIngestionService } from '../services/file-intelligence/documentIngestionService.js';
 import { DocumentProcessingException } from '../services/file-intelligence/fileTypes.js';
 import { getVerifiedEmergencyContacts } from '../config/emergencyRegistry.js';
-import { AiModelError, getModelDefinition, resolveAiModel } from '../services/ai/aiModelRegistry.js';
-import { AUTO_ROUTING_MODEL_ID } from '../../shared/aiModelContract.js';
+import {
+  AiModelError,
+  getModelDisplayName,
+  getModelDefinition,
+  resolveAiModel,
+  validateProfileMode,
+  mapLegacyModelToProfile,
+  getProfileDefinition
+} from '../services/ai/aiModelRegistry.js';
+import {
+  AUTO_ROUTING_MODEL_ID,
+  isAiProfile
+} from '../../shared/aiModelContract.js';
 import { smartModelRouter } from '../services/ai/smartModelRouter.js';
 
 const router = Router();
@@ -48,16 +58,29 @@ const sendError = (res: Response, code: string, message: string, status = 500) =
 
 const sendModelSelectionError = (res: Response, error: unknown) => {
   if (!(error instanceof AiModelError)) return false;
-  const status = error.code === 'MODEL_NOT_ALLOWED' ? 403 : 400;
+  const status = error.code === 'MODEL_NOT_ALLOWED' ? 403 : error.code === 'MODEL_UNAVAILABLE' || error.code === 'PROVIDER_NOT_CONFIGURED' ? 503 : 400;
   const messages: Record<AiModelError['code'], string> = {
     MODEL_NOT_FOUND: 'Model AI tidak dikenal.',
     MODEL_NOT_ALLOWED: 'Model ini tidak tersedia untuk paket akun Anda.',
     MODEL_UNAVAILABLE: 'Model AI sedang tidak tersedia.',
-    PROVIDER_NOT_CONFIGURED: 'Penyedia model AI sedang tidak tersedia.'
+    PROVIDER_NOT_CONFIGURED: 'Penyedia model AI sedang tidak tersedia.',
+    INVALID_PROFILE_FOR_MODE: 'Profil AI tidak sesuai dengan mode ruang aktif.'
   };
-  sendError(res, error.code, messages[error.code], status);
+  sendError(res, error.code, messages[error.code] || 'Model AI tidak valid.', status);
   return true;
 };
+
+function getProfileDegradation(profileId: string | undefined, modelId: string | undefined) {
+  const profile = profileId ? getProfileDefinition(profileId) : undefined;
+  const model = modelId ? getModelDefinition(modelId) : undefined;
+  const rank = (value?: string) => value === 'Sangat Tinggi' ? 2 : value === 'Tinggi' ? 1 : 0;
+  const isDegraded = Boolean(profile && model && rank(model.reasoning) < rank(profile.reasoning));
+  return {
+    isDegraded,
+    degradationNotice: isDegraded ? `Profil ${profile!.name}: ${model!.name} berada di bawah sasaran penalaran profil.` : undefined
+  };
+}
+
 
 // Middleware to check ownership for a specific chat ID
 const checkChatOwnership = async (req: Request, res: Response, next: NextFunction) => {
@@ -243,15 +266,30 @@ router.post(['/chat', '/api/chat'], optionalAuth, aiChatLimiter, aiAbuseLimiter,
       });
     }
 
-    // If manual mode, validate the requested model
-    if (!isAutoRouting) {
+    const isWorkspace = Boolean(mode && mode.toLowerCase().includes('ruang_kerja'));
+    const isProfile = Boolean(requestedAiModel && isAiProfile(requestedAiModel));
+    const canSelectInternalModel = req.user?.role === 'admin' || userTier === 'Developer';
+
+    // Validate mode isolation: Tenang profiles cannot be used in Kerja and vice-versa
+    if (isProfile) {
+      try { validateProfileMode(requestedAiModel, isWorkspace); }
+      catch (error) { if (sendModelSelectionError(res, error)) return; throw error; }
+    } else if (!isAutoRouting) {
+      if (!canSelectInternalModel) {
+        return sendError(res, 'MODEL_NOT_ALLOWED', 'Pemilihan model internal hanya tersedia untuk admin dan akun Developer.', 403);
+      }
       try { resolveAiModel(requestedAiModel, userTier); }
       catch (error) { if (sendModelSelectionError(res, error)) return; throw error; }
     }
 
+    const effectiveProfileId = isProfile
+      ? (requestedAiModel as any)
+      : mapLegacyModelToProfile(requestedAiModel, isWorkspace);
+
     const routingContext = {
       manualModelId: isAutoRouting ? AUTO_ROUTING_MODEL_ID : requestedAiModel,
-      workspaceMode: Boolean(mode && mode.toLowerCase().includes('ruang_kerja')),
+      profileId: effectiveProfileId,
+      workspaceMode: isWorkspace,
       chatMode,
       responseStyle,
       streamingRequired: false,
@@ -277,21 +315,39 @@ router.post(['/chat', '/api/chat'], optionalAuth, aiChatLimiter, aiAbuseLimiter,
       routingContext
     });
 
+    const actualDegradation = getProfileDegradation(routingDecision.profileId || effectiveProfileId, pipelineRes.modelUsed);
     return res.status(200).json({
       success: true,
       text: pipelineRes.text,
       message: pipelineRes.text,
       isCrisis: pipelineRes.isCrisisOverride,
       modelUsed: pipelineRes.modelUsed,
+      modelName: getModelDisplayName(pipelineRes.modelUsed),
+      profileUsed: routingDecision.profileId || effectiveProfileId,
       modelRequested: routingDecision.selectedModelId,
       providerUsed: getModelDefinition(pipelineRes.modelUsed)?.provider || 'local',
       isFallback: pipelineRes.isFallback,
+      isDegraded: Boolean(routingDecision.isDegraded || actualDegradation.isDegraded),
+      degradationNotice: routingDecision.degradationNotice || actualDegradation.degradationNotice,
       fallbackFrom: pipelineRes.isFallback && pipelineRes.modelUsed !== routingDecision.selectedModelId ? routingDecision.selectedModelId : undefined,
+      fallbackFromName: pipelineRes.isFallback && pipelineRes.modelUsed !== routingDecision.selectedModelId ? getModelDisplayName(routingDecision.selectedModelId) : undefined,
       routingMode: routingDecision.routingMode,
       routingReason: routingDecision.routingReason
     });
+
   } catch (err: any) {
     console.error('Chat endpoint error:', err);
+    if (sendModelSelectionError(res, err)) return;
+    if (err?.category) {
+      const category = err.category;
+      const status = category === 'RATE_LIMIT' || category === 'QUOTA_EXCEEDED' ? 429 : 503;
+      return res.status(status).json({
+        success: false,
+        code: category,
+        retryable: Boolean(err.retryable) || category === 'QUOTA_EXCEEDED',
+        error: category === 'TIMEOUT' ? 'Model terlalu lama merespons. Silakan coba lagi.' : 'Model AI sedang tidak tersedia. Silakan coba lagi.'
+      });
+    }
     return res.status(500).json({ success: false, error: 'Gagal memproses pesan chat.' });
   }
 });
@@ -337,14 +393,27 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
       }
     }
 
+    const isWorkspace = Boolean(workspaceMode) || (mode || '').toLowerCase().includes('ruang_kerja') || (chatMode || '').toLowerCase().includes('ruangkerja');
     const isAutoRouting = !requestedAiModel || requestedAiModel === AUTO_ROUTING_MODEL_ID;
+    const isProfile = Boolean(requestedAiModel && isAiProfile(requestedAiModel));
+    const canSelectInternalModel = userRole === 'admin' || userTier === 'Developer';
 
-    if (!isAutoRouting) {
+    // Validate mode isolation: Tenang profiles cannot be used in Kerja and vice-versa
+    if (isProfile) {
+      try { validateProfileMode(requestedAiModel, isWorkspace); }
+      catch (error) { if (sendModelSelectionError(res, error)) return; throw error; }
+    } else if (!isAutoRouting) {
+      if (!canSelectInternalModel) {
+        return sendError(res, 'MODEL_NOT_ALLOWED', 'Pemilihan model internal hanya tersedia untuk admin dan akun Developer.', 403);
+      }
       try { resolveAiModel(requestedAiModel, userTier || 'Free'); }
       catch (error) { if (sendModelSelectionError(res, error)) return; throw error; }
     }
 
-    const isWorkspace = Boolean(workspaceMode) || (mode || '').toLowerCase().includes('ruang_kerja') || (chatMode || '').toLowerCase().includes('ruangkerja');
+    const effectiveProfileId = isProfile
+      ? (requestedAiModel as any)
+      : mapLegacyModelToProfile(requestedAiModel, isWorkspace);
+
     const attachmentLimit = isWorkspace ? MAX_WORKSPACE_ACTIVE_ATTACHMENTS : MAX_CHAT_ATTACHMENTS_PER_MESSAGE;
     if (Array.isArray(attachments) && attachments.length > attachmentLimit) {
       return sendError(res, 'TOO_MANY_FILES', `Maksimal ${attachmentLimit} lampiran aktif diperbolehkan`, 400);
@@ -356,6 +425,7 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
 
     const routingContext = {
       manualModelId: isAutoRouting ? AUTO_ROUTING_MODEL_ID : requestedAiModel,
+      profileId: effectiveProfileId,
       workspaceMode: isWorkspace,
       chatMode,
       responseStyle,
@@ -371,6 +441,7 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
         size: a?.size
       }))
     };
+
 
     const routingDecision = smartModelRouter.routeModel(routingContext, cleanMessage);
     const aiModel = routingDecision.selectedModelId;
@@ -458,6 +529,12 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
               if (record.chatId && record.chatId !== currentChatId) {
                 await rollbackUserAiQuota(userId, clientIp);
                 return sendError(res, 'ATTACHMENT_WORKSPACE_MISMATCH', 'Dokumen ini terhubung ke Ruang Kerja lain.', 403);
+              }
+              if (!record.chatId && currentChatId) {
+                await prisma.attachments.update({
+                  where: { id: attachmentId },
+                  data: { chatId: currentChatId }
+                }).catch(() => undefined);
               }
             }
           }
@@ -741,83 +818,41 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
     res.on('finish', cleanupKeepAlive);
     res.on('close', cleanupKeepAlive);
 
-    const runLocalFallback = async () => {
+    const runLocalFallback = async (cause?: unknown) => {
       if (clientDisconnected || reqAbortController.signal.aborted) {
         if (!res.writableEnded) res.end();
         return;
       }
-      console.warn('Executing Local Fallback AI stream response');
-      const fallbackResponse = getLocalFallbackResponse(cleanMessage || pluginResult || '', chatMode, responseStyle);
+      const category = typeof cause === 'object' && cause && 'category' in cause && typeof cause.category === 'string'
+        ? cause.category
+        : 'PROVIDER_UNAVAILABLE';
+      const retryable = category !== 'AI_CONSENT_REQUIRED' && category !== 'PROMPT_INJECTION_DETECTED';
+      const message = category === 'AI_CONSENT_REQUIRED'
+        ? 'Aktifkan persetujuan pemrosesan AI untuk menggunakan fitur ini.'
+        : category === 'TIMEOUT'
+          ? 'Provider AI terlalu lama merespons. Coba ulangi permintaan.'
+          : category === 'QUOTA_EXCEEDED' || category === 'RATE_LIMIT'
+            ? 'Batas penggunaan provider AI tercapai. Coba lagi setelah batasnya pulih.'
+            : 'Provider AI tidak dapat menyelesaikan permintaan. Tidak ada jawaban yang dibuat; silakan coba lagi.';
+      console.warn(`[CHAT_STREAM] Request failed category=${category}`);
       if (!res.writableEnded) {
-        res.write(`data: ${JSON.stringify({
-          type: 'routing',
-          modelUsed: 'local-empathetic-fallback',
-          isFallback: true,
-          fallbackFrom: aiModel,
-          routingMode: routingDecision.routingMode,
-          routingReason: 'Model penyedia tidak menyelesaikan respons; jawaban lokal digunakan.'
-        })}\n\n`);
+        res.write(`data: ${JSON.stringify({ error: true, code: category, retryable, message })}\n\n`);
+        res.write(`data: ${JSON.stringify({ done: true, chatId: currentChatId })}\n\n`);
+        res.write('data: [DONE]\n\n');
+        res.end();
       }
-      
-      if (fallbackResponse.tool_call) {
-        res.write(`data: ${JSON.stringify({ tool_call: fallbackResponse.tool_call, parameters: { reason: fallbackResponse.text } })}\n\n`);
-        
-        if (!activeIsTemporary && userId && currentChatId && !(clientDisconnected || reqAbortController.signal.aborted)) {
-          try {
-            await prisma.chatMessages.create({
-              data: {
-                id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
-                chatId: currentChatId,
-                role: 'assistant',
-                content: encryptionService.encryptSensitive(`Memanggil ${fallbackResponse.tool_call}`) || `Memanggil ${fallbackResponse.tool_call}`,
-                plugin: fallbackResponse.tool_call
-              }
-            });
-          } catch(e) {}
-        }
-      } else {
-        const words = fallbackResponse.text.split(' ');
-        let currentFullText = '';
-        for (const word of words) {
-          if (clientDisconnected || reqAbortController.signal.aborted) break;
-          const chunk = word + ' ';
-          currentFullText += chunk;
-          res.write(`data: ${JSON.stringify({ text: chunk })}\n\n`);
-          await new Promise(resolve => setTimeout(resolve, 30));
-        }
-        
-        if (!activeIsTemporary && userId && currentChatId && !(clientDisconnected || reqAbortController.signal.aborted)) {
-          try {
-            await prisma.chatMessages.create({
-              data: {
-                id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
-                chatId: currentChatId,
-                role: 'assistant',
-                content: encryptionService.encryptSensitive(currentFullText.trim()) || currentFullText.trim()
-              }
-            });
-          } catch(e) {}
-        }
-      }
-
-      if (isNewChat && !activeIsTemporary && userId) {
-        try {
-          const title = (cleanMessage || 'Percakapan').substring(0, 30) + ((cleanMessage && cleanMessage.length > 30) ? '...' : '');
-          res.write(`data: ${JSON.stringify({ newTitle: title })}\n\n`);
-        } catch(e) {}
-      }
-
-      res.write(`data: ${JSON.stringify({ done: true, chatId: currentChatId })}\n\n`);
-      res.write('data: [DONE]\n\n');
-      res.end();
     };
 
     const reqAbortController = new AbortController();
     let clientDisconnected = false;
 
     req.on('close', () => {
-      clientDisconnected = true;
-      reqAbortController.abort();
+      // IncomingMessage also emits `close` after a successfully received body.
+      // Only treat it as a disconnect when the request ended prematurely.
+      if (!req.complete) {
+        clientDisconnected = true;
+        reqAbortController.abort();
+      }
     });
     req.on('aborted', () => {
       clientDisconnected = true;
@@ -845,6 +880,12 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
         if (userId) await rollbackUserAiQuota(userId, clientIp).catch(() => undefined);
         return sendError(res, 'WORKSPACE_FILE_ACCESS_DENIED', 'File hanya dapat digunakan dari Workspace yang memilikinya.', 403);
       }
+      // Link any previously unassigned ready attachments belonging to this user to currentChatId
+      await prisma.attachments.updateMany({
+        where: { id: { in: requestedWorkspaceAttachmentIds }, userId, chatId: null, status: 'ready' },
+        data: { chatId: currentChatId }
+      }).catch(() => undefined);
+
       const ownedReadyFiles = await prisma.attachments.findMany({
         where: { id: { in: requestedWorkspaceAttachmentIds }, chatId: currentChatId, userId, status: 'ready' },
         select: { id: true }
@@ -881,16 +922,16 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
       });
     } catch (err: any) {
       console.warn('[CHAT_STREAM] Unified safety pipeline threw error, switching to fallback:', err?.message || err);
-      return await runLocalFallback();
+      return await runLocalFallback(err);
     }
 
     if (!pipelineRes) {
-      return await runLocalFallback();
+      return await runLocalFallback(Object.assign(new Error('Pipeline did not return a result.'), { category: 'PROVIDER_ERROR' }));
     }
 
     if (pipelineRes.isConsentFallback || pipelineRes.modelUsed?.startsWith('local-')) {
       console.log('Fallback triggered from pipeline result!');
-      return await runLocalFallback();
+      return await runLocalFallback(Object.assign(new Error('Pipeline did not return a provider response.'), { category: 'PROVIDER_ERROR' }));
     }
 
     if (pipelineRes.isPromptInjectionOverride) {
@@ -943,7 +984,7 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
 
     if (!responseStream) {
       console.log('Stream falsy, executing fallback!');
-      await runLocalFallback();
+      await runLocalFallback(Object.assign(new Error('Provider did not create a response stream.'), { category: 'PROVIDER_ERROR' }));
       return;
     }
 
@@ -955,18 +996,25 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
 
       // Emit routing decision event so client can display which model was actually routed
       if (pipelineRes.routingDecision && !res.writableEnded) {
+        const actualDegradation = getProfileDegradation(pipelineRes.routingDecision.profileId || effectiveProfileId, pipelineRes.modelUsed);
         res.write(`data: ${JSON.stringify({
           type: 'routing',
+          profileId: pipelineRes.routingDecision.profileId || effectiveProfileId,
           modelUsed: pipelineRes.modelUsed || pipelineRes.routingDecision.selectedModelId,
+          modelName: getModelDisplayName(pipelineRes.modelUsed || pipelineRes.routingDecision.selectedModelId),
           modelRequested: pipelineRes.routingDecision.selectedModelId,
           providerUsed: getModelDefinition(pipelineRes.modelUsed)?.provider || 'local',
           isFallback: Boolean(pipelineRes.isFallback),
+          isDegraded: Boolean(pipelineRes.routingDecision.isDegraded || actualDegradation.isDegraded),
+          degradationNotice: pipelineRes.routingDecision.degradationNotice || actualDegradation.degradationNotice,
           fallbackFrom: pipelineRes.isFallback ? pipelineRes.routingDecision.selectedModelId : undefined,
+          fallbackFromName: pipelineRes.isFallback ? getModelDisplayName(pipelineRes.routingDecision.selectedModelId) : undefined,
           routingMode: pipelineRes.routingDecision.routingMode,
           routingReason: pipelineRes.routingDecision.routingReason,
           presetId: routingContext.presetId
         })}\n\n`);
       }
+
 
       if (pipelineRes.sourceReferences && pipelineRes.sourceReferences.length > 0 && !res.writableEnded) {
         res.write(`data: ${JSON.stringify({ sources: pipelineRes.sourceReferences })}\n\n`);
@@ -976,6 +1024,33 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
         if (clientDisconnected || reqAbortController.signal.aborted || res.writableEnded) {
           console.log('[SSE] Client disconnected or request aborted, stopping stream');
           break;
+        }
+
+        if ((chunk as any)?.type === 'model_fallback') {
+          const fallbackModelId = (chunk as any).modelUsed as string;
+          const fallbackModel = getModelDefinition(fallbackModelId);
+          const profile = getProfileDefinition(routingDecision.profileId || effectiveProfileId);
+          const rank = (value?: string) => value === 'Sangat Tinggi' ? 2 : value === 'Tinggi' ? 1 : 0;
+          const isDegraded = Boolean(profile && fallbackModel && rank(fallbackModel.reasoning) < rank(profile.reasoning));
+          (pipelineRes as any).modelUsed = fallbackModelId;
+          (pipelineRes as any).isFallback = true;
+          (pipelineRes as any).routingDecision.isDegraded = isDegraded;
+          (pipelineRes as any).routingDecision.degradationNotice = isDegraded
+            ? `Profil ${profile?.name}: respons dialihkan ke model dengan tingkat penalaran yang lebih rendah setelah provider utama gagal.`
+            : undefined;
+          if (!res.writableEnded) {
+            res.write(`data: ${JSON.stringify({
+              type: 'routing', profileId: routingDecision.profileId || effectiveProfileId,
+              modelUsed: fallbackModelId, modelRequested: routingDecision.selectedModelId,
+              modelName: getModelDisplayName(fallbackModelId),
+              providerUsed: fallbackModel?.provider || 'local', isFallback: true,
+              fallbackFrom: (chunk as any).fallbackFrom || routingDecision.selectedModelId,
+              fallbackFromName: getModelDisplayName((chunk as any).fallbackFrom || routingDecision.selectedModelId),
+              isDegraded, degradationNotice: (pipelineRes as any).routingDecision.degradationNotice,
+              routingMode: routingDecision.routingMode, routingReason: `Fallback setelah ${(chunk as any).category || 'kegagalan provider'}.`
+            })}\n\n`);
+          }
+          continue;
         }
 
         const text = chunk.text;
@@ -1119,7 +1194,7 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
         if (!hasStreamedAnyText && !fullResponseText) {
           // Stream produced nothing, fallback to local response
           console.warn('[CHAT_STREAM] Stream produced no output, running fallback');
-          return await runLocalFallback();
+          return await runLocalFallback(Object.assign(new Error('Provider returned an empty response.'), { category: 'EMPTY_PROVIDER_RESPONSE' }));
         }
 
         if (!activeIsTemporary && userId && currentChatId && fullResponseText) {
@@ -1186,11 +1261,12 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
     }
   } catch (error: any) {
     console.error('[CHAT_STREAM] Outer unhandled error:', error);
+    if (sendModelSelectionError(res, error)) return;
     if (!res.headersSent) {
-      sendError(res, 'INTERNAL_SERVER_ERROR', 'Terjadi kesalahan pada server');
+      sendError(res, 'INTERNAL_SERVER_ERROR', 'Terjadi kesalahan pada server saat memproses pesan.');
     } else if (!res.writableEnded) {
       try {
-        res.write(`data: ${JSON.stringify({ text: "\n\nAku di sini untuk mendengarkanmu. Ceritakan apa yang sedang kamu rasakan yaa 🌿" })}\n\n`);
+        res.write(`data: ${JSON.stringify({ error: true, code: 'INTERNAL_SERVER_ERROR', message: 'Terjadi kesalahan sistem saat memproses respons AI.' })}\n\n`);
         res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
         res.write('data: [DONE]\n\n');
         res.end();

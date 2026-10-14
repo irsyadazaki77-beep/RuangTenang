@@ -26,7 +26,7 @@ export class GlobalErrorBoundary extends Component<GlobalErrorBoundaryProps, Glo
   }
 
   public componentDidCatch(error: Error, _errorInfo: ErrorInfo): void {
-    console.error('[GlobalErrorBoundary] UI_RENDER_ERROR', { name: error.name });
+    console.error('[GlobalErrorBoundary] UI_RENDER_ERROR', { name: error.name, message: error.message, stack: error.stack });
   }
 
   public handleResetSession = (): void => {

@@ -8,6 +8,7 @@ import jwt from 'jsonwebtoken';
 import cookieParser from 'cookie-parser';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-for-development-ruangtenang';
+const originalJwtSecret = process.env.JWT_SECRET;
 
 const app = express();
 app.use(express.json());
@@ -23,6 +24,9 @@ describe('Screening Authorization Security Tests', () => {
   const adminToken = generateToken({ userId: 'admin-1', name: 'Admin 1', role: 'admin', email: 'a1@test.com' });
 
   beforeAll(async () => {
+    // Other security suites mutate process.env while exercising startup guards.
+    // Keep the issuer's secret aligned with the fixtures created above.
+    process.env.JWT_SECRET = JWT_SECRET;
     vi.spyOn(serverDb, 'isSessionActive').mockResolvedValue(true);
     await prisma.appointments.deleteMany({ where: { id: { in: ['apt-test-auth-1'] } } });
     await prisma.counselors.deleteMany({ where: { id: { in: ['c-profile-1'] } } });
@@ -78,6 +82,8 @@ describe('Screening Authorization Security Tests', () => {
 
   afterAll(async () => {
     vi.restoreAllMocks();
+    if (originalJwtSecret === undefined) delete process.env.JWT_SECRET;
+    else process.env.JWT_SECRET = originalJwtSecret;
     await prisma.appointments.deleteMany({ where: { id: { in: ['apt-test-auth-1'] } } });
     await prisma.counselors.deleteMany({ where: { id: { in: ['c-profile-1'] } } });
     await prisma.screenings.deleteMany({ where: { id: { in: ['scr-1', 'scr-2'] } } });

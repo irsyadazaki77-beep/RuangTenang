@@ -10,8 +10,6 @@ import { ShieldCheck,
   ChevronLeft,
   Brain,
   MessageSquare,
-  Gauge,
-  Cpu,
   CheckCircle2,
   History,
   Calendar,
@@ -20,8 +18,12 @@ import { ShieldCheck,
   Volume2
 } from 'lucide-react';
 import { UserSession, SubscriptionTier } from '../../types';
-import { DEFAULT_AI_MODEL_ID } from '../../lib/aiModels';
-import { useAiModelCatalog } from '../../lib/aiModelCatalog';
+import { 
+  TENANG_PROFILES,
+  DEFAULT_TENANG_PROFILE_ID,
+  isTenangProfile,
+  migrateLegacyTenangModelToProfile
+} from '../../lib/aiModels';
 import { safeLocalStorage } from '../../lib/storage';
 import { BUILT_IN_PRESETS, DEFAULT_PRESET_ID } from '../workspace/constants/presetConstants';
 import { loadUserPersonalization, saveUserPersonalization, loadUserCustomPresets } from '../workspace/utils/workspacePresetManager';
@@ -62,12 +64,14 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   onOpenChangelog,
 }) => {
   const safeUser = userSession || DEFAULT_GUEST_USER;
-  const { models: availableModels, defaultModel, loading: modelsLoading, error: modelsError } = useAiModelCatalog();
   const [loading, setLoading] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const [aiModel, setAiModel] = useState(() => safeLocalStorage.getItem('aiModel') || DEFAULT_AI_MODEL_ID);
+  const [aiModel, setAiModel] = useState(() => {
+    const saved = safeLocalStorage.getItem('aiModel');
+    return migrateLegacyTenangModelToProfile(saved);
+  });
   const [responseStyle, setResponseStyle] = useState(() => safeLocalStorage.getItem('responseStyle') || 'Seimbang');
   
   const [prefDailyReminders, setPrefDailyReminders] = useState(() => safeLocalStorage.getItem('pref_daily_reminders') !== 'false');
@@ -76,20 +80,22 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   const [prefAiCompletionChime, setPrefAiCompletionChime] = useState(() => safeLocalStorage.getItem('pref_ai_completion_chime') !== 'false');
 
   useEffect(() => {
-    if (availableModels.length && !availableModels.some(model => model.id === aiModel && model.selectable)) {
-      setAiModel(defaultModel);
+    if (!isTenangProfile(aiModel)) {
+      setAiModel(migrateLegacyTenangModelToProfile(aiModel));
     }
-  }, [availableModels, aiModel, defaultModel]);
+  }, [aiModel]);
 
   const triggerNotificationSaved = () => {
     setSuccessMsg('Preferensi notifikasi berhasil diperbarui.');
     setTimeout(() => setSuccessMsg(null), 3000);
   };
 
-  const handleSelectAiModel = (modelId: string) => {
-    setAiModel(modelId);
-    safeLocalStorage.setItem('aiModel', modelId);
-    setSuccessMsg(`Model AI berhasil diubah ke ${availableModels.find(m => m.id === modelId)?.name || modelId}.`);
+  const handleSelectAiModel = (profileId: string) => {
+    const valid = migrateLegacyTenangModelToProfile(profileId);
+    setAiModel(valid);
+    safeLocalStorage.setItem('aiModel', valid);
+    const p = TENANG_PROFILES.find(item => item.id === valid);
+    setSuccessMsg(`Profil Ruang Tenang berhasil diubah ke ${p?.name || valid}.`);
     setTimeout(() => setSuccessMsg(null), 3000);
   };
 
@@ -361,86 +367,71 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                 </p>
               </div>
               <span className="text-xs font-medium text-teal-700 dark:text-teal-400 bg-teal-50/70 dark:bg-teal-950/50 px-2.5 py-1 rounded-md border border-teal-200/80 dark:border-teal-800 self-start sm:self-auto">
-                Default Aktif: {availableModels.find(m => m.id === aiModel)?.name || 'Gemini 3.8 Flash'}
+                Profil Aktif: {TENANG_PROFILES.find(p => p.id === aiModel)?.name || 'Tenang Middle'}
               </span>
             </div>
 
-            {/* Model Selection Grid */}
+            {/* Profile Selection Grid */}
             <div className="space-y-3">
               <label className="text-xs font-bold text-secondary uppercase tracking-wide">
-                Daftar Model AI Tersedia
+                Profil Kemampuan AI Ruang Tenang
               </label>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                {availableModels.filter(m => m.selectable).map((model) => {
-                  const isSelected = aiModel === model.id;
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+                {TENANG_PROFILES.map((profile) => {
+                  const isSelected = aiModel === profile.id;
+                  const isDefault = profile.id === DEFAULT_TENANG_PROFILE_ID;
+                  const IconComp = profile.id === 'tenang-turbo' ? Brain : profile.id === 'tenang-low' ? Zap : Sparkles;
+
                   return (
                     <div
-                      key={model.id}
-                      onClick={() => model.selectable && handleSelectAiModel(model.id)}
-                      aria-disabled={!model.selectable}
-                      className={`relative p-4 rounded-xl border transition-all ${model.selectable ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'} flex flex-col justify-between ${
+                      key={profile.id}
+                      onClick={() => handleSelectAiModel(profile.id)}
+                      className={`relative p-4 rounded-xl border transition-all cursor-pointer flex flex-col justify-between ${
                         isSelected
                           ? 'border-teal-600 bg-teal-50/40 shadow-xs ring-1 ring-teal-500'
                           : 'border-default hover:border-default hover:surface-muted surface-card'
                       }`}
                     >
-                      <div className="space-y-2">
+                      <div className="space-y-2.5">
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex items-center gap-2">
-                            <span className="text-xs font-bold text-primary">{model.name}</span>
-                            {model.isDefault && (
+                            <div className={`p-1.5 rounded-lg ${isSelected ? 'bg-teal-100 dark:bg-teal-900/60 text-teal-700 dark:text-teal-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>
+                              <IconComp className="w-4 h-4" />
+                            </div>
+                            <span className="text-xs font-bold text-primary">{profile.name}</span>
+                            {isDefault && (
                               <span className="text-[9.5px] bg-slate-900 text-white font-bold px-1.5 py-0.5 rounded">
                                 Default
                               </span>
                             )}
                           </div>
-                          {isSelected ? (
+                          {isSelected && (
                             <span className="flex items-center gap-1 text-xs font-semibold text-teal-700 dark:text-teal-400 bg-teal-50 dark:bg-teal-950/60 px-2 py-0.5 rounded-md">
                               <CheckCircle2 className="w-3.5 h-3.5 text-teal-600" /> Dipilih
-                            </span>
-                          ) : (
-                            <span className="text-[10px] text-muted bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded font-medium">
-                              {model.tag}
                             </span>
                           )}
                         </div>
 
                         <p className="text-xs text-secondary leading-relaxed">
-                          {model.provider} · {model.capabilities.join(' · ')} · {model.availability === 'configured' ? 'Terkonfigurasi' : model.availability === 'temporarily_unavailable' ? 'Sementara tidak tersedia' : 'Penyedia belum dikonfigurasi'}
+                          {profile.description}
                         </p>
-
-                        <div className="p-2 surface-muted/80 rounded-lg border border-default text-[11px] text-secondary space-y-1">
-                          <div className="flex items-center justify-between text-[10.5px]">
-                            <span className="text-muted flex items-center gap-1">
-                              <Gauge className="w-3 h-3 text-muted" /> Kecepatan:
-                            </span>
-                            <span className="font-semibold text-secondary">{model.speed}</span>
-                          </div>
-                          <div className="flex items-center justify-between text-[10.5px]">
-                            <span className="text-muted flex items-center gap-1">
-                              <Cpu className="w-3 h-3 text-muted" /> Penalaran:
-                            </span>
-                            <span className="font-semibold text-secondary">{model.reasoning}</span>
-                          </div>
-                        </div>
                       </div>
 
-                      <div className="pt-2.5 mt-2 border-t border-slate-150/70 flex items-center justify-between text-[11px]">
-                        <span className="text-muted text-[10px] truncate max-w-[200px]">
-                          {model.allowedTiers.join(' · ')}
+                      <div className="pt-3 mt-3 border-t border-slate-150/70 dark:border-slate-800 flex items-center justify-between text-[11px]">
+                        <span className="text-muted text-[10.5px]">
+                          {profile.id === 'tenang-turbo' ? 'Reasoning tinggi' : profile.id === 'tenang-low' ? 'Latensi terendah' : 'Seimbang & adaptif'}
                         </span>
                         <button
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            if (model.selectable) handleSelectAiModel(model.id);
+                            handleSelectAiModel(profile.id);
                           }}
-                          disabled={!model.selectable}
                           className={`text-xs font-semibold px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
                             isSelected
                               ? 'bg-teal-600 text-white shadow-xs'
-                              : 'bg-slate-100 hover:bg-slate-200 text-secondary'
+                              : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-secondary'
                           }`}
                         >
                           {isSelected ? 'Aktif' : 'Gunakan'}
@@ -450,8 +441,6 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                   );
                 })}
               </div>
-              {modelsLoading && <p className="text-xs text-muted">Memuat model...</p>}
-              {modelsError && <p className="text-xs text-rose-600">Daftar model tidak dapat dimuat.</p>}
             </div>
 
             {/* Default Response Style Option */}

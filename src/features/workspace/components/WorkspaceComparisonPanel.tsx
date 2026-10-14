@@ -160,7 +160,7 @@ export const WorkspaceComparisonPanel = React.memo(function WorkspaceComparisonP
     candidateAttemptsRef.current.clear();
     activeRetryControllers.forEach(item => item.abort());
     activeRetryControllers.clear();
-    const nextCandidates = run.selectedModelIds.map(modelId => ({ candidateId: modelId, modelId, modelName: modelsRef.current.find(model => model.id === modelId)?.name || modelId, status: 'queued' as const, output: '' }));
+    const nextCandidates = run.selectedModelIds.map(modelId => ({ candidateId: modelId, modelId, modelName: modelsRef.current.find(model => model.id === modelId)?.name || 'Model AI', status: 'queued' as const, output: '' }));
     candidatesRef.current = nextCandidates;
     setCandidates(nextCandidates);
     setActiveMobileId(nextCandidates[0]?.candidateId || '');
@@ -190,7 +190,7 @@ export const WorkspaceComparisonPanel = React.memo(function WorkspaceComparisonP
           buffer = lines.pop() || '';
           for (const line of lines) {
             if (!line.startsWith('data: ')) continue;
-            let event: { type: string; comparisonId: string; snapshotId?: string; contextFingerprint?: string; candidateId?: string; attemptId?: string; attempts?: Array<{ candidateId: string; attemptId: string }>; modelName?: string; text?: string; latencyMs?: number; errorCode?: string };
+            let event: { type: string; comparisonId: string; snapshotId?: string; contextFingerprint?: string; candidateId?: string; attemptId?: string; attempts?: Array<{ candidateId: string; attemptId: string }>; modelId?: string; modelName?: string; profileId?: string; message?: string; text?: string; latencyMs?: number; errorCode?: string };
             try { event = JSON.parse(line.slice(6)); } catch { continue; }
             if (!active || event.comparisonId !== run.comparisonId || event.snapshotId !== run.snapshotId || runIdRef.current !== runKey) continue;
             if (event.type === 'comparison_started' && event.attempts) {
@@ -200,11 +200,15 @@ export const WorkspaceComparisonPanel = React.memo(function WorkspaceComparisonP
               });
               continue;
             }
+            if (event.type === 'comparison_notice' && event.message) {
+              setNotice(event.message);
+              continue;
+            }
             const id = event.candidateId;
             if (!id || !event.attemptId) continue;
             if (event.type === 'candidate_started' && run.selectedModelIds.includes(id)) {
               candidateAttemptsRef.current.set(id, event.attemptId);
-              updateCandidate(id, { status: 'streaming', modelName: event.modelName || id, comparisonId: event.comparisonId, snapshotId: event.snapshotId, attemptId: event.attemptId, contextFingerprint: event.contextFingerprint }, event.attemptId);
+              updateCandidate(id, { status: 'streaming', modelId: event.modelId || id, modelName: event.modelName || id, profileId: event.profileId, comparisonId: event.comparisonId, snapshotId: event.snapshotId, attemptId: event.attemptId, contextFingerprint: event.contextFingerprint }, event.attemptId);
             } else if (candidateAttemptsRef.current.get(id) !== event.attemptId) continue;
             else if (event.type === 'candidate_chunk' && event.text) enqueueCandidateChunk(id, event.attemptId, event.text);
             else if (event.type === 'candidate_completed') {

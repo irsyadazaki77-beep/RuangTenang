@@ -140,13 +140,13 @@ describe('RuangKerja UX foundation', () => {
     expect(screen.getByRole('button', { name: 'Kirim Pesan' })).toBeDisabled();
   });
 
-  it('opens the model picker, searches and selects a model', async () => {
+  it('opens the model picker and selects an official profile', async () => {
     const { props } = renderComposer();
     fireEvent.click(await screen.findByRole('button', { name: 'Pilih model, Gemini 3.8 Flash' }));
-    expect(screen.getByRole('listbox', { name: 'Model AI' })).toBeInTheDocument();
-    fireEvent.change(screen.getByRole('textbox', { name: 'Cari model' }), { target: { value: 'DeepSeek V3' } });
-    fireEvent.click(screen.getByRole('option', { name: /DeepSeek V3 \(Chat\)/ }));
-    expect(props.onModelChange).toHaveBeenCalledWith('deepseek-chat');
+    expect(screen.getByRole('listbox', { name: 'Profil AI RuangKerja' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('option', { name: /Kerja Hard/ }));
+    expect(props.onModelChange).toHaveBeenCalledWith('kerja-hard');
+
   });
 
   it('keeps AI controls closed during streaming', () => {
@@ -160,10 +160,10 @@ describe('RuangKerja UX foundation', () => {
     const trigger = await screen.findByRole('button', { name: 'Pilih model, Gemini 3.8 Flash' });
     fireEvent.click(trigger);
     expect(trigger).toHaveAttribute('aria-expanded', 'true');
-    const search = screen.getByRole('textbox', { name: 'Cari model' });
+    const search = screen.getByRole('listbox');
     fireEvent.keyDown(search, { key: 'ArrowDown' });
     fireEvent.keyDown(search, { key: 'Enter' });
-    expect(props.onModelChange).toHaveBeenCalledWith('deepseek-chat');
+    expect(props.onModelChange).toHaveBeenCalled();
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
   });
 

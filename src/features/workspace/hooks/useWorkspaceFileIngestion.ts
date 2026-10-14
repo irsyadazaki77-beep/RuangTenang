@@ -272,19 +272,19 @@ export function useWorkspaceFileIngestion(chatId?: string) {
   const openFilePicker = useCallback(() => fileInputRef.current?.click(), []);
 
   useLayoutEffect(() => {
+    let isActive = true;
     const generation = ++generationRef.current;
     isMountedRef.current = true;
     const controller = new AbortController();
     const requestControllers = controllersRef.current;
     const deletingAttachments = deletingAttachmentsRef.current;
     const localFiles = filesRef.current;
-    let active = true;
     attachmentsRef.current = [];
     setAttachments([]);
     setIsLoadingAttachments(Boolean(chatId));
     if (chatId) {
       void WorkspaceApiService.fetchChatAttachments(chatId, controller.signal).then(serverAttachments => {
-        if (!active || !isMountedRef.current) return;
+        if (!isActive || !isMountedRef.current) return;
         const localAttachments = attachmentsRef.current.filter(attachment => !attachment.id);
         const mapped = serverAttachments.map(fromDto);
         const seen = new Set(mapped.map(attachment => `${attachment.name.toLocaleLowerCase()}:${attachment.size}`));
@@ -296,7 +296,7 @@ export function useWorkspaceFileIngestion(chatId?: string) {
           const pollKey = `server:${attachment.id}`;
           controllersRef.current.set(pollKey, statusController);
           void pollProcessingStatus(attachment.id!, 15, 800, statusController.signal, chatId).then(result => {
-            if (!active || statusController.signal.aborted || generationRef.current !== generation || !attachmentsRef.current.some(item => item.id === attachment.id)) return;
+            if (!isActive || statusController.signal.aborted || generationRef.current !== generation || !attachmentsRef.current.some(item => item.id === attachment.id)) return;
             if (result.attachment) {
               const updated = fromDto(result.attachment);
               updateAttachments(list => list.map(item => item.id === updated.id ? updated : item));
@@ -315,11 +315,11 @@ export function useWorkspaceFileIngestion(chatId?: string) {
           showToastRef.current('Dokumen Workspace gagal dimuat.', 'error');
         }
       }).finally(() => {
-        if (active && isMountedRef.current) setIsLoadingAttachments(false);
+        if (isActive && isMountedRef.current) setIsLoadingAttachments(false);
       });
     }
     return () => {
-      active = false;
+      isActive = false;
       isMountedRef.current = false;
       generationRef.current += 1;
       controller.abort();
