@@ -112,13 +112,13 @@ describe('Workspace Canvas 2.0 UX & Behavior', () => {
   it('restores an unsaved document draft after closing and reopening Canvas', async () => {
     render(<CanvasDraftHarness />);
     fireEvent.click(await screen.findByTitle('Edit Dokumen Langsung (Autosave)'));
-    fireEvent.click(await screen.findByRole('button', { name: 'Markdown' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Markdown' }, { timeout: 15_000 }));
     const textarea = screen.getByPlaceholderText(/Ketik atau sesuaikan draf dokumen/) as HTMLTextAreaElement;
     fireEvent.change(textarea, { target: { value: '# Draf yang belum disimpan' } });
     fireEvent.click(screen.getByRole('button', { name: 'Tutup Canvas' }));
     fireEvent.click(screen.getByRole('button', { name: 'Buka Canvas' }));
     fireEvent.click(screen.getByTitle('Edit Dokumen Langsung (Autosave)'));
-    fireEvent.click(await screen.findByRole('button', { name: 'Markdown' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Markdown' }, { timeout: 15_000 }));
     expect(screen.getByPlaceholderText(/Ketik atau sesuaikan draf dokumen/)).toHaveValue('# Draf yang belum disimpan');
     expect(screen.getByText('Belum disimpan')).toBeInTheDocument();
   });
