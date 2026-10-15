@@ -299,76 +299,34 @@ describe('FASE 1 — CRITICAL AUTHORIZATION & SSO HARDENING TEST SUITE', () => {
   // 1. CAMPUS SSO & PRIVILEGE ESCALATION TESTS
   // ==========================================
   describe('1. Campus SSO & Privilege Escalation Hardening', () => {
-    it('should reject domain injection attacks like attacker@ui.ac.id.evil.com', async () => {
+    it('keeps campus SSO unavailable until an identity provider is verified', async () => {
       const res = await request(app)
         .post('/api/v1/auth/sso/campus-login')
         .send({
-          email: 'attacker@ui.ac.id.evil.com',
-          name: 'Attacker'
+          email: 'attacker@ui.ac.id',
+          name: 'Attacker',
+          providerId: 'sso-ui'
         });
 
-      expect(res.status).toBe(400);
-      expect(res.body.error).toContain('resmi institusi kampus');
+      expect(res.status).toBe(503);
+      expect(res.body.code).toBe('SSO_UNAVAILABLE');
+      expect(res.body.token).toBeUndefined();
+      expect(res.headers['set-cookie']).toBeUndefined();
+      expect(await prisma.users.findUnique({ where: { email: 'attacker@ui.ac.id' } })).toBeNull();
+      expect((await request(app).get('/api/v1/auth/sso/providers')).body.providers).toEqual([]);
     });
 
-    it('should NOT escalate role when roleHint=admin or roleHint=CAMPUS_ADMIN is passed', async () => {
-      const testEmail = 'attacker.admin.test@ui.ac.id';
-      await prisma.users.deleteMany({ where: { email: testEmail } });
+    it('does not issue a session for an existing privileged account through SSO', async () => {
+      for (const account of [campusAdmin, counselor1]) {
+        const res = await request(app)
+          .post('/api/v1/auth/sso/campus-login')
+          .send({ email: account.email, roleHint: account.role });
 
-      const res = await request(app)
-        .post('/api/v1/auth/sso/campus-login')
-        .send({
-          email: testEmail,
-          name: 'Fake Admin Attempt',
-          roleHint: 'admin'
-        });
-
-      expect(res.status).toBe(200);
-      expect(res.body.user.role).toBe('mahasiswa');
-      expect(res.body.user.role).not.toBe('admin');
-
-      // Verify in DB that the role is strictly 'mahasiswa'
-      const createdUser = await prisma.users.findUnique({ where: { email: testEmail } });
-      expect(createdUser?.role).toBe('mahasiswa');
-
-      await prisma.users.deleteMany({ where: { email: testEmail } });
-    });
-
-    it('should NOT escalate role when email contains "admin" or "rektorat"', async () => {
-      const testEmail = 'rektorat.administrator@ugm.ac.id';
-      await prisma.users.deleteMany({ where: { email: testEmail } });
-
-      const res = await request(app)
-        .post('/api/v1/auth/sso/campus-login')
-        .send({
-          email: testEmail,
-          name: 'Rektorat Officer'
-        });
-
-      expect(res.status).toBe(200);
-      expect(res.body.user.role).toBe('mahasiswa');
-      expect(res.body.user.role).not.toBe('admin');
-
-      await prisma.users.deleteMany({ where: { email: testEmail } });
-    });
-
-    it('should NOT escalate role when roleHint=konselor or email contains "konselor"', async () => {
-      const testEmail = 'konselor.fake@itb.ac.id';
-      await prisma.users.deleteMany({ where: { email: testEmail } });
-
-      const res = await request(app)
-        .post('/api/v1/auth/sso/campus-login')
-        .send({
-          email: testEmail,
-          name: 'Fake Counselor Attempt',
-          roleHint: 'LICENSED_PSYCHOLOGIST'
-        });
-
-      expect(res.status).toBe(200);
-      expect(res.body.user.role).toBe('mahasiswa');
-      expect(res.body.user.role).not.toBe('konselor');
-
-      await prisma.users.deleteMany({ where: { email: testEmail } });
+        expect(res.status).toBe(503);
+        expect(res.body.code).toBe('SSO_UNAVAILABLE');
+        expect(res.body.token).toBeUndefined();
+        expect(res.headers['set-cookie']).toBeUndefined();
+      }
     });
   });
 

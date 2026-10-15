@@ -28,6 +28,11 @@ RuangTenang Kampus adalah platform digital kesehatan emosional dan pendampingan 
    - Akses berbasis peran (`mahasiswa`, `konselor`, `admin`) dengan isolasi data yang ketat.
    - Audit trail transaksi backend dan dukungan Hak Penghapusan Permanen (*Right to be Forgotten*).
 
+5. **Fondasi Multi-Kampus**
+   - Tenant kampus dengan pemetaan akun yang dikendalikan admin platform; data lama tidak diberi tenant secara otomatis.
+   - Panel admin kampus untuk kontak rujukan, zona waktu, branding, status AI, pengaturan operasional konselor, dan analitik agregat dengan minimum kelompok.
+   - Lihat [`docs/MULTI_CAMPUS_OPERATIONS.md`](docs/MULTI_CAMPUS_OPERATIONS.md) untuk langkah provisioning, isolasi tenant, dan gerbang pilot.
+
 ---
 
 ## 🛠️ Arsitektur & Teknologi

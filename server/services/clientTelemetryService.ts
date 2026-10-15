@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { scanAndSanitizePII } from './piiService.js';
 import { consentService } from './consentService.js';
+import { isProductionLikeEnvironment } from '../config/environment.js';
 
 export const clientDebugSchema = z.object({
   type: z.enum(['onerror', 'unhandledrejection']).optional(),
@@ -75,7 +76,7 @@ export class ClientTelemetryService {
    * Evaluates if telemetry is globally allowed in the current environment
    */
   isTelemetryEnabled(): boolean {
-    if (process.env.NODE_ENV === 'production') {
+    if (isProductionLikeEnvironment()) {
       return process.env.ENABLE_CLIENT_TELEMETRY === 'true';
     }
     return process.env.ENABLE_CLIENT_TELEMETRY !== 'false';

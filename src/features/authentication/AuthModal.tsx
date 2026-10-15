@@ -70,6 +70,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   }, [onClose]);
 
   const [activeTab, setActiveTab] = useState<AuthTab>('login');
+  const isCampusSsoEnabled = false;
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -457,7 +458,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <button
                   type="button"
                   onClick={() => { setActiveTab('sso'); resetFormState(); }}
-                  className={`flex-1 py-2 px-2 text-xs font-semibold border-b-2 transition min-h-[40px] cursor-pointer whitespace-nowrap flex items-center justify-center gap-1 ${activeTab === 'sso' ? 'border-teal-600 text-teal-700 dark:text-teal-400 font-bold' : 'border-transparent text-secondary hover:text-primary'}`}
+                  className={`hidden flex-1 py-2 px-2 text-xs font-semibold border-b-2 transition min-h-[40px] cursor-pointer whitespace-nowrap flex items-center justify-center gap-1 ${activeTab === 'sso' ? 'border-teal-600 text-teal-700 dark:text-teal-400 font-bold' : 'border-transparent text-secondary hover:text-primary'}`}
                 >
                   <GraduationCap className="w-3.5 h-3.5 text-teal-600" />
                   <span>SSO Kampus</span>
@@ -554,7 +555,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       type="button"
                       onClick={() => { setActiveTab('sso'); resetFormState(); }}
                       disabled={loading}
-                      className="w-full py-2.5 min-h-[44px] bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-900/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded-xl text-sm font-semibold transition cursor-pointer disabled:opacity-50 flex items-center justify-center space-x-2"
+                      className="hidden w-full py-2.5 min-h-[44px] bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-900/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded-xl text-sm font-semibold transition cursor-pointer disabled:opacity-50 flex items-center justify-center space-x-2"
                     >
                       <GraduationCap className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
                       <span>Masuk dengan SSO Kampus</span>
@@ -592,7 +593,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               )}
 
               {/* TAB: SSO KAMPUS */}
-              {activeTab === 'sso' && (
+              {isCampusSsoEnabled && activeTab === 'sso' && (
                 <div className="space-y-4 animate-fade-in">
                   <div className="p-3 bg-indigo-50/80 dark:bg-indigo-950/40 border border-indigo-200/80 dark:border-indigo-900/50 rounded-xl text-xs text-indigo-900 dark:text-indigo-200">
                     <div className="flex items-center gap-2 font-bold mb-1">

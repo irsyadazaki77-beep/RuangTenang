@@ -312,11 +312,25 @@ const providerModels: Record<string, { provider: ProviderId; providerModelId: st
   'gemini-flash-latest': { provider: 'gemini', providerModelId: 'gemini-3.8-flash' },
 };
 
-export const AI_MODEL_REGISTRY: readonly AiModelDefinition[] = MODEL_METADATA.map(model => ({
-  ...model,
-  ...(providerModels[model.id] ?? { provider: 'gemini' as const, providerModelId: model.id }),
-  capabilities: model.reasoning === 'Standar' ? ['chat', 'streaming'] : ['chat', 'streaming', 'reasoning']
-}));
+export const AI_MODEL_REGISTRY: readonly AiModelDefinition[] = MODEL_METADATA.map(model => {
+  const providerInfo = providerModels[model.id] ?? { provider: 'gemini' as const, providerModelId: model.id };
+  const baseCaps: ModelCapability[] = model.reasoning === 'Standar' ? ['chat', 'streaming'] : ['chat', 'streaming', 'reasoning'];
+  
+  // Multimodal Vision & OCR capabilities:
+  // Gemini models natively support vision, image_understanding, document_ocr, and audio_transcription
+  // OpenAI gpt-5.1 & gpt-5-mini support vision, image_understanding, and document_ocr
+  if (providerInfo.provider === 'gemini') {
+    baseCaps.push('vision', 'image_understanding', 'document_ocr', 'audio_transcription');
+  } else if (providerInfo.provider === 'openai' && (model.id === 'openai-gpt-5.1' || model.id === 'openai-gpt-5-mini')) {
+    baseCaps.push('vision', 'image_understanding', 'document_ocr');
+  }
+
+  return {
+    ...model,
+    ...providerInfo,
+    capabilities: baseCaps
+  };
+});
 export const AVAILABLE_AI_MODELS = AI_MODEL_REGISTRY;
 
 /** Only IDs observed in existing callers/preferences are accepted as aliases. */

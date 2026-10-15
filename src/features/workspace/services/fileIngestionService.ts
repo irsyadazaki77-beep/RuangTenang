@@ -195,9 +195,13 @@ export async function processFileForWorkspace(
       formData.append('chatId', chatId);
     }
     formData.append('workspaceMode', 'true');
+    const csrfCookie = document.cookie.match(/(?:^|; )XSRF-TOKEN=([^;]+)/)?.[1];
+    const uploadHeaders: Record<string, string> = { 'X-Requested-With': 'XMLHttpRequest' };
+    if (csrfCookie) uploadHeaders['X-CSRF-Token'] = decodeURIComponent(csrfCookie);
 
     const res = await fetch('/api/v1/chat/attachments/upload', {
       method: 'POST',
+      headers: uploadHeaders,
       credentials: 'include',
       body: formData,
       signal

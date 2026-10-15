@@ -22,6 +22,12 @@ interface EmergencyCenterProps {
   onTriggerSOS?: () => void;
 }
 
+interface CampusReferralContact {
+  label: string;
+  phone?: string;
+  url?: string;
+}
+
 export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
   onTriggerSOS,
 }) => {
@@ -30,6 +36,7 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
   const [sosStatus, setSosStatus] = useState<SOSDispatchStatus | null>(null);
   const [isTriggeringSOS, setIsTriggeringSOS] = useState(false);
   const [hotlineQuery, setHotlineQuery] = useState("");
+  const [campusReferralContacts, setCampusReferralContacts] = useState<CampusReferralContact[]>([]);
 
   const [contact, setContact] = useState<EmergencyContact>({
     name: "",
@@ -59,6 +66,19 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
       })
       .catch(e => console.warn("Failed to load emergency contact from backend:", e));
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    setCampusReferralContacts([]);
+    if (!user?.campusId) return () => { cancelled = true; };
+    apiClient.get<{ campus?: { referralContacts?: CampusReferralContact[] } }>('/api/v1/campuses/me')
+      .then(response => {
+        const contacts = response.data?.campus?.referralContacts;
+        if (!cancelled && response.success && Array.isArray(contacts)) setCampusReferralContacts(contacts);
+      })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [user?.campusId]);
 
   const getCoordinates = (): Promise<{ latitude: number; longitude: number } | undefined> => {
     return new Promise((resolve) => {
@@ -124,7 +144,7 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
       const data = response.data || response;
       setSosStatus(data);
       if (data.status === 'SENT') {
-        showToast("Sinyal SOS darurat berhasil dikirim via SMS/WA!", "success");
+        showToast("Permintaan SOS diterima oleh penyedia SMS/WA. Status penerimaan kontak belum dapat dipastikan.", "success");
       } else if (data.status === 'SIMULATED') {
         showToast("Sinyal SOS hanya dicatat dalam mode simulasi. Untuk dukungan psikologis buka Healing119; untuk darurat medis hubungi 119.", "info");
       } else {
@@ -229,7 +249,7 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
             </button>
 
             {sosStatus && (
-              <div className={`p-3 rounded-lg border text-xs space-y-1 animate-fade-in ${
+              <div role="status" aria-live="polite" className={`p-3 rounded-lg border text-xs space-y-1 animate-fade-in ${
                 sosStatus.status === 'SENT' 
                   ? 'bg-emerald-50/70 dark:bg-emerald-950/60 border-emerald-200 dark:border-emerald-900 text-emerald-950 dark:text-emerald-200'
                   : (sosStatus.status === 'SIMULATED' || sosStatus.status === 'DIRECT_CALL_ONLY')
@@ -240,7 +260,7 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
                   {sosStatus.status === 'SENT' ? (
                     <>
                       <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                      <span className="text-emerald-900 dark:text-emerald-200">Sinyal SOS Berhasil Terkirim (SMS/WA)</span>
+                      <span className="text-emerald-900 dark:text-emerald-200">Permintaan SOS Diterima Penyedia SMS/WA</span>
                     </>
                   ) : sosStatus.status === 'SIMULATED' ? (
                     <>
@@ -265,7 +285,9 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
                   )}
                 </p>
                 <p className="text-secondary leading-relaxed text-[11px]">
-                  {sosStatus.message}
+                  {sosStatus.status === 'SENT'
+                    ? `${sosStatus.message} Status ini hanya mengonfirmasi permintaan diterima penyedia; aplikasi belum dapat memastikan kontak membaca atau menerima pesan.`
+                    : sosStatus.message}
                 </p>
                 <div className="text-[9.5px] text-secondary pt-0.5 flex justify-between">
                   <span>ID: {sosStatus.dispatchId}</span>
@@ -283,6 +305,35 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 sm:gap-4">
         {/* LEFT/MAIN COLUMN: HELPLINE DIRECTORY (7 cols) */}
         <div className="lg:col-span-7 surface-card rounded-xl p-3.5 sm:p-4 space-y-3 border border-default shadow-3xs">
+          {user?.campusId && (
+            <section className="space-y-2 rounded-xl border border-teal-200 bg-teal-50/60 p-3 dark:border-teal-900 dark:bg-teal-950/30" aria-labelledby="campus-referrals-title">
+              <div>
+                <h3 id="campus-referrals-title" className="text-xs font-bold text-primary">Kontak rujukan kampus</h3>
+                <p className="mt-0.5 text-xs text-secondary">Kontak yang dikonfigurasi kampus Anda. Untuk darurat medis, hubungi 119 atau fasilitas kesehatan terdekat.</p>
+              </div>
+              {campusReferralContacts.length > 0 ? (
+                <ul className="space-y-1.5">
+                  {campusReferralContacts.map((item, index) => (
+                    <li key={`${item.label}-${index}`} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-surface p-2.5 text-xs">
+                      <span className="font-medium">{item.label}</span>
+                      {(item.url || item.phone) && (
+                        <a
+                          href={item.url || `tel:${(item.phone || '').replace(/[^\d+]/g, '')}`}
+                          target={item.url ? '_blank' : undefined}
+                          rel={item.url ? 'noopener noreferrer' : undefined}
+                          className="font-semibold text-teal-700 underline underline-offset-2 dark:text-teal-300"
+                        >
+                          {item.url ? 'Buka layanan' : item.phone}
+                        </a>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-xs text-secondary">Belum ada kontak rujukan kampus yang dikonfigurasi.</p>
+              )}
+            </section>
+          )}
           <div className="space-y-0.5">
             <h2 className="text-xs sm:text-sm font-bold text-primary flex items-center gap-1.5">
               <HeartHandshake className="w-4 h-4 text-teal-600 dark:text-teal-400" />

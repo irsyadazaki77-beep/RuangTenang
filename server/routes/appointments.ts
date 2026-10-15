@@ -7,6 +7,8 @@ import { sanitizeInput } from '../security';
 import { validatePagination, idempotencyMiddleware } from '../apiV1Helpers';
 import { EventEmitter } from 'events';
 import { getValidatedTurnConfig } from '../config/envValidation.js';
+import { canAccessAppointmentWithinCampus, campusesMatchForLegacyAccess } from '../services/campusTenantService.js';
+import { recordCampusProductEvent } from '../services/campusProductAnalyticsService.js';
 import { buildScheduledAppointmentTime, canJoinAppointmentRoom, isValidAppointmentStatusTransition } from '../services/appointmentRoomPolicy.js';
 import {
   CreateAppointmentSchema as createAppointmentSchema,
@@ -136,6 +138,14 @@ export const verifyAppointmentAccess = async (req: Request, res: Response, next:
 
     // Admin can manage records operationally, but room authorization is separately denied.
     const role = normalizeRole(user.role);
+    if (role !== 'admin' && !(await canAccessAppointmentWithinCampus(appointmentId, user.campusId))) {
+      console.warn('[APPOINTMENT_ROOM_ACCESS]', JSON.stringify({ appointmentId, userId: user.userId, role, allowed: false, reason: 'CAMPUS_SCOPE_MISMATCH', timestamp: new Date().toISOString() }));
+      return res.status(404).json({
+        success: false,
+        error: 'ACCESS_DENIED',
+        message: 'Akses ditolak. Jadwal tidak tersedia dalam ruang kampus Anda.'
+      });
+    }
     if (role === 'admin') {
       (req as any).appointment = appt;
       return next();
@@ -202,7 +212,7 @@ export const requireEligibleAppointmentRoom = (req: Request, res: Response, next
 };
 
 // Availability Check
-router.get(['/availability', '/appointments/availability'], async (req: Request, res: Response) => {
+router.get(['/availability', '/appointments/availability'], requireAuth, async (req: Request, res: Response) => {
   try {
     const parsed = AvailabilityQuerySchema.safeParse(req.query);
     if (!parsed.success) {
@@ -215,6 +225,10 @@ router.get(['/availability', '/appointments/availability'], async (req: Request,
     }
 
     const { counselorId, date } = parsed.data;
+    const counselor = await prisma.counselors.findUnique({ where: { id: counselorId }, select: { campusId: true } });
+    if (!counselor || (normalizeRole(req.user!.role) !== 'admin' && counselor.campusId !== (req.user!.campusId ?? null))) {
+      return res.status(404).json({ success: false, error: 'COUNSELOR_NOT_FOUND', message: 'Konselor tidak tersedia di kampus Anda.' });
+    }
     const availability = await serverDb.getAppointmentAvailability(counselorId, date);
     res.json(availability);
   } catch (err: any) {
@@ -238,6 +252,7 @@ router.get(['/', '/db/appointments'], requireAuth, requireRole(['mahasiswa', 'ko
 
     // Role-based data isolation with canonical mapping
     const role = normalizeRole(req.user!.role);
+    if (role !== 'admin') andConditions.push({ campusId: req.user!.campusId ?? null });
     if (role === 'mahasiswa') {
       andConditions.push({ userId: req.user!.userId });
     } else if (role === 'konselor') {
@@ -435,6 +450,10 @@ router.post(['/', '/db/appointments'], requireAuth, requireRole(['mahasiswa', 'k
 
     const validated = parsed.data;
     const role = normalizeRole(req.user!.role);
+    if (req.user!.campusId) {
+      const campus = await prisma.campuses.findUnique({ where: { id: req.user!.campusId }, select: { isActive: true } });
+      if (!campus?.isActive) return res.status(403).json({ success: false, error: 'CAMPUS_INACTIVE' });
+    }
     if (role === 'konselor') {
       return res.status(403).json({
         success: false,
@@ -448,9 +467,27 @@ router.post(['/', '/db/appointments'], requireAuth, requireRole(['mahasiswa', 'k
     const finalStudentEmail = isMahasiswa ? req.user!.email : (validated.studentEmail || '');
     const finalStudentNIM = isMahasiswa ? (req.body.studentNIM || '') : (validated.studentNIM || '');
 
+    const studentAccount = finalUserId
+      ? await prisma.users.findUnique({ where: { id: finalUserId }, select: { campusId: true } })
+      : null;
+    const counselorAccount = validated.counselorId
+      ? await prisma.counselors.findUnique({ where: { id: validated.counselorId }, select: { id: true, campusId: true, name: true } })
+      : await prisma.counselors.findFirst({
+          where: { name: validated.counselorName, campusId: studentAccount?.campusId ?? null },
+          select: { id: true, campusId: true, name: true }
+        });
+    if (!counselorAccount || (finalUserId && !studentAccount) || !campusesMatchForLegacyAccess(studentAccount?.campusId, counselorAccount.campusId)) {
+      return res.status(403).json({ success: false, error: 'CAMPUS_SCOPE_MISMATCH', message: 'Mahasiswa dan konselor harus berada pada kampus yang sama.' });
+    }
+    if (role === 'mahasiswa' && studentAccount?.campusId !== (req.user!.campusId ?? null)) {
+      return res.status(403).json({ success: false, error: 'CAMPUS_SCOPE_MISMATCH', message: 'Akun kampus tidak cocok dengan mahasiswa.' });
+    }
+    const appointmentCampusId = studentAccount?.campusId ?? counselorAccount.campusId ?? undefined;
+
     const record = await serverDb.addAppointment({
-      counselorId: validated.counselorId,
-      counselorName: validated.counselorName,
+      counselorId: counselorAccount.id,
+      campusId: appointmentCampusId,
+      counselorName: counselorAccount.name,
       date: validated.date,
       time: validated.time,
       timezone: validated.timezone || 'WIB',
@@ -465,6 +502,7 @@ router.post(['/', '/db/appointments'], requireAuth, requireRole(['mahasiswa', 'k
       studentNIM: sanitizeInput(finalStudentNIM, 30),
       studentEmail: sanitizeInput(finalStudentEmail, 100)
     });
+    await recordCampusProductEvent(record.userId, appointmentCampusId, 'referral_started');
 
     res.json({ success: true, record: mapAppointmentToResponse(record, role === 'admin') });
   } catch (err: any) {
@@ -518,6 +556,15 @@ router.put(['/:id', '/db/appointments/:id'], requireAuth, verifyAppointmentAcces
     }
 
     const validated = parsed.data;
+    if (validated.counselorId && validated.counselorId !== appt.counselorId) {
+      const [targetStudent, targetCounselor] = await Promise.all([
+        appt.userId ? prisma.users.findUnique({ where: { id: appt.userId }, select: { campusId: true } }) : Promise.resolve(null),
+        prisma.counselors.findUnique({ where: { id: validated.counselorId }, select: { campusId: true } })
+      ]);
+      if (!targetCounselor || !campusesMatchForLegacyAccess(targetStudent?.campusId, targetCounselor.campusId)) {
+        return res.status(403).json({ success: false, error: 'CAMPUS_SCOPE_MISMATCH' });
+      }
+    }
     if (validated.status && !isValidAppointmentStatusTransition(appt.status, validated.status)) {
       return res.status(409).json({ success: false, error: 'INVALID_APPOINTMENT_STATUS_TRANSITION' });
     }
@@ -601,6 +648,9 @@ router.put(['/:id', '/db/appointments/:id'], requireAuth, verifyAppointmentAcces
     const record = await serverDb.updateAppointment(id, updates, appt.status);
     if (!record) {
       return res.status(409).json({ success: false, error: 'APPOINTMENT_STATUS_CONFLICT' });
+    }
+    if (record.status === 'COMPLETED' && appt.status !== 'COMPLETED') {
+      await recordCampusProductEvent(record.userId, record.campusId || req.user!.campusId, 'referral_completed');
     }
     if (record.status !== appt.status || record.approvalStatus !== appt.approvalStatus || record.attendanceStatus !== appt.attendanceStatus) {
       clearAppointmentRoomState(id);

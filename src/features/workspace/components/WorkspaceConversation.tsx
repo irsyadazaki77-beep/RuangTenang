@@ -184,19 +184,20 @@ export const WorkspaceConversation: React.FC<WorkspaceConversationProps> = React
         </div>
       ) : !hasUserSentMessage && !activeStreamingMessage ? (
         /* FRESH WORKSPACE STATE: Compact Intro & Starter Tasks */
-        <div className="my-auto py-6 px-2 space-y-4 animate-fade-in max-w-2xl mx-auto w-full">
+        <div className="my-auto mx-auto w-full max-w-2xl animate-fade-in space-y-5 px-2 py-8 sm:px-4">
           {/* Compact Workspace Introduction */}
-          <div className="text-center space-y-1.5">
-            <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100">
+          <div className="space-y-2 text-center">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"><Sparkles className="h-3 w-3" aria-hidden="true" /> RuangKerja</span>
+            <h2 className="text-lg font-semibold tracking-tight text-slate-900 dark:text-slate-100 sm:text-xl">
               Mulai sesuatu
             </h2>
-            <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 max-w-sm mx-auto leading-relaxed">
-              Bantu riset, tulisan, coding, dan pekerjaan akademik secara terstruktur.
+            <p className="mx-auto max-w-md text-xs leading-relaxed text-slate-600 dark:text-slate-400 sm:text-sm">
+              Analisis, tulis, riset, atau review kode. Mulai dari contoh atau ketik permintaanmu.
             </p>
           </div>
 
-          {/* Compact Starter Actions List */}
-          <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
+          <div className="mb-1 text-center text-[11px] font-medium text-slate-500 dark:text-slate-400">Pilih titik awal</div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {starterTasks.map((task) => (
               <button
                 key={task.id}
@@ -204,8 +205,8 @@ export const WorkspaceConversation: React.FC<WorkspaceConversationProps> = React
                 onClick={() => onSelectStarterTask(task.prompt)}
                 className={`w-full p-2.5 rounded-xl text-left transition-all flex items-center justify-between group cursor-pointer active:scale-[0.99] border ${
                   task.primary
-                    ? 'bg-emerald-50/60 dark:bg-emerald-950/25 border-emerald-200/70 dark:border-emerald-900/70 hover:bg-emerald-50 dark:hover:bg-emerald-950/40'
-                    : 'bg-transparent border-transparent hover:border-slate-200/70 dark:hover:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900'
+                    ? 'border-emerald-200 bg-emerald-50/70 shadow-xs hover:bg-emerald-50 dark:border-emerald-900/70 dark:bg-emerald-950/30 dark:hover:bg-emerald-950/50'
+                    : 'border-slate-200 bg-white hover:border-emerald-200 hover:bg-emerald-50/40 hover:shadow-xs dark:border-slate-800 dark:bg-slate-900 dark:hover:border-emerald-900 dark:hover:bg-emerald-950/20'
                 }`}
               >
                 <div className="flex items-center gap-2.5 min-w-0 pr-2">

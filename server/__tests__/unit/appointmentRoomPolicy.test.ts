@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calculateScheduledAtUtc, utcToLocalAppointmentFields } from '../../../src/repositories/appointmentRepository.js';
+import { calculateScheduledAtUtc, isCounselorScheduledOnDate, utcToLocalAppointmentFields } from '../../../src/repositories/appointmentRepository.js';
 import { canJoinAppointmentRoom, isValidAppointmentStatusTransition } from '../../services/appointmentRoomPolicy.js';
 
 const start = new Date('2026-09-20T03:00:00.000Z');
@@ -35,6 +35,13 @@ describe('appointment room access policy', () => {
     expect(calculateScheduledAtUtc('2026-09-20', '10:00', 'WITA').toISOString()).toBe('2026-09-20T02:00:00.000Z');
     expect(calculateScheduledAtUtc('2026-09-20', '10:00', 'WIT').toISOString()).toBe('2026-09-20T01:00:00.000Z');
     expect(utcToLocalAppointmentFields(new Date('2026-09-20T01:00:00Z'), 'WIT')).toMatchObject({ date: '2026-09-20', time: '10:00', timezone: 'WIT' });
+  });
+
+  it('respects counselor weekdays while keeping legacy time-only schedules compatible', () => {
+    expect(isCounselorScheduledOnDate('["Senin","Rabu"]', '2026-10-12')).toBe(true);
+    expect(isCounselorScheduledOnDate('["Senin","Rabu"]', '2026-10-13')).toBe(false);
+    expect(isCounselorScheduledOnDate('["09:00","10:30"]', '2026-10-13')).toBe(true);
+    expect(isCounselorScheduledOnDate('["Senin"]', 'invalid-date')).toBe(false);
   });
 
   it('rejects malformed booking dates and times and blocks invalid state transitions', () => {

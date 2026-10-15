@@ -53,6 +53,9 @@ export const chunkingService = {
     let currentSlide: number | undefined;
     let currentSheet: string | undefined;
     let currentSection: string | undefined;
+    let currentIsVisual = false;
+    let currentOcrConf: number | undefined;
+    let currentUncertainty: string | undefined;
     let chunkIndex = 0;
 
     const finalizeChunk = () => {
@@ -85,7 +88,10 @@ export const chunkingService = {
         sheetName: currentSheet,
         section: currentSection,
         sourceRef,
-        checksum
+        checksum,
+        isVisualExtraction: currentIsVisual || undefined,
+        ocrConfidence: currentOcrConf,
+        readingUncertainty: currentUncertainty
       });
 
       chunkIndex++;
@@ -97,6 +103,9 @@ export const chunkingService = {
         currentChunkText = '';
       }
       currentPages = [];
+      currentIsVisual = false;
+      currentOcrConf = undefined;
+      currentUncertainty = undefined;
     };
 
     for (const block of doc.blocks) {
@@ -104,6 +113,9 @@ export const chunkingService = {
       if (block.slideNumber !== undefined) currentSlide = block.slideNumber;
       if (block.sheetName !== undefined) currentSheet = block.sheetName;
       if (block.section) currentSection = block.section;
+      if (block.isVisualExtraction) currentIsVisual = true;
+      if (block.ocrConfidence) currentOcrConf = block.ocrConfidence;
+      if (block.readingUncertainty) currentUncertainty = block.readingUncertainty;
 
       const blockText = block.text.trim();
       if (!blockText) continue;

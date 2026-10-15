@@ -39,6 +39,10 @@ export const documentIngestionService = {
   async ingestFile(input: IngestFileInput): Promise<AttachmentResponseDTO> {
     const { userId, buffer, originalFilename, clientMime, chatId, messageId, abortSignal } = input;
 
+    if (!userId || userId === 'guest') {
+      throw new DocumentProcessingException('OWNERSHIP_ERROR', 'Sesi pemilik lampiran tidak tersedia.');
+    }
+
     if (abortSignal?.aborted) {
       throw new DocumentProcessingException('PROCESSING_ABORTED', 'Proses unggah berkas dibatalkan.');
     }
@@ -111,7 +115,7 @@ export const documentIngestionService = {
           id: attachmentId,
           messageId: messageId || null,
           chatId: chatId || null,
-          userId: userId || 'guest',
+          userId,
           filename: verified.sanitizedName,
           mimeType: verified.verifiedMime,
           size: verified.size,
@@ -131,31 +135,6 @@ export const documentIngestionService = {
         }
       } catch {}
       throw dbErr;
-    }
-
-    // If image kind, mark ready immediately (preview_only) without text extraction
-    if (verified.fileKind === 'image') {
-      await prisma.attachments.update({
-        where: { id: attachmentId },
-        data: {
-          status: 'ready',
-          processedAt: new Date(),
-          metadata: JSON.stringify({ previewOnly: true })
-        }
-      });
-
-      return {
-        id: attachmentId,
-        filename: verified.sanitizedName,
-        mimeType: verified.verifiedMime,
-        fileKind: verified.fileKind,
-        size: verified.size,
-        status: 'ready',
-        url: `/api/v1/chat/attachments/${attachmentId}`,
-        checksum: verified.checksum,
-        createdAt: record.createdAt.toISOString(),
-        processedAt: new Date().toISOString()
-      };
     }
 
     // 5. PROCESS: Execute format-aware extraction adapter
@@ -184,7 +163,7 @@ export const documentIngestionService = {
           data: chunks.map(c => ({
             id: c.id,
             attachmentId,
-            userId: userId || 'guest',
+            userId,
             chunkIndex: c.index,
             content: encryptionService.encryptRequiredSensitive(c.text),
             isEncrypted: true,
@@ -202,6 +181,9 @@ export const documentIngestionService = {
       }
 
       const metadataObj = {
+        visualAnalysisAvailable: Boolean(extraction.metadata?.visualAnalysisAvailable || verified.fileKind === 'image'),
+        previewOnly: Boolean(extraction.metadata?.previewOnly),
+        ocrApplied: Boolean(extraction.metadata?.ocrApplied),
         pageCount: extraction.pageCount,
         slideCount: extraction.slideCount,
         sheetCount: extraction.sheetCount,
@@ -215,7 +197,7 @@ export const documentIngestionService = {
         data: {
           status: 'ready',
           processedAt: new Date(),
-          extractedText: encryptionService.encryptRequiredSensitive(normalized.normalizedFullText.substring(0, 10_000)),
+          extractedText: normalized.normalizedFullText.trim() ? encryptionService.encryptRequiredSensitive(normalized.normalizedFullText.substring(0, 10_000)) : null,
           isEncrypted: true,
           encryptionVersion: encryptionService.getCurrentKeyVersion(),
           metadata: JSON.stringify(metadataObj)
@@ -235,6 +217,9 @@ export const documentIngestionService = {
         slideCount: extraction.slideCount,
         sheetCount: extraction.sheetCount,
         extractionWarnings: extraction.extractionWarnings,
+        visualAnalysisAvailable: Boolean(extraction.metadata?.visualAnalysisAvailable || verified.fileKind === 'image'),
+        previewOnly: Boolean(extraction.metadata?.previewOnly),
+        ocrApplied: Boolean(extraction.metadata?.ocrApplied),
         createdAt: updated.createdAt.toISOString(),
         processedAt: updated.processedAt ? updated.processedAt.toISOString() : undefined
       };
@@ -298,7 +283,7 @@ export const documentIngestionService = {
       throw new DocumentProcessingException('OWNERSHIP_ERROR', 'Dokumen tidak ditemukan.');
     }
 
-    if (attachment.userId !== userId && !(attachment.userId === 'guest' && userId === 'guest')) {
+    if (!userId || userId === 'guest' || attachment.userId === 'guest' || attachment.userId !== userId) {
       throw new DocumentProcessingException('OWNERSHIP_ERROR', 'Anda tidak memiliki hak akses ke dokumen ini.');
     }
     if (chatId && attachment.chatId !== chatId) {
@@ -384,7 +369,7 @@ export const documentIngestionService = {
           data: chunks.map(c => ({
             id: c.id,
             attachmentId,
-            userId: userId || 'guest',
+            userId,
             chunkIndex: c.index,
             content: encryptionService.encryptRequiredSensitive(c.text),
             isEncrypted: true,
@@ -463,7 +448,7 @@ export const documentIngestionService = {
 
     if (!attachment) return false;
 
-    if (attachment.userId !== userId && !(attachment.userId === 'guest' && userId === 'guest')) {
+    if (!userId || userId === 'guest' || attachment.userId === 'guest' || attachment.userId !== userId) {
       throw new DocumentProcessingException('OWNERSHIP_ERROR', 'Anda tidak berhak menghapus berkas ini.');
     }
     if (chatId && attachment.chatId !== chatId) {
@@ -501,7 +486,7 @@ export const documentIngestionService = {
 
     if (!attachment) return null;
 
-    if (attachment.userId !== userId && !(attachment.userId === 'guest' && userId === 'guest')) {
+    if (!userId || userId === 'guest' || attachment.userId === 'guest' || attachment.userId !== userId) {
       throw new DocumentProcessingException('OWNERSHIP_ERROR', 'Akses tidak diizinkan.');
     }
     if (chatId && attachment.chatId !== chatId) return null;

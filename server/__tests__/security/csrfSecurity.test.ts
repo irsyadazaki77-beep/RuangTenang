@@ -63,6 +63,15 @@ describe('CSRF Security Middleware Tests', () => {
     expect(res.body.code).toBe('CSRF_ORIGIN_MISSING');
   });
 
+  it('requires a CSRF token for the anonymous attachment ownership cookie', async () => {
+    const res = await supertest(app)
+      .post('/api/resource')
+      .set('Cookie', [`rt_guest_attachment=${'ab'.repeat(32)}`])
+      .set('Origin', 'https://ruangtenang.ui.ac.id');
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('CSRF_FORBIDDEN');
+  });
+
   it('should REJECT POST request with session cookie if Origin is untrusted', async () => {
     const res = await supertest(app)
       .post('/api/resource')
@@ -102,22 +111,31 @@ describe('CSRF Security Middleware Tests', () => {
     expect(res.body.success).toBe(true);
   });
 
-  it('should ALLOW POST request from platform preview domain without session cookie', async () => {
+  it('should reject unregistered preview origins with a different port', async () => {
     const res = await supertest(app)
       .post('/api/resource')
       .set('Host', 'ais-dev-ygw5xydfvpld32tbemu5xl-120957595740.asia-southeast1.run.app')
       .set('Origin', 'https://ais-dev-ygw5xydfvpld32tbemu5xl-120957595740.asia-southeast1.run.app')
       .set('x-requested-with', 'XMLHttpRequest');
-    expect(res.status).toBe(200);
-    expect(res.body.success).toBe(true);
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('CSRF_FORBIDDEN');
   });
 
-  it('should ALLOW POST request from ai.studio preview origin', async () => {
+  it('should reject unregistered AI Studio origins', async () => {
     const res = await supertest(app)
       .post('/api/resource')
       .set('Origin', 'https://ai.studio')
       .set('x-requested-with', 'XMLHttpRequest');
-    expect(res.status).toBe(200);
-    expect(res.body.success).toBe(true);
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('CSRF_FORBIDDEN');
+  });
+
+  it('should reject an otherwise trusted host when its port is not allowlisted', async () => {
+    const res = await supertest(app)
+      .post('/api/resource')
+      .set('Origin', 'https://ruangtenang.ui.ac.id:8443')
+      .set('x-requested-with', 'XMLHttpRequest');
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('CSRF_FORBIDDEN');
   });
 });

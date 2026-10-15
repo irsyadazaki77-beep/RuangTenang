@@ -282,6 +282,12 @@ export const apiClient = {
       method: 'PUT',
       body: body !== undefined ? (typeof body === 'string' ? body : JSON.stringify(body)) : undefined
     }),
+  patch: <T = unknown>(url: string, body?: unknown, options: RequestInit = {}) =>
+    fetchWithTimeoutAndRetry<T>(url, {
+      ...options,
+      method: 'PATCH',
+      body: body !== undefined ? (typeof body === 'string' ? body : JSON.stringify(body)) : undefined
+    }),
   delete: <T = unknown>(url: string, options: RequestInit = {}) =>
     fetchWithTimeoutAndRetry<T>(url, { ...options, method: 'DELETE' }),
   request: fetchWithTimeoutAndRetry

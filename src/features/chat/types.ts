@@ -4,7 +4,9 @@ export interface Attachment {
   id: string;
   file: File;
   previewUrl?: string;
-  status: 'uploading' | 'processing' | 'success' | 'error';
+  status: 'uploading' | 'processing' | 'ready' | 'visual_ready' | 'success' | 'error';
+  visualAnalysisAvailable?: boolean;
+  ocrApplied?: boolean;
   errorMessage?: string;
   serverAttachmentId?: string;
   filename?: string;
@@ -21,6 +23,8 @@ export interface StoredAttachment {
   size: number;
   url?: string;
   data?: string;
+  visualAnalysisAvailable?: boolean;
+  ocrApplied?: boolean;
 }
 
 export interface Message {

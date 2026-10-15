@@ -2,10 +2,11 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 import { seedInitialDataIfNeeded } from '../database.js';
+import { isProductionLikeEnvironment } from '../config/environment.js';
 
 async function main() {
-  if (process.env.NODE_ENV === 'production') {
-    console.error('❌ Error: Demo seeding is forbidden in production environment.');
+  if (isProductionLikeEnvironment()) {
+    console.error('❌ Error: Demo seeding is forbidden outside development/test environments.');
     process.exit(1);
   }
 

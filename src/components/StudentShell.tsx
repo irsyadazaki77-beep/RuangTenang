@@ -15,6 +15,7 @@ import { getChatIdFromPath, getModeChatPath, getModeHomePath, getWorkspaceModeFr
 import { createStudentRoutes } from '../app/routes/studentRoutes';
 import { LoadingState } from './ui/primitives/Surfaces';
 import { FeatureErrorBoundary } from './error/FeatureErrorBoundary';
+import { trackProductEvent } from '../lib/productAnalytics';
 
 const SettingsPage = lazyWithRetry(() => import('../features/settings/SettingsPage').then(module => ({ default: module.SettingsPage })));
 
@@ -91,6 +92,10 @@ export const StudentShell: React.FC<StudentShellProps> = ({
   const location = useLocation();
   const currentMode = getWorkspaceModeFromPath(location.pathname);
   const shouldReduceMotion = useReducedMotion();
+
+  React.useEffect(() => {
+    if (user.role === 'mahasiswa' && user.campusId) trackProductEvent('repeat_visit');
+  }, [user.campusId, user.id, user.role]);
 
   return (
     <div className="flex w-full h-dvh bg-transparent text-primary font-sans relative overflow-hidden">

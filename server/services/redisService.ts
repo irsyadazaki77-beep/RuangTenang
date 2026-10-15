@@ -66,7 +66,7 @@ export class RedisService {
       };
 
       if (redisUrl) {
-        this.client = new Redis(redisUrl, options);
+        this.client = new Redis(redisUrl, { ...options, password: process.env.REDIS_PASSWORD || undefined });
       } else if (redisHost) {
         this.client = new Redis({
           host: redisHost,
@@ -302,6 +302,39 @@ export class RedisService {
     count += 1;
     this.memoryCache.set(key, { value: String(count), expiresAt });
     return count;
+  }
+
+  /** Atomic fixed-window counter for express-rate-limit; null means shared Redis is unavailable. */
+  public async incrementRateLimit(key: string, windowMs: number): Promise<{ count: number; resetTime: Date } | null> {
+    if (!this.isConnected || !this.client) return null;
+    try {
+      const result = await this.client.eval(
+        "local n=redis.call('INCR',KEYS[1]); if n==1 then redis.call('PEXPIRE',KEYS[1],ARGV[1]); end; local ttl=redis.call('PTTL',KEYS[1]); return {n,ttl}",
+        1,
+        key,
+        String(windowMs),
+      ) as [number | string, number | string];
+      const count = Number(result?.[0]);
+      const ttlMs = Number(result?.[1]);
+      if (!Number.isFinite(count) || !Number.isFinite(ttlMs) || ttlMs < 0) throw new Error('Invalid Redis rate-limit response');
+      return { count, resetTime: new Date(Date.now() + ttlMs) };
+    } catch (err: any) {
+      this.isConnected = false;
+      this.logWarnOnce(`[SECURITY_ALERT] Redis rate-limit counter unavailable; using local fallback: ${err?.message || 'connection error'}`);
+      return null;
+    }
+  }
+
+  public async decrementRateLimit(key: string): Promise<boolean> {
+    if (!this.isConnected || !this.client) return false;
+    try {
+      await this.client.eval("local n=redis.call('GET',KEYS[1]); if not n then return 0 end; if tonumber(n)<=1 then return redis.call('DEL',KEYS[1]) end; return redis.call('DECR',KEYS[1])", 1, key);
+      return true;
+    } catch (err: any) {
+      this.isConnected = false;
+      this.logWarnOnce(`[SECURITY_ALERT] Redis rate-limit decrement unavailable: ${err?.message || 'connection error'}`);
+      return false;
+    }
   }
 
   public async expire(key: string, ttlSeconds: number): Promise<boolean> {

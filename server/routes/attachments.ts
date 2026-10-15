@@ -9,6 +9,7 @@ import { attachmentStorageService, MAX_FILE_SIZE } from '../services/attachmentS
 import { documentIngestionService } from '../services/file-intelligence/documentIngestionService.js';
 import { DocumentProcessingException } from '../services/file-intelligence/fileTypes.js';
 import { attachmentUploadLimiter } from '../middleware/rateLimiters.js';
+import { guestAttachmentSession, optionalAttachmentOwner } from '../middleware/guestAttachmentSession.js';
 import { MAX_ATTACHMENT_UPLOAD_BATCH, MAX_WORKSPACE_ACTIVE_ATTACHMENTS } from '../../shared/contracts/files.js';
 import { TabularAnalysisRequestSchema, TabularTransformRequestSchema } from '../../shared/contracts/tabular.js';
 import { createTabularDataset, parseTabularWorkbook, runTabularAnalysis, toSafeCsv, toSafeXlsx, previewTabularTransform } from '../services/tabularDatasetService.js';
@@ -52,19 +53,25 @@ async function loadOwnedTabularAttachment(attachmentId: string, userId: string) 
     buffer.fill(0);
     return { error: { code: 'ATTACHMENT_NOT_READY', message: 'Dataset tersedia setelah pemrosesan selesai.', status: 409 } } as const;
   }
-  if (!attachment.chatId || !['csv', 'tsv', 'xlsx'].includes((attachment.filename.split('.').pop() || '').toLowerCase())) {
+  if (!['csv', 'tsv', 'xlsx'].includes((attachment.filename.split('.').pop() || '').toLowerCase())) {
     buffer.fill(0);
     return { error: { code: 'UNSUPPORTED_DATASET', message: 'Analisis tabular tersedia untuk CSV, TSV, dan XLSX.', status: 415 } } as const;
   }
-  let chat;
-  try { chat = await prisma.chats.findFirst({ where: { id: attachment.chatId, userId }, select: { id: true } }); }
-  catch {
+  if (userId.startsWith('guest:') && attachment.chatId) {
     buffer.fill(0);
     return { error: { code: 'NOT_FOUND', message: 'Dataset tidak ditemukan.', status: 404 } } as const;
   }
-  if (!chat) {
-    buffer.fill(0);
-    return { error: { code: 'NOT_FOUND', message: 'Dataset tidak ditemukan.', status: 404 } } as const;
+  if (!userId.startsWith('guest:') && attachment.chatId) {
+    let chat;
+    try { chat = await prisma.chats.findFirst({ where: { id: attachment.chatId, userId }, select: { id: true } }); }
+    catch {
+      buffer.fill(0);
+      return { error: { code: 'NOT_FOUND', message: 'Dataset tidak ditemukan.', status: 404 } } as const;
+    }
+    if (!chat) {
+      buffer.fill(0);
+      return { error: { code: 'NOT_FOUND', message: 'Dataset tidak ditemukan.', status: 404 } } as const;
+    }
   }
   try {
     const workbook = await parseTabularWorkbook(buffer, attachment.filename);
@@ -76,19 +83,19 @@ async function loadOwnedTabularAttachment(attachmentId: string, userId: string) 
 }
 
 /** Structured, ownership-checked spreadsheet overview and profile. */
-router.get('/chat/attachments/:id/dataset', requireAuth, async (req: Request, res: Response) => {
-  const loaded = await loadOwnedTabularAttachment(req.params.id, req.user!.userId);
+router.get('/chat/attachments/:id/dataset', optionalAuth, guestAttachmentSession(), async (req: Request, res: Response) => {
+  const loaded = await loadOwnedTabularAttachment(req.params.id, req.attachmentOwnerId!);
   if ('error' in loaded) return sendAttachmentError(res, loaded.error.code, loaded.error.message, loaded.error.status);
   try {
     const sheetName = typeof req.query.sheet === 'string' ? req.query.sheet : undefined;
-    const dataset = createTabularDataset({ attachmentId: loaded.attachment.id, workspaceId: loaded.attachment.chatId!, filename: loaded.attachment.filename, checksum: loaded.attachment.checksum || '', createdAt: loaded.attachment.createdAt, workbook: loaded.workbook, sheetName });
+    const dataset = createTabularDataset({ attachmentId: loaded.attachment.id, workspaceId: loaded.attachment.chatId || loaded.attachment.id, filename: loaded.attachment.filename, checksum: loaded.attachment.checksum || '', createdAt: loaded.attachment.createdAt, workbook: loaded.workbook, sheetName });
     return res.json({ success: true, data: dataset });
   } finally { loaded.buffer.fill(0); }
 });
 
 /** Return a bounded page of structured cells; the browser never receives the full workbook. */
-router.get('/chat/attachments/:id/dataset/preview', requireAuth, async (req: Request, res: Response) => {
-  const loaded = await loadOwnedTabularAttachment(req.params.id, req.user!.userId);
+router.get('/chat/attachments/:id/dataset/preview', optionalAuth, guestAttachmentSession(), async (req: Request, res: Response) => {
+  const loaded = await loadOwnedTabularAttachment(req.params.id, req.attachmentOwnerId!);
   if ('error' in loaded) return sendAttachmentError(res, loaded.error.code, loaded.error.message, loaded.error.status);
   try {
     const requestedSheet = typeof req.query.sheet === 'string' ? req.query.sheet : loaded.workbook.activeSheet;
@@ -101,10 +108,10 @@ router.get('/chat/attachments/:id/dataset/preview', requireAuth, async (req: Req
 });
 
 /** Execute a validated allowlisted aggregation in server code, never generated code. */
-router.post('/chat/attachments/:id/dataset/analyze', requireAuth, async (req: Request, res: Response) => {
+router.post('/chat/attachments/:id/dataset/analyze', optionalAuth, guestAttachmentSession(), async (req: Request, res: Response) => {
   const parsedPlan = TabularAnalysisRequestSchema.safeParse(req.body);
   if (!parsedPlan.success) return sendAttachmentError(res, 'INVALID_ANALYSIS_PLAN', 'Rencana analisis tidak valid.', 400);
-  const loaded = await loadOwnedTabularAttachment(req.params.id, req.user!.userId);
+  const loaded = await loadOwnedTabularAttachment(req.params.id, req.attachmentOwnerId!);
   if ('error' in loaded) return sendAttachmentError(res, loaded.error.code, loaded.error.message, loaded.error.status);
   try {
     const result = runTabularAnalysis({ attachmentId: loaded.attachment.id, filename: loaded.attachment.filename, checksum: loaded.attachment.checksum || '', createdAt: loaded.attachment.createdAt, workbook: loaded.workbook, plan: parsedPlan.data });
@@ -115,10 +122,10 @@ router.post('/chat/attachments/:id/dataset/analyze', requireAuth, async (req: Re
 });
 
 /** Preview transformation changes without persisting or changing the source file. */
-router.post('/chat/attachments/:id/dataset/transform/preview', requireAuth, async (req: Request, res: Response) => {
+router.post('/chat/attachments/:id/dataset/transform/preview', optionalAuth, guestAttachmentSession(), async (req: Request, res: Response) => {
   const parsedPlan = TabularTransformRequestSchema.safeParse(req.body);
   if (!parsedPlan.success) return sendAttachmentError(res, 'INVALID_TRANSFORM_PLAN', 'Rencana transformasi tidak valid.', 400);
-  const loaded = await loadOwnedTabularAttachment(req.params.id, req.user!.userId);
+  const loaded = await loadOwnedTabularAttachment(req.params.id, req.attachmentOwnerId!);
   if ('error' in loaded) return sendAttachmentError(res, loaded.error.code, loaded.error.message, loaded.error.status);
   try {
     const preview = previewTabularTransform({ attachmentId: loaded.attachment.id, checksum: loaded.attachment.checksum || '', workbook: loaded.workbook, plan: parsedPlan.data });
@@ -160,8 +167,8 @@ router.post('/chat/attachments/:id/dataset/transform/confirm', requireAuth, asyn
 });
 
 /** Export an immutable source sheet as CSV with spreadsheet-formula injection protection. */
-router.get('/chat/attachments/:id/dataset/export', requireAuth, async (req: Request, res: Response) => {
-  const loaded = await loadOwnedTabularAttachment(req.params.id, req.user!.userId);
+router.get('/chat/attachments/:id/dataset/export', optionalAuth, guestAttachmentSession(), async (req: Request, res: Response) => {
+  const loaded = await loadOwnedTabularAttachment(req.params.id, req.attachmentOwnerId!);
   if ('error' in loaded) return sendAttachmentError(res, loaded.error.code, loaded.error.message, loaded.error.status);
   try {
     const requestedSheet = typeof req.query.sheet === 'string' ? req.query.sheet : loaded.workbook.activeSheet;
@@ -208,6 +215,7 @@ const limitConcurrentAttachmentUploads = (_req: Request, res: Response, next: Ne
 router.post(
   '/chat/attachments/upload',
   optionalAuth,
+  guestAttachmentSession({ issueIfMissing: true }),
   attachmentUploadLimiter,
   limitConcurrentAttachmentUploads,
   (req: Request, res: Response, next) => {
@@ -253,7 +261,7 @@ router.post(
       else pendingWorkspaceAttachmentUploads.delete(reservedChatId);
     };
     try {
-      const userId = req.user?.userId || 'guest';
+      const userId = req.attachmentOwnerId!;
       const files = (req.files as Express.Multer.File[]) || [];
       const { chatId } = req.body;
 
@@ -384,9 +392,9 @@ router.post(
 );
 
 /** List metadata for documents in an owned Workspace conversation. */
-router.get('/chat/:chatId/attachments', optionalAuth, async (req: Request, res: Response) => {
+router.get('/chat/:chatId/attachments', optionalAuth, guestAttachmentSession(), async (req: Request, res: Response) => {
   try {
-    const userId = req.user?.userId || 'guest';
+    const userId = req.attachmentOwnerId!;
     const chatId = req.params.chatId;
     const chat = await prisma.chats.findFirst({ where: { id: chatId, userId } });
     if (!chat) return sendAttachmentError(res, 'NOT_FOUND', 'Ruang Kerja tidak ditemukan.', 404);
@@ -430,15 +438,17 @@ router.get('/chat/:chatId/attachments', optionalAuth, async (req: Request, res: 
 });
 
 /** Return a bounded, ownership-checked text preview from the document's existing extraction. */
-router.get('/chat/attachments/:id/preview', requireAuth, async (req: Request, res: Response) => {
+router.get('/chat/attachments/:id/preview', optionalAuth, guestAttachmentSession(), async (req: Request, res: Response) => {
   try {
     const attachment = await prisma.attachments.findFirst({
-      where: { id: req.params.id, userId: req.user!.userId },
+      where: { id: req.params.id, userId: req.attachmentOwnerId },
       select: { id: true, chatId: true, filename: true, mimeType: true, fileKind: true, size: true, status: true, extractedText: true, isEncrypted: true, metadata: true }
     });
-    if (!attachment || !attachment.chatId) return sendAttachmentError(res, 'NOT_FOUND', 'Berkas tidak ditemukan.', 404);
-    const chat = await prisma.chats.findFirst({ where: { id: attachment.chatId, userId: req.user!.userId }, select: { id: true } });
-    if (!chat) return sendAttachmentError(res, 'NOT_FOUND', 'Berkas tidak ditemukan.', 404);
+    if (!attachment) return sendAttachmentError(res, 'NOT_FOUND', 'Berkas tidak ditemukan.', 404);
+    if (attachment.chatId && !req.attachmentOwnerId!.startsWith('guest:')) {
+      const chat = await prisma.chats.findFirst({ where: { id: attachment.chatId, userId: req.attachmentOwnerId }, select: { id: true } });
+      if (!chat) return sendAttachmentError(res, 'NOT_FOUND', 'Berkas tidak ditemukan.', 404);
+    }
     if (attachment.status !== 'ready') return sendAttachmentError(res, 'ATTACHMENT_NOT_READY', 'Preview tersedia setelah dokumen selesai diproses.', 409);
     let previewText = attachment.extractedText || '';
     if (attachment.isEncrypted) previewText = encryptionService.decryptSensitive(previewText) || '';
@@ -453,9 +463,9 @@ router.get('/chat/attachments/:id/preview', requireAuth, async (req: Request, re
 /**
  * Status check endpoint for asynchronous / progressive file processing
  */
-router.get('/chat/attachments/:id/status', optionalAuth, async (req: Request, res: Response) => {
+router.get('/chat/attachments/:id/status', optionalAuth, guestAttachmentSession(), async (req: Request, res: Response) => {
   try {
-    const userId = req.user?.userId || 'guest';
+    const userId = req.attachmentOwnerId!;
     const attachmentId = req.params.id;
 
     if (!attachmentId) {
@@ -484,9 +494,9 @@ router.get('/chat/attachments/:id/status', optionalAuth, async (req: Request, re
 /**
  * Retry processing endpoint for failed documents
  */
-router.post('/chat/attachments/:id/retry', optionalAuth, async (req: Request, res: Response) => {
+router.post('/chat/attachments/:id/retry', optionalAuth, guestAttachmentSession(), async (req: Request, res: Response) => {
   try {
-    const userId = req.user?.userId || 'guest';
+    const userId = req.attachmentOwnerId!;
     const attachmentId = req.params.id;
 
     if (!attachmentId) {
@@ -520,9 +530,9 @@ router.post('/chat/attachments/:id/retry', optionalAuth, async (req: Request, re
  * Download/view attachment file endpoint
  * Validates ownership and sends secure HTTP headers with sanitized Content-Disposition
  */
-router.get('/chat/attachments/:id', optionalAuth, async (req: Request, res: Response) => {
+router.get('/chat/attachments/:id', optionalAuth, guestAttachmentSession(), async (req: Request, res: Response) => {
   try {
-    const userId = req.user?.userId || 'guest';
+    const userId = req.attachmentOwnerId!;
     const attachmentId = req.params.id;
 
     if (!attachmentId) {
@@ -570,9 +580,9 @@ router.get('/chat/attachments/:id', optionalAuth, async (req: Request, res: Resp
 /**
  * Delete attachment endpoint
  */
-router.delete('/chat/attachments/:id', optionalAuth, async (req: Request, res: Response) => {
+router.delete('/chat/attachments/:id', optionalAuth, guestAttachmentSession(), async (req: Request, res: Response) => {
   try {
-    const userId = req.user?.userId || 'guest';
+    const userId = req.attachmentOwnerId!;
     const attachmentId = req.params.id;
 
     if (!attachmentId) {

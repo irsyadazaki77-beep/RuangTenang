@@ -6,7 +6,9 @@ import {
   getProviderCircuitState,
   resetAiReliabilityStateForTests
 } from '../../services/ai/aiReliabilityService.js';
-import { selectReliableModelCandidates } from '../../services/ai/aiRequestService.js';
+import { aiRequestService, selectReliableModelCandidates } from '../../services/ai/aiRequestService.js';
+import { geminiAdapter } from '../../services/ai/geminiAdapter.js';
+import { AI_PROVIDER_ADAPTERS } from '../../services/ai/aiProviderAdapters.js';
 import type { AiRequestOptions } from '../../services/ai/aiRequestService.js';
 
 describe('AI reliability policy', () => {
@@ -83,6 +85,97 @@ describe('AI reliability policy', () => {
     for (const [key, value] of Object.entries(previousKeys)) {
       if (value === undefined) delete process.env[key];
       else process.env[key] = value;
+    }
+  });
+
+  it('falls back across providers when a workspace profile model is out of quota', async () => {
+    const previousEnv = Object.fromEntries(['GEMINI_API_KEY', 'GROQ_API_KEY', 'E2E_MOCK_AI'].map(key => [key, process.env[key]]));
+    process.env.GEMINI_API_KEY = 'fixture-gemini-key';
+    process.env.GROQ_API_KEY = `gsk_${'x'.repeat(32)}`;
+    process.env.E2E_MOCK_AI = '0';
+
+    const quotaError = Object.assign(new Error('Gemini quota exceeded'), { statusCode: 429 });
+    const gemini = vi.spyOn(geminiAdapter, 'generateStream').mockRejectedValue(quotaError);
+    const groq = vi.spyOn(AI_PROVIDER_ADAPTERS.groq, 'generateStream').mockResolvedValue({
+      stream: (async function* () { yield { text: 'Jawaban alternatif.' }; })(),
+      modelUsed: 'groq-gpt-20b'
+    });
+
+    try {
+      const routingDecision = {
+        selectedModelId: 'gemini-3.8-flash',
+        provider: 'gemini' as const,
+        routingMode: 'manual' as const,
+        routingReason: 'workspace profile fixture',
+        fallbackCandidates: ['groq-gpt-20b'],
+        profileId: 'kerja-santai' as const
+      };
+      const response = await aiRequestService.generateStreamResponse({
+        requestedModelId: routingDecision.selectedModelId,
+        prompt: 'Ringkas satu kalimat.',
+        userTier: 'Free',
+        routingDecision,
+        fallbackCandidates: routingDecision.fallbackCandidates
+      });
+      const chunks = [];
+      for await (const chunk of response.stream) chunks.push(chunk);
+
+      expect(response.modelUsed).toBe('groq-gpt-20b');
+      expect(response.isFallback).toBe(true);
+      expect(chunks).toEqual([{ text: 'Jawaban alternatif.' }]);
+      expect(gemini).toHaveBeenCalledOnce();
+      expect(groq).toHaveBeenCalledOnce();
+    } finally {
+      gemini.mockRestore();
+      groq.mockRestore();
+      for (const [key, value] of Object.entries(previousEnv)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
+  });
+
+  it('falls back across providers for non-streaming workspace agent requests out of quota', async () => {
+    const previousEnv = Object.fromEntries(['GEMINI_API_KEY', 'GROQ_API_KEY', 'E2E_MOCK_AI'].map(key => [key, process.env[key]]));
+    process.env.GEMINI_API_KEY = 'fixture-gemini-key';
+    process.env.GROQ_API_KEY = `gsk_${'x'.repeat(32)}`;
+    process.env.E2E_MOCK_AI = '0';
+
+    const quotaError = Object.assign(new Error('Gemini quota exceeded'), { statusCode: 429 });
+    const gemini = vi.spyOn(geminiAdapter, 'generate').mockRejectedValue(quotaError);
+    const groq = vi.spyOn(AI_PROVIDER_ADAPTERS.groq, 'generate').mockResolvedValue({
+      text: 'Jawaban agent alternatif.',
+      modelUsed: 'groq-gpt-20b',
+      isFallback: false
+    });
+
+    try {
+      const routingDecision = {
+        selectedModelId: 'gemini-3.8-flash',
+        provider: 'gemini' as const,
+        routingMode: 'manual' as const,
+        routingReason: 'workspace profile fixture',
+        fallbackCandidates: ['groq-gpt-20b'],
+        profileId: 'kerja-santai' as const
+      };
+      const response = await aiRequestService.generateChatResponse({
+        requestedModelId: routingDecision.selectedModelId,
+        prompt: 'Ringkas satu kalimat.',
+        userTier: 'Free',
+        routingDecision,
+        fallbackCandidates: routingDecision.fallbackCandidates
+      });
+
+      expect(response).toEqual({ text: 'Jawaban agent alternatif.', modelUsed: 'groq-gpt-20b', isFallback: true });
+      expect(gemini).toHaveBeenCalledOnce();
+      expect(groq).toHaveBeenCalledOnce();
+    } finally {
+      gemini.mockRestore();
+      groq.mockRestore();
+      for (const [key, value] of Object.entries(previousEnv)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
     }
   });
 });

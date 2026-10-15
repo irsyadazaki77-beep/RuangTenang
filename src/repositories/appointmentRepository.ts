@@ -9,6 +9,35 @@ const HARD_MAX_PAGE_SIZE = 100;
 const SERIALIZABLE_TX_OPTIONS = process.env.DATABASE_URL?.startsWith('postgres')
   ? { isolationLevel: 'Serializable' as const }
   : undefined;
+const INDONESIAN_WEEKDAYS = ['minggu', 'senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu'];
+
+function getConfiguredCounselorWeekdays(availability: string): Set<string> {
+  try {
+    const entries: unknown = JSON.parse(availability);
+    if (!Array.isArray(entries)) return new Set();
+    const weekdays = entries
+      .filter((entry): entry is string => typeof entry === 'string')
+      .map(entry => entry.trim().toLocaleLowerCase('id-ID'))
+      .filter(entry => INDONESIAN_WEEKDAYS.includes(entry));
+    return new Set(weekdays);
+  } catch {
+    return new Set();
+  }
+}
+
+function getIndonesianWeekday(date: string): string | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+  const parsed = new Date(`${date}T12:00:00Z`);
+  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== date) return null;
+  return INDONESIAN_WEEKDAYS[parsed.getUTCDay()];
+}
+
+export function isCounselorScheduledOnDate(availability: string, date: string): boolean {
+  const configuredWeekdays = getConfiguredCounselorWeekdays(availability);
+  if (configuredWeekdays.size === 0) return true;
+  const requestedWeekday = getIndonesianWeekday(date);
+  return requestedWeekday !== null && configuredWeekdays.has(requestedWeekday);
+}
 
 /**
  * Calculates absolute UTC DateTime from local date string, time string, and timezone.
@@ -212,7 +241,12 @@ export class AppointmentRepository {
       return cached;
     }
 
-    const standardSlots = ["09:00", "10:30", "14:00", "16:00"];
+    const counselor = await prisma.counselors.findUnique({
+      where: { id: counselorId },
+      select: { availability: true },
+    });
+    const isScheduledDay = counselor ? isCounselorScheduledOnDate(counselor.availability, date) : true;
+    const standardSlots = isScheduledDay ? ["09:00", "10:30", "14:00", "16:00"] : [];
     const tz = 'WIB';
     const slotTimes = standardSlots.map(time => calculateScheduledAtUtc(date, time, tz));
 
@@ -345,6 +379,7 @@ export class AppointmentRepository {
         data: {
           id,
           counselorId: resolvedCounselorId,
+          campusId: appt.campusId || null,
           counselorName: appt.counselorName,
           scheduledAt,
           timezone: appt.timezone || 'WIB',
@@ -500,6 +535,7 @@ export class AppointmentRepository {
 
       const updateData = {
           counselorId: updates.counselorId,
+          campusId: updates.campusId,
           counselorName: updates.counselorName,
           scheduledAt,
           timezone: targetTimezone,

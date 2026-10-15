@@ -8,7 +8,7 @@ import MoodCard from '../../plugins/MoodCard';
 import ScreeningCard from '../../plugins/ScreeningCard';
 import ArticlesCard from '../../plugins/ArticlesCard';
 import { BurnoutInterventionCard } from './BurnoutInterventionCard';
-import { Copy, RefreshCw, ThumbsUp, ThumbsDown, Edit2, Check, Bookmark, GitBranch, FileText, Volume2, VolumeX } from 'lucide-react';
+import { Copy, RefreshCw, ThumbsUp, ThumbsDown, Edit2, Check, Bookmark, GitBranch, FileText, Image as ImageIcon, Volume2, VolumeX } from 'lucide-react';
 import { useToast } from '../../../components/Toast';
 import { motion, useReducedMotion } from 'motion/react';
 import { RhythmicTypingIndicator } from '../../../components/ui/RhythmicTypingIndicator';
@@ -199,8 +199,15 @@ export const MessageBubble = memo(function MessageBubble({
                         rel="noreferrer"
                         className="flex items-center gap-1.5 px-2.5 py-1 bg-stone-100/90 dark:bg-slate-800 hover:bg-stone-200/90 dark:hover:bg-slate-700 rounded-xl text-[11px] text-stone-800 dark:text-stone-200 transition-colors border border-stone-200/50 dark:border-slate-700"
                       >
-                        <FileText className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+                        {att.mimeType?.startsWith('image/') ? (
+                          <ImageIcon className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 shrink-0" />
+                        ) : (
+                          <FileText className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 shrink-0" />
+                        )}
                         <span className="truncate max-w-[140px] font-medium">{att.filename}</span>
+                        {att.mimeType?.startsWith('image/') && (
+                          <span className="text-[9.5px] px-1 py-0.2 rounded bg-teal-100/70 dark:bg-teal-900/60 text-teal-700 dark:text-teal-300 font-medium">Visual</span>
+                        )}
                         {att.size > 0 && <span className="text-[10px] opacity-60">({(att.size / 1024).toFixed(0)}KB)</span>}
                       </a>
                     ))}
@@ -280,6 +287,35 @@ export const MessageBubble = memo(function MessageBubble({
                   </div>
                 )}
                 <LazyMarkdown content={msg.content} />
+                {msg.sources && msg.sources.length > 0 && (
+                  <div className="not-prose mt-3 pt-2.5 border-t border-stone-200/60 dark:border-slate-800 space-y-1.5 text-xs text-stone-600 dark:text-slate-400">
+                    <div className="font-semibold text-[11px] uppercase tracking-wider text-stone-500 dark:text-slate-400 flex items-center gap-1">
+                      <span>Sumber & Bukti Terverifikasi</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {msg.sources.map(src => (
+                        <div
+                          key={src.citationId || src.sourceRef}
+                          className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-stone-100/90 dark:bg-slate-800/90 border border-stone-200/70 dark:border-slate-700 text-[11px]"
+                          title={src.snippet || src.sourceRef}
+                        >
+                          <span className="font-mono text-[10px] font-bold text-teal-600 dark:text-teal-400">{src.citationId || 'REF'}</span>
+                          <span className="truncate max-w-[180px]">{src.filename}{src.page ? ` [Hal. ${src.page}]` : ''}</span>
+                          {src.isVisualExtraction && (
+                            <span className="px-1 py-0.2 rounded bg-teal-50 dark:bg-teal-950/60 text-teal-600 dark:text-teal-300 text-[9.5px] font-medium border border-teal-200/50 dark:border-teal-800/50">
+                              OCR
+                            </span>
+                          )}
+                          {src.readingUncertainty && (
+                            <span className="px-1 py-0.2 rounded bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 text-[9.5px] font-medium border border-amber-200/50">
+                              Ketidakpastian
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 {isTyping && (
                   <motion.span
                     aria-hidden="true"

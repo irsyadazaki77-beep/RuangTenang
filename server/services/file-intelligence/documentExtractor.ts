@@ -66,7 +66,8 @@ export class DocumentExtractor {
           extractionWarnings: extraction.extractionWarnings,
           size: buffer.length,
           checksum: verified.checksum,
-          fileKind: verified.fileKind
+          fileKind: verified.fileKind,
+          ...extraction.metadata
         },
         documentId: extraction.documentId,
         filename: verified.sanitizedName,

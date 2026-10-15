@@ -1,6 +1,6 @@
 import { calculatePhq9Severity } from '../../shared/clinical/scoring.js';
 import { Router, Request, Response } from 'express';
-import { requireAuth, requireRole } from '../middleware/auth.js';
+import { optionalAuth, requireAuth, requireRole } from '../middleware/auth.js';
 import { prisma } from '../database.js';
 import { consentService } from '../services/consentService.js';
 import { normalizeRole } from '../middleware/auth.js';
@@ -176,7 +176,7 @@ const INITIAL_RISK_ALERTS = [
   }
 ];
 
-router.get(['/', '/counselors', '/api/counselors', '/api/v1/counselors'], async (req: Request, res: Response) => {
+router.get(['/', '/counselors', '/api/counselors', '/api/v1/counselors'], optionalAuth, async (req: Request, res: Response) => {
   if (process.env.SERVER_DEMO_MODE === 'true') {
     return res.json(MOCK_COUNSELORS.map(m => ({
       ...m,
@@ -190,8 +190,13 @@ router.get(['/', '/counselors', '/api/counselors', '/api/v1/counselors'], async 
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 50));
     const format = (req.query.format as string) || 'array';
     const offset = (page - 1) * limit;
+    const campusId = req.user?.campusId ?? null;
+    if (campusId) {
+      const campus = await prisma.campuses.findUnique({ where: { id: campusId }, select: { isActive: true } });
+      if (!campus?.isActive) return res.json([]);
+    }
 
-    const cacheKey = `counselors:list:p${page}:l${limit}:f${format}`;
+    const cacheKey = `counselors:list:c${campusId || 'unassigned'}:p${page}:l${limit}:f${format}`;
     const cached = await redisService.get<{ data: any; headers: Record<string, any> }>(cacheKey);
 
     if (cached) {
@@ -207,9 +212,9 @@ router.get(['/', '/counselors', '/api/counselors', '/api/v1/counselors'], async 
     res.setHeader('X-Cache', 'MISS');
 
     const [total, dbCounselors] = await Promise.all([
-      prisma.counselors.count({ where: { isDemoData: false } }),
+      prisma.counselors.count({ where: { isDemoData: false, campusId } }),
       prisma.counselors.findMany({
-        where: { isDemoData: false },
+        where: { isDemoData: false, campusId },
         take: limit,
         skip: offset,
         orderBy: { name: 'asc' }
@@ -312,9 +317,9 @@ router.get(
 
     try {
       const scopedStudentIds = await getAssignedStudentUserIds(req.user!.userId);
-      const counselor = await prisma.counselors.findFirst({ where: { userId: req.user!.userId }, select: { id: true } });
+      const counselor = await prisma.counselors.findFirst({ where: { userId: req.user!.userId, campusId: req.user!.campusId ?? null }, select: { id: true } });
       const scopedScreening = { userId: { in: scopedStudentIds } };
-      const scopedAppointment = { counselorId: counselor?.id || '__none__' };
+      const scopedAppointment = { counselorId: counselor?.id || '__none__', campusId: req.user!.campusId ?? null };
       const [totalSessions, userCount, allScreenings, highRiskScreenings, appointments] = await Promise.all([
         prisma.appointments.count({ where: scopedAppointment }),
         prisma.users.count({ where: { id: { in: scopedStudentIds } } }),

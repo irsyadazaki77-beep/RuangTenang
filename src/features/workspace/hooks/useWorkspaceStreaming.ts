@@ -6,6 +6,7 @@ import { useToast } from '../../../components/Toast';
 import { WorkspaceArtifact, WorkspaceComposerConfig } from '../types';
 import type { FileSourceReference } from '../../../../shared/contracts/files';
 import { dispatchAuroraActivity } from '../../../lib/auroraEvents';
+import { readGuestAiConsent } from '../../../lib/guestAiConsent';
 
 export type WorkspaceStreamingStatus =
   | 'idle'
@@ -261,6 +262,7 @@ export function useWorkspaceStreaming({
         message: formattedPrompt,
         chatId: chatId || undefined,
         chatMode: 'RuangKerja',
+        guestAiConsent: readGuestAiConsent(),
         responseStyle: config?.responseStyle && config.responseStyle !== 'Default'
           ? `${config.responseMode}; ${config.responseStyle}`
           : config?.responseMode ?? 'Seimbang',

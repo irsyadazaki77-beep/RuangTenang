@@ -137,14 +137,14 @@ export const WorkspaceInspectorPanel: React.FC<WorkspaceInspectorPanelProps> = R
   return (
     <aside
       aria-label="Panel RuangKerja"
-      className={`min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white/95 dark:bg-slate-900/95 backdrop-blur-xs xl:border-l xl:border-slate-200/80 xl:dark:border-slate-800 ${
+      className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white dark:bg-slate-950 xl:border-l xl:border-slate-200/80 xl:dark:border-slate-800 ${
         activeInspectorTab === 'sources'
           ? 'absolute inset-x-0 bottom-0 z-40 h-[min(65dvh,36rem)] rounded-t-2xl shadow-2xl xl:relative xl:inset-auto xl:z-auto xl:h-auto xl:rounded-none xl:shadow-none'
           : ''
       } ${isExpanded ? 'xl:flex-1' : 'xl:flex-[0_0_46%] 2xl:flex-[0_0_48%]'}`}
     >
       <div className="flex h-10 shrink-0 items-center justify-between border-b border-slate-200/80 px-3 dark:border-slate-800">
-        <div className="flex h-full items-center gap-1 overflow-x-auto" role="tablist" aria-label="Panel Workspace">
+        <div className="flex h-full min-w-0 items-center gap-1 overflow-x-auto" role="tablist" aria-label="Panel Workspace">
           <button
             type="button"
             role="tab"
@@ -162,28 +162,15 @@ export const WorkspaceInspectorPanel: React.FC<WorkspaceInspectorPanelProps> = R
           <button
             type="button"
             role="tab"
-            aria-selected={activeInspectorTab === 'files'}
+            aria-selected={activeInspectorTab === 'files' || activeInspectorTab === 'sources'}
             onClick={() => onSelectTab('files')}
             className={`min-h-8 rounded-md px-2.5 text-xs font-semibold transition-colors ${
-              activeInspectorTab === 'files'
+              activeInspectorTab === 'files' || activeInspectorTab === 'sources'
                 ? 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-100'
                 : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
             }`}
           >
-            File{workspaceAttachments.length > 0 && <span className="ml-1 text-[10px] text-slate-500">({workspaceAttachments.length})</span>}
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeInspectorTab === 'sources'}
-            onClick={() => onSelectTab('sources')}
-            className={`min-h-8 rounded-md px-2.5 text-xs font-semibold transition-colors ${
-              activeInspectorTab === 'sources'
-                ? 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-100'
-                : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-            }`}
-          >
-            Sumber
+            Referensi{workspaceAttachments.length > 0 && <span className="ml-1 text-[10px] text-slate-500">({workspaceAttachments.length})</span>}
           </button>
           <button
             type="button"
@@ -225,6 +212,18 @@ export const WorkspaceInspectorPanel: React.FC<WorkspaceInspectorPanelProps> = R
           <X className="h-4 w-4" aria-hidden="true" />
         </button>
       </div>
+
+      {(activeInspectorTab === 'files' || activeInspectorTab === 'sources') && (
+        <div className="flex h-10 shrink-0 items-center gap-1 border-b border-slate-100 px-3 dark:border-slate-800" role="group" aria-label="Jenis referensi">
+          <button type="button" aria-pressed={activeInspectorTab === 'files'} onClick={() => onSelectTab('files')} className={`min-h-8 rounded-md px-3 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${activeInspectorTab === 'files' ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-900'}`}>
+            File
+          </button>
+          <button type="button" aria-pressed={activeInspectorTab === 'sources'} onClick={() => onSelectTab('sources')} className={`min-h-8 rounded-md px-3 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${activeInspectorTab === 'sources' ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-900'}`}>
+            Sumber
+          </button>
+          <span className="ml-auto text-[10px] text-slate-500">File & sumber</span>
+        </div>
+      )}
 
       {activeInspectorTab === 'context' ? (
         <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3" role="tabpanel" aria-label="Konteks Workspace">

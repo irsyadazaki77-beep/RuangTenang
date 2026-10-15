@@ -25,13 +25,126 @@ function ProposalPreview({ proposal, onDismiss }: {
   proposal: { title: string; type: ArtifactType; content: string; language?: string };
   onDismiss?: () => void;
 }) {
-  return <section className="flex min-h-0 flex-1 flex-col overflow-hidden" aria-label="Preview proposal Agent">
-    <div className="flex shrink-0 items-center justify-between gap-3 border-b border-amber-200 bg-amber-50 px-4 py-2 dark:border-amber-900/60 dark:bg-amber-950/30">
-      <div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-200">Proposal Agent · belum disimpan</p><h3 className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">{proposal.title}</h3><p className="text-[10px] text-slate-600 dark:text-slate-400">{proposal.type}{proposal.language ? ` · ${proposal.language}` : ''} · Menunggu persetujuan di panel Rencana</p></div>
-      {onDismiss && <button type="button" onClick={onDismiss} className="shrink-0 rounded-md px-2 py-1 text-xs font-medium text-slate-600 hover:bg-amber-100 dark:text-slate-300 dark:hover:bg-amber-900/40">Kembali ke Canvas</button>}
-    </div>
-    <pre className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words p-5 font-sans text-sm leading-7 text-slate-800 dark:text-slate-200">{proposal.content}</pre>
-  </section>;
+  const isPresentation = proposal.language === 'presentation' || (proposal.content.includes('"format": "ruangtenang-presentation-v1"') || proposal.content.includes('"format":"ruangtenang-presentation-v1"'));
+  const isTable = proposal.type === 'TABLE' || proposal.content.includes('"type": "table"') || proposal.content.includes('"type":"table"');
+
+  let tableData: { title?: string; columns: string[]; rows: Array<Record<string, unknown>> } | null = null;
+  if (isTable) {
+    try {
+      const parsed = JSON.parse(proposal.content);
+      if (parsed.type === 'table' && Array.isArray(parsed.columns) && Array.isArray(parsed.rows)) {
+        tableData = parsed;
+      }
+    } catch {
+      // Fallback to table markdown or raw
+    }
+  }
+
+  let deckData: { format: string; theme?: string; slides: Array<{ title: string; body: string; notes?: string }> } | null = null;
+  if (isPresentation) {
+    try {
+      const parsed = JSON.parse(proposal.content);
+      if (parsed.format === 'ruangtenang-presentation-v1' && Array.isArray(parsed.slides)) {
+        deckData = parsed;
+      }
+    } catch {
+      // Fallback
+    }
+  }
+
+  return (
+    <section className="flex min-h-0 flex-1 flex-col overflow-hidden" aria-label="Preview proposal Agent">
+      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-amber-200 bg-amber-50 px-4 py-2.5 dark:border-amber-900/60 dark:bg-amber-950/30">
+        <div className="min-w-0">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-200">
+            Proposal Agent · belum disimpan
+          </p>
+          <h3 className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
+            {proposal.title}
+          </h3>
+          <p className="text-[10px] text-slate-600 dark:text-slate-400">
+            {proposal.type}{proposal.language ? ` · ${proposal.language}` : ''} · Tinjau dan setujui di panel Rencana untuk menyimpan ke Canvas
+          </p>
+        </div>
+        {onDismiss && (
+          <button
+            type="button"
+            onClick={onDismiss}
+            className="shrink-0 rounded-md bg-white dark:bg-slate-800 border border-amber-300 dark:border-amber-800 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-amber-100 dark:text-slate-200 dark:hover:bg-amber-900/40 shadow-3xs cursor-pointer"
+          >
+            Kembali ke Canvas
+          </button>
+        )}
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-auto p-5">
+        {deckData ? (
+          <div className="space-y-4 max-w-4xl mx-auto">
+            <div className="flex items-center justify-between text-xs text-slate-500 border-b border-slate-200 dark:border-slate-800 pb-2">
+              <span className="font-semibold text-slate-700 dark:text-slate-300">Slide Deck ({deckData.slides.length} slide)</span>
+              <span className="text-[11px] uppercase tracking-wider font-mono">Tema: {deckData.theme || 'academic_minimal'}</span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {deckData.slides.map((s, idx) => (
+                <div key={idx} className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-sm space-y-2">
+                  <div className="flex items-center justify-between text-[11px] font-semibold text-slate-500 border-b border-slate-100 dark:border-slate-800 pb-1">
+                    <span>Slide {idx + 1}</span>
+                    <span className="truncate max-w-[200px]">{s.title}</span>
+                  </div>
+                  <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">{s.title}</h4>
+                  <pre className="text-xs whitespace-pre-wrap font-sans text-slate-700 dark:text-slate-300 leading-relaxed bg-slate-50 dark:bg-slate-800/50 p-2.5 rounded-lg border border-slate-100 dark:border-slate-800">
+                    {s.body}
+                  </pre>
+                  {s.notes && (
+                    <p className="text-[10px] text-slate-500 italic border-l-2 border-emerald-500 pl-2">
+                      Catatan: {s.notes}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : tableData ? (
+          <div className="max-w-5xl mx-auto space-y-3">
+            <div className="flex items-center justify-between text-xs text-slate-500 border-b border-slate-200 dark:border-slate-800 pb-2">
+              <span className="font-semibold text-slate-700 dark:text-slate-300">
+                {tableData.title || proposal.title} ({tableData.rows.length} baris · {tableData.columns.length} kolom)
+              </span>
+              <span className="text-[11px]">Format: Structured Table JSON</span>
+            </div>
+            <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+              <table className="min-w-full text-xs text-left">
+                <thead className="bg-slate-100 dark:bg-slate-800">
+                  <tr>
+                    {tableData.columns.map(col => (
+                      <th key={col} className="px-3 py-2 font-semibold text-slate-800 dark:text-slate-200 border-b border-slate-200 dark:border-slate-700">
+                        {col}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {tableData.rows.map((row, rIdx) => (
+                    <tr key={rIdx} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                      {tableData!.columns.map(col => (
+                        <td key={col} className="px-3 py-2 text-slate-700 dark:text-slate-300">
+                          {String(row[col] ?? '')}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : (
+          <pre className="whitespace-pre-wrap break-words font-sans text-sm leading-7 text-slate-800 dark:text-slate-200 max-w-4xl mx-auto">
+            {proposal.content}
+          </pre>
+        )}
+      </div>
+    </section>
+  );
 }
 
 interface WorkspaceCanvasPaneProps {
@@ -149,7 +262,7 @@ export const WorkspaceCanvasPane: React.FC<WorkspaceCanvasPaneProps> = React.mem
       {/* DESKTOP RIGHT PANE: LIVE ARTIFACT CANVAS */}
       {isCanvasOpen && isDesktopLayout && (
         <section 
-        className="hidden xl:flex flex-1 min-h-0 min-w-0 flex-col h-full overflow-hidden transition-all duration-200"
+        className="hidden min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white transition-all duration-200 xl:flex dark:bg-slate-950"
         >
           {isCreatingArtifact && <div role="status" className="flex h-8 shrink-0 items-center gap-2 border-b border-emerald-100 bg-emerald-50/70 px-3 text-xs font-medium text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-300"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />Membuat dokumen di Canvas…</div>}
           {activeArtifact?.persistenceStatus && activeArtifact.persistenceStatus !== 'persistent' && <div className="flex min-h-8 shrink-0 items-center justify-between gap-2 border-b border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200" role="status">

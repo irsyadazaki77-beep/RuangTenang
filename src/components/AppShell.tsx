@@ -14,6 +14,7 @@ import { LoadingState } from './ui/primitives/Surfaces';
 
 const CounselorShell = lazyWithRetry(() => import('./CounselorShell').then(module => ({ default: module.CounselorShell })));
 const StudentShell = lazyWithRetry(() => import('./StudentShell').then(module => ({ default: module.StudentShell })));
+const CampusAdminPortal = lazyWithRetry(() => import('../features/campus-admin/CampusAdminPortal').then(module => ({ default: module.CampusAdminPortal })));
 
 const ShellLoadingState: React.FC<{ label: string }> = ({ label }) => (
   <div className="min-h-[100dvh] flex items-center justify-center surface-page" role="status" aria-label={label}>
@@ -56,6 +57,14 @@ export const AppShell: React.FC = () => {
 
   if (authLoading) return <ShellLoadingState label="Memulihkan sesi akun" />;
   if (!user) return null;
+
+  if (user.role === 'campus_admin') {
+    return (
+      <Suspense fallback={<ShellLoadingState label="Memuat administrasi kampus" />}>
+        <CampusAdminPortal userName={user.name} onLogout={handleLogout} />
+      </Suspense>
+    );
+  }
 
   if (user.role === 'konselor') {
     return (

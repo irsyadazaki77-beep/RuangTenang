@@ -12,6 +12,7 @@ import { useWorkspaceFileIngestion } from '../../features/workspace/hooks/useWor
 import { processFileForWorkspace } from '../../features/workspace/services/fileIngestionService';
 import { AcademicPromptPill, AcademicTaskTemplate, StarterTaskItem, WorkspaceArtifact } from '../../features/workspace/types';
 import { loadWorkspaceModelPreference, readWorkspaceModelPreference, saveWorkspaceModelPreference } from '../../features/workspace/utils/workspaceModelPreference';
+import { STARTER_TASKS } from '../../features/workspace/constants/workspaceConstants';
 
 vi.mock('../../features/workspace/services/fileIngestionService', async importOriginal => ({
   ...await importOriginal<typeof import('../../features/workspace/services/fileIngestionService')>(),
@@ -68,6 +69,16 @@ describe('RuangKerja UX foundation', () => {
       starterTasks={starterTasks} onSelectStarterTask={noop} onRetryMessage={noop} onOpenCanvas={noop} />);
     expect(screen.getByText('Mulai sesuatu')).toBeInTheDocument();
     fireEvent.click(screen.getByText('Buat outline'));
+  });
+
+  it('uses the shared starter actions and sends the selected starter prompt', () => {
+    const onSelectStarterTask = vi.fn();
+    render(<WorkspaceConversation messages={[]} activeStreamingMessage={null} isStreaming={false} artifacts={[]}
+      starterTasks={STARTER_TASKS} onSelectStarterTask={onSelectStarterTask} onRetryMessage={noop} onOpenCanvas={noop} />);
+
+    for (const task of STARTER_TASKS) expect(screen.getByRole('button', { name: new RegExp(task.title) })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Analisis dokumen/ }));
+    expect(onSelectStarterTask).toHaveBeenCalledWith(STARTER_TASKS[0].prompt);
   });
 
   it('shows a loading status before initial messages arrive', () => {
@@ -232,6 +243,18 @@ describe('RuangKerja UX foundation', () => {
     fireEvent.click(screen.getByRole('button', { name: 'AI & Opsi' }));
     expect(screen.getByLabelText('Mode respons')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Template' })).toBeInTheDocument();
+  });
+
+  it('keeps the full active context available in the compact composer control', () => {
+    const onOpenContext = vi.fn();
+    renderComposer({ onOpenContext, workspaceContextSummary: '1 dokumen aktif · Proposal' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Buka panel konteks: 1 dokumen aktif · Proposal' }));
+    expect(onOpenContext).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole('button', { name: 'AI & Opsi' }));
+    const options = screen.getByRole('dialog', { name: 'AI & Opsi' });
+    expect(within(options).getByText(/Konteks tambahan untuk pesan berikutnya:/)).toBeInTheDocument();
+    expect(within(options).getByText(/1 dokumen aktif · Proposal/)).toBeInTheDocument();
   });
 
   it('exposes attachment status and removal action', () => {

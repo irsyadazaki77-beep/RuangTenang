@@ -128,7 +128,7 @@ export const contextRetrievalService = {
 
     const readyAttachments = await prisma.attachments.findMany({
       where: attachmentWhere,
-      select: { id: true, chatId: true, filename: true, mimeType: true, fileKind: true, checksum: true, updatedAt: true }
+      select: { id: true, chatId: true, filename: true, mimeType: true, fileKind: true, checksum: true, updatedAt: true, metadata: true }
     });
 
     if (readyAttachments.length === 0) {
@@ -262,7 +262,9 @@ export const contextRetrievalService = {
         sheet: c.sheetName ?? undefined,
         section: c.section ?? undefined,
         sourceRef: formattedSourceRef,
-        snippet: textContent.substring(0, 140) + '...'
+        snippet: textContent.substring(0, 140) + '...',
+        isVisualExtraction: Boolean(attachment?.fileKind === 'image' || (attachment?.metadata && attachment.metadata.includes('"ocrApplied":true'))),
+        readingUncertainty: attachment?.metadata && attachment.metadata.includes('readingUncertainty') ? 'Sebagian teks tidak terbaca jelas' : undefined
       });
 
       return true;

@@ -5,7 +5,7 @@ This document records what the checked-in application code does. It is not a ven
 ## AI requests
 
 - The app presents Gemini, DeepSeek, Groq, and OpenRouter as possible AI providers. A selected model or automatic routing decision chooses the provider through the RuangTenang server.
-- For registered accounts, the server checks the stored AI consent before using the AI pipeline. When consent is absent, it returns a local fallback. Guest and temporary sessions currently enter the AI path without a persistent consent record; review this behavior with the data-protection and product owners before deployment.
+- For registered accounts, the server checks the stored AI consent before using the AI pipeline, including temporary chats. Anonymous guest sessions require an explicit session-only acknowledgement before a provider can receive a message; without it, the server returns a general notice and does not invoke an AI provider. The guest acknowledgement is kept in browser session storage and is not a persistent consent record. Review the disclosure and guest consent design with the data-protection and product owners before deployment.
 - The shared safety pipeline normalizes text and applies pattern-based personal-data redaction before the request path. This is not guaranteed anonymization. Names, unsupported identifiers, and content embedded in images or files may remain identifiable.
 - Provider adapters do not all support the same attachment formats. Do not assume every file or prompt is handled identically across providers. Confirm enabled providers and model routing in each deployment.
 - Code inspection cannot establish provider-side retention, training, region, or deletion behavior. The provider privacy review gate in `RELEASE_CHECKLIST.md` remains open until those terms and deployment settings are confirmed by the responsible owner.
@@ -15,6 +15,13 @@ This document records what the checked-in application code does. It is not a ven
 - Account records, chats, mood logs, screenings, appointments, consent settings, and related records are persisted in the configured database.
 - Uploaded files are stored under `uploads/attachments/`; attachment metadata and extracted document chunks are stored in the database. Browser-side offline submissions are held in the app's IndexedDB outbox, with current code encrypting payloads before persistence.
 - The attachment service validates database-stored paths against the attachment directory for reads and deletion. Existing symlinks and paths that resolve outside the directory are rejected.
+- Tenant records now include a campus link for accounts, counselors, and appointments. Existing rows remain unassigned after migration until a responsible owner confirms the campus mapping; campus-scoped APIs exclude unassigned appointment data.
+
+## Campus adoption analytics
+
+- Campus product events contain only an allow-listed event code, campus ID, timestamp, and a keyed campus-scoped HMAC actor value. Chat text, screening results, journal text, names, and email addresses are not event fields.
+- Events are recorded only when the student has explicitly enabled analytics consent. The daily-maintenance task removes events older than 90 days. Activity deletion and account erasure remove the matching pseudonymous events.
+- Campus dashboards suppress each event metric when fewer than 10 distinct actors appear in the reporting period. Pseudonymous values remain protected data and require the same access and retention review as other analytics.
 
 ## Retention and erasure
 

@@ -86,7 +86,7 @@ export function classifyRequest(context: AiRoutingContext, promptText?: string):
       category: 'general_chat',
       latencyPreference: 'balanced',
       qualityPreference: 'high',
-      requiredCapabilities: ['chat'],
+      requiredCapabilities: ['chat', 'vision', 'image_understanding'],
       reasonHint: 'Request membutuhkan kemampuan pemrosesan multimodal/visual'
     };
   }
@@ -375,9 +375,7 @@ export class SmartModelRouter {
       if (!aiProviderConfig.isConfigured(model.provider)) continue;
       if (getProviderHealth(model.provider) === 'unavailable') continue;
       if (context.streamingRequired && !model.capabilities.includes('streaming')) continue;
-      if ((context.requestedCapabilities || []).some(cap => !model.capabilities.includes(cap))) continue;
-      if (classification.requiredCapabilities.some(cap => !model.capabilities.includes(cap))) continue;
-      if (hasImage && model.provider !== 'gemini') continue;
+      if (hasImage && !model.capabilities.includes('vision')) continue;
 
       viableCandidates.push(model);
     }
@@ -501,6 +499,14 @@ export class SmartModelRouter {
 
       // Check required streaming capability if streaming
       if (context.streamingRequired && !model.capabilities.includes('streaming')) {
+        throw new AiModelError('MODEL_UNAVAILABLE');
+      }
+
+      // Check vision capability if image attachments are present
+      const hasImage = (context.attachments || []).some(a =>
+        a.mimeType?.startsWith('image/') || /\.(png|jpe?g|webp|gif|bmp|svg)$/i.test(a.filename || '')
+      );
+      if (hasImage && !model.capabilities.includes('vision')) {
         throw new AiModelError('MODEL_UNAVAILABLE');
       }
 

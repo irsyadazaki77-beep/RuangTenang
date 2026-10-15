@@ -15,9 +15,9 @@ test('public AI selectors expose only the three profiles for the active mode', a
   await expect(tenangOptions.getByText('Tenang Turbo')).toBeVisible();
   await expect(tenangOptions.getByText('Tenang Middle')).toBeVisible();
   await expect(tenangOptions.getByText('Tenang Low')).toBeVisible();
-  await page.screenshot({ path: path.join(screenshotDir, 'ruang-tenang.png'), animations: 'disabled' });
+  await page.screenshot({ path: path.join(screenshotDir, 'ruang-tenang.png'), animations: 'disabled', scale: 'css' });
   await page.evaluate(() => document.documentElement.classList.add('dark'));
-  await page.screenshot({ path: path.join(screenshotDir, 'ruang-tenang-dark.png'), animations: 'disabled' });
+  await page.screenshot({ path: path.join(screenshotDir, 'ruang-tenang-dark.png'), animations: 'disabled', scale: 'css' });
   await page.evaluate(() => document.documentElement.classList.remove('dark'));
 
   await page.goto('/workspace/new?__test__=true', { waitUntil: 'domcontentloaded' });
@@ -28,16 +28,16 @@ test('public AI selectors expose only the three profiles for the active mode', a
   await expect(kerjaOptions.getByText('Kerja Fast')).toBeVisible();
   await expect(kerjaOptions.getByText('Kerja Santai')).toBeVisible();
   await expect(kerjaOptions.getByText('Kerja Hard')).toBeVisible();
-  await page.screenshot({ path: path.join(screenshotDir, 'ruang-kerja.png'), animations: 'disabled' });
+  await page.screenshot({ path: path.join(screenshotDir, 'ruang-kerja.png'), animations: 'disabled', scale: 'css' });
   await page.evaluate(() => document.documentElement.classList.add('dark'));
-  await page.screenshot({ path: path.join(screenshotDir, 'ruang-kerja-dark.png'), animations: 'disabled' });
+  await page.screenshot({ path: path.join(screenshotDir, 'ruang-kerja-dark.png'), animations: 'disabled', scale: 'css' });
   await page.evaluate(() => document.documentElement.classList.remove('dark'));
 
   await page.setViewportSize({ width: 408, height: 852 });
   const santaiOption = kerjaOptions.getByRole('option', { name: /Kerja Santai/ });
   await expect(santaiOption).toBeVisible();
   expect((await santaiOption.boundingBox())?.width).toBeGreaterThan(340);
-  await page.screenshot({ path: path.join(screenshotDir, 'ruang-kerja-408px.png'), animations: 'disabled' });
+  await page.screenshot({ path: path.join(screenshotDir, 'ruang-kerja-408px.png'), animations: 'disabled', scale: 'css' });
 
   await page.keyboard.press('ArrowDown');
   await page.keyboard.press('Enter');

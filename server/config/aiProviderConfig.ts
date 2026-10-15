@@ -17,7 +17,7 @@ function isValidKey(provider: ProviderId, key: string): boolean {
 }
 
 /** Internal server-only provider credentials. Never serialize this object. */
-export const aiProviderConfig = Object.freeze({
+export const aiProviderConfig = {
   getApiKey(provider: ProviderId): string {
     const key = (process.env[keyNames[provider]] || '').trim();
     return isValidKey(provider, key) ? key : '';
@@ -25,7 +25,7 @@ export const aiProviderConfig = Object.freeze({
   isConfigured(provider: ProviderId): boolean {
     return Boolean(this.getApiKey(provider));
   }
-});
+};
 
 export const DEEPSEEK_API_KEY = aiProviderConfig.getApiKey('deepseek');
 export const GROQ_API_KEY = aiProviderConfig.getApiKey('groq');

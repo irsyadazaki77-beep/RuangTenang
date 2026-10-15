@@ -34,6 +34,7 @@ export const CounselorPortal: React.FC = () => {
     averageResponseTimeHours: null,
   });
   const [loading, setLoading] = useState<boolean>(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedStudentForSoap, setSelectedStudentForSoap] = useState<TriageItem | null>(null);
   const [activeNoteForEdit, setActiveNoteForEdit] = useState<SoapNote | null>(null);
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -60,22 +61,31 @@ export const CounselorPortal: React.FC = () => {
 
       if (!isMountedRef.current || ac.signal.aborted) return;
 
+      const failedSections: string[] = [];
       if (queueRes.status === 'fulfilled' && queueRes.value.success && Array.isArray(queueRes.value.data)) {
         setTriageItems(queueRes.value.data);
       } else {
-        setTriageItems([]);
+        failedSections.push('antrean triase');
       }
 
       if (statsRes.status === 'fulfilled' && statsRes.value.success && statsRes.value.data) {
         setStats(statsRes.value.data);
+      } else {
+        failedSections.push('ringkasan analitik');
       }
 
       if (notesRes.status === 'fulfilled' && notesRes.value.success && notesRes.value.data) {
         setSoapNotes(notesRes.value.data);
+      } else {
+        failedSections.push('riwayat SOAP');
       }
+      setLoadError(failedSections.length
+        ? `Data ${failedSections.join(', ')} belum berhasil dimuat. Data sebelumnya tetap ditampilkan jika tersedia.`
+        : null);
     } catch (err: any) {
       if (err?.name !== 'AbortError') {
         console.error('Failed to load counselor portal data:', err);
+        setLoadError('Data portal belum berhasil dimuat. Periksa koneksi lalu coba lagi.');
       }
     } finally {
       if (isMountedRef.current && !ac.signal.aborted) {
@@ -174,7 +184,7 @@ export const CounselorPortal: React.FC = () => {
                 <h1 className="text-lg sm:text-xl font-bold text-primary flex items-center gap-2">
                   <span>Portal Konselor & Layanan Klinis Kampus</span>
                   <span className="text-xs px-2.5 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 font-semibold border border-indigo-200 dark:border-indigo-900">
-                    Enterprise
+                    Portal Klinis
                   </span>
                 </h1>
                 <p className="text-xs text-secondary mt-0.5">
@@ -187,7 +197,7 @@ export const CounselorPortal: React.FC = () => {
           <div className="flex items-center gap-3">
             <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl surface-muted border border-default text-xs">
               <ShieldCheck className="w-4 h-4 text-emerald-600" />
-              <span className="text-secondary font-medium">Praktik Berlisensi & UU PDP</span>
+              <span className="text-secondary font-medium">Akses berbasis peran & persetujuan</span>
             </div>
 
             <button
@@ -217,6 +227,19 @@ export const CounselorPortal: React.FC = () => {
               <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
             )}
             <span>{notification.message}</span>
+          </div>
+        )}
+        {loadError && (
+          <div role="alert" className="mt-4 flex flex-col gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100 sm:flex-row sm:items-center sm:justify-between">
+            <span>{loadError}</span>
+            <button
+              type="button"
+              onClick={() => void fetchData()}
+              disabled={loading}
+              className="min-h-9 shrink-0 rounded-lg border border-amber-400 px-3 font-semibold hover:bg-amber-100 disabled:opacity-50 dark:border-amber-800 dark:hover:bg-amber-900/50"
+            >
+              Coba Muat Ulang
+            </button>
           </div>
         )}
       </div>

@@ -34,6 +34,7 @@ async function deleteAttachmentRecords(records: Array<{ id: string; data: string
 }
 
 import { encryptionService } from './encryptionService.js';
+import { createCampusAnalyticsActorHash } from './campusProductAnalyticsService.js';
 
 export class RetentionService {
   /**
@@ -157,11 +158,9 @@ export class RetentionService {
     const guestMessageChatIds = new Map(oldGuestMessages.map((message) => [message.id, message.chatId]));
     const oldGuestAttachments = await prisma.attachments.findMany({
       where: {
-        userId: 'guest',
         OR: [
-          { chatId: { in: oldGuestChatIds } },
-          { messageId: { in: oldGuestMessages.map((message) => message.id) } },
-          { chatId: null, messageId: null, createdAt: { lt: guestCutoff } }
+          { userId: 'guest', createdAt: { lt: guestCutoff } },
+          { userId: { startsWith: 'guest:' }, createdAt: { lt: guestCutoff } }
         ]
       },
       select: { id: true, data: true, chatId: true, messageId: true }
@@ -239,6 +238,12 @@ export class RetentionService {
       const user = await tx.users.findUnique({ where: { id: userId } });
       const userEmail = user?.email || 'anonymized';
       let count = 0;
+
+      const analyticsActorHash = user?.campusId ? createCampusAnalyticsActorHash(userId, user.campusId) : null;
+      if (analyticsActorHash && user?.campusId) {
+        const delAnalyticsEvents = await tx.productAnalyticsEvents.deleteMany({ where: { campusId: user.campusId, actorHash: analyticsActorHash } });
+        count += delAnalyticsEvents.count;
+      }
 
       // 1. Message Bookmarks and Attachments (Must delete before Chat Messages to prevent foreign key issues)
       const delBookmarks = await tx.messageBookmarks.deleteMany({ where: { userId } });
@@ -368,6 +373,13 @@ export class RetentionService {
   ): Promise<{ success: boolean; erasedRecordsCount: number; timestamp: string }> {
     return await prisma.$transaction(async (tx) => {
       let count = 0;
+
+      const user = await tx.users.findUnique({ where: { id: userId }, select: { campusId: true } });
+      const analyticsActorHash = user?.campusId ? createCampusAnalyticsActorHash(userId, user.campusId) : null;
+      if (analyticsActorHash && user?.campusId) {
+        const delAnalyticsEvents = await tx.productAnalyticsEvents.deleteMany({ where: { campusId: user.campusId, actorHash: analyticsActorHash } });
+        count += delAnalyticsEvents.count;
+      }
 
       // Clean bookmarks and attachments first
       const delBookmarks = await tx.messageBookmarks.deleteMany({ where: { userId } });

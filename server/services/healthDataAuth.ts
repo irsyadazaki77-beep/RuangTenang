@@ -1,6 +1,7 @@
 import { prisma } from '../database.js';
 import { consentService } from './consentService.js';
 import { normalizeRole } from '../middleware/auth.js';
+import { campusesMatchForLegacyAccess } from './campusTenantService.js';
 
 export interface CanAccessHealthDataOptions {
   appointmentId?: string;
@@ -8,7 +9,7 @@ export interface CanAccessHealthDataOptions {
 }
 
 export async function canAccessHealthData(
-  requestingUser: { userId: string; role: string; name?: string; email?: string },
+  requestingUser: { userId: string; role: string; name?: string; email?: string; campusId?: string },
   targetUserId: string | undefined,
   purpose = 'GENERAL_HEALTH_ACCESS',
   options?: CanAccessHealthDataOptions
@@ -32,19 +33,22 @@ export async function canAccessHealthData(
   }
 
   if (isStaff) {
+    const [targetUser, counselor] = await Promise.all([
+      prisma.users.findUnique({ where: { id: resolvedTargetUserId }, select: { campusId: true } }),
+      prisma.counselors.findFirst({
+        where: { userId: requestingUser.userId, campusId: requestingUser.campusId ?? null },
+        select: { id: true, campusId: true }
+      })
+    ]);
+    if (!targetUser || !counselor || !campusesMatchForLegacyAccess(targetUser.campusId, counselor.campusId)) {
+      return false;
+    }
+
     // Clinical details require the student's explicit sharing consent. Summary consent
     // does not authorize access to screening scores, risk indicators, or SOAP content.
     const consent = await consentService.getUserConsents(resolvedTargetUserId);
     const canShare = consent.consentForCounselorSharing;
     if (!canShare) {
-      return false;
-    }
-
-    // 2. Check Active Counselor Profile
-    const counselor = await prisma.counselors.findFirst({
-      where: { userId: requestingUser.userId }
-    });
-    if (!counselor) {
       return false;
     }
 
@@ -59,7 +63,7 @@ export async function canAccessHealthData(
     }
 
     const appointment = await prisma.appointments.findFirst({
-      where: apptWhere
+      where: { ...apptWhere, campusId: counselor.campusId ?? null }
     });
     if (!appointment) {
       return false;
@@ -93,28 +97,36 @@ export async function canAccessHealthData(
 export async function getAssignedStudentUserIds(counselorUserId: string): Promise<string[]> {
   const account = await prisma.users.findUnique({
     where: { id: counselorUserId },
-    select: { role: true }
+    select: { role: true, campusId: true }
   });
   const role = normalizeRole(account?.role);
   if (role !== 'konselor' && role !== 'peer_counselor') return [];
 
   const counselor = await prisma.counselors.findFirst({
-    where: { userId: counselorUserId }
+    where: { userId: counselorUserId, campusId: account?.campusId ?? null }
   });
   if (!counselor) return [];
 
   const appointments = await prisma.appointments.findMany({
     where: {
       counselorId: counselor.id,
+      campusId: counselor.campusId ?? null,
       status: { notIn: ['CANCELLED', 'REJECTED'] }
     },
     select: { userId: true }
   });
 
   const rawUserIds = Array.from(new Set(appointments.map(a => a.userId).filter(Boolean))) as string[];
+  const assignedUsers = await prisma.users.findMany({
+    where: {
+      id: { in: rawUserIds },
+      campusId: counselor.campusId ?? null
+    },
+    select: { id: true }
+  });
   const validUserIds: string[] = [];
 
-  for (const sId of rawUserIds) {
+  for (const { id: sId } of assignedUsers) {
     const consent = await consentService.getUserConsents(sId);
     if (consent.consentForCounselorSharing) {
       validUserIds.push(sId);

@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useState } from 'react';
 import {
   Paperclip, 
+  Files,
   Sparkles, 
   StopCircle, 
   Send,
@@ -201,8 +202,9 @@ export const WorkspaceComposer: React.FC<WorkspaceComposerProps> = React.memo(({
     readyAttachments.length ? `${readyAttachments.length} file` : '',
     activeArtifactTitle || '',
     selectedText.trim() ? 'teks dipilih' : ''
-  ].filter(Boolean).join(' · ') || 'Konteks';
+  ].filter(Boolean).join(' · ') || 'Konteks kosong';
   const displayedContextSummary = workspaceContextSummary || contextSummary;
+  const hasActiveContext = displayedContextSummary !== 'Konteks kosong' && displayedContextSummary !== 'Konteks';
 
   return (
     <div className="p-3 bg-white/85 dark:bg-secondary-900/85 backdrop-blur-md border-t border-slate-200/80 dark:border-slate-800 shrink-0">
@@ -278,9 +280,9 @@ export const WorkspaceComposer: React.FC<WorkspaceComposerProps> = React.memo(({
               <Paperclip className="w-4 h-4" />
             </button>
             <WorkspaceModelSelector value={selectedModel} onChange={onModelChange} disabled={isStreaming || isDisabled} overlayPlacement="anchored" />
-            <button type="button" onClick={onOpenContext} aria-label={`Buka panel konteks: ${displayedContextSummary}`} title={displayedContextSummary} className="inline-flex h-8 max-w-[min(22vw,8.5rem)] min-w-0 items-center gap-1.5 rounded-lg px-2 text-xs text-slate-500 transition hover:bg-slate-200/70 hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"><span className="truncate">{displayedContextSummary}</span></button>
+            <button type="button" onClick={onOpenContext} aria-label={`Buka panel konteks: ${displayedContextSummary}`} title={displayedContextSummary} className="relative inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg px-0 text-xs text-slate-500 transition hover:bg-slate-200/70 hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100 sm:h-8 sm:w-auto sm:max-w-[min(22vw,8.5rem)] sm:min-w-0 sm:justify-start sm:gap-1.5 sm:px-2"><Files className="h-4 w-4 shrink-0 sm:hidden" aria-hidden="true" />{hasActiveContext && <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-emerald-500 sm:hidden" aria-hidden="true" />}<span className="hidden truncate sm:inline">{displayedContextSummary}</span></button>
             <div className="relative shrink-0">
-              <button type="button" disabled={isStreaming || isDisabled} aria-label="AI & Opsi" aria-expanded={optionsOpen} aria-haspopup="dialog" aria-controls="workspace-composer-options" onClick={() => setOptionsOpen(value => !value)} className={`inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${optionsOpen ? 'relative z-50 bg-slate-200 text-slate-800 dark:bg-slate-800 dark:text-slate-100' : 'text-slate-500 hover:bg-slate-200/70 dark:hover:bg-slate-800'}`}>
+              <button type="button" disabled={isStreaming || isDisabled} aria-label="AI & Opsi" aria-expanded={optionsOpen} aria-haspopup="dialog" aria-controls="workspace-composer-options" onClick={() => setOptionsOpen(value => !value)} className={`inline-flex h-9 w-9 shrink-0 items-center justify-center gap-1.5 rounded-lg px-0 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 sm:h-8 sm:w-auto sm:justify-start sm:px-2 ${optionsOpen ? 'relative z-50 bg-slate-200 text-slate-800 dark:bg-slate-800 dark:text-slate-100' : 'text-slate-500 hover:bg-slate-200/70 dark:hover:bg-slate-800'}`}>
                 <SlidersHorizontal className="h-3.5 w-3.5" />
                 <span className="hidden sm:inline">AI &amp; Opsi</span>
               </button>
@@ -297,7 +299,7 @@ export const WorkspaceComposer: React.FC<WorkspaceComposerProps> = React.memo(({
                       <label className="text-[11px] font-medium text-slate-600 dark:text-slate-300">Respons<select aria-label="Mode respons" value={responseMode} onChange={event => setResponseMode(event.target.value as WorkspaceResponseMode)} className="mt-1 h-9 w-full rounded-lg border border-slate-200 bg-white px-2 text-xs dark:border-slate-700 dark:bg-slate-950"><option>Ringkas</option><option>Seimbang</option><option>Mendalam</option></select></label>
                       <label className="text-[11px] font-medium text-slate-600 dark:text-slate-300">Gaya<select aria-label="Gaya (opsional)" value={responseStyle} onChange={event => setResponseStyle(event.target.value as WorkspaceResponseStyle)} className="mt-1 h-9 w-full rounded-lg border border-slate-200 bg-white px-2 text-xs dark:border-slate-700 dark:bg-slate-950"><option value="Default">Default</option><option>Akademik</option><option>Langkah demi langkah</option><option>Formal</option></select></label>
                     </div>
-                    <div className="rounded-lg bg-slate-50 px-2.5 py-2 text-[11px] text-slate-500 dark:bg-slate-950/70"><span className="font-medium text-slate-700 dark:text-slate-200">Konteks aktif:</span> {displayedContextSummary}</div>
+                    <div className="rounded-lg bg-slate-50 px-2.5 py-2 text-[11px] text-slate-500 dark:bg-slate-950/70"><span className="font-medium text-slate-700 dark:text-slate-200">Konteks tambahan untuk pesan berikutnya:</span> {displayedContextSummary}</div>
                     <div className="flex flex-wrap items-center gap-1">
                     {allPresets && activePreset && onSelectPreset && onCreatePreset && onUpdatePreset && onDuplicatePreset && onDeletePreset && (
                       <WorkspacePresetSelector allPresets={allPresets} activePreset={activePreset} activePresetId={activePresetId || activePreset.id} summary={presetSummary || activePreset.name} isManualOverride={isManualModelOverride} disabled={isStreaming} onSelectPreset={onSelectPreset} onCreatePreset={onCreatePreset} onUpdatePreset={onUpdatePreset} onDuplicatePreset={onDuplicatePreset} onDeletePreset={onDeletePreset} onResetPersonalization={onResetPersonalization} />

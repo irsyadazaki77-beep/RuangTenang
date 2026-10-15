@@ -144,4 +144,111 @@ describe('server Agent tool authorization', () => {
     expect(result).toMatchObject({ data: { provider: 'tavily', verificationStatus: 'external_unverified', results: [{ url: 'https://example.org/value-chain' }] } });
     expect(searchWeb).toHaveBeenCalledTimes(2);
   });
+
+  it('proposes a structured document draft with sections and references', async () => {
+    const writingContext = {
+      ...context,
+      allowedToolIds: new Set(['propose_document_draft'])
+    };
+    const result = await executeAuthorizedAgentTool('propose_document_draft', {
+      title: 'Laporan Analisis Efektivitas Intervensi',
+      summary: 'Ringkasan komparasi intervensi konseling berbasis bukti.',
+      sections: [
+        { heading: 'Pendahuluan', level: 1, body: 'Latar belakang penelitian intervensi.' },
+        { heading: 'Metodologi', level: 2, body: 'Metode kuasi eksperimen dengan pre-post test.' }
+      ],
+      references: ['Santrock, J. W. (2020). Educational Psychology. McGraw-Hill.']
+    }, writingContext);
+
+    expect(result.status).toBe('completed');
+    expect(result).toMatchObject({
+      data: {
+        proposalStatus: 'ready_for_review',
+        artifactType: 'DOCUMENT',
+        title: 'Laporan Analisis Efektivitas Intervensi',
+        sectionCount: 2,
+        formattedMarkdown: expect.stringContaining('# Laporan Analisis Efektivitas Intervensi')
+      }
+    });
+  });
+
+  it('proposes a structured slide deck for presentations', async () => {
+    const presentationContext = {
+      ...context,
+      allowedToolIds: new Set(['propose_presentation_deck'])
+    };
+    const result = await executeAuthorizedAgentTool('propose_presentation_deck', {
+      title: 'Presentasi Eksekutif Hasil Riset',
+      theme: 'professional',
+      slides: [
+        { title: 'Judul Riset', body: 'Paparan hasil analisis data empiris.', notes: 'Buka presentasi dengan salam.' },
+        { title: 'Temuan Utama', body: '- Peningkatan efikasi diri 28%\n- Penurunan tingkat stres 34%', notes: 'Sorot data persentase.' }
+      ]
+    }, presentationContext);
+
+    expect(result.status).toBe('completed');
+    expect(result).toMatchObject({
+      data: {
+        proposalStatus: 'ready_for_review',
+        artifactType: 'DOCUMENT',
+        language: 'presentation',
+        title: 'Presentasi Eksekutif Hasil Riset',
+        slideCount: 2,
+        deckJson: expect.stringContaining('ruangtenang-presentation-v1')
+      }
+    });
+  });
+
+  it('proposes a structured tabular dataset for spreadsheet studio', async () => {
+    const tableContext = {
+      ...context,
+      allowedToolIds: new Set(['propose_tabular_dataset'])
+    };
+    const result = await executeAuthorizedAgentTool('propose_tabular_dataset', {
+      title: 'Tabel Rekapitulasi Skor Intervensi',
+      columns: ['Kelompok', 'Skor Pre-Test', 'Skor Post-Test', 'Delta'],
+      columnTypes: { 'Kelompok': 'text', 'Skor Pre-Test': 'number', 'Skor Post-Test': 'number', 'Delta': 'number' },
+      rows: [
+        { 'Kelompok': 'Kontrol', 'Skor Pre-Test': 65, 'Skor Post-Test': 68, 'Delta': 3 },
+        { 'Kelompok': 'Eksperimen', 'Skor Pre-Test': 62, 'Skor Post-Test': 88, 'Delta': 26 }
+      ]
+    }, tableContext);
+
+    expect(result.status).toBe('completed');
+    expect(result).toMatchObject({
+      data: {
+        proposalStatus: 'ready_for_review',
+        artifactType: 'TABLE',
+        title: 'Tabel Rekapitulasi Skor Intervensi',
+        columnCount: 4,
+        rowCount: 2,
+        tableJson: expect.stringContaining('"type": "table"')
+      }
+    });
+  });
+
+  it('verifies artifact structural integrity and exporter readiness', async () => {
+    const verifyContext = {
+      ...context,
+      allowedToolIds: new Set(['verify_artifact_structure'])
+    };
+    const validDocContent = '# Laporan\n\n' + 'Kata '.repeat(60) + '\n\n## Referensi\n- Ref 1';
+    const result = await executeAuthorizedAgentTool('verify_artifact_structure', {
+      targetType: 'document',
+      content: validDocContent
+    }, verifyContext);
+
+    expect(result.status).toBe('completed');
+    expect(result).toMatchObject({
+      data: {
+        isValid: true,
+        targetType: 'document',
+        checks: expect.arrayContaining([
+          expect.objectContaining({ name: 'heading_structure', passed: true }),
+          expect.objectContaining({ name: 'content_length', passed: true }),
+          expect.objectContaining({ name: 'academic_references', passed: true })
+        ])
+      }
+    });
+  });
 });

@@ -72,6 +72,10 @@ export interface DocumentBlock {
   sheetName?: string;
   section?: string;
   sourceOffset?: number;
+  /** Fase 26: Flag if block was obtained via visual OCR */
+  isVisualExtraction?: boolean;
+  ocrConfidence?: number;
+  readingUncertainty?: string;
 }
 
 export interface ExtractedDocument {
@@ -103,6 +107,10 @@ export interface DocumentChunk {
   section?: string;
   sourceRef: string; // e.g. "Tugas.pdf [Hal. 2]" or "Data.xlsx [Sheet: Ringkasan]"
   checksum: string;
+  /** Fase 26: Visual & OCR provenance tracking */
+  isVisualExtraction?: boolean;
+  ocrConfidence?: number;
+  readingUncertainty?: string;
 }
 
 export interface FileSourceReference {
@@ -121,6 +129,14 @@ export interface FileSourceReference {
   section?: string;
   sourceRef: string;
   snippet?: string;
+  /** Fase 26: Visual & OCR provenance tracking */
+  isVisualExtraction?: boolean;
+  ocrConfidence?: number;
+  readingUncertainty?: string;
+  visualRegion?: {
+    pageNumber?: number;
+    description?: string;
+  };
 }
 
 export type ResearchSourceProvenance = 'uploaded_file' | 'workspace_artifact' | 'user_note' | 'external_verified' | 'unknown';
@@ -192,6 +208,10 @@ export interface AttachmentResponseDTO {
   errorCode?: FileErrorCode;
   createdAt: string;
   processedAt?: string;
+  /** Fase 26: Visual analysis & multimodal readiness */
+  visualAnalysisAvailable?: boolean;
+  previewOnly?: boolean;
+  ocrApplied?: boolean;
 }
 
 export const FileUploadQuerySchema = z.object({

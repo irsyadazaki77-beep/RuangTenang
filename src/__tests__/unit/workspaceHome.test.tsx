@@ -4,6 +4,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { WorkspaceHome } from '../../features/workspace/WorkspaceHome';
 import { WorkspaceApiService } from '../../features/workspace/services/workspaceApiService';
+import { STARTER_TASKS } from '../../features/workspace/constants/workspaceConstants';
 
 vi.mock('../../features/workspace/services/workspaceApiService', () => ({
   WorkspaceApiService: {
@@ -40,6 +41,14 @@ describe('Workspace home', () => {
     fireEvent.click(screen.getByText('Lihat aktivitas lainnya'));
     expect(screen.getByRole('button', { name: /Brainstorm ide/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Bandingkan jawaban/ })).toBeInTheDocument();
+  });
+
+  it('uses the same first starter prompt as a fresh conversation', async () => {
+    render(<MemoryRouter><WorkspaceHome chats={[]} /><LocationProbe /></MemoryRouter>);
+
+    fireEvent.click(await screen.findByRole('button', { name: /Analisis dokumen/ }));
+    const location = JSON.parse(screen.getByTestId('location').textContent || '{}');
+    expect(location.state.initialPrompt).toBe(STARTER_TASKS[0].prompt);
   });
 
   it('routes search results to their matching object inside the workspace', async () => {

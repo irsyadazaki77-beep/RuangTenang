@@ -5,10 +5,12 @@ import { serverDb } from '../database.js';
 import { authService } from '../services/authService.js';
 import { emailService } from '../services/emailService.js';
 import { registerSchema, loginSchema } from '../validators/authSchemas.js';
+import { metricsService } from '../services/metricsService.js';
 
 export class AuthController {
   static async register(req: Request, res: Response) {
     try {
+      const browserClient = authService.isBrowserRequest(req);
       const parsed = registerSchema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({
@@ -64,14 +66,15 @@ export class AuthController {
         lastActive: new Date().toISOString()
       });
 
-      authService.setSessionCookie(res, token);
+      if (browserClient) authService.setSessionCookie(res, token);
+      metricsService.recordAuthSession(browserClient ? 'browser_cookie' : 'legacy_bearer');
 
-      const isDev = process.env.NODE_ENV !== 'production';
+      const isDev = process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test';
       
       return res.status(201).json({
         success: true,
         userId: newUser.id,
-        token,
+        ...(browserClient ? {} : { token }),
         message: isDev ? `Registrasi berhasil. [DEV MODE] Kode verifikasi Anda: ${verificationCode}` : 'Registrasi berhasil. Kode verifikasi email telah dikirim.'
       });
     } catch (err: any) {
@@ -82,6 +85,7 @@ export class AuthController {
 
   static async login(req: Request, res: Response) {
     try {
+      const browserClient = authService.isBrowserRequest(req);
       const parsed = loginSchema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({
@@ -127,13 +131,13 @@ export class AuthController {
 
       await serverDb.resetFailedAttempts(user.id);
 
-      if (user.role === 'admin' || user.role === 'konselor' || user.mfaEnabled) {
+      if (user.role === 'admin' || user.role === 'konselor' || user.role === 'campus_admin' || user.mfaEnabled) {
         const mfaCode = authService.generate6DigitCode();
         const mfaToken = 'mfa-tok-' + Date.now() + '-' + crypto.randomBytes(4).toString('hex');
         await serverDb.setMfaCode(user.id, mfaCode, mfaToken);
         await emailService.sendMfaOtp(user.email, mfaCode);
 
-        const isDev = process.env.NODE_ENV !== 'production';
+        const isDev = process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test';
 
         return res.json({
           success: true,
@@ -163,11 +167,12 @@ export class AuthController {
       });
 
       await serverDb.recordLoginHistory(user.id, { ip: clientIp, userAgent, status: 'SUCCESS' });
-      authService.setSessionCookie(res, token);
+      if (browserClient) authService.setSessionCookie(res, token);
+      metricsService.recordAuthSession(browserClient ? 'browser_cookie' : 'legacy_bearer');
 
       return res.json({
         success: true,
-        token,
+        ...(browserClient ? {} : { token }),
         user: authService.sanitizeUser(user)
       });
     } catch (err: any) {

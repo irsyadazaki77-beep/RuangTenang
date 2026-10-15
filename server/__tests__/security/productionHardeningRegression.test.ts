@@ -107,6 +107,8 @@ describe('Phase 1 Production Hardening & Regression Test Suite', () => {
       process.env.BLIND_INDEX_SECRET = generateValidKey();
       delete process.env.DATA_ENCRYPTION_KEY;
       process.env.DATABASE_URL = 'postgresql://postgres:securepass@cloudsql.internal:5432/ruangtenang';
+      process.env.APP_ORIGIN = 'https://ruangtenang.example.test';
+      process.env.CORS_ALLOWED_ORIGINS = 'https://ruangtenang.example.test';
 
       expect(() => validateEnvironment()).not.toThrow();
       expect(() => validateStartupEnvironment()).not.toThrow();

@@ -1,6 +1,6 @@
 export type MessageRole = "user" | "assistant" | "system";
 
-export type UserRole = "guest" | "mahasiswa" | "konselor" | "admin";
+export type UserRole = "guest" | "mahasiswa" | "konselor" | "admin" | "campus_admin";
 
 export type SubscriptionTier = "Free" | "Pro" | "Developer";
 
@@ -15,6 +15,7 @@ export interface UserSession {
     appointmentsBooked: number;
   };
   university?: string;
+  campusId?: string;
   token?: string;
   isDemo?: boolean;
 }

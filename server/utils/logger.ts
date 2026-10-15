@@ -4,6 +4,7 @@
  */
 
 import { scanAndSanitizePII } from '../services/piiService.js';
+import { isProductionLikeEnvironment } from '../config/environment.js';
 
 const REDACT_KEYS = new Set([
   'password',
@@ -154,7 +155,7 @@ export function maskSensitivePayload(data: any): any {
 }
 
 export function installProductionConsoleSanitizer(): void {
-  if (process.env.NODE_ENV !== 'production') return;
+  if (!isProductionLikeEnvironment()) return;
 
   for (const method of ['log', 'warn', 'error', 'info'] as const) {
     const original = console[method].bind(console);
@@ -190,7 +191,7 @@ export const logger = {
 
   error(event: string, error?: any, meta: Record<string, any> = {}) {
     const rawErrorMessage = error?.message || String(error);
-    const safeError = process.env.NODE_ENV === 'production'
+    const safeError = isProductionLikeEnvironment()
       ? { name: error?.name || 'Error', code: error?.code || undefined }
       : redactSensitiveText(rawErrorMessage);
     console.error(JSON.stringify({

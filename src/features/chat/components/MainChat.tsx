@@ -26,6 +26,8 @@ import { RhythmicTypingIndicator } from '../../../components/ui/RhythmicTypingIn
 import { detectAcademicDistress } from '../../workspace/utils/distressDetector';
 import { usePrivacyVault } from '../../../contexts/PrivacyVaultContext';
 import { dispatchAuroraActivity } from '../../../lib/auroraEvents';
+import { GUEST_AI_CONSENT_CHANGED_EVENT, readGuestAiConsent, writeGuestAiConsent } from '../../../lib/guestAiConsent';
+import { GuestAiConsentNotice } from '../../../components/GuestAiConsentNotice';
 
 // Import our cohesive, feature-scoped custom hooks
 import { useUpcomingAppointment } from '../hooks/useUpcomingAppointment';
@@ -64,6 +66,19 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
     return migrateLegacyTenangModelToProfile(saved);
   });
   const [isTemporary, setIsTemporary] = useState(() => !user || user?.role === 'guest');
+  const [guestAiConsent, setGuestAiConsent] = useState(() => user?.role === 'guest' && readGuestAiConsent());
+
+  const handleGuestConsentChange = (granted: boolean) => {
+    setGuestAiConsent(granted);
+    writeGuestAiConsent(granted);
+  };
+
+  useEffect(() => {
+    if (user?.role !== 'guest') return;
+    const refreshConsent = () => setGuestAiConsent(readGuestAiConsent());
+    window.addEventListener(GUEST_AI_CONSENT_CHANGED_EVENT, refreshConsent);
+    return () => window.removeEventListener(GUEST_AI_CONSENT_CHANGED_EVENT, refreshConsent);
+  }, [user?.role]);
 
   useEffect(() => { safeLocalStorage.setItem('chatMode', chatMode); }, [chatMode]);
   useEffect(() => { safeLocalStorage.setItem('responseStyle', responseStyle); }, [responseStyle]);
@@ -225,6 +240,7 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
         message: content,
         chatId,
         isTemporary,
+        guestAiConsent: user?.role === 'guest' ? guestAiConsent : undefined,
         pluginResult,
         chatMode,
         responseStyle,
@@ -325,7 +341,7 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
         }
       }
     );
-  }, [chatId, isTemporary, chatMode, responseStyle, aiModel, streamMessage, navigate, setChats, showToast, setMessages, loadedChatIdRef]);
+  }, [chatId, isTemporary, chatMode, responseStyle, aiModel, guestAiConsent, user?.role, streamMessage, navigate, setChats, showToast, setMessages, loadedChatIdRef]);
 
   // Discuss Mood and Screening location state routing listeners
   useEffect(() => {
@@ -894,6 +910,9 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
             </button>
           )}
           
+          {user?.role === 'guest' && !guestAiConsent && (
+            <GuestAiConsentNotice checked={guestAiConsent} onChange={handleGuestConsentChange} />
+          )}
           <ChatComposer 
             onSend={handleSend} 
             isTyping={isTyping} 

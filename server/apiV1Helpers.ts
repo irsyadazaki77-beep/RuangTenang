@@ -8,6 +8,7 @@ import { logger } from './utils/logger.js';
 import { metricsService } from './services/metricsService.js';
 import { isAiAvailable } from './config/aiConfig.js';
 import { aiProviderConfig } from './config/aiProviderConfig.js';
+import { isProductionLikeEnvironment } from './config/environment.js';
 
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
@@ -15,13 +16,15 @@ declare global {
     interface Request {
       requestId?: string;
       idempotencyKey?: string;
+      attachmentOwnerId?: string;
       user?: {
         userId: string;
-        role: 'mahasiswa' | 'konselor' | 'admin';
+        role: 'mahasiswa' | 'konselor' | 'admin' | 'campus_admin';
         name: string;
         email: string;
         tier?: string;
         sessionId?: string;
+        campusId?: string;
       };
     }
   }
@@ -741,7 +744,7 @@ export function formatP2002ErrorMessage(err: any): { code: string; message: stri
 // ==========================================
 export function centralizedErrorHandler(err: any, req: Request, res: Response, _next: NextFunction) {
   const requestId = req.requestId || 'unknown';
-  const isProd = process.env.NODE_ENV === 'production';
+  const isProd = isProductionLikeEnvironment();
   const errorName = err?.name || 'Error';
   const errorCode = err?.code || '';
   

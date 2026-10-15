@@ -6,6 +6,7 @@ import { getActualGeminiModel, resolveAiModel, getModelDefinition, isModelAllowe
 import { AI_PROVIDER_ADAPTERS } from './aiProviderAdapters.js';
 import { geminiAdapter } from './geminiAdapter.js';
 import { AI_RELIABILITY_POLICY, executeWithReliability, guardAiStream, recordProviderStreamFailure } from './aiReliabilityService.js';
+import { isCampusAiEnabledForUser } from '../campusTenantService.js';
 
 import type { RoutingDecision } from '../../../shared/aiModelContract.js';
 import type { ModelCapability } from '../../../shared/aiModelContract.js';
@@ -43,7 +44,8 @@ export function selectReliableModelCandidates(options: AiRequestOptions, primary
       ? Boolean(getGenAIClient())
       : AI_PROVIDER_ADAPTERS[model.provider].isAvailable();
     if (!providerAvailable) continue;
-    if (!model.capabilities.includes(requirements.capability) || (requirements.hasAttachments && model.provider !== 'gemini')) continue;
+    if (!model.capabilities.includes(requirements.capability)) continue;
+    if (requirements.hasAttachments && !model.capabilities.includes('vision')) continue;
     selected.push(modelId);
     if (selected.length === 3) break;
   }
@@ -78,6 +80,14 @@ export const aiRequestService = {
       return {
         text: aiSafetyService.getCrisisSafeResponse(),
         modelUsed: 'deterministic-crisis-policy',
+        isFallback: true
+      };
+    }
+
+    if (!(await isCampusAiEnabledForUser(userId))) {
+      return {
+        text: 'Layanan AI sedang dinonaktifkan oleh kampus. Kamu tetap dapat melihat kontak bantuan dan membuat janji dengan konselor.',
+        modelUsed: 'campus-policy',
         isFallback: true
       };
     }
@@ -155,9 +165,8 @@ Pedoman Interaksi:
             requestedModelId: modelId,
             prompt: sanitizedPrompt,
             history: sanitizedHistory,
-            // Non-Gemini adapters do not have the same attachment handling path.
-            // Never forward raw inline data to them by spreading the original options.
-            attachments: [],
+            // Non-Gemini adapters only receive image attachments if the model supports vision
+            attachments: model.capabilities.includes('vision') ? (options.attachments || []) : [],
             systemInstruction: fullSystemInstruction,
             abortSignal: signal
           }, modelId), abortSignal, requestId);
@@ -172,7 +181,8 @@ Pedoman Interaksi:
         if (abortSignal?.aborted) throw error;
         console.warn(`[AI_REQUEST] requestId=${requestId} attempt=${index + 1} model=${modelId} failed category=${(error as any)?.category || 'INTERNAL_ERROR'}`);
         const category = (error as any)?.category;
-        const mayTryProfileAlternative = Boolean(options.routingDecision?.profileId) && category === 'AUTH_ERROR';
+        const mayTryProfileAlternative = Boolean(options.routingDecision?.profileId)
+          && ['AUTH_ERROR', 'QUOTA_EXCEEDED'].includes(category);
         if (index + 1 >= candidates.length || (!(error as any)?.retryable && !mayTryProfileAlternative)) break;
       }
     }
@@ -232,6 +242,12 @@ Pedoman Interaksi:
     const outputTokens = isAnonymous ? 400 : 1000;
     
     const requestId = globalThis.crypto?.randomUUID?.() || `ai-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+    if (!(await isCampusAiEnabledForUser(userId))) {
+      const disabledText = 'Layanan AI sedang dinonaktifkan oleh kampus. Kamu tetap dapat melihat kontak bantuan dan membuat janji dengan konselor.';
+      const disabledStream = async function* () { yield { text: disabledText }; };
+      return { stream: disabledStream(), modelUsed: 'campus-policy', isFallback: true, requestId };
+    }
 
     let fullSystemInstruction = systemInstruction || `Kamu adalah 'RuangTenang Companion', pendamping reflektif dan suportif untuk mahasiswa Indonesia.
 Prinsip utamamu: "Dengarkan untuk memahami, bukan terburu-buru memperbaiki."
@@ -297,9 +313,8 @@ Pedoman Interaksi:
               requestedModelId: modelId,
               prompt: sanitizedPrompt,
               history: sanitizedHistory,
-              // Non-Gemini adapters do not have the same attachment handling path.
-              // Never forward raw inline data to them by spreading the original options.
-              attachments: [],
+              // Non-Gemini adapters only receive image attachments if the model supports vision
+              attachments: model.capabilities.includes('vision') ? (options.attachments || []) : [],
               systemInstruction: fullSystemInstruction,
               abortSignal: streamController.signal
             }, modelId);
@@ -347,7 +362,8 @@ Pedoman Interaksi:
         failedProvider = model.provider;
         console.warn(`[AI_REQUEST] requestId=${requestId} attempt=${index + 1} model=${modelId} failed category=${(error as any)?.category || 'INTERNAL_ERROR'}`);
         const category = (error as any)?.category;
-        const mayTryProfileAlternative = Boolean(options.routingDecision?.profileId) && category === 'AUTH_ERROR';
+        const mayTryProfileAlternative = Boolean(options.routingDecision?.profileId)
+          && ['AUTH_ERROR', 'QUOTA_EXCEEDED'].includes(category);
         if (abortSignal?.aborted || (!(error as any)?.retryable && !mayTryProfileAlternative) || index + 1 >= candidates.length) throw error;
       }
     }

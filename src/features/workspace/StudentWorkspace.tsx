@@ -42,6 +42,8 @@ import { getArtifactSelectionContext } from './utils/artifactPatch';
 import { WorkspacePlanSchema, type WorkspacePlan } from '../../../shared/contracts/workspace';
 import { validateResearchCitations } from './utils/citationIntegrity';
 import { useWorkspaceViewController } from './hooks/useWorkspaceViewController';
+import { GuestAiConsentNotice } from '../../components/GuestAiConsentNotice';
+import { GUEST_AI_CONSENT_CHANGED_EVENT, readGuestAiConsent, writeGuestAiConsent } from '../../lib/guestAiConsent';
 import { WORKSPACE_COMMAND_EVENT, type WorkspaceCommandId } from './utils/workspaceCommandEvents';
 import { readWorkspacePromptDraft, writeWorkspacePromptDraft } from './utils/workspacePromptDraft';
 import type { AgentExecutionResult } from '../../../shared/contracts/agent';
@@ -110,6 +112,13 @@ function StudentWorkspaceSession({
   onSwitchMode, 
   onOpenSidebar 
 }: StudentWorkspaceProps) {
+  const [guestAiConsent, setGuestAiConsent] = useState(() => user?.role === 'guest' && readGuestAiConsent());
+  useEffect(() => {
+    if (user?.role !== 'guest') return;
+    const refreshConsent = () => setGuestAiConsent(readGuestAiConsent());
+    window.addEventListener(GUEST_AI_CONSENT_CHANGED_EVENT, refreshConsent);
+    return () => window.removeEventListener(GUEST_AI_CONSENT_CHANGED_EVENT, refreshConsent);
+  }, [user?.role]);
   const { chatId } = useParams<{ chatId?: string }>();
   const location = useLocation();
   const navigate = useNavigate();
@@ -1087,7 +1096,7 @@ function StudentWorkspaceSession({
 
   return (
     <div 
-      className="flex flex-col h-dvh w-full bg-transparent text-slate-800 dark:text-slate-100 overflow-hidden relative"
+      className="flex h-dvh w-full flex-col overflow-hidden relative bg-slate-50 text-slate-800 dark:bg-slate-950 dark:text-slate-100"
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
@@ -1183,15 +1192,15 @@ function StudentWorkspaceSession({
       )}
 
       {/* 2. Main Dual-Pane Workspace */}
-      <main className="flex-1 min-h-0 min-w-0 flex overflow-hidden relative">
+      <main className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden bg-slate-50 dark:bg-slate-950">
         {/* LEFT PANE: CONVERSATION & COMPOSER */}
         <section 
           className={`flex flex-col min-h-0 min-w-0 h-full transition-all duration-200 ${
             isCanvasExpanded 
               ? 'hidden' 
               : isSplitView
-                ? 'w-full xl:flex-[0_0_54%] 2xl:flex-[0_0_52%] shrink-0 border-r border-slate-200/80 dark:border-slate-800 bg-white/60 dark:bg-secondary-900/60 backdrop-blur-xs'
-                : 'w-full max-w-3xl mx-auto border-r-0 bg-white/45 dark:bg-secondary-900/45 backdrop-blur-xs'
+                ? 'w-full xl:flex-[0_0_54%] 2xl:flex-[0_0_52%] shrink-0 border-r border-slate-200/80 bg-white dark:border-slate-800 dark:bg-slate-950'
+                : 'mx-auto w-full max-w-3xl border-r-0 bg-white xl:max-w-5xl dark:bg-slate-950'
           } ${mobileActiveTab === 'chat' || workspaceView.inspector === 'sources' ? 'flex' : 'hidden xl:flex'}`}
         >
           <WorkspaceConversation
@@ -1214,6 +1223,15 @@ function StudentWorkspaceSession({
             onOpenSource={openWorkspaceSource}
           />
 
+          {user?.role === 'guest' && !guestAiConsent && (
+            <GuestAiConsentNotice
+              checked={guestAiConsent}
+              onChange={granted => {
+                setGuestAiConsent(granted);
+                writeGuestAiConsent(granted);
+              }}
+            />
+          )}
           <WorkspaceComposer
             activeArtifactType={activeArtifact?.id !== DEFAULT_WELCOME_ARTIFACT_ID ? activeArtifact?.type : null}
             activeArtifactTitle={visibleActiveArtifact?.title || null}

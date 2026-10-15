@@ -1,4 +1,94 @@
-import rateLimit from 'express-rate-limit';
+import expressRateLimit from 'express-rate-limit';
+import { isProductionLikeEnvironment } from '../config/environment.js';
+import { redisService } from '../services/redisService.js';
+import { metricsService } from '../services/metricsService.js';
+
+type LocalCounter = { totalHits: number; resetTime: Date };
+let storeSequence = 0;
+let localFallbackHits = 0;
+let fallbackActive = false;
+let lastFallbackAlertAt = 0;
+
+export class DistributedRateLimitStore {
+  readonly localKeys = false;
+  private readonly prefix = `ruangtenang:rate-limit:${++storeSequence}:`;
+  private windowMs = 60_000;
+  private readonly localCounters = new Map<string, LocalCounter>();
+
+  init(options: { windowMs: number }) {
+    this.windowMs = options.windowMs;
+  }
+
+  async increment(key: string) {
+    const redisKey = `${this.prefix}${key}`;
+    const shared = await redisService.incrementRateLimit(redisKey, this.windowMs);
+    if (shared) {
+      fallbackActive = false;
+      return { totalHits: shared.count, resetTime: shared.resetTime };
+    }
+
+    fallbackActive = true;
+    localFallbackHits++;
+    const now = Date.now();
+    let current = this.localCounters.get(key);
+    if (!current || current.resetTime.getTime() <= now) {
+      current = { totalHits: 0, resetTime: new Date(now + this.windowMs) };
+    }
+    current.totalHits++;
+    this.localCounters.set(key, current);
+
+    if (isProductionLikeEnvironment() && now - lastFallbackAlertAt > 30_000) {
+      lastFallbackAlertAt = now;
+      console.error('[SECURITY_ALERT] Distributed rate limiting is using per-process counters because Redis is unavailable.');
+    }
+    return { totalHits: current.totalHits, resetTime: current.resetTime };
+  }
+
+  async decrement(key: string) {
+    const redisKey = `${this.prefix}${key}`;
+    if (await redisService.decrementRateLimit(redisKey)) return;
+    const current = this.localCounters.get(key);
+    if (current && current.totalHits > 0) current.totalHits--;
+  }
+
+  async resetKey(key: string) {
+    this.localCounters.delete(key);
+    await redisService.del(`${this.prefix}${key}`);
+  }
+
+  async resetAll() {
+    this.localCounters.clear();
+    await redisService.delPattern(`${this.prefix}*`);
+  }
+}
+
+const rateLimit = (options: any) => expressRateLimit({
+  ...options,
+  store: new DistributedRateLimitStore(),
+  handler: (req: any, res: any, next: any, optionsUsed: any) => {
+    metricsService.recordSecurityEvent('rate_limit_exceeded');
+    if (options.handler) return options.handler(req, res, next, optionsUsed);
+    return res.status(optionsUsed.statusCode).send(optionsUsed.message);
+  },
+});
+
+export function getRateLimitStoreMetrics() {
+  return {
+    fallbackActive,
+    localFallbackHits,
+  };
+}
+
+export function getRateLimitStorePrometheus() {
+  return [
+    '# HELP ruangtenang_rate_limit_local_fallback_active Whether Redis-backed rate limiting is currently degraded.',
+    '# TYPE ruangtenang_rate_limit_local_fallback_active gauge',
+    `ruangtenang_rate_limit_local_fallback_active ${fallbackActive ? 1 : 0}`,
+    '# HELP ruangtenang_rate_limit_local_fallback_hits Requests counted using per-process fallback counters.',
+    '# TYPE ruangtenang_rate_limit_local_fallback_hits counter',
+    `ruangtenang_rate_limit_local_fallback_hits ${localFallbackHits}`,
+  ].join('\n');
+}
 
 const isTestEnv = () => process.env.NODE_ENV === 'test' || Boolean(process.env.VITEST);
 
@@ -26,6 +116,19 @@ export const loginLimiter = rateLimit({
     success: false,
     code: 'LOGIN_RATE_LIMIT_EXCEEDED',
     error: 'Terlalu banyak percobaan masuk (maks 5x). Demi keamanan akun Anda, silakan coba lagi setelah 15 menit.'
+  }
+});
+
+export const mobileRefreshLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: () => isTestEnv(),
+  message: {
+    success: false,
+    code: 'MOBILE_REFRESH_RATE_LIMIT_EXCEEDED',
+    error: 'Terlalu banyak permintaan refresh sesi. Silakan coba lagi nanti.'
   }
 });
 
@@ -183,7 +286,7 @@ export const diagnosticsLimiter = rateLimit({
 
 export const accountDeletionLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 mins
-  max: process.env.NODE_ENV === 'production' ? 5 : (process.env.NODE_ENV === 'test' ? 100 : 15),
+  max: process.env.NODE_ENV === 'test' ? 100 : (isProductionLikeEnvironment() ? 5 : 15),
   standardHeaders: true,
   legacyHeaders: false,
   validate: { keyGeneratorIpFallback: false },
@@ -197,7 +300,7 @@ export const accountDeletionLimiter = rateLimit({
 
 export const adminDeletionLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 mins
-  max: process.env.NODE_ENV === 'production' ? 5 : (process.env.NODE_ENV === 'test' ? 100 : 10),
+  max: process.env.NODE_ENV === 'test' ? 100 : (isProductionLikeEnvironment() ? 5 : 10),
   standardHeaders: true,
   legacyHeaders: false,
   validate: { keyGeneratorIpFallback: false },

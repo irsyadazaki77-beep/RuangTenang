@@ -22,6 +22,7 @@ import type { AiRoutingContext, RoutingDecision } from '../../../shared/aiModelC
 
 export interface UnifiedPipelineInput {
   userId?: string;
+  attachmentOwnerId?: string;
   input: string;
   chatId?: string;
   mode?: string;
@@ -36,6 +37,7 @@ export interface UnifiedPipelineInput {
   onStreamToken?: (token: string) => void;
   abortSignal?: AbortSignal;
   isTemporary?: boolean;
+  guestAiConsent?: boolean;
   workspaceMode?: boolean;
   attachments?: any[];
   attachmentIds?: string[];
@@ -454,30 +456,10 @@ export const aiSafetyService = {
     const userId = input.userId;
     const rawInput = input.input || input.pluginResult || '';
 
-    // 1. Validate Consent from DB truth
-    // For registered users with persistent accounts, verify consent preferences from DB.
-    // For anonymous/guest/temporary sessions, conversational interaction in ephemeral RAM is permitted.
-    const isGuestOrTemporary = !userId || userId === 'guest' || Boolean(input.isTemporary);
-    let hasAiConsent: boolean;
-
-    if (isGuestOrTemporary) {
-      hasAiConsent = true;
-    } else {
-      hasAiConsent = await consentService.canUseAI(userId);
-    }
-
-    if (!hasAiConsent) {
-      console.warn(`[SAFETY_PIPELINE] User ${userId || 'guest'} has not provided AI processing consent. Running safe fallback.`);
-      throw Object.assign(new Error('AI processing consent is required.'), {
-        category: 'AI_CONSENT_REQUIRED',
-        retryable: false
-      });
-    }
-
-    // 2. Normalize input
+    // Normalize locally before making any provider request.
     const normalizedInput = rawInput.trim().replace(/\s+/g, ' ');
 
-    // 3. PII Redaction
+    // PII Redaction
     const redactedInput = scanAndSanitizePII(normalizedInput).sanitizedText;
 
     // Treat pluginResult as untrusted data
@@ -490,7 +472,7 @@ export const aiSafetyService = {
       }
     }
 
-    // 4. Prompt-injection analysis on user input & plugin result
+    // Prompt-injection analysis on user input & plugin result
     if (this.detectPromptInjection(redactedInput)) {
       console.warn(`[SAFETY_PIPELINE] Prompt injection detected in input for user ${userId || 'anonymous'}`);
       return {
@@ -503,7 +485,7 @@ export const aiSafetyService = {
       };
     }
 
-    // 5. Context determination & Crisis triage
+    // Context determination & Crisis triage
     const isRuangKerja = (input.chatMode || '').toLowerCase().includes('ruangkerja') || 
                           (input.mode || '').toUpperCase() === 'RUANG_KERJA' ||
                           (input.mode || '').toLowerCase().includes('ruang_kerja') ||
@@ -520,6 +502,23 @@ export const aiSafetyService = {
         isPromptInjectionOverride: false,
         isConsentFallback: false
       };
+    }
+
+    // Check consent after deterministic safety checks so crisis help remains
+    // available without sending the message to an external provider.
+    const isGuestOrTemporary = !userId || userId === 'guest' || Boolean(input.isTemporary);
+    const hasAiConsent = isGuestOrTemporary
+      ? userId && userId !== 'guest'
+        ? await consentService.canUseAI(userId)
+        : input.guestAiConsent === true
+      : await consentService.canUseAI(userId);
+
+    if (!hasAiConsent) {
+      console.warn(`[SAFETY_PIPELINE] User ${userId || 'guest'} has not provided AI processing consent. Returning safe local guidance.`);
+      throw Object.assign(new Error('AI processing consent is required.'), {
+        category: 'AI_CONSENT_REQUIRED',
+        retryable: false
+      });
     }
 
     // 6. Context authorization & boundary setting
@@ -726,7 +725,7 @@ Konteks Pengguna:
         pipelineSourceReferences = builtContext.sourceReferences;
       }
     } else if (isRuangKerja) {
-      const guestAttachmentIds = input.attachmentIds || (input.attachments || [])
+      const guestAttachmentIds = input.workspaceAttachmentIds ?? input.attachmentIds ?? (input.attachments || [])
         .map((attachment: unknown) => {
           if (typeof attachment === 'string') return attachment;
           if (!attachment || typeof attachment !== 'object') return undefined;
@@ -738,7 +737,7 @@ Konteks Pengguna:
         try {
           const { contextRetrievalService } = await import('../file-intelligence/contextRetrievalService.js');
           const guestDocumentContext = await contextRetrievalService.retrieveContext({
-            userId: 'guest',
+            userId: input.attachmentOwnerId || 'guest',
             attachmentIds: guestAttachmentIds,
             userQuery: redactedInput
           });

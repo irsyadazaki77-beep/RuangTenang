@@ -19,6 +19,8 @@ out/
 # Environment Variables & Secrets (NEVER bake into images)
 .env*
 !.env.example
+/secrets/
+/backups/
 
 # Local SQLite & Temporary Databases
 prisma/*.db

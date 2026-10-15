@@ -11,7 +11,7 @@ export const provisionUserSchema = z.object({
   name: z.string().min(2, 'Nama minimal 2 karakter').max(100),
   email: z.string().email('Format email tidak valid'),
   password: z.string().min(10, 'Kata sandi minimal 10 karakter untuk perlindungan akun'),
-  role: z.enum(['konselor', 'admin']),
+  role: z.enum(['konselor', 'admin', 'campus_admin']),
   university: z.string().optional()
 });
 

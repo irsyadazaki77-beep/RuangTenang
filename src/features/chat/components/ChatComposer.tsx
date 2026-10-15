@@ -149,9 +149,13 @@ export function ChatComposer({
       // Upload via backend endpoint
       const formData = new FormData();
       formData.append('files', file);
+      const csrfCookie = document.cookie.match(/(?:^|; )XSRF-TOKEN=([^;]+)/)?.[1];
+      const uploadHeaders: Record<string, string> = { 'X-Requested-With': 'XMLHttpRequest' };
+      if (csrfCookie) uploadHeaders['X-CSRF-Token'] = decodeURIComponent(csrfCookie);
 
       fetch('/api/v1/chat/attachments/upload', {
         method: 'POST',
+        headers: uploadHeaders,
         credentials: 'include',
         body: formData
       })
@@ -163,14 +167,18 @@ export function ChatComposer({
           return;
         }
         const uploadedAtt = data.attachment || (data.attachments && data.attachments[0]);
+        const isImage = file.type.startsWith('image/');
+        const status = isImage ? 'visual_ready' : (uploadedAtt?.ocrApplied ? 'visual_ready' : 'ready');
         setAttachments(prev => prev.map(a => a.id === id ? {
           ...a,
-          status: 'success',
+          status,
           serverAttachmentId: uploadedAtt.id,
           filename: uploadedAtt.filename,
           mimeType: uploadedAtt.mimeType,
           size: uploadedAtt.size,
-          url: uploadedAtt.url
+          url: uploadedAtt.url,
+          visualAnalysisAvailable: Boolean(uploadedAtt?.visualAnalysisAvailable || isImage),
+          ocrApplied: Boolean(uploadedAtt?.ocrApplied)
         } : a));
       })
       .catch(() => {
@@ -224,7 +232,7 @@ export function ChatComposer({
       return;
     }
 
-    const validAttachments = attachments.filter(a => a.status === 'success');
+    const validAttachments = attachments.filter(a => ['success', 'ready', 'visual_ready'].includes(a.status));
     if (validAttachments.length > 0) {
       onSend(input.trim(), undefined, validAttachments);
     } else {
@@ -452,8 +460,11 @@ export function ChatComposer({
                 <div className="flex-1 min-w-0 max-w-[140px]">
                   <div className="font-medium text-[11.5px] text-stone-800 dark:text-stone-200 truncate">{att.file.name}</div>
                   {att.status === 'uploading' && <div className="text-[10px] text-teal-600 dark:text-teal-400">Mengunggah...</div>}
-                  {att.status === 'error' && <div className="text-[10px] text-red-500 truncate">{att.errorMessage}</div>}
+                  {att.status === 'processing' && <div className="text-[10px] text-amber-500 dark:text-amber-400">Memproses...</div>}
+                  {att.status === 'visual_ready' && <div className="text-[10px] text-teal-600 dark:text-teal-400 font-medium">Analisis visual siap</div>}
+                  {att.status === 'ready' && <div className="text-[10px] text-emerald-600">Siap untuk pratinjau</div>}
                   {att.status === 'success' && <div className="text-[10px] text-emerald-600">Siap dikirim</div>}
+                  {att.status === 'error' && <div className="text-[10px] text-rose-500 truncate">{att.errorMessage || 'Gagal diproses'}</div>}
                 </div>
                 <button
                   type="button"

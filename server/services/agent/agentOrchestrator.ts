@@ -94,9 +94,17 @@ export async function runWorkspaceAgent(input: WorkspaceAgentRunInput): Promise<
   if (!task || task.status !== 'running' || task.executionId !== input.executionId || !task.snapshot) {
     throw new AgentExecutionError('AGENT_EXECUTION_STALE', 'Task tidak lagi berada dalam eksekusi aktif.');
   }
+  const dependencyArtifactIds = new Set(
+    input.plan.tasks
+      .filter(item => task.dependsOn.includes(item.id) && Boolean(item.outputArtifactId))
+      .map(item => item.outputArtifactId as string)
+  );
+  if (task.snapshot.artifactId) dependencyArtifactIds.add(task.snapshot.artifactId);
+
   const allowedToolIds = getAllowedAgentToolIds(task.type, {
     attachmentIds: task.snapshot.contextSourceIds,
-    artifactId: task.snapshot.artifactId
+    artifactId: task.snapshot.artifactId,
+    hasDependencyArtifacts: dependencyArtifactIds.size > 0
   });
   const sourceNamespace = `AGENT_${input.executionId.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 24) || 'RUN'}`;
   let sourceIndex = 0;
@@ -215,7 +223,7 @@ export async function runWorkspaceAgent(input: WorkspaceAgentRunInput): Promise<
     toolCalls += 1;
     const result = await executeAuthorizedAgentTool(decision.toolId, decision.arguments, {
       executionId: input.executionId, workspaceId: input.workspaceId, userId: input.userId, task,
-      allowedToolIds, abortSignal: input.abortSignal, sourceNamespace,
+      allowedToolIds, allowedArtifactIds: dependencyArtifactIds, abortSignal: input.abortSignal, sourceNamespace,
       nextSourceIndex: () => ++sourceIndex
     });
     results.push(result);

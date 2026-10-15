@@ -36,6 +36,7 @@ import {
   isAiProfile
 } from '../../shared/aiModelContract.js';
 import { smartModelRouter } from '../services/ai/smartModelRouter.js';
+import { optionalAttachmentOwner } from '../middleware/guestAttachmentSession.js';
 
 const router = Router();
 
@@ -230,7 +231,7 @@ router.post('/chat/summary', requireAuth, checkChatOwnership, aiSummaryLimiter, 
 });
 
 // Canonical Chat Endpoint (Non-streaming JSON & Pre-flight Safe Interceptor)
-router.post(['/chat', '/api/chat'], optionalAuth, aiChatLimiter, aiAbuseLimiter, async (req: Request, res: Response) => {
+router.post(['/chat', '/api/chat'], optionalAuth, optionalAttachmentOwner, aiChatLimiter, aiAbuseLimiter, async (req: Request, res: Response) => {
   try {
     const { 
       message, 
@@ -239,7 +240,8 @@ router.post(['/chat', '/api/chat'], optionalAuth, aiChatLimiter, aiAbuseLimiter,
       isTemporary, 
       chatMode, 
       responseStyle, 
-      aiModel: requestedAiModel
+      aiModel: requestedAiModel,
+      guestAiConsent
     } = req.body;
 
     const isAutoRouting = !requestedAiModel || requestedAiModel === AUTO_ROUTING_MODEL_ID;
@@ -312,7 +314,8 @@ router.post(['/chat', '/api/chat'], optionalAuth, aiChatLimiter, aiAbuseLimiter,
       isStreaming: false,
       isTemporary,
       routingDecision,
-      routingContext
+      routingContext,
+      guestAiConsent: guestAiConsent === true
     });
 
     const actualDegradation = getProfileDegradation(routingDecision.profileId || effectiveProfileId, pipelineRes.modelUsed);
@@ -336,6 +339,17 @@ router.post(['/chat', '/api/chat'], optionalAuth, aiChatLimiter, aiAbuseLimiter,
     });
 
   } catch (err: any) {
+    if (err?.category === 'AI_CONSENT_REQUIRED') {
+      const notice = 'Persetujuan pemrosesan AI belum aktif, jadi pesan ini tidak dikirim ke penyedia AI. Ini hanya pemberitahuan umum dan tidak ditinjau manusia. Anda tetap dapat membuka latihan mindfulness, direktori konselor, atau Pusat Bantuan Krisis untuk dukungan.';
+      return res.status(200).json({
+        success: true,
+        text: notice,
+        message: notice,
+        modelUsed: 'local-consent-notice',
+        isFallback: true,
+        isCrisis: false
+      });
+    }
     console.error('Chat endpoint error:', err);
     if (sendModelSelectionError(res, err)) return;
     if (err?.category) {
@@ -353,13 +367,14 @@ router.post(['/chat', '/api/chat'], optionalAuth, aiChatLimiter, aiAbuseLimiter,
 });
 
 // Main Streaming Chat Route
-router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (req: Request, res: Response) => {
+router.post('/chat/stream', optionalAuth, optionalAttachmentOwner, aiChatLimiter, aiAbuseLimiter, async (req: Request, res: Response) => {
   try {
     const { 
       message, 
       chatId, 
       mode,
       isTemporary, 
+      guestAiConsent,
       pluginResult, 
       chatMode, 
       responseStyle, 
@@ -558,7 +573,7 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
                 const attId = typeof att === 'string' ? att : att?.id;
                 if (attId) {
                   // Verify IDOR ownership and link messageId and chatId
-                  const result = await attachmentStorageService.getAttachmentForUser(attId, userId || 'guest');
+                  const result = await attachmentStorageService.getAttachmentForUser(attId, req.attachmentOwnerId || '');
                   if (result) {
                     await prisma.attachments.update({
                       where: { id: attId },
@@ -572,14 +587,16 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
                   // Backward compatibility for direct base64 uploads (validates mime, magic bytes, size & saves to disk via canonical pipeline)
                   const base64Clean = att.base64.includes(',') ? att.base64.split(',')[1] : att.base64;
                   const buffer = Buffer.from(base64Clean, 'base64');
-                  await documentIngestionService.ingestFile({
-                    userId: userId || 'guest',
-                    buffer,
-                    originalFilename: att.filename || 'attachment.bin',
-                    clientMime: att.mimeType || 'application/octet-stream',
-                    chatId: currentChatId,
-                    messageId: msgResult.id
-                  });
+                  if (req.attachmentOwnerId) {
+                    await documentIngestionService.ingestFile({
+                      userId: req.attachmentOwnerId,
+                      buffer,
+                      originalFilename: att.filename || 'attachment.bin',
+                      clientMime: att.mimeType || 'application/octet-stream',
+                      chatId: currentChatId,
+                      messageId: msgResult.id
+                    });
+                  }
                 }
               } catch (e: any) {
                 console.error('[ATTACHMENT_PROCESS_ERROR]', e.message);
@@ -662,7 +679,7 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
               for (const att of msg.attachments) {
                 if (isWorkspace && (!currentWorkspaceAttachmentIds.has(att.id) || (att.fileKind !== 'image' && !att.mimeType?.startsWith('image/')))) continue;
                 try {
-                  const res = await attachmentStorageService.getAttachmentForUser(att.id, userId || 'guest');
+                  const res = await attachmentStorageService.getAttachmentForUser(att.id, req.attachmentOwnerId || '');
                   if (res) {
                     if (att.mimeType === 'text/plain' || att.mimeType === 'text/markdown') {
                       let text = res.buffer.toString('utf8');
@@ -697,7 +714,7 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
               const attId = typeof att === 'string' ? att : att?.id;
               if (isWorkspace && (!attId || !currentWorkspaceAttachmentIds.has(attId) || !att.mimeType?.startsWith('image/'))) continue;
               if (attId) {
-                const res = await attachmentStorageService.getAttachmentForUser(attId, userId || 'guest');
+                const res = await attachmentStorageService.getAttachmentForUser(attId, req.attachmentOwnerId || '');
                 if (res) {
                   if (res.attachment.mimeType === 'text/plain' || res.attachment.mimeType === 'text/markdown') {
                     let text = res.buffer.toString('utf8');
@@ -747,7 +764,7 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
             const attId = typeof att === 'string' ? att : att?.id;
             if (isWorkspace && (!attId || !currentWorkspaceAttachmentIds.has(attId) || !att.mimeType?.startsWith('image/'))) continue;
             if (attId) {
-              const res = await attachmentStorageService.getAttachmentForUser(attId, userId || 'guest');
+              const res = await attachmentStorageService.getAttachmentForUser(attId, req.attachmentOwnerId || '');
               if (res) {
                 if (res.attachment.mimeType === 'text/plain' || res.attachment.mimeType === 'text/markdown') {
                   let text = res.buffer.toString('utf8');
@@ -790,34 +807,6 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
       messagesToSend.push({ role: 'user', parts });
     }
 
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache, no-transform');
-    res.setHeader('Connection', 'keep-alive');
-    res.setHeader('X-Accel-Buffering', 'no');
-    res.flushHeaders();
-    // Let RuangKerja bind its newly-created conversation immediately so a
-    // clear request during generation can still target the persisted messages.
-    if (isWorkspace && isNewChat && currentChatId) {
-      res.write(`data: ${JSON.stringify({ chatId: currentChatId })}\n\n`);
-    }
-
-    // Periodically send SSE keepalive heartbeat every 15 seconds to prevent Cloud Run / Nginx / reverse proxy timeouts
-    const keepAliveTimer = setInterval(() => {
-      if (!res.writableEnded) {
-        res.write(': keepalive\n\n');
-      } else {
-        clearInterval(keepAliveTimer);
-      }
-    }, 15000);
-
-    const cleanupKeepAlive = () => {
-      clearInterval(keepAliveTimer);
-    };
-
-    req.on('close', cleanupKeepAlive);
-    res.on('finish', cleanupKeepAlive);
-    res.on('close', cleanupKeepAlive);
-
     const runLocalFallback = async (cause?: unknown) => {
       if (clientDisconnected || reqAbortController.signal.aborted) {
         if (!res.writableEnded) res.end();
@@ -835,8 +824,16 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
             ? 'Batas penggunaan provider AI tercapai. Coba lagi setelah batasnya pulih.'
             : 'Provider AI tidak dapat menyelesaikan permintaan. Tidak ada jawaban yang dibuat; silakan coba lagi.';
       console.warn(`[CHAT_STREAM] Request failed category=${category}`);
+      if (category === 'AI_CONSENT_REQUIRED' && userId) {
+        await rollbackUserAiQuota(userId, clientIp).catch(() => undefined);
+      }
       if (!res.writableEnded) {
-        res.write(`data: ${JSON.stringify({ error: true, code: category, retryable, message })}\n\n`);
+        if (category === 'AI_CONSENT_REQUIRED') {
+          const localNotice = 'Persetujuan pemrosesan AI belum aktif, jadi pesan ini tidak dikirim ke penyedia AI. Ini hanya pemberitahuan umum dan tidak ditinjau manusia. Anda tetap dapat membuka latihan mindfulness, direktori konselor, atau Pusat Bantuan Krisis untuk dukungan.';
+          res.write(`data: ${JSON.stringify({ text: localNotice })}\n\n`);
+        } else {
+          res.write(`data: ${JSON.stringify({ error: true, code: category, retryable, message })}\n\n`);
+        }
         res.write(`data: ${JSON.stringify({ done: true, chatId: currentChatId })}\n\n`);
         res.write('data: [DONE]\n\n');
         res.end();
@@ -876,18 +873,29 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
       : [];
 
     if (requestedWorkspaceAttachmentIds.length > 0) {
-      if (!isWorkspace || !currentChatId || !userId || userId === 'guest') {
+      const isGuestWorkspaceRequest = !userId || userId === 'guest';
+      const attachmentOwnerId = isGuestWorkspaceRequest ? req.attachmentOwnerId : userId;
+      if (!isWorkspace || !attachmentOwnerId) {
         if (userId) await rollbackUserAiQuota(userId, clientIp).catch(() => undefined);
-        return sendError(res, 'WORKSPACE_FILE_ACCESS_DENIED', 'File hanya dapat digunakan dari Workspace yang memilikinya.', 403);
+        return sendError(res, isWorkspace ? 'GUEST_SESSION_REQUIRED' : 'WORKSPACE_FILE_ACCESS_DENIED', isWorkspace
+          ? 'Sesi lampiran tamu tidak tersedia. Muat ulang Workspace lalu unggah kembali dokumen.'
+          : 'File hanya dapat digunakan dari Workspace yang memilikinya.', isWorkspace ? 401 : 403);
       }
-      // Link any previously unassigned ready attachments belonging to this user to currentChatId
-      await prisma.attachments.updateMany({
-        where: { id: { in: requestedWorkspaceAttachmentIds }, userId, chatId: null, status: 'ready' },
-        data: { chatId: currentChatId }
-      }).catch(() => undefined);
+      if (!isGuestWorkspaceRequest && currentChatId) {
+        // Link any previously unassigned ready attachments belonging to this user to currentChatId.
+        await prisma.attachments.updateMany({
+          where: { id: { in: requestedWorkspaceAttachmentIds }, userId: attachmentOwnerId, chatId: null, status: 'ready' },
+          data: { chatId: currentChatId }
+        }).catch(() => undefined);
+      }
 
       const ownedReadyFiles = await prisma.attachments.findMany({
-        where: { id: { in: requestedWorkspaceAttachmentIds }, chatId: currentChatId, userId, status: 'ready' },
+        where: {
+          id: { in: requestedWorkspaceAttachmentIds },
+          userId: attachmentOwnerId,
+          status: 'ready',
+          chatId: isGuestWorkspaceRequest || !currentChatId ? null : currentChatId
+        },
         select: { id: true }
       });
       if (ownedReadyFiles.length !== requestedWorkspaceAttachmentIds.length) {
@@ -895,12 +903,43 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
         return sendError(res, 'WORKSPACE_FILE_ACCESS_DENIED', 'File tidak tersedia di Workspace ini.', 403);
       }
     }
+
+    // Validate workspace file ownership before opening SSE, so safe HTTP
+    // errors cannot be hidden by the streaming response headers.
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders();
+    // Let RuangKerja bind its newly-created conversation immediately so a
+    // clear request during generation can still target the persisted messages.
+    if (isWorkspace && isNewChat && currentChatId) {
+      res.write(`data: ${JSON.stringify({ chatId: currentChatId })}\n\n`);
+    }
+
+    // Periodically send SSE keepalive heartbeat every 15 seconds to prevent Cloud Run / Nginx / reverse proxy timeouts
+    const keepAliveTimer = setInterval(() => {
+      if (!res.writableEnded) {
+        res.write(': keepalive\n\n');
+      } else {
+        clearInterval(keepAliveTimer);
+      }
+    }, 15000);
+
+    const cleanupKeepAlive = () => {
+      clearInterval(keepAliveTimer);
+    };
+
+    req.on('close', cleanupKeepAlive);
+    res.on('finish', cleanupKeepAlive);
+    res.on('close', cleanupKeepAlive);
     
     try {
       // Call the canonical Unified Safety Pipeline
       pipelineRes = await aiSafetyService.runUnifiedPipeline({
         userId,
         input: cleanMessage,
+        attachmentOwnerId: req.attachmentOwnerId,
         chatId: currentChatId,
         mode,
         chatMode,
@@ -916,6 +955,7 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
         workspaceAttachmentIds: isWorkspace ? requestedWorkspaceAttachmentIds : undefined,
         isStreaming: true,
         isTemporary: activeIsTemporary,
+        guestAiConsent: guestAiConsent === true,
         abortSignal: reqAbortController.signal,
         routingDecision,
         routingContext

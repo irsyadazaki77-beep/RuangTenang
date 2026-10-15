@@ -132,11 +132,6 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
             <span className="font-bold text-sm tracking-tight text-slate-900 dark:text-slate-100 truncate">
               RuangTenang
             </span>
-            {isRuangKerja && (
-              <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 border border-emerald-300/60 dark:border-emerald-700/60 rounded-md shrink-0">
-                RuangKerja
-              </span>
-            )}
           </div>
         </div>
 

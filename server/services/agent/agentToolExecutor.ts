@@ -19,6 +19,7 @@ export interface AgentToolExecutionContext {
   userId: string;
   task: WorkspacePlan['tasks'][number];
   allowedToolIds: ReadonlySet<string>;
+  allowedArtifactIds?: ReadonlySet<string>;
   abortSignal: AbortSignal;
   sourceNamespace: string;
   nextSourceIndex: () => number;
@@ -170,7 +171,8 @@ async function executeRegisteredTool(toolId: string, input: unknown, context: Ag
 
   if (toolId === 'read_workspace_artifact') {
     const args = input as { artifactId: string };
-    if (!context.task.snapshot?.artifactId || args.artifactId !== context.task.snapshot.artifactId) throw new Error('ARTIFACT_NOT_ALLOWED');
+    const allowedArtifacts = context.allowedArtifactIds || (context.task.snapshot?.artifactId ? new Set([context.task.snapshot.artifactId]) : new Set<string>());
+    if (!allowedArtifacts.has(args.artifactId)) throw new Error('ARTIFACT_NOT_ALLOWED');
     const artifact = await prisma.artifacts.findFirst({
       where: { id: args.artifactId, chatId: context.workspaceId, userId: context.userId },
       select: { id: true, title: true, type: true, language: true, version: true, content: true }
@@ -187,6 +189,212 @@ async function executeRegisteredTool(toolId: string, input: unknown, context: Ag
       ...(artifact.language ? { language: artifact.language } : {}),
       version: artifact.version,
       content: scanAndSanitizePII(content.slice(0, 12_000)).sanitizedText
+    };
+  }
+
+  if (toolId === 'propose_document_draft') {
+    const args = input as {
+      title: string;
+      summary: string;
+      sections: Array<{ heading: string; level: number; body: string }>;
+      references?: string[];
+    };
+    const title = safeString(args.title) as string;
+    const summary = safeString(args.summary) as string;
+    const mdParts: string[] = [`# ${title}\n`, `> ${summary}\n`];
+    for (const sec of args.sections) {
+      const hashes = '#'.repeat(Math.max(1, Math.min(3, sec.level)));
+      mdParts.push(`${hashes} ${safeString(sec.heading)}\n\n${safeString(sec.body)}\n`);
+    }
+    if (args.references && args.references.length > 0) {
+      mdParts.push('## Referensi\n');
+      for (const ref of args.references) {
+        mdParts.push(`- ${safeString(ref)}`);
+      }
+    }
+    const formattedMarkdown = mdParts.join('\n').slice(0, 20_000);
+    const estimatedWords = formattedMarkdown.split(/\s+/).filter(Boolean).length;
+    return {
+      proposalStatus: 'ready_for_review',
+      artifactType: 'DOCUMENT',
+      title,
+      sectionCount: args.sections.length,
+      estimatedWords,
+      formattedMarkdown
+    };
+  }
+
+  if (toolId === 'propose_presentation_deck') {
+    const args = input as {
+      title: string;
+      theme: 'academic_minimal' | 'professional' | 'technology' | 'clean_corporate';
+      slides: Array<{ title: string; body: string; notes?: string }>;
+    };
+    const title = safeString(args.title) as string;
+    const slides = args.slides.map((s, idx) => ({
+      id: `slide-${idx + 1}`,
+      title: safeString(s.title) as string,
+      body: safeString(s.body) as string,
+      notes: safeString(s.notes || '') as string
+    }));
+    const deck = {
+      format: 'ruangtenang-presentation-v1',
+      theme: args.theme || 'academic_minimal',
+      slides
+    };
+    const deckJson = JSON.stringify(deck, null, 2).slice(0, 20_000);
+    return {
+      proposalStatus: 'ready_for_review',
+      artifactType: 'DOCUMENT',
+      language: 'presentation',
+      title,
+      slideCount: slides.length,
+      deckJson
+    };
+  }
+
+  if (toolId === 'propose_tabular_dataset') {
+    const args = input as {
+      title: string;
+      columns: string[];
+      columnTypes?: Record<string, 'text' | 'number' | 'date'>;
+      rows: Array<Record<string, unknown>>;
+      sourceProvenance?: string;
+    };
+    const title = safeString(args.title) as string;
+    const columns = args.columns.map(c => safeString(c) as string);
+    const sanitizedRows = args.rows.map(r => sanitizeStructured(r) as Record<string, unknown>);
+    const table = {
+      type: 'table',
+      title,
+      columns,
+      columnTypes: args.columnTypes || {},
+      rows: sanitizedRows,
+      transformations: [],
+      ...(args.sourceProvenance ? { filename: safeString(args.sourceProvenance) as string } : {})
+    };
+    const tableJson = JSON.stringify(table, null, 2).slice(0, 20_000);
+    return {
+      proposalStatus: 'ready_for_review',
+      artifactType: 'TABLE',
+      title,
+      columnCount: columns.length,
+      rowCount: sanitizedRows.length,
+      tableJson
+    };
+  }
+
+  if (toolId === 'revise_workspace_artifact') {
+    const args = input as {
+      artifactId: string;
+      instructions: string;
+      revisedTitle?: string;
+      revisedContent: string;
+    };
+    const allowedArtifacts = context.allowedArtifactIds || (context.task.snapshot?.artifactId ? new Set([context.task.snapshot.artifactId]) : new Set<string>());
+    if (!allowedArtifacts.has(args.artifactId)) throw new Error('ARTIFACT_NOT_ALLOWED');
+    const artifact = await prisma.artifacts.findFirst({
+      where: { id: args.artifactId, chatId: context.workspaceId, userId: context.userId },
+      select: { id: true, title: true }
+    });
+    if (!artifact) throw new Error('ARTIFACT_NOT_FOUND');
+    const title = safeString(args.revisedTitle || artifact.title) as string;
+    const revisedContent = scanAndSanitizePII(args.revisedContent).sanitizedText.slice(0, 20_000);
+    return {
+      proposalStatus: 'revision_proposed',
+      targetArtifactId: artifact.id,
+      title,
+      contentLength: revisedContent.length
+    };
+  }
+
+  if (toolId === 'verify_artifact_structure') {
+    const args = input as {
+      targetType: 'document' | 'presentation' | 'table';
+      content: string;
+    };
+    const checks: Array<{ name: string; passed: boolean; details: string }> = [];
+    const warnings: string[] = [];
+
+    if (args.targetType === 'document') {
+      const hasHeading = /^#{1,6}\s+/m.test(args.content);
+      checks.push({
+        name: 'heading_structure',
+        passed: hasHeading,
+        details: hasHeading ? 'Dokumen memiliki heading Markdown valid.' : 'Dokumen tidak memiliki heading Markdown.'
+      });
+      const wordCount = args.content.split(/\s+/).filter(Boolean).length;
+      checks.push({
+        name: 'content_length',
+        passed: wordCount >= 50,
+        details: `Jumlah kata: ${wordCount} (minimum 50 kata).`
+      });
+      const hasReferences = /references|referensi|daftar pustaka/i.test(args.content);
+      checks.push({
+        name: 'academic_references',
+        passed: hasReferences,
+        details: hasReferences ? 'Bagian referensi/bibliografi terdeteksi.' : 'Tidak ada bagian referensi terdeteksi.'
+      });
+      if (!hasReferences) warnings.push('Dokumen akademis disarankan menyertakan bagian referensi.');
+    } else if (args.targetType === 'presentation') {
+      let isStructuredJson = false;
+      let slideCount = 0;
+      try {
+        const deck = JSON.parse(args.content);
+        if (deck.format === 'ruangtenang-presentation-v1' && Array.isArray(deck.slides)) {
+          isStructuredJson = true;
+          slideCount = deck.slides.length;
+        }
+      } catch {
+        slideCount = args.content.split(/(?=^#{1,2}\s+)/m).filter(s => s.trim()).length;
+      }
+      checks.push({
+        name: 'slide_format',
+        passed: isStructuredJson || slideCount > 0,
+        details: isStructuredJson ? `Format JSON presentasi valid dengan ${slideCount} slide.` : `Format Markdown dengan ${slideCount} section slide.`
+      });
+      checks.push({
+        name: 'slide_count',
+        passed: slideCount >= 3,
+        details: `Jumlah slide: ${slideCount} (disarankan minimal 3 slide).`
+      });
+      if (slideCount < 3) warnings.push('Presentasi memiliki kurang dari 3 slide.');
+    } else if (args.targetType === 'table') {
+      let isTableJson = false;
+      let rowCount = 0;
+      let colCount = 0;
+      try {
+        const tbl = JSON.parse(args.content);
+        if (tbl.type === 'table' && Array.isArray(tbl.columns) && Array.isArray(tbl.rows)) {
+          isTableJson = true;
+          colCount = tbl.columns.length;
+          rowCount = tbl.rows.length;
+        }
+      } catch {
+        const lines = args.content.split(/\r?\n/).filter(l => l.includes('|'));
+        if (lines.length >= 2) {
+          rowCount = lines.length - 2;
+          colCount = lines[0].split('|').filter(c => c.trim()).length;
+        }
+      }
+      checks.push({
+        name: 'table_structure',
+        passed: (isTableJson || rowCount > 0) && colCount > 0,
+        details: isTableJson ? `Tabel terstruktur dengan ${colCount} kolom dan ${rowCount} baris.` : `Tabel Markdown dengan ${colCount} kolom dan ${rowCount} baris.`
+      });
+      checks.push({
+        name: 'minimum_data_rows',
+        passed: rowCount >= 1,
+        details: `Baris data: ${rowCount} (minimum 1 baris).`
+      });
+    }
+
+    const isValid = checks.every(c => c.passed);
+    return {
+      isValid,
+      targetType: args.targetType,
+      checks,
+      warnings
     };
   }
 
@@ -263,7 +471,8 @@ function safeToolError(error: unknown): { code: string; message: string } {
     TOOL_TIMEOUT: 'Batas waktu eksekusi tool tercapai.',
     WEB_SEARCH_NOT_CONFIGURED: 'Pencarian web belum dikonfigurasi.',
     WEB_SEARCH_FAILED: 'Pencarian web gagal; tidak ada sumber eksternal yang digunakan.',
-    WEB_SEARCH_TIMEOUT: 'Pencarian web melebihi batas waktu; tidak ada sumber eksternal yang digunakan.'
+    WEB_SEARCH_TIMEOUT: 'Pencarian web melebihi batas waktu; tidak ada sumber eksternal yang digunakan.',
+    INVALID_REVISION_TARGET: 'Artifact yang ingin direvisi tidak ditemukan atau tidak diizinkan.'
   };
   return { code: safeMessages[code] ? code : 'TOOL_EXECUTION_FAILED', message: safeMessages[code] || 'Tool gagal dijalankan.' };
 }
@@ -291,7 +500,8 @@ export async function executeAuthorizedAgentTool(
   const toolCallId = randomUUID();
   const startedAt = Date.now();
   const definition = getAgentToolDefinition(toolId);
-  if (!definition || !context.allowedToolIds.has(toolId) || definition.permission !== 'read' || definition.requiresApproval) {
+  const isAllowedPermission = definition && (definition.permission === 'read' || definition.permission === 'propose');
+  if (!definition || !context.allowedToolIds.has(toolId) || !isAllowedPermission || definition.requiresApproval) {
     const result = AgentToolResultSchema.parse({ executionId: context.executionId, toolCallId, toolId, status: 'failed', error: { code: 'TOOL_NOT_ALLOWED', message: 'Tool tidak diizinkan untuk task ini.' }, durationMs: 0 });
     console.info('[WORKSPACE_AGENT_TOOL]', JSON.stringify({ executionId: context.executionId, toolCallId, toolId, status: 'failed', durationMs: 0, errorCode: 'TOOL_NOT_ALLOWED' }));
     return result;

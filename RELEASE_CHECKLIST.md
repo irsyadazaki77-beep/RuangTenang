@@ -1,5 +1,23 @@
 # Production Release Checklist - RuangTenang Kampus 🌿
 
+## Multi-campus readiness gate — 2026-10-15
+- [x] Added nullable campus ownership to accounts, counselor profiles, and appointments, plus a shared campus configuration and privacy-limited product-event store.
+- [x] Added platform-admin provisioning/mapping endpoints, a separate campus-admin role and panel, tenant-scoped counselor/appointment access checks, opt-in product events, a 10-user analytics suppression threshold, and 90-day event cleanup.
+- [ ] Generate both Prisma clients and apply/rehearse migration `20261015000000_campus_tenants` against isolated SQLite and PostgreSQL databases.
+- [ ] Map existing accounts, counselor profiles, and appointments only after the data owner approves each campus mapping. Unassigned rows stay unavailable to tenant administrators.
+- [ ] Add API-level cross-tenant tests for user records, screenings, appointments, counselor availability, exports, notifications, and room signaling; confirm review of any remaining direct database queries.
+- [ ] Run typecheck, lint, unit, integration, security, and E2E suites after the migration; prior release gates and environment blockers below remain open until rerun.
+- [ ] Obtain clinical, privacy, accessibility, backup/restore, vendor, and campus-owner sign-off before pilot. This repository change does not provide those human or deployment approvals.
+- See [`docs/MULTI_CAMPUS_OPERATIONS.md`](docs/MULTI_CAMPUS_OPERATIONS.md) for provisioning, mapping, and rollout instructions.
+
+### Validation snapshot — 2026-10-15
+- [x] `npm run typecheck` passes; both SQLite and PostgreSQL Prisma schemas validate.
+- [x] Focused unit/security checks pass: 12 appointment/campus unit tests and 12 appointment authorization/idempotency security tests.
+- [ ] Full unit run: 655 passed, 2 failed. The failures are the Windows backup-file permission assertion and production environment fixtures that do not provide the required dedicated 32-byte hex backup key.
+- [ ] Full security run: 282 passed, 18 failed. The current SQLite test database lacks `MobileRefreshToken`; other failures include old production-secret fixtures and a counselor-query mock expectation. The appointment idempotency failures from this run were fixed and the focused security file then passed; rerun the full suite after test-database migration.
+- [ ] Clean install/client generation and integration/E2E suites remain open. Prisma generation previously hit Windows `EPERM` replacing a locked native engine; no isolated PostgreSQL instance was available for migration rehearsal.
+- [ ] `git diff --check` still reports trailing whitespace in pre-existing AI model files; it reports no formatting issue in the tenant files added in this change.
+
 ## Fase 1 gate status — 2026-10-02
 - [ ] **Not a production candidate.** The final revision has not completed the full required quality gate.
 - [ ] `npm ci` failed with Windows `EPERM` while replacing locked native binaries. `npm install --ignore-scripts --no-audit --no-fund` restored enough tooling for local checks, but Prisma Client generation is blocked because `binaries.prisma.sh` is unreachable. Typecheck fails on missing generated Prisma exports; unit/integration/security scripts stop before Vitest for the same reason.
@@ -64,7 +82,7 @@ Production environment validation and PostgreSQL migration rehearsal remain unve
 - [x] Bounded multipart field sizes/counts and concurrent upload processing; PDF page limits are checked from document metadata before full text extraction.
 - [x] Extended retention cleanup to delete expired chat attachments and unlinked uploads, including guest attachments after 24 hours; cleanup removes extracted document chunks and uses the centralized attachment path checks above.
 - [x] Daily maintenance output now reports attachment cleanup counts.
-- [ ] **Operational verification required before production**: confirm upload limits work with the production proxy/IP configuration and monitor file storage/cleanup failures. The limiter uses the current Express rate-limit default store.
+- [ ] **Operational verification required before production**: confirm upload limits work with the production proxy/IP configuration and monitor file storage/cleanup failures. Express limiters now use atomic Redis counters with an enforced per-process fallback and alert metric when Redis is unavailable.
 
 ## 6. Performance and loading review — 2026-10-01
 - [x] Lazy-loaded the student and counselor application shells by authenticated role, with an accessible loading status while the selected workspace downloads.
@@ -87,18 +105,19 @@ Production environment validation and PostgreSQL migration rehearsal remain unve
 - [x] Hardened PostgreSQL backups to invoke `pg_dump` without a shell, avoid putting the database URL in process arguments/logs, validate the archive with `pg_restore --list`, restrict local file permissions, and publish only completed backup files.
 - [x] Changed rollback guidance to prefer application rollback and treat database restore as a separately approved recovery action, since restore can discard writes made after the snapshot.
 - [ ] **Restore rehearsal required before production**: restore a recent PostgreSQL dump into a new isolated database, verify representative records and application startup, then record duration and recovery point.
-- [ ] **Backup storage required before production**: store backups in encrypted, access-controlled storage outside the app host; define retention and confirm an off-host copy. The local backup utility does not encrypt dump contents.
+- [x] Local database backups are now authenticated AES-256-GCM ciphertext and require a dedicated `BACKUP_ENCRYPTION_KEY`; plaintext staging files are removed after encryption.
+- [x] Local backup retention is seven days; PostgreSQL CI now restores an encrypted backup into a disposable database and verifies the restored schema.
+- [ ] **Backup storage required before production**: configure encrypted, access-controlled off-host storage and confirm a retained off-host copy. The repository does not configure a cloud/object-storage destination.
 - [ ] **Deployment rollback rehearsal required before production**: keep immutable prior application images available and practice routing traffic back without restoring the database.
 - [ ] **Live release gates remain open**: run the smoke check against the deployment target and complete the pending clinical, privacy, access-control, accessibility, and production-environment reviews above.
 
 ## 9. Deployment Steps
-1. Configure environment variables in deployment environment (Cloud Run / Container environment):
+1. Configure non-secret values in `.env.production` and provide secret file paths using `.env.example`:
    - Set `NODE_ENV=production`
    - Set `PORT=3000`
-   - Set `JWT_SECRET` (at least 32 random characters)
-   - Set `ENCRYPTION_KEY` (32-byte hex string)
-   - Set `BLIND_INDEX_SECRET`
-   - Set `DATABASE_URL` to PostgreSQL; production SQLite is rejected.
+   - Mount `JWT_SECRET`, `ENCRYPTION_KEY`, `BLIND_INDEX_SECRET`, and `DATABASE_URL` from Compose secret files; production SQLite is rejected.
+   - Set `BACKUP_ENCRYPTION_KEY` as a dedicated 32-byte hex key in its own secret file.
+   - Set PostgreSQL and Redis passwords in mounted secret files. The database URL password must match the PostgreSQL password file.
    - Configure provider credentials only for AI providers that are enabled. `GEMINI_API_KEY` is optional when another provider or local fallback is intended.
    - Keep demo seeding disabled in production.
 2. Build production container artifact:

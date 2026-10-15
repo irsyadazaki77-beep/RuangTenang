@@ -9,7 +9,9 @@ import {
 } from 'lucide-react';
 import { apiClient } from '../../lib/apiClient';
 import { clientDb } from '../../lib/clientDb';
+import { writeGuestAiConsent } from '../../lib/guestAiConsent';
 import { safeLocalStorage } from '../../lib/storage';
+import { trackProductEvent } from '../../lib/productAnalytics';
 
 interface OnboardingFlowProps {
   userId: string;
@@ -124,6 +126,10 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ userId, onComple
     safeLocalStorage.setItem(`rt_user_mood_${userId}`, selectedMood);
     safeLocalStorage.setItem(`rt_user_goals_${userId}`, JSON.stringify(selectedNeeds));
 
+    // Guest consent is deliberately session-scoped: it is not an account consent
+    // record and must not persist in shared browser storage after this tab closes.
+    if (userId === 'guest') writeGuestAiConsent(consentForAI);
+
     try {
       await clientDb.saveEncrypted(
         `onboarding_${userId}`, 
@@ -152,6 +158,7 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ userId, onComple
       } catch (err) {
         console.warn('Failed to sync onboarding to server:', err);
       }
+      trackProductEvent('activation_completed');
     }
   };
 

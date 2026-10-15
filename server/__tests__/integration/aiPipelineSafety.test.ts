@@ -7,6 +7,7 @@ import { getVerifiedEmergencyContacts } from '../../config/emergencyRegistry.js'
 import { analyzeMessageSentiment } from '../../../src/lib/crisisDetector.js';
 import { scanAndSanitizePII } from '../../services/piiService.js';
 import { aiRequestService } from '../../services/ai/aiRequestService.js';
+import { contextRetrievalService } from '../../services/file-intelligence/contextRetrievalService.js';
 
 describe('FASE 8: Unified AI Gateway & Safety Pipeline Tests', () => {
   beforeEach(() => {
@@ -141,6 +142,79 @@ describe('FASE 8: Unified AI Gateway & Safety Pipeline Tests', () => {
   });
 
   describe('5. Unified AI Gateway Consent Governance', () => {
+    it('requires session-scoped consent before a guest message can reach an AI provider', async () => {
+      await expect(aiSafetyService.runUnifiedPipeline({
+        userId: 'guest',
+        input: 'Bagaimana cara mengatasi rasa cemas?',
+        isStreaming: false
+      })).rejects.toMatchObject({ category: 'AI_CONSENT_REQUIRED', retryable: false });
+    });
+
+    it('keeps deterministic crisis guidance available when a guest has not consented to provider processing', async () => {
+      const result = await aiSafetyService.runUnifiedPipeline({
+        userId: 'guest',
+        input: 'Saya ingin bunuh diri malam ini dan sudah menyiapkan caranya',
+        isStreaming: false
+      });
+
+      expect(result.isCrisisOverride).toBe(true);
+      expect(result.text).toContain('119');
+    });
+
+    it('retrieves a guest Workspace document through its per-session attachment owner', async () => {
+      vi.stubEnv('GEMINI_API_KEY', 'test-only-gemini-placeholder');
+      vi.spyOn(contextRetrievalService, 'retrieveContext').mockResolvedValue({
+        contextBlock: '<untrusted_document_context>guest document evidence</untrusted_document_context>',
+        sourceReferences: [],
+        chunksSelected: [],
+        totalTokensUsed: 0,
+        snapshot: {
+          id: 'guest-snapshot',
+          query: 'Rangkum dokumen ini',
+          createdAt: new Date().toISOString(),
+          selectedAttachmentIds: ['guest-file'],
+          selectedChunks: [],
+          sourceReferences: [],
+          tokenBudget: 2500,
+          totalTokensUsed: 0
+        }
+      });
+      vi.spyOn(aiRequestService, 'generateChatResponse').mockResolvedValue({
+        text: 'Dokumen membahas temuan utama.',
+        modelUsed: 'gemini-3.1-flash-lite',
+        isFallback: false
+      });
+
+      await aiSafetyService.runUnifiedPipeline({
+        input: 'Rangkum dokumen ini',
+        chatMode: 'RuangKerja',
+        workspaceMode: true,
+        attachmentOwnerId: 'guest:opaque-session-owner',
+        workspaceAttachmentIds: ['guest-file'],
+        guestAiConsent: true,
+        isStreaming: false
+      });
+
+      expect(contextRetrievalService.retrieveContext).toHaveBeenCalledWith(expect.objectContaining({
+        userId: 'guest:opaque-session-owner',
+        attachmentIds: ['guest-file'],
+        userQuery: 'Rangkum dokumen ini'
+      }));
+      expect(aiRequestService.generateChatResponse).toHaveBeenCalledWith(expect.objectContaining({
+        systemInstruction: expect.stringContaining('guest document evidence')
+      }));
+    });
+
+    it('does not let temporary sessions bypass a registered user consent withdrawal', async () => {
+      vi.spyOn(consentService, 'canUseAI').mockResolvedValue(false);
+      await expect(aiSafetyService.runUnifiedPipeline({
+        userId: 'user_without_ai_consent',
+        input: 'Bagaimana cara mengatasi rasa cemas?',
+        isTemporary: true,
+        isStreaming: false
+      })).rejects.toMatchObject({ category: 'AI_CONSENT_REQUIRED', retryable: false });
+    });
+
     it('does not generate a chat response when AI consent is not granted', async () => {
       vi.spyOn(consentService, 'canUseAI').mockResolvedValue(false);
 

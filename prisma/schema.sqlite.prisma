@@ -11,6 +11,26 @@ generator client {
   provider = "prisma-client-js"
 }
 
+model Campuses {
+  id               String    @id
+  slug             String    @unique
+  name             String
+  timeZone         String    @default("Asia/Jakarta")
+  referralContacts String    @default("[]")
+  aiSettings       String    @default("{}")
+  branding         String    @default("{}")
+  retentionDays    Int       @default(90)
+  isActive         Boolean   @default(true)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  users            Users[]
+  counselors       Counselors[]
+  appointments     Appointments[]
+  analyticsEvents  ProductAnalyticsEvents[]
+
+  @@index([isActive, name])
+}
+
 model Users {
   id                        String    @id
   name                      String
@@ -19,6 +39,7 @@ model Users {
   role                      String    @default("mahasiswa")
   tier                      String    @default("Free")
   university                String    @default("")
+  campusId                  String?
   createdAt                 DateTime  @default(now())
   emailVerified             Boolean   @default(false)
   emailVerificationCode     String?
@@ -45,6 +66,7 @@ model Users {
   emergencyContact          EmergencyContacts?
   memories                  UserMemories[]
   sessions                  UserSession[]
+  mobileRefreshTokens       MobileRefreshToken[]
   loginEvents               LoginEvent[]
   notifications             SecurityNotification[]
   messageBookmarks          MessageBookmarks[]
@@ -52,6 +74,9 @@ model Users {
   soapNotesAsCounselor      ClinicalSoapNotes[]   @relation("CounselorSoapNotes")
   artifacts                 Artifacts[]
   workspaceMemories         WorkspaceMemories[]
+  campus                    Campuses? @relation(fields: [campusId], references: [id], onDelete: SetNull)
+
+  @@index([campusId, role])
 }
 
 model Appointments {
@@ -73,11 +98,13 @@ model Appointments {
   studentEmail     String?
   studentNimHash   String?
   studentEmailHash String?
+  campusId         String?
 
   // Relations
   user             Users?       @relation(fields: [userId], references: [id], onDelete: Cascade)
   counselor        Counselors   @relation(fields: [counselorId], references: [id], onDelete: Cascade)
   slot             AppointmentSlot?
+  campus           Campuses? @relation(fields: [campusId], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([counselorId])
@@ -87,6 +114,7 @@ model Appointments {
   @@index([createdAt])
   @@index([studentNimHash])
   @@index([studentEmailHash])
+  @@index([campusId, scheduledAt, status])
 }
 
 model Screenings {
@@ -332,12 +360,28 @@ model Counselors {
   location          String?
   isDemoData        Boolean  @default(false)
   userId            String?
+  campusId          String?
   createdAt         DateTime @default(now())
 
   // Relations
   appointments      Appointments[]
+  campus            Campuses? @relation(fields: [campusId], references: [id], onDelete: SetNull)
 
   @@index([isVerified])
+  @@index([campusId, isDemoData])
+}
+
+model ProductAnalyticsEvents {
+  id         String   @id
+  campusId   String
+  actorHash  String
+  eventType  String
+  occurredAt DateTime @default(now())
+  campus     Campuses @relation(fields: [campusId], references: [id], onDelete: Cascade)
+
+  @@index([campusId, eventType, occurredAt])
+  @@index([campusId, actorHash, occurredAt])
+  @@index([occurredAt])
 }
 
 model MoodLogs {
@@ -388,6 +432,22 @@ model UserSession {
   @@index([userId])
   @@index([userId, lastActive])
   @@index([ipHash])
+}
+
+model MobileRefreshToken {
+  id          String    @id
+  userId      String
+  sessionId   String
+  familyId    String
+  tokenHash   String    @unique
+  expiresAt   DateTime
+  createdAt   DateTime  @default(now())
+  consumedAt  DateTime?
+  revokedAt   DateTime?
+  user        Users     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@index([familyId, revokedAt])
 }
 
 model LoginEvent {

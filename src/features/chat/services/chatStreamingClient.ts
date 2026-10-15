@@ -41,6 +41,8 @@ export interface StreamPayload {
   message: string;
   chatId?: string;
   isTemporary?: boolean;
+  /** Session-only acknowledgement for anonymous AI processing; never account-persisted. */
+  guestAiConsent?: boolean;
   pluginResult?: string;
   chatMode?: string;
   responseStyle?: string;

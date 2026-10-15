@@ -17,6 +17,8 @@ function setValidProductionEnvironment() {
   process.env.ENCRYPTION_KEY = crypto.randomBytes(32).toString('hex');
   process.env.BLIND_INDEX_SECRET = crypto.randomBytes(32).toString('hex');
   process.env.DATABASE_URL = 'postgresql://fixture:fixture@localhost:5432/fixture';
+  process.env.APP_ORIGIN = 'https://fixture.example.test';
+  process.env.CORS_ALLOWED_ORIGINS = 'https://fixture.example.test';
   delete process.env.TURN_URL;
   delete process.env.TURN_USERNAME;
   delete process.env.TURN_SHARED_SECRET;

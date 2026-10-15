@@ -226,7 +226,7 @@ export const attachmentStorageService = {
         data: `uploads/attachments/${responseDto.id}.bin`,
         chatId: chatId || null,
         messageId: messageId || null,
-        userId: userId || 'guest',
+        userId,
         metadata: JSON.stringify({
           pageCount: responseDto.pageCount,
           slideCount: responseDto.slideCount,
@@ -271,8 +271,8 @@ export const attachmentStorageService = {
       return null;
     }
 
-    // IDOR / Ownership validation: user must own attachment or both be 'guest'
-    if (attachment.userId !== userId && !(attachment.userId === 'guest' && userId === 'guest')) {
+    // Ownership is exact. The legacy shared "guest" principal is never accepted.
+    if (!userId || userId === 'guest' || attachment.userId === 'guest' || attachment.userId !== userId) {
       throw new Error('UNAUTHORIZED_ACCESS: Anda tidak memiliki akses ke berkas ini.');
     }
 

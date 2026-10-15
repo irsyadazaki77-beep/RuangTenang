@@ -7,11 +7,13 @@ node_modules/
 build/
 dist/
 dist-ssr/
+/tmp/
 *.local
 
 # Environment Variables & Secrets
 .env*
 !.env.example
+/secrets/
 
 # Logs
 *.log

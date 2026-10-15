@@ -88,12 +88,30 @@ export const authRepository = {
         ],
       },
     });
+
+    const refreshRows = await (prisma as any).mobileRefreshToken.findMany({
+      where: { userId, revokedAt: null },
+      select: { id: true, sessionId: true, familyId: true },
+    });
+    const revokedFamilies = [...new Set(refreshRows
+      .filter((row: any) => row.sessionId === sessionId || crypto.createHash('sha256').update(row.sessionId).digest('hex') === sessionId || crypto.createHash('sha256').update(row.sessionId).digest('hex') === hashedId)
+      .map((row: any) => row.familyId))];
+    if (revokedFamilies.length) {
+      await (prisma as any).mobileRefreshToken.updateMany({
+        where: { familyId: { in: revokedFamilies }, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+    }
   },
 
   async removeAllActiveSessions(userId: string): Promise<void> {
     await prisma.$transaction(async (tx) => {
       await tx.userSession.deleteMany({
         where: { userId },
+      });
+      await (tx as any).mobileRefreshToken.updateMany({
+        where: { userId, revokedAt: null },
+        data: { revokedAt: new Date() },
       });
       await tx.users.update({
         where: { id: userId },

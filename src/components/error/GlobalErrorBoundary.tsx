@@ -1,5 +1,6 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { RefreshCw, Home, HeartHandshake } from 'lucide-react';
+import { trackProductEvent } from '../../lib/productAnalytics';
 
 export interface GlobalErrorBoundaryProps {
   children: ReactNode;
@@ -27,6 +28,7 @@ export class GlobalErrorBoundary extends Component<GlobalErrorBoundaryProps, Glo
 
   public componentDidCatch(error: Error, _errorInfo: ErrorInfo): void {
     console.error('[GlobalErrorBoundary] UI_RENDER_ERROR', { name: error.name, message: error.message, stack: error.stack });
+    trackProductEvent('workflow_failed');
   }
 
   public handleResetSession = (): void => {
