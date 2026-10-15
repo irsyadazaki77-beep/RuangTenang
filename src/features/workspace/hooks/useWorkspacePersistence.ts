@@ -3,11 +3,13 @@ import { Message } from '../../chat/types';
 import { WorkspaceArtifact } from '../types';
 import { WorkspaceApiService } from '../services/workspaceApiService';
 import { createWelcomeMessage } from '../constants/workspaceConstants';
+import { showWorkspaceLoadFailureOnce } from '../utils/workspaceLoadNotice';
 import { useToast } from '../../../components/Toast';
 
 interface UseWorkspacePersistenceOptions {
   chatId?: string;
   workspaceIdentity?: string;
+  loadAttemptId?: string;
   userName?: string;
 }
 
@@ -24,6 +26,7 @@ interface UseWorkspacePersistenceReturn {
 export function useWorkspacePersistence({
   chatId,
   workspaceIdentity,
+  loadAttemptId,
   userName
 }: UseWorkspacePersistenceOptions): UseWorkspacePersistenceReturn {
   const { showToast } = useToast();
@@ -97,7 +100,12 @@ export function useWorkspacePersistence({
         } else if (messagesResult.status === 'rejected' && messagesResult.reason?.name !== 'AbortError' && messageLoadGenerationRef.current === loadGeneration) {
           console.warn('[useWorkspacePersistence] Messages load error:', messagesResult.reason);
           setMessages([createWelcomeMessage(userName)]);
-          showToastRef.current('Riwayat Workspace gagal dimuat. Periksa koneksi lalu coba lagi.', 'error');
+          const status = (messagesResult.reason as { status?: number } | undefined)?.status;
+          if (status === 404) {
+            showToastRef.current('Workspace tidak ditemukan atau kamu tidak memiliki akses.', 'error');
+          } else if (status !== 401) {
+            showWorkspaceLoadFailureOnce(loadAttemptId || `workspace-load:${chatId}`, showToastRef.current);
+          }
         }
       } finally {
         if (!signal.aborted && messageLoadGenerationRef.current === loadGeneration && activeChatIdRef.current === chatId && activeWorkspaceIdentityRef.current === workspaceIdentity) {
@@ -112,7 +120,7 @@ export function useWorkspacePersistence({
     return () => {
       abortController.abort();
     };
-  }, [chatId, userName, workspaceIdentity]);
+  }, [chatId, loadAttemptId, userName, workspaceIdentity]);
 
   const clearWorkspaceConversation = useCallback((targetChatId?: string): Promise<boolean> => {
     if (clearPromiseRef.current) return clearPromiseRef.current;

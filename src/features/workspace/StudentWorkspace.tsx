@@ -123,9 +123,11 @@ function StudentWorkspaceSession({
   const location = useLocation();
   const navigate = useNavigate();
   const { showToast } = useToast();
+  const isGuestUser = !user || user.role === 'guest';
+  const activeRouteChatId = isGuestUser ? undefined : chatId;
   const [streamCreatedChatId, setStreamCreatedChatId] = useState<string>();
-  const [workspaceIdentity, setWorkspaceIdentity] = useState(() => chatId ? `chat:${chatId}` : getLocalWorkspaceIdentity(user?.id));
-  const effectiveChatId = chatId || streamCreatedChatId;
+  const [workspaceIdentity, setWorkspaceIdentity] = useState(() => activeRouteChatId ? `chat:${activeRouteChatId}` : getLocalWorkspaceIdentity(user?.id));
+  const effectiveChatId = activeRouteChatId || (!isGuestUser ? streamCreatedChatId : undefined);
   const workspaceMetadata = useWorkspaceMetadata(user?.role === 'guest' ? undefined : effectiveChatId);
   const workspacePlan = workspaceMetadata.plan;
   const workspaceData = workspaceMetadata.workspace;
@@ -135,18 +137,26 @@ function StudentWorkspaceSession({
   const saveWorkspaceMetadata = workspaceMetadata.save;
   const workspacePlanRef = React.useRef(workspacePlan);
   workspacePlanRef.current = workspacePlan;
-  const logicalWorkspaceIdentity = streamCreatedChatId && (!chatId || chatId === streamCreatedChatId)
+  const logicalWorkspaceIdentity = streamCreatedChatId && (!activeRouteChatId || activeRouteChatId === streamCreatedChatId)
     ? workspaceIdentity
-    : chatId ? `chat:${chatId}` : workspaceIdentity;
+    : activeRouteChatId ? `chat:${activeRouteChatId}` : workspaceIdentity;
+  const workspaceLoadAttemptId = useMemo(
+    () => `${user?.id || 'guest'}:${logicalWorkspaceIdentity}:${Date.now()}:${Math.random().toString(36).slice(2)}`,
+    [logicalWorkspaceIdentity, user?.id]
+  );
   const logicalWorkspaceIdentityRef = React.useRef(logicalWorkspaceIdentity);
   logicalWorkspaceIdentityRef.current = logicalWorkspaceIdentity;
   const workspaceTitle = chats?.find(chat => chat.id === effectiveChatId)?.title || 'Workspace baru';
   const effectiveChatIdRef = React.useRef(effectiveChatId);
-  const lastRouteChatIdRef = React.useRef(chatId);
+  const lastRouteChatIdRef = React.useRef(activeRouteChatId);
   const clearInProgressRef = React.useRef(false);
   const activeSendOperationRef = React.useRef<string | null>(null);
   const taskGenerationRequestsRef = React.useRef(new Map<string, string>());
   effectiveChatIdRef.current = effectiveChatId;
+
+  useEffect(() => {
+    if (isGuestUser && chatId) navigate('/workspace', { replace: true });
+  }, [chatId, isGuestUser, navigate]);
 
   // 1. Domain Persistence Hook
   const {
@@ -160,6 +170,7 @@ function StudentWorkspaceSession({
   } = useWorkspacePersistence({
     chatId: effectiveChatId,
     workspaceIdentity: logicalWorkspaceIdentity,
+    loadAttemptId: workspaceLoadAttemptId,
     userName: user?.name
   });
 
@@ -302,11 +313,11 @@ function StudentWorkspaceSession({
 
   useLayoutEffect(() => {
     const previousRouteChatId = lastRouteChatIdRef.current;
-    const createdFromCurrentStream = !previousRouteChatId && Boolean(chatId && effectiveChatIdRef.current === chatId);
-    lastRouteChatIdRef.current = chatId;
+    const createdFromCurrentStream = !previousRouteChatId && Boolean(activeRouteChatId && effectiveChatIdRef.current === activeRouteChatId);
+    lastRouteChatIdRef.current = activeRouteChatId;
     setComparisonRun(null);
     if (createdFromCurrentStream) return;
-    if (previousRouteChatId !== chatId) {
+    if (previousRouteChatId !== activeRouteChatId) {
       dispatchWorkspaceView({ type: 'reset-workspace-view' });
       setIsCanvasExpanded(false);
       setInputText(readWorkspacePromptDraft(getWorkspaceSessionStorage(), promptDraftIdentity));
@@ -320,8 +331,8 @@ function StudentWorkspaceSession({
       setIsInstructionsEditing(false);
       setIsInstructionsSaving(false);
     }
-    if (chatId) {
-      setWorkspaceIdentity(`chat:${chatId}`);
+    if (activeRouteChatId) {
+      setWorkspaceIdentity(`chat:${activeRouteChatId}`);
       clearLocalWorkspaceIdentity(user?.id);
     } else {
       setWorkspaceIdentity(getLocalWorkspaceIdentity(user?.id));
@@ -338,11 +349,11 @@ function StudentWorkspaceSession({
     setPendingCanvasTransfer(null);
     requestSnapshotsRef.current.clear();
     activeSendOperationRef.current = null;
-  }, [chatId, dispatchWorkspaceView, promptDraftIdentity, user?.id]);
+  }, [activeRouteChatId, dispatchWorkspaceView, promptDraftIdentity, user?.id]);
 
   useEffect(() => {
-    if (chatId && streamCreatedChatId === chatId) setStreamCreatedChatId(undefined);
-  }, [chatId, streamCreatedChatId]);
+    if (activeRouteChatId && streamCreatedChatId === activeRouteChatId) setStreamCreatedChatId(undefined);
+  }, [activeRouteChatId, streamCreatedChatId]);
 
   const handleModelChange = useCallback((modelId: string) => {
     const validModel = readWorkspaceModelPreference({ getItem: () => modelId });
@@ -382,7 +393,7 @@ function StudentWorkspaceSession({
     handleDrop,
     removeAttachment,
     retryAttachment
-  } = useWorkspaceFileIngestion(effectiveChatId);
+  } = useWorkspaceFileIngestion(effectiveChatId, workspaceLoadAttemptId);
   const selectedReadyWorkspaceFileCount = includeFilesInContext
     ? selectedWorkspaceFileIds.filter(id => workspaceAttachments.some(file => file.id === id && file.status === 'ready')).length
     : 0;
@@ -432,20 +443,20 @@ function StudentWorkspaceSession({
   // 7. Domain Streaming Hook
   const handleChatIdReceived = useCallback((createdChatId: string, identity: WorkspaceRequestIdentity) => {
     if (identity.workspaceId !== logicalWorkspaceIdentityRef.current || !isStreamRequestCurrentRef.current(identity)) return;
-    if (chatId) return;
+    if (activeRouteChatId) return;
     effectiveChatIdRef.current = createdChatId;
     setStreamCreatedChatId(createdChatId);
-  }, [chatId]);
+  }, [activeRouteChatId]);
 
   const handleChatCreated = useCallback((createdChatId: string, identity: WorkspaceRequestIdentity) => {
-    if (chatId || !createdChatId || identity.workspaceId !== logicalWorkspaceIdentityRef.current || !isStreamRequestCurrentRef.current(identity)) return;
+    if (activeRouteChatId || !createdChatId || identity.workspaceId !== logicalWorkspaceIdentityRef.current || !isStreamRequestCurrentRef.current(identity)) return;
     clearLocalWorkspaceIdentity(user?.id);
     void migrateLocalArtifacts(createdChatId);
     navigate(getModeChatPath('RUANG_KERJA', createdChatId), { replace: true });
     void apiClient.get<Chat[]>('/api/v1/chat/history').then(response => {
       if (response.success && Array.isArray(response.data)) setChats?.(response.data);
     }).catch(error => console.warn('[Workspace] Chat list refresh failed:', error));
-  }, [chatId, migrateLocalArtifacts, navigate, setChats, user?.id]);
+  }, [activeRouteChatId, migrateLocalArtifacts, navigate, setChats, user?.id]);
 
   const handleStreamArtifactExtracted = useCallback((_artifact: WorkspaceArtifact, _streaming: boolean, identity: WorkspaceRequestIdentity) => {
     if (identity.workspaceId !== logicalWorkspaceIdentityRef.current || !isStreamRequestCurrentRef.current(identity)) return;
@@ -551,7 +562,7 @@ function StudentWorkspaceSession({
     abortStream,
     isRequestCurrent
   } = useWorkspaceStreaming({
-    chatId,
+    chatId: activeRouteChatId,
     workspaceIdentity: logicalWorkspaceIdentity,
     onChatIdReceived: handleChatIdReceived,
     onChatCreated: handleChatCreated,
@@ -819,13 +830,13 @@ function StudentWorkspaceSession({
     try {
       const cleared = await clearWorkspaceConversation(targetChatId);
       if (!cleared) return false;
-      if (!chatId && targetChatId) navigate(getModeChatPath('RUANG_KERJA', targetChatId), { replace: true });
+      if (!activeRouteChatId && targetChatId) navigate(getModeChatPath('RUANG_KERJA', targetChatId), { replace: true });
       showToast('Percakapan dibersihkan. Dokumen dan artefak Canvas tetap tersimpan.', 'success');
       return true;
     } finally {
       clearInProgressRef.current = false;
     }
-  }, [abortStream, chatId, clearWorkspaceConversation, navigate, showToast]);
+  }, [abortStream, activeRouteChatId, clearWorkspaceConversation, navigate, showToast]);
 
   const handleRequestRevision = useCallback((revisionPrompt: string, currentArt: WorkspaceArtifact) => {
     const baseContent = currentArt.content;
@@ -875,7 +886,7 @@ function StudentWorkspaceSession({
           content: usableArtifact.content,
           version: usableArtifact.version
         } : null,
-        chatId,
+        chatId: effectiveChatId,
         selectedModel,
         presetId: activePresetId
       }
@@ -926,7 +937,7 @@ function StudentWorkspaceSession({
       console.warn(`[WorkspaceTool:${tool.id}] Execution failed:`, error);
       showToast(error instanceof Error ? error.message : 'Tool gagal dijalankan.', 'error');
     }
-  }, [activePresetId, chatId, handleExecuteSendMessage, handleRequestRevision, saveArtifact, selectedModel, showToast]);
+  }, [activePresetId, effectiveChatId, handleExecuteSendMessage, handleRequestRevision, saveArtifact, selectedModel, showToast]);
 
   const selectWorkspaceTool = useCallback((tool: WorkspaceToolDefinition, artifact?: WorkspaceArtifact | null) => {
     const contextArtifact = artifact ?? (activeArtifact?.id === DEFAULT_WELCOME_ARTIFACT_ID ? null : activeArtifact);
@@ -1204,7 +1215,7 @@ function StudentWorkspaceSession({
           } ${mobileActiveTab === 'chat' || workspaceView.inspector === 'sources' ? 'flex' : 'hidden xl:flex'}`}
         >
           <WorkspaceConversation
-            key={chatId || 'workspace-new'}
+            key={activeRouteChatId || 'workspace-new'}
             messages={messages}
             isLoading={isLoadingMessages}
             activeStreamingMessage={activeStreamingMessage}

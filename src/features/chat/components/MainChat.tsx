@@ -68,6 +68,12 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
   const [isTemporary, setIsTemporary] = useState(() => !user || user?.role === 'guest');
   const [guestAiConsent, setGuestAiConsent] = useState(() => user?.role === 'guest' && readGuestAiConsent());
 
+  // A guest can log in without MainChat unmounting. Reset the privacy mode when
+  // the account changes so signed-in chats are persisted by default.
+  useEffect(() => {
+    setIsTemporary(!user || user.role === 'guest');
+  }, [user?.id, user?.role]);
+
   const handleGuestConsentChange = (granted: boolean) => {
     setGuestAiConsent(granted);
     writeGuestAiConsent(granted);

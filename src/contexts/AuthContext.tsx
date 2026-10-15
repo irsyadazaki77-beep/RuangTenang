@@ -1,4 +1,4 @@
-import { apiClient } from "../lib/apiClient";
+import { apiClient, AUTH_SESSION_INVALIDATED_EVENT } from "../lib/apiClient";
 import { safeSessionStorage, safeLocalStorage } from "../lib/storage";
 import { clientDb } from "../lib/clientDb";
 import { getAuthSessionSnapshot, transitionAuthSession, type AuthLifecyclePhase, type AuthSessionSnapshot } from "../lib/authSessionLifecycle";
@@ -47,6 +47,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [sessionSnapshot, setSessionSnapshot] = useState<AuthSessionSnapshot>(getAuthSessionSnapshot);
   const authVersionRef = useRef(0);
   const authChannelRef = useRef<BroadcastChannel | null>(null);
+  const invalidSessionRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const publishLifecycle = useCallback((phase: AuthLifecyclePhase, nextUser?: UserSession | null) => {
     setSessionSnapshot(transitionAuthSession(phase, nextUser ? { id: nextUser.id, role: nextUser.role } : null));
@@ -140,6 +141,25 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     window.addEventListener('storage', handleAuthStorageChange);
     return () => window.removeEventListener('storage', handleAuthStorageChange);
   }, [publishLifecycle, refreshSession]);
+
+  useEffect(() => {
+    const handleInvalidSession = () => {
+      const activeUserId = safeLocalStorage.getItem('rt_active_user_id');
+      if (!activeUserId || activeUserId === 'guest') return;
+      if (invalidSessionRefreshTimerRef.current) clearTimeout(invalidSessionRefreshTimerRef.current);
+      invalidSessionRefreshTimerRef.current = setTimeout(() => {
+        invalidSessionRefreshTimerRef.current = null;
+        void refreshSession();
+      }, 250);
+    };
+
+    window.addEventListener(AUTH_SESSION_INVALIDATED_EVENT, handleInvalidSession);
+    return () => {
+      window.removeEventListener(AUTH_SESSION_INVALIDATED_EVENT, handleInvalidSession);
+      if (invalidSessionRefreshTimerRef.current) clearTimeout(invalidSessionRefreshTimerRef.current);
+      invalidSessionRefreshTimerRef.current = null;
+    };
+  }, [refreshSession]);
 
   useEffect(() => {
     if (typeof BroadcastChannel === 'undefined') return;

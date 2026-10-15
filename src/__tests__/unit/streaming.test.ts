@@ -46,6 +46,28 @@ describe('Chat Streaming Client & Race Condition Tests', () => {
     expect(onMessageComplete).toHaveBeenCalledWith('Halo dunia!');
   });
 
+  it('announces a created chat when its completion event also contains sources', async () => {
+    const encoder = new TextEncoder();
+    const body = new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text: 'Jawaban' })}\n\n`));
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ done: true, chatId: 'chat-new', sources: [] })}\n\n`));
+        controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+        controller.close();
+      }
+    });
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, body });
+
+    const onChatCreated = vi.fn();
+    const onSources = vi.fn();
+    const client = new ChatStreamingClient();
+    await client.stream({ message: 'Hai' }, { onChatCreated, onSources });
+
+    expect(onChatCreated).toHaveBeenCalledOnce();
+    expect(onChatCreated).toHaveBeenCalledWith('chat-new');
+    expect(onSources).toHaveBeenCalledWith([]);
+  });
+
   it('reports EOF before the done marker as a failed, retryable response', async () => {
     const encoder = new TextEncoder();
     const onChunk = vi.fn();

@@ -10,6 +10,8 @@ import { WorkspaceArtifact } from '../../features/workspace/types';
 import { Message } from '../../features/chat/types';
 import { ChatStreamingClient } from '../../features/chat/services/chatStreamingClient';
 
+const { showToastMock } = vi.hoisted(() => ({ showToastMock: vi.fn() }));
+
 // Mock the WorkspaceApiService
 vi.mock('../../features/workspace/services/workspaceApiService', () => ({
   WorkspaceApiService: {
@@ -28,7 +30,7 @@ vi.mock('../../features/workspace/services/workspaceApiService', () => ({
 // Mock toast
 vi.mock('../../components/Toast', () => ({
   useToast: () => ({
-    showToast: vi.fn()
+    showToast: showToastMock
   })
 }));
 
@@ -39,6 +41,49 @@ describe('Workspace Lifecycle & Regression Suite', () => {
   });
 
   describe('1. Fresh Workspace vs Existing Chat Lifecycle', () => {
+    it('does not show duplicate load errors when a Workspace session has expired', async () => {
+      vi.mocked(WorkspaceApiService.fetchArtifacts).mockResolvedValue([]);
+      vi.mocked(WorkspaceApiService.fetchMessages).mockRejectedValueOnce(Object.assign(new Error('Unauthorized'), { status: 401 }));
+      vi.mocked(WorkspaceApiService.fetchChatAttachments).mockRejectedValueOnce(Object.assign(new Error('Unauthorized'), { status: 401 }));
+
+      const { result: persistenceResult } = renderHook(() => useWorkspacePersistence({ chatId: 'expired-workspace' }));
+      const { result: ingestionResult } = renderHook(() => useWorkspaceFileIngestion('expired-workspace'));
+
+      await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+
+      expect(persistenceResult.current.messages).toHaveLength(1);
+      expect(ingestionResult.current.attachments).toEqual([]);
+      expect(showToastMock).not.toHaveBeenCalled();
+    });
+
+    it('combines parallel history and document failures into one notification', async () => {
+      vi.mocked(WorkspaceApiService.fetchArtifacts).mockResolvedValue([]);
+      vi.mocked(WorkspaceApiService.fetchMessages).mockRejectedValueOnce(Object.assign(new Error('Service unavailable'), { status: 503 }));
+      vi.mocked(WorkspaceApiService.fetchChatAttachments).mockRejectedValueOnce(Object.assign(new Error('Service unavailable'), { status: 503 }));
+
+      renderHook(() => useWorkspacePersistence({ chatId: 'workspace-network-failure' }));
+      renderHook(() => useWorkspaceFileIngestion('workspace-network-failure'));
+
+      await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+
+      expect(showToastMock).toHaveBeenCalledTimes(1);
+      expect(showToastMock).toHaveBeenCalledWith('Sebagian data Workspace gagal dimuat. Periksa koneksi lalu coba lagi.', 'error');
+    });
+
+    it('shows one actionable message when the Workspace no longer exists', async () => {
+      vi.mocked(WorkspaceApiService.fetchArtifacts).mockResolvedValue([]);
+      vi.mocked(WorkspaceApiService.fetchMessages).mockRejectedValueOnce(Object.assign(new Error('Not found'), { status: 404 }));
+      vi.mocked(WorkspaceApiService.fetchChatAttachments).mockRejectedValueOnce(Object.assign(new Error('Not found'), { status: 404 }));
+
+      renderHook(() => useWorkspacePersistence({ chatId: 'missing-workspace' }));
+      renderHook(() => useWorkspaceFileIngestion('missing-workspace'));
+
+      await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+
+      expect(showToastMock).toHaveBeenCalledTimes(1);
+      expect(showToastMock).toHaveBeenCalledWith('Workspace tidak ditemukan atau kamu tidak memiliki akses.', 'error');
+    });
+
     it('initializes fresh workspace with default welcome artifact and welcome message', () => {
       const { result: persistenceResult, unmount: unmountPersist } = renderHook(() => 
         useWorkspacePersistence({ userName: 'Ahmad' })

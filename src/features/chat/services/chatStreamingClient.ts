@@ -95,6 +95,7 @@ export class ChatStreamingClient {
     const assistantMsgId = `msg_${Date.now() + 1}`;
     let currentText = '';
     let pluginName = '';
+    let announcedChatId: string | undefined;
 
     this.changeState(token, 'connecting', callbacks.onStateChange);
 
@@ -204,6 +205,15 @@ export class ChatStreamingClient {
                   }
                   try {
                     const parsed = JSON.parse(dataStr);
+
+                    // A completion event may include both chatId and sources. Handle
+                    // the chat ID independently so source metadata cannot swallow it.
+                    if (parsed.chatId && parsed.chatId !== announcedChatId) {
+                      announcedChatId = parsed.chatId;
+                      if (token === this.activeToken && callbacks.onChatCreated) {
+                        callbacks.onChatCreated(parsed.chatId);
+                      }
+                    }
                     
                     if (parsed.quotaExceeded || parsed.error === 'DAILY_LIMIT_EXCEEDED') {
                       if (token === this.activeToken && callbacks.onQuotaExceeded) {
@@ -249,10 +259,6 @@ export class ChatStreamingClient {
                     } else if (parsed.type === 'followup' && parsed.questions) {
                       if (token === this.activeToken && callbacks.onFollowUps) {
                         callbacks.onFollowUps(parsed.questions);
-                      }
-                    } else if (parsed.chatId) {
-                      if (token === this.activeToken && callbacks.onChatCreated) {
-                        callbacks.onChatCreated(parsed.chatId);
                       }
                     }
                   } catch (e: any) {

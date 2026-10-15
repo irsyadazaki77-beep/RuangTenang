@@ -3,6 +3,7 @@ import { WorkspaceFileAttachment } from '../types.js';
 import { pollProcessingStatus, processFileForWorkspace, retryWorkspaceFile, validateFileHeader } from '../services/fileIngestionService.js';
 import { WorkspaceApiService } from '../services/workspaceApiService.js';
 import { WorkspaceAttachmentDto } from '../services/workspaceApiService.js';
+import { showWorkspaceLoadFailureOnce } from '../utils/workspaceLoadNotice.js';
 import { MAX_WORKSPACE_ACTIVE_ATTACHMENTS } from '../../../../shared/contracts/files.js';
 import { useToast } from '../../../components/Toast';
 
@@ -35,7 +36,7 @@ function fromDto(dto: WorkspaceAttachmentDto): WorkspaceFileAttachment {
   };
 }
 
-export function useWorkspaceFileIngestion(chatId?: string) {
+export function useWorkspaceFileIngestion(chatId?: string, loadAttemptId?: string) {
   const { showToast } = useToast();
   const [attachments, setAttachments] = useState<WorkspaceFileAttachment[]>([]);
   const [isLoadingAttachments, setIsLoadingAttachments] = useState(Boolean(chatId));
@@ -312,7 +313,12 @@ export function useWorkspaceFileIngestion(chatId?: string) {
       }).catch(error => {
         if (!controller.signal.aborted) {
           console.error('[Workspace] Attachment list fetch failed:', error);
-          showToastRef.current('Dokumen Workspace gagal dimuat.', 'error');
+          const status = (error as { status?: number } | undefined)?.status;
+          // A stale session is refreshed by AuthContext; a missing/unauthorized
+          // chat is already explained by the conversation loader.
+          if (status !== 401 && status !== 404) {
+            showWorkspaceLoadFailureOnce(loadAttemptId || `workspace-load:${chatId}`, showToastRef.current);
+          }
         }
       }).finally(() => {
         if (isActive && isMountedRef.current) setIsLoadingAttachments(false);
@@ -329,7 +335,7 @@ export function useWorkspaceFileIngestion(chatId?: string) {
       queueRef.current = [];
       localFiles.clear();
     };
-  }, [chatId, updateAttachments]);
+  }, [chatId, loadAttemptId, updateAttachments]);
 
   return {
     attachments,

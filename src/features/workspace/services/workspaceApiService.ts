@@ -59,6 +59,10 @@ export interface WorkspaceSearchResult {
   updatedAt: string;
 }
 
+function workspaceApiError(message: string, status?: number, code?: string): Error & { status?: number; code?: string } {
+  return Object.assign(new Error(message), { status, code });
+}
+
 export class WorkspaceApiService {
   static async fetchResearchSources(chatId: string, signal?: AbortSignal): Promise<ResearchSource[]> {
     const res = await apiClient.get<ResearchSource[]>(`/api/v1/workspace/${encodeURIComponent(chatId)}/sources`, { signal });
@@ -237,7 +241,7 @@ export class WorkspaceApiService {
       `/api/v1/chat/${encodeURIComponent(chatId)}/attachments`, { signal }
     );
     if (!res.success || !Array.isArray(res.data?.attachments)) {
-      throw new Error(res.message || 'Gagal memuat dokumen Workspace');
+      throw workspaceApiError(res.message || 'Gagal memuat dokumen Workspace', res.status, res.code);
     }
     return res.data.attachments;
   }
@@ -285,7 +289,7 @@ export class WorkspaceApiService {
     if (res.success && res.data && Array.isArray(res.data.data)) {
       return res.data.data;
     }
-    throw new Error(res.message || 'Gagal memuat percakapan Workspace');
+    throw workspaceApiError(res.message || 'Gagal memuat percakapan Workspace', res.status, res.code);
   }
 
   /** Clears only the messages belonging to an owned Workspace chat. */
