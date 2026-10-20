@@ -317,7 +317,7 @@ export function GroundingModal({ isOpen, onClose, onOpenBreathing }: GroundingMo
 
               <button
                 onClick={handleNext}
-                className="px-5 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm hover:shadow flex items-center gap-1.5 cursor-pointer"
+                className="px-5 py-2.5 bg-teal-700 hover:bg-teal-800 text-white rounded-xl text-xs font-bold transition-all shadow-sm hover:shadow flex items-center gap-1.5 cursor-pointer"
               >
                 <span>{currentStepIndex === STEPS.length - 1 ? 'Selesaikan Grounding' : 'Langkah Berikutnya'}</span>
                 <ChevronRight className="w-4 h-4" />
@@ -331,7 +331,7 @@ export function GroundingModal({ isOpen, onClose, onOpenBreathing }: GroundingMo
             animate={{ opacity: 1, scale: 1 }}
             className="p-6 rounded-2xl bg-teal-50/80 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800/80 text-center space-y-4"
           >
-            <div className="w-14 h-14 mx-auto rounded-full bg-teal-600 text-white flex items-center justify-center shadow-md">
+            <div className="w-14 h-14 mx-auto rounded-full bg-teal-700 text-white flex items-center justify-center shadow-md">
               <CheckCircle2 className="w-8 h-8" />
             </div>
 
@@ -364,7 +364,7 @@ export function GroundingModal({ isOpen, onClose, onOpenBreathing }: GroundingMo
                     onClose();
                     onOpenBreathing();
                   }}
-                  className="w-full sm:w-auto px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                  className="w-full sm:w-auto px-4 py-2 bg-teal-700 hover:bg-teal-800 text-white rounded-xl text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                 >
                   <Sparkles className="w-3.5 h-3.5" />
                   Latihan Pernapasan (1 Menit)

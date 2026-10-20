@@ -76,7 +76,10 @@ describe('RuangKerja UX foundation', () => {
     render(<WorkspaceConversation messages={[]} activeStreamingMessage={null} isStreaming={false} artifacts={[]}
       starterTasks={STARTER_TASKS} onSelectStarterTask={onSelectStarterTask} onRetryMessage={noop} onOpenCanvas={noop} />);
 
-    for (const task of STARTER_TASKS) expect(screen.getByRole('button', { name: new RegExp(task.title) })).toBeInTheDocument();
+    for (const task of STARTER_TASKS) {
+      expect(screen.getByRole('button', { name: new RegExp(task.title) })).toBeInTheDocument();
+      expect(screen.getByText(task.subtitle)).toBeInTheDocument();
+    }
     fireEvent.click(screen.getByRole('button', { name: /Analisis dokumen/ }));
     expect(onSelectStarterTask).toHaveBeenCalledWith(STARTER_TASKS[0].prompt);
   });
@@ -273,6 +276,16 @@ describe('RuangKerja UX foundation', () => {
     expect(screen.getByText('Bab Pendahuluan')).toBeInTheDocument();
   });
 
+  it('keeps the complete workspace title available when the header has to wrap it', () => {
+    const workspaceTitle = 'Proposal Program Pendampingan Mahasiswa Tahun Akademik';
+    render(<WorkspaceHeader workspaceTitle={workspaceTitle} activeArtifact={null} isCanvasOpen mobileActiveTab="chat" hasUnreadArtifact={false}
+      onSetMobileActiveTab={noop} onToggleCanvas={noop} onCreateNewArtifact={noop} onOpenTemplateGallery={noop}
+      onConfirmClearWorkspace={noop} />);
+    const title = screen.getByText(workspaceTitle);
+    expect(title).toHaveAttribute('title', workspaceTitle);
+    expect(title).toHaveClass('line-clamp-2');
+  });
+
   it('opens the Context tab from compact workspace navigation', () => {
     const onSetMobileActiveTab = vi.fn();
     render(<WorkspaceHeader activeArtifact={null} isCanvasOpen mobileActiveTab="chat" hasUnreadArtifact={false}
@@ -381,6 +394,57 @@ describe('RuangKerja UX foundation', () => {
       onSelectStarterTask={noop} onRetryMessage={noop} onOpenCanvas={noop} onSendToCanvas={onSendToCanvas} />);
     fireEvent.click(screen.getByRole('button', { name: 'Kirim ke Canvas' }));
     expect(onSendToCanvas).toHaveBeenCalledWith('Ringkasan hasil penelitian.');
+  });
+
+  it('keeps the current message anchored when older rows are prepended and content below reflows', async () => {
+    let trailingContentExpansion = 0;
+    const initialMessages = [
+      { id: 'm51', role: 'user' as const, content: 'Pesan 51' },
+      { id: 'm52', role: 'assistant' as const, content: 'Pesan 52' }
+    ];
+    function ConversationHarness() {
+      const [messages, setMessages] = React.useState(initialMessages);
+      const [hasOlderMessages, setHasOlderMessages] = React.useState(true);
+      const [isLoadingOlderMessages, setIsLoadingOlderMessages] = React.useState(false);
+      const loadOlderMessages = async () => {
+        setIsLoadingOlderMessages(true);
+        await Promise.resolve();
+        trailingContentExpansion = 100;
+        setMessages(current => [
+          { id: 'm49', role: 'user' as const, content: 'Pesan 49' },
+          { id: 'm50', role: 'assistant' as const, content: 'Pesan 50' },
+          ...current
+        ]);
+        setHasOlderMessages(false);
+        setIsLoadingOlderMessages(false);
+        return true;
+      };
+      return <WorkspaceConversation messages={messages} activeStreamingMessage={null} isStreaming={false} artifacts={[]}
+        starterTasks={[]} onSelectStarterTask={noop} onRetryMessage={noop} onOpenCanvas={noop}
+        hasOlderMessages={hasOlderMessages} isLoadingOlderMessages={isLoadingOlderMessages}
+        onLoadOlderMessages={loadOlderMessages} scrollToMessageId="m52" />;
+    }
+
+    render(<ConversationHarness />);
+    const log = screen.getByRole('log', { name: 'Percakapan RuangKerja' });
+    Object.defineProperty(log, 'scrollHeight', { configurable: true, get: () => log.querySelectorAll('[data-workspace-message-id]').length * 200 + trailingContentExpansion });
+    Object.defineProperty(log, 'clientHeight', { configurable: true, value: 100 });
+    Object.defineProperty(log, 'scrollTop', { configurable: true, writable: true, value: 50 });
+    const anchor = log.querySelector<HTMLElement>('[data-workspace-message-id="m51"]')!;
+    const getAnchorBounds = vi.spyOn(anchor, 'getBoundingClientRect').mockImplementation(() => {
+      const top = 250 + (log.querySelectorAll('[data-workspace-message-id]').length - 2) * 200;
+      return { x: 0, y: top, top, right: 100, bottom: top + 40, left: 0, width: 100, height: 40, toJSON: () => ({}) } as DOMRect;
+    });
+    fireEvent.scroll(log);
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Muat pesan sebelumnya' })); });
+
+    expect(log.querySelectorAll('[data-workspace-message-id]')).toHaveLength(4);
+    expect((log as HTMLElement).scrollTop).toBe(450);
+    // A Markdown row below the anchor can finish layout while the older page is being prepended.
+    expect((log as HTMLElement).scrollTop).not.toBe(550);
+    expect(getAnchorBounds).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole('button', { name: 'Muat pesan sebelumnya' })).not.toBeInTheDocument();
   });
 
   it('rejects unsupported file types without starting an upload', () => {

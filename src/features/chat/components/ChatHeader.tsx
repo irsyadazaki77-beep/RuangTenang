@@ -1,28 +1,30 @@
 import React, { useEffect, useState } from 'react';
-import { 
-  Menu, 
-  Moon, 
-  Sun, 
-  Ghost, 
-  Brain, 
-  ChevronDown, 
-  Search, 
-  MoreVertical, 
-  Sparkles, 
-  Bookmark, 
-  GitBranch, 
-  HeartPulse, 
-  Eye, 
-  EyeOff, 
-  Shield, 
+import {
+  Menu,
+  Moon,
+  Sun,
+  Ghost,
+  Brain,
+  ChevronDown,
+  Search,
+  MoreVertical,
+  Sparkles,
+  Bookmark,
+  GitBranch,
+  HeartPulse,
+  Eye,
+  EyeOff,
+  Shield,
   Lock,
   Check,
-  Zap
+  Zap,
+  PhoneCall
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { UserSession } from '../../../types';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { usePrivacyVault } from '../../../contexts/PrivacyVaultContext';
-import { 
+import {
   DEFAULT_TENANG_PROFILE_ID,
   TENANG_PROFILES,
   isTenangProfile,
@@ -30,6 +32,7 @@ import {
   type TenangProfileId
 } from '../../../lib/aiModels';
 import { BrandLogo } from '../../../components/ui/BrandLogo';
+import { useFocusTrap } from '../../../hooks/useFocusTrap';
 
 interface ChatHeaderProps {
   user: UserSession | null;
@@ -67,6 +70,7 @@ export function ChatHeader({
   isPrivacyMode = false,
   onTogglePrivacy
 }: ChatHeaderProps) {
+  const navigate = useNavigate();
   const { actualTheme, toggleTheme } = useTheme();
   const { isIncognitoMode, toggleIncognito, triggerPanicScreen } = usePrivacyVault();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -84,9 +88,15 @@ export function ChatHeader({
     }
   }, [aiModel, activeProfileId, setAiModel]);
 
+  const settingsSheetRef = useFocusTrap<HTMLDivElement>({
+    isOpen: isSettingsOpen,
+    onClose: () => setActivePlugin(null),
+    lockScroll: false,
+  });
+
   return (
-    <header className="sticky top-0 z-20 w-full shrink-0 flex items-center justify-between px-2.5 sm:px-4 pt-safe pt-[env(safe-area-inset-top,0px)] min-h-[calc(3rem+env(safe-area-inset-top,0px))] bg-stone-50/80 dark:bg-slate-950/70 backdrop-blur-2xl border-b border-stone-200/40 dark:border-slate-800/40 transition-colors">
-      
+    <header className="sticky top-0 z-20 w-full shrink-0 flex items-center justify-between px-2.5 sm:px-4 pt-safe pt-[env(safe-area-inset-top,0px)] min-h-[calc(3rem+env(safe-area-inset-top,0px))] bg-[#fafaf9]/85 dark:bg-[#080d16]/85 backdrop-blur-2xl border-b border-slate-200/60 dark:border-slate-800/60 transition-colors">
+
       {/* Left: Mobile Navigation Drawer Toggle & Identity / Model Trigger */}
       <div className="flex items-center gap-1 sm:gap-2 min-w-0 flex-1">
         {onOpenSidebar && (
@@ -118,14 +128,21 @@ export function ChatHeader({
           {/* Preferences Popover */}
           {isSettingsOpen && (
             <>
-              <div className="fixed inset-0 z-40" onClick={() => setActivePlugin(null)} />
-              <div className="absolute top-full left-0 mt-1.5 w-72 sm:w-80 bg-white dark:bg-slate-900 rounded-xl p-3 z-50 space-y-3 shadow-lg border border-stone-200/80 dark:border-slate-800 animate-in fade-in zoom-in-95 duration-120 text-xs">
+              <div className="fixed inset-0 z-40 bg-slate-950/40 sm:bg-transparent" onClick={() => setActivePlugin(null)} />
+              <div
+                ref={settingsSheetRef}
+                tabIndex={-1}
+                role="dialog"
+                aria-modal="true"
+                aria-label="Preferensi dan Model AI"
+                className="fixed inset-x-0 bottom-0 z-50 w-full max-h-[85dvh] overflow-y-auto rounded-t-2xl bg-white dark:bg-slate-900 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] space-y-3 shadow-2xl border border-stone-200/80 dark:border-slate-800 animate-in slide-in-from-bottom duration-200 text-xs sm:absolute sm:inset-x-auto sm:bottom-auto sm:top-full sm:left-0 sm:mt-1.5 sm:w-80 sm:max-h-[min(82dvh,32rem)] sm:rounded-xl sm:pb-3 sm:shadow-lg sm:slide-in-from-bottom-0 sm:zoom-in-95 sm:duration-150"
+              >
                 <div className="flex items-center justify-between pb-2 border-b border-stone-100 dark:border-slate-800">
                   <span className="font-medium text-stone-900 dark:text-stone-100 flex items-center gap-1.5">
-                    <Brain className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+                    <Brain className="w-3.5 h-3.5 text-teal-700 dark:text-teal-400" />
                     Preferensi & Model
                   </span>
-                  <span className="text-[10px] text-stone-400 font-normal">
+                  <span className="text-[10px] text-stone-600 dark:text-stone-400 font-medium">
                     {user?.tier || 'Free'} Plan
                   </span>
                 </div>
@@ -133,10 +150,10 @@ export function ChatHeader({
                 {/* Model Selection -> 3 Official Ruang Tenang Profiles */}
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
-                    <label className="text-[10.5px] font-semibold text-stone-600 dark:text-slate-300">
+                    <label className="text-[10.5px] font-semibold text-stone-700 dark:text-slate-300">
                       Tingkat Kemampuan AI
                     </label>
-                    <span className="text-[9.5px] text-teal-650 dark:text-teal-400 font-medium">
+                    <span className="text-[9.5px] text-teal-700 dark:text-teal-400 font-medium">
                       Otomatis dirutekan
                     </span>
                   </div>
@@ -177,12 +194,12 @@ export function ChatHeader({
                                 </span>
                               )}
                             </div>
-                            <p className="text-[10px] text-stone-500 dark:text-slate-400 mt-0.5 leading-snug">
+                            <p className="text-[10px] text-stone-600 dark:text-slate-400 mt-0.5 leading-snug">
                               {profile.description}
                             </p>
                           </div>
                           {isSelected && (
-                            <Check className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 mt-1 shrink-0" />
+                            <Check className="w-3.5 h-3.5 text-teal-700 dark:text-teal-400 mt-1 shrink-0" />
                           )}
                         </button>
                       );
@@ -195,10 +212,11 @@ export function ChatHeader({
                   <div className="pt-2 border-t border-stone-100 dark:border-slate-800 flex items-center justify-between">
                     <div>
                       <div className="text-[11px] font-medium text-stone-800 dark:text-slate-200">Mode Sementara</div>
-                      <div className="text-[9.5px] text-stone-400">Pesan tidak disimpan ke riwayat</div>
+                      <div className="text-[9.5px] text-stone-600 dark:text-stone-400">Pesan tidak disimpan ke riwayat</div>
                     </div>
                     <button
                       type="button"
+                      aria-label="Toggle mode sementara"
                       onClick={() => setIsTemporary(!isTemporary)}
                       className={`w-8 h-4.5 rounded-full p-0.5 transition-colors cursor-pointer ${isTemporary ? 'bg-amber-500' : 'bg-stone-200 dark:bg-slate-700'}`}
                     >
@@ -246,7 +264,7 @@ export function ChatHeader({
 
       {/* Right side: Focused primary actions with progressive disclosure */}
       <div className="flex items-center gap-0.5 sm:gap-1 shrink-0">
-        
+
         {/* 1. Search in Conversation (Visible when messages exist) */}
         {onToggleSearch && hasMessages && (
           <button
@@ -303,7 +321,7 @@ export function ChatHeader({
             <>
               <div className="fixed inset-0 z-40" onClick={() => setIsMenuOpen(false)} />
               <div className="absolute top-full right-0 mt-1.5 w-60 bg-white dark:bg-slate-900 rounded-xl p-1.5 z-50 shadow-xl border border-stone-200/80 dark:border-slate-800 animate-in fade-in zoom-in-95 duration-120 text-xs">
-                
+
                 {/* Mobile-only Panic & Privacy entries inside More */}
                 <button
                   onClick={() => {
@@ -402,15 +420,35 @@ export function ChatHeader({
                     <div className="text-[10px] text-stone-400">Atur konteks personal refleksi</div>
                   </div>
                 </button>
+
+                <div className="my-1 border-t border-stone-200/60 dark:border-slate-800" />
+
+                {/* Emergency Hotline / SOS Quick Link */}
+                <button
+                  onClick={() => {
+                    setIsMenuOpen(false);
+                    navigate('/emergency');
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-rose-700 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-left transition-colors cursor-pointer"
+                >
+                  <PhoneCall className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <div className="font-semibold text-rose-600 dark:text-rose-400 flex items-center justify-between">
+                      <span>Bantuan Krisis & SOS</span>
+                      <span className="text-[9px] bg-rose-100 dark:bg-rose-900/60 px-1 py-0.2 rounded font-bold">119</span>
+                    </div>
+                    <div className="text-[10px] text-rose-500/80">Hotline & kontak darurat kampus</div>
+                  </div>
+                </button>
               </div>
             </>
           )}
         </div>
 
         {/* 4. Theme Toggle (Sun / Moon) */}
-        <button 
-          onClick={toggleTheme} 
-          className="w-9 h-9 min-w-[36px] min-h-[36px] flex items-center justify-center text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-200/40 dark:hover:bg-slate-800/50 rounded-lg transition-colors cursor-pointer" 
+        <button
+          onClick={toggleTheme}
+          className="w-9 h-9 min-w-[36px] min-h-[36px] flex items-center justify-center text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-200/40 dark:hover:bg-slate-800/50 rounded-lg transition-colors cursor-pointer"
           aria-label="Ganti Tema Tampilan"
           title={actualTheme === 'dark' ? 'Mode Terang' : 'Mode Gelap'}
         >

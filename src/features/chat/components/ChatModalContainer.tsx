@@ -20,7 +20,7 @@ export interface ChatModalContainerProps {
   activePlugin: string | null;
   onClosePlugin: () => void;
   onScreeningComplete: (score: any) => void;
-  onTriggerSOS: () => void;
+  onTriggerSOS?: () => void;
   // Summary modal
   isSummaryModalOpen: boolean;
   onCloseSummaryModal: () => void;

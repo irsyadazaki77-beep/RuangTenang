@@ -37,7 +37,7 @@ export class WorkspaceToolRegistry {
       return this.getAllTools().filter(t => !t.requiresArtifact);
     }
 
-    return this.getAllTools().filter(t => 
+    return this.getAllTools().filter(t =>
       !t.supportedArtifactTypes || t.supportedArtifactTypes.includes(artifactType)
     );
   }

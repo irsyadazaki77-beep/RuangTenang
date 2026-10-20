@@ -294,7 +294,7 @@ export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(
               dark:peer-focus-visible:ring-offset-slate-900
               ${
                 checked
-                  ? 'bg-teal-600 border-teal-600 text-white'
+                  ? 'bg-teal-700 border-teal-600 text-white'
                   : 'bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 group-hover:border-slate-400 dark:group-hover:border-slate-600'
               }
             `}

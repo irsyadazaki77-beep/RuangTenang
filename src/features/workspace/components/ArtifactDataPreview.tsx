@@ -26,6 +26,3 @@ export const TableArtifactPreview: React.FC<{ table: SavedTableSpec }> = ({ tabl
   <div className="max-h-[60vh] overflow-auto rounded-xl border border-slate-200 dark:border-slate-800"><table className="min-w-full text-left text-xs"><caption className="sr-only">Preview dataset turunan</caption><thead className="sticky top-0 bg-slate-100 dark:bg-slate-800"><tr>{table.columns.map(column => <th key={column} scope="col" className="whitespace-nowrap px-3 py-2 font-semibold">{column}</th>)}</tr></thead><tbody>{table.rows.slice(0, 200).map((row, index) => <tr key={index} className="border-t border-slate-100 dark:border-slate-800">{table.columns.map(column => <td key={column} className="max-w-64 truncate px-3 py-2">{String(row[column] ?? '')}</td>)}</tr>)}</tbody></table></div>
   {table.rows.length > 200 && <p className="text-[10px] text-slate-500">Menampilkan 200 baris pertama. Unduh JSON untuk seluruh dataset.</p>}
 </section>;
-
-
-

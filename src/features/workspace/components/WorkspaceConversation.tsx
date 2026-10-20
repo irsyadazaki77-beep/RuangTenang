@@ -1,10 +1,11 @@
-import React, { useRef, useEffect, useMemo, useCallback } from 'react';
-import { ChevronRight, Sparkles } from 'lucide-react';
+import React, { useRef, useEffect, useLayoutEffect, useMemo, useCallback } from 'react';
+import { ArrowUp, ChevronRight, Ghost } from 'lucide-react';
 import { motion, useReducedMotion } from 'motion/react';
 import { Message } from '../../chat/types';
 import { LazyMarkdown } from '../../../components/common/LazyMarkdown';
 import { StarterTaskItem, WorkspaceArtifact } from '../types';
 import { RhythmicTypingIndicator } from '../../../components/ui/RhythmicTypingIndicator';
+import { BrandLogo } from '../../../components/ui/BrandLogo';
 import { WorkspaceMessageRow } from './WorkspaceMessageRow';
 import type { WorkspaceComparisonCandidate, WorkspaceComparisonRun } from '../types';
 import type { FileSourceReference } from '../../../../shared/contracts/files';
@@ -16,6 +17,9 @@ const WorkspaceComparisonPanel = React.lazy(() => import('./WorkspaceComparisonP
 interface WorkspaceConversationProps {
   messages: Message[];
   isLoading?: boolean;
+  hasOlderMessages?: boolean;
+  isLoadingOlderMessages?: boolean;
+  onLoadOlderMessages?: () => Promise<boolean>;
   activeStreamingMessage: Message | null;
   isStreaming: boolean;
   artifacts: WorkspaceArtifact[];
@@ -29,6 +33,8 @@ interface WorkspaceConversationProps {
   onComparisonSendToCanvas?: (candidate: WorkspaceComparisonCandidate) => void;
   onCompareAgain?: (run: WorkspaceComparisonRun) => void;
   onOpenSource?: (source: FileSourceReference) => void;
+  onEditUserMessage?: (messageId: string, newContent: string) => void;
+  isTemporary?: boolean;
   scrollToMessageId?: string;
 }
 
@@ -63,6 +69,9 @@ const StreamingMarkdownPreview = React.memo(function StreamingMarkdownPreview({ 
 export const WorkspaceConversation: React.FC<WorkspaceConversationProps> = React.memo(({
   messages,
   isLoading = false,
+  hasOlderMessages = false,
+  isLoadingOlderMessages = false,
+  onLoadOlderMessages,
   activeStreamingMessage,
   isStreaming,
   artifacts,
@@ -76,14 +85,36 @@ export const WorkspaceConversation: React.FC<WorkspaceConversationProps> = React
   onComparisonSendToCanvas = noop,
   onCompareAgain = noop,
   onOpenSource = noopOpenSource,
+  onEditUserMessage,
+  isTemporary = false,
   scrollToMessageId
 }) => {
   const shouldReduceMotion = useReducedMotion();
   const scrollRafRef = useRef<number | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const pendingScrollPreservationRef = useRef<{ anchor: HTMLElement; top: number } | null>(null);
   const isNearBottomRef = useRef(true);
   const copyTimersRef = useRef(new Map<string, number>());
   const [copiedMessageId, setCopiedMessageId] = React.useState<string | null>(null);
+
+  const handleLoadOlderMessages = useCallback(async () => {
+    const scroller = scrollContainerRef.current;
+    if (!scroller || !onLoadOlderMessages || isLoadingOlderMessages) return;
+    const anchor = scroller.querySelector<HTMLElement>('[data-workspace-message-id]');
+    pendingScrollPreservationRef.current = anchor
+      ? { anchor, top: anchor.getBoundingClientRect().top }
+      : null;
+    const loaded = await onLoadOlderMessages();
+    if (!loaded) pendingScrollPreservationRef.current = null;
+  }, [isLoadingOlderMessages, onLoadOlderMessages]);
+
+  useLayoutEffect(() => {
+    const pending = pendingScrollPreservationRef.current;
+    const scroller = scrollContainerRef.current;
+    if (!pending || !scroller) return;
+    scroller.scrollTop += pending.anchor.getBoundingClientRect().top - pending.top;
+    pendingScrollPreservationRef.current = null;
+  }, [messages]);
 
   const hasUserSentMessage = useMemo(
     () => isStreaming || messages.length > 1 || messages.some(message => message.role === 'user'),
@@ -152,22 +183,34 @@ export const WorkspaceConversation: React.FC<WorkspaceConversationProps> = React
     }
     return undefined;
   }, [messages]);
-  const persistedMessageRows = useMemo(() => messages.map(message => (
-    <WorkspaceMessageRow
-      key={message.id}
-      message={message}
-      lastUserPrompt={message.error ? lastUserPrompt : undefined}
-      isHighlighted={scrollToMessageId === message.id}
-      showArtifactLink={artifacts.length > 0}
-      isCopied={copiedMessageId === message.id}
-      onRetryMessage={onRetryMessage}
-      onOpenCanvas={onOpenCanvas}
-      onOpenSource={onOpenSource}
-      onSendToCanvas={onSendToCanvas}
-      onCopyMessage={copyMessage}
-      formatMessageTime={formatMessageTime}
-    />
-  )), [artifacts, copiedMessageId, copyMessage, formatMessageTime, lastUserPrompt, messages, onOpenCanvas, onOpenSource, onRetryMessage, onSendToCanvas, scrollToMessageId]);
+  const hasArtifacts = artifacts.length > 0;
+  const persistedMessageRows = useMemo(() => messages.map((message, idx) => {
+    // Find the corresponding or nearest preceding user prompt for regeneration
+    let associatedUserPrompt = lastUserPrompt;
+    for (let i = idx - 1; i >= 0; i--) {
+      if (messages[i].role === 'user') {
+        associatedUserPrompt = messages[i].content;
+        break;
+      }
+    }
+    return (
+      <WorkspaceMessageRow
+        key={message.id}
+        message={message}
+        lastUserPrompt={associatedUserPrompt}
+        isHighlighted={scrollToMessageId === message.id}
+        showArtifactLink={hasArtifacts}
+        isCopied={copiedMessageId === message.id}
+        onRetryMessage={onRetryMessage}
+        onOpenCanvas={onOpenCanvas}
+        onOpenSource={onOpenSource}
+        onSendToCanvas={onSendToCanvas}
+        onCopyMessage={copyMessage}
+        onEditUserMessage={onEditUserMessage}
+        formatMessageTime={formatMessageTime}
+      />
+    );
+  }), [hasArtifacts, copiedMessageId, copyMessage, formatMessageTime, lastUserPrompt, messages, onOpenCanvas, onOpenSource, onRetryMessage, onSendToCanvas, onEditUserMessage, scrollToMessageId]);
 
   const handleConversationScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
     const scroller = event.currentTarget;
@@ -175,7 +218,13 @@ export const WorkspaceConversation: React.FC<WorkspaceConversationProps> = React
   }, []);
 
   return (
-    <div ref={scrollContainerRef} role="log" aria-label="Percakapan RuangKerja" aria-live={isStreaming ? 'off' : 'polite'} onScroll={handleConversationScroll} className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-3.5 sm:p-5 space-y-4 custom-scrollbar flex flex-col">
+    <div ref={scrollContainerRef} role="log" aria-label="Percakapan RuangKerja" aria-live={isStreaming ? 'off' : 'polite'} onScroll={handleConversationScroll} className="flex-1 min-h-0 overflow-y-auto overscroll-contain bg-transparent p-3.5 sm:p-5 space-y-4 custom-scrollbar flex flex-col">
+      {isTemporary && (
+        <div className="mx-auto flex max-w-xl items-center justify-center gap-2 rounded-xl border border-amber-300/80 bg-amber-50/90 px-3 py-1.5 text-[11px] font-medium text-amber-900 shadow-2xs dark:border-amber-800/80 dark:bg-amber-950/40 dark:text-amber-200">
+          <Ghost className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+          <span><strong>Sesi Sementara Aktif:</strong> Percakapan ini tidak disimpan ke riwayat akun dan memori jangka panjang.</span>
+        </div>
+      )}
       {isLoading ? (
         <div role="status" aria-label="Memuat percakapan" className="my-auto w-full max-w-lg mx-auto space-y-3 px-2">
           <div className="h-3 w-28 rounded bg-slate-200 dark:bg-slate-800 animate-pulse" />
@@ -184,11 +233,13 @@ export const WorkspaceConversation: React.FC<WorkspaceConversationProps> = React
         </div>
       ) : !hasUserSentMessage && !activeStreamingMessage ? (
         /* FRESH WORKSPACE STATE: Compact Intro & Starter Tasks */
-        <div className="my-auto mx-auto w-full max-w-2xl animate-fade-in space-y-5 px-2 py-8 sm:px-4">
+        <div className="relative my-auto mx-auto w-full max-w-2xl animate-fade-in px-2 py-8 sm:px-4">
+          <div aria-hidden="true" className="pointer-events-none absolute -inset-x-1 -inset-y-2 rounded-3xl border border-white/80 bg-white/70 shadow-[0_24px_70px_-48px_rgba(99,102,241,0.22)] backdrop-blur-md dark:border-slate-800/80 dark:bg-slate-900/60 dark:shadow-[0_24px_70px_-45px_rgba(0,0,0,0.8)]" />
+          <div className="relative space-y-5">
           {/* Compact Workspace Introduction */}
           <div className="space-y-2 text-center">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"><Sparkles className="h-3 w-3" aria-hidden="true" /> RuangKerja</span>
-            <h2 className="text-lg font-semibold tracking-tight text-slate-900 dark:text-slate-100 sm:text-xl">
+            <div className="mb-3 flex flex-col items-center gap-2"><BrandLogo mode="RUANG_KERJA" size="xl" iconOnly /><span className="text-sm font-semibold tracking-tight text-teal-800 dark:text-teal-300">RuangKerja</span></div>
+            <h2 className="text-xl font-semibold tracking-tight text-slate-900 dark:text-slate-100 sm:text-2xl">
               Mulai sesuatu
             </h2>
             <p className="mx-auto max-w-md text-xs leading-relaxed text-slate-600 dark:text-slate-400 sm:text-sm">
@@ -205,45 +256,58 @@ export const WorkspaceConversation: React.FC<WorkspaceConversationProps> = React
                 onClick={() => onSelectStarterTask(task.prompt)}
                 className={`w-full p-2.5 rounded-xl text-left transition-all flex items-center justify-between group cursor-pointer active:scale-[0.99] border ${
                   task.primary
-                    ? 'border-emerald-200 bg-emerald-50/70 shadow-xs hover:bg-emerald-50 dark:border-emerald-900/70 dark:bg-emerald-950/30 dark:hover:bg-emerald-950/50'
-                    : 'border-slate-200 bg-white hover:border-emerald-200 hover:bg-emerald-50/40 hover:shadow-xs dark:border-slate-800 dark:bg-slate-900 dark:hover:border-emerald-900 dark:hover:bg-emerald-950/20'
+                    ? 'border-indigo-200/90 bg-gradient-to-br from-indigo-50/80 to-white/90 shadow-[0_8px_24px_-18px_rgba(99,102,241,0.35)] hover:border-indigo-300 hover:shadow-xs dark:border-indigo-900/70 dark:from-indigo-950/40 dark:to-slate-900 dark:hover:border-indigo-800'
+                    : 'border-slate-200/90 bg-white/85 shadow-[0_8px_24px_-20px_rgba(15,23,42,0.25)] hover:border-indigo-200 hover:bg-indigo-50/40 hover:shadow-xs dark:border-slate-800 dark:bg-slate-900/80 dark:hover:border-indigo-900 dark:hover:bg-indigo-950/20'
                 }`}
               >
                 <div className="flex items-center gap-2.5 min-w-0 pr-2">
-                  <div className="p-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700 shrink-0">
+                  <div className="p-1.5 rounded-lg bg-white/90 dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700 shrink-0">
                     {task.icon}
                   </div>
                   <div className="min-w-0">
-                    <div className="text-xs font-semibold text-slate-800 dark:text-slate-200 group-hover:text-emerald-700 dark:group-hover:text-emerald-300 transition-colors truncate">
+                    <div className="text-xs font-semibold text-slate-800 dark:text-slate-200 group-hover:text-indigo-700 dark:group-hover:text-indigo-300 transition-colors line-clamp-1">
                       {task.title}
                     </div>
-                    <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-2 sm:line-clamp-1 leading-snug">
                       {task.subtitle}
                     </div>
                   </div>
                 </div>
-                <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-200 transition-colors shrink-0" />
+                <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-200 transition-colors shrink-0 ml-1" />
               </button>
             ))}
+          </div>
           </div>
         </div>
       ) : (
         /* ACTIVE WORKSPACE STATE: Chat Messages Feed */
         <>
+          {hasOlderMessages && (
+            <button
+              type="button"
+              onClick={() => { void handleLoadOlderMessages(); }}
+              disabled={isLoadingOlderMessages}
+              aria-live="polite"
+              className="mx-auto inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white/90 px-3 py-1.5 text-[11px] font-medium text-slate-600 shadow-xs transition-colors hover:border-indigo-200 hover:bg-indigo-50/70 hover:text-indigo-700 disabled:cursor-wait disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-300 dark:hover:border-indigo-800 dark:hover:bg-indigo-950/40 dark:hover:text-indigo-300"
+            >
+              <ArrowUp className={`h-3.5 w-3.5 ${isLoadingOlderMessages ? 'animate-pulse' : ''}`} aria-hidden="true" />
+              {isLoadingOlderMessages ? 'Memuat pesan sebelumnya…' : 'Muat pesan sebelumnya'}
+            </button>
+          )}
           {persistedMessageRows}
 
           {/* Active Streaming Preview */}
           {activeStreamingMessage && (
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
               className="flex flex-col items-start"
             >
               <div className="flex items-center gap-1.5 mb-1 px-1 select-none text-xs text-slate-500 dark:text-slate-400">
-                <Sparkles className="w-3 h-3 text-emerald-500 animate-pulse" />
+                <BrandLogo mode="RUANG_KERJA" size="xs" iconOnly />
                 <span className="font-semibold text-slate-700 dark:text-slate-300">Asisten RuangKerja</span>
                 <span>·</span>
-                <span className="text-[10.5px] text-emerald-600 dark:text-emerald-400 font-medium">Menulis...</span>
+                <span className="text-[10.5px] text-indigo-600 dark:text-indigo-400 font-medium">Menulis...</span>
               </div>
 
               <div className="mx-auto w-full max-w-4xl text-slate-800 dark:text-slate-100 leading-relaxed text-xs sm:text-sm">
@@ -251,7 +315,7 @@ export const WorkspaceConversation: React.FC<WorkspaceConversationProps> = React
                   <StreamingMarkdownPreview content={activeStreamingMessage.content || '...'} />
                 </div>
                 <div className="mt-2.5 pt-2 border-t border-slate-200/70 dark:border-slate-800">
-                  <RhythmicTypingIndicator label="Menyusun konten akademik di Canvas..." />
+                  <RhythmicTypingIndicator label="Menyusun konten akademik di Canvas..." avatarSrc="/ruangkerja.svg" />
                 </div>
               </div>
             </motion.div>
@@ -266,4 +330,3 @@ export const WorkspaceConversation: React.FC<WorkspaceConversationProps> = React
     </div>
   );
 });
-

@@ -68,7 +68,7 @@ export const SafetyCheckModal: React.FC<SafetyCheckModalProps> = ({
   return (
     <AnimatePresence>
       {isOpen && (
-        <motion.div 
+        <motion.div
           key="safety-backdrop"
           initial="hidden"
           animate="visible"
@@ -76,7 +76,7 @@ export const SafetyCheckModal: React.FC<SafetyCheckModalProps> = ({
           variants={shouldReduceMotion ? reducedMotionVariants : modalBackdropVariants}
           className="fixed inset-0 z-[60] bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4"
         >
-          <motion.div 
+          <motion.div
             key="safety-panel"
             ref={panelRef}
             initial="hidden"

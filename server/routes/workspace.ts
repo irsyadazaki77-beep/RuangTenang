@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { Router, type Request, type Response } from 'express';
 import {
   CreateWorkspaceSchema,
@@ -23,7 +23,10 @@ import { prisma } from '../database.js';
 import { requireAuth } from '../middleware/auth.js';
 import { encryptionService } from '../services/encryptionService.js';
 import { sanitizeInput } from '../security.js';
-import { aiChatLimiter } from '../middleware/rateLimiters.js';
+import { aiChatLimiter, generalApiLimiter } from '../middleware/rateLimiters.js';
+import { checkUserAiUsageLimit } from '../services/aiUsageLimiter.js';
+import { consentService } from '../services/consentService.js';
+import { aiSafetyService } from '../services/ai/aiSafetyService.js';
 import { WorkspaceMemoryService } from '../services/workspaceMemoryService.js';
 import {
   backfillLegacyPlan,
@@ -46,6 +49,48 @@ import { AgentExecutionResultSchema } from '../services/agent/agentContracts.js'
 
 const router = Router();
 router.use(requireAuth);
+
+const WORKSPACE_SEARCH_KINDS = ['workspace', 'task', 'artifact', 'file', 'message'] as const;
+type WorkspaceSearchKind = typeof WORKSPACE_SEARCH_KINDS[number];
+const WORKSPACE_SEARCH_BATCH_SIZE = 25;
+const WORKSPACE_SEARCH_PAGE_SIZE = 50;
+
+interface WorkspaceSearchCursor {
+  version: 1;
+  queryKey: string;
+  snapshotAt: string;
+  after: Partial<Record<WorkspaceSearchKind, { id: string; at: string }>>;
+  done: Partial<Record<WorkspaceSearchKind, boolean>>;
+}
+
+function workspaceSearchQueryKey(query: string, kind: string): string {
+  return createHash('sha256').update(`${kind}\0${query}`).digest('hex').slice(0, 32);
+}
+
+function decodeWorkspaceSearchCursor(raw: unknown, query: string, kind: string): WorkspaceSearchCursor | null {
+  if (raw === undefined) return null;
+  if (typeof raw !== 'string' || raw.length > 4096) throw new Error('WORKSPACE_SEARCH_CURSOR_INVALID');
+  try {
+    const parsed = JSON.parse(Buffer.from(raw, 'base64url').toString('utf8')) as Partial<WorkspaceSearchCursor>;
+    if (parsed.version !== 1 || parsed.queryKey !== workspaceSearchQueryKey(query, kind) || typeof parsed.snapshotAt !== 'string' || !Number.isFinite(Date.parse(parsed.snapshotAt)) || !parsed.after || !parsed.done) {
+      throw new Error('WORKSPACE_SEARCH_CURSOR_INVALID');
+    }
+    for (const source of WORKSPACE_SEARCH_KINDS) {
+      const after = parsed.after[source];
+      const done = parsed.done[source];
+      if ((after !== undefined && (!after || typeof after.id !== 'string' || after.id.length > 256 || typeof after.at !== 'string' || !Number.isFinite(Date.parse(after.at)))) || (done !== undefined && typeof done !== 'boolean')) {
+        throw new Error('WORKSPACE_SEARCH_CURSOR_INVALID');
+      }
+    }
+    return parsed as WorkspaceSearchCursor;
+  } catch {
+    throw new Error('WORKSPACE_SEARCH_CURSOR_INVALID');
+  }
+}
+
+function encodeWorkspaceSearchCursor(cursor: WorkspaceSearchCursor): string {
+  return Buffer.from(JSON.stringify(cursor)).toString('base64url');
+}
 
 function decrypt(value: string | null | undefined): string | null {
   if (!value) return value ?? null;
@@ -189,76 +234,158 @@ function sendWorkflowError(res: Response, error: unknown, fallbackCode: string, 
 }
 
 router.get('/', async (req: Request, res: Response) => {
+  const offsetValue = typeof req.query.offset === 'string' ? Number(req.query.offset) : 0;
+  const limitValue = typeof req.query.limit === 'string' ? Number(req.query.limit) : 100;
+  if (!Number.isSafeInteger(offsetValue) || offsetValue < 0 || offsetValue > 100_000 ||
+      !Number.isSafeInteger(limitValue) || limitValue < 1 || limitValue > 100) {
+    return res.status(400).json({ success: false, code: 'WORKSPACE_LIST_PAGINATION_INVALID', message: 'Halaman Workspace tidak valid.' });
+  }
   try {
     const rows = await prisma.workspaces.findMany({
       where: { chat: { userId: req.user!.userId, workspaceMode: 'RUANG_KERJA', isArchived: false } },
-      include: {
-        chat: true,
-        tasks: { orderBy: { createdAt: 'asc' } },
-        plans: { orderBy: { updatedAt: 'desc' }, take: 1, select: { id: true, titleEncrypted: true, status: true, tasks: { select: { status: true } } } }
+      select: {
+        chatId: true,
+        createdAt: true,
+        chat: { select: { title: true, isPinned: true, isArchived: true, updatedAt: true } }
       },
-      orderBy: { chat: { updatedAt: 'desc' } },
-      take: 100
+      orderBy: [{ chat: { isPinned: 'desc' } }, { chat: { updatedAt: 'desc' } }, { chatId: 'asc' }],
+      skip: offsetValue,
+      take: limitValue + 1
     });
-    return res.json({ success: true, data: rows.map(row => {
-      const plan = row.plans[0];
-      return workspaceDto({ ...row, workflowPlanSummary: plan ? {
-        id: plan.id,
-        title: decrypt(plan.titleEncrypted) || 'Rencana pekerjaan',
-        status: plan.status,
-        taskCount: plan.tasks.length,
-        completedCount: plan.tasks.filter(task => task.status === 'done').length
-      } : undefined }, false);
-    }) });
+    const hasMore = rows.length > limitValue;
+    const items = rows.slice(0, limitValue).map(row => ({
+      id: row.chatId,
+      chatId: row.chatId,
+      name: decrypt(row.chat?.title) || 'Workspace baru',
+      isPinned: Boolean(row.chat?.isPinned),
+      isArchived: Boolean(row.chat?.isArchived),
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: (row.chat?.updatedAt || row.createdAt).toISOString()
+    }));
+    return res.json({ success: true, data: { items, hasMore, nextOffset: offsetValue + items.length } });
   } catch (error) {
     console.error('[WORKSPACE_LIST_ERROR]', error);
     return res.status(500).json({ success: false, code: 'WORKSPACE_LIST_FAILED', message: 'Gagal memuat Workspace.' });
   }
 });
 
-router.get('/search', async (req: Request, res: Response) => {
+router.get('/search', generalApiLimiter, async (req: Request, res: Response) => {
   const query = typeof req.query.q === 'string' ? req.query.q.trim().slice(0, 100).toLocaleLowerCase() : '';
-  if (query.length < 2) return res.json({ success: true, data: [] });
+  const filterKind = typeof req.query.kind === 'string' ? req.query.kind.trim().toLocaleLowerCase() : 'all';
+  const validKinds = new Set(['all', 'workspace', 'task', 'artifact', 'file', 'message']);
+  if (!validKinds.has(filterKind)) return res.status(400).json({ success: false, code: 'WORKSPACE_SEARCH_FILTER_INVALID', message: 'Filter pencarian tidak valid.' });
+  if (query.length < 2) return res.json({ success: true, data: { items: [], hasMore: false, nextCursor: null } });
+  const activeKinds = (filterKind === 'all' ? WORKSPACE_SEARCH_KINDS : [filterKind]) as WorkspaceSearchKind[];
+  let cursor: WorkspaceSearchCursor;
   try {
-    const workspaces = await prisma.workspaces.findMany({
-      where: { chat: { userId: req.user!.userId, workspaceMode: 'RUANG_KERJA', isArchived: false } },
-      select: { chatId: true, chat: { select: { title: true, updatedAt: true } }, tasks: { select: { id: true, title: true, status: true, updatedAt: true } } },
-      orderBy: { chat: { updatedAt: 'desc' } }, take: 100
-    });
-    const chatIds = workspaces.map(item => item.chatId);
-    if (!chatIds.length) return res.json({ success: true, data: [] });
-    const [artifacts, attachments, messages] = await Promise.all([
-      prisma.artifacts.findMany({ where: { userId: req.user!.userId, chatId: { in: chatIds } }, select: { id: true, chatId: true, title: true, content: true, updatedAt: true }, take: 500 }),
-      prisma.attachments.findMany({ where: { userId: req.user!.userId, chatId: { in: chatIds } }, select: { id: true, chatId: true, filename: true, status: true, updatedAt: true }, take: 500 }),
-      prisma.chatMessages.findMany({ where: { chatId: { in: chatIds } }, orderBy: { createdAt: 'desc' }, take: 1000, select: { id: true, chatId: true, role: true, content: true, createdAt: true } })
-    ]);
-    const nameByChat = new Map(workspaces.map(item => [item.chatId, decrypt(item.chat?.title) || 'Workspace']));
-    const results: Array<{ kind: string; chatId: string; itemId?: string; title: string; snippet: string; updatedAt: string }> = [];
-    const add = (result: typeof results[number]) => { if (results.length < 40) results.push(result); };
-    for (const workspace of workspaces) {
-      const name = nameByChat.get(workspace.chatId) || 'Workspace';
-      if (name.toLocaleLowerCase().includes(query)) add({ kind: 'workspace', chatId: workspace.chatId, title: name, snippet: 'Workspace', updatedAt: workspace.chat.updatedAt.toISOString() });
-      for (const task of workspace.tasks) {
-        const title = decrypt(task.title) || '';
-        if (title.toLocaleLowerCase().includes(query)) add({ kind: 'task', chatId: workspace.chatId, itemId: task.id, title, snippet: `Task · ${task.status}`, updatedAt: task.updatedAt.toISOString() });
+    const existing = decodeWorkspaceSearchCursor(req.query.cursor, query, filterKind);
+    cursor = existing || {
+      version: 1,
+      queryKey: workspaceSearchQueryKey(query, filterKind),
+      snapshotAt: new Date().toISOString(),
+      after: {},
+      done: Object.fromEntries(WORKSPACE_SEARCH_KINDS.map(kind => [kind, !activeKinds.includes(kind)])) as Record<WorkspaceSearchKind, boolean>
+    };
+  } catch {
+    return res.status(400).json({ success: false, code: 'WORKSPACE_SEARCH_CURSOR_INVALID', message: 'Cursor pencarian tidak valid. Mulai pencarian baru.' });
+  }
+  try {
+    const userId = req.user!.userId;
+    const candidates: Array<{ kind: WorkspaceSearchKind; chatId: string; itemId?: string; title: string; snippet: string; updatedAt: string }> = [];
+    const add = (result: typeof candidates[number] | null) => { if (result) candidates.push(result); };
+    const consume = <T,>(kind: WorkspaceSearchKind, rows: T[], getId: (row: T) => string, getCreatedAt: (row: T) => Date, toResult: (row: T) => typeof candidates[number] | null) => {
+      if (!rows.length) { cursor.done[kind] = true; return; }
+      let consumed = 0;
+      for (const row of rows) {
+        cursor.after[kind] = { id: getId(row), at: getCreatedAt(row).toISOString() };
+        consumed += 1;
+        add(toResult(row));
+        if (candidates.length >= WORKSPACE_SEARCH_PAGE_SIZE) break;
       }
+      if (consumed === rows.length && rows.length < WORKSPACE_SEARCH_BATCH_SIZE) cursor.done[kind] = true;
+    };
+
+    for (const kind of activeKinds) {
+      if (cursor.done[kind]) continue;
+      const position = cursor.after[kind];
+      const afterPosition = position ? {
+        OR: [
+          { createdAt: { lt: new Date(position.at) } },
+          { createdAt: new Date(position.at), ...(kind === 'workspace' ? { chatId: { gt: position.id } } : { id: { gt: position.id } }) }
+        ]
+      } : {};
+      if (kind === 'workspace') {
+        const rows = await prisma.workspaces.findMany({
+          where: { ...afterPosition, createdAt: { lte: new Date(cursor.snapshotAt) }, chat: { userId, workspaceMode: 'RUANG_KERJA', isArchived: false } },
+          orderBy: [{ createdAt: 'desc' }, { chatId: 'asc' }], take: WORKSPACE_SEARCH_BATCH_SIZE,
+          select: { chatId: true, createdAt: true, chat: { select: { title: true, updatedAt: true } } }
+        });
+        consume(kind, rows, row => row.chatId, row => row.createdAt, row => {
+          const title = decrypt(row.chat?.title) || 'Workspace';
+          return title.toLocaleLowerCase().includes(query) ? { kind, chatId: row.chatId, title, snippet: 'Workspace', updatedAt: row.chat.updatedAt.toISOString() } : null;
+        });
+      } else if (kind === 'task') {
+        const rows = await prisma.workspaceTasks.findMany({
+          where: { ...afterPosition, createdAt: { lte: new Date(cursor.snapshotAt) }, workspace: { chat: { userId, workspaceMode: 'RUANG_KERJA', isArchived: false } } },
+          orderBy: [{ createdAt: 'desc' }, { id: 'asc' }], take: WORKSPACE_SEARCH_BATCH_SIZE,
+          select: { id: true, workspaceId: true, title: true, status: true, createdAt: true, updatedAt: true }
+        });
+        consume(kind, rows, row => row.id, row => row.createdAt, row => {
+          const title = decrypt(row.title) || '';
+          return title.toLocaleLowerCase().includes(query) ? { kind, chatId: row.workspaceId, itemId: row.id, title, snippet: `Task · ${row.status}`, updatedAt: row.updatedAt.toISOString() } : null;
+        });
+      } else if (kind === 'artifact') {
+        const rows = await prisma.artifacts.findMany({
+          where: { ...afterPosition, createdAt: { lte: new Date(cursor.snapshotAt) }, userId, chatId: { not: null }, chat: { is: { userId, workspaceMode: 'RUANG_KERJA', isArchived: false } } },
+          orderBy: [{ createdAt: 'desc' }, { id: 'asc' }], take: WORKSPACE_SEARCH_BATCH_SIZE,
+          select: { id: true, chatId: true, title: true, content: true, createdAt: true, updatedAt: true }
+        });
+        consume(kind, rows, row => row.id, row => row.createdAt, row => {
+          const title = decrypt(row.title) || 'Dokumen';
+          const content = decrypt(row.content) || '';
+          const matchingText = `${title}\n${content}`;
+          const index = matchingText.toLocaleLowerCase().indexOf(query);
+          return index >= 0 && row.chatId ? { kind, chatId: row.chatId, itemId: row.id, title, snippet: matchingText.slice(Math.max(0, index - 70), index + 150).replace(/\s+/g, ' '), updatedAt: row.updatedAt.toISOString() } : null;
+        });
+      } else if (kind === 'file') {
+        const rows = await prisma.attachments.findMany({
+          where: { ...afterPosition, createdAt: { lte: new Date(cursor.snapshotAt) }, userId, chatId: { not: null } },
+          orderBy: [{ createdAt: 'desc' }, { id: 'asc' }], take: WORKSPACE_SEARCH_BATCH_SIZE,
+          select: { id: true, chatId: true, filename: true, status: true, createdAt: true, updatedAt: true }
+        });
+        const workspaceIds = await prisma.workspaces.findMany({
+          where: { chatId: { in: rows.flatMap(row => row.chatId ? [row.chatId] : []) }, createdAt: { lte: new Date(cursor.snapshotAt) }, chat: { userId, workspaceMode: 'RUANG_KERJA', isArchived: false } },
+          select: { chatId: true }
+        });
+        const workspaceIdSet = new Set(workspaceIds.map(workspace => workspace.chatId));
+        consume(kind, rows, row => row.id, row => row.createdAt, row => row.chatId && row.filename.toLocaleLowerCase().includes(query)
+          && workspaceIdSet.has(row.chatId)
+          ? { kind, chatId: row.chatId, itemId: row.id, title: row.filename, snippet: `File · ${row.status}`, updatedAt: row.updatedAt.toISOString() }
+          : null);
+      } else {
+        const rows = await prisma.chatMessages.findMany({
+          where: { ...afterPosition, createdAt: { lte: new Date(cursor.snapshotAt) }, chat: { userId, workspaceMode: 'RUANG_KERJA', isArchived: false } },
+          orderBy: [{ createdAt: 'desc' }, { id: 'asc' }], take: WORKSPACE_SEARCH_BATCH_SIZE,
+          select: { id: true, chatId: true, content: true, createdAt: true, chat: { select: { title: true } } }
+        });
+        consume(kind, rows, row => row.id, row => row.createdAt, row => {
+          const content = decrypt(row.content) || '';
+          const index = content.toLocaleLowerCase().indexOf(query);
+          return index >= 0 ? { kind, chatId: row.chatId, itemId: row.id, title: decrypt(row.chat.title) || 'Workspace', snippet: content.slice(Math.max(0, index - 70), index + 150).replace(/\s+/g, ' '), updatedAt: row.createdAt.toISOString() } : null;
+        });
+      }
+      if (candidates.length >= WORKSPACE_SEARCH_PAGE_SIZE) break;
     }
-    for (const artifact of artifacts) {
-      const title = decrypt(artifact.title) || 'Dokumen';
-      const content = decrypt(artifact.content) || '';
-      const matchingText = `${title}\n${content}`;
-      const index = matchingText.toLocaleLowerCase().indexOf(query);
-      if (index >= 0 && artifact.chatId) add({ kind: 'artifact', chatId: artifact.chatId, itemId: artifact.id, title, snippet: matchingText.slice(Math.max(0, index - 70), index + 150).replace(/\s+/g, ' '), updatedAt: artifact.updatedAt.toISOString() });
-    }
-    for (const attachment of attachments) {
-      if (attachment.filename.toLocaleLowerCase().includes(query) && attachment.chatId) add({ kind: 'file', chatId: attachment.chatId, itemId: attachment.id, title: attachment.filename, snippet: `File · ${attachment.status}`, updatedAt: attachment.updatedAt.toISOString() });
-    }
-    for (const message of messages) {
-      const content = decrypt(message.content) || '';
-      const index = content.toLocaleLowerCase().indexOf(query);
-      if (index >= 0) add({ kind: 'message', chatId: message.chatId, itemId: message.id, title: nameByChat.get(message.chatId) || 'Workspace', snippet: content.slice(Math.max(0, index - 70), index + 150).replace(/\s+/g, ' '), updatedAt: message.createdAt.toISOString() });
-    }
-    return res.json({ success: true, data: results });
+    const rank = (result: typeof candidates[number]) => {
+      const title = result.title.toLocaleLowerCase();
+      if (title === query) return 3;
+      if (title.startsWith(query)) return 2;
+      if (title.includes(query)) return 1;
+      return 0;
+    };
+    const items = candidates.sort((a, b) => rank(b) - rank(a) || Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
+    const hasMore = activeKinds.some(kind => !cursor.done[kind]);
+    return res.json({ success: true, data: { items, hasMore, nextCursor: hasMore ? encodeWorkspaceSearchCursor(cursor) : null } });
   } catch (error) {
     console.error('[WORKSPACE_SEARCH_ERROR]', error);
     return res.status(500).json({ success: false, code: 'WORKSPACE_SEARCH_FAILED', message: 'Pencarian Workspace gagal.' });
@@ -465,8 +592,34 @@ router.post('/:chatId/plans/:planId/tasks/:taskId/agent', aiChatLimiter, async (
 
     const plan = await findWorkspacePlan(workspaceId, userId, planId);
     if (!plan) return res.status(404).json({ success: false, code: 'WORKSPACE_PLAN_NOT_FOUND', message: 'Plan tidak ditemukan.' });
+
+    // 1. Consent verification
+    const consent = await consentService.getUserConsents(userId);
+    if (!consent.consentForAI) {
+      await cancelWorkspaceTaskExecution(workspaceId, userId, planId, taskId, executionId);
+      return res.status(403).json({ success: false, code: 'AI_CONSENT_REQUIRED', message: 'Persetujuan pemrosesan AI diperlukan untuk menjalankan Agent.' });
+    }
+
+    // 2. Crisis & Safety Interception
+    const targetTask = plan.tasks.find(t => t.id === taskId);
+    const promptToCheck = `${plan.goal || ''} ${targetTask?.title || ''} ${targetTask?.snapshot?.inputPrompt || ''}`;
+    if (aiSafetyService.detectCrisis(promptToCheck).isCrisis) {
+      await cancelWorkspaceTaskExecution(workspaceId, userId, planId, taskId, executionId);
+      return res.status(422).json({ success: false, code: 'CRISIS_DETECTED', message: aiSafetyService.getCrisisSafeResponse() });
+    }
+
+    // 3. Quota and usage check
+    const clientIp = req.ip || req.socket.remoteAddress || '127.0.0.1';
+    const userTier = (req.user as any).tier || 'Free';
+    const userRole = req.user?.role;
+    const quotaCheck = await checkUserAiUsageLimit(userId, clientIp, userTier, userRole);
+    if (!quotaCheck.allowed) {
+      await cancelWorkspaceTaskExecution(workspaceId, userId, planId, taskId, executionId);
+      return res.status(429).json({ success: false, code: 'DAILY_LIMIT_EXCEEDED', message: 'Batas kuota penggunaan AI harian Anda telah tercapai.' });
+    }
+
     const result = await runWorkspaceAgent({
-      executionId, workspaceId, userId, userTier: (req.user as any).tier || 'Free',
+      executionId, workspaceId, userId, userTier,
       plan, taskId, abortSignal: abortController.signal
     });
     if (abortController.signal.aborted) throw new AgentExecutionError('AGENT_CANCELLED', 'Eksekusi dihentikan.');
@@ -644,9 +797,13 @@ router.put('/:chatId/tasks/:taskId', async (req: Request, res: Response) => {
     if (task.status !== parsed.data.status && !allowed[task.status]?.includes(parsed.data.status)) {
       return res.status(409).json({ success: false, code: 'WORKSPACE_TASK_TRANSITION_INVALID', message: 'Perubahan status task tidak diizinkan.' });
     }
-    const updated = await prisma.workspaceTasks.update({ where: { id: task.id }, data: { status: parsed.data.status } });
+    const updated = await prisma.workspaceTasks.updateMany({ where: { id: task.id, status: task.status }, data: { status: parsed.data.status } });
+    if (!updated.count) {
+      return res.status(409).json({ success: false, code: 'WORKSPACE_TASK_CONFLICT', message: 'Status task telah berubah di sesi lain. Muat ulang sebelum menyimpan.' });
+    }
+    const fresh = await prisma.workspaceTasks.findUnique({ where: { id: task.id } });
     await prisma.chats.update({ where: { id: req.params.chatId }, data: { updatedAt: new Date() } });
-    return res.json({ success: true, data: { ...updated, title: decrypt(updated.title) } });
+    return res.json({ success: true, data: { ...fresh, title: decrypt(fresh?.title) } });
   } catch (error) {
     console.error('[WORKSPACE_TASK_UPDATE_ERROR]', error);
     return res.status(500).json({ success: false, code: 'WORKSPACE_TASK_UPDATE_FAILED', message: 'Gagal memperbarui task.' });

@@ -14,6 +14,7 @@ import { encryptionService } from '../services/encryptionService.js';
 
 
 import { aiSafetyService } from '../services/ai/aiSafetyService.js';
+import { consentService } from '../services/consentService.js';
 import { aiGateway } from '../services/ai/aiGateway.js';
 import { validateAndSanitizeToolCall } from '../services/ai/aiToolSchemas.js';
 import { ChatController } from '../controllers/chatController.js';
@@ -49,9 +50,9 @@ router.get('/ai/metrics', requireAuth, requireRole(['admin']), (req: Request, re
 
 // Error wrapper helper
 const sendError = (res: Response, code: string, message: string, status = 500) => {
-  res.status(status).json({ 
-    success: false, 
-    code, 
+  res.status(status).json({
+    success: false,
+    code,
     message,
     error: { code, message }
   });
@@ -69,6 +70,18 @@ const sendModelSelectionError = (res: Response, error: unknown) => {
   };
   sendError(res, error.code, messages[error.code] || 'Model AI tidak valid.', status);
   return true;
+};
+
+const authenticateChatStream = (req: Request, res: Response, next: NextFunction) => {
+  // Only explicitly temporary, chat-less requests or guest requests may run anonymously. A stale
+  // login must never silently turn a saved conversation into an in-memory chat.
+  if (
+    req.body?.isTemporary === true &&
+    (!req.body?.chatId || (typeof req.body?.chatId === 'string' && req.body.chatId.startsWith('guest_')))
+  ) {
+    return optionalAuth(req, res, next);
+  }
+  return requireAuth(req, res, next);
 };
 
 function getProfileDegradation(profileId: string | undefined, modelId: string | undefined) {
@@ -89,7 +102,7 @@ const checkChatOwnership = async (req: Request, res: Response, next: NextFunctio
   const userId = req.user?.userId;
   if (!chatId) return sendError(res, 'MISSING_CHAT_ID', 'Chat ID wajib diisi', 400);
   if (!userId) return sendError(res, 'UNAUTHORIZED', 'Sesi tidak valid', 401);
-  
+
   try {
     const chat = await prisma.chats.findFirst({ where: { id: chatId, userId } });
     if (!chat) return sendError(res, 'NOT_FOUND', 'Percakapan tidak ditemukan atau bukan milik Anda', 404);
@@ -233,13 +246,13 @@ router.post('/chat/summary', requireAuth, checkChatOwnership, aiSummaryLimiter, 
 // Canonical Chat Endpoint (Non-streaming JSON & Pre-flight Safe Interceptor)
 router.post(['/chat', '/api/chat'], optionalAuth, optionalAttachmentOwner, aiChatLimiter, aiAbuseLimiter, async (req: Request, res: Response) => {
   try {
-    const { 
-      message, 
-      chatId, 
+    const {
+      message,
+      chatId,
       mode,
-      isTemporary, 
-      chatMode, 
-      responseStyle, 
+      isTemporary,
+      chatMode,
+      responseStyle,
       aiModel: requestedAiModel,
       guestAiConsent
     } = req.body;
@@ -346,6 +359,7 @@ router.post(['/chat', '/api/chat'], optionalAuth, optionalAttachmentOwner, aiCha
         text: notice,
         message: notice,
         modelUsed: 'local-consent-notice',
+        providerUsed: 'local',
         isFallback: true,
         isCrisis: false
       });
@@ -367,17 +381,17 @@ router.post(['/chat', '/api/chat'], optionalAuth, optionalAttachmentOwner, aiCha
 });
 
 // Main Streaming Chat Route
-router.post('/chat/stream', optionalAuth, optionalAttachmentOwner, aiChatLimiter, aiAbuseLimiter, async (req: Request, res: Response) => {
+router.post('/chat/stream', authenticateChatStream, optionalAttachmentOwner, aiChatLimiter, aiAbuseLimiter, async (req: Request, res: Response) => {
   try {
-    const { 
-      message, 
-      chatId, 
+    const {
+      message,
+      chatId,
       mode,
-      isTemporary, 
+      isTemporary,
       guestAiConsent,
-      pluginResult, 
-      chatMode, 
-      responseStyle, 
+      pluginResult,
+      chatMode,
+      responseStyle,
       aiModel: requestedAiModel,
       attachments,
       workspaceMode,
@@ -387,9 +401,10 @@ router.post('/chat/stream', optionalAuth, optionalAttachmentOwner, aiChatLimiter
       presetId,
       includeWorkspaceFiles,
       workspaceAttachmentIds,
-      isolatedTaskExecution
+      isolatedTaskExecution,
+      history: clientHistory
     } = req.body;
-    
+
     const isAnonymous = !req.user || req.user.userId === 'guest';
     const maxLength = isAnonymous ? 500 : 2000;
     let cleanMessage = sanitizeInput(message || '', maxLength);
@@ -409,6 +424,55 @@ router.post('/chat/stream', optionalAuth, optionalAttachmentOwner, aiChatLimiter
     }
 
     const isWorkspace = Boolean(workspaceMode) || (mode || '').toLowerCase().includes('ruang_kerja') || (chatMode || '').toLowerCase().includes('ruangkerja');
+    const hasAiConsent = userId && userId !== 'guest'
+      ? await consentService.canUseAI(userId)
+      : guestAiConsent === true;
+
+    // Ask for consent before creating a chat or storing the user's message.
+    // Keep deterministic crisis support available without involving an AI provider.
+    if (!hasAiConsent) {
+      let crisisHistory: Array<{ role: 'user' | 'model'; parts: Array<{ text: string }> }> = [];
+      if (userId && userId !== 'guest' && chatId) {
+        const ownedChat = await prisma.chats.findFirst({ where: { id: chatId, userId }, select: { id: true } });
+        if (!ownedChat) return sendError(res, 'NOT_FOUND', 'Percakapan tidak ditemukan atau bukan milik Anda', 404);
+
+        const storedMessages = await prisma.chatMessages.findMany({
+          where: { chatId },
+          orderBy: { createdAt: 'desc' },
+          take: 30,
+          select: { role: true, content: true }
+        });
+        crisisHistory = storedMessages.reverse().flatMap(item => {
+          if (item.role !== 'user' && item.role !== 'assistant') return [];
+          return [{
+            role: item.role === 'assistant' ? 'model' as const : 'user' as const,
+            parts: [{ text: encryptionService.decryptSensitive(item.content) || item.content }]
+          }];
+        });
+      }
+
+      const crisisCheck = aiSafetyService.detectCrisis(cleanMessage, crisisHistory, {
+        isRuangKerja: isWorkspace,
+        mode: chatMode || (isWorkspace ? 'RuangKerja' : 'Teman Cerita')
+      });
+      const responseText = crisisCheck.isCrisis
+        ? aiSafetyService.getCrisisSafeResponse()
+        : 'Persetujuan pemrosesan AI belum aktif, jadi pesan ini belum dikirim atau disimpan. Kamu dapat memberi izin untuk mulai chat.';
+
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache, no-transform');
+      res.setHeader('Connection', 'keep-alive');
+      res.setHeader('X-Accel-Buffering', 'no');
+      if (!crisisCheck.isCrisis) {
+        res.write(`data: ${JSON.stringify({ type: 'consent_required', code: 'AI_CONSENT_REQUIRED' })}\n\n`);
+      }
+      res.write(`data: ${JSON.stringify({ text: responseText })}\n\n`);
+      res.write(`data: ${JSON.stringify({ done: true, chatId })}\n\n`);
+      res.write('data: [DONE]\n\n');
+      res.end();
+      return;
+    }
+
     const isAutoRouting = !requestedAiModel || requestedAiModel === AUTO_ROUTING_MODEL_ID;
     const isProfile = Boolean(requestedAiModel && isAiProfile(requestedAiModel));
     const canSelectInternalModel = userRole === 'admin' || userTier === 'Developer';
@@ -472,8 +536,8 @@ router.post('/chat/stream', optionalAuth, optionalAttachmentOwner, aiChatLimiter
       res.setHeader('Content-Type', 'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('Connection', 'keep-alive');
-      res.write('data: ' + JSON.stringify({ 
-        error: 'DAILY_LIMIT_EXCEEDED', 
+      res.write('data: ' + JSON.stringify({
+        error: 'DAILY_LIMIT_EXCEEDED',
         quotaExceeded: true,
         message: empatheticMsg,
         text: `⚠️ ${empatheticMsg}`,
@@ -485,7 +549,8 @@ router.post('/chat/stream', optionalAuth, optionalAttachmentOwner, aiChatLimiter
       return;
     }
 
-    let activeIsTemporary = isTemporary || !userId;
+    const isGuestChat = Boolean(isTemporary || !userId || (typeof chatId === 'string' && chatId.startsWith('guest_')));
+    const activeIsTemporary = isGuestChat;
     let currentChatId = chatId;
     let isNewChat = false;
 
@@ -507,10 +572,10 @@ router.post('/chat/stream', optionalAuth, optionalAttachmentOwner, aiChatLimiter
               userId,
               title: encryptionService.encryptSensitive(newTitle) || newTitle,
               workspaceMode: isWorkspace ? 'RUANG_KERJA' : 'RUANG_TENANG',
+              ...(isWorkspace ? { workspace: { create: {} } } : {}),
             }
           });
           currentChatId = newChat.id;
-          if (isWorkspace) await prisma.workspaces.create({ data: { chatId: newChat.id } });
         }
 
         if (isWorkspace && currentChatId) {
@@ -565,8 +630,8 @@ router.post('/chat/stream', optionalAuth, optionalAttachmentOwner, aiChatLimiter
               content: encryptionService.encryptSensitive(cleanMessage) || cleanMessage
             }
           });
-          
-          
+
+
           if (attachments && Array.isArray(attachments) && attachments.length > 0) {
             for (const att of attachments) {
               try {
@@ -621,7 +686,7 @@ router.post('/chat/stream', optionalAuth, optionalAttachmentOwner, aiChatLimiter
               }
             }
           }
-          
+
           await prisma.chats.update({
             where: { id: currentChatId },
             data: { updatedAt: new Date() }
@@ -638,8 +703,9 @@ router.post('/chat/stream', optionalAuth, optionalAttachmentOwner, aiChatLimiter
           });
         }
       } catch (dbErr: any) {
-        console.warn(`[CHAT_DB_WARNING] Database write failed, falling back to temporary mode: ${dbErr.message}`);
-        activeIsTemporary = true;
+        await rollbackUserAiQuota(userId, clientIp).catch(() => undefined);
+        console.error(`[CHAT_PERSISTENCE_ERROR] Failed to persist chat request: ${dbErr.message}`);
+        return sendError(res, 'CHAT_PERSISTENCE_FAILED', 'Pesan gagal disimpan. Periksa koneksi lalu coba kirim ulang.', 503);
       }
     }
 
@@ -649,7 +715,7 @@ router.post('/chat/stream', optionalAuth, optionalAttachmentOwner, aiChatLimiter
         ? attachments.map((attachment: any) => typeof attachment === 'string' ? attachment : attachment?.id).filter((id: unknown): id is string => typeof id === 'string')
         : []
     );
-    
+
     if (!activeIsTemporary && userId && currentChatId) {
       try {
         const history = await prisma.chatMessages.findMany({
@@ -673,7 +739,7 @@ router.post('/chat/stream', optionalAuth, optionalAttachmentOwner, aiChatLimiter
           } else if (msg.plugin) {
              messagesToSend.push({ role: 'model', parts: [{ text: `{"tool_call": "${msg.plugin}"}` }] });
           } else {
-            
+
             const parts: any[] = [{ text: decryptedContent }];
             if (msg.attachments && msg.attachments.length > 0) {
               for (const att of msg.attachments) {
@@ -757,6 +823,14 @@ router.post('/chat/stream', optionalAuth, optionalAttachmentOwner, aiChatLimiter
         messagesToSend.push({ role: 'user', parts });
       }
     } else {
+      if (Array.isArray(clientHistory) && clientHistory.length > 0) {
+        for (const item of clientHistory.slice(-20)) {
+          if (item && typeof item.content === 'string' && item.content.trim()) {
+            const role = (item.role === 'assistant' || item.role === 'model') ? 'model' : 'user';
+            messagesToSend.push({ role, parts: [{ text: item.content }] });
+          }
+        }
+      }
       const parts: any[] = [{ text: pluginResult ? `[PLUGIN_RESULT]\n${pluginResult}` : cleanMessage }];
       if (attachments && Array.isArray(attachments) && attachments.length > 0) {
         for (const att of attachments) {
@@ -829,7 +903,8 @@ router.post('/chat/stream', optionalAuth, optionalAttachmentOwner, aiChatLimiter
       }
       if (!res.writableEnded) {
         if (category === 'AI_CONSENT_REQUIRED') {
-          const localNotice = 'Persetujuan pemrosesan AI belum aktif, jadi pesan ini tidak dikirim ke penyedia AI. Ini hanya pemberitahuan umum dan tidak ditinjau manusia. Anda tetap dapat membuka latihan mindfulness, direktori konselor, atau Pusat Bantuan Krisis untuk dukungan.';
+          const localNotice = 'Persetujuan pemrosesan AI belum aktif, jadi AI belum dapat memproses pesan ini. Buka persetujuan untuk mulai chat.';
+          res.write(`data: ${JSON.stringify({ type: 'consent_required', code: 'AI_CONSENT_REQUIRED' })}\n\n`);
           res.write(`data: ${JSON.stringify({ text: localNotice })}\n\n`);
         } else {
           res.write(`data: ${JSON.stringify({ error: true, code: category, retryable, message })}\n\n`);
@@ -933,7 +1008,7 @@ router.post('/chat/stream', optionalAuth, optionalAttachmentOwner, aiChatLimiter
     req.on('close', cleanupKeepAlive);
     res.on('finish', cleanupKeepAlive);
     res.on('close', cleanupKeepAlive);
-    
+
     try {
       // Call the canonical Unified Safety Pipeline
       pipelineRes = await aiSafetyService.runUnifiedPipeline({
@@ -1113,7 +1188,7 @@ router.post('/chat/stream', optionalAuth, optionalAttachmentOwner, aiChatLimiter
       // Record performance & usage metrics
       const requestEndTime = Date.now();
       const ttfb = firstTokenTime ? (firstTokenTime - requestStartTime) : (requestEndTime - requestStartTime);
-      
+
       aiMetricsService.recordRequestMetric({
         requestId: pipelineRes.requestId || `req_${Date.now()}`,
         ttfbMs: ttfb,
@@ -1143,10 +1218,10 @@ router.post('/chat/stream', optionalAuth, optionalAttachmentOwner, aiChatLimiter
         try {
           const parsed = JSON.parse(fullResponseText.trim());
           const validation = validateAndSanitizeToolCall(parsed);
-          
+
           if (validation.isValid && validation.toolCall) {
             validToolCallParsed = { tool_call: validation.toolCall, parameters: validation.parameters || {} };
-            
+
             if (validToolCallParsed.tool_call === 'ai_memory' && validToolCallParsed.parameters.action === 'save') {
                const memContent = validToolCallParsed.parameters.content;
                if (memContent && userId && !activeIsTemporary) {
@@ -1176,7 +1251,7 @@ router.post('/chat/stream', optionalAuth, optionalAttachmentOwner, aiChatLimiter
             if (!res.writableEnded) {
               res.write(`data: ${JSON.stringify({ tool_call: validToolCallParsed.tool_call, parameters: validToolCallParsed.parameters || {} })}\n\n`);
             }
-            
+
             if (!activeIsTemporary && userId && currentChatId) {
                try {
                  await prisma.chatMessages.create({
@@ -1319,11 +1394,11 @@ router.post('/chat/stream', optionalAuth, optionalAttachmentOwner, aiChatLimiter
 router.post('/chat/truncate-history', requireAuth, checkChatOwnership, async (req: Request, res: Response) => {
   try {
     const { chatId, messageId } = req.body;
-    
+
     if (!chatId || !messageId) {
       return sendError(res, 'INVALID_INPUT', 'Parameter chatId dan messageId diperlukan', 400);
     }
-    
+
     const targetMsg = await prisma.chatMessages.findFirst({ where: { id: messageId, chatId } });
     if (targetMsg) {
       // Delete this message and all subsequent messages
@@ -1334,7 +1409,7 @@ router.post('/chat/truncate-history', requireAuth, checkChatOwnership, async (re
         }
       });
     }
-    
+
     res.json({ success: true });
   } catch (err: any) {
     console.error('Failed to truncate chat history:', err);

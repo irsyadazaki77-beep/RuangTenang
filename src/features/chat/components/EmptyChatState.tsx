@@ -97,8 +97,10 @@ const QUICK_STARTERS = [
 export function EmptyChatState({ userName, onSelectPrompt, onOpenBreathing }: EmptyChatStateProps) {
   const [selectedMood, setSelectedMood] = useState<MoodItem | null>(null);
   const [isBreathingModalOpen, setIsBreathingModalOpen] = useState(false);
+  const [isSavingMood, setIsSavingMood] = useState(false);
+  const [moodSaveMessage, setMoodSaveMessage] = useState('');
 
-  const handleMoodSelect = async (mood: MoodItem) => {
+  const handleMoodSelect = (mood: MoodItem) => {
     if (typeof window !== 'undefined' && 'vibrate' in navigator) {
       try {
         navigator.vibrate(12);
@@ -107,22 +109,32 @@ export function EmptyChatState({ userName, onSelectPrompt, onOpenBreathing }: Em
 
     if (selectedMood?.id === mood.id) {
       setSelectedMood(null);
+      setMoodSaveMessage('');
       return;
     }
 
     setSelectedMood(mood);
+    setMoodSaveMessage('');
+  };
 
-    // Auto-log silently in background
+  const saveMoodCheckin = async () => {
+    if (!selectedMood || isSavingMood) return;
+    setIsSavingMood(true);
     try {
       await apiClient.post('/api/v1/mood', {
-        mood: mood.value,
-        notes: `Check-in suasana hati: ${mood.label}`,
+        mood: selectedMood.value,
+        notes: `Check-in suasana hati: ${selectedMood.label}`,
         sleepHours: null,
         sleepQuality: null,
         factors: [],
-        emotions: [mood.label]
+        emotions: [selectedMood.label]
       });
-    } catch {}
+      setMoodSaveMessage('Check-in tersimpan di catatan mood Anda.');
+    } catch {
+      setMoodSaveMessage('Check-in belum tersimpan. Coba lagi saat koneksi tersedia.');
+    } finally {
+      setIsSavingMood(false);
+    }
   };
 
   const handlePromptSelectWithHaptic = (prompt: string) => {
@@ -143,38 +155,38 @@ export function EmptyChatState({ userName, onSelectPrompt, onOpenBreathing }: Em
   };
 
   return (
-    <div className="w-full max-w-lg mx-auto flex flex-col items-center text-center px-4 py-3 sm:py-6 my-auto select-none animate-fade-in">
-      
-      {/* 1. Brand Mark - Restrained, compact, calm */}
-      <div className="mb-3">
-        <BrandLogo size="sm" iconOnly />
+    <div className="w-full max-w-lg mx-auto flex flex-col items-center text-center px-4 py-2 sm:py-6 my-0 sm:my-auto select-none animate-fade-in">
+
+      {/* 1. Brand mark with enough space to read the heart and helping hand. */}
+      <div className="mb-2 sm:mb-3">
+        <BrandLogo size="lg" iconOnly />
       </div>
 
       {/* 2. Editorial Headline - Human, balanced line-height, no loud marketing */}
-      <h1 className="text-lg sm:text-xl font-serif font-medium tracking-tight text-stone-850 dark:text-stone-100 max-w-sm sm:max-w-md mx-auto leading-snug">
+      <h1 className="text-base sm:text-xl font-serif font-medium tracking-tight text-stone-850 dark:text-stone-100 max-w-sm sm:max-w-md mx-auto leading-snug">
         {userName ? `Hai ${userName}, ada yang ingin diceritakan?` : 'Hai Mahasiswa, ada yang ingin diceritakan?'}
       </h1>
 
       {/* 3. Supporting Subtitle & Breathing Shortcut */}
-      <div className="flex items-center justify-center gap-1.5 mt-1 text-[12px] text-stone-400 dark:text-stone-400">
+      <div className="flex items-center justify-center gap-1.5 mt-1 text-[11px] sm:text-[12px] text-stone-600 dark:text-stone-300">
         <span>Ruang aman tanpa penghakiman</span>
         <span aria-hidden="true" className="opacity-40">·</span>
-        <button 
-          type="button" 
-          onClick={handleOpenBreathing} 
-          className="text-teal-600 dark:text-teal-400 hover:text-teal-700 dark:hover:text-teal-300 font-medium cursor-pointer transition-colors"
+        <button
+          type="button"
+          onClick={handleOpenBreathing}
+          className="text-teal-700 dark:text-teal-400 hover:text-teal-800 dark:hover:text-teal-300 font-semibold cursor-pointer transition-colors"
         >
           Jeda hening 1 menit
         </button>
       </div>
 
-      <BreathingModal 
-        isOpen={isBreathingModalOpen} 
-        onClose={() => setIsBreathingModalOpen(false)} 
+      <BreathingModal
+        isOpen={isBreathingModalOpen}
+        onClose={() => setIsBreathingModalOpen(false)}
       />
 
       {/* 4. Secondary: Coherent Emotional Mood Shortcuts (5 items in a stable responsive row) */}
-      <div className="w-full max-w-sm mt-4 sm:mt-5 mb-2.5">
+      <div className="w-full max-w-sm mt-3 sm:mt-5 mb-2 sm:mb-2.5">
         <div className="grid grid-cols-5 gap-1.5 sm:gap-2">
           {EMOTIONAL_MOODS.map(item => {
             const isSelected = selectedMood?.id === item.id;
@@ -208,12 +220,12 @@ export function EmptyChatState({ userName, onSelectPrompt, onOpenBreathing }: Em
       {/* Dynamic Feedback when Mood Selected */}
       <AnimatePresence>
         {selectedMood && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
             transition={{ duration: 0.15 }}
-            className="mb-2 flex items-center justify-center gap-2 text-xs overflow-hidden"
+            className="mb-2 flex flex-wrap items-center justify-center gap-2 text-xs overflow-hidden"
           >
             <span className="text-stone-500 dark:text-slate-400 text-[11.5px]">
               Kamu <span className="font-medium text-stone-800 dark:text-stone-200">{selectedMood.feeling}</span>.
@@ -221,11 +233,20 @@ export function EmptyChatState({ userName, onSelectPrompt, onOpenBreathing }: Em
             <button
               type="button"
               onClick={() => handlePromptSelectWithHaptic(selectedMood.prompt)}
-              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-teal-600 hover:bg-teal-700 text-white font-medium text-[11px] transition-colors cursor-pointer shadow-3xs"
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-teal-700 hover:bg-teal-800 text-white font-medium text-[11px] transition-colors cursor-pointer shadow-3xs"
             >
               <span>Mulai Cerita</span>
               <ArrowRight className="w-3 h-3" />
             </button>
+            <button
+              type="button"
+              onClick={saveMoodCheckin}
+              disabled={isSavingMood || Boolean(moodSaveMessage && moodSaveMessage.startsWith('Check-in tersimpan'))}
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-stone-200 dark:border-slate-700 text-stone-600 dark:text-slate-300 font-medium text-[11px] transition-colors disabled:opacity-60 cursor-pointer"
+            >
+              {isSavingMood ? 'Menyimpan…' : moodSaveMessage.startsWith('Check-in tersimpan') ? 'Tersimpan' : 'Simpan check-in'}
+            </button>
+            {moodSaveMessage && <span role="status" className="basis-full text-center text-[11px] text-secondary">{moodSaveMessage}</span>}
           </motion.div>
         )}
       </AnimatePresence>

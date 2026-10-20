@@ -45,7 +45,7 @@ export const WORKSPACE_TOOL_DEFINITIONS: WorkspaceToolDefinition[] = [
     requiresArtifact: true,
     supportsStreaming: true,
     requiredCapabilities: ['chat'],
-    promptTemplate: (_input, contextText) => 
+    promptTemplate: (_input, contextText) =>
       `Tingkatkan derajat formalitas naskah ini agar sesuai dengan register penulisan ilmiah akademik universitas (objektif, bebas kata santai, berbasis bukti):\n\n${contextText}`
   },
   {
@@ -60,7 +60,7 @@ export const WORKSPACE_TOOL_DEFINITIONS: WorkspaceToolDefinition[] = [
     requiresArtifact: true,
     supportsStreaming: true,
     requiredCapabilities: ['chat'],
-    promptTemplate: (_input, contextText) => 
+    promptTemplate: (_input, contextText) =>
       `Elaborasi naskah ini secara mendalam dengan menyertakan landasan konseptual, contoh kasus konkret yang relevan, dan analisis komparatif:\n\n${contextText}`
   },
   {
@@ -75,7 +75,7 @@ export const WORKSPACE_TOOL_DEFINITIONS: WorkspaceToolDefinition[] = [
     requiresArtifact: true,
     supportsStreaming: true,
     requiredCapabilities: ['chat'],
-    promptTemplate: (_input, contextText) => 
+    promptTemplate: (_input, contextText) =>
       `Ringkas dokumen ini menjadi lebih padat, ringkas, dan fokus pada inti argumen ilmiah, tanpa mengurangi informasi penting:\n\n${contextText}`
   },
   {
@@ -116,7 +116,7 @@ export const WORKSPACE_TOOL_DEFINITIONS: WorkspaceToolDefinition[] = [
     requiresArtifact: true,
     supportsStreaming: true,
     requiredCapabilities: ['chat'],
-    promptTemplate: (_input, contextText) => 
+    promptTemplate: (_input, contextText) =>
       `Ekstraksi dan rangkum poin-poin kunci, landasan metodologi, premis utama, dan temuan substantif dari dokumen berikut dalam format butir-butir terstruktur:\n\n${contextText}`
   },
   {
@@ -131,7 +131,7 @@ export const WORKSPACE_TOOL_DEFINITIONS: WorkspaceToolDefinition[] = [
     requiresArtifact: true,
     supportsStreaming: true,
     requiredCapabilities: ['chat'],
-    promptTemplate: (_input, contextText) => 
+    promptTemplate: (_input, contextText) =>
       `Jelaskan konsep inti, landasan ilmiah, dan keterkaitan teori yang terdapat dalam materi berikut secara komprehensif untuk mahasiswa:\n\n${contextText}`
   },
 
@@ -148,7 +148,7 @@ export const WORKSPACE_TOOL_DEFINITIONS: WorkspaceToolDefinition[] = [
     requiresArtifact: true,
     supportsStreaming: true,
     requiredCapabilities: ['chat'],
-    promptTemplate: (_input, contextText) => 
+    promptTemplate: (_input, contextText) =>
       `Optimalkan kode program ini untuk efisiensi kompleksitas waktu dan memori (Big-O notation). Berikan penjelasan singkat mengenai optimasi yang dilakukan:\n\n${contextText}`
   },
   {
@@ -163,7 +163,7 @@ export const WORKSPACE_TOOL_DEFINITIONS: WorkspaceToolDefinition[] = [
     requiresArtifact: true,
     supportsStreaming: true,
     requiredCapabilities: ['chat'],
-    promptTemplate: (_input, contextText) => 
+    promptTemplate: (_input, contextText) =>
       `Lengkapi kode program ini dengan validasi input defensif, exception handling komprehensif, dan pengujian edge-case batas ekstrem:\n\n${contextText}`
   },
   {
@@ -178,7 +178,7 @@ export const WORKSPACE_TOOL_DEFINITIONS: WorkspaceToolDefinition[] = [
     requiresArtifact: true,
     supportsStreaming: true,
     requiredCapabilities: ['chat'],
-    promptTemplate: (_input, contextText) => 
+    promptTemplate: (_input, contextText) =>
       `Tambahkan dokumentasi docstring lengkap (deskripsi fungsi, parameter, return type, dan catatan penting) serta komentar kode yang jelas pada setiap blok logika:\n\n${contextText}`
   },
   {
@@ -193,7 +193,7 @@ export const WORKSPACE_TOOL_DEFINITIONS: WorkspaceToolDefinition[] = [
     requiresArtifact: true,
     supportsStreaming: true,
     requiredCapabilities: ['chat'],
-    promptTemplate: (_input, contextText) => 
+    promptTemplate: (_input, contextText) =>
       `Jelaskan alur algoritma, struktur data yang digunakan, dan cara kerja kode ini secara terstruktur langkah demi langkah:\n\n${contextText}`
   },
 
@@ -210,7 +210,7 @@ export const WORKSPACE_TOOL_DEFINITIONS: WorkspaceToolDefinition[] = [
     requiresArtifact: true,
     supportsStreaming: true,
     requiredCapabilities: ['chat'],
-    promptTemplate: (_input, contextText) => 
+    promptTemplate: (_input, contextText) =>
       `Konversikan dan format ulang seluruh daftar pustaka/sitasi berikut agar mematuhi pedoman baku APA Style 7th Edition secara presisi:\n\n${contextText}`
   },
   {
@@ -225,7 +225,7 @@ export const WORKSPACE_TOOL_DEFINITIONS: WorkspaceToolDefinition[] = [
     requiresArtifact: true,
     supportsStreaming: true,
     requiredCapabilities: ['chat'],
-    promptTemplate: (_input, contextText) => 
+    promptTemplate: (_input, contextText) =>
       `Konversikan seluruh daftar pustaka berikut ke format standar IEEE bernomor [1], [2], dengan urutan kutipan yang tepat:\n\n${contextText}`
   },
   {
@@ -275,7 +275,7 @@ export const WORKSPACE_TOOL_DEFINITIONS: WorkspaceToolDefinition[] = [
     requiresArtifact: true,
     supportsStreaming: true,
     requiredCapabilities: ['chat'],
-    promptTemplate: (_input, contextText) => 
+    promptTemplate: (_input, contextText) =>
       `Kembangkan outline berikut dengan merinci bab/sub-bab metodologi penelitian (desain riset, populasi & sampling, instrumen pengumpulan data, dan teknik analisis kuantitatif/kualitatif):\n\n${contextText}`
   },
   {
@@ -290,7 +290,7 @@ export const WORKSPACE_TOOL_DEFINITIONS: WorkspaceToolDefinition[] = [
     requiresArtifact: true,
     supportsStreaming: true,
     requiredCapabilities: ['chat'],
-    promptTemplate: (_input, contextText) => 
+    promptTemplate: (_input, contextText) =>
       `Evaluasi dan susun ulang hierarki outline ini agar setiap sub-bab langsung menjawab rumusan masalah dan tujuan penelitian ilmiah:\n\n${contextText}`
   }
 ];

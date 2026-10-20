@@ -68,6 +68,7 @@ model Users {
   sessions                  UserSession[]
   mobileRefreshTokens       MobileRefreshToken[]
   loginEvents               LoginEvent[]
+  journalEntries            UserJournalEntry[]
   notifications             SecurityNotification[]
   messageBookmarks          MessageBookmarks[]
   soapNotesAsStudent        ClinicalSoapNotes[]   @relation("StudentSoapNotes")
@@ -402,6 +403,19 @@ model MoodLogs {
   @@index([userId])
   @@index([userId, timestamp])
   @@index([timestamp])
+}
+
+model UserJournalEntry {
+  id        String   @id
+  userId    String
+  kind      String
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      Users    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, kind])
+  @@index([userId, updatedAt])
 }
 
 model EmergencyContacts {

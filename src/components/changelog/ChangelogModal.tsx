@@ -1,28 +1,28 @@
 import React, { useState, useMemo } from 'react';
-import { 
-  X, 
-  Sparkles, 
-  Search, 
-  Calendar, 
-  Check, 
-  Copy, 
-  Layers, 
-  Zap, 
-  ShieldCheck, 
-  Wrench, 
-  Brain, 
-  ChevronDown, 
+import {
+  X,
+  Sparkles,
+  Search,
+  Calendar,
+  Check,
+  Copy,
+  Layers,
+  Zap,
+  ShieldCheck,
+  Wrench,
+  Brain,
+  ChevronDown,
   ChevronUp,
   Info,
   CheckCircle2} from 'lucide-react';
-import { 
-  APP_CHANGELOG, 
-  CURRENT_APP_VERSION, 
-  LAST_UPDATED_DATE, 
-  CATEGORY_METADATA, 
-  ChangeCategory, 
-  ReleaseNote, 
-  markUpdateAsSeen 
+import {
+  APP_CHANGELOG,
+  CURRENT_APP_VERSION,
+  LAST_UPDATED_DATE,
+  CATEGORY_METADATA,
+  ChangeCategory,
+  ReleaseNote,
+  markUpdateAsSeen
 } from '../../data/changelogData';
 
 interface ChangelogModalProps {
@@ -67,7 +67,7 @@ export const ChangelogModal: React.FC<ChangelogModalProps> = ({
 
   const handleCopyNotes = (release: ReleaseNote) => {
     const text = `📢 RuangTenang Update ${release.version} (${release.date})\n📌 ${release.title}\n\n💡 Highlight:\n${release.highlights.map(h => `• ${h}`).join('\n')}\n\n🚀 Detail Pembaruan:\n${release.changes.map(c => `[${CATEGORY_METADATA[c.category].label}] ${c.title}: ${c.description}`).join('\n')}`;
-    
+
     navigator.clipboard.writeText(text);
     setCopiedVersion(release.version);
     setTimeout(() => setCopiedVersion(null), 2500);
@@ -87,18 +87,18 @@ export const ChangelogModal: React.FC<ChangelogModalProps> = ({
 
       // Search & category filter inside changes
       const q = searchQuery.toLowerCase().trim();
-      const matchesSearch = 
+      const matchesSearch =
         !q ||
         release.version.toLowerCase().includes(q) ||
         release.title.toLowerCase().includes(q) ||
         release.tagline.toLowerCase().includes(q) ||
-        release.changes.some(c => 
-          c.title.toLowerCase().includes(q) || 
+        release.changes.some(c =>
+          c.title.toLowerCase().includes(q) ||
           c.description.toLowerCase().includes(q) ||
           (c.impact && c.impact.toLowerCase().includes(q))
         );
 
-      const matchesCategory = 
+      const matchesCategory =
         selectedCategory === 'all' ||
         release.changes.some(c => c.category === selectedCategory);
 
@@ -125,14 +125,14 @@ export const ChangelogModal: React.FC<ChangelogModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 md:p-6 bg-slate-950/60 backdrop-blur-sm animate-in fade-in duration-200">
-      <div 
-        className="fixed inset-0" 
-        onClick={onClose} 
-        aria-hidden="true" 
+      <div
+        className="fixed inset-0"
+        onClick={onClose}
+        aria-hidden="true"
       />
-      
+
       <div className="relative w-full max-w-3xl max-h-[92vh] surface-card border border-default rounded-2xl shadow-2xl flex flex-col overflow-hidden text-primary z-10 animate-in zoom-in-95 duration-200">
-        
+
         {/* Top Header */}
         <div className="p-4 sm:p-5 border-b border-default bg-stone-50/80 dark:bg-slate-900/80 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3 min-w-0">
@@ -216,13 +216,13 @@ export const ChangelogModal: React.FC<ChangelogModalProps> = ({
               onClick={() => setSelectedCategory('all')}
               className={`px-2.5 py-1 rounded-lg font-medium transition-colors flex items-center gap-1.5 shrink-0 cursor-pointer ${
                 selectedCategory === 'all'
-                  ? 'bg-teal-600 text-white font-semibold shadow-3xs'
+                  ? 'bg-teal-700 text-white font-semibold shadow-3xs'
                   : 'bg-slate-100 dark:bg-slate-800 text-secondary hover:bg-slate-200 dark:hover:bg-slate-700'
               }`}
             >
               <Layers className="w-3.5 h-3.5" /> Semua Kategori
             </button>
-            
+
             {(Object.keys(CATEGORY_METADATA) as ChangeCategory[]).map(catKey => {
               const cat = CATEGORY_METADATA[catKey];
               const isSelected = selectedCategory === catKey;
@@ -267,8 +267,8 @@ export const ChangelogModal: React.FC<ChangelogModalProps> = ({
           ) : (
             filteredReleases.map((release) => {
               const isExpanded = expandedVersions[release.version] ?? true;
-              const filteredChanges = selectedCategory === 'all' 
-                ? release.changes 
+              const filteredChanges = selectedCategory === 'all'
+                ? release.changes
                 : release.changes.filter(c => c.category === selectedCategory);
 
               if (filteredChanges.length === 0 && selectedCategory !== 'all') {
@@ -276,16 +276,16 @@ export const ChangelogModal: React.FC<ChangelogModalProps> = ({
               }
 
               return (
-                <div 
+                <div
                   key={release.version}
                   className={`surface-card rounded-2xl border transition-all shadow-3xs overflow-hidden ${
-                    release.isLatest 
-                      ? 'border-teal-500/70 dark:border-teal-500/50 ring-2 ring-teal-500/10' 
+                    release.isLatest
+                      ? 'border-teal-500/70 dark:border-teal-500/50 ring-2 ring-teal-500/10'
                       : 'border-default'
                   }`}
                 >
                   {/* Release Card Header */}
-                  <div 
+                  <div
                     onClick={() => toggleExpand(release.version)}
                     className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors"
                   >
@@ -297,7 +297,7 @@ export const ChangelogModal: React.FC<ChangelogModalProps> = ({
 
                         {release.badge && (
                           <span className={`px-2 py-0.5 text-[10.5px] font-bold rounded-full border ${
-                            release.isLatest 
+                            release.isLatest
                               ? 'bg-teal-500 text-white border-teal-600'
                               : 'bg-slate-100 dark:bg-slate-800 text-secondary border-slate-200 dark:border-slate-700'
                           }`}>
@@ -354,7 +354,7 @@ export const ChangelogModal: React.FC<ChangelogModalProps> = ({
                   {/* Expanded Content */}
                   {isExpanded && (
                     <div className="px-4 pb-5 sm:px-5 sm:pb-5 space-y-4 border-t border-slate-100 dark:border-slate-800/80 pt-4">
-                      
+
                       {/* Key Highlights */}
                       {release.highlights.length > 0 && selectedCategory === 'all' && (
                         <div className="p-3 bg-teal-50/50 dark:bg-teal-950/30 border border-teal-100 dark:border-teal-900/60 rounded-xl space-y-1.5">
@@ -377,12 +377,12 @@ export const ChangelogModal: React.FC<ChangelogModalProps> = ({
                         <span className="text-[11px] font-bold text-muted uppercase tracking-wider">
                           Daftar Perubahan ({filteredChanges.length})
                         </span>
-                        
+
                         <div className="space-y-2">
                           {filteredChanges.map(change => {
                             const cat = CATEGORY_METADATA[change.category];
                             return (
-                              <div 
+                              <div
                                 key={change.id}
                                 className="p-3 bg-stone-50/60 dark:bg-slate-800/50 border border-slate-200/70 dark:border-slate-700/60 rounded-xl space-y-1.5 hover:border-slate-300 dark:hover:border-slate-600 transition-colors"
                               >
@@ -440,7 +440,7 @@ export const ChangelogModal: React.FC<ChangelogModalProps> = ({
             <button
               type="button"
               onClick={handleMarkAsRead}
-              className="w-full sm:w-auto px-4 py-2 bg-teal-600 hover:bg-teal-700 active:scale-[0.98] text-white rounded-xl text-xs font-bold transition-all shadow-3xs cursor-pointer flex items-center justify-center gap-2 min-h-[38px]"
+              className="w-full sm:w-auto px-4 py-2 bg-teal-700 hover:bg-teal-800 active:scale-[0.98] text-white rounded-xl text-xs font-bold transition-all shadow-3xs cursor-pointer flex items-center justify-center gap-2 min-h-[38px]"
             >
               <Check className="w-4 h-4" />
               {hasMarkedRead ? 'Telah Ditandai Selesai' : 'Saya Mengerti (Tandai Selesai)'}

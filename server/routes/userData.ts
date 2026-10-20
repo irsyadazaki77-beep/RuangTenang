@@ -8,12 +8,90 @@ import { encryptionService } from '../services/encryptionService.js';
 import { generateStudentProgressPdf } from '../services/reportGenerator.js';
 import { CreateMoodSchema, UpdateMoodSchema } from '../../shared/contracts/mood.js';
 import crypto from 'crypto';
+import { sanitizeInput } from '../security.js';
 
 const router = Router();
 
 const sendError = (res: Response, code: string, message: string, status = 500) => {
   res.status(status).json({ success: false, code, message });
 };
+
+const GratitudeEntrySchema = z.object({
+  id: z.string().min(1).max(100), date: z.string().max(100),
+  note1: z.string().max(2000), note2: z.string().max(2000), note3: z.string().max(2000),
+  personToThank: z.string().max(1000), challengeOvercome: z.string().max(2000),
+  moodRating: z.number().int().min(1).max(5)
+});
+const CompassionLetterSchema = z.object({
+  id: z.string().min(1).max(100), dateWritten: z.string().max(100),
+  unlockDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), content: z.string().max(10000),
+  keyPhrase: z.string().max(1000), isUnlocked: z.boolean(),
+  theme: z.enum(['amber', 'teal', 'slate'])
+});
+const JournalKindSchema = z.enum(['gratitude', 'compassion']);
+
+router.get('/journals', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const rows = await prisma.userJournalEntry.findMany({ where: { userId: req.user!.userId } });
+    const entries: Record<string, unknown[]> = { gratitude: [], compassion: [] };
+    for (const row of rows) {
+      const kind = JournalKindSchema.safeParse(row.kind);
+      if (!kind.success) continue;
+      const plaintext = encryptionService.decryptSensitive(row.content);
+      if (!plaintext) return sendError(res, 'JOURNAL_DECRYPTION_FAILED', 'Jurnal tidak dapat dibuka. Hubungi dukungan sebelum mencoba menghapus data.');
+      try {
+        const parsed = JSON.parse(plaintext);
+        const validated = kind.data === 'gratitude'
+          ? z.array(GratitudeEntrySchema).max(500).safeParse(parsed)
+          : z.array(CompassionLetterSchema).max(500).safeParse(parsed);
+        if (validated.success) entries[kind.data] = validated.data;
+      } catch {
+        return sendError(res, 'JOURNAL_DATA_INVALID', 'Format jurnal tidak dapat dibaca.');
+      }
+    }
+    res.json({ success: true, data: entries });
+  } catch {
+    console.error('[JOURNAL] FETCH_FAILED');
+    sendError(res, 'FETCH_JOURNAL_FAILED', 'Gagal mengambil jurnal Anda.');
+  }
+});
+
+router.put('/journals/:kind', requireAuth, verifyOfflineOwner, async (req: Request, res: Response) => {
+  try {
+    const parsedKind = JournalKindSchema.safeParse(req.params.kind);
+    if (!parsedKind.success) return sendError(res, 'INVALID_JOURNAL_KIND', 'Jenis jurnal tidak valid.', 400);
+    const schema = parsedKind.data === 'gratitude'
+      ? z.array(GratitudeEntrySchema).max(500)
+      : z.array(CompassionLetterSchema).max(500);
+    const parsedEntries = schema.safeParse(req.body?.entries);
+    if (!parsedEntries.success) {
+      return res.status(400).json({ success: false, code: 'INVALID_JOURNAL_ENTRIES', message: 'Isi jurnal tidak valid.', details: parsedEntries.error.issues });
+    }
+    const encryptedContent = encryptionService.encryptSensitive(JSON.stringify(parsedEntries.data));
+    if (!encryptedContent) return sendError(res, 'JOURNAL_ENCRYPTION_FAILED', 'Jurnal tidak tersimpan karena enkripsi gagal.');
+    await prisma.userJournalEntry.upsert({
+      where: { userId_kind: { userId: req.user!.userId, kind: parsedKind.data } },
+      create: { id: `journal_${crypto.randomUUID()}`, userId: req.user!.userId, kind: parsedKind.data, content: encryptedContent },
+      update: { content: encryptedContent }
+    });
+    res.json({ success: true, data: { kind: parsedKind.data, entries: parsedEntries.data } });
+  } catch {
+    console.error('[JOURNAL] SAVE_FAILED');
+    sendError(res, 'SAVE_JOURNAL_FAILED', 'Jurnal belum tersimpan. Coba lagi saat koneksi tersedia.');
+  }
+});
+
+router.delete('/journals/:kind', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const parsedKind = JournalKindSchema.safeParse(req.params.kind);
+    if (!parsedKind.success) return sendError(res, 'INVALID_JOURNAL_KIND', 'Jenis jurnal tidak valid.', 400);
+    const deleted = await prisma.userJournalEntry.deleteMany({ where: { userId: req.user!.userId, kind: parsedKind.data } });
+    res.json({ success: true, deleted: deleted.count });
+  } catch {
+    console.error('[JOURNAL] DELETE_FAILED');
+    sendError(res, 'DELETE_JOURNAL_FAILED', 'Jurnal belum dapat dihapus.');
+  }
+});
 
 // --- MOOD LOGS ---
 router.get('/mood', requireAuth, async (req: Request, res: Response) => {
@@ -28,7 +106,7 @@ router.get('/mood', requireAuth, async (req: Request, res: Response) => {
       if (log.notes) {
         decryptedNotes = encryptionService.decryptSensitive(log.notes) || '';
       }
-      
+
       let factors: string[] = [];
       if (log.factors) {
         if (encryptionService.isEncrypted(log.factors)) {
@@ -158,7 +236,7 @@ router.put('/mood/:id', requireAuth, async (req: Request, res: Response) => {
     }
     if (parsed.data.sleepHours !== undefined) updates.sleepHours = parsed.data.sleepHours;
     if (parsed.data.sleepQuality !== undefined) updates.sleepQuality = parsed.data.sleepQuality;
-    
+
     if (parsed.data.factors !== undefined) {
       if (parsed.data.factors && parsed.data.factors.length > 0) {
         const enc = encryptionService.encryptSensitive(JSON.stringify(parsed.data.factors));
@@ -168,7 +246,7 @@ router.put('/mood/:id', requireAuth, async (req: Request, res: Response) => {
         updates.factors = null;
       }
     }
-    
+
     if (parsed.data.emotions !== undefined) {
       if (parsed.data.emotions && parsed.data.emotions.length > 0) {
         const enc = encryptionService.encryptSensitive(JSON.stringify(parsed.data.emotions));
@@ -183,7 +261,7 @@ router.put('/mood/:id', requireAuth, async (req: Request, res: Response) => {
       where: { id },
       data: updates
     });
-    
+
     let parsedFactors = parsed.data.factors;
     if (parsedFactors === undefined) {
       if (updated.factors) {
@@ -368,7 +446,7 @@ router.post('/emergency-contact', requireAuth, async (req: Request, res: Respons
     }
 
     const { name, relationship, phone, whatsapp, hasConsent, consentDate } = parsed.data;
-    
+
     let encryptedName: string;
     let encryptedPhone: string;
     let encryptedRelationship: string;
@@ -395,7 +473,7 @@ router.post('/emergency-contact', requireAuth, async (req: Request, res: Respons
       update: { name: encryptedName, relationship: encryptedRelationship, phone: encryptedPhone, whatsapp: encryptedWhatsapp, hasConsent, consentDate },
       create: { userId: req.user!.userId, name: encryptedName, relationship: encryptedRelationship, phone: encryptedPhone, whatsapp: encryptedWhatsapp, hasConsent, consentDate }
     });
-    
+
     // Return decrypted representation
     res.json({ success: true, contact: { ...contact, name, phone, whatsapp, relationship } });
   } catch (e: any) {
@@ -417,14 +495,37 @@ router.get('/profile', requireAuth, async (req: Request, res: Response) => {
   }
 });
 
+export const updateProfileSchema = z.object({
+  name: z.string().trim().min(2, 'Nama minimal 2 karakter').max(100, 'Nama maksimal 100 karakter'),
+  university: z.string().trim().max(150, 'Nama universitas maksimal 150 karakter').optional().nullable()
+}).strict();
+
 router.post('/profile', requireAuth, async (req: Request, res: Response) => {
   try {
-    const { name, university } = req.body;
+    const parsed = updateProfileSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        success: false,
+        error: 'Data profil tidak valid',
+        details: parsed.error.issues.map(e => ({ path: e.path.join('.'), message: e.message }))
+      });
+    }
+
+    const cleanName = sanitizeInput(parsed.data.name, 100);
+    const cleanUniversity = parsed.data.university ? sanitizeInput(parsed.data.university, 150) : null;
+
+    if (!cleanName || cleanName.length < 2) {
+      return res.status(400).json({ success: false, error: 'Nama tidak valid setelah sanitasi keamanan' });
+    }
+
     await prisma.users.update({
       where: { id: req.user!.userId },
-      data: { name, university }
+      data: {
+        name: cleanName,
+        university: cleanUniversity || undefined
+      }
     });
-    res.json({ success: true });
+    res.json({ success: true, name: cleanName, university: cleanUniversity });
   } catch(e) {
     sendError(res, 'UPDATE_PROFILE_FAILED', 'Gagal memperbarui profil');
   }
@@ -439,7 +540,7 @@ const handleExportPdf = async (req: Request, res: Response) => {
     }
     const chatId = typeof req.query.chatId === 'string' ? req.query.chatId : undefined;
     const pdfBuffer = await generateStudentProgressPdf(user.id, user.name, chatId);
-    
+
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename=Resume_Konseling_RuangTenang_${Date.now()}.pdf`);
     res.send(pdfBuffer);

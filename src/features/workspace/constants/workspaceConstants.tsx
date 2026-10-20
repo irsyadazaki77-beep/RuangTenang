@@ -34,7 +34,7 @@ export function createWelcomeMessage(userName?: string) {
   return {
     id: 'msg_welcome',
     role: 'assistant' as const,
-    content: `Halo ${displayName}! 👋 Saya asisten akademik RuangKerja. 
+    content: `Halo ${displayName}! 👋 Saya asisten akademik RuangKerja.
 
 Ada tugas kuliah, draf skripsi, resume jurnal, atau kode yang butuh di-review dan dioptimasi hari ini? Ketik langsung tugas Anda atau pilih instruksi di bawah.`,
     createdAt: new Date()
@@ -46,7 +46,7 @@ export const STARTER_TASKS: StarterTaskItem[] = [
     id: 'analisis-dokumen',
     title: 'Analisis dokumen',
     subtitle: 'Ringkas tujuan, temuan, bukti, dan pertanyaan',
-    icon: <FileText className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />,
+    icon: <FileText className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />,
     primary: true,
     prompt: 'Bantu saya menganalisis dokumen yang saya lampirkan. Rangkum tujuan, temuan utama, bukti pendukung, dan pertanyaan yang masih terbuka.'
   },
@@ -54,7 +54,7 @@ export const STARTER_TASKS: StarterTaskItem[] = [
     id: 'tulis-dokumen',
     title: 'Tulis dokumen',
     subtitle: 'Mulai dari tujuan, pembaca, dan bahan yang ada',
-    icon: <BookOpen className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />,
+    icon: <BookOpen className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />,
     primary: false,
     prompt: 'Bantu saya menulis dokumen. Tanyakan tujuan, pembaca, dan bahan yang sudah tersedia sebelum menyusun draf.'
   },
@@ -62,7 +62,7 @@ export const STARTER_TASKS: StarterTaskItem[] = [
     id: 'review-kode',
     title: 'Review kode',
     subtitle: 'Cari bug, risiko keamanan, dan perbaikan penting',
-    icon: <Code2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />,
+    icon: <Code2 className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />,
     primary: false,
     prompt: 'Tinjau kode yang saya berikan. Cari bug, risiko keamanan, dan perbaikan paling penting dengan penjelasan singkat.'
   },
@@ -70,7 +70,7 @@ export const STARTER_TASKS: StarterTaskItem[] = [
     id: 'riset-topik',
     title: 'Riset topik',
     subtitle: 'Susun pertanyaan, kata kunci, dan sumber yang perlu dicek',
-    icon: <FlaskConical className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />,
+    icon: <FlaskConical className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />,
     primary: false,
     prompt: 'Bantu saya meneliti topik ini. Susun pertanyaan riset, kata kunci pencarian, sumber yang relevan, dan hal yang perlu diverifikasi.'
   }

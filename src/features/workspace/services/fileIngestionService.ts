@@ -1,8 +1,8 @@
-import { 
-  FileValidationResult, 
-  WorkspaceFileAttachment, 
-  WorkspaceFileKind, 
-  FileValidationErrorType 
+import {
+  FileValidationResult,
+  WorkspaceFileAttachment,
+  WorkspaceFileKind,
+  FileValidationErrorType
 } from '../types.js';
 import { MAX_UPLOAD_FILE_SIZE_BYTES, SUPPORTED_WORKSPACE_FILE_EXTENSIONS } from '../../../../shared/contracts/files.js';
 
@@ -35,10 +35,10 @@ export function validateFileHeader(file: File): FileValidationResult {
   }
 
   if (file.size > MAX_FILE_SIZE_BYTES) {
-    return { 
-      valid: false, 
-      error: 'TOO_LARGE', 
-      message: `Ukuran berkas (${(file.size / (1024 * 1024)).toFixed(1)}MB) melebihi batas maksimal 5MB.` 
+    return {
+      valid: false,
+      error: 'TOO_LARGE',
+      message: `Ukuran berkas (${(file.size / (1024 * 1024)).toFixed(1)}MB) melebihi batas maksimal 5MB.`
     };
   }
 
@@ -67,6 +67,11 @@ export interface AttachmentStatusResponseDTO {
   slideCount?: number;
   sheetCount?: number;
   extractionWarnings?: string[];
+  ocrApplied?: boolean;
+  visualAnalysisAvailable?: boolean;
+  previewOnly?: boolean;
+  ocrConfidence?: number;
+  readingUncertainty?: string;
   errorMessage?: string;
   errorCode?: string;
 }
@@ -309,6 +314,11 @@ export async function processFileForWorkspace(
       slideCount: att.slideCount,
       sheetCount: att.sheetCount,
       extractionWarnings: att.extractionWarnings,
+      ocrApplied: att.ocrApplied,
+      visualAnalysisAvailable: att.visualAnalysisAvailable,
+      previewOnly: att.previewOnly,
+      ocrConfidence: att.ocrConfidence,
+      readingUncertainty: att.readingUncertainty,
       url: att.url || `/api/v1/chat/attachments/${att.id}`,
       checksum: att.checksum
     };
@@ -369,7 +379,12 @@ export async function retryWorkspaceFile(attachmentId: string, signal?: AbortSig
         pageCount: attachment.pageCount,
         slideCount: attachment.slideCount,
         sheetCount: attachment.sheetCount,
-        extractionWarnings: attachment.extractionWarnings
+        extractionWarnings: attachment.extractionWarnings,
+        ocrApplied: attachment.ocrApplied,
+        visualAnalysisAvailable: attachment.visualAnalysisAvailable,
+        previewOnly: attachment.previewOnly,
+        ocrConfidence: attachment.ocrConfidence,
+        readingUncertainty: attachment.readingUncertainty
       }
     };
   } catch (error) {

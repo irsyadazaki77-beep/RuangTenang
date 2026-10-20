@@ -39,6 +39,8 @@
     "test:smoke": "tsx scripts/smokeTest.ts"
   },
   "dependencies": {
+    "@fontsource-variable/lora": "^5.3.0",
+    "@fontsource-variable/plus-jakarta-sans": "^5.3.0",
     "@google/genai": "^2.15.0",
     "@prisma/client": "6",
     "@tailwindcss/typography": "^0.5.20",

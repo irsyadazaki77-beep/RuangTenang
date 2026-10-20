@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Sparkles } from 'lucide-react';
+import { useFocusTrap } from '../../../hooks/useFocusTrap';
 import { WorkspaceAiPreset, WorkspaceResponseMode, WorkspaceResponseStyle } from '../../../lib/aiPresets';
 import { AUTO_ROUTING_MODEL_ID, KERJA_PROFILES } from '../../../lib/aiModels';
 import {
@@ -72,6 +73,8 @@ export const PresetFormModal: React.FC<PresetFormModalProps> = ({
     setErrorMsg(null);
   }, [initialData, isOpen]);
 
+  const dialogRef = useFocusTrap<HTMLDivElement>({ isOpen, onClose });
+
   if (!isOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -100,19 +103,15 @@ export const PresetFormModal: React.FC<PresetFormModalProps> = ({
   };
 
   return (
-    <div 
-      role="dialog" 
-      aria-modal="true" 
+    <div
+      ref={dialogRef}
+      tabIndex={-1}
+      role="dialog"
+      aria-modal="true"
       aria-labelledby="preset-form-title"
       className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in"
-      onKeyDown={(e) => {
-        if (e.key === 'Escape') {
-          e.preventDefault();
-          onClose();
-        }
-      }}
     >
-      <div 
+      <div
         className="w-full max-w-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90dvh]"
         onClick={(e) => e.stopPropagation()}
       >

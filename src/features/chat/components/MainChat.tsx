@@ -26,8 +26,13 @@ import { RhythmicTypingIndicator } from '../../../components/ui/RhythmicTypingIn
 import { detectAcademicDistress } from '../../workspace/utils/distressDetector';
 import { usePrivacyVault } from '../../../contexts/PrivacyVaultContext';
 import { dispatchAuroraActivity } from '../../../lib/auroraEvents';
-import { GUEST_AI_CONSENT_CHANGED_EVENT, readGuestAiConsent, writeGuestAiConsent } from '../../../lib/guestAiConsent';
-import { GuestAiConsentNotice } from '../../../components/GuestAiConsentNotice';
+import { readGuestAiConsent } from '../../../lib/guestAiConsent';
+import {
+  createGuestChat,
+  appendGuestMessage,
+  saveGuestMessages,
+  getGuestChats
+} from '../../../lib/guestChatStorage';
 
 // Import our cohesive, feature-scoped custom hooks
 import { useUpcomingAppointment } from '../hooks/useUpcomingAppointment';
@@ -45,9 +50,12 @@ interface MainChatProps {
   onOpenSidebar?: () => void;
   onOpenSettings?: () => void;
   onOpenChangelog?: () => void;
+  aiConsentAllowed?: boolean | null;
+  aiConsentPromptOpen?: boolean;
+  onRequestAiConsent?: (cancelPendingSend?: () => void) => void;
 }
 
-export default function MainChat({ user, setChats, chats = [], onOpenSidebar, onOpenSettings, onOpenChangelog }: MainChatProps) {
+export default function MainChat({ user, setChats, chats = [], onOpenSidebar, onOpenSettings, onOpenChangelog, aiConsentAllowed = true, aiConsentPromptOpen = false, onRequestAiConsent }: MainChatProps) {
   const { chatId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -59,32 +67,20 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
   const parentChat = isBranch ? chats.find(c => c.id === currentChat?.parentChatId) : undefined;
 
   // Persistence of preferences
-  const [chatMode, setChatMode] = useState<ChatMode>(() => safeLocalStorage.getItem('chatMode') as ChatMode || 'Teman Cerita');
-  const [responseStyle, setResponseStyle] = useState<ResponseStyle>(() => safeLocalStorage.getItem('responseStyle') as ResponseStyle || 'Seimbang');
+  const [chatMode, _setChatMode] = useState<ChatMode>(() => safeLocalStorage.getItem('chatMode') as ChatMode || 'Teman Cerita');
+  const [responseStyle, _setResponseStyle] = useState<ResponseStyle>(() => safeLocalStorage.getItem('responseStyle') as ResponseStyle || 'Seimbang');
   const [aiModel, setAiModel] = useState<string>(() => {
     const saved = safeLocalStorage.getItem('aiModel');
     return migrateLegacyTenangModelToProfile(saved);
   });
-  const [isTemporary, setIsTemporary] = useState(() => !user || user?.role === 'guest');
-  const [guestAiConsent, setGuestAiConsent] = useState(() => user?.role === 'guest' && readGuestAiConsent());
+  const [isTemporary, setIsTemporary] = useState(false);
 
   // A guest can log in without MainChat unmounting. Reset the privacy mode when
   // the account changes so signed-in chats are persisted by default.
+  const isGuestOrAnonymous = !user || user.role === 'guest';
   useEffect(() => {
-    setIsTemporary(!user || user.role === 'guest');
-  }, [user?.id, user?.role]);
-
-  const handleGuestConsentChange = (granted: boolean) => {
-    setGuestAiConsent(granted);
-    writeGuestAiConsent(granted);
-  };
-
-  useEffect(() => {
-    if (user?.role !== 'guest') return;
-    const refreshConsent = () => setGuestAiConsent(readGuestAiConsent());
-    window.addEventListener(GUEST_AI_CONSENT_CHANGED_EVENT, refreshConsent);
-    return () => window.removeEventListener(GUEST_AI_CONSENT_CHANGED_EVENT, refreshConsent);
-  }, [user?.role]);
+    setIsTemporary(false);
+  }, [isGuestOrAnonymous]);
 
   useEffect(() => { safeLocalStorage.setItem('chatMode', chatMode); }, [chatMode]);
   useEffect(() => { safeLocalStorage.setItem('responseStyle', responseStyle); }, [responseStyle]);
@@ -97,6 +93,16 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
 
   const [followUps, setFollowUps] = useState<string[]>([]);
   const [streamingMessage, setStreamingMessage] = useState<Message | null>(null);
+  const pendingConsentSendRef = React.useRef<{
+    content: string;
+    pluginResult?: string;
+    attachments?: Attachment[];
+    preserveUserMessage?: boolean;
+  } | null>(null);
+
+  useEffect(() => {
+    pendingConsentSendRef.current = null;
+  }, [chatId, user?.id]);
 
   // --- Modal state orchestrations ---
   const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false);
@@ -210,47 +216,70 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
     navigate(`/c/${newChat.id}`);
   };
 
-  const handleSend = useCallback(async (content: string, pluginResult?: string, attachments?: Attachment[], preserveUserMessage = false) => {
+  const handleSendAuthorized = useCallback(async (content: string, pluginResult?: string, attachments?: Attachment[], preserveUserMessage = false) => {
     if (!content.trim() && !pluginResult && (!attachments || attachments.length === 0)) return;
-    
+
+    const isGuest = !user || user.role === 'guest';
+    const shouldPersistLocally = isGuest && !isTemporary;
+
+    let activeChatId = chatId;
+    if (shouldPersistLocally && !activeChatId) {
+      const newGuestChat = createGuestChat(content);
+      activeChatId = newGuestChat.id;
+      loadedChatIdRef.current = activeChatId;
+      navigate(`/c/${activeChatId}`, { replace: true });
+      setChats(getGuestChats());
+    }
+
     const tempId = `msg_${Date.now()}`;
     const distressCheck = content ? detectAcademicDistress(content) : null;
 
+    const userMessage: Message = {
+      id: tempId,
+      role: 'user',
+      content,
+      createdAt: new Date().toISOString(),
+      attachments: attachments ? attachments.map(a => ({
+        id: a.serverAttachmentId || a.id,
+        filename: a.filename || a.file?.name || 'attachment.bin',
+        mimeType: a.mimeType || a.file?.type || 'application/octet-stream',
+        size: a.size || a.file?.size || 0,
+        url: a.url || `/api/v1/chat/attachments/${a.serverAttachmentId || a.id}`
+      })) : undefined
+    };
+
     if (!pluginResult && !preserveUserMessage) {
-      setMessages(prev => [...prev, {
-        id: tempId,
-        role: 'user',
-        content,
-        attachments: attachments ? attachments.map(a => ({
-          id: a.serverAttachmentId || a.id,
-          filename: a.filename || a.file?.name || 'attachment.bin',
-          mimeType: a.mimeType || a.file?.type || 'application/octet-stream',
-          size: a.size || a.file?.size || 0,
-          url: a.url || `/api/v1/chat/attachments/${a.serverAttachmentId || a.id}`
-        })) : undefined
-      }]);
+      setMessages(prev => [...prev, userMessage]);
+      if (shouldPersistLocally && activeChatId) {
+        appendGuestMessage(activeChatId, userMessage);
+      }
     }
-    
+
     setFollowUps([]);
     let assistantMsgId = `assistant_${Date.now()}`;
     let routingMeta: { modelUsed?: string; modelName?: string; routingMode?: 'manual' | 'auto'; routingReason?: string; fallbackFrom?: string; fallbackFromName?: string } = {};
     dispatchAuroraActivity({
       mode: 'RUANG_TENANG',
       phase: 'preparing',
-      chatId,
+      chatId: activeChatId,
     });
     setStreamingMessage({ id: assistantMsgId, role: 'assistant', content: '' });
+
+    const clientHistory = isGuest && messages.length > 0
+      ? messages.map(m => ({ role: m.role, content: m.content }))
+      : undefined;
 
     await streamMessage(
       {
         message: content,
-        chatId,
-        isTemporary,
-        guestAiConsent: user?.role === 'guest' ? guestAiConsent : undefined,
+        chatId: activeChatId,
+        isTemporary: isGuest ? true : isTemporary,
+        guestAiConsent: user?.role === 'guest' ? readGuestAiConsent() : undefined,
         pluginResult,
         chatMode,
         responseStyle,
         aiModel,
+        history: clientHistory,
         attachments: attachments ? attachments.map(a => ({
           id: a.serverAttachmentId || a.id,
           filename: a.filename || a.file?.name || 'attachment.bin',
@@ -274,29 +303,33 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
           setStreamingMessage(prev => prev ? { ...prev, content: `Memuat fitur ${pluginName}...`, plugin: pluginName } : null);
         },
         onMessageComplete: (text) => {
+          if (/persetujuan pemrosesan ai belum aktif/i.test(text)) onRequestAiConsent?.();
           if (text) {
-            setMessages(prev => [
-              ...prev,
-              {
-                id: assistantMsgId,
-                role: 'assistant',
-                content: text,
-                ...routingMeta,
-                plugin: distressCheck?.isDistressed ? 'burnout' : undefined,
-                pluginResult: distressCheck?.isDistressed
-                  ? {
-                      distressType: distressCheck.distressType,
-                      triggerReason: distressCheck.suggestedAction,
-                      triggerKeywords: distressCheck.triggerKeywords
-                    }
-                  : undefined
-              }
-            ]);
+            const assistantMessage: Message = {
+              id: assistantMsgId,
+              role: 'assistant',
+              content: text,
+              createdAt: new Date().toISOString(),
+              ...routingMeta,
+              plugin: distressCheck?.isDistressed ? 'burnout' : undefined,
+              pluginResult: distressCheck?.isDistressed
+                ? {
+                    distressType: distressCheck.distressType,
+                    triggerReason: distressCheck.suggestedAction,
+                    triggerKeywords: distressCheck.triggerKeywords
+                  }
+                : undefined
+            };
+            setMessages(prev => [...prev, assistantMessage]);
+            if (shouldPersistLocally && activeChatId) {
+              appendGuestMessage(activeChatId, assistantMessage);
+              setChats(getGuestChats());
+            }
           }
           dispatchAuroraActivity({
             mode: 'RUANG_TENANG',
             phase: 'finishing',
-            chatId,
+            chatId: activeChatId,
           });
           setStreamingMessage(null);
         },
@@ -308,11 +341,14 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
             resetAt: data.resetAt
           });
         },
+        onConsentRequired: () => {
+          onRequestAiConsent?.();
+        },
         onError: (err) => {
           dispatchAuroraActivity({
             mode: 'RUANG_TENANG',
             phase: 'error',
-            chatId,
+            chatId: activeChatId,
           });
           setStreamingMessage(null);
           if (err.includes('DAILY_LIMIT_EXCEEDED') || err.toLowerCase().includes('kuota') || err.toLowerCase().includes('limit')) {
@@ -347,7 +383,26 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
         }
       }
     );
-  }, [chatId, isTemporary, chatMode, responseStyle, aiModel, guestAiConsent, user?.role, streamMessage, navigate, setChats, showToast, setMessages, loadedChatIdRef]);
+  }, [chatId, isTemporary, chatMode, responseStyle, aiModel, user, messages, streamMessage, navigate, setChats, showToast, setMessages, loadedChatIdRef, onRequestAiConsent]);
+
+  const handleSend = useCallback((content: string, pluginResult?: string, attachments?: Attachment[], preserveUserMessage = false) => {
+    if (aiConsentAllowed !== true) {
+      if (content.trim() || pluginResult || (attachments && attachments.length > 0)) {
+        pendingConsentSendRef.current = { content, pluginResult, attachments, preserveUserMessage };
+        onRequestAiConsent?.(() => { pendingConsentSendRef.current = null; });
+      }
+      return false;
+    }
+    void handleSendAuthorized(content, pluginResult, attachments, preserveUserMessage);
+    return true;
+  }, [aiConsentAllowed, handleSendAuthorized, onRequestAiConsent]);
+
+  useEffect(() => {
+    if (aiConsentAllowed !== true || !pendingConsentSendRef.current) return;
+    const pending = pendingConsentSendRef.current;
+    pendingConsentSendRef.current = null;
+    void handleSendAuthorized(pending.content, pending.pluginResult, pending.attachments, pending.preserveUserMessage);
+  }, [aiConsentAllowed, handleSendAuthorized]);
 
   // Discuss Mood and Screening location state routing listeners
   useEffect(() => {
@@ -364,11 +419,11 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
       };
 
       const moodLabel = moodLabels[moodLog.mood] || 'N/A';
-      const emotionsList = moodLog.emotions && moodLog.emotions.length > 0 
-        ? moodLog.emotions.join(', ') 
+      const emotionsList = moodLog.emotions && moodLog.emotions.length > 0
+        ? moodLog.emotions.join(', ')
         : 'Tidak ada emosi spesifik';
-      const factorsList = moodLog.factors && moodLog.factors.length > 0 
-        ? moodLog.factors.join(', ') 
+      const factorsList = moodLog.factors && moodLog.factors.length > 0
+        ? moodLog.factors.join(', ')
         : 'Tidak ada faktor spesifik';
 
       const initialPrompt = `Halo! Saya baru saja mencatat mood saya hari ini:\n- Mood utama: ${moodLabel}\n- Emosi: ${emotionsList}\n- Faktor pemicu: ${factorsList}${moodLog.notes ? `\n- Catatan tambahan: "${moodLog.notes}"` : ''}\n\nSaya ingin berkonsultasi mengenai perasaan saya hari ini.`;
@@ -412,9 +467,14 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
 
     try {
       if (chatId) {
-        const res = await apiClient.post<{summary?: string}>(`/api/v1/chat/${chatId}/truncate`, { messageId: msgId });
-        if (!res.success) {
-          throw new Error(res.error || res.message || 'Gagal memotong riwayat pesan');
+        if (!chatId.startsWith('guest_')) {
+          const res = await apiClient.post<{summary?: string}>(`/api/v1/chat/${chatId}/truncate`, { messageId: msgId });
+          if (!res.success) {
+            throw new Error(res.error || res.message || 'Gagal memotong riwayat pesan');
+          }
+        } else {
+          const updated = messages.slice(0, idx);
+          saveGuestMessages(chatId, updated);
         }
       }
       await handleSend(newContent);
@@ -445,7 +505,7 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
         handleSend(lastUser.content, undefined, undefined, true);
       }
     }
-  }, [messages, chatId, handleEditMessage, handleSend]);
+  }, [messages, chatId, handleEditMessage, handleSend, setMessages]);
 
   const handleSendPluginResult = useCallback((res: string) => {
     handleSend('', res);
@@ -527,9 +587,13 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
       if (chatId) {
         if (confirm('Bersihkan riwayat percakapan ini?')) {
           try {
-            const res = await apiClient.delete(`/api/v1/chat/${chatId}/messages`);
-            if (!res.success) {
-              throw new Error(res.error || 'Gagal membersihkan percakapan di server.');
+            if (chatId.startsWith('guest_')) {
+              saveGuestMessages(chatId, []);
+            } else {
+              const res = await apiClient.delete(`/api/v1/chat/${chatId}/messages`);
+              if (!res.success) {
+                throw new Error(res.error || 'Gagal membersihkan percakapan di server.');
+              }
             }
             setMessages([]);
             showToast('Pesan berhasil dibersihkan', 'success');
@@ -549,7 +613,7 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
         showToast('Tidak ada percakapan untuk diringkas', 'info');
         return;
       }
-      
+
       try {
         if (chatId) {
           const res = await apiClient.post<{summary?: string}>(`/api/v1/chat/summary`, { chatId });
@@ -580,7 +644,6 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
           showToast('Skrining berhasil diselesaikan.', 'success');
           handleSend('', `Saya telah menyelesaikan skrining mandiri PHQ-9 (skor: ${score.phq9.score}, kategori: ${score.phq9.severity}) dan GAD-7 (skor: ${score.gad7.score}, kategori: ${score.gad7.severity}). Catatan: Skrining ini adalah alat evaluasi mandiri awal dan BUKAN diagnosis medis.`);
         }}
-        onTriggerSOS={() => showToast('Sinyal SOS darurat diaktifkan.', 'info')}
         isSummaryModalOpen={isSummaryModalOpen}
         onCloseSummaryModal={() => setIsSummaryModalOpen(false)}
         isBookmarksModalOpen={isBookmarksModalOpen}
@@ -623,12 +686,12 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
         currentChatTitle={currentChat?.title}
       />
 
-      <div 
+      <div
         className="flex-1 flex flex-col h-full min-h-0 bg-transparent relative min-w-0 overflow-hidden"
         style={viewportHeight ? { height: `${viewportHeight}px`, maxHeight: `${viewportHeight}px` } : undefined}
       >
         <div className="relative z-10 flex flex-col flex-1 h-full min-h-0 overflow-hidden bg-transparent">
-          <ChatHeader 
+          <ChatHeader
             user={user}
             chatId={chatId}
             isBranch={isBranch}
@@ -672,7 +735,7 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
               <div className="px-3 sm:px-4 pt-2.5 pb-1 shrink-0 z-20 animate-fade-in">
                 <div className="max-w-3xl mx-auto surface-card/85 backdrop-blur-md rounded-2xl border border-teal-200/60 dark:border-teal-800/60 p-2.5 sm:p-3 shadow-md hover:shadow-lg transition-all flex items-center justify-between gap-3 bg-linear-to-r from-teal-500/10 via-emerald-500/5 to-cyan-500/10">
                   <div className="flex items-center gap-2.5 min-w-0">
-                    <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-teal-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                    <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-teal-700 text-white flex items-center justify-center shrink-0 shadow-xs">
                       <Video className="w-4 h-4 animate-pulse" />
                     </div>
                     <div className="min-w-0">
@@ -694,7 +757,7 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
                     <button
                       type="button"
                       onClick={() => navigate('/counselors', { state: { selectedAppointment: upcomingAppointment.appointment } })}
-                      className="px-3 py-1.5 min-h-8.5 rounded-xl text-xs font-bold bg-teal-600 hover:bg-teal-700 text-white shadow-3xs hover:shadow-xs transition-all flex items-center gap-1 cursor-pointer whitespace-nowrap"
+                      className="px-3 py-1.5 min-h-8.5 rounded-xl text-xs font-bold bg-teal-700 hover:bg-teal-800 text-white shadow-3xs hover:shadow-xs transition-all flex items-center gap-1 cursor-pointer whitespace-nowrap"
                     >
                       <span>Masuk Ruang Sesi / Detail</span>
                     </button>
@@ -712,10 +775,10 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
               </div>
             )}
 
-            <div 
+            <div
               className={`flex-1 overflow-y-auto chat-scroll-container w-full min-w-0 flex flex-col px-3 sm:px-4 pt-3 sm:pt-4 pb-40 sm:pb-36 transition-all duration-300 bg-transparent ${
                 isPrivacyMode ? 'backdrop-blur-md filter blur-md select-none pointer-events-none' : ''
-              }`} 
+              }`}
               ref={scrollContainerRef}
             >
               {isLoadingMessages ? (
@@ -732,10 +795,10 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
                   />
                 </div>
               ) : messages.length === 0 ? (
-                <div className="min-h-full flex flex-col justify-between my-auto w-full">
-                  <EmptyChatState 
-                    userName={user?.name?.split(' ')[0]} 
-                    onSelectPrompt={(prompt) => handleSend(prompt)} 
+                <div className="min-h-0 flex-1 flex flex-col justify-start md:justify-center py-2 sm:py-4 w-full">
+                  <EmptyChatState
+                    userName={user?.name?.split(' ')[0]}
+                    onSelectPrompt={(prompt) => handleSend(prompt)}
                     onOpenBreathing={() => setIsBreathingOpen(true)}
                   />
                 </div>
@@ -757,8 +820,8 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
 
                   {nextCursor && (
                     <div className="flex justify-center mb-4">
-                      <button 
-                        onClick={handleLoadMore} 
+                      <button
+                        onClick={handleLoadMore}
                         disabled={isLoadingMore}
                         className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-secondary rounded-full text-xs font-medium transition-colors disabled:opacity-50 flex items-center gap-1.5 min-h-8 cursor-pointer"
                       >
@@ -767,12 +830,12 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
                       </button>
                     </div>
                   )}
-                  
+
                   {messages.map((msg) => (
-                    <MessageBubble 
-                      key={msg.id} 
-                      msg={msg} 
-                      isTyping={false} 
+                    <MessageBubble
+                      key={msg.id}
+                      msg={msg}
+                      isTyping={false}
                       onRegenerate={handleRegenerate}
                       onSendPluginResult={handleSendPluginResult}
                       onOpenPlugin={handleOpenPlugin}
@@ -784,24 +847,24 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
                       isSearchTarget={isSearchOpen && searchMatches[currentSearchIndex] === msg.id}
                     />
                   ))}
-                  
+
                   {streamingMessage && (
-                    <StreamingBubble 
-                      key={streamingMessage.id} 
-                      msg={streamingMessage} 
+                    <StreamingBubble
+                      key={streamingMessage.id}
+                      msg={streamingMessage}
                     />
                   )}
-                  
+
                   {isTyping && !streamingMessage && messages[messages.length - 1]?.role !== 'assistant' && (
                     <RhythmicTypingIndicator label="RuangTenang sedang merespons..." />
                   )}
-                  
+
                   {!isTyping && followUps.length > 0 && (
                     <div className="flex flex-wrap gap-1.5 mt-3 justify-end">
                       {followUps.map((q, idx) => (
-                        <button 
-                          key={idx} 
-                          onClick={() => handleSend(q)} 
+                        <button
+                          key={idx}
+                          onClick={() => handleSend(q)}
                           className="px-3 py-1.5 bg-slate-100/80 hover:bg-slate-200/80 dark:bg-slate-800/80 dark:hover:bg-slate-700/80 rounded-full text-xs text-slate-600 dark:text-slate-300 transition-colors text-left cursor-pointer chip-tactile active:scale-[0.96]"
                         >
                           {q}
@@ -836,7 +899,7 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
                             <button
                               type="button"
                               onClick={() => setIsBreathingOpen(true)}
-                              className="flex-1 sm:flex-initial px-3.5 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95"
+                              className="flex-1 sm:flex-initial px-3.5 py-2 bg-teal-700 hover:bg-teal-800 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95"
                             >
                               <Wind className="w-3.5 h-3.5" />
                               <span>Mulai Latihan Napas</span>
@@ -861,7 +924,7 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
             </div>
 
             {isPrivacyMode && (
-              <div 
+              <div
                 onClick={handleTogglePrivacy}
                 role="button"
                 tabIndex={0}
@@ -871,7 +934,7 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
                 aria-label="Layar disamarkan untuk privasi Anda. Klik untuk membuka kembali"
                 className="absolute inset-0 z-30 flex flex-col items-center justify-center p-4 sm:p-6 bg-stone-900/35 dark:bg-black/55 backdrop-blur-xs cursor-pointer select-none transition-all duration-200 animate-fade-in"
               >
-                <div 
+                <div
                   className="max-w-md w-full mx-auto p-6 sm:p-7 rounded-3xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-stone-200/80 dark:border-slate-800 shadow-2xl flex flex-col items-center text-center space-y-4 transform transition-transform hover:scale-[1.01] active:scale-[0.99]"
                 >
                   <div className="w-16 h-16 rounded-2xl bg-teal-50 dark:bg-teal-950/60 border border-teal-200/70 dark:border-teal-800/70 flex items-center justify-center text-teal-600 dark:text-teal-400 shadow-inner">
@@ -903,11 +966,11 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
               </div>
             )}
           </div>
-          
+
           {showScrollBottom && !isPrivacyMode && (
-            <button 
-              onClick={() => scrollToBottom(true)} 
-              className="absolute bottom-24 sm:bottom-22 left-1/2 -translate-x-1/2 z-30 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-full shadow-lg text-xs font-semibold flex items-center gap-1.5 transition-all animate-bounce cursor-pointer active:scale-95 border border-teal-400/50"
+            <button
+              onClick={() => scrollToBottom(true)}
+              className="absolute bottom-24 sm:bottom-22 left-1/2 -translate-x-1/2 z-30 px-4 py-2 bg-teal-700 hover:bg-teal-800 text-white rounded-full shadow-lg text-xs font-semibold flex items-center gap-1.5 transition-all animate-bounce cursor-pointer active:scale-95 border border-teal-400/50"
               title="Pesan Baru ↓"
               aria-label="Gulir ke Pesan Baru"
             >
@@ -915,15 +978,14 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
               <ArrowDown className="w-3.5 h-3.5" />
             </button>
           )}
-          
-          {user?.role === 'guest' && !guestAiConsent && (
-            <GuestAiConsentNotice checked={guestAiConsent} onChange={handleGuestConsentChange} />
-          )}
-          <ChatComposer 
-            onSend={handleSend} 
-            isTyping={isTyping} 
-            onStop={abortStream} 
-            chatId={chatId} 
+
+          <ChatComposer
+            onSend={handleSend}
+            isTyping={isTyping}
+            aiConsentAllowed={aiConsentAllowed}
+            aiConsentPromptOpen={aiConsentPromptOpen}
+            onStop={abortStream}
+            chatId={chatId}
             onCommand={handleCommand}
             onOpenPlugin={handleOpenPlugin}
             quotaExceeded={quotaExceededInfo?.isExceeded}

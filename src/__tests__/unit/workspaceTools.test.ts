@@ -150,7 +150,7 @@ describe('FASE 23 — Workspace Tool System', () => {
       expect(result.success).toBe(true);
       expect(result.outputType).toBe('ARTIFACT_UPDATE');
       expect(result.proposedContent).toContain('## Daftar Pustaka');
-      
+
       const lines = result.proposedContent!.split('\n').filter(l => l.startsWith('- '));
       expect(lines[0]).toContain('Andi');
       expect(lines[1]).toContain('Budi');

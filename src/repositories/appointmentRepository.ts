@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { prisma } from "../../server/database";
 import { AppointmentRecord } from "../../server/database";
 import { encryptionService } from "../../server/services/encryptionService";
@@ -98,7 +99,7 @@ function mapDbAppointmentToRecord(a: any): AppointmentRecord {
  * ============================================================================
  * RUANGTENANG KAMPUS - APPOINTMENT REPOSITORY (WITH BLIND INDEXING)
  * ============================================================================
- * 
+ *
  * @class AppointmentRepository
  * @description
  * High-security Repository for managing student mental health appointments.
@@ -110,7 +111,7 @@ function mapDbAppointmentToRecord(a: any): AppointmentRecord {
 export class AppointmentRepository {
   /**
    * Cleans up appointments older than a given cutoff date.
-   * 
+   *
    * @param cutoffDate - Expiration date boundary.
    * @returns Total number of records deleted.
    */
@@ -128,7 +129,7 @@ export class AppointmentRepository {
   /**
    * Retrieves a paginated list of appointments with optional user filtering.
    * Decrypts AES-256-GCM encrypted fields before returning records.
-   * 
+   *
    * @param limit - Page size limit (capped at HARD_MAX_PAGE_SIZE = 100).
    * @param offset - Pagination offset count.
    * @param userId - Optional student user ID filter.
@@ -149,7 +150,7 @@ export class AppointmentRepository {
 
   /**
    * Finds a single appointment by its primary key ID and returns decrypted contents.
-   * 
+   *
    * @param id - Unique appointment record ID.
    * @returns Decrypted `AppointmentRecord` or `null` if not found.
    */
@@ -164,13 +165,13 @@ export class AppointmentRepository {
 
   /**
    * Finds appointments associated with a specific Student NIM using HMAC-SHA256 Blind Indexing.
-   * 
+   *
    * Cryptographic Workflow:
    * 1. Computes the deterministic HMAC-SHA256 blind index hash for the input `nim`.
    * 2. Executes a database-indexed query (`SELECT * FROM Appointments WHERE studentNimHash = ?`).
    * 3. Maps raw database records through `encryptionService.decryptSensitive()` to reveal
    *    plaintext `studentNIM`, `studentEmail`, and `notes`.
-   * 
+   *
    * @param nim - Plaintext Student NIM (e.g. "13520999").
    * @returns Array of matching, fully decrypted `AppointmentRecord` objects.
    */
@@ -199,12 +200,12 @@ export class AppointmentRepository {
 
   /**
    * Finds appointments associated with a specific Student Email using HMAC-SHA256 Blind Indexing.
-   * 
+   *
    * Cryptographic Workflow:
    * 1. Computes the deterministic HMAC-SHA256 blind index hash for the input `email`.
    * 2. Executes a database-indexed query (`SELECT * FROM Appointments WHERE studentEmailHash = ?`).
    * 3. Maps raw database records through `encryptionService.decryptSensitive()`.
-   * 
+   *
    * @param email - Plaintext Student Email (e.g. "mahasiswa@ui.ac.id").
    * @returns Array of matching, fully decrypted `AppointmentRecord` objects.
    */
@@ -230,7 +231,7 @@ export class AppointmentRepository {
 
   /**
    * Checks slot availability for a counselor on a given date with Redis caching.
-   * 
+   *
    * @param counselorId - ID of the target counselor.
    * @param date - Date string in YYYY-MM-DD format.
    */
@@ -284,7 +285,7 @@ export class AppointmentRepository {
    * Adds a new appointment to the database with dual security mechanisms:
    * 1. AES-256-GCM Application-Level Encryption for `notes`, `studentNIM`, and `studentEmail`.
    * 2. HMAC-SHA256 Blind Index generation for `studentNimHash` and `studentEmailHash`.
-   * 
+   *
    * @param appt - Appointment data containing raw student details and notes.
    * @returns Saved and decrypted `AppointmentRecord`.
    * @throws {Error} Throws "SLOT_ALREADY_BOOKED" if the target slot is unavailable.
@@ -292,7 +293,7 @@ export class AppointmentRepository {
   async addAppointment(
     appt: Omit<AppointmentRecord, "id" | "createdAt">,
   ): Promise<AppointmentRecord> {
-    const id = "appt-" + Date.now() + "-" + Math.floor(Math.random() * 1000);
+    const id = `appt-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
     const initialStatus = appt.status || "PENDING";
     const initialApproval =
       appt.approvalStatus ||
@@ -321,7 +322,7 @@ export class AppointmentRepository {
       }
 
       // Check if counselor exists in authoritative database
-      let counselorRecord = resolvedCounselorId 
+      let counselorRecord = resolvedCounselorId
         ? await tx.counselors.findUnique({ where: { id: resolvedCounselorId } })
         : null;
 
@@ -330,7 +331,7 @@ export class AppointmentRepository {
         if (process.env.NODE_ENV === 'test' || process.env.VITE_PUBLIC_DEMO_MODE === 'true' || process.env.VITEST === 'true') {
           counselorRecord = await tx.counselors.create({
             data: {
-              id: resolvedCounselorId || ("cns-test-" + Date.now() + "-" + Math.floor(Math.random() * 1000)),
+              id: resolvedCounselorId || `cns-test-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`,
               name: appt.counselorName || "Test Counselor",
               role: "Konselor Mahasiswa",
               specialties: JSON.stringify(["Konseling Umum"]),
@@ -420,7 +421,7 @@ export class AppointmentRepository {
       try {
         await tx.auditLogs.create({
           data: {
-            id: "log-" + Date.now() + "-" + Math.floor(Math.random() * 1000),
+            id: `log-${crypto.randomUUID()}`,
             action: "CREATE_APPOINTMENT",
             details: `Jadwal konseling (Status: ${initialStatus}) dibuat untuk ID sesi ${id} tanggal ${appt.date} (${created.scheduledAt.toISOString()})`,
             timestamp: new Date(),
@@ -440,7 +441,7 @@ export class AppointmentRepository {
   /**
    * Updates an existing appointment, recalculating ciphertexts and blind index hashes
    * whenever sensitive student NIM or Email fields are updated.
-   * 
+   *
    * @param id - Appointment ID.
    * @param updates - Partial object containing updated appointment fields.
    */
@@ -567,7 +568,7 @@ export class AppointmentRepository {
       try {
         await tx.auditLogs.create({
           data: {
-            id: "log-" + Date.now() + "-" + Math.floor(Math.random() * 1000),
+            id: `log-${crypto.randomUUID()}`,
             action: "UPDATE_APPOINTMENT",
             details: `Jadwal konseling ID ${id} diperbarui. Status: ${updated.status}`,
             timestamp: new Date(),
@@ -589,7 +590,7 @@ export class AppointmentRepository {
 
   /**
    * Deletes an appointment record and associated slot reservations.
-   * 
+   *
    * @param id - Appointment ID to remove.
    * @returns `true` if deleted successfully, `false` otherwise.
    */
@@ -608,7 +609,7 @@ export class AppointmentRepository {
 
         await tx.auditLogs.create({
           data: {
-            id: "log-" + Date.now() + "-" + Math.floor(Math.random() * 1000),
+            id: `log-${crypto.randomUUID()}`,
             action: "DELETE_APPOINTMENT",
             details: `Jadwal konseling ID ${id} dihapus.`,
             timestamp: new Date(),

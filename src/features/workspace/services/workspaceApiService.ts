@@ -39,16 +39,22 @@ export interface WorkspaceAttachmentDto {
   slideCount?: number;
   sheetCount?: number;
   extractionWarnings?: string[];
+  ocrApplied?: boolean;
+  visualAnalysisAvailable?: boolean;
+  previewOnly?: boolean;
+  ocrConfidence?: number;
+  readingUncertainty?: string;
   chunkCount?: number;
   errorMessage?: string;
   createdAt?: string;
 }
 
-export interface WorkspaceAttachmentPreviewDto extends Pick<WorkspaceAttachmentDto, 'id' | 'filename' | 'mimeType' | 'fileKind' | 'size' | 'chunkCount'> {
+export interface WorkspaceAttachmentPreviewDto extends Pick<WorkspaceAttachmentDto, 'id' | 'filename' | 'mimeType' | 'fileKind' | 'size' | 'chunkCount' | 'ocrApplied' | 'visualAnalysisAvailable' | 'previewOnly' | 'ocrConfidence' | 'readingUncertainty' | 'extractionWarnings'> {
   previewText: string;
 }
 
 export interface TabularPreviewDto { sheetName: string; columns: string[]; rows: Array<Record<string, unknown>>; offset: number; limit: number; rowCount: number }
+export interface WorkspaceTabularOverviewDto { dataset: TabularDataset; preview: TabularPreviewDto }
 
 export interface WorkspaceSearchResult {
   kind: 'workspace' | 'task' | 'artifact' | 'file' | 'message';
@@ -59,27 +65,56 @@ export interface WorkspaceSearchResult {
   updatedAt: string;
 }
 
+export interface WorkspaceSearchPage {
+  items: WorkspaceSearchResult[];
+  hasMore: boolean;
+  nextCursor: string | null;
+}
+
+export interface WorkspaceListPage {
+  items: WorkspaceContract[];
+  hasMore: boolean;
+  nextOffset: number;
+}
+
 function workspaceApiError(message: string, status?: number, code?: string): Error & { status?: number; code?: string } {
   return Object.assign(new Error(message), { status, code });
+}
+
+function unwrapApiData<T>(payload: unknown): T {
+  if (
+    payload &&
+    typeof payload === 'object' &&
+    !Array.isArray(payload) &&
+    'success' in payload &&
+    typeof (payload as { success?: unknown }).success === 'boolean' &&
+    'data' in payload
+  ) {
+    return (payload as { data: T }).data;
+  }
+  return payload as T;
 }
 
 export class WorkspaceApiService {
   static async fetchResearchSources(chatId: string, signal?: AbortSignal): Promise<ResearchSource[]> {
     const res = await apiClient.get<ResearchSource[]>(`/api/v1/workspace/${encodeURIComponent(chatId)}/sources`, { signal });
-    if (!res.success || !Array.isArray(res.data)) throw new Error(res.message || 'Sumber gagal dimuat.');
-    return res.data;
+    const data = unwrapApiData<ResearchSource[]>(res.data);
+    if (!res.success || !Array.isArray(data)) throw new Error(res.message || 'Sumber gagal dimuat.');
+    return data;
   }
 
   static async updateResearchSource(chatId: string, sourceId: string, metadata: ResearchSourceMetadata): Promise<ResearchSource> {
     const res = await apiClient.put<ResearchSource>(`/api/v1/workspace/${encodeURIComponent(chatId)}/sources/${encodeURIComponent(sourceId)}`, metadata);
-    if (!res.success || !res.data) throw new Error(res.message || 'Metadata sumber gagal disimpan.');
-    return res.data;
+    const data = unwrapApiData<ResearchSource>(res.data);
+    if (!res.success || !data) throw new Error(res.message || 'Metadata sumber gagal disimpan.');
+    return data;
   }
 
   static async startTaskExecution(chatId: string, planId: string, taskId: string, executionId: string, snapshot: NonNullable<WorkspacePlan['tasks'][number]['snapshot']>): Promise<{ plan: WorkspacePlan; claimed: boolean }> {
     const res = await apiClient.post<{ plan: WorkspacePlan; claimed: boolean }>(`/api/v1/workspace/${encodeURIComponent(chatId)}/plans/${encodeURIComponent(planId)}/tasks/${encodeURIComponent(taskId)}/run`, { executionId, snapshot });
-    if (!res.success || !res.data) throw new Error(res.message || 'Task tidak dapat dijalankan.');
-    return res.data;
+    const data = unwrapApiData<{ plan: WorkspacePlan; claimed: boolean }>(res.data);
+    if (!res.success || !data) throw new Error(res.message || 'Task tidak dapat dijalankan.');
+    return data;
   }
 
   static async executeAgentTask(chatId: string, planId: string, taskId: string, executionId: string, signal?: AbortSignal): Promise<{ execution: AgentExecutionResult; plan: WorkspacePlan }> {
@@ -87,148 +122,185 @@ export class WorkspaceApiService {
     const res = await apiClient.request<{ execution: AgentExecutionResult; plan: WorkspacePlan }>(url, {
       method: 'POST', body: JSON.stringify({ executionId }), signal
     }, 0, 120_000);
-    if (!res.success || !res.data) throw new Error(res.message || 'Agent tidak dapat menjalankan task.');
-    return res.data;
+    const data = unwrapApiData<{ execution: AgentExecutionResult; plan: WorkspacePlan }>(res.data);
+    if (!res.success || !data) throw new Error(res.message || 'Agent tidak dapat menjalankan task.');
+    return data;
   }
 
   static async finishTaskExecution(chatId: string, planId: string, taskId: string, executionId: string, result: { output?: string; sources?: WorkspacePlan['tasks'][number]['sources']; errorCode?: string }): Promise<WorkspacePlan> {
     const path = `/api/v1/workspace/${encodeURIComponent(chatId)}/plans/${encodeURIComponent(planId)}/tasks/${encodeURIComponent(taskId)}/executions/${encodeURIComponent(executionId)}/result`;
     const res = await apiClient.post<WorkspacePlan>(path, result);
-    if (!res.success || !res.data) throw new Error(res.message || 'Hasil task gagal disimpan.');
-    return res.data;
+    const data = unwrapApiData<WorkspacePlan>(res.data);
+    if (!res.success || !data) throw new Error(res.message || 'Hasil task gagal disimpan.');
+    return data;
   }
 
   static async reviewTask(chatId: string, planId: string, taskId: string, decision: 'accept' | 'reject'): Promise<WorkspacePlan> {
     const path = `/api/v1/workspace/${encodeURIComponent(chatId)}/plans/${encodeURIComponent(planId)}/tasks/${encodeURIComponent(taskId)}/review`;
     const res = await apiClient.post<WorkspacePlan>(path, { decision });
-    if (!res.success || !res.data) throw new Error(res.message || 'Keputusan tinjauan gagal disimpan.');
-    return res.data;
+    const data = unwrapApiData<WorkspacePlan>(res.data);
+    if (!res.success || !data) throw new Error(res.message || 'Keputusan tinjauan gagal disimpan.');
+    return data;
   }
 
   static async updateTaskModel(chatId: string, planId: string, taskId: string, modelId: string | null): Promise<WorkspacePlan> {
     const path = `/api/v1/workspace/${encodeURIComponent(chatId)}/plans/${encodeURIComponent(planId)}/tasks/${encodeURIComponent(taskId)}/model`;
     const res = await apiClient.post<WorkspacePlan>(path, { modelId });
-    if (!res.success || !res.data) throw new Error(res.message || 'Model task gagal diperbarui.');
-    return res.data;
+    const data = unwrapApiData<WorkspacePlan>(res.data);
+    if (!res.success || !data) throw new Error(res.message || 'Model task gagal diperbarui.');
+    return data;
   }
 
   static async linkTaskArtifact(chatId: string, planId: string, taskId: string, executionId: string, artifactId: string): Promise<WorkspacePlan> {
     const path = `/api/v1/workspace/${encodeURIComponent(chatId)}/plans/${encodeURIComponent(planId)}/tasks/${encodeURIComponent(taskId)}/executions/${encodeURIComponent(executionId)}/artifact`;
     const res = await apiClient.post<WorkspacePlan>(path, { artifactId });
-    if (!res.success || !res.data) throw new Error(res.message || 'Artifact task gagal ditautkan.');
-    return res.data;
+    const data = unwrapApiData<WorkspacePlan>(res.data);
+    if (!res.success || !data) throw new Error(res.message || 'Artifact task gagal ditautkan.');
+    return data;
   }
 
   static async transitionPlan(chatId: string, planId: string, action: 'approve' | 'pause' | 'resume' | 'cancel' | 'complete'): Promise<WorkspacePlan> {
     const res = await apiClient.post<WorkspacePlan>(`/api/v1/workspace/${encodeURIComponent(chatId)}/plans/${encodeURIComponent(planId)}/transition`, { action });
-    if (!res.success || !res.data) throw new Error(res.message || 'Perubahan status plan gagal disimpan.');
-    return res.data;
+    const data = unwrapApiData<WorkspacePlan>(res.data);
+    if (!res.success || !data) throw new Error(res.message || 'Perubahan status plan gagal disimpan.');
+    return data;
   }
 
   static async cancelTaskExecution(chatId: string, planId: string, taskId: string, executionId: string): Promise<WorkspacePlan> {
     const path = `/api/v1/workspace/${encodeURIComponent(chatId)}/plans/${encodeURIComponent(planId)}/tasks/${encodeURIComponent(taskId)}/executions/${encodeURIComponent(executionId)}/cancel`;
     const res = await apiClient.post<WorkspacePlan>(path, {});
-    if (!res.success || !res.data) throw new Error(res.message || 'Task belum dapat dihentikan.');
-    return res.data;
+    const data = unwrapApiData<WorkspacePlan>(res.data);
+    if (!res.success || !data) throw new Error(res.message || 'Task belum dapat dihentikan.');
+    return data;
   }
 
   static async recoverTaskExecution(chatId: string, planId: string, taskId: string, executionId: string): Promise<WorkspacePlan> {
     const path = `/api/v1/workspace/${encodeURIComponent(chatId)}/plans/${encodeURIComponent(planId)}/tasks/${encodeURIComponent(taskId)}/executions/${encodeURIComponent(executionId)}/recover`;
     const res = await apiClient.post<WorkspacePlan>(path, {});
-    if (!res.success || !res.data) throw new Error(res.message || 'Eksekusi belum dapat dipulihkan.');
-    return res.data;
+    const data = unwrapApiData<WorkspacePlan>(res.data);
+    if (!res.success || !data) throw new Error(res.message || 'Eksekusi belum dapat dipulihkan.');
+    return data;
   }
 
   static async createPlan(chatId: string, plan: WorkspacePlan): Promise<WorkspacePlan> {
     const res = await apiClient.post<WorkspacePlan>(`/api/v1/workspace/${encodeURIComponent(chatId)}/plans`, plan);
-    if (!res.success || !res.data) throw new Error(res.message || 'Plan gagal disimpan.');
-    return res.data;
+    const data = unwrapApiData<WorkspacePlan>(res.data);
+    if (!res.success || !data) throw new Error(res.message || 'Plan gagal disimpan.');
+    return data;
   }
 
   static async updatePlan(chatId: string, plan: WorkspacePlan): Promise<WorkspacePlan> {
     const res = await apiClient.put<WorkspacePlan>(`/api/v1/workspace/${encodeURIComponent(chatId)}/plans/${encodeURIComponent(plan.id)}`, plan);
-    if (!res.success || !res.data) throw new Error(res.message || 'Plan gagal diperbarui.');
-    return res.data;
+    const data = unwrapApiData<WorkspacePlan>(res.data);
+    if (!res.success || !data) throw new Error(res.message || 'Plan gagal diperbarui.');
+    return data;
   }
 
-  static async searchWorkspaces(query: string, signal?: AbortSignal): Promise<WorkspaceSearchResult[]> {
-    const res = await apiClient.get<WorkspaceSearchResult[]>(`/api/v1/workspace/search?q=${encodeURIComponent(query)}`, { signal });
-    if (!res.success || !Array.isArray(res.data)) throw new Error(res.message || 'Pencarian Workspace gagal.');
-    return res.data;
+  static async searchWorkspaces(query: string, signal?: AbortSignal, kind?: string, cursor?: string | null): Promise<WorkspaceSearchPage> {
+    const params = new URLSearchParams({ q: query });
+    if (kind && kind !== 'all') params.set('kind', kind);
+    if (cursor) params.set('cursor', cursor);
+    const res = await apiClient.get<WorkspaceSearchPage>(`/api/v1/workspace/search?${params.toString()}`, { signal });
+    const data = unwrapApiData<WorkspaceSearchPage>(res.data);
+    if (!res.success || !data || !Array.isArray(data.items) || typeof data.hasMore !== 'boolean' || !(data.nextCursor === null || typeof data.nextCursor === 'string') || (data.hasMore && !data.nextCursor)) throw new Error(res.message || 'Pencarian Workspace gagal.');
+    return data;
   }
 
   static async fetchAttachmentPreview(attachmentId: string, signal?: AbortSignal): Promise<WorkspaceAttachmentPreviewDto> {
     const res = await apiClient.get<WorkspaceAttachmentPreviewDto>(`/api/v1/chat/attachments/${encodeURIComponent(attachmentId)}/preview`, { signal });
-    if (!res.success || !res.data) throw new Error(res.message || 'Preview dokumen gagal dimuat.');
-    return res.data;
+    const data = unwrapApiData<WorkspaceAttachmentPreviewDto>(res.data);
+    if (!res.success || !data) throw new Error(res.message || 'Preview dokumen gagal dimuat.');
+    return data;
   }
 
   static async fetchTabularDataset(attachmentId: string, sheetName?: string, signal?: AbortSignal): Promise<TabularDataset> {
     const suffix = sheetName ? `?sheet=${encodeURIComponent(sheetName)}` : '';
     const res = await apiClient.get<TabularDataset>(`/api/v1/chat/attachments/${encodeURIComponent(attachmentId)}/dataset${suffix}`, { signal });
-    if (!res.success || !res.data) throw new Error(res.message || 'Profil dataset gagal dimuat.');
-    return res.data;
+    const data = unwrapApiData<TabularDataset>(res.data);
+    if (!res.success || !data) throw new Error(res.message || 'Profil dataset gagal dimuat.');
+    return data;
+  }
+
+  static async fetchTabularDatasetOverview(attachmentId: string, sheetName?: string, signal?: AbortSignal): Promise<WorkspaceTabularOverviewDto> {
+    const query = sheetName ? `?sheet=${encodeURIComponent(sheetName)}` : '';
+    const res = await apiClient.get<WorkspaceTabularOverviewDto>(`/api/v1/chat/attachments/${encodeURIComponent(attachmentId)}/dataset/overview${query}`, { signal });
+    const data = unwrapApiData<WorkspaceTabularOverviewDto>(res.data);
+    if (!res.success || !data?.dataset || !data.preview) throw new Error(res.message || 'Ringkasan dataset gagal dimuat.');
+    return data;
   }
 
   static async fetchTabularPreview(attachmentId: string, sheetName: string, offset: number, signal?: AbortSignal): Promise<TabularPreviewDto> {
     const query = new URLSearchParams({ sheet: sheetName, offset: String(offset), limit: '25' });
     const res = await apiClient.get<TabularPreviewDto>(`/api/v1/chat/attachments/${encodeURIComponent(attachmentId)}/dataset/preview?${query}`, { signal });
-    if (!res.success || !res.data) throw new Error(res.message || 'Preview dataset gagal dimuat.');
-    return res.data;
+    const data = unwrapApiData<TabularPreviewDto>(res.data);
+    if (!res.success || !data) throw new Error(res.message || 'Preview dataset gagal dimuat.');
+    return data;
   }
 
   static async analyzeTabularDataset(attachmentId: string, plan: TabularAnalysisRequest): Promise<TabularAnalysisResult> {
     const res = await apiClient.post<TabularAnalysisResult>(`/api/v1/chat/attachments/${encodeURIComponent(attachmentId)}/dataset/analyze`, plan);
-    if (!res.success || !res.data) throw new Error(res.message || 'Analisis dataset gagal dijalankan.');
-    return res.data;
+    const data = unwrapApiData<TabularAnalysisResult>(res.data);
+    if (!res.success || !data) throw new Error(res.message || 'Analisis dataset gagal dijalankan.');
+    return data;
   }
 
   static async previewTabularTransform(attachmentId: string, plan: TabularTransformRequest): Promise<TabularTransformPreview> {
     const res = await apiClient.post<TabularTransformPreview>(`/api/v1/chat/attachments/${encodeURIComponent(attachmentId)}/dataset/transform/preview`, plan);
-    if (!res.success || !res.data) throw new Error(res.message || 'Preview transformasi gagal.');
-    return res.data;
+    const data = unwrapApiData<TabularTransformPreview>(res.data);
+    if (!res.success || !data) throw new Error(res.message || 'Preview transformasi gagal.');
+    return data;
   }
 
   static async confirmTabularTransform(attachmentId: string, plan: TabularTransformRequest): Promise<{ artifact: WorkspaceArtifact; transform: TabularTransformPreview; sourceUnchanged: boolean }> {
     const res = await apiClient.post<{ artifact: WorkspaceArtifact; transform: TabularTransformPreview; sourceUnchanged: boolean }>(`/api/v1/chat/attachments/${encodeURIComponent(attachmentId)}/dataset/transform/confirm`, plan);
-    if (!res.success || !res.data) throw new Error(res.message || 'Transformasi gagal disimpan.');
-    return res.data;
+    const data = unwrapApiData<{ artifact: WorkspaceArtifact; transform: TabularTransformPreview; sourceUnchanged: boolean }>(res.data);
+    if (!res.success || !data) throw new Error(res.message || 'Transformasi gagal disimpan.');
+    return data;
   }
 
-  static async listWorkspaces(signal?: AbortSignal): Promise<WorkspaceContract[]> {
-    const res = await apiClient.get<WorkspaceContract[]>('/api/v1/workspace', { signal });
-    if (!res.success || !Array.isArray(res.data)) throw new Error(res.message || 'Gagal memuat Workspace');
-    return res.data;
+  static async listWorkspaces(offset = 0, signal?: AbortSignal): Promise<WorkspaceListPage> {
+    const params = new URLSearchParams({ offset: String(offset), limit: '100' });
+    const res = await apiClient.get<WorkspaceListPage>(`/api/v1/workspace?${params.toString()}`, { signal });
+    const data = unwrapApiData<WorkspaceListPage>(res.data);
+    if (!res.success || !Array.isArray(data?.items) || typeof data.hasMore !== 'boolean' || !Number.isSafeInteger(data.nextOffset)) {
+      throw new Error(res.message || 'Gagal memuat Workspace');
+    }
+    return data;
   }
 
   static async createWorkspace(name?: string, signal?: AbortSignal): Promise<WorkspaceContract> {
     const res = await apiClient.post<WorkspaceContract>('/api/v1/workspace', { ...(name ? { name } : {}) }, { signal });
-    if (!res.success || !res.data) throw new Error(res.message || 'Gagal membuat Workspace');
-    return res.data;
+    const data = unwrapApiData<WorkspaceContract>(res.data);
+    if (!res.success || !data) throw new Error(res.message || 'Gagal membuat Workspace');
+    return data;
   }
 
   static async fetchWorkspace(chatId: string, signal?: AbortSignal): Promise<WorkspaceContract> {
     const res = await apiClient.get<WorkspaceContract>(`/api/v1/workspace/${encodeURIComponent(chatId)}`, { signal });
-    if (!res.success || !res.data) throw new Error(res.message || 'Gagal memuat Workspace');
-    return res.data;
+    const data = unwrapApiData<WorkspaceContract>(res.data);
+    if (!res.success || !data) throw workspaceApiError(res.message || 'Gagal memuat Workspace', res.status, res.code);
+    return data;
   }
 
   static async updateWorkspace(chatId: string, payload: Partial<Pick<WorkspaceContract, 'name' | 'description' | 'instructions' | 'defaultModel' | 'defaultPreset'>>, signal?: AbortSignal): Promise<WorkspaceContract> {
     const res = await apiClient.put<WorkspaceContract>(`/api/v1/workspace/${encodeURIComponent(chatId)}`, payload, { signal });
-    if (!res.success || !res.data) throw new Error(res.message || 'Gagal menyimpan Workspace');
-    return res.data;
+    const data = unwrapApiData<WorkspaceContract>(res.data);
+    if (!res.success || !data) throw new Error(res.message || 'Gagal menyimpan Workspace');
+    return data;
   }
 
   static async createTask(chatId: string, title: string, source: WorkspaceTaskSource = 'user', signal?: AbortSignal): Promise<WorkspaceTaskContract> {
     const res = await apiClient.post<WorkspaceTaskContract>(`/api/v1/workspace/${encodeURIComponent(chatId)}/tasks`, { title, source }, { signal });
-    if (!res.success || !res.data) throw new Error(res.message || 'Gagal membuat task');
-    return res.data;
+    const data = unwrapApiData<WorkspaceTaskContract>(res.data);
+    if (!res.success || !data) throw new Error(res.message || 'Gagal membuat task');
+    return data;
   }
 
   static async updateTask(chatId: string, taskId: string, status: WorkspaceTaskStatus, signal?: AbortSignal): Promise<WorkspaceTaskContract> {
     const res = await apiClient.put<WorkspaceTaskContract>(`/api/v1/workspace/${encodeURIComponent(chatId)}/tasks/${encodeURIComponent(taskId)}`, { status }, { signal });
-    if (!res.success || !res.data) throw new Error(res.message || 'Gagal memperbarui task');
-    return res.data;
+    const data = unwrapApiData<WorkspaceTaskContract>(res.data);
+    if (!res.success || !data) throw new Error(res.message || 'Gagal memperbarui task');
+    return data;
   }
 
   static async deleteTask(chatId: string, taskId: string, signal?: AbortSignal): Promise<void> {
@@ -240,10 +312,11 @@ export class WorkspaceApiService {
     const res = await apiClient.get<{ attachments?: WorkspaceAttachmentDto[] }>(
       `/api/v1/chat/${encodeURIComponent(chatId)}/attachments`, { signal }
     );
-    if (!res.success || !Array.isArray(res.data?.attachments)) {
+    const data = unwrapApiData<{ attachments?: WorkspaceAttachmentDto[] }>(res.data);
+    if (!res.success || !Array.isArray(data?.attachments)) {
       throw workspaceApiError(res.message || 'Gagal memuat dokumen Workspace', res.status, res.code);
     }
-    return res.data.attachments;
+    return data.attachments;
   }
 
   static async deleteAttachment(attachmentId: string, chatId?: string, signal?: AbortSignal): Promise<void> {
@@ -259,8 +332,9 @@ export class WorkspaceApiService {
     const res = await apiClient.post<{ attachment?: WorkspaceAttachmentDto }>(
       `/api/v1/chat/attachments/${encodeURIComponent(attachmentId)}/retry${query}`, {}, { signal }
     );
-    if (!res.success || !res.data?.attachment) throw new Error(res.message || 'Gagal mencoba ulang pemrosesan dokumen.');
-    return res.data.attachment;
+    const data = unwrapApiData<{ attachment?: WorkspaceAttachmentDto }>(res.data);
+    if (!res.success || !data?.attachment) throw new Error(res.message || 'Gagal mencoba ulang pemrosesan dokumen.');
+    return data.attachment;
   }
 
   /** Fetch artifacts belonging to one Workspace. A missing chat never falls back to the user library. */
@@ -268,8 +342,9 @@ export class WorkspaceApiService {
     if (!chatId) return [];
     const url = `/api/v1/workspace/artifacts?chatId=${encodeURIComponent(chatId)}`;
     const res = await apiClient.get<any>(url, { signal });
-    if (res.success && Array.isArray(res.data)) {
-      return res.data;
+    const data = unwrapApiData<WorkspaceArtifact[]>(res.data);
+    if (res.success && Array.isArray(data)) {
+      return data;
     }
     return [];
   }
@@ -277,19 +352,36 @@ export class WorkspaceApiService {
   /** Explicit library operation for screens that intentionally list every user artifact. */
   static async fetchAllArtifacts(signal?: AbortSignal): Promise<WorkspaceArtifact[]> {
     const res = await apiClient.get<any>('/api/v1/workspace/artifacts/all', { signal });
-    if (res.success && Array.isArray(res.data)) return res.data;
+    const data = unwrapApiData<WorkspaceArtifact[]>(res.data);
+    if (res.success && Array.isArray(data)) return data;
     return [];
   }
 
-  /**
-   * Fetch messages for a specific chat
-   */
-  static async fetchMessages(chatId: string, signal?: AbortSignal): Promise<Message[]> {
-    const res = await apiClient.get<any>(`/api/v1/chat/${encodeURIComponent(chatId)}/messages?limit=50`, { signal });
-    if (res.success && res.data && Array.isArray(res.data.data)) {
-      return res.data.data;
+  /** Fetch one chronological page of messages for a specific chat. */
+  static async fetchMessagesPage(chatId: string, cursor?: string, signal?: AbortSignal): Promise<{ messages: Message[]; nextCursor: string | null }> {
+    const params = new URLSearchParams({ limit: '50' });
+    if (cursor) params.set('cursor', cursor);
+    const res = await apiClient.get<any>(`/api/v1/chat/${encodeURIComponent(chatId)}/messages?${params.toString()}`, { signal });
+    const payload = res.data;
+    const messagesArray = Array.isArray(payload?.data)
+      ? payload.data
+      : Array.isArray(payload?.data?.data)
+        ? payload.data.data
+        : null;
+    const rawCursor = payload?.nextCursor ?? payload?.data?.nextCursor;
+    if (res.success && messagesArray) {
+      return {
+        messages: messagesArray,
+        nextCursor: typeof rawCursor === 'string' && rawCursor.length > 0 ? rawCursor : null
+      };
     }
     throw workspaceApiError(res.message || 'Gagal memuat percakapan Workspace', res.status, res.code);
+  }
+
+  /** Compatibility helper for callers that only need the first page of messages. */
+  static async fetchMessages(chatId: string, signal?: AbortSignal): Promise<Message[]> {
+    const page = await this.fetchMessagesPage(chatId, undefined, signal);
+    return page.messages;
   }
 
   /** Clears only the messages belonging to an owned Workspace chat. */
@@ -303,8 +395,9 @@ export class WorkspaceApiService {
    */
   static async createArtifact(payload: CreateArtifactPayload, signal?: AbortSignal): Promise<WorkspaceArtifact | null> {
     const res = await apiClient.post<any>('/api/v1/workspace/artifacts', payload, { signal });
-    if (res.success && res.data) {
-      return res.data;
+    const data = unwrapApiData<WorkspaceArtifact>(res.data);
+    if (res.success && data) {
+      return data;
     }
     return null;
   }
@@ -314,8 +407,9 @@ export class WorkspaceApiService {
    */
   static async updateArtifact(id: string, payload: UpdateArtifactPayload, signal?: AbortSignal): Promise<WorkspaceArtifact | null> {
     const res = await apiClient.put<any>(`/api/v1/workspace/artifacts/${encodeURIComponent(id)}`, payload, { signal });
-    if (res.success && res.data) {
-      return res.data;
+    const data = unwrapApiData<WorkspaceArtifact>(res.data);
+    if (res.success && data) {
+      return data;
     }
     if (res.status === 409 || res.code === 'ARTIFACT_CONFLICT') {
       throw new Error(res.message || 'Dokumen berubah sejak revisi dimulai. Coba ulang revisi.');
@@ -332,9 +426,10 @@ export class WorkspaceApiService {
     const res = await apiClient.post<any>(`/api/v1/workspace/artifacts/${encodeURIComponent(id)}/rollback${query}`, {
       targetVersion
     }, { signal });
+    const data = unwrapApiData<WorkspaceArtifact>(res.data);
 
-    if (res.success && res.data) {
-      return res.data;
+    if (res.success && data) {
+      return data;
     }
     throw new Error(res.message || 'Gagal memulihkan versi artefak');
   }
@@ -353,20 +448,23 @@ export class WorkspaceApiService {
 
   static async fetchWorkspaceMemories(chatId: string, signal?: AbortSignal): Promise<any[]> {
     const res = await apiClient.get<any[]>(`/api/v1/workspace/${encodeURIComponent(chatId)}/memories`, { signal });
-    if (!res.success || !Array.isArray(res.data)) throw new Error(res.message || 'Memori workspace gagal dimuat.');
-    return res.data;
+    const data = unwrapApiData<any[]>(res.data);
+    if (!res.success || !Array.isArray(data)) throw new Error(res.message || 'Memori workspace gagal dimuat.');
+    return data;
   }
 
   static async createWorkspaceMemory(chatId: string, payload: { category: string; content: string; provenance?: string }, signal?: AbortSignal): Promise<any> {
     const res = await apiClient.post<any>(`/api/v1/workspace/${encodeURIComponent(chatId)}/memories`, payload, { signal });
-    if (!res.success || !res.data) throw new Error(res.message || 'Memori workspace gagal disimpan.');
-    return res.data;
+    const data = unwrapApiData<any>(res.data);
+    if (!res.success || !data) throw new Error(res.message || 'Memori workspace gagal disimpan.');
+    return data;
   }
 
   static async updateWorkspaceMemory(chatId: string, memoryId: string, payload: { content?: string; category?: string; status?: string; isActive?: boolean }, signal?: AbortSignal): Promise<any> {
     const res = await apiClient.put<any>(`/api/v1/workspace/${encodeURIComponent(chatId)}/memories/${encodeURIComponent(memoryId)}`, payload, { signal });
-    if (!res.success || !res.data) throw new Error(res.message || 'Memori workspace gagal diperbarui.');
-    return res.data;
+    const data = unwrapApiData<any>(res.data);
+    if (!res.success || !data) throw new Error(res.message || 'Memori workspace gagal diperbarui.');
+    return data;
   }
 
   static async deleteWorkspaceMemory(chatId: string, memoryId: string, signal?: AbortSignal): Promise<void> {

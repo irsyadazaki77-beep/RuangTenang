@@ -142,7 +142,10 @@ export const contextRetrievalService = {
       chatId,
       attachmentIds: readyAttachments.map(a => a.id),
       userQuery,
-      sourceChecksums
+      sourceChecksums,
+      maxTokens,
+      maxChunks,
+      section
     });
 
     const cachedContext = documentContextCacheService.get(cacheKey);
@@ -356,7 +359,7 @@ export const contextRetrievalService = {
     const chunkBlocks = selectedChunks.map(c => {
       let safeContent = c.text;
       safeContent = scanAndSanitizePII(safeContent).sanitizedText;
-      
+
       // If the document content contains blatant prompt injection phrases, neutralize them as raw data
       if (detectPromptInjection(safeContent)) {
         safeContent = `[DATA NETRALISIR - TERDETEKSI POLA INSTRUKSI UNTRUSTED]\n${safeContent.replace(/([[\]{}<>])/g, '')}`;

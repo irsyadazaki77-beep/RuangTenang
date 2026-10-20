@@ -1,9 +1,10 @@
 import React from 'react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { ArtifactCanvas } from '../../features/workspace/components/ArtifactCanvas';
+import { WorkspaceAttachmentList } from '../../features/workspace/components/WorkspaceAttachmentList';
 import { WorkspaceCanvasPane } from '../../features/workspace/components/WorkspaceCanvasPane';
-import { WorkspaceArtifact } from '../../features/workspace/types';
+import { WorkspaceArtifact, WorkspaceFileAttachment } from '../../features/workspace/types';
 import { ArtifactPatch } from '../../features/workspace/types';
 
 vi.mock('../../components/common/LazyMarkdown', () => ({
@@ -89,6 +90,36 @@ describe('Workspace Canvas 2.0 UX & Behavior', () => {
     expect(screen.getByText('Proposal Agent · belum disimpan')).toBeInTheDocument();
     expect(screen.getByText('# Evidence-backed draft')).toBeInTheDocument();
     expect(save).not.toHaveBeenCalled();
+  });
+
+  it('exposes the active Canvas document with pressed toggle semantics', () => {
+    const secondArtifact = { ...mockArtifact, id: 'art_456', title: 'Catatan Riset', version: 1, versions: [] };
+    const onSelectArtifact = vi.fn();
+    render(<WorkspaceCanvasPane
+      artifacts={[mockArtifact, secondArtifact]} activeArtifact={mockArtifact} activeArtifactId={mockArtifact.id}
+      isCanvasOpen isCanvasExpanded={false} isStreaming={false} mobileActiveTab="chat"
+      onSelectArtifact={onSelectArtifact} onCloseCanvas={vi.fn()} onToggleExpand={vi.fn()}
+      onUpdateActiveArtifact={vi.fn()} onSaveArtifact={vi.fn()} onRollbackVersion={vi.fn()}
+      onRequestRevision={vi.fn()} onCreateNewArtifact={vi.fn()} onSetMobileActiveTab={vi.fn()}
+    />);
+
+    const documentPicker = screen.getByRole('group', { name: 'Pilih dokumen Canvas' });
+    const active = within(documentPicker).getByRole('button', { name: /Analisis Metodologi/ });
+    const inactive = within(documentPicker).getByRole('button', { name: /Catatan Riset/ });
+    expect(active).toHaveAttribute('aria-pressed', 'true');
+    expect(inactive).toHaveAttribute('aria-pressed', 'false');
+    fireEvent.click(inactive);
+    expect(onSelectArtifact).toHaveBeenCalledWith('art_456');
+  });
+
+  it('discloses when an uploaded document was only partially indexed', () => {
+    const attachment: WorkspaceFileAttachment = {
+      id: 'att-large', clientId: 'att-large', name: 'large.txt', size: 464_000, mimeType: 'text/plain', fileKind: 'text', status: 'ready',
+      extractionWarnings: ['Hanya 100 bagian awal dokumen yang diindeks; sisanya tidak disertakan sebagai konteks AI.']
+    };
+    render(<WorkspaceAttachmentList attachments={[attachment]} onRemove={vi.fn()} onRetry={vi.fn()} />);
+
+    expect(screen.getByText('Ekstraksi parsial')).toHaveAttribute('title', attachment.extractionWarnings?.[0]);
   });
 
   it('renders a long raw document gutter as text instead of one element per line', async () => {

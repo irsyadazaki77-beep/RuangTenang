@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Check, Copy, FilePlus2, GitMerge, Sparkles, Square, SquareStop } from 'lucide-react';
 import { useAiModelCatalog } from '../../../lib/aiModelCatalog';
+import { KERJA_PROFILES } from '../../../lib/aiModels';
 import type { WorkspaceComparisonCandidate, WorkspaceComparisonRun } from '../types';
 
 interface Props {
@@ -160,7 +161,13 @@ export const WorkspaceComparisonPanel = React.memo(function WorkspaceComparisonP
     candidateAttemptsRef.current.clear();
     activeRetryControllers.forEach(item => item.abort());
     activeRetryControllers.clear();
-    const nextCandidates = run.selectedModelIds.map(modelId => ({ candidateId: modelId, modelId, modelName: modelsRef.current.find(model => model.id === modelId)?.name || 'Model AI', status: 'queued' as const, output: '' }));
+    const nextCandidates = run.selectedModelIds.map(modelId => ({
+      candidateId: modelId,
+      modelId,
+      modelName: modelsRef.current.find(model => model.id === modelId)?.name || KERJA_PROFILES.find(profile => profile.id === modelId)?.name || 'Model AI',
+      status: 'queued' as const,
+      output: ''
+    }));
     candidatesRef.current = nextCandidates;
     setCandidates(nextCandidates);
     setActiveMobileId(nextCandidates[0]?.candidateId || '');

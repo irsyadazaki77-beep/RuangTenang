@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Lock, 
-  Save, 
-  AlertCircle, 
-  CheckCircle, 
-  Stethoscope, 
-  Printer 
+import {
+  Lock,
+  Save,
+  AlertCircle,
+  CheckCircle,
+  Stethoscope,
+  Printer
 } from 'lucide-react';
 import { SoapNote, TriageItem } from '../types';
 import { apiClient } from '../../../lib/apiClient';
@@ -154,10 +154,11 @@ export const SoapNoteEditor: React.FC<SoapNoteEditorProps> = ({
         {/* Student Identification Bar */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-default">
           <div>
-            <label className="block text-xs font-semibold text-secondary mb-1">
+            <label htmlFor="soap-student-name" className="block text-xs font-semibold text-secondary mb-1">
               Nama Mahasiswa / Klien
             </label>
             <input
+              id="soap-student-name"
               type="text"
               value={studentName}
               onChange={(e) => setStudentName(e.target.value)}
@@ -168,10 +169,11 @@ export const SoapNoteEditor: React.FC<SoapNoteEditorProps> = ({
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-secondary mb-1">
+            <label htmlFor="soap-student-id" className="block text-xs font-semibold text-secondary mb-1">
               ID Mahasiswa / NIM
             </label>
             <input
+              id="soap-student-id"
               type="text"
               value={studentId}
               onChange={(e) => setStudentId(e.target.value)}
@@ -187,13 +189,14 @@ export const SoapNoteEditor: React.FC<SoapNoteEditorProps> = ({
           {/* S - Subjective */}
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <label className="text-xs font-bold text-primary flex items-center gap-1.5">
+              <label htmlFor="soap-subjective" className="text-xs font-bold text-primary flex items-center gap-1.5">
                 <span className="w-5 h-5 rounded-md bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 flex items-center justify-center font-bold text-[11px]">S</span>
                 <span>Subjective (Keluhan Utama Mahasiswa)</span>
               </label>
               <span className="text-[11px] text-secondary">Gejala, pemicu akademik/sosial, laporan verbal</span>
             </div>
             <textarea
+              id="soap-subjective"
               rows={3}
               value={subjective}
               onChange={(e) => setSubjective(e.target.value)}
@@ -206,13 +209,14 @@ export const SoapNoteEditor: React.FC<SoapNoteEditorProps> = ({
           {/* O - Objective */}
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <label className="text-xs font-bold text-primary flex items-center gap-1.5">
+              <label htmlFor="soap-objective" className="text-xs font-bold text-primary flex items-center gap-1.5">
                 <span className="w-5 h-5 rounded-md bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 flex items-center justify-center font-bold text-[11px]">O</span>
                 <span>Objective (Observasi Klinis & Skor Skrining)</span>
               </label>
               <span className="text-[11px] text-secondary">Afek, kontak mata, skor PHQ-9 / GAD-7</span>
             </div>
             <textarea
+              id="soap-objective"
               rows={3}
               value={objective}
               onChange={(e) => setObjective(e.target.value)}
@@ -224,13 +228,14 @@ export const SoapNoteEditor: React.FC<SoapNoteEditorProps> = ({
           {/* A - Assessment */}
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <label className="text-xs font-bold text-primary flex items-center gap-1.5">
+              <label htmlFor="soap-assessment" className="text-xs font-bold text-primary flex items-center gap-1.5">
                 <span className="w-5 h-5 rounded-md bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 flex items-center justify-center font-bold text-[11px]">A</span>
                 <span>Assessment (Evaluasi Psikologis / Diagnostik Kerja)</span>
               </label>
               <span className="text-[11px] text-secondary">Dinamika psikologis & estimasi risiko bahaya diri</span>
             </div>
             <textarea
+              id="soap-assessment"
               rows={3}
               value={assessment}
               onChange={(e) => setAssessment(e.target.value)}
@@ -243,13 +248,14 @@ export const SoapNoteEditor: React.FC<SoapNoteEditorProps> = ({
           {/* P - Plan */}
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <label className="text-xs font-bold text-primary flex items-center gap-1.5">
+              <label htmlFor="soap-plan" className="text-xs font-bold text-primary flex items-center gap-1.5">
                 <span className="w-5 h-5 rounded-md bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 flex items-center justify-center font-bold text-[11px]">P</span>
                 <span>Plan (Rencana Intervensi & Tindak Lanjut)</span>
               </label>
               <span className="text-[11px] text-secondary">Teknik CBT, sleep hygiene, tugas mandiri, rujukan</span>
             </div>
             <textarea
+              id="soap-plan"
               rows={3}
               value={plan}
               onChange={(e) => setPlan(e.target.value)}
@@ -263,10 +269,11 @@ export const SoapNoteEditor: React.FC<SoapNoteEditorProps> = ({
         {/* Clinical Parameters: Risk, Referral, Follow Up */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-3 border-t border-default">
           <div>
-            <label className="block text-xs font-semibold text-secondary mb-1">
+            <label htmlFor="soap-risk-level" className="block text-xs font-semibold text-secondary mb-1">
               Tingkat Risiko Klinis
             </label>
             <select
+              id="soap-risk-level"
               value={riskLevel}
               onChange={(e) => setRiskLevel(e.target.value as any)}
               className="w-full px-3 py-2 text-xs border border-default surface-card rounded-xl text-primary focus:outline-none focus:border-indigo-600"
@@ -279,10 +286,11 @@ export const SoapNoteEditor: React.FC<SoapNoteEditorProps> = ({
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-secondary mb-1">
+            <label htmlFor="soap-referral-target" className="block text-xs font-semibold text-secondary mb-1">
               Rujukan Medis / RS Mitra
             </label>
             <select
+              id="soap-referral-target"
               value={referralTarget}
               onChange={(e) => setReferralTarget(e.target.value)}
               className="w-full px-3 py-2 text-xs border border-default surface-card rounded-xl text-primary focus:outline-none focus:border-indigo-600"
@@ -297,10 +305,11 @@ export const SoapNoteEditor: React.FC<SoapNoteEditorProps> = ({
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-secondary mb-1">
+            <label htmlFor="soap-follow-up-date" className="block text-xs font-semibold text-secondary mb-1">
               Jadwal Sesi Lanjutan (Follow-up)
             </label>
             <input
+              id="soap-follow-up-date"
               type="date"
               value={followUpDate}
               onChange={(e) => setFollowUpDate(e.target.value)}

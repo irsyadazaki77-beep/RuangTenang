@@ -1,12 +1,12 @@
-import { 
-  Heart, 
-  BookOpen, 
-  Stethoscope, 
-  Users, 
-  AlertCircle, 
-  PlusCircle, 
-  Trash2, 
-  Download, 
+import {
+  Heart,
+  BookOpen,
+  Stethoscope,
+  Users,
+  AlertCircle,
+  PlusCircle,
+  Trash2,
+  Download,
   Sparkles,
   Wind,
   HeartPulse,
@@ -46,46 +46,46 @@ export const CHAT_COMMANDS: ChatCommand[] = [
 ];
 
 export const CHAT_PLUGINS: ChatPluginOption[] = [
-  { 
-    id: 'grounding', 
-    icon: HeartPulse, 
-    label: 'Grounding 5-4-3-2-1', 
+  {
+    id: 'grounding',
+    icon: HeartPulse,
+    label: 'Grounding 5-4-3-2-1',
     desc: 'Teknik redakan panik & cemas akut',
-    color: 'text-rose-500 bg-rose-50 dark:bg-rose-950/60' 
+    color: 'text-rose-500 bg-rose-50 dark:bg-rose-950/60'
   },
-  { 
-    id: 'mood', 
-    icon: Heart, 
-    label: 'Mood Tracker', 
+  {
+    id: 'mood',
+    icon: Heart,
+    label: 'Mood Tracker',
     desc: 'Catat kondisi emosi harian',
-    color: 'text-rose-500 bg-rose-50 dark:bg-rose-950/60' 
+    color: 'text-rose-500 bg-rose-50 dark:bg-rose-950/60'
   },
-  { 
-    id: 'articles', 
-    icon: BookOpen, 
-    label: 'Artikel Edukasi', 
+  {
+    id: 'articles',
+    icon: BookOpen,
+    label: 'Artikel Edukasi',
     desc: 'Baca panduan kesehatan mental',
-    color: 'text-indigo-500 bg-indigo-50 dark:bg-indigo-950/60' 
+    color: 'text-indigo-500 bg-indigo-50 dark:bg-indigo-950/60'
   },
-  { 
-    id: 'screening', 
-    icon: Stethoscope, 
-    label: 'Skrining Mandiri', 
+  {
+    id: 'screening',
+    icon: Stethoscope,
+    label: 'Skrining Mandiri',
     desc: 'Cek tingkat stres, cemas & depresi',
-    color: 'text-blue-500 bg-blue-50 dark:bg-blue-950/60' 
+    color: 'text-blue-500 bg-blue-50 dark:bg-blue-950/60'
   },
-  { 
-    id: 'counselors', 
-    icon: Users, 
-    label: 'Konselor Kampus', 
+  {
+    id: 'counselors',
+    icon: Users,
+    label: 'Konselor Kampus',
     desc: 'Temukan konselor profesional',
-    color: 'text-teal-600 bg-teal-50 dark:bg-teal-950/60' 
+    color: 'text-teal-600 bg-teal-50 dark:bg-teal-950/60'
   },
-  { 
-    id: 'emergency', 
-    icon: AlertCircle, 
-    label: 'Bantuan Darurat SOS', 
+  {
+    id: 'emergency',
+    icon: AlertCircle,
+    label: 'Bantuan Darurat SOS',
     desc: 'Akses Healing119 dan bantuan medis darurat',
-    color: 'text-rose-600 bg-rose-100 dark:bg-rose-900/60' 
+    color: 'text-rose-600 bg-rose-100 dark:bg-rose-900/60'
   },
 ];

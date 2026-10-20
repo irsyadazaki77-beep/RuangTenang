@@ -119,11 +119,11 @@ export const AiQuotaBadge: React.FC<AiQuotaBadgeProps> = ({
 
   if (error && variant === 'card') {
     return (
-      <ErrorState 
-        type="network" 
-        title="Gagal Memuat Kuota" 
-        description={error} 
-        onRetry={() => fetchUsageStats(true)} 
+      <ErrorState
+        type="network"
+        title="Gagal Memuat Kuota"
+        description={error}
+        onRetry={() => fetchUsageStats(true)}
         className="py-4 border border-rose-200"
       />
     );
@@ -290,7 +290,7 @@ export const AiQuotaBadge: React.FC<AiQuotaBadgeProps> = ({
                       setShowPopover(false);
                       onOpenSettings();
                     }}
-                    className="w-full py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all shadow-xs cursor-pointer"
+                    className="w-full py-2 bg-teal-700 hover:bg-teal-800 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all shadow-xs cursor-pointer"
                   >
                     <span>Atur Paket & Kuota</span>
                     <ChevronRight className="w-3.5 h-3.5" />

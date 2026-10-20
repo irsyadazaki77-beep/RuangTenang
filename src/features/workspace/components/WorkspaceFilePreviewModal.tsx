@@ -9,7 +9,7 @@ type Panel = 'data' | 'profile' | 'analysis' | 'transform';
 
 const valueText = (value: unknown) => value === null || value === undefined ? '' : typeof value === 'object' ? JSON.stringify(value) : String(value);
 
-export const WorkspaceFilePreviewModal: React.FC<Props> = ({ attachmentId, onClose, onArtifactCreated }) => {
+const WorkspaceFilePreviewContent: React.FC<Props> = ({ attachmentId, onClose, onArtifactCreated }) => {
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const onCloseRef = useRef(onClose);
@@ -72,16 +72,15 @@ export const WorkspaceFilePreviewModal: React.FC<Props> = ({ attachmentId, onClo
       if (controller.signal.aborted) return;
       setPreview(value);
       if (value.fileKind === 'csv' || value.fileKind === 'xlsx') {
-        const profile = await WorkspaceApiService.fetchTabularDataset(attachmentId, undefined, controller.signal);
+        const overview = await WorkspaceApiService.fetchTabularDatasetOverview(attachmentId, undefined, controller.signal);
         if (controller.signal.aborted) return;
+        const profile = overview.dataset;
         setDataset(profile);
+        setTable(overview.preview);
         const defaultNumber = profile.columns.find(item => ['number', 'integer', 'currency', 'percentage'].includes(item.inferredType));
         setColumn(defaultNumber?.name || '');
         const firstCategory = profile.columns.find(item => item.name !== defaultNumber?.name && ['string', 'boolean', 'date'].includes(item.inferredType));
         setGroupBy(firstCategory?.name || '');
-        const firstSheet = profile.sheetName || profile.activeSheet;
-        const rows = await WorkspaceApiService.fetchTabularPreview(attachmentId, firstSheet, 0, controller.signal);
-        if (!controller.signal.aborted) setTable(rows);
       }
     }).catch(reason => {
       if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : 'Preview tidak tersedia.');
@@ -92,11 +91,9 @@ export const WorkspaceFilePreviewModal: React.FC<Props> = ({ attachmentId, onClo
   const selectSheet = async (sheetName: string) => {
     setOffset(0); setTable(null); setAnalysis(null);
     try {
-      const [profile, rows] = await Promise.all([
-        WorkspaceApiService.fetchTabularDataset(attachmentId, sheetName),
-        WorkspaceApiService.fetchTabularPreview(attachmentId, sheetName, 0)
-      ]);
-      setDataset(profile); setTable(rows); setTransformPreview(null); setDerivedArtifact(null); setShowQuality(false);
+      const overview = await WorkspaceApiService.fetchTabularDatasetOverview(attachmentId, sheetName);
+      const profile = overview.dataset;
+      setDataset(profile); setTable(overview.preview); setTransformPreview(null); setDerivedArtifact(null); setShowQuality(false);
       const numeric = profile.columns.find(item => ['number', 'integer', 'currency', 'percentage'].includes(item.inferredType));
       setColumn(numeric?.name || '');
       setGroupBy(profile.columns.find(item => item.name !== numeric?.name && ['string', 'boolean', 'date'].includes(item.inferredType))?.name || '');
@@ -212,8 +209,43 @@ export const WorkspaceFilePreviewModal: React.FC<Props> = ({ attachmentId, onClo
             {derivedArtifact ? <p className="mt-3 text-xs font-medium text-emerald-800 dark:text-emerald-300">Dataset turunan tersimpan di Canvas: {derivedArtifact.title}</p> : <button type="button" disabled={transforming} onClick={() => void confirmTransform()} className="mt-3 rounded-lg border border-emerald-700 px-3 py-2 text-xs font-semibold text-emerald-800 hover:bg-emerald-50 disabled:opacity-50 dark:text-emerald-300 dark:hover:bg-emerald-950/40">{transforming ? 'Membuat dataset…' : 'Konfirmasi dan buat dataset turunan'}</button>}
           </div>}
         </div>}
-        {preview && !tabular && <pre className="whitespace-pre-wrap break-words font-sans text-xs leading-6 text-slate-700 dark:text-slate-200">{preview.previewText || 'Tidak ada teks yang dapat ditampilkan untuk file ini.'}{preview.previewText.length >= 20_000 ? '\n\n— Preview dibatasi hingga 20.000 karakter —' : ''}</pre>}
+        {preview && !tabular && (
+          <div className="space-y-3">
+            {(preview.ocrApplied || preview.previewOnly || (preview.extractionWarnings && preview.extractionWarnings.length > 0)) && (
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-indigo-200/80 bg-indigo-50/60 px-3.5 py-2.5 text-xs text-indigo-900 dark:border-indigo-900/60 dark:bg-indigo-950/30 dark:text-indigo-200">
+                <div className="space-y-0.5">
+                  <p className="font-semibold">
+                    {preview.ocrApplied
+                      ? `Ekstraksi Teks OCR Multimodal Aktif${preview.ocrConfidence ? ` · Keyakinan ${Math.round(preview.ocrConfidence * 100)}%` : ''}`
+                      : 'Mode Pratinjau Visual / Dokumen Pindaian'}
+                  </p>
+                  {preview.readingUncertainty && <p className="text-[11px] text-amber-700 dark:text-amber-300">{preview.readingUncertainty}</p>}
+                  {preview.extractionWarnings && preview.extractionWarnings.length > 0 && (
+                    <p className="text-[11px] text-slate-600 dark:text-slate-300">{preview.extractionWarnings.join(' · ')}</p>
+                  )}
+                </div>
+              </div>
+            )}
+            {preview.fileKind === 'image' && (
+              <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50 p-3 text-center dark:border-slate-800 dark:bg-slate-950">
+                <img
+                  src={`/api/v1/chat/attachments/${encodeURIComponent(preview.id)}`}
+                  alt={preview.filename}
+                  className="mx-auto max-h-96 rounded-lg object-contain shadow-xs"
+                />
+              </div>
+            )}
+            <pre className="whitespace-pre-wrap break-words font-sans text-xs leading-6 text-slate-700 dark:text-slate-200">
+              {preview.previewText || (preview.fileKind === 'image' ? 'Berkas gambar siap dianalisis secara visual bersama AI.' : 'Tidak ada teks yang dapat ditampilkan untuk file ini.')}
+              {preview.previewText.length >= 20_000 ? '\n\n— Preview dibatasi hingga 20.000 karakter —' : ''}
+            </pre>
+          </div>
+        )}
       </div>
     </section>
   </div>;
 };
+
+export const WorkspaceFilePreviewModal: React.FC<Props> = props => (
+  <WorkspaceFilePreviewContent key={props.attachmentId} {...props} />
+);

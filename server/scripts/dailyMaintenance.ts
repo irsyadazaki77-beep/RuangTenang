@@ -12,6 +12,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import { prisma, serverDb } from '../database.js';
 import { runBackup } from './backupTool.js';
 import { retentionService, RetentionCleanupResult } from '../services/retentionService.js';
@@ -140,6 +141,7 @@ export async function executeDailyMaintenance(): Promise<DailyMaintenanceReport>
     success: false,
     totalCleaned: 0,
     moodLogsDeleted: 0,
+      journalEntriesDeleted: 0,
     screeningsDeleted: 0,
     appointmentsDeleted: 0,
     chatsDeleted: 0,
@@ -276,7 +278,10 @@ export async function executeDailyMaintenance(): Promise<DailyMaintenanceReport>
 
 // Standalone execution support
 const isDirectCliExecution =
-  (typeof import.meta !== 'undefined' && import.meta.url === `file://${process.argv[1]}`) ||
+  (typeof process !== 'undefined' &&
+    Boolean(process.argv[1]) &&
+    path.resolve(fileURLToPath(import.meta.url)).toLowerCase() ===
+      path.resolve(process.argv[1]).toLowerCase()) ||
   (typeof require !== 'undefined' && typeof module !== 'undefined' && require.main === module);
 
 if (isDirectCliExecution) {

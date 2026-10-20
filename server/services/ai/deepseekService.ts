@@ -74,7 +74,8 @@ export const deepseekService = {
     const deepseekModel = this.mapModelName(targetModel);
     const messages = this.buildMessages(options);
     const isAnonymous = !options.userId || options.userId === 'guest';
-    const maxTokens = Math.min(options.maxOutputTokens || (isAnonymous ? 500 : (AI_CONFIG.MAX_OUTPUT_TOKENS || 1000)), isAnonymous ? 500 : (AI_CONFIG.MAX_OUTPUT_TOKENS || 1000));
+    const defaultMax = isAnonymous ? 1500 : (AI_CONFIG.MAX_OUTPUT_TOKENS || 4096);
+    const maxTokens = Math.min(options.maxOutputTokens || defaultMax, isAnonymous ? 2048 : 8192);
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), AI_RELIABILITY_POLICY.connectTimeoutMs);
@@ -138,7 +139,8 @@ export const deepseekService = {
     const deepseekModel = this.mapModelName(targetModel);
     const messages = this.buildMessages(options);
     const isAnonymous = !options.userId || options.userId === 'guest';
-    const maxTokens = isAnonymous ? 600 : 1500;
+    const defaultMax = isAnonymous ? 1500 : (AI_CONFIG.MAX_OUTPUT_TOKENS || 4096);
+    const maxTokens = Math.min(options.maxOutputTokens || defaultMax, isAnonymous ? 2048 : 8192);
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), AI_RELIABILITY_POLICY.totalRequestTimeoutMs);

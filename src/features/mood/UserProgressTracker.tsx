@@ -59,7 +59,7 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
   const [shareConsent, setShareConsent] = useState<boolean>(true);
   const [loadingUsage, setLoadingUsage] = useState<boolean>(false);
   const [usageStats, setUsageStats] = useState<any>(null);
-  
+
   const [isLoadingPage, setIsLoadingPage] = useState<boolean>(true);
   const [pageError, setPageError] = useState<string | null>(null);
 
@@ -72,19 +72,19 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
     { id: 'sc4', task: 'Sediakan waktu 30 menit bebas layar sebelum tidur malam', done: false }
   ];
   const [selfCareChecklist, setSelfCareChecklist] = useState<{ id: string; task: string; done: boolean }[]>(defaultTasks);
-  
+
   useEffect(() => {
     if (!user || user.role === 'guest') {
       const saved = safeLocalStorage.getItem(CHECKLIST_KEY);
       if (saved) {
-        try { 
+        try {
           const parsed = JSON.parse(saved);
           setSelfCareChecklist(parsed);
         } catch {}
       }
       return;
     }
-    
+
     // Fetch from backend for authenticated users
     const dateStr = new Date().toISOString().split('T')[0];
     apiClient.get<any>(`/api/v1/user/selfcare?date=${dateStr}`).then(res => {
@@ -119,7 +119,7 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
     setPageError(null);
     try {
       await fetchUsageStats();
-      
+
       const [moodRes, screenRes] = await Promise.all([
         apiClient.get<any>('/api/v1/mood'),
         apiClient.get<any>('/api/v1/screenings')
@@ -236,9 +236,22 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
   };
 
   const latestMood = moodLogs.length > 0 ? moodLogs[0].mood : 0;
-  const currentPhq9 = screenHistory.length > 0 ? screenHistory[0].phq9 : 0;
-  const currentGad7 = screenHistory.length > 0 ? screenHistory[0].gad7 : 0;
-  const currentTriage = screenHistory.length > 0 ? screenHistory[0].triage : 'Ringan';
+  const hasScreening = screenHistory.length > 0;
+  const currentPhq9 = hasScreening ? screenHistory[0].phq9 : null;
+  const currentGad7 = hasScreening ? screenHistory[0].gad7 : null;
+  const currentTriage = hasScreening ? screenHistory[0].triage : null;
+
+  const todayDateStr = useMemo(() => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }, []);
+
+  const todayCheckin = useMemo(() => {
+    return moodLogs.find(l => l.date === todayDateStr);
+  }, [moodLogs, todayDateStr]);
 
   const totalActiveDays = useMemo(() => {
     if (!moodLogs || moodLogs.length === 0) return 0;
@@ -250,7 +263,10 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
     return calculateStreak(moodLogs.map(l => l.date));
   }, [moodLogs]);
 
-  const getTriageBadge = (triage: TriageCategory) => {
+  const getTriageBadge = (triage: TriageCategory | null) => {
+    if (!triage) {
+      return { bg: 'bg-slate-50 dark:bg-slate-900 text-secondary border-default', dot: 'bg-slate-400', desc: 'Belum ada hasil skrining' };
+    }
     switch(triage) {
       case 'Krisis': return { bg: 'bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800', dot: 'bg-rose-500', desc: 'Jawaban menunjukkan bahaya langsung; cari bantuan sekarang' };
       case 'Prioritas': return { bg: 'bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800', dot: 'bg-amber-500', desc: 'Skrining positif atau skor tinggi; perlu tindak lanjut profesional' };
@@ -323,13 +339,13 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
 
   return (
     <div className="flex flex-col h-full surface-page w-full overflow-y-auto">
-      <motion.div 
+      <motion.div
         variants={containerVariants}
         initial="hidden"
         animate="show"
         className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6 sm:space-y-8"
       >
-        
+
         {/* Header Section */}
         <motion.div variants={itemVariants} className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
@@ -340,7 +356,7 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
               Pantau perkembangan kesejahteraan emosional, riwayat skrining, dan rutinitas pemulihan mandiri Anda.
             </p>
           </div>
-          
+
           <div className="flex flex-wrap items-center gap-2.5">
             <button
               onClick={() => setIsCheckinModalOpen(true)}
@@ -380,120 +396,177 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
           />
         ) : (
           <>
-            {/* Top 4 KPI Summary Cards */}
-            <motion.div variants={itemVariants} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Today's Check-in Spotlight Hero Card */}
+            <motion.div
+              variants={itemVariants}
+              className={`p-4 sm:p-5 rounded-2xl border transition-all ${
+                todayCheckin
+                  ? 'bg-gradient-to-r from-teal-50 to-emerald-50 dark:from-teal-950/40 dark:to-emerald-950/30 border-teal-200/80 dark:border-teal-800/60'
+                  : 'bg-gradient-to-r from-teal-500/10 via-amber-500/10 to-teal-500/5 border-teal-500/30 dark:border-teal-500/20 shadow-3xs'
+              }`}
+            >
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3.5">
+                <div className="flex items-start sm:items-center gap-3">
+                  <div className={`p-2.5 rounded-xl shrink-0 ${
+                    todayCheckin
+                      ? 'bg-teal-700 text-white'
+                      : 'bg-teal-700 dark:bg-teal-600 text-white animate-pulse'
+                  }`}>
+                    {todayCheckin ? <CheckCircle2 className="w-5 h-5" /> : <Sparkles className="w-5 h-5" />}
+                  </div>
+                  <div>
+                    <h3 className="text-sm sm:text-base font-bold text-primary">
+                      {todayCheckin
+                        ? `Sudah Check-in Hari Ini: ${getMoodLabel(todayCheckin.mood)}`
+                        : 'Bagaimana suasana hati Anda hari ini?'}
+                    </h3>
+                    <p className="text-xs text-secondary mt-0.5">
+                      {todayCheckin
+                        ? (todayCheckin.notes ? `"${todayCheckin.notes.slice(0, 70)}${todayCheckin.notes.length > 70 ? '…' : ''}"` : 'Refleksi harian tercatat. Pertahankan ritme Anda!')
+                        : 'Luangkan 30 detik untuk mencatat emosi, tidur, dan faktor pemicu.'}
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setIsCheckinModalOpen(true)}
+                  className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold flex items-center justify-center gap-2 cursor-pointer transition-all shrink-0 ${
+                    todayCheckin
+                      ? 'surface-card border border-default text-secondary hover:text-primary hover:bg-slate-100 dark:hover:bg-slate-800'
+                      : 'btn-primary shadow-xs'
+                  }`}
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>{todayCheckin ? 'Ubah Catatan Hari Ini' : 'Catat Mood Sekarang'}</span>
+                </button>
+              </div>
+            </motion.div>
+
+            {/* Top 4 KPI Summary Cards (2x2 on mobile, 4-col on lg) */}
+            <motion.div variants={itemVariants} className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
               {/* Mood Terakhir */}
-              <div className="surface-card p-4 sm:p-5 rounded-2xl border border-default flex flex-col justify-between shadow-3xs space-y-3">
+              <div className="surface-card p-3.5 sm:p-5 rounded-2xl border border-default flex flex-col justify-between shadow-3xs space-y-2.5 sm:space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-secondary uppercase tracking-wider">
+                  <span className="text-[11px] sm:text-xs font-semibold text-secondary uppercase tracking-wider truncate">
                     Mood Terakhir
                   </span>
-                  <div className={`p-2 rounded-xl ${getMoodColor(latestMood)}`}>
-                    <Brain className="w-4 h-4" />
+                  <div className={`p-1.5 sm:p-2 rounded-xl shrink-0 ${getMoodColor(latestMood)}`}>
+                    <Brain className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                   </div>
                 </div>
                 <div>
-                  <div className="text-xl sm:text-2xl font-bold text-primary">
+                  <div className="text-lg sm:text-2xl font-bold text-primary truncate">
                     {latestMood === 0 ? 'Belum Ada' : getMoodLabel(latestMood)}
                   </div>
-                  <p className="text-xs text-secondary mt-1">
+                  <p className="text-[11px] sm:text-xs text-secondary mt-1 truncate">
                     {moodLogs.length > 0 ? `Tercatat ${moodLogs[0].date}` : 'Mulai catat hari ini'}
                   </p>
                 </div>
               </div>
 
               {/* Streak Check-in */}
-              <div className="surface-card p-4 sm:p-5 rounded-2xl border border-default flex flex-col justify-between shadow-3xs space-y-3">
+              <div className="surface-card p-3.5 sm:p-5 rounded-2xl border border-default flex flex-col justify-between shadow-3xs space-y-2.5 sm:space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-secondary uppercase tracking-wider">
+                  <span className="text-[11px] sm:text-xs font-semibold text-secondary uppercase tracking-wider truncate">
                     Streak Check-in
                   </span>
-                  <div className="p-2 rounded-xl bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400">
-                    <TrendingUp className="w-4 h-4" />
+                  <div className="p-1.5 sm:p-2 rounded-xl bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 shrink-0">
+                    <TrendingUp className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                   </div>
                 </div>
                 <div>
-                  <div className="text-xl sm:text-2xl font-bold text-primary">
+                  <div className="text-lg sm:text-2xl font-bold text-primary">
                     {streakCount === 0 ? '0 Hari' : `${streakCount} Hari`}
                   </div>
-                  <p className="text-xs text-secondary mt-1 font-medium">
-                    {totalActiveDays} hari aktif tercatat total
+                  <p className="text-[11px] sm:text-xs text-secondary mt-1 font-medium truncate">
+                    {totalActiveDays} hari aktif total
                   </p>
                 </div>
               </div>
 
               {/* PHQ-9 Terbaru */}
-              <div className="surface-card p-4 sm:p-5 rounded-2xl border border-default flex flex-col justify-between shadow-3xs space-y-3">
+              <div className="surface-card p-3.5 sm:p-5 rounded-2xl border border-default flex flex-col justify-between shadow-3xs space-y-2.5 sm:space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-secondary uppercase tracking-wider">
+                  <span className="text-[11px] sm:text-xs font-semibold text-secondary uppercase tracking-wider truncate">
                     PHQ-9 (Depresi)
                   </span>
-                  <div className="p-2 rounded-xl bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400">
-                    <Activity className="w-4 h-4" />
+                  <div className="p-1.5 sm:p-2 rounded-xl bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 shrink-0">
+                    <Activity className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                   </div>
                 </div>
                 <div>
                   <div className="flex items-baseline gap-1">
-                    <span className="text-xl sm:text-2xl font-bold text-primary">
-                      {screenHistory.length === 0 ? '—' : currentPhq9}
+                    <span className="text-lg sm:text-2xl font-bold text-primary">
+                      {currentPhq9 === null ? '—' : currentPhq9}
                     </span>
-                    {screenHistory.length > 0 && (
-                      <span className="text-xs text-secondary">/ 27</span>
+                    {currentPhq9 !== null && (
+                      <span className="text-[10px] sm:text-xs text-secondary">/ 27</span>
                     )}
                   </div>
-                  <p className="text-xs text-secondary mt-1 font-medium">
-                    {screenHistory.length === 0 
-                      ? 'Belum pernah tes' 
-                      : `Kategori: ${getPhq9Severity(currentPhq9)}`}
+                  <p className="text-[11px] sm:text-xs text-secondary mt-1 font-medium truncate">
+                    {currentPhq9 === null
+                      ? 'Belum pernah tes'
+                      : getPhq9Severity(currentPhq9)}
                   </p>
                 </div>
               </div>
 
               {/* GAD-7 Terbaru */}
-              <div className="surface-card p-4 sm:p-5 rounded-2xl border border-default flex flex-col justify-between shadow-3xs space-y-3">
+              <div className="surface-card p-3.5 sm:p-5 rounded-2xl border border-default flex flex-col justify-between shadow-3xs space-y-2.5 sm:space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-secondary uppercase tracking-wider">
-                    GAD-7 (Kecemasan)
+                  <span className="text-[11px] sm:text-xs font-semibold text-secondary uppercase tracking-wider truncate">
+                    GAD-7 (Cemas)
                   </span>
-                  <div className="p-2 rounded-xl bg-teal-50 dark:bg-teal-950/50 text-teal-600 dark:text-teal-400">
-                    <Activity className="w-4 h-4" />
+                  <div className="p-1.5 sm:p-2 rounded-xl bg-teal-50 dark:bg-teal-950/50 text-teal-600 dark:text-teal-400 shrink-0">
+                    <Activity className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                   </div>
                 </div>
                 <div>
                   <div className="flex items-baseline gap-1">
-                    <span className="text-xl sm:text-2xl font-bold text-primary">
-                      {screenHistory.length === 0 ? '—' : currentGad7}
+                    <span className="text-lg sm:text-2xl font-bold text-primary">
+                      {currentGad7 === null ? '—' : currentGad7}
                     </span>
-                    {screenHistory.length > 0 && (
-                      <span className="text-xs text-secondary">/ 21</span>
+                    {currentGad7 !== null && (
+                      <span className="text-[10px] sm:text-xs text-secondary">/ 21</span>
                     )}
                   </div>
-                  <p className="text-xs text-secondary mt-1 font-medium">
-                    {screenHistory.length === 0 
-                      ? 'Belum pernah tes' 
-                      : `Kategori: ${getGad7Severity(currentGad7)}`}
+                  <p className="text-[11px] sm:text-xs text-secondary mt-1 font-medium truncate">
+                    {currentGad7 === null
+                      ? 'Belum pernah tes'
+                      : getGad7Severity(currentGad7)}
                   </p>
                 </div>
               </div>
             </motion.div>
 
             {/* Section Filter Pills */}
-            <div className="flex items-center gap-2 overflow-x-auto custom-scrollbar pb-1">
+            <div
+              role="tablist"
+              aria-label="Navigasi Bagian Dashboard"
+              className="flex items-center gap-2 overflow-x-auto custom-scrollbar pb-1"
+            >
               <button
+                type="button"
+                role="tab"
+                aria-selected={activeSection === 'all'}
                 onClick={() => setActiveSection('all')}
                 className={`px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
                   activeSection === 'all'
-                    ? 'bg-teal-600 text-white shadow-xs'
+                    ? 'bg-teal-700 text-white shadow-xs'
                     : 'surface-card border border-default text-secondary hover:text-primary'
                 }`}
               >
                 Semua Bagian
               </button>
               <button
+                type="button"
+                role="tab"
+                aria-selected={activeSection === 'mood'}
                 onClick={() => setActiveSection('mood')}
                 className={`px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
                   activeSection === 'mood'
-                    ? 'bg-teal-600 text-white shadow-xs'
+                    ? 'bg-teal-700 text-white shadow-xs'
                     : 'surface-card border border-default text-secondary hover:text-primary'
                 }`}
               >
@@ -501,10 +574,13 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
                 <span>Log & Analisis Mood</span>
               </button>
               <button
+                type="button"
+                role="tab"
+                aria-selected={activeSection === 'screening'}
                 onClick={() => setActiveSection('screening')}
                 className={`px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
                   activeSection === 'screening'
-                    ? 'bg-teal-600 text-white shadow-xs'
+                    ? 'bg-teal-700 text-white shadow-xs'
                     : 'surface-card border border-default text-secondary hover:text-primary'
                 }`}
               >
@@ -512,10 +588,13 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
                 <span>Tren Skrining PHQ/GAD</span>
               </button>
               <button
+                type="button"
+                role="tab"
+                aria-selected={activeSection === 'selfcare'}
                 onClick={() => setActiveSection('selfcare')}
                 className={`px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
                   activeSection === 'selfcare'
-                    ? 'bg-teal-600 text-white shadow-xs'
+                    ? 'bg-teal-700 text-white shadow-xs'
                     : 'surface-card border border-default text-secondary hover:text-primary'
                 }`}
               >
@@ -527,7 +606,7 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
             {/* SECTION 1: Mood Tracker (Full Width & Spacious) */}
             {(activeSection === 'all' || activeSection === 'mood') && (
               <motion.div variants={itemVariants} className="space-y-6">
-                <MoodTracker 
+                <MoodTracker
                   moodLogs={moodLogs}
                   setMoodLogs={setMoodLogs as any}
                   showToast={showToast}
@@ -539,7 +618,7 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
             {/* SECTION 2: Screening Trends (PHQ-9 & GAD-7) (Full Width & Responsive) */}
             {(activeSection === 'all' || activeSection === 'screening') && (
               <motion.div variants={itemVariants} className="space-y-6">
-                <ScreeningTrend 
+                <ScreeningTrend
                   screenHistory={screenHistory as any}
                   moodLogs={moodLogs}
                   currentPhq9={currentPhq9}
@@ -581,7 +660,7 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
                             Insight Perkembangan Kesejahteraan
                           </h3>
                         </div>
-                        <button 
+                        <button
                           onClick={() => setIsExpandedInsight(!isExpandedInsight)}
                           className="text-xs text-teal-600 dark:text-teal-400 font-semibold hover:underline flex items-center gap-1 cursor-pointer"
                         >
@@ -615,7 +694,7 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
                                     ? `Tercatat ${totalActiveDays} hari aktif dengan ${moodLogs.length} entri mood. Keteraturan Anda membantu mengenali pola stres dan keseimbangan aktivitas perkuliahan.`
                                     : `Data awal Anda telah tercatat (${moodLogs.length} log). Terus catat secara berkala untuk analisis pola emosi yang lebih mendalam.`}
                                 </p>
-                                
+
                                 {isExpandedInsight && (
                                   <div className="mt-4 pt-4 border-t border-default space-y-2.5 animate-fade-in">
                                     <div className="flex gap-2.5 items-start">
@@ -624,7 +703,7 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
                                         Log data tersimpan secara aman dan terenkripsi pada akun Anda.
                                       </p>
                                     </div>
-                                    {currentPhq9 > 9 && (
+                                    {currentPhq9 !== null && currentPhq9 > 9 && (
                                       <div className="flex gap-2.5 items-start">
                                         <AlertCircle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
                                         <p className="text-xs sm:text-sm text-secondary">
@@ -646,9 +725,9 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
                       <h3 className="font-bold text-sm sm:text-base text-primary">
                         Perawatan Diri Hari Ini
                       </h3>
-                      <TimelineTasks 
-                        selfCareChecklist={selfCareChecklist} 
-                        onToggleSelfCare={handleToggleSelfCare} 
+                      <TimelineTasks
+                        selfCareChecklist={selfCareChecklist}
+                        onToggleSelfCare={handleToggleSelfCare}
                         onNavigateToSchedule={onNavigateToSchedule}
                       />
                     </div>
@@ -671,9 +750,9 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
                         <span>Akses Konselor</span>
                         <span className="text-[11px] font-medium text-muted">Izin Data</span>
                       </h3>
-                      <CounselorConsent 
-                        shareConsent={shareConsent} 
-                        setShareConsent={setShareConsent} 
+                      <CounselorConsent
+                        shareConsent={shareConsent}
+                        setShareConsent={setShareConsent}
                         showToast={showToast}
                       />
                     </div>

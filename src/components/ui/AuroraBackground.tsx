@@ -43,7 +43,7 @@ export interface AuroraBackgroundProps {
 
 /**
  * AuroraBackground — Aurora 2.2 Performance, Fluid Motion & Visual Quality Overhaul
- * 
+ *
  * Fitur Utama Aurora 2.2:
  * 1. Dual-Vibrant Palette Engine:
  *    - Ruang Tenang: Teal (#0d9488), Emerald (#10b981), Mint (#6ee7b7), Cyan (#22d3ee).
@@ -276,7 +276,7 @@ export const AuroraBackground: React.FC<AuroraBackgroundProps> = memo(({
     : 0;
 
   // Layer 1 Animation: Top-Left Primary Fluid Stream (Lissajous drift)
-  const baseOp1 = (isKerja ? 0.42 : 0.82) * intensityMultiplier;
+  const baseOp1 = (isKerja ? 0.72 : 0.82) * intensityMultiplier;
   const targetOp1 = Math.min(0.98, baseOp1 + opacityBoost);
   const layer1Animation: TargetAndTransition = shouldReduceMotion || isTabHidden
     ? { opacity: targetOp1 }
@@ -311,7 +311,7 @@ export const AuroraBackground: React.FC<AuroraBackgroundProps> = memo(({
   };
 
   // Layer 2 Animation: Bottom-Right Counter Oceanic Wave
-  const baseOp2 = (isKerja ? 0.38 : 0.76) * intensityMultiplier;
+  const baseOp2 = (isKerja ? 0.68 : 0.76) * intensityMultiplier;
   const targetOp2 = Math.min(0.96, baseOp2 + opacityBoost);
   const layer2Animation: TargetAndTransition = shouldReduceMotion || isTabHidden
     ? { opacity: targetOp2 }
@@ -346,7 +346,7 @@ export const AuroraBackground: React.FC<AuroraBackgroundProps> = memo(({
   };
 
   // Layer 3 Animation: Top-Right Dynamic Accent Ribbon
-  const baseOp3 = (isKerja ? 0.35 : 0.72) * intensityMultiplier;
+  const baseOp3 = (isKerja ? 0.64 : 0.72) * intensityMultiplier;
   const targetOp3 = Math.min(0.95, baseOp3 + opacityBoost);
   const layer3Animation: TargetAndTransition = shouldReduceMotion || isTabHidden
     ? { opacity: targetOp3 }
@@ -434,8 +434,8 @@ export const AuroraBackground: React.FC<AuroraBackgroundProps> = memo(({
   const layer2MorphGradient = useMemo(() => {
     if (isKerja) {
       return isDark
-        ? 'radial-gradient(circle at 48% 54%, rgba(6, 182, 212, 0.46) 0%, rgba(16, 185, 129, 0.25) 45%, rgba(139, 92, 246, 0.12) 72%, transparent 86%)'
-        : 'radial-gradient(circle at 48% 54%, rgba(6, 182, 212, 0.56) 0%, rgba(16, 185, 129, 0.35) 42%, rgba(139, 92, 246, 0.16) 70%, transparent 86%)';
+        ? 'radial-gradient(circle at 48% 54%, rgba(6, 182, 212, 0.46) 0%, rgba(59, 130, 246, 0.25) 45%, rgba(139, 92, 246, 0.12) 72%, transparent 86%)'
+        : 'radial-gradient(circle at 48% 54%, rgba(6, 182, 212, 0.56) 0%, rgba(59, 130, 246, 0.35) 42%, rgba(139, 92, 246, 0.16) 70%, transparent 86%)';
     }
     return isDark
       ? 'radial-gradient(circle at 48% 54%, rgba(34, 211, 238, 0.46) 0%, rgba(110, 231, 183, 0.28) 45%, rgba(99, 102, 241, 0.12) 72%, transparent 86%)'
@@ -445,8 +445,8 @@ export const AuroraBackground: React.FC<AuroraBackgroundProps> = memo(({
   const layer3Gradient = useMemo(() => {
     if (isKerja) {
       return isDark
-        ? 'radial-gradient(circle at 52% 48%, rgba(6, 182, 212, 0.46) 0%, rgba(16, 185, 129, 0.25) 45%, rgba(59, 130, 246, 0.12) 72%, transparent 86%)'
-        : 'radial-gradient(circle at 52% 48%, rgba(6, 182, 212, 0.58) 0%, rgba(16, 185, 129, 0.35) 42%, rgba(99, 102, 241, 0.18) 70%, transparent 86%)';
+        ? 'radial-gradient(circle at 52% 48%, rgba(6, 182, 212, 0.46) 0%, rgba(99, 102, 241, 0.25) 45%, rgba(59, 130, 246, 0.12) 72%, transparent 86%)'
+        : 'radial-gradient(circle at 52% 48%, rgba(6, 182, 212, 0.58) 0%, rgba(99, 102, 241, 0.35) 42%, rgba(59, 130, 246, 0.18) 70%, transparent 86%)';
     }
     return isDark
       ? 'radial-gradient(circle at 52% 48%, rgba(6, 182, 212, 0.46) 0%, rgba(110, 231, 183, 0.26) 45%, rgba(6, 182, 212, 0.10) 72%, transparent 86%)'
@@ -566,7 +566,7 @@ export const AuroraBackground: React.FC<AuroraBackgroundProps> = memo(({
       {/* Atmospheric Subtle Central Reading Diffusion (Smooth Cross-Fading Dual-Veil) */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
         {/* Light Mode Diffusion Veil */}
-        <div 
+        <div
           className={`absolute inset-0 pointer-events-none transition-opacity duration-500 ease-in-out ${
             isDark ? 'opacity-0' : 'opacity-100'
           } ${
@@ -576,7 +576,7 @@ export const AuroraBackground: React.FC<AuroraBackgroundProps> = memo(({
           }`}
         />
         {/* Dark Mode Diffusion Veil */}
-        <div 
+        <div
           className={`absolute inset-0 pointer-events-none transition-opacity duration-500 ease-in-out ${
             isDark ? 'opacity-100' : 'opacity-0'
           } ${

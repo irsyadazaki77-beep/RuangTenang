@@ -52,12 +52,13 @@ export class MobileAuthController {
 
       const tokens = await mobileAuthService.createSession(user, req);
       const isDev = process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test';
+      if (isDev) {
+        console.info(`[DEV_ONLY_EMAIL_SINK] Mobile registration code for ${user.email}: ${verificationCode}`);
+      }
       return res.status(201).json({
         ...tokens,
         userId: user.id,
-        message: isDev
-          ? `Registrasi berhasil. [DEV MODE] Kode verifikasi Anda: ${verificationCode}`
-          : 'Registrasi berhasil. Kode verifikasi email telah dikirim.',
+        message: 'Registrasi berhasil. Kode verifikasi email telah dikirim.',
       });
     } catch (error) {
       console.error('Mobile registration error:', error);
@@ -103,11 +104,14 @@ export class MobileAuthController {
         await serverDb.setMfaCode(user.id, code, mfaToken);
         await emailService.sendMfaOtp(user.email, code);
         const isDev = process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test';
+        if (isDev) {
+          console.info(`[DEV_ONLY_EMAIL_SINK] Mobile MFA code for ${user.email}: ${code}`);
+        }
         return res.json({
           success: true,
           mfaRequired: true,
           mfaToken,
-          message: isDev ? `MFA diperlukan. [DEV MODE] Kode MFA: ${code}` : 'Kode MFA telah dikirim.',
+          message: 'Kode MFA telah dikirim.',
         });
       }
 

@@ -10,14 +10,25 @@ export const NewUpdateToast: React.FC<NewUpdateToastProps> = ({ onOpenChangelog 
   const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
+    if (typeof window !== 'undefined' && ((window as any).__vitest_worker__ || (window as any).isE2ETest)) {
+      return;
+    }
+    let autoDismissTimer: ReturnType<typeof setTimeout>;
     // Check if new update is available and user hasn't seen it
     const timer = setTimeout(() => {
       if (isNewUpdateAvailable()) {
         setIsVisible(true);
+        autoDismissTimer = setTimeout(() => {
+          setIsVisible(false);
+          markUpdateAsSeen();
+        }, 8000);
       }
     }, 1500); // Gentle delay after initial app load
 
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      clearTimeout(autoDismissTimer);
+    };
   }, []);
 
   const handleDismiss = () => {
@@ -33,7 +44,7 @@ export const NewUpdateToast: React.FC<NewUpdateToastProps> = ({ onOpenChangelog 
   if (!isVisible) return null;
 
   return (
-    <div className="fixed bottom-4 right-4 z-40 max-w-sm w-[calc(100vw-2rem)] sm:w-auto surface-card border border-teal-300 dark:border-teal-700/80 rounded-2xl shadow-xl p-3.5 sm:p-4 text-primary animate-in slide-in-from-bottom-5 fade-in duration-300 ring-2 ring-teal-500/10">
+    <div className="fixed top-16 right-3 left-3 sm:left-auto sm:right-6 sm:top-18 z-40 max-w-sm w-auto surface-card border border-teal-300 dark:border-teal-700/80 rounded-2xl shadow-xl p-3.5 sm:p-4 text-primary animate-in slide-in-from-top-4 fade-in duration-300 ring-2 ring-teal-500/10 pointer-events-auto">
       <div className="flex items-start gap-3">
         <div className="w-8 h-8 rounded-xl bg-teal-100 dark:bg-teal-900/80 text-teal-700 dark:text-teal-300 flex items-center justify-center shrink-0 shadow-3xs mt-0.5">
           <Sparkles className="w-4 h-4" />
@@ -56,7 +67,7 @@ export const NewUpdateToast: React.FC<NewUpdateToastProps> = ({ onOpenChangelog 
             <button
               type="button"
               onClick={handleOpen}
-              className="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 active:scale-[0.98] text-white text-xs font-bold rounded-xl transition-all shadow-3xs flex items-center gap-1 cursor-pointer"
+              className="px-3 py-1.5 bg-teal-700 hover:bg-teal-800 active:scale-[0.98] text-white text-xs font-bold rounded-xl transition-all shadow-3xs flex items-center gap-1 cursor-pointer"
             >
               <span>Lihat Pembaruan</span>
               <ArrowRight className="w-3 h-3" />

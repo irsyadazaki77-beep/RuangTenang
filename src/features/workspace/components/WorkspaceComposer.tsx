@@ -1,12 +1,15 @@
 import React, { useRef, useEffect, useState } from 'react';
 import {
-  Paperclip, 
+  Paperclip,
   Files,
-  Sparkles, 
-  StopCircle, 
+  Sparkles,
+  StopCircle,
   Send,
-  SlidersHorizontal
+  SlidersHorizontal,
+  Mic,
+  MicOff
 } from 'lucide-react';
+import { useComposerVoiceInput } from '../../chat/hooks/useComposerVoiceInput';
 import { WorkspaceFileAttachment, AcademicPromptPill, WorkspaceComposerConfig, WorkspaceResponseMode, WorkspaceResponseStyle } from '../types';
 import { WorkspaceAttachmentList } from './WorkspaceAttachmentList';
 import { MAX_WORKSPACE_ACTIVE_ATTACHMENTS, SUPPORTED_WORKSPACE_FILE_EXTENSIONS } from '../../../../shared/contracts/files';
@@ -154,6 +157,7 @@ export const WorkspaceComposer: React.FC<WorkspaceComposerProps> = React.memo(({
   }, [activePreset?.id, activePreset?.responseMode, activePreset?.responseStyle]);
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [inputFocused, setInputFocused] = useState(false);
+  const { isListening, toggleListening } = useComposerVoiceInput(inputText, setInputText);
   useEffect(() => {
     if (compareMode) setOptionsOpen(true);
   }, [compareMode]);
@@ -207,7 +211,7 @@ export const WorkspaceComposer: React.FC<WorkspaceComposerProps> = React.memo(({
   const hasActiveContext = displayedContextSummary !== 'Konteks kosong' && displayedContextSummary !== 'Konteks';
 
   return (
-    <div className="p-3 bg-white/85 dark:bg-secondary-900/85 backdrop-blur-md border-t border-slate-200/80 dark:border-slate-800 shrink-0">
+    <div className="p-3 pb-safe pb-[max(0.75rem,env(safe-area-inset-bottom))] bg-white/75 dark:bg-[#0b101b]/75 backdrop-blur-md border-t border-slate-200/70 dark:border-slate-800/80 shrink-0">
       {/* Academic Distress Regulation Banner */}
       {distressResult.isDistressed && !isDistressDismissed && (
         <AcademicDistressBanner
@@ -219,10 +223,10 @@ export const WorkspaceComposer: React.FC<WorkspaceComposerProps> = React.memo(({
       )}
 
       {/* Compact Floating Composer Container */}
-      <div className={`relative rounded-xl bg-slate-50/90 dark:bg-slate-900/90 border transition-all duration-500 p-2 ${
+      <div className={`relative bg-white/80 dark:bg-[#0f141f]/80 backdrop-blur-sm border transition-all duration-300 p-2 rounded-2xl shadow-subtle dark:shadow-subtle-dark ${
         isStreaming
           ? 'border-indigo-400/60 dark:border-indigo-500/60 shadow-[0_0_16px_rgba(99,102,241,0.14)] ring-1 ring-indigo-400/25'
-          : 'border-slate-200/90 dark:border-slate-800 focus-within:border-emerald-500/80 focus-within:ring-1 focus-within:ring-emerald-500/30'
+          : 'border-slate-200/90 dark:border-slate-800 focus-within:border-indigo-500/80 focus-within:ring-1 focus-within:ring-indigo-500/30'
       }`}>
         {modelPreferenceNotice && <p role="status" className="mb-1 px-1 text-[11px] text-amber-700 dark:text-amber-300">{modelPreferenceNotice}</p>}
         <WorkspaceAttachmentList
@@ -273,16 +277,16 @@ export const WorkspaceComposer: React.FC<WorkspaceComposerProps> = React.memo(({
               type="button"
               onClick={() => fileInputRef.current?.click()}
               disabled={isStreaming || isDisabled}
-              className="h-9 w-9 shrink-0 rounded-lg text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-800 transition-colors cursor-pointer flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+              className="h-9 w-9 shrink-0 rounded-lg text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-800 transition-colors cursor-pointer flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
               title={`Lampirkan dokumen atau kode (maksimal ${MAX_WORKSPACE_ACTIVE_ATTACHMENTS})`}
               aria-label="Lampirkan dokumen atau kode"
             >
               <Paperclip className="w-4 h-4" />
             </button>
             <WorkspaceModelSelector value={selectedModel} onChange={onModelChange} disabled={isStreaming || isDisabled} overlayPlacement="anchored" />
-            <button type="button" onClick={onOpenContext} aria-label={`Buka panel konteks: ${displayedContextSummary}`} title={displayedContextSummary} className="relative inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg px-0 text-xs text-slate-500 transition hover:bg-slate-200/70 hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100 sm:h-8 sm:w-auto sm:max-w-[min(22vw,8.5rem)] sm:min-w-0 sm:justify-start sm:gap-1.5 sm:px-2"><Files className="h-4 w-4 shrink-0 sm:hidden" aria-hidden="true" />{hasActiveContext && <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-emerald-500 sm:hidden" aria-hidden="true" />}<span className="hidden truncate sm:inline">{displayedContextSummary}</span></button>
+            <button type="button" onClick={onOpenContext} aria-label={`Buka panel konteks: ${displayedContextSummary}`} title={displayedContextSummary} className="relative inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg px-0 text-xs text-slate-500 transition hover:bg-slate-200/70 hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100 sm:h-8 sm:w-auto sm:max-w-[min(22vw,8.5rem)] sm:min-w-0 sm:justify-start sm:gap-1.5 sm:px-2"><Files className="h-4 w-4 shrink-0 sm:hidden" aria-hidden="true" />{hasActiveContext && <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-indigo-500 sm:hidden" aria-hidden="true" />}<span className="hidden truncate sm:inline">{displayedContextSummary}</span></button>
             <div className="relative shrink-0">
-              <button type="button" disabled={isStreaming || isDisabled} aria-label="AI & Opsi" aria-expanded={optionsOpen} aria-haspopup="dialog" aria-controls="workspace-composer-options" onClick={() => setOptionsOpen(value => !value)} className={`inline-flex h-9 w-9 shrink-0 items-center justify-center gap-1.5 rounded-lg px-0 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 sm:h-8 sm:w-auto sm:justify-start sm:px-2 ${optionsOpen ? 'relative z-50 bg-slate-200 text-slate-800 dark:bg-slate-800 dark:text-slate-100' : 'text-slate-500 hover:bg-slate-200/70 dark:hover:bg-slate-800'}`}>
+              <button type="button" disabled={isStreaming || isDisabled} aria-label="AI & Opsi" aria-expanded={optionsOpen} aria-haspopup="dialog" aria-controls="workspace-composer-options" onClick={() => setOptionsOpen(value => !value)} className={`inline-flex h-9 w-9 shrink-0 items-center justify-center gap-1.5 rounded-lg px-0 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 sm:h-8 sm:w-auto sm:justify-start sm:px-2 ${optionsOpen ? 'relative z-50 bg-slate-200 text-slate-800 dark:bg-slate-800 dark:text-slate-100' : 'text-slate-500 hover:bg-slate-200/70 dark:hover:bg-slate-800'}`}>
                 <SlidersHorizontal className="h-3.5 w-3.5" />
                 <span className="hidden sm:inline">AI &amp; Opsi</span>
               </button>
@@ -292,9 +296,9 @@ export const WorkspaceComposer: React.FC<WorkspaceComposerProps> = React.memo(({
                   <div className="flex flex-col gap-2 border-b border-slate-100 pb-2 dark:border-slate-800">
                     <div className="flex items-start justify-between gap-3">
                       <div><p className="text-xs font-semibold text-slate-800 dark:text-slate-100">Cara bekerja</p><p className="mt-0.5 text-[11px] text-slate-500">Pilih satu jawaban atau bandingkan model.</p></div>
-                      <button type="button" disabled={isStreaming} aria-pressed={compareMode} onClick={() => onCompareModeChange(!compareMode)} className={`h-8 shrink-0 rounded-lg px-2.5 text-xs font-medium transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${compareMode ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' : 'border border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800'}`}>{compareMode ? 'Bandingkan aktif' : 'Bandingkan'}</button>
+                      <button type="button" disabled={isStreaming} aria-pressed={compareMode} onClick={() => onCompareModeChange(!compareMode)} className={`h-8 shrink-0 rounded-lg px-2.5 text-xs font-medium transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${compareMode ? 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300' : 'border border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800'}`}>{compareMode ? 'Bandingkan aktif' : 'Bandingkan'}</button>
                     </div>
-                    {compareMode && <div className="rounded-lg border border-emerald-200/70 bg-emerald-50/50 p-2 dark:border-emerald-900/60 dark:bg-emerald-950/20"><p className="mb-1.5 text-[11px] font-medium text-emerald-900 dark:text-emerald-200">Pilih model untuk dibandingkan</p><WorkspaceCompareModelSelector selectedModelIds={selectedCompareModels} onChange={onCompareModelsChange} disabled={isStreaming} hasAttachment={hasAttachments} /></div>}
+                    {compareMode && <div className="rounded-lg border border-indigo-200/70 bg-indigo-50/50 p-2 dark:border-indigo-900/60 dark:bg-indigo-950/20"><p className="mb-1.5 text-[11px] font-medium text-indigo-900 dark:text-indigo-200">Pilih model untuk dibandingkan</p><WorkspaceCompareModelSelector selectedModelIds={selectedCompareModels} onChange={onCompareModelsChange} disabled={isStreaming} hasAttachment={hasAttachments} /></div>}
                     <div className="grid gap-2 sm:grid-cols-2">
                       <label className="text-[11px] font-medium text-slate-600 dark:text-slate-300">Respons<select aria-label="Mode respons" value={responseMode} onChange={event => setResponseMode(event.target.value as WorkspaceResponseMode)} className="mt-1 h-9 w-full rounded-lg border border-slate-200 bg-white px-2 text-xs dark:border-slate-700 dark:bg-slate-950"><option>Ringkas</option><option>Seimbang</option><option>Mendalam</option></select></label>
                       <label className="text-[11px] font-medium text-slate-600 dark:text-slate-300">Gaya<select aria-label="Gaya (opsional)" value={responseStyle} onChange={event => setResponseStyle(event.target.value as WorkspaceResponseStyle)} className="mt-1 h-9 w-full rounded-lg border border-slate-200 bg-white px-2 text-xs dark:border-slate-700 dark:bg-slate-950"><option value="Default">Default</option><option>Akademik</option><option>Langkah demi langkah</option><option>Formal</option></select></label>
@@ -307,7 +311,7 @@ export const WorkspaceComposer: React.FC<WorkspaceComposerProps> = React.memo(({
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center gap-1 pt-2">
-                    <button type="button" onClick={onOpenTemplateGallery} disabled={isDisabled} className="h-8 rounded-lg px-2 text-xs text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"><Sparkles className="mr-1 inline h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />Template</button>
+                    <button type="button" onClick={onOpenTemplateGallery} disabled={isDisabled} className="h-8 rounded-lg px-2 text-xs text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"><Sparkles className="mr-1 inline h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />Template</button>
                     {onSelectTool && <WorkspaceToolSelector artifactType={activeArtifactType} hasArtifact={Boolean(activeArtifactType)} disabled={isStreaming || isDisabled || compareMode} onSelectTool={tool => { setOptionsOpen(false); onSelectTool(tool); }} triggerVariant="composer" />}
                   </div>
                 </div>
@@ -315,8 +319,23 @@ export const WorkspaceComposer: React.FC<WorkspaceComposerProps> = React.memo(({
             </div>
           </div>
 
-          {/* Right Controls: Enter Hint & Send */}
-          <div className="flex items-center gap-2">
+          {/* Right Controls: Voice Input, Enter Hint & Send */}
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            <button
+              type="button"
+              onClick={toggleListening}
+              disabled={isStreaming || isDisabled}
+              aria-label={isListening ? "Hentikan rekam suara" : "Input suara (Speech-to-Text)"}
+              title={isListening ? "Hentikan rekam suara (Sedang mendengarkan...)" : "Bicara (Input Suara Speech-to-Text)"}
+              className={`h-9 w-9 shrink-0 rounded-lg flex items-center justify-center transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
+                isListening
+                  ? "bg-rose-500 text-white animate-pulse shadow-md hover:bg-rose-600 ring-2 ring-rose-400"
+                  : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-800"
+              }`}
+            >
+              {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+            </button>
+
             <span id="workspace-composer-hint" className="text-[10px] text-slate-400 font-sans hidden sm:inline select-none">
               Enter ↵
             </span>
@@ -346,7 +365,7 @@ export const WorkspaceComposer: React.FC<WorkspaceComposerProps> = React.memo(({
                   (inputText.trim() || readyAttachments.length > 0) &&
                   !hasPendingAttachment && !hasFailedAttachment &&
                   (!hasAttachments || readyAttachments.length === activeAttachments.length)
-                    ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs active:scale-95'
+                    ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-2xs active:scale-95'
                     : 'bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
                 }`}
                 title="Kirim"

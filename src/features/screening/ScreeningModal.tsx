@@ -129,7 +129,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
         }
       }
     };
-    
+
     const focusable = getFocusableElements();
     (focusable[0] || modalRef.current)?.focus();
 
@@ -174,7 +174,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
 
   const fetchHistory = () => {
     if (!isOpen && !isPageMode) return;
-    
+
     setLoadingHistory(true);
     setErrorHistory(null);
     apiClient.get<any[]>('/api/v1/screenings')
@@ -249,8 +249,8 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
 
   const handleNextQuestion = () => {
     const currentQ = ALL_QUESTIONS[currentQuestionIndex];
-    const ansVal = currentQ?.section === 'phq9' 
-      ? phq9AnswersRef.current[currentQ.questionIndexInSection] 
+    const ansVal = currentQ?.section === 'phq9'
+      ? phq9AnswersRef.current[currentQ.questionIndexInSection]
       : gad7AnswersRef.current[currentQ.questionIndexInSection];
 
     if (ansVal === -1) {
@@ -316,7 +316,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
 
     const newHistory = [res, ...historyList];
     setHistoryList(newHistory);
-    
+
     setFinalResult(res);
     setStep('result');
 
@@ -390,7 +390,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
 
     addNotification(
       "Mengarahkan ke Konselor Kampus 🌿",
-      "Membuka form reservasi jadwal konseling dengan skor skrining awal Anda terlampir.",
+      "Membuka form reservasi. Ringkasan skrining hanya disertakan jika izin berbagi dengan konselor aktif.",
       "info"
     );
 
@@ -444,7 +444,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
 
   const currentQ = ALL_QUESTIONS[currentQuestionIndex];
   const currentAnswerValue = currentQ
-    ? (currentQ.section === 'phq9' 
+    ? (currentQ.section === 'phq9'
         ? (phq9Answers[currentQ.questionIndexInSection] !== -1 ? phq9Answers[currentQ.questionIndexInSection] : phq9AnswersRef.current[currentQ.questionIndexInSection])
         : (gad7Answers[currentQ.questionIndexInSection] !== -1 ? gad7Answers[currentQ.questionIndexInSection] : gad7AnswersRef.current[currentQ.questionIndexInSection]))
     : -1;
@@ -508,7 +508,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
                 </span>
                 <span className="text-[10px] text-secondary font-medium uppercase tracking-wider">Arsip Pribadi</span>
               </div>
-              
+
               {loadingHistory ? (
                 <div className="flex items-center justify-center p-4">
                   <div className="w-5 h-5 border-2 border-teal-500 border-t-transparent rounded-full animate-spin"></div>
@@ -618,7 +618,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
                           aria-pressed={isSelected}
                           className={`p-3.5 sm:p-4 min-h-13 rounded-xl text-xs sm:text-sm font-medium border text-left transition-all focus:outline-none focus:ring-2 focus:ring-teal-500/30 cursor-pointer flex items-center justify-between group chip-tactile ${
                             isSelected
-                              ? 'bg-teal-600 text-white border-teal-600 shadow-md scale-[1.01]'
+                              ? 'bg-teal-700 text-white border-teal-700 shadow-md scale-[1.01]'
                               : 'surface-card border-default text-primary hover:bg-teal-50/60 dark:hover:bg-teal-950/30 hover:border-teal-300 dark:hover:border-teal-700 shadow-3xs'
                           }`}
                         >
@@ -660,7 +660,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
                   disabled={!hasCurrentAnswer || isSubmitting}
                   className={`flex items-center justify-center gap-1.5 px-5 py-2 min-h-11 sm:min-h-9 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer btn-tactile ${
                     hasCurrentAnswer && !isSubmitting
-                      ? 'bg-teal-600 text-white hover:bg-teal-700 shadow-3xs'
+                      ? 'bg-teal-700 text-white hover:bg-teal-800 shadow-3xs'
                       : 'bg-slate-100 dark:bg-slate-800 text-muted border border-default cursor-not-allowed opacity-60'
                   }`}
                 >
@@ -866,7 +866,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
                 </button>
                 <button
                   onClick={onClose}
-                  className="w-full sm:w-auto px-5 py-2 min-h-11 sm:min-h-9 bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold rounded-xl shadow-3xs transition-all cursor-pointer flex items-center justify-center btn-tactile"
+                  className="w-full sm:w-auto px-5 py-2 min-h-11 sm:min-h-9 bg-teal-700 hover:bg-teal-800 text-white text-xs font-bold rounded-xl shadow-3xs transition-all cursor-pointer flex items-center justify-center btn-tactile"
                 >
                   Selesai
                 </button>

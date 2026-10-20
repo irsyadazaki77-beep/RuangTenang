@@ -71,7 +71,8 @@ export const openrouterService = {
     const openrouterModel = this.mapModelName(targetModel);
     const messages = this.buildMessages(options);
     const isAnonymous = !options.userId || options.userId === 'guest';
-    const maxTokens = Math.min(options.maxOutputTokens || (isAnonymous ? 600 : 1200), isAnonymous ? 600 : 1200);
+    const defaultMax = isAnonymous ? 1500 : 4096;
+    const maxTokens = Math.min(options.maxOutputTokens || defaultMax, isAnonymous ? 2048 : 4096);
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), AI_RELIABILITY_POLICY.connectTimeoutMs);
@@ -142,7 +143,8 @@ export const openrouterService = {
     const openrouterModel = this.mapModelName(targetModel);
     const messages = this.buildMessages(options);
     const isAnonymous = !options.userId || options.userId === 'guest';
-    const maxTokens = isAnonymous ? 600 : 1200;
+    const defaultMax = isAnonymous ? 1500 : 4096;
+    const maxTokens = Math.min(options.maxOutputTokens || defaultMax, isAnonymous ? 2048 : 4096);
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), AI_RELIABILITY_POLICY.totalRequestTimeoutMs);

@@ -11,6 +11,7 @@ import os from 'os';
 import fs from 'fs';
 import util from 'util';
 import crypto from 'crypto';
+import { fileURLToPath } from 'url';
 import { createReadStream, createWriteStream } from 'fs';
 import { pipeline } from 'stream/promises';
 import { resolveDatabaseConfiguration } from '../config/databaseConfig.js';
@@ -103,7 +104,7 @@ export async function runBackup() {
   const backupKey = getBackupEncryptionKey();
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
   const backupDir = path.resolve(process.cwd(), 'backups');
-  
+
   if (!fs.existsSync(backupDir)) {
     fs.mkdirSync(backupDir, { recursive: true, mode: 0o700 });
   }
@@ -224,7 +225,10 @@ export async function runBackup() {
 }
 
 const isDirectCliExecution =
-  (typeof import.meta !== 'undefined' && import.meta.url === `file://${process.argv[1]}`) ||
+  (typeof process !== 'undefined' &&
+    Boolean(process.argv[1]) &&
+    path.resolve(fileURLToPath(import.meta.url)).toLowerCase() ===
+      path.resolve(process.argv[1]).toLowerCase()) ||
   (typeof require !== 'undefined' && typeof module !== 'undefined' && require.main === module);
 
 if (isDirectCliExecution) {

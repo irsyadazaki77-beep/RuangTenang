@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
-import { 
-  AlertTriangle, 
-  ShieldAlert, 
-  Search, 
-  Filter, 
-  UserCheck, 
-  FileEdit, 
-  Clock, 
+import {
+  AlertTriangle,
+  ShieldAlert,
+  Search,
+  Filter,
+  UserCheck,
+  FileEdit,
+  Clock,
   CheckCircle2
 } from 'lucide-react';
 import { TriageItem, RiskLevel } from '../types';

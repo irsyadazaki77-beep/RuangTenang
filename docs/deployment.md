@@ -24,17 +24,26 @@ The repository's `deploy.sh` is a Compose rollout helper. Review its environment
 
 ## PostgreSQL backup
 
-Run `npm run db:backup` from an operator environment with `DATABASE_URL`, `pg_dump`, and `pg_restore` configured. The utility writes a PostgreSQL custom-format archive under `backups/`, validates its archive table of contents with `pg_restore --list`, uses a temporary file until validation passes, and applies restrictive local permissions where the operating system supports them.
+Run `npm run db:backup` from an operator environment with `DATABASE_URL`, `BACKUP_ENCRYPTION_KEY` (dedicated 32-byte hex key), `pg_dump`, and `pg_restore` configured. The utility writes an authenticated AES-256-GCM encrypted PostgreSQL archive (`.enc`) under `backups/`, validates its archive table of contents with `pg_restore --list`, removes any temporary staging files after encryption, and applies restrictive local permissions (`0o600`).
 
-The dump contains sensitive application data and is **not encrypted by this utility**. Store it only in access-controlled, encrypted storage, keep an off-host copy, and apply the approved retention schedule. Do not commit backup files or leave them on a shared deployment host.
+The dump contains sensitive application data and is **encrypted at rest by this utility**. Store the `.enc` artifact in access-controlled, off-host storage, retain the independent `BACKUP_ENCRYPTION_KEY` securely in secret manager, and apply the approved retention schedule. Do not commit backup files or leave them unmanaged on a shared host.
 
 ## Restore rehearsal and recovery
 
-Practice restores against a new, isolated, empty PostgreSQL database. Do not restore over production as a routine rollback step.
+Practice restores against a new, isolated, empty PostgreSQL database using the automated rehearsal script `npm run db:backup:rehearse` or by decrypting the `.enc` file in an isolated operator environment:
 
 ```bash
-pg_restore --exit-on-error --no-owner --dbname="$RESTORE_DATABASE_URL" backups/postgres-backup-TIMESTAMP.dump
+# Automated rehearsal against an isolated disposable database
+RESTORE_REHEARSAL_ALLOW_TARGET=isolated npm run db:backup:rehearse
 ```
+
+For manual restore, decrypt the `.enc` file using `decryptBackupFile` into an isolated temporary directory (restricted to `0o700`), execute `pg_restore`:
+
+```bash
+pg_restore --exit-on-error --no-owner --dbname="$RESTORE_DATABASE_URL" /path/to/isolated-temp/restore.dump
+```
+
+Ensure the temporary decrypted dump is immediately shredded/unlinked once `pg_restore` completes.
 
 After restore, validate migration state, representative application records, and app startup before considering a controlled endpoint or traffic switch. Record the snapshot time, restore duration, and any lost-write window. Restore can discard all writes newer than the snapshot.
 

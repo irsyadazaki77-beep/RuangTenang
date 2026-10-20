@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
+import { useFocusTrap } from '../../../hooks/useFocusTrap';
 import { WorkspaceToolDefinition } from '../tools/toolTypes';
 
 interface WorkspaceToolConfigModalProps {
@@ -21,13 +22,15 @@ export const WorkspaceToolConfigModal: React.FC<WorkspaceToolConfigModalProps> =
     setValues(tool ? defaultsFor(tool) : {});
   }, [tool]);
 
+  const dialogRef = useFocusTrap<HTMLElement>({ isOpen: Boolean(tool?.inputSchema?.length), onClose: onCancel });
+
   if (!tool?.inputSchema?.length) return null;
 
   const updateValue = (name: string, value: unknown) => setValues(current => ({ ...current, [name]: value }));
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/50 p-4" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) onCancel(); }}>
-      <section role="dialog" aria-modal="true" aria-labelledby="workspace-tool-config-title" className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-700 dark:bg-slate-900">
+      <section ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="workspace-tool-config-title" className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-700 dark:bg-slate-900">
         <header className="mb-4 flex items-start justify-between gap-3">
           <div>
             <h2 id="workspace-tool-config-title" className="text-base font-bold text-slate-900 dark:text-slate-100">Konfigurasi {tool.name}</h2>

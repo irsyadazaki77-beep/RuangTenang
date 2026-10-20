@@ -48,6 +48,7 @@ export function useChatStreaming() {
       onChatCreated?: (chatId: string) => void;
       onQuotaExceeded?: (data: { message: string; resetAt?: string; suggestedActions?: string[] }) => void;
       onRoutingMetadata?: (data: RoutingEventData) => void;
+      onConsentRequired?: () => void;
     }
   ) => {
     const token = ++currentTokenRef.current;
@@ -88,7 +89,7 @@ export function useChatStreaming() {
         onChunk: (text) => {
           if (token !== currentTokenRef.current) return;
           // Batch fast token emissions into 60 FPS rAF frames to prevent main thread choke
-          const isTest = 
+          const isTest =
             (typeof process !== 'undefined' && (process.env?.NODE_ENV === 'test' || process.env?.VITEST === 'true')) ||
             (typeof window !== 'undefined' && Boolean((window as any).__vitest_worker__ || (window as any).vi || (globalThis as any).vi)) ||
             (typeof import.meta !== 'undefined' && Boolean((import.meta as any).env?.VITEST || (import.meta as any).env?.MODE === 'test'));
@@ -147,6 +148,10 @@ export function useChatStreaming() {
         onRoutingMetadata: (data) => {
           if (token !== currentTokenRef.current) return;
           callbacks.onRoutingMetadata?.(data);
+        },
+        onConsentRequired: () => {
+          if (token !== currentTokenRef.current) return;
+          callbacks.onConsentRequired?.();
         }
       });
     } finally {

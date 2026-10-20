@@ -2,6 +2,7 @@ import React, { memo } from 'react';
 import { LazyMarkdown } from '../../../components/common/LazyMarkdown';
 import { Message } from '../types';
 import { RhythmicTypingIndicator } from '../../../components/ui/RhythmicTypingIndicator';
+import { BrandLogo } from '../../../components/ui/BrandLogo';
 
 interface Props {
   msg: Message;
@@ -22,9 +23,7 @@ export const StreamingBubble: React.FC<Props> = memo(({ msg }) => {
       }}
       className="render-optimized-item flex gap-3 sm:gap-3.5 group w-full justify-start transition-none"
     >
-      <div className="w-7 h-7 rounded-xl bg-teal-50 dark:bg-teal-950/60 flex items-center justify-center shrink-0 mt-0.5 p-1 border border-teal-100/80 dark:border-teal-900/60 shadow-xs">
-        <img src="/favicon.svg" alt="RuangTenang" className="w-4 h-4 object-contain" />
-      </div>
+      <BrandLogo size="xs" iconOnly className="shrink-0 mt-0.5" />
 
       <div className="flex-1 min-w-0 max-w-full">
         {!msg.content ? (

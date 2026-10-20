@@ -164,7 +164,7 @@ export function SessionSummaryModal({ chatId, isOpen, onClose }: SessionSummaryM
                 <button
                   onClick={handleDownloadPdf}
                   disabled={downloadingPdf}
-                  className="flex items-center gap-1.5 px-3 py-1 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium transition-colors cursor-pointer disabled:opacity-50 shadow-xs"
+                  className="flex items-center gap-1.5 px-3 py-1 bg-teal-700 hover:bg-teal-800 text-white rounded-lg font-medium transition-colors cursor-pointer disabled:opacity-50 shadow-xs"
                   title="Unduh Laporan PDF Resume Konseling"
                 >
                   {downloadingPdf ? (

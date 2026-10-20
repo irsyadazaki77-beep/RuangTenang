@@ -1,17 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { 
+import {
   MessageSquare,
-  Heart, 
-  Compass, 
-  Stethoscope, 
-  Users, 
-  Bell, 
-  Sparkles, 
+  Heart,
+  Compass,
+  Stethoscope,
+  Users,
+  Bell,
   LayoutDashboard,
   ChevronDown,
-  Lock,
-  PhoneCall
+  Lock
 } from 'lucide-react';
 import { WorkspaceMode } from '../../../features/workspace/types';
 import { SidebarTooltip } from './SidebarTooltip';
@@ -40,7 +38,7 @@ export const SidebarNavLinks: React.FC<SidebarNavLinksProps> = ({
   const navigate = useNavigate();
   const { user } = useAuth();
   const { isVaultConfigured, isVaultUnlocked, lockVault, triggerPanicScreen } = usePrivacyVault();
-  
+
   const canAccessCounselorPortal = Boolean(
     user && (user.role === 'konselor' || user.role === 'admin' || (user.role as string) === 'peer_counselor')
   );
@@ -87,7 +85,7 @@ export const SidebarNavLinks: React.FC<SidebarNavLinksProps> = ({
                 onClick={() => handleNavigate('/workspace')}
                 className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors cursor-pointer ${
                   location.pathname.startsWith('/workspace')
-                    ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-bold'
+                    ? 'bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 font-bold'
                     : 'text-slate-500 hover:bg-slate-200/70 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-200'
                 }`}
                 aria-label="Canvas Workspace"
@@ -158,21 +156,6 @@ export const SidebarNavLinks: React.FC<SidebarNavLinksProps> = ({
                 <Users className="w-4 h-4" />
               </button>
             </SidebarTooltip>
-
-            <SidebarTooltip content="Pusat Bantuan Krisis & Darurat" show={true} position="right">
-              <button
-                type="button"
-                onClick={() => handleNavigate('/emergency')}
-                className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors cursor-pointer ${
-                  location.pathname === '/emergency'
-                    ? 'bg-rose-500/20 text-rose-600 dark:text-rose-400 font-bold'
-                    : 'text-rose-500 hover:bg-rose-100/70 dark:hover:bg-rose-950/40'
-                }`}
-                aria-label="Pusat Bantuan Krisis"
-              >
-                <PhoneCall className="w-4 h-4" />
-              </button>
-            </SidebarTooltip>
           </>
         )}
 
@@ -209,20 +192,20 @@ export const SidebarNavLinks: React.FC<SidebarNavLinksProps> = ({
         <div className="flex items-center gap-1.5">
           {isRuangKerja ? (
             <>
-              <Sparkles className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-              <span>RuangKerja</span>
+              <LayoutDashboard className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
+              <span>Alat Akademik</span>
             </>
           ) : (
             <>
               <Heart className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 shrink-0" />
-              <span>Layanan Sekunder</span>
+              <span>Kesehatan Mental</span>
             </>
           )}
         </div>
-        <ChevronDown 
+        <ChevronDown
           className={`w-3.5 h-3.5 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300 transition-transform duration-200 ${
             isExpanded ? 'rotate-180' : ''
-          }`} 
+          }`}
         />
       </button>
 
@@ -239,17 +222,17 @@ export const SidebarNavLinks: React.FC<SidebarNavLinksProps> = ({
             {isRuangKerja ? (
               /* Workspace navigation */
               <>
-                <button 
+                <button
                   type="button"
-                  onClick={() => handleNavigate('/workspace')} 
+                  onClick={() => handleNavigate('/workspace')}
                   className={`w-full flex items-center justify-between px-2 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
                   location.pathname.startsWith('/workspace')
-                      ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 font-semibold'
+                      ? 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-800 dark:text-indigo-300 font-semibold'
                       : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60'
                   }`}
                 >
                   <div className="flex items-center gap-2">
-                    <LayoutDashboard className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    <LayoutDashboard className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
                     <span>Beranda RuangKerja</span>
                   </div>
                 </button>
@@ -258,9 +241,9 @@ export const SidebarNavLinks: React.FC<SidebarNavLinksProps> = ({
             ) : (
               /* Campus Services */
               <>
-                <button 
+                <button
                   type="button"
-                  onClick={() => handleNavigate('/mood')} 
+                  onClick={() => handleNavigate('/mood')}
                   className={`w-full flex items-center gap-2 px-2 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
                     location.pathname === '/mood'
                       ? 'bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300 font-semibold'
@@ -271,9 +254,9 @@ export const SidebarNavLinks: React.FC<SidebarNavLinksProps> = ({
                   <span>Mood & Jurnal</span>
                 </button>
 
-                <button 
+                <button
                   type="button"
-                  onClick={() => handleNavigate('/mindfulness')} 
+                  onClick={() => handleNavigate('/mindfulness')}
                   className={`w-full flex items-center gap-2 px-2 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
                     location.pathname === '/mindfulness'
                       ? 'bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300 font-semibold'
@@ -284,9 +267,9 @@ export const SidebarNavLinks: React.FC<SidebarNavLinksProps> = ({
                   <span>Tenang Mandiri</span>
                 </button>
 
-                <button 
+                <button
                   type="button"
-                  onClick={() => handleNavigate('/screening')} 
+                  onClick={() => handleNavigate('/screening')}
                   className={`w-full flex items-center gap-2 px-2 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
                     location.pathname === '/screening'
                       ? 'bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300 font-semibold'
@@ -297,9 +280,9 @@ export const SidebarNavLinks: React.FC<SidebarNavLinksProps> = ({
                   <span>Skrining Mandiri</span>
                 </button>
 
-                <button 
+                <button
                   type="button"
-                  onClick={() => handleNavigate('/counselors')} 
+                  onClick={() => handleNavigate('/counselors')}
                   className={`w-full flex items-center gap-2 px-2 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
                     location.pathname === '/counselors'
                       ? 'bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300 font-semibold'
@@ -310,28 +293,10 @@ export const SidebarNavLinks: React.FC<SidebarNavLinksProps> = ({
                   <span>Direktori Konselor</span>
                 </button>
 
-                <button 
-                  type="button"
-                  onClick={() => handleNavigate('/emergency')} 
-                  className={`w-full flex items-center justify-between px-2 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-                    location.pathname === '/emergency'
-                      ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 font-semibold'
-                      : 'text-rose-600 dark:text-rose-400 hover:bg-rose-50/70 dark:hover:bg-rose-950/30'
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <PhoneCall className="w-3.5 h-3.5 text-rose-500 shrink-0" />
-                    <span>Pusat Bantuan Krisis</span>
-                  </div>
-                  <span className="text-[9px] bg-rose-100 dark:bg-rose-900/50 text-rose-700 dark:text-rose-300 px-1 rounded font-bold">
-                    SOS
-                  </span>
-                </button>
-
                 {canAccessCounselorPortal && (
-                  <button 
+                  <button
                     type="button"
-                    onClick={() => handleNavigate('/counselor-portal')} 
+                    onClick={() => handleNavigate('/counselor-portal')}
                     className={`w-full flex items-center justify-between px-2 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
                       location.pathname === '/counselor-portal'
                         ? 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 font-semibold'
@@ -379,9 +344,9 @@ export const SidebarNavLinks: React.FC<SidebarNavLinksProps> = ({
       )}
 
       {/* Notifications Row */}
-      <button 
+      <button
         type="button"
-        onClick={() => { onOpenNotifications?.(); onCloseMobile(); }} 
+        onClick={() => { onOpenNotifications?.(); onCloseMobile(); }}
         className="w-full flex items-center justify-between px-2 py-1 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100/80 dark:hover:bg-slate-800/60 transition-colors cursor-pointer"
       >
         <div className="flex items-center gap-1.5">
@@ -397,4 +362,3 @@ export const SidebarNavLinks: React.FC<SidebarNavLinksProps> = ({
     </div>
   );
 };
-

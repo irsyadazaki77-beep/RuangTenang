@@ -182,7 +182,7 @@ router.post('/chat/compare/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter,
   res.setHeader('X-Accel-Buffering', 'no');
   res.flushHeaders();
   writeEvent(res, { type: 'comparison_started', comparisonId: request.comparisonId, snapshotId: snapshot.snapshotId, contextFingerprint: snapshot.contextFingerprint, attempts: [...attemptIds].map(([candidateId, attemptId]) => ({ candidateId, attemptId })) });
-  
+
   // Inform if multiple selected profiles resolve to the exact same underlying model
   if (new Set(models.map(m => m.id)).size < models.length) {
     writeEvent(res, {
@@ -380,14 +380,14 @@ router.post('/chat/compare/select', optionalAuth, async (req: Request, res: Resp
   return res.json({ success: true, promptId, responseId, chatId });
 });
 
-router.post('/chat/compare/analyze', optionalAuth, async (req: Request, res: Response) => {
+router.post('/chat/compare/analyze', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (req: Request, res: Response) => {
   const body = z.object({
     prompt: z.string().min(1).max(2000),
     candidates: z.array(z.object({
       candidateId: z.string().min(1),
       modelId: z.string().min(1),
       modelName: z.string().min(1),
-      output: z.string(),
+      output: z.string().max(100_000),
       status: z.enum(['completed', 'failed', 'cancelled', 'streaming', 'queued']),
       latencyMs: z.number().optional()
     })).min(1).max(3),
@@ -418,14 +418,14 @@ router.post('/chat/compare/analyze', optionalAuth, async (req: Request, res: Res
   return res.json({ success: true, analysis });
 });
 
-router.post('/chat/compare/synthesize', optionalAuth, async (req: Request, res: Response) => {
+router.post('/chat/compare/synthesize', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (req: Request, res: Response) => {
   const body = z.object({
     prompt: z.string().min(1).max(2000),
     candidates: z.array(z.object({
       candidateId: z.string().min(1),
       modelId: z.string().min(1),
       modelName: z.string().min(1),
-      output: z.string(),
+      output: z.string().max(100_000),
       status: z.enum(['completed', 'failed', 'cancelled', 'streaming', 'queued']),
       latencyMs: z.number().optional()
     })).min(1).max(3),

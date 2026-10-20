@@ -28,8 +28,10 @@ export interface WorkspaceRequestIdentity {
 interface UseWorkspaceStreamingOptions {
   chatId?: string;
   workspaceIdentity?: string;
+  isTemporary?: boolean;
   onChatIdReceived?: (chatId: string, identity: WorkspaceRequestIdentity) => void;
   onChatCreated?: (chatId: string, identity: WorkspaceRequestIdentity) => void;
+  onConsentRequired?: () => void;
   onStreamArtifactExtracted?: (artifact: WorkspaceArtifact, isStreaming: boolean, identity: WorkspaceRequestIdentity) => void;
   onStreamCompleted?: (assistantMessage: Message, extractedArtifacts: WorkspaceArtifact[], identity: WorkspaceRequestIdentity) => void | Promise<void>;
 }
@@ -54,8 +56,10 @@ const AURORA_PHASE_BY_STREAM_STATUS: Record<
 export function useWorkspaceStreaming({
   chatId,
   workspaceIdentity = chatId ? `chat:${chatId}` : 'local:workspace',
+  isTemporary = false,
   onChatIdReceived,
   onChatCreated,
+  onConsentRequired,
   onStreamArtifactExtracted,
   onStreamCompleted
 }: UseWorkspaceStreamingOptions) {
@@ -261,6 +265,8 @@ export function useWorkspaceStreaming({
       await client.stream({
         message: formattedPrompt,
         chatId: chatId || undefined,
+        isTemporary,
+        workspaceMode: true,
         chatMode: 'RuangKerja',
         guestAiConsent: readGuestAiConsent(),
         responseStyle: config?.responseStyle && config.responseStyle !== 'Default'
@@ -288,6 +294,9 @@ export function useWorkspaceStreaming({
         onSources: sources => {
           if (isCurrentRequest(identity)) sourceReferences = sources;
         },
+        onConsentRequired: () => {
+          if (isCurrentRequest(identity)) onConsentRequired?.();
+        },
         onMessageStart: () => {
           if (!isCurrentRequest(identity)) return;
           setActiveStreamingMessage({ id: assistantMsgId, role: 'assistant', content: '', createdAt: new Date() });
@@ -300,7 +309,7 @@ export function useWorkspaceStreaming({
           const scanText = artifactScanTail + chunk.toLowerCase();
           if (!artifactCandidateSeen && scanText.includes(ARTIFACT_OPEN_TAG)) artifactCandidateSeen = true;
           artifactScanTail = scanText.slice(-(ARTIFACT_OPEN_TAG.length - 1));
-          
+
           if (isFirstChunk) {
             flushStreamingMessage();
           } else {
@@ -310,6 +319,7 @@ export function useWorkspaceStreaming({
         },
         onMessageComplete: async finalText => {
           if (!isCurrentRequest(identity) || completionHandled || completedRequestsRef.current.has(identity.requestId)) return;
+          if (/persetujuan pemrosesan ai belum aktif/i.test(finalText) && !isTemporary) onConsentRequired?.();
           completionHandled = true;
           completedRequestsRef.current.add(identity.requestId);
           clearParseTimer();
@@ -362,7 +372,7 @@ export function useWorkspaceStreaming({
       }
       await finishWithError();
     }
-  }, [chatId, workspaceIdentity, onChatIdReceived, onChatCreated, onStreamArtifactExtracted, onStreamCompleted, clearParseTimer, clearStreamUiTimer, isCurrentRequest, setStatus, invalidateActiveRequest]);
+  }, [chatId, workspaceIdentity, isTemporary, onChatIdReceived, onChatCreated, onConsentRequired, onStreamArtifactExtracted, onStreamCompleted, clearParseTimer, clearStreamUiTimer, isCurrentRequest, setStatus, invalidateActiveRequest]);
 
   return {
     streamingStatus,

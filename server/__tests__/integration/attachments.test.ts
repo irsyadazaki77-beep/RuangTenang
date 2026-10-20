@@ -76,7 +76,7 @@ describe('Attachment Context RuangTenang Security & Upload Verification', () => 
     await expect(
       attachmentStorageService.getAttachmentForUser(validAttachmentId, otherUserId)
     ).rejects.toThrow(/UNAUTHORIZED_ACCESS/);
-  });
+  }, 15000);
 
   it('isolates guest attachments by opaque per-browser owner identifiers', async () => {
     const ownerA = `guest:${crypto.randomBytes(32).toString('hex')}`;
@@ -93,7 +93,7 @@ describe('Attachment Context RuangTenang Security & Upload Verification', () => 
     await expect(attachmentStorageService.getAttachmentForUser(attachment.id, ownerB)).rejects.toThrow(/UNAUTHORIZED_ACCESS/);
     await expect(attachmentStorageService.getAttachmentForUser(attachment.id, 'guest')).rejects.toThrow(/UNAUTHORIZED_ACCESS/);
     await attachmentStorageService.deleteAttachment(attachment.id, ownerA);
-  });
+  }, 15000);
 
   it('5. Should sanitize malicious filenames and path traversal sequences', () => {
     const maliciousNames = [

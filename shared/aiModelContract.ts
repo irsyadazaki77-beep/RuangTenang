@@ -1,12 +1,13 @@
 export type ProviderId = 'gemini' | 'deepseek' | 'groq' | 'openrouter' | 'openai';
-export type ModelCapability = 
-  | 'chat' 
-  | 'streaming' 
+export type ModelCapability =
+  | 'chat'
+  | 'streaming'
   | 'reasoning'
   | 'vision'
   | 'image_understanding'
   | 'document_ocr'
-  | 'audio_transcription';
+  | 'audio_transcription'
+  | 'tool_calling';
 export type ModelAvailability = 'configured' | 'temporarily_unavailable' | 'provider_not_configured';
 export type ModelTier = 'Free' | 'Pro' | 'Premium';
 
@@ -237,4 +238,3 @@ export interface AiModelCatalogResponse {
   defaultTenangProfile?: TenangProfileId;
   defaultKerjaProfile?: KerjaProfileId;
 }
-

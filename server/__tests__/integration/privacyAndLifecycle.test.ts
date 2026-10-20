@@ -223,6 +223,28 @@ describe('FASE 7: Data Privacy, Sensitive Data Lifecycle & Security Tests', () =
       expect(user?.mfaCode).toBeNull();
       expect(user?.mfaToken).toBeNull();
     });
+
+    it('only allows exactly one successful verification when concurrent requests attempt to consume the same MFA challenge', async () => {
+      const code = '654321';
+      const token = 'mfa-challenge-race-test';
+
+      await authRepository.setMfaCode(TEST_USER_ID, code, token);
+
+      // Fire 3 parallel verification requests simultaneously with the correct code
+      const results = await Promise.all([
+        authRepository.verifyMfaCode(token, code),
+        authRepository.verifyMfaCode(token, code),
+        authRepository.verifyMfaCode(token, code),
+      ]);
+
+      const successCount = results.filter(r => r !== null).length;
+      expect(successCount).toBe(1);
+
+      // Verify challenge is destroyed
+      const userAfter = await prisma.users.findUnique({ where: { id: TEST_USER_ID } });
+      expect(userAfter?.mfaCode).toBeNull();
+      expect(userAfter?.mfaToken).toBeNull();
+    });
   });
 
   // 5. APPOINTMENT SENSITIVE DATA ENCRYPTION

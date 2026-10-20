@@ -16,8 +16,13 @@ import { createStudentRoutes } from '../app/routes/studentRoutes';
 import { LoadingState } from './ui/primitives/Surfaces';
 import { FeatureErrorBoundary } from './error/FeatureErrorBoundary';
 import { trackProductEvent } from '../lib/productAnalytics';
+import { apiClient } from '../lib/apiClient';
+import { GUEST_AI_CONSENT_CHANGED_EVENT, readGuestAiConsent, writeGuestAiConsent } from '../lib/guestAiConsent';
+import { AiConsentPrompt } from '../features/privacy/components/AiConsentPrompt';
+import { BRAND_IDENTITIES } from './ui/BrandLogo';
 
 const SettingsPage = lazyWithRetry(() => import('../features/settings/SettingsPage').then(module => ({ default: module.SettingsPage })));
+const PrivacyCenterModal = lazyWithRetry(() => import('../features/privacy/PrivacyCenterModal').then(module => ({ default: module.PrivacyCenterModal })));
 
 interface StudentShellProps {
   user: UserSession;
@@ -91,7 +96,102 @@ export const StudentShell: React.FC<StudentShellProps> = ({
   const navigate = useNavigate();
   const location = useLocation();
   const currentMode = getWorkspaceModeFromPath(location.pathname);
+  React.useEffect(() => {
+    const brand = BRAND_IDENTITIES[currentMode];
+    const previousTitle = document.title;
+    const favicon = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+    const previousIcon = favicon?.getAttribute('href');
+    document.title = currentMode === 'RUANG_KERJA'
+      ? 'RuangKerja — RuangTenang'
+      : 'RuangTenang - Pendamping Refleksi & Ruang Kerja Mahasiswa';
+    favicon?.setAttribute('href', brand.src);
+    return () => {
+      document.title = previousTitle;
+      if (previousIcon) favicon?.setAttribute('href', previousIcon);
+    };
+  }, [currentMode]);
   const shouldReduceMotion = useReducedMotion();
+  const [isPrivacyCenterOpen, setIsPrivacyCenterOpen] = React.useState(false);
+  const [aiConsentAllowed, setAiConsentAllowed] = React.useState<boolean | null>(null);
+  const [isAiConsentPromptOpen, setIsAiConsentPromptOpen] = React.useState(false);
+  const [isSavingAiConsent, setIsSavingAiConsent] = React.useState(false);
+  const [aiConsentError, setAiConsentError] = React.useState<string | null>(null);
+  const pendingConsentCancelRef = React.useRef<(() => void) | null>(null);
+
+  const openPrivacyCenter = React.useCallback(() => {
+    setIsSettingsOpen(false);
+    setIsPrivacyCenterOpen(true);
+  }, [setIsSettingsOpen]);
+
+  const requestAiConsent = React.useCallback((cancelPendingSend?: () => void) => {
+    setAiConsentError(null);
+    setAiConsentAllowed(false);
+    pendingConsentCancelRef.current = cancelPendingSend || null;
+    setIsAiConsentPromptOpen(true);
+  }, []);
+
+  React.useEffect(() => {
+    setIsAiConsentPromptOpen(false);
+    setAiConsentError(null);
+    setIsPrivacyCenterOpen(false);
+    if (user.role === 'guest') {
+      const guestConsent = readGuestAiConsent();
+      setAiConsentAllowed(guestConsent);
+      if (guestConsent) setIsAiConsentPromptOpen(false);
+      const syncGuestConsent = () => setAiConsentAllowed(readGuestAiConsent());
+      window.addEventListener(GUEST_AI_CONSENT_CHANGED_EVENT, syncGuestConsent);
+      return () => window.removeEventListener(GUEST_AI_CONSENT_CHANGED_EVENT, syncGuestConsent);
+    }
+
+    const controller = new AbortController();
+    let active = true;
+    setAiConsentAllowed(null);
+    void apiClient.get<any>('/api/v1/privacy/consent', { signal: controller.signal }).then(response => {
+      if (!active) return;
+      if (!response.success) {
+        setAiConsentAllowed(false);
+        return;
+      }
+      const consent = response.data?.consent;
+      const allowed = consent?.consentForAI === true;
+      setAiConsentAllowed(allowed);
+      if (allowed) setIsAiConsentPromptOpen(false);
+    }).catch(() => {
+      if (active) setAiConsentAllowed(false);
+    });
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [user.id, user.role]);
+
+  const handleGrantAiConsent = React.useCallback(async () => {
+    if (isSavingAiConsent) return;
+    setIsSavingAiConsent(true);
+    setAiConsentError(null);
+    try {
+      if (user.role === 'guest') {
+        writeGuestAiConsent(true);
+      } else {
+        const response = await apiClient.post<any>('/api/v1/privacy/consent', { consentForAI: true });
+        if (!response.success) throw new Error(response.error || 'Izin belum dapat disimpan. Coba lagi.');
+      }
+      pendingConsentCancelRef.current = null;
+      setAiConsentAllowed(true);
+      setIsAiConsentPromptOpen(false);
+    } catch (error) {
+      setAiConsentError(error instanceof Error ? error.message : 'Izin belum dapat disimpan. Coba lagi.');
+    } finally {
+      setIsSavingAiConsent(false);
+    }
+  }, [isSavingAiConsent, user.role]);
+
+  const closeAiConsentPrompt = React.useCallback(() => {
+    pendingConsentCancelRef.current?.();
+    pendingConsentCancelRef.current = null;
+    setIsAiConsentPromptOpen(false);
+  }, []);
 
   React.useEffect(() => {
     if (user.role === 'mahasiswa' && user.campusId) trackProductEvent('repeat_visit');
@@ -99,13 +199,19 @@ export const StudentShell: React.FC<StudentShellProps> = ({
 
   return (
     <div className="flex w-full h-dvh bg-transparent text-primary font-sans relative overflow-hidden">
-      <ChatAuroraBackground 
-        variant={currentMode === 'RUANG_KERJA' ? 'kerja' : 'tenang'} 
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:px-4 focus:py-2 focus:bg-teal-700 focus:text-white focus:rounded-lg focus:shadow-md focus:outline-none text-xs font-semibold"
+      >
+        Lewati ke konten utama
+      </a>
+      <ChatAuroraBackground
+        variant={currentMode === 'RUANG_KERJA' ? 'kerja' : 'tenang'}
         intensity={((safeLocalStorage.getItem('aurora_intensity') as 'subtle' | 'normal' | 'vivid' | null) || 'normal')}
       />
-      <Sidebar 
-        isOpen={isSidebarOpen} 
-        setIsOpen={setIsSidebarOpen} 
+      <Sidebar
+        isOpen={isSidebarOpen}
+        setIsOpen={setIsSidebarOpen}
         onNewChat={() => {
           navigate(currentMode === 'RUANG_KERJA' ? '/workspace/new' : getModeHomePath(currentMode));
         }}
@@ -128,35 +234,43 @@ export const StudentShell: React.FC<StudentShellProps> = ({
         user={user}
         isLoading={isLoadingChats}
       />
-      
-      <div className="flex-1 flex flex-col relative min-w-0 h-full overflow-hidden">
+
+      <main id="main-content" tabIndex={-1} className="flex-1 flex flex-col relative min-w-0 h-full overflow-hidden">
         {isOffline && (
-          <div className="shrink-0 z-30 bg-amber-500 text-white px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium flex items-center justify-center gap-2 shadow-sm text-center">
-            <WifiOff className="w-4 h-4 shrink-0" />
-            <span>Koneksi ke server terputus. Beberapa fitur mungkin tidak berfungsi.</span>
+          <div role="status" aria-live="polite" className="shrink-0 z-30 bg-amber-600 dark:bg-amber-700 text-white px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium flex items-center justify-center gap-2 shadow-sm text-center">
+            <WifiOff className="w-4 h-4 shrink-0 animate-pulse" />
+            <span>Mode Offline: Anda tetap dapat beraktivitas, data tersimpan di perangkat dan akan disinkronkan otomatis saat terhubung kembali.</span>
           </div>
         )}
         {isSettingsOpen ? (
           <div className="absolute inset-0 bg-slate-50/75 dark:bg-[#0e141b]/80 backdrop-blur-md z-20 flex flex-col overflow-hidden">
             <div className="p-3 sm:p-3.5 border-b border-default flex items-center surface-card shadow-xs shrink-0">
-              <button onClick={() => setIsSettingsOpen(false)} className="mr-3 text-secondary hover:text-slate-800 dark:hover:text-slate-200 text-xs sm:text-sm font-medium" aria-label="Kembali">&larr; Kembali</button>
+              <button
+                type="button"
+                onClick={() => setIsSettingsOpen(false)}
+                className="mr-3 px-3 py-2 min-h-[44px] min-w-[44px] flex items-center gap-1.5 rounded-xl border border-default hover:bg-slate-100 dark:hover:bg-slate-800 text-secondary hover:text-primary transition-colors cursor-pointer text-xs sm:text-sm font-semibold"
+                aria-label="Kembali dari pengaturan"
+              >
+                &larr; <span>Kembali</span>
+              </button>
               <h2 className="font-semibold text-xs sm:text-sm text-primary">Pengaturan & Profil</h2>
             </div>
             <div className="flex-1 overflow-y-auto min-w-0">
                <Suspense fallback={<div className="p-4 text-center text-secondary">Memuat pengaturan...</div>}>
-                 <SettingsPage 
-                   userSession={user} 
-                   setUserSession={(u) => setUser(u)} 
-                   onOpenAuth={() => setIsAuthModalOpen(true)} 
+                 <SettingsPage
+                   userSession={user}
+                   setUserSession={(u) => setUser(u)}
+                   onOpenAuth={() => setIsAuthModalOpen(true)}
                    onOpenChangelog={() => setIsChangelogOpen(true)}
+                   onOpenPrivacyCenter={openPrivacyCenter}
                    onOpenScreening={() => {
                      setIsSettingsOpen(false);
                      navigate('/screening');
-                   }} 
+                   }}
                    onOpenLegal={() => {
                      setIsSettingsOpen(false);
                      setIsLegalDocsOpen(true);
-                   }} 
+                   }}
                  />
                </Suspense>
             </div>
@@ -192,8 +306,10 @@ export const StudentShell: React.FC<StudentShellProps> = ({
                       onOpenSidebar: () => setIsSidebarOpen(true),
                       onOpenSettings: () => setIsSettingsOpen(true),
                       onOpenChangelog: () => setIsChangelogOpen(true),
+                      aiConsentAllowed,
+                      aiConsentPromptOpen: isAiConsentPromptOpen,
+                      onRequestAiConsent: requestAiConsent,
                       onPersisted: () => showToast('Skrining berhasil disimpan ke profil Anda.', 'success'),
-                      onTriggerSOS: () => showToast('Sinyal SOS darurat diaktifkan.', 'info'),
                       navigate
                     }).map(route => (
                       <Route
@@ -208,7 +324,7 @@ export const StudentShell: React.FC<StudentShellProps> = ({
             </Suspense>
           </GlobalErrorBoundary>
         )}
-      </div>
+      </main>
 
       <GlobalOverlays
         user={user}
@@ -237,6 +353,25 @@ export const StudentShell: React.FC<StudentShellProps> = ({
             navigate('/');
           }
         }}
+      />
+      {isPrivacyCenterOpen && (
+        <Suspense fallback={<div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/50 text-sm font-medium text-white">Memuat Pusat Persetujuan…</div>}>
+          <PrivacyCenterModal
+            isOpen
+            onClose={() => setIsPrivacyCenterOpen(false)}
+            userSession={user}
+            setUserSession={session => setUser(session)}
+            onAiConsentChange={setAiConsentAllowed}
+          />
+        </Suspense>
+      )}
+      <AiConsentPrompt
+        isOpen={isAiConsentPromptOpen}
+        isSaving={isSavingAiConsent}
+        error={aiConsentError}
+        isGuest={user.role === 'guest'}
+        onApprove={handleGrantAiConsent}
+        onClose={closeAiConsentPrompt}
       />
     </div>
   );

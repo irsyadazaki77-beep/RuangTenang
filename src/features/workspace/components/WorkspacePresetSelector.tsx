@@ -1,17 +1,17 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { 
-  Check, 
-  ChevronDown, 
-  Plus, 
-  Copy, 
-  Pencil, 
-  Trash2, 
-  Search, 
-  Zap, 
-  Scale, 
-  Brain, 
-  BookOpen, 
-  Code2, 
+import {
+  Check,
+  ChevronDown,
+  Plus,
+  Copy,
+  Pencil,
+  Trash2,
+  Search,
+  Zap,
+  Scale,
+  Brain,
+  BookOpen,
+  Code2,
   Star
 } from 'lucide-react';
 import { WorkspaceAiPreset, PresetId } from '../../../lib/aiPresets';
@@ -86,7 +86,7 @@ export const WorkspacePresetSelector: React.FC<WorkspacePresetSelectorProps> = R
   const filteredPresets = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return allPresets;
-    return allPresets.filter(p => 
+    return allPresets.filter(p =>
       p.name.toLowerCase().includes(q) ||
       p.description.toLowerCase().includes(q) ||
       (p.taskCategory && p.taskCategory.toLowerCase().includes(q))
@@ -125,12 +125,12 @@ export const WorkspacePresetSelector: React.FC<WorkspacePresetSelectorProps> = R
         aria-label={`Preset AI: ${activePreset.name}${isManualOverride ? ' (dengan override manual)' : ''}`}
         onClick={() => setOpen(prev => !prev)}
         onKeyDown={(e) => { if (e.key === 'Escape' && open) closeMenu(); }}
-        className="h-8 max-w-[min(48vw,16rem)] inline-flex items-center gap-1.5 rounded-lg px-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-200/70 dark:hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 transition-colors cursor-pointer"
+        className="h-8 max-w-[min(48vw,16rem)] inline-flex items-center gap-1.5 rounded-lg px-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-200/70 dark:hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 transition-colors cursor-pointer"
         title={`Preset aktif: ${activePreset.name} (${summary})`}
       >
         <span className="text-slate-400 font-normal">Preset</span>
         <div className="flex items-center gap-1 min-w-0">
-          <span className="text-emerald-600 dark:text-emerald-400 shrink-0">
+          <span className="text-indigo-600 dark:text-indigo-400 shrink-0">
             {getPresetIcon(activePreset.icon)}
           </span>
           <span className="truncate font-semibold text-slate-800 dark:text-slate-100">
@@ -148,11 +148,11 @@ export const WorkspacePresetSelector: React.FC<WorkspacePresetSelectorProps> = R
       {/* Popover Menu */}
       {open && !disabled && (
         <>
-          <button 
-            type="button" 
-            className="fixed inset-0 z-40 cursor-default" 
-            aria-label="Tutup menu preset" 
-            onClick={closeMenu} 
+          <button
+            type="button"
+            className="fixed inset-0 z-40 cursor-default"
+            aria-label="Tutup menu preset"
+            onClick={closeMenu}
           />
           <div
             className="fixed inset-x-2 bottom-3 z-50 max-h-[min(75dvh,36rem)] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900 md:absolute md:inset-auto md:bottom-full md:left-0 md:mb-2 md:w-[min(26rem,calc(100vw-2rem))]"
@@ -180,7 +180,7 @@ export const WorkspacePresetSelector: React.FC<WorkspacePresetSelectorProps> = R
                     setIsModalOpen(true);
                     setOpen(false);
                   }}
-                  className="h-7 px-2.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 text-xs font-semibold transition-colors flex items-center gap-1 cursor-pointer shrink-0"
+                  className="h-7 px-2.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 text-xs font-semibold transition-colors flex items-center gap-1 cursor-pointer shrink-0"
                   aria-label="Buat preset baru"
                 >
                   <Plus className="w-3.5 h-3.5" />
@@ -205,11 +205,11 @@ export const WorkspacePresetSelector: React.FC<WorkspacePresetSelectorProps> = R
             </div>
 
             {/* List of Presets */}
-            <div 
-              id={listId} 
-              role="listbox" 
-              aria-label="Daftar Preset AI" 
-              tabIndex={0} 
+            <div
+              id={listId}
+              role="listbox"
+              aria-label="Daftar Preset AI"
+              tabIndex={0}
               className="max-h-[min(48dvh,24rem)] overflow-y-auto p-2 outline-none space-y-3"
             >
               {groups.map(({ group, items }) => (
@@ -224,8 +224,8 @@ export const WorkspacePresetSelector: React.FC<WorkspacePresetSelectorProps> = R
                         <div
                           key={preset.id}
                           className={`group relative rounded-xl p-2 transition-all flex items-start justify-between gap-2 ${
-                            isSelected 
-                              ? 'bg-emerald-50/90 dark:bg-emerald-950/40 border border-emerald-500/30' 
+                            isSelected
+                              ? 'bg-indigo-50/90 dark:bg-indigo-950/40 border border-indigo-500/30'
                               : 'hover:bg-slate-50 dark:hover:bg-slate-800/80 border border-transparent'
                           }`}
                         >
@@ -241,7 +241,7 @@ export const WorkspacePresetSelector: React.FC<WorkspacePresetSelectorProps> = R
                           >
                             <div className={`p-1.5 rounded-lg mt-0.5 shrink-0 ${
                               isSelected
-                                ? 'bg-emerald-600 text-white'
+                                ? 'bg-indigo-600 text-white'
                                 : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
                             }`}>
                               {getPresetIcon(preset.icon)}
@@ -269,7 +269,7 @@ export const WorkspacePresetSelector: React.FC<WorkspacePresetSelectorProps> = R
                           {/* Quick Actions per preset */}
                           <div className="flex items-center gap-1 shrink-0 pt-0.5">
                             {isSelected && (
-                              <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 mr-1" aria-hidden="true" />
+                              <Check className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0 mr-1" aria-hidden="true" />
                             )}
 
                             {/* Duplicate Action */}
@@ -378,7 +378,7 @@ export const WorkspacePresetSelector: React.FC<WorkspacePresetSelectorProps> = R
                     onResetPersonalization();
                     closeMenu();
                   }}
-                  className="text-emerald-700 dark:text-emerald-400 hover:underline font-medium cursor-pointer shrink-0"
+                  className="text-indigo-700 dark:text-indigo-400 hover:underline font-medium cursor-pointer shrink-0"
                 >
                   Reset Preferensi
                 </button>

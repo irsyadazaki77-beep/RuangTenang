@@ -14,6 +14,10 @@ const SVG_ATTRIBUTES = new Set(['xmlns', 'viewBox', 'width', 'height', 'x', 'y',
 
 /** Mermaid SVG is untrusted markup. Keep only static diagram primitives and local fragment references. */
 export function sanitizeMermaidSvg(svg: string): string {
+  if (!svg || typeof svg !== 'string') return '';
+  // Defend against XML Entity Expansion (Billion Laughs) and XXE payloads before parsing
+  if (/<!ENTITY|<!DOCTYPE|SYSTEM\s*["']/i.test(svg)) return '';
+
   const parsed = new DOMParser().parseFromString(svg, 'image/svg+xml');
   const root = parsed.documentElement;
   if (root.localName !== 'svg' || parsed.querySelector('parsererror')) return '';
@@ -28,8 +32,9 @@ export function sanitizeMermaidSvg(svg: string): string {
       const isReference = name === 'href' || name === 'xlink:href';
       const safeReference = isReference && value.startsWith('#') && !value.includes('\\');
       const containsControl = Array.from(value).some(character => character.charCodeAt(0) < 0x20);
-      const safeStyle = name !== 'style' || (!/(?:url\s*\(|expression\s*\(|@import|javascript:|data:|behavior\s*:|-moz-binding)/i.test(value) && !value.includes('\\') && !containsControl);
-      if ((!SVG_ATTRIBUTES.has(name) && !safeReference) || /^on/i.test(name) || !safeStyle || /(?:javascript\s*:|data\s*:\s*text\/html)/i.test(value)) {
+      const cleanCssValue = value.replace(/\/\*[\s\S]*?\*\//g, '');
+      const safeStyle = name !== 'style' || (!/(?:url\s*\(|expression\s*\(|@import|javascript:|data:|vbscript:|behavior\s*:|-moz-binding|position\s*:\s*fixed)/i.test(cleanCssValue) && !value.includes('\\') && !containsControl);
+      if ((!SVG_ATTRIBUTES.has(name) && !safeReference) || /^on/i.test(name) || !safeStyle || /(?:javascript\s*:|vbscript\s*:|data\s*:\s*text\/html)/i.test(value)) {
         element.removeAttribute(name);
       }
     }
@@ -38,11 +43,11 @@ export function sanitizeMermaidSvg(svg: string): string {
   return root.outerHTML;
 }
 
-export const MermaidRenderer: React.FC<MermaidRendererProps> = ({ 
-  chart, 
-  title, 
+export const MermaidRenderer: React.FC<MermaidRendererProps> = ({
+  chart,
+  title,
   className = '',
-  onRequestFixDiagram 
+  onRequestFixDiagram
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [svgContent, setSvgContent] = useState<string>('');
@@ -61,7 +66,7 @@ export const MermaidRenderer: React.FC<MermaidRendererProps> = ({
     const renderMermaidChart = async () => {
       try {
         const mermaid = (await import('mermaid')).default;
-        
+
         const isDarkMode = document.documentElement.classList.contains('dark');
         mermaid.initialize({
           startOnLoad: false,
@@ -85,7 +90,7 @@ export const MermaidRenderer: React.FC<MermaidRendererProps> = ({
 
         const uniqueId = `mermaid-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
         const cleanChart = chart.trim();
-        
+
         const { svg } = await mermaid.render(uniqueId, cleanChart);
         if (isMounted) {
           const safeSvg = sanitizeMermaidSvg(svg);
@@ -277,7 +282,7 @@ export const MermaidRenderer: React.FC<MermaidRendererProps> = ({
       </div>
 
       {/* Render Canvas Area */}
-      <div 
+      <div
         ref={containerRef}
         className="p-6 overflow-x-auto min-h-[160px] flex items-center justify-center bg-white/50 dark:bg-slate-950/40"
       >
@@ -324,7 +329,7 @@ export const MermaidRenderer: React.FC<MermaidRendererProps> = ({
             )}
           </div>
         ) : (
-          <div 
+          <div
             style={{ transform: `scale(${zoomLevel})`, transformOrigin: 'top center', transition: 'transform 0.15s ease-out' }}
             dangerouslySetInnerHTML={{ __html: svgContent }}
             className="mermaid-svg-container max-w-full"

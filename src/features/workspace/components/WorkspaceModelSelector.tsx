@@ -29,20 +29,23 @@ export const WorkspaceModelSelector = React.memo(function WorkspaceModelSelector
   overlayPlacement = 'anchored'
 }: WorkspaceModelSelectorProps) {
   const { models } = useAiModelCatalog();
-  // Normalize legacy values to an official Kerja profile
-  const activeProfileId: KerjaProfileId = isKerjaProfile(value)
+  // Check if incoming value is an active profile or a recognized manual model
+  const isProfile = isKerjaProfile(value);
+  const isRecognizedModel = Boolean(models.some(m => m.id === value));
+  const activeProfileId: KerjaProfileId = isProfile
     ? value
     : migrateLegacyWorkspaceModelToProfile(value);
 
-  // If incoming value was a legacy model, update parent to the normalized profile ID
+  // If incoming value is unknown legacy model, migrate to default profile
   useEffect(() => {
-    if (value && !isKerjaProfile(value)) {
+    if (value && !isProfile && !isRecognizedModel && models.length > 0) {
       onChange(activeProfileId);
     }
-  }, [value, activeProfileId, onChange]);
+  }, [value, isProfile, isRecognizedModel, models.length, activeProfileId, onChange]);
 
   const activeProfile = KERJA_PROFILES.find(p => p.id === activeProfileId) ?? KERJA_PROFILES[1];
   const [open, setOpen] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(() => !isProfile && isRecognizedModel);
   const [activeIndex, setActiveIndex] = useState(() =>
     Math.max(0, KERJA_PROFILES.findIndex(p => p.id === activeProfileId))
   );
@@ -94,10 +97,10 @@ export const WorkspaceModelSelector = React.memo(function WorkspaceModelSelector
             close();
           }
         }}
-        className="inline-flex h-9 w-9 shrink-0 items-center justify-center gap-1 rounded-lg px-0 text-xs text-slate-700 transition-colors hover:bg-slate-200/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:cursor-not-allowed disabled:opacity-50 dark:text-slate-200 dark:hover:bg-slate-800 sm:h-8 sm:w-auto sm:max-w-[min(30vw,10.5rem)] sm:justify-start sm:gap-1.5 sm:px-2"
+        className="inline-flex h-9 w-9 shrink-0 items-center justify-center gap-1 rounded-lg px-0 text-xs text-slate-700 transition-colors hover:bg-slate-200/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-50 dark:text-slate-200 dark:hover:bg-slate-800 sm:h-8 sm:w-auto sm:max-w-[min(30vw,10.5rem)] sm:justify-start sm:gap-1.5 sm:px-2"
         title={disabled ? 'Profil AI tidak dapat diubah selama pemrosesan' : `Profil AI: ${displayName}`}
       >
-        <ActiveIcon className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+        <ActiveIcon className="h-3.5 w-3.5 shrink-0 text-indigo-600 dark:text-indigo-400" />
         <span className="hidden truncate font-medium sm:inline">{activeProfile.name}</span>
         <ChevronDown className="h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden="true" />
       </button>
@@ -164,9 +167,9 @@ export const WorkspaceModelSelector = React.memo(function WorkspaceModelSelector
                     aria-selected={isSelected}
                     onMouseEnter={() => setActiveIndex(index)}
                     onClick={() => selectIndex(index)}
-                    className={`flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
+                    className={`flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
                       isSelected
-                        ? 'bg-emerald-50 dark:bg-emerald-950/50 text-slate-900 dark:text-slate-100'
+                        ? 'bg-indigo-50 dark:bg-indigo-950/50 text-slate-900 dark:text-slate-100'
                         : isFocused
                         ? 'bg-slate-100 dark:bg-slate-800/70 text-slate-800 dark:text-slate-200'
                         : 'hover:bg-slate-50 dark:hover:bg-slate-800/40 text-slate-700 dark:text-slate-300'
@@ -175,7 +178,7 @@ export const WorkspaceModelSelector = React.memo(function WorkspaceModelSelector
                     <div
                       className={`p-1.5 rounded-md mt-0.5 shrink-0 ${
                         isSelected
-                          ? 'bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300'
+                          ? 'bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300'
                           : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
                       }`}
                     >
@@ -186,7 +189,7 @@ export const WorkspaceModelSelector = React.memo(function WorkspaceModelSelector
                       <div className="flex items-center gap-1.5">
                         <span className="text-xs font-semibold">{profile.name}</span>
                         {isDefault && (
-                          <span className="text-[9.5px] font-medium px-1.5 py-0.2 rounded bg-emerald-200/70 dark:bg-emerald-900/70 text-emerald-800 dark:text-emerald-200">
+                          <span className="text-[9.5px] font-medium px-1.5 py-0.2 rounded bg-indigo-200/70 dark:bg-indigo-900/70 text-indigo-800 dark:text-indigo-200">
                             Default
                           </span>
                         )}
@@ -198,7 +201,7 @@ export const WorkspaceModelSelector = React.memo(function WorkspaceModelSelector
 
                     {isSelected && (
                       <Check
-                        className="mt-1 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400"
+                        className="mt-1 h-4 w-4 shrink-0 text-indigo-600 dark:text-indigo-400"
                         aria-hidden="true"
                       />
                     )}
@@ -206,6 +209,67 @@ export const WorkspaceModelSelector = React.memo(function WorkspaceModelSelector
                 );
               })}
             </div>
+
+            {/* Advanced Section: Manual Model Selection */}
+            {models && models.length > 0 && (
+              <div className="mt-2 border-t border-slate-150 pt-2 dark:border-slate-800/80">
+                <button
+                  type="button"
+                  onClick={() => setShowAdvanced(prev => !prev)}
+                  className="flex w-full items-center justify-between px-2.5 py-1 text-[11px] font-semibold text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200 transition-colors cursor-pointer rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/40"
+                  aria-expanded={showAdvanced}
+                >
+                  <span className="flex items-center gap-1.5">
+                    <span>Pengaturan Model Manual</span>
+                    {!isKerjaProfile(value) && (
+                      <span className="rounded bg-indigo-100 px-1 py-0.2 text-[9px] font-semibold text-indigo-800 dark:bg-indigo-950/80 dark:text-indigo-300">
+                        Manual Aktif
+                      </span>
+                    )}
+                  </span>
+                  <ChevronDown
+                    className={`h-3.5 w-3.5 transition-transform duration-150 ${showAdvanced ? 'rotate-180' : ''}`}
+                    aria-hidden="true"
+                  />
+                </button>
+
+                {showAdvanced && (
+                  <div className="mt-1.5 max-h-48 space-y-1 overflow-y-auto px-1 custom-scrollbar">
+                    <p className="px-1.5 py-0.5 text-[9.5px] text-slate-500 dark:text-slate-400">
+                      Pilih model spesifik untuk instruksi teknis langsung (tanpa fallback tersembunyi):
+                    </p>
+                    {models
+                      .filter(m => m.selectable && m.available)
+                      .map(m => {
+                        const isManualSelected = value === m.id;
+                        return (
+                          <button
+                            key={m.id}
+                            type="button"
+                            onClick={() => {
+                              onChange(m.id);
+                              close();
+                            }}
+                            className={`flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left text-xs transition-colors ${
+                              isManualSelected
+                                ? 'bg-indigo-50 font-semibold text-indigo-900 dark:bg-indigo-950/60 dark:text-indigo-200'
+                                : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+                            }`}
+                          >
+                            <div className="min-w-0 flex-1 pr-2">
+                              <div className="truncate text-[11px] font-medium">{m.name}</div>
+                              <div className="truncate text-[9.5px] text-slate-400">{m.provider} · {m.speed}</div>
+                            </div>
+                            {isManualSelected && (
+                              <Check className="h-3.5 w-3.5 shrink-0 text-indigo-600 dark:text-indigo-400" />
+                            )}
+                          </button>
+                        );
+                      })}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </>
       )}

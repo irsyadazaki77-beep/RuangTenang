@@ -95,7 +95,7 @@ export const openaiService = {
         body: JSON.stringify({
           model,
           messages: buildMessages(options),
-          max_completion_tokens: Math.min(options.maxOutputTokens || (!options.userId || options.userId === 'guest' ? 500 : 1000), !options.userId || options.userId === 'guest' ? 500 : 1000),
+          max_completion_tokens: Math.min(options.maxOutputTokens || (!options.userId || options.userId === 'guest' ? 1500 : 4096), !options.userId || options.userId === 'guest' ? 2048 : 4096),
           stream: false,
           store: false
         }),
@@ -134,7 +134,7 @@ export const openaiService = {
         body: JSON.stringify({
           model,
           messages: buildMessages(options),
-          max_completion_tokens: !options.userId || options.userId === 'guest' ? 500 : 1000,
+          max_completion_tokens: Math.min(options.maxOutputTokens || (!options.userId || options.userId === 'guest' ? 1500 : 4096), !options.userId || options.userId === 'guest' ? 2048 : 4096),
           stream: true,
           store: false
         }),

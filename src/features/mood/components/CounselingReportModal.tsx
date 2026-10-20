@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import { MoodLog, UserSession } from '../../../types';
-import { 
-  FileText, 
-  Printer, 
-  X, 
-  ShieldCheck, 
-  HeartHandshake, 
-  GraduationCap, 
+import {
+  FileText,
+  Printer,
+  X,
+  ShieldCheck,
+  HeartHandshake,
+  GraduationCap,
   CheckCircle2
 } from 'lucide-react';
 
@@ -70,7 +70,7 @@ export const CounselingReportModal: React.FC<CounselingReportModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 overflow-y-auto animate-in fade-in duration-200">
       <div className="bg-white text-slate-900 rounded-3xl max-w-3xl w-full shadow-2xl flex flex-col max-h-[90vh] overflow-hidden my-auto border border-slate-200">
-        
+
         {/* Modal Action Bar (Hidden in Print) */}
         <div className="p-4 bg-slate-900 text-white flex items-center justify-between print:hidden shrink-0">
           <div className="flex items-center gap-2">
@@ -83,20 +83,20 @@ export const CounselingReportModal: React.FC<CounselingReportModalProps> = ({
 
           <div className="flex items-center gap-3">
             <label className="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer select-none">
-              <input 
-                type="checkbox" 
-                checked={includeReflectionNotes} 
-                onChange={(e) => setIncludeReflectionNotes(e.target.checked)} 
+              <input
+                type="checkbox"
+                checked={includeReflectionNotes}
+                onChange={(e) => setIncludeReflectionNotes(e.target.checked)}
                 className="rounded text-teal-500"
               />
               <span>Sertakan Catatan</span>
             </label>
 
             <label className="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer select-none">
-              <input 
-                type="checkbox" 
-                checked={anonymizeName} 
-                onChange={(e) => setAnonymizeName(e.target.checked)} 
+              <input
+                type="checkbox"
+                checked={anonymizeName}
+                onChange={(e) => setAnonymizeName(e.target.checked)}
                 className="rounded text-teal-500"
               />
               <span>Anonimkan Nama</span>
@@ -105,7 +105,7 @@ export const CounselingReportModal: React.FC<CounselingReportModalProps> = ({
             <button
               type="button"
               onClick={handlePrint}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-semibold shadow-sm transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-teal-700 hover:bg-teal-500 text-white text-xs font-semibold shadow-sm transition-colors cursor-pointer"
             >
               <Printer className="w-3.5 h-3.5" />
               <span>Cetak / PDF</span>
@@ -124,7 +124,7 @@ export const CounselingReportModal: React.FC<CounselingReportModalProps> = ({
 
         {/* Printable Report Body */}
         <div id="printable-counseling-report" className="p-6 sm:p-10 overflow-y-auto space-y-6 text-xs sm:text-sm leading-relaxed font-sans">
-          
+
           {/* Institutional Document Header */}
           <div className="border-b-2 border-slate-800 pb-4 flex flex-col sm:flex-row sm:items-start justify-between gap-4">
             <div>
@@ -182,7 +182,7 @@ export const CounselingReportModal: React.FC<CounselingReportModalProps> = ({
               <div className="p-3 rounded-lg border border-slate-200 bg-white">
                 <span className="font-semibold text-xs text-slate-700 block mb-1">Evaluasi Ritme Istirahat:</span>
                 <p className="text-xs text-slate-600">
-                  {parseFloat(avgSleep) < 6 
+                  {parseFloat(avgSleep) < 6
                     ? '⚠️ Terdapat indikasi defisit tidur kronis yang berpotensi memicu kerentanan kognitif dan penurunan regulasi emosi saat menghadapi deadline.'
                     : '✅ Durasi istirahat harian berada dalam rentang adekuat untuk mendukung pemulihan fungsi kognitif.'}
                 </p>

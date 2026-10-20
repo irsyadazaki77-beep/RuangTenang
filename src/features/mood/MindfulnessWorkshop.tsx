@@ -1,23 +1,24 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useMindfulnessAudio } from './hooks/useMindfulnessAudio';
-import { 
-  Compass, 
-  Music, 
-  PenTool, 
-  Lock, 
-  Unlock, 
-  Plus, 
-  Trash2, 
-  Search, 
-  Check, 
-  Volume2, 
-  VolumeX, 
-  Wind, 
-  Sparkles, 
-  Clock, 
-  AlertCircle, 
-  ChevronRight, 
+import { apiClient } from '../../lib/apiClient';
+import {
+  Compass,
+  Music,
+  PenTool,
+  Lock,
+  Unlock,
+  Plus,
+  Trash2,
+  Search,
+  Check,
+  Volume2,
+  VolumeX,
+  Wind,
+  Sparkles,
+  Clock,
+  AlertCircle,
+  ChevronRight,
   ChevronLeft,
   Smile,
   BookOpen
@@ -47,10 +48,17 @@ export interface SelfCompassionLetter {
   theme: 'amber' | 'teal' | 'slate';
 }
 
+const localDateString = (date = new Date()) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 type WorkshopTab = 'soundscape' | 'grounding' | 'gratitude' | 'compassion';
 
 // ============================================================================
-export const MindfulnessWorkshop: React.FC = () => {
+export const MindfulnessWorkshop: React.FC<{ userId: string }> = ({ userId }) => {
   const [activeTab, setActiveTab] = useState<WorkshopTab>('soundscape');
   const { isPlayingTheta, isPlayingWaves, isPlayingChimes, volume, toggleTheta, toggleWaves, toggleChimes, handleVolumeChange } = useMindfulnessAudio();
 
@@ -86,34 +94,101 @@ export const MindfulnessWorkshop: React.FC = () => {
   const [unlockKeyPhraseInput, setUnlockKeyPhraseInput] = useState('');
   const [unlockError, setUnlockError] = useState('');
   const [showCompassionSuccess, setShowCompassionSuccess] = useState(false);
+  const [showLegacyMigration, setShowLegacyMigration] = useState(false);
+  const [migrationError, setMigrationError] = useState('');
+  const [isJournalLoading, setIsJournalLoading] = useState(true);
+  const [isSavingJournal, setIsSavingJournal] = useState(false);
+  const [journalError, setJournalError] = useState('');
+  const [journalReloadKey, setJournalReloadKey] = useState(0);
+  const hasAccount = Boolean(userId && userId !== 'guest');
 
-  // Persistent storage simulation on mount
+  // Journals are encrypted on the account server; the browser holds only UI state.
   useEffect(() => {
-    try {
-      const storedG = localStorage.getItem('rt_gratitude_entries');
-      if (storedG) setGratitudeLogs(JSON.parse(storedG));
+    const controller = new AbortController();
+    let active = true;
+    setGratitudeLogs([]);
+    setLetters([]);
+    setJournalError('');
+    setIsJournalLoading(hasAccount);
+    if (hasAccount) {
+      void apiClient.get<any>('/api/v1/journals', { signal: controller.signal }).then(response => {
+        if (!active) return;
+        if (!response.success) throw new Error(response.error || 'Jurnal belum dapat dimuat.');
+        const stored = response.data || {};
+        setGratitudeLogs(Array.isArray(stored.gratitude) ? stored.gratitude : []);
+        setLetters(Array.isArray(stored.compassion) ? stored.compassion : []);
+      }).catch(() => {
+        if (active && !controller.signal.aborted) setJournalError('Jurnal belum dapat dimuat. Periksa koneksi lalu muat ulang halaman.');
+      }).finally(() => { if (active) setIsJournalLoading(false); });
+    } else {
+      setIsJournalLoading(false);
+    }
 
-      const storedL = localStorage.getItem('rt_compassion_letters');
-      if (storedL) setLetters(JSON.parse(storedL));
-    } catch (err) {
-      console.warn('Could not retrieve local user data:', err);
+    if (hasAccount) {
+      try {
+        const hasLegacyData = localStorage.getItem('rt_gratitude_entries') || localStorage.getItem('rt_compassion_letters');
+        setShowLegacyMigration(Boolean(hasLegacyData));
+      } catch { setShowLegacyMigration(false); }
     }
 
     // Set a sensible default unlock date (tomorrow)
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
-    setLetterUnlockDate(tomorrow.toISOString().split('T')[0]);
+    setLetterUnlockDate(localDateString(tomorrow));
 
-  }, []);
+    return () => { active = false; controller.abort(); };
+  }, [hasAccount, userId, journalReloadKey]);
+
+  const saveJournalEntries = async (kind: 'gratitude' | 'compassion', entries: GratitudeEntry[] | SelfCompassionLetter[]) => {
+    if (!hasAccount) {
+      setJournalError('Masuk ke akun untuk menyimpan jurnal secara terenkripsi.');
+      return false;
+    }
+    setIsSavingJournal(true);
+    setJournalError('');
+    try {
+      const response = await apiClient.put<any>(`/api/v1/journals/${kind}`, { entries });
+      if (!response.success) throw new Error(response.error || 'Jurnal belum tersimpan.');
+      return true;
+    } catch {
+      setJournalError('Jurnal belum tersimpan. Coba lagi saat koneksi tersedia.');
+      return false;
+    } finally {
+      setIsSavingJournal(false);
+    }
+  };
+
+  const migrateLegacyEntries = async () => {
+    if (!hasAccount || isJournalLoading || journalError) return;
+    try {
+      const legacyGratitude = localStorage.getItem('rt_gratitude_entries');
+      const legacyLetters = localStorage.getItem('rt_compassion_letters');
+      const nextGratitude = legacyGratitude ? JSON.parse(legacyGratitude) : [];
+      const nextLetters = legacyLetters ? JSON.parse(legacyLetters) : [];
+      if (!Array.isArray(nextGratitude) || !Array.isArray(nextLetters)) throw new Error('Format jurnal lama tidak dikenali.');
+      const mergedGratitude = Array.from(new Map([...nextGratitude, ...gratitudeLogs].map(entry => [(entry as GratitudeEntry).id, entry])).values()) as GratitudeEntry[];
+      const mergedLetters = Array.from(new Map([...nextLetters, ...letters].map(entry => [(entry as SelfCompassionLetter).id, entry])).values()) as SelfCompassionLetter[];
+      if (legacyGratitude && !await saveJournalEntries('gratitude', mergedGratitude)) return;
+      if (legacyLetters && !await saveJournalEntries('compassion', mergedLetters)) return;
+      setGratitudeLogs(mergedGratitude);
+      setLetters(mergedLetters);
+      if (legacyGratitude) localStorage.removeItem('rt_gratitude_entries');
+      if (legacyLetters) localStorage.removeItem('rt_compassion_letters');
+      setShowLegacyMigration(false);
+      setMigrationError('');
+    } catch {
+      setMigrationError('Catatan lama belum dapat dipindahkan. Data lama tetap dipertahankan di browser ini.');
+    }
+  };
 
   // Save gratitude helpers
-  const saveGratitudeLog = (e: React.FormEvent) => {
+  const saveGratitudeLog = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!gFormNote1.trim() && !gFormNote2.trim() && !gFormNote3.trim()) return;
 
     const newEntry: GratitudeEntry = {
       id: `g-${Date.now()}`,
-      date: new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
+      date: new Date(`${localDateString()}T12:00:00`).toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
       note1: gFormNote1.trim() || 'Rasa syukur sederhana harian.',
       note2: gFormNote2.trim(),
       note3: gFormNote3.trim(),
@@ -123,8 +198,8 @@ export const MindfulnessWorkshop: React.FC = () => {
     };
 
     const updated = [newEntry, ...gratitudeLogs];
+    if (!await saveJournalEntries('gratitude', updated)) return;
     setGratitudeLogs(updated);
-    localStorage.setItem('rt_gratitude_entries', JSON.stringify(updated));
 
     // Clear form
     setGFormNote1('');
@@ -133,15 +208,15 @@ export const MindfulnessWorkshop: React.FC = () => {
     setGFormPerson('');
     setGFormChallenge('');
     setGFormRating(5);
-    
+
     setShowGSuccessMessage(true);
     setTimeout(() => setShowGSuccessMessage(false), 4000);
   };
 
-  const deleteGratitudeEntry = (id: string) => {
+  const deleteGratitudeEntry = async (id: string) => {
     const updated = gratitudeLogs.filter(item => item.id !== id);
+    if (!await saveJournalEntries('gratitude', updated)) return;
     setGratitudeLogs(updated);
-    localStorage.setItem('rt_gratitude_entries', JSON.stringify(updated));
   };
 
   // Grounding Navigation Helper
@@ -166,13 +241,13 @@ export const MindfulnessWorkshop: React.FC = () => {
   };
 
   // Save Self Compassion Letter
-  const handleSaveLetter = (e: React.FormEvent) => {
+  const handleSaveLetter = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!letterContent.trim() || !letterKeyPhrase.trim()) return;
 
     const newLetter: SelfCompassionLetter = {
       id: `l-${Date.now()}`,
-      dateWritten: new Date().toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' }),
+      dateWritten: new Date(`${localDateString()}T12:00:00`).toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' }),
       unlockDate: letterUnlockDate,
       content: letterContent.trim(),
       keyPhrase: letterKeyPhrase.trim().toLowerCase(),
@@ -181,8 +256,8 @@ export const MindfulnessWorkshop: React.FC = () => {
     };
 
     const updated = [newLetter, ...letters];
+    if (!await saveJournalEntries('compassion', updated)) return;
     setLetters(updated);
-    localStorage.setItem('rt_compassion_letters', JSON.stringify(updated));
 
     setLetterContent('');
     setLetterKeyPhrase('');
@@ -190,11 +265,11 @@ export const MindfulnessWorkshop: React.FC = () => {
     setTimeout(() => setShowCompassionSuccess(false), 4000);
   };
 
-  const handleUnlockLetterAttempt = (letter: SelfCompassionLetter) => {
+  const handleUnlockLetterAttempt = async (letter: SelfCompassionLetter) => {
     // Check lock date
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = localDateString();
     const isDatePassed = new Date(todayStr).getTime() >= new Date(letter.unlockDate).getTime();
-    
+
     if (!isDatePassed) {
       setUnlockError(`Surat ini masih terkunci oleh waktu. Baru bisa dibuka pada tanggal: ${letter.unlockDate}`);
       return;
@@ -208,8 +283,11 @@ export const MindfulnessWorkshop: React.FC = () => {
         }
         return item;
       });
+      if (!await saveJournalEntries('compassion', updated)) {
+        setUnlockError('Surat belum dapat diperbarui. Coba lagi saat koneksi tersedia.');
+        return;
+      }
       setLetters(updated);
-      localStorage.setItem('rt_compassion_letters', JSON.stringify(updated));
       setUnlockAttemptId(null);
       setUnlockKeyPhraseInput('');
       setUnlockError('');
@@ -218,13 +296,13 @@ export const MindfulnessWorkshop: React.FC = () => {
     }
   };
 
-  const deleteLetter = (id: string) => {
+  const deleteLetter = async (id: string) => {
     const updated = letters.filter(item => item.id !== id);
+    if (!await saveJournalEntries('compassion', updated)) return;
     setLetters(updated);
-    localStorage.setItem('rt_compassion_letters', JSON.stringify(updated));
   };
 
-  const filteredGratitude = gratitudeLogs.filter(log => 
+  const filteredGratitude = gratitudeLogs.filter(log =>
     log.note1.toLowerCase().includes(searchGratitude.toLowerCase()) ||
     log.note2.toLowerCase().includes(searchGratitude.toLowerCase()) ||
     log.note3.toLowerCase().includes(searchGratitude.toLowerCase()) ||
@@ -232,8 +310,21 @@ export const MindfulnessWorkshop: React.FC = () => {
   );
 
   return (
-    <div id="mindfulness-workshop-root" className="max-w-4xl mx-auto p-4 sm:p-6 space-y-6 select-none animate-fade-in text-slate-800 dark:text-slate-100">
-      
+    <div id="mindfulness-workshop-root" className="max-w-4xl mx-auto p-4 sm:p-6 space-y-6 animate-fade-in text-slate-800 dark:text-slate-100">
+      {showLegacyMigration && (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
+          <p className="font-semibold">Ada jurnal lama yang belum terkait ke akun ini.</p>
+          <p className="mt-1 text-xs leading-relaxed">Pindahkan jurnal lama dari penyimpanan browser ke akun yang sedang masuk? Lanjutkan hanya jika catatan itu milik Anda. Setelah dipindahkan, salinan browser lama akan dihapus.</p>
+          {migrationError && <p role="alert" className="mt-2 text-xs">{migrationError}</p>}
+          <div className="mt-3 flex gap-2">
+            <button type="button" onClick={migrateLegacyEntries} className="min-h-10 rounded-lg bg-amber-800 px-3 text-xs font-semibold text-white hover:bg-amber-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600">Pindahkan jurnal</button>
+            <button type="button" onClick={() => setShowLegacyMigration(false)} className="min-h-10 rounded-lg border border-amber-400 px-3 text-xs font-semibold hover:bg-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 dark:border-amber-800 dark:hover:bg-amber-950/60">Nanti saja</button>
+          </div>
+        </div>
+      )}
+      {isJournalLoading && <p role="status" className="rounded-lg border border-default px-3 py-2 text-xs text-secondary">Memuat jurnal terenkripsi…</p>}
+      {journalError && <div role="alert" className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs text-rose-900 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200"><span>{journalError}</span><button type="button" onClick={() => setJournalReloadKey(value => value + 1)} className="min-h-9 rounded-md border border-rose-300 px-2.5 font-semibold hover:bg-rose-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 dark:border-rose-900 dark:hover:bg-rose-950">Coba lagi</button></div>}
+
       {/* ========================================================================= */}
       {/* ELEGANT TABULAR NAVIGATION PANEL */}
       {/* ========================================================================= */}
@@ -248,55 +339,79 @@ export const MindfulnessWorkshop: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex bg-slate-100 dark:bg-slate-900 border border-slate-200/70 dark:border-slate-800 rounded-full p-0.5 max-w-full overflow-x-auto shrink-0 scrollbar-none">
-          <button
-            type="button"
-            onClick={() => setActiveTab('soundscape')}
-            className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${
-              activeTab === 'soundscape'
-                ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-xs'
-                : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
-            }`}
+        <div className="relative max-w-full">
+          <div
+            role="tablist"
+            aria-label="Kategori Lokakarya Ketenangan"
+            className="flex bg-slate-100 dark:bg-slate-900 border border-slate-200/70 dark:border-slate-800 rounded-full p-0.5 max-w-full overflow-x-auto shrink-0 scrollbar-none"
           >
-            <Music className="w-3.5 h-3.5" />
-            <span>Soundscape</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('grounding')}
-            className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${
-              activeTab === 'grounding'
-                ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-xs'
-                : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
-            }`}
-          >
-            <Wind className="w-3.5 h-3.5" />
-            <span>5-4-3-2-1</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('gratitude')}
-            className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${
-              activeTab === 'gratitude'
-                ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-xs'
-                : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
-            }`}
-          >
-            <Smile className="w-3.5 h-3.5" />
-            <span>Jurnal Syukur</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('compassion')}
-            className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${
-              activeTab === 'compassion'
-                ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-xs'
-                : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
-            }`}
-          >
-            <PenTool className="w-3.5 h-3.5" />
-            <span>Kapsul Waktu</span>
-          </button>
+            <button
+              type="button"
+              role="tab"
+              id="tab-soundscape"
+              aria-controls="panel-soundscape"
+              aria-selected={activeTab === 'soundscape'}
+              onClick={() => setActiveTab('soundscape')}
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'soundscape'
+                  ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-xs'
+                  : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
+              }`}
+            >
+              <Music className="w-3.5 h-3.5" />
+              <span>Soundscape</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              id="tab-grounding"
+              aria-controls="panel-grounding"
+              aria-selected={activeTab === 'grounding'}
+              onClick={() => setActiveTab('grounding')}
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'grounding'
+                  ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-xs'
+                  : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
+              }`}
+            >
+              <Wind className="w-3.5 h-3.5" />
+              <span>5-4-3-2-1</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              id="tab-gratitude"
+              aria-controls="panel-gratitude"
+              aria-selected={activeTab === 'gratitude'}
+              onClick={() => setActiveTab('gratitude')}
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'gratitude'
+                  ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-xs'
+                  : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
+              }`}
+            >
+              <Smile className="w-3.5 h-3.5" />
+              <span>Jurnal Syukur</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              id="tab-compassion"
+              aria-controls="panel-compassion"
+              aria-selected={activeTab === 'compassion'}
+              onClick={() => setActiveTab('compassion')}
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'compassion'
+                  ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-xs'
+                  : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
+              }`}
+            >
+              <PenTool className="w-3.5 h-3.5" />
+              <span>Kapsul Waktu</span>
+            </button>
+          </div>
+          {/* Scroll fade affordance cue on small screens */}
+          <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-6 bg-gradient-to-l from-slate-100 dark:from-slate-900 to-transparent rounded-r-full sm:hidden opacity-75" />
         </div>
       </div>
 
@@ -322,7 +437,7 @@ export const MindfulnessWorkshop: React.FC = () => {
                   <div>
                     <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Generator Suara Tenang Mandiri</h3>
                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 leading-normal">
-                      Disintesis langsung oleh browser Anda menggunakan teknologi Web Audio API. Tanpa mengunduh audio berat, 100% aman, privat, bekerja offline tanpa koneksi internet.
+                      Suara dibuat langsung di browser dengan Web Audio API; aplikasi tidak mengunduh file audio untuk fitur ini. Ketersediaan tetap bergantung pada browser dan perangkat Anda.
                     </p>
                   </div>
                 </div>
@@ -337,7 +452,7 @@ export const MindfulnessWorkshop: React.FC = () => {
                         <span className="px-1.5 py-0.5 rounded-md bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 font-mono text-[9px] uppercase font-bold tracking-wider">6Hz Beat</span>
                       </div>
                       <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-normal">
-                        Membantu sinkronisasi otak kiri & kanan menuju kondisi relaksasi mendalam. Disarankan pakai headphone.
+                        Suara berulang mungkin terasa menenangkan bagi sebagian orang, tetapi respons tiap orang berbeda. Hentikan jika terasa tidak nyaman; headphone bersifat opsional.
                       </p>
                     </div>
                     <button
@@ -370,7 +485,7 @@ export const MindfulnessWorkshop: React.FC = () => {
                       onClick={toggleWaves}
                       className={`w-full py-2 rounded-full text-xs font-semibold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                         isPlayingWaves
-                          ? 'bg-teal-600 text-white shadow-xs'
+                          ? 'bg-teal-700 text-white shadow-xs'
                           : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200'
                       }`}
                     >
@@ -468,7 +583,7 @@ export const MindfulnessWorkshop: React.FC = () => {
                     {/* Header Step Counter */}
                     <div className="flex items-center justify-between border-b border-slate-200/50 dark:border-slate-800 pb-3">
                       <div className="flex items-center gap-2">
-                        <div className="w-7 h-7 rounded-full bg-teal-600 text-white font-bold text-xs flex items-center justify-center">
+                        <div className="w-7 h-7 rounded-full bg-teal-700 text-white font-bold text-xs flex items-center justify-center">
                           {groundingStep}
                         </div>
                         <div>
@@ -498,7 +613,7 @@ export const MindfulnessWorkshop: React.FC = () => {
                               Arahkan pandangan Anda ke sekeliling ruangan. Temukan dan ketikkan 5 objek visual yang ada di sekitar Anda saat ini.
                             </p>
                           </div>
-                          
+
                           <div className="grid grid-cols-1 sm:grid-cols-5 gap-2">
                             {groundingInputs.sights.map((val, idx) => (
                               <input
@@ -535,7 +650,7 @@ export const MindfulnessWorkshop: React.FC = () => {
                               Rasakan sensasi fisik pada kulit Anda. Sentuh baju Anda, meja, dinding, atau permukaan barang lainnya, lalu catatkan.
                             </p>
                           </div>
-                          
+
                           <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
                             {groundingInputs.touches.map((val, idx) => (
                               <input
@@ -572,7 +687,7 @@ export const MindfulnessWorkshop: React.FC = () => {
                               Pejamkan mata sejenak jika membantu. Dengarkan bunyi kipas angin, deru jalan raya luar, atau detak jarum jam, lalu tuliskan.
                             </p>
                           </div>
-                          
+
                           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                             {groundingInputs.sounds.map((val, idx) => (
                               <input
@@ -609,7 +724,7 @@ export const MindfulnessWorkshop: React.FC = () => {
                               Tarik napas dalam-dalam. Apakah Anda mendeteksi bau wangi sabun, kopi, udara segar, atau buku tua? Tuliskan di bawah ini.
                             </p>
                           </div>
-                          
+
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                             {groundingInputs.smells.map((val, idx) => (
                               <input
@@ -646,7 +761,7 @@ export const MindfulnessWorkshop: React.FC = () => {
                               Apakah ada rasa tersisa di dalam mulut Anda? Seperti rasa manis air minum, pasta gigi, mint harian, atau rasa netral.
                             </p>
                           </div>
-                          
+
                           <div className="grid grid-cols-1 gap-2">
                             {groundingInputs.tastes.map((val, idx) => (
                               <input
@@ -695,7 +810,7 @@ export const MindfulnessWorkshop: React.FC = () => {
                     <div className="p-3 bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400 rounded-full w-14 h-14 flex items-center justify-center mx-auto shadow-2xs">
                       <Check className="w-8 h-8" />
                     </div>
-                    
+
                     <div className="space-y-1">
                       <h4 className="text-base font-bold text-slate-900 dark:text-slate-100">Selamat! Pikiran Anda Telah Tergrounding</h4>
                       <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto leading-normal">
@@ -840,7 +955,8 @@ export const MindfulnessWorkshop: React.FC = () => {
 
                       <button
                         type="submit"
-                        className="btn-primary px-5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
+                        disabled={isSavingJournal || isJournalLoading}
+                        className="btn-primary px-5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-all cursor-pointer disabled:opacity-50"
                       >
                         <Plus className="w-4 h-4" />
                         <span>Simpan ke Jurnal</span>
@@ -854,7 +970,7 @@ export const MindfulnessWorkshop: React.FC = () => {
               <div className="space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <span className="text-xs uppercase tracking-wider font-bold text-slate-400">Arsip Jurnal Syukur ({filteredGratitude.length})</span>
-                  
+
                   {/* Local Search bar inside gratitude list */}
                   <div className="relative w-full sm:max-w-xs">
                     <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-3" />
@@ -1024,7 +1140,8 @@ export const MindfulnessWorkshop: React.FC = () => {
                     <div className="flex justify-end pt-2 border-t border-slate-200/50 dark:border-slate-800">
                       <button
                         type="submit"
-                        className="btn-primary px-5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
+                        disabled={isSavingJournal || isJournalLoading}
+                        className="btn-primary px-5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-all cursor-pointer disabled:opacity-50"
                       >
                         <Lock className="w-3.5 h-3.5" />
                         <span>Simpan & Kunci Surat</span>
@@ -1046,7 +1163,7 @@ export const MindfulnessWorkshop: React.FC = () => {
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {letters.map((item) => {
-                      const todayStr = new Date().toISOString().split('T')[0];
+                      const todayStr = localDateString();
                       const isDatePassed = new Date(todayStr).getTime() >= new Date(item.unlockDate).getTime();
                       const displayTheme = item.theme === 'teal' ? 'teal' : item.theme === 'amber' ? 'amber' : 'slate';
 
@@ -1054,10 +1171,10 @@ export const MindfulnessWorkshop: React.FC = () => {
                         <div
                           key={item.id}
                           className={`border rounded-2xl p-4 flex flex-col justify-between space-y-4 transition-all shadow-3xs relative group ${
-                            displayTheme === 'teal' 
-                              ? 'bg-teal-50/20 border-teal-200/60' 
-                              : displayTheme === 'amber' 
-                              ? 'bg-amber-50/20 border-amber-200/60' 
+                            displayTheme === 'teal'
+                              ? 'bg-teal-50/20 border-teal-200/60'
+                              : displayTheme === 'amber'
+                              ? 'bg-amber-50/20 border-amber-200/60'
                               : 'bg-slate-100/30 border-slate-200/60 dark:border-slate-800'
                           }`}
                         >
@@ -1114,7 +1231,7 @@ export const MindfulnessWorkshop: React.FC = () => {
                                     <button
                                       type="button"
                                       onClick={() => handleUnlockLetterAttempt(item)}
-                                      className="px-3.5 py-1.5 rounded-xl bg-teal-600 text-white font-semibold text-xs transition-all hover:bg-teal-700 cursor-pointer shrink-0"
+                                      className="px-3.5 py-1.5 rounded-xl bg-teal-700 text-white font-semibold text-xs transition-all hover:bg-teal-800 cursor-pointer shrink-0"
                                     >
                                       Buka
                                     </button>

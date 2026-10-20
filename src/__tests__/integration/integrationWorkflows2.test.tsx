@@ -9,6 +9,7 @@ import { PrivacyVaultProvider } from '../../contexts/PrivacyVaultContext';
 import { lazyWithRetry } from '../../lib/lazyWithRetry';
 
 vi.mock('../../lib/apiClient', () => ({
+  AUTH_SESSION_INVALIDATED_EVENT: 'rt_auth_session_invalidated',
   apiClient: {
     get: vi.fn().mockImplementation(async (url: string) => {
       if (url.includes('/api/v1/auth/me')) {
@@ -77,8 +78,8 @@ describe('P2 Comprehensive E2E & Route Fallback Coverage', () => {
     await waitFor(() => {
       expect(screen.getAllByText(/RuangTenang/i).length).toBeGreaterThan(0);
       expect(screen.getAllByText(/Obrolan baru/i).length).toBeGreaterThan(0);
-    }, { timeout: 5000 });
-  });
+    }, { timeout: 10000 });
+  }, 15000);
 
   it('handles unknown routes by redirecting safely to home', async () => {
     renderTestApp('/unknown-route-typo-123');

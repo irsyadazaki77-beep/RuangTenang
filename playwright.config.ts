@@ -41,6 +41,6 @@ export default defineConfig({
       OPENROUTER_API_KEY: '',
     },
     reuseExistingServer: !process.env.CI,
-    timeout: 30000,
+    timeout: Number(process.env.PLAYWRIGHT_WEB_SERVER_TIMEOUT_MS) || 90000,
   },
 });

@@ -10,6 +10,8 @@ RuangKerja opens on conversation with model selection set to Auto. The four star
 
 Metadata, messages, artifacts, attachments, source results, task panel drafts, and composer drafts are scoped to the active chat/workspace identity. Composer drafts are kept in session storage under the current user and workspace key, cleared when sent, and never included in a request until the user sends them. Async loads are aborted or ignored when their workspace is no longer active. File context checkboxes are enabled only for ready attachments. The composer summary reports the selected context sent with the next request.
 
+Workspace tool selection, input validation, client utility execution, and routing to chat or document revision are owned by `useWorkspaceTools`. Tool output that changes a Canvas artifact goes through the same artifact save/version path; selection text is included only when its artifact identity matches the selected target.
+
 ## Navigation and commands
 
 The global command palette keeps its existing Ctrl/Cmd+K entry point. Workspace commands dispatch typed events handled by the active Workspace and are exposed only on an active Workspace route. The palette is not opened by the shortcut while focus is inside a text editor. Commands that would leave an active Workspace are not offered in that route-specific command list.

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { useWorkspaceArtifacts } from '../../features/workspace/hooks/useWorkspaceArtifacts';
+import { readLocalDrafts, useWorkspaceArtifacts } from '../../features/workspace/hooks/useWorkspaceArtifacts';
 import { useWorkspacePersistence } from '../../features/workspace/hooks/useWorkspacePersistence';
 import { useWorkspaceStreaming } from '../../features/workspace/hooks/useWorkspaceStreaming';
 import { useWorkspaceFileIngestion } from '../../features/workspace/hooks/useWorkspaceFileIngestion';
@@ -17,6 +17,7 @@ vi.mock('../../features/workspace/services/workspaceApiService', () => ({
   WorkspaceApiService: {
     fetchArtifacts: vi.fn(),
     fetchMessages: vi.fn(),
+    fetchMessagesPage: vi.fn(),
     clearMessages: vi.fn(),
     createArtifact: vi.fn(),
     updateArtifact: vi.fn(),
@@ -43,7 +44,7 @@ describe('Workspace Lifecycle & Regression Suite', () => {
   describe('1. Fresh Workspace vs Existing Chat Lifecycle', () => {
     it('does not show duplicate load errors when a Workspace session has expired', async () => {
       vi.mocked(WorkspaceApiService.fetchArtifacts).mockResolvedValue([]);
-      vi.mocked(WorkspaceApiService.fetchMessages).mockRejectedValueOnce(Object.assign(new Error('Unauthorized'), { status: 401 }));
+      vi.mocked(WorkspaceApiService.fetchMessagesPage).mockRejectedValueOnce(Object.assign(new Error('Unauthorized'), { status: 401 }));
       vi.mocked(WorkspaceApiService.fetchChatAttachments).mockRejectedValueOnce(Object.assign(new Error('Unauthorized'), { status: 401 }));
 
       const { result: persistenceResult } = renderHook(() => useWorkspacePersistence({ chatId: 'expired-workspace' }));
@@ -58,7 +59,7 @@ describe('Workspace Lifecycle & Regression Suite', () => {
 
     it('combines parallel history and document failures into one notification', async () => {
       vi.mocked(WorkspaceApiService.fetchArtifacts).mockResolvedValue([]);
-      vi.mocked(WorkspaceApiService.fetchMessages).mockRejectedValueOnce(Object.assign(new Error('Service unavailable'), { status: 503 }));
+      vi.mocked(WorkspaceApiService.fetchMessagesPage).mockRejectedValueOnce(Object.assign(new Error('Service unavailable'), { status: 503 }));
       vi.mocked(WorkspaceApiService.fetchChatAttachments).mockRejectedValueOnce(Object.assign(new Error('Service unavailable'), { status: 503 }));
 
       renderHook(() => useWorkspacePersistence({ chatId: 'workspace-network-failure' }));
@@ -72,7 +73,7 @@ describe('Workspace Lifecycle & Regression Suite', () => {
 
     it('shows one actionable message when the Workspace no longer exists', async () => {
       vi.mocked(WorkspaceApiService.fetchArtifacts).mockResolvedValue([]);
-      vi.mocked(WorkspaceApiService.fetchMessages).mockRejectedValueOnce(Object.assign(new Error('Not found'), { status: 404 }));
+      vi.mocked(WorkspaceApiService.fetchMessagesPage).mockRejectedValueOnce(Object.assign(new Error('Not found'), { status: 404 }));
       vi.mocked(WorkspaceApiService.fetchChatAttachments).mockRejectedValueOnce(Object.assign(new Error('Not found'), { status: 404 }));
 
       renderHook(() => useWorkspacePersistence({ chatId: 'missing-workspace' }));
@@ -84,8 +85,20 @@ describe('Workspace Lifecycle & Regression Suite', () => {
       expect(showToastMock).toHaveBeenCalledWith('Workspace tidak ditemukan atau kamu tidak memiliki akses.', 'error');
     });
 
+    it('triggers onNotFound callback when the Workspace returns 404', async () => {
+      vi.mocked(WorkspaceApiService.fetchArtifacts).mockResolvedValue([]);
+      vi.mocked(WorkspaceApiService.fetchMessagesPage).mockRejectedValueOnce(Object.assign(new Error('Not found'), { status: 404 }));
+
+      const onNotFound = vi.fn();
+      renderHook(() => useWorkspacePersistence({ chatId: 'missing-workspace-404', onNotFound }));
+
+      await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+
+      expect(onNotFound).toHaveBeenCalledTimes(1);
+    });
+
     it('initializes fresh workspace with default welcome artifact and welcome message', () => {
-      const { result: persistenceResult, unmount: unmountPersist } = renderHook(() => 
+      const { result: persistenceResult, unmount: unmountPersist } = renderHook(() =>
         useWorkspacePersistence({ userName: 'Ahmad' })
       );
       expect(persistenceResult.current.messages).toHaveLength(1);
@@ -93,7 +106,7 @@ describe('Workspace Lifecycle & Regression Suite', () => {
       expect(persistenceResult.current.messages[0].content).toContain('Halo Ahmad');
       unmountPersist();
 
-      const { result: artifactResult, unmount: unmountArt } = renderHook(() => 
+      const { result: artifactResult, unmount: unmountArt } = renderHook(() =>
         useWorkspaceArtifacts({ persistedArtifacts: [] })
       );
       expect(artifactResult.current.artifacts).toHaveLength(1);
@@ -131,12 +144,12 @@ describe('Workspace Lifecycle & Regression Suite', () => {
       ];
 
       vi.mocked(WorkspaceApiService.fetchArtifacts).mockResolvedValueOnce(mockExistingArtifacts);
-      vi.mocked(WorkspaceApiService.fetchMessages).mockResolvedValueOnce([
+      vi.mocked(WorkspaceApiService.fetchMessagesPage).mockResolvedValueOnce({ messages: [
         { id: 'm1', role: 'user', content: 'Halo', createdAt: new Date() },
         { id: 'm2', role: 'assistant', content: 'Halo kembali', createdAt: new Date() }
-      ]);
+      ], nextCursor: null });
 
-      const { result: persistenceResult } = renderHook(() => 
+      const { result: persistenceResult } = renderHook(() =>
         useWorkspacePersistence({ chatId: mockChatId, userName: 'Budi' })
       );
 
@@ -150,12 +163,37 @@ describe('Workspace Lifecycle & Regression Suite', () => {
       expect(persistenceResult.current.persistedArtifacts).toHaveLength(1);
 
       // Pass into useWorkspaceArtifacts
-      const { result: artifactResult } = renderHook(() => 
+      const { result: artifactResult } = renderHook(() =>
         useWorkspaceArtifacts({ chatId: mockChatId, persistedArtifacts: mockExistingArtifacts })
       );
 
       expect(artifactResult.current.artifacts).toHaveLength(2); // Welcome + art_101
       expect(artifactResult.current.activeArtifactId).toBe('art_101');
+    });
+
+    it('loads older message pages on demand without duplicating records', async () => {
+      vi.mocked(WorkspaceApiService.fetchArtifacts).mockResolvedValue([]);
+      vi.mocked(WorkspaceApiService.fetchMessagesPage)
+        .mockResolvedValueOnce({ messages: [
+          { id: 'm51', role: 'user', content: 'Pesan 51', createdAt: new Date('2026-01-01T00:00:00Z') },
+          { id: 'm52', role: 'assistant', content: 'Pesan 52', createdAt: new Date('2026-01-01T00:01:00Z') }
+        ], nextCursor: 'cursor-m51' })
+        .mockResolvedValueOnce({ messages: [
+          { id: 'm49', role: 'user', content: 'Pesan 49', createdAt: new Date('2025-12-31T23:58:00Z') },
+          { id: 'm50', role: 'assistant', content: 'Pesan 50', createdAt: new Date('2025-12-31T23:59:00Z') },
+          { id: 'm51', role: 'user', content: 'Pesan 51', createdAt: new Date('2026-01-01T00:00:00Z') }
+        ], nextCursor: null });
+
+      const { result } = renderHook(() => useWorkspacePersistence({ chatId: 'chat-paged' }));
+      await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+      expect(result.current.messages.map(message => message.id)).toEqual(['m51', 'm52']);
+      expect(result.current.hasOlderMessages).toBe(true);
+
+      await act(async () => { expect(await result.current.loadOlderMessages()).toBe(true); });
+
+      expect(result.current.messages.map(message => message.id)).toEqual(['m49', 'm50', 'm51', 'm52']);
+      expect(result.current.hasOlderMessages).toBe(false);
+      expect(WorkspaceApiService.fetchMessagesPage).toHaveBeenNthCalledWith(2, 'chat-paged', 'cursor-m51', expect.any(AbortSignal));
     });
 
     it('keeps a local draft through chat binding and retains it when migration fails', async () => {
@@ -206,6 +244,21 @@ describe('Workspace Lifecycle & Regression Suite', () => {
       const parsed: WorkspaceArtifact = { id: 'art_first_ai', title: 'Hasil AI', type: 'DOCUMENT', content: 'isi', version: 1, updatedAt: new Date().toISOString() };
       await act(async () => { expect(await result.current.syncParsedMessageArtifacts([parsed], 'chat-created-stream')).toBe(true); });
       expect(WorkspaceApiService.createArtifact).toHaveBeenCalledWith(expect.objectContaining({ id: parsed.id, chatId: 'chat-created-stream' }));
+    });
+
+    it('writes a guest Canvas transfer to session storage for refresh recovery', async () => {
+      const workspaceIdentity = 'local:guest:refresh-recovery';
+      const { result } = renderHook(() => useWorkspaceArtifacts({ workspaceIdentity, persistedArtifacts: [] }));
+
+      await act(async () => {
+        expect(await result.current.createArtifactFromContent('Fixture jawaban untuk Canvas.', 'Jawaban AI', 'art_guest_response')).toBe(true);
+      });
+
+      expect(readLocalDrafts(workspaceIdentity).find(item => item.id === 'art_guest_response')).toMatchObject({
+        title: 'Jawaban AI',
+        content: 'Fixture jawaban untuk Canvas.',
+        persistenceStatus: 'local'
+      });
     });
 
     it('does not merge artifacts from the previous Workspace after a switch', async () => {
@@ -262,7 +315,7 @@ describe('Workspace Lifecycle & Regression Suite', () => {
         updatedAt: new Date().toISOString()
       }));
 
-      const { result } = renderHook(() => 
+      const { result } = renderHook(() =>
         useWorkspaceArtifacts({ chatId: 'chat_abc', persistedArtifacts: [] })
       );
 
@@ -284,7 +337,7 @@ describe('Workspace Lifecycle & Regression Suite', () => {
         updatedAt: new Date().toISOString()
       }));
 
-      const { result } = renderHook(() => 
+      const { result } = renderHook(() =>
         useWorkspaceArtifacts({ chatId: 'chat_123', persistedArtifacts: [] })
       );
 
@@ -324,7 +377,7 @@ describe('Workspace Lifecycle & Regression Suite', () => {
         content: 'Updated content'
       });
 
-      const { result } = renderHook(() => 
+      const { result } = renderHook(() =>
         useWorkspaceArtifacts({ chatId: 'chat-existing', persistedArtifacts: [mockInitial] })
       );
 
@@ -379,7 +432,7 @@ describe('Workspace Lifecycle & Regression Suite', () => {
         content: 'Version 1 content'
       });
 
-      const { result } = renderHook(() => 
+      const { result } = renderHook(() =>
         useWorkspaceArtifacts({ chatId: 'chat-history', persistedArtifacts: [mockArt] })
       );
 
@@ -491,6 +544,24 @@ describe('Workspace Lifecycle & Regression Suite', () => {
       });
 
       expect(result.current.streamingStatus).toBe('cancelled');
+    });
+
+    it('marks signed-in Workspace streams as persistent and guest Workspace streams as temporary', async () => {
+      const payloads: Array<Parameters<ChatStreamingClient['stream']>[0]> = [];
+      const streamSpy = vi.spyOn(ChatStreamingClient.prototype, 'stream').mockImplementation(async (payload, callbacks) => {
+        payloads.push(payload);
+        await callbacks.onMessageComplete?.('Jawaban tersimpan');
+      });
+
+      const signedIn = renderHook(() => useWorkspaceStreaming({ chatId: 'workspace-saved', isTemporary: false }));
+      await act(async () => { await signedIn.result.current.sendMessageStream('Prompt akun'); });
+      const guest = renderHook(() => useWorkspaceStreaming({ workspaceIdentity: 'local:guest', isTemporary: true }));
+      await act(async () => { await guest.result.current.sendMessageStream('Prompt tamu'); });
+
+      expect(payloads.map(payload => payload.isTemporary)).toEqual([false, true]);
+      expect(payloads[0]).toMatchObject({ chatId: 'workspace-saved', chatMode: 'RuangKerja', workspaceMode: true });
+      expect(payloads[1]).toMatchObject({ chatMode: 'RuangKerja', workspaceMode: true });
+      streamSpy.mockRestore();
     });
 
     it('does not commit a late stream callback after clear aborts the stream', async () => {
@@ -606,13 +677,14 @@ describe('Workspace Lifecycle & Regression Suite', () => {
   describe('5. Clear Chat Session', () => {
     it('deletes persisted messages before resetting local state and stays empty after reload', async () => {
       vi.mocked(WorkspaceApiService.fetchArtifacts).mockResolvedValue([]);
-      vi.mocked(WorkspaceApiService.fetchMessages).mockResolvedValue([
+      vi.mocked(WorkspaceApiService.fetchMessagesPage).mockResolvedValue({ messages: [
         { id: 'old-msg', role: 'user', content: 'Pesan lama', createdAt: new Date() }
-      ]);
+      ], nextCursor: 'cursor-before-clear' });
       vi.mocked(WorkspaceApiService.clearMessages).mockResolvedValue();
       const { result, unmount } = renderHook(() => useWorkspacePersistence({ chatId: 'chat-clear', userName: 'Test User' }));
       await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
       expect(result.current.messages.map(message => message.content)).toContain('Pesan lama');
+      expect(result.current.hasOlderMessages).toBe(true);
 
       await act(async () => {
         expect(await result.current.clearWorkspaceConversation()).toBe(true);
@@ -620,9 +692,12 @@ describe('Workspace Lifecycle & Regression Suite', () => {
       expect(WorkspaceApiService.clearMessages).toHaveBeenCalledWith('chat-clear');
       expect(result.current.messages).toHaveLength(1);
       expect(result.current.messages[0].content).toContain('Halo');
+      expect(result.current.hasOlderMessages).toBe(false);
+      await expect(result.current.loadOlderMessages()).resolves.toBe(false);
+      expect(WorkspaceApiService.fetchMessagesPage).toHaveBeenCalledTimes(1);
 
       unmount();
-      vi.mocked(WorkspaceApiService.fetchMessages).mockResolvedValueOnce([]);
+      vi.mocked(WorkspaceApiService.fetchMessagesPage).mockResolvedValueOnce({ messages: [], nextCursor: null });
       const reloaded = renderHook(() => useWorkspacePersistence({ chatId: 'chat-clear', userName: 'Test User' }));
       await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
       expect(reloaded.result.current.messages).toHaveLength(1);
@@ -633,9 +708,9 @@ describe('Workspace Lifecycle & Regression Suite', () => {
 
     it('keeps visible messages if the persistent clear request fails', async () => {
       vi.mocked(WorkspaceApiService.fetchArtifacts).mockResolvedValue([]);
-      vi.mocked(WorkspaceApiService.fetchMessages).mockResolvedValue([
+      vi.mocked(WorkspaceApiService.fetchMessagesPage).mockResolvedValue({ messages: [
         { id: 'kept-msg', role: 'user', content: 'Riwayat tetap terlihat', createdAt: new Date() }
-      ]);
+      ], nextCursor: null });
       const { result } = renderHook(() => useWorkspacePersistence({ chatId: 'chat-fail-clear' }));
       await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
       vi.mocked(WorkspaceApiService.clearMessages).mockRejectedValueOnce(new Error('offline'));
@@ -647,14 +722,14 @@ describe('Workspace Lifecycle & Regression Suite', () => {
     });
 
     it('ignores an initial message response that arrives after a successful clear', async () => {
-      let resolveFetch: (messages: Message[]) => void = () => undefined;
+      let resolveFetch: (page: { messages: Message[]; nextCursor: string | null }) => void = () => undefined;
       vi.mocked(WorkspaceApiService.fetchArtifacts).mockResolvedValue([]);
-      vi.mocked(WorkspaceApiService.fetchMessages).mockImplementationOnce(() => new Promise(resolve => { resolveFetch = resolve; }));
+      vi.mocked(WorkspaceApiService.fetchMessagesPage).mockImplementationOnce(() => new Promise(resolve => { resolveFetch = resolve; }));
       vi.mocked(WorkspaceApiService.clearMessages).mockResolvedValue();
       const { result } = renderHook(() => useWorkspacePersistence({ chatId: 'chat-race', userName: 'Test User' }));
       await act(async () => { await result.current.clearWorkspaceConversation(); });
       await act(async () => {
-        resolveFetch([{ id: 'late-msg', role: 'user', content: 'Respons fetch lama', createdAt: new Date() }]);
+        resolveFetch({ messages: [{ id: 'late-msg', role: 'user', content: 'Respons fetch lama', createdAt: new Date() }], nextCursor: null });
         await new Promise(resolve => setTimeout(resolve, 0));
       });
       expect(result.current.messages.some(message => message.content.includes('Respons fetch lama'))).toBe(false);

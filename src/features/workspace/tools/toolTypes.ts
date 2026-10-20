@@ -1,23 +1,23 @@
 import { ArtifactType } from '../types';
 import { ModelTier } from '../../../lib/aiModels';
 
-export type WorkspaceToolCategory = 
-  | 'Writing' 
-  | 'Research' 
-  | 'Coding' 
-  | 'Citation' 
-  | 'Outline' 
-  | 'Analysis' 
+export type WorkspaceToolCategory =
+  | 'Writing'
+  | 'Research'
+  | 'Coding'
+  | 'Citation'
+  | 'Outline'
+  | 'Analysis'
   | 'Productivity';
 
 export type WorkspaceToolExecutionMode = 'ai' | 'client_utility' | 'export';
 
-export type WorkspaceToolOutputType = 
-  | 'TEXT' 
-  | 'ARTIFACT_UPDATE' 
-  | 'ARTIFACT_CREATE' 
-  | 'CITATION' 
-  | 'DOWNLOAD' 
+export type WorkspaceToolOutputType =
+  | 'TEXT'
+  | 'ARTIFACT_UPDATE'
+  | 'ARTIFACT_CREATE'
+  | 'CITATION'
+  | 'DOWNLOAD'
   | 'STRUCTURED';
 
 export interface WorkspaceToolInputSchemaField {
@@ -72,16 +72,16 @@ export interface WorkspaceToolExecutionPayload {
   context: WorkspaceToolContext;
 }
 
-export type WorkspaceToolErrorCode = 
-  | 'TOOL_NOT_FOUND' 
-  | 'TOOL_UNAVAILABLE' 
-  | 'INVALID_TOOL_INPUT' 
-  | 'MISSING_ARTIFACT' 
-  | 'MISSING_SELECTION' 
-  | 'TIER_RESTRICTED' 
-  | 'EXECUTION_FAILED' 
-  | 'ABORTED' 
-  | 'PROMPT_INJECTION_DETECTED' 
+export type WorkspaceToolErrorCode =
+  | 'TOOL_NOT_FOUND'
+  | 'TOOL_UNAVAILABLE'
+  | 'INVALID_TOOL_INPUT'
+  | 'MISSING_ARTIFACT'
+  | 'MISSING_SELECTION'
+  | 'TIER_RESTRICTED'
+  | 'EXECUTION_FAILED'
+  | 'ABORTED'
+  | 'PROMPT_INJECTION_DETECTED'
   | 'RESULT_INVALID';
 
 export interface WorkspaceToolExecutionResult {

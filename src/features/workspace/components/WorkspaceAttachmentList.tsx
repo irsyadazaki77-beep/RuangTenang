@@ -1,5 +1,5 @@
 import React from 'react';
-import { AlertCircle, CheckCircle2, FileCode, FileSpreadsheet, FileText, Loader2, Presentation, RotateCw, X } from 'lucide-react';
+import { AlertCircle, CheckCircle2, FileCode, FileSpreadsheet, FileText, Image as ImageIcon, Loader2, Presentation, RotateCw, ScanText, X } from 'lucide-react';
 import { WorkspaceFileAttachment } from '../types';
 
 interface WorkspaceAttachmentListProps {
@@ -13,6 +13,7 @@ function getFileIcon(attachment: WorkspaceFileAttachment) {
   if (attachment.fileKind === 'xlsx' || attachment.fileKind === 'csv') return <FileSpreadsheet className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />;
   if (attachment.fileKind === 'pptx') return <Presentation className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />;
   if (attachment.fileKind === 'code' || attachment.fileKind === 'json') return <FileCode className="h-3.5 w-3.5 shrink-0 text-indigo-600 dark:text-indigo-400" />;
+  if (attachment.fileKind === 'image') return <ImageIcon className="h-3.5 w-3.5 shrink-0 text-purple-600 dark:text-purple-400" />;
   return <FileText className="h-3.5 w-3.5 shrink-0 text-rose-600 dark:text-rose-400" />;
 }
 
@@ -39,6 +40,15 @@ export const WorkspaceAttachmentList: React.FC<WorkspaceAttachmentListProps> = R
             <span className="shrink-0 text-[9px] text-slate-500 dark:text-slate-400" title={attachment.mimeType}>{fileType}</span>
             <span className="shrink-0 text-slate-400">{attachment.size ? `${Math.max(1, Math.round(attachment.size / 1024))} KB` : ''}</span>
             <span className="shrink-0">{status}</span>
+            {attachment.ocrApplied ? (
+              <span title={attachment.readingUncertainty || `Teks diekstraksi dengan OCR Visual${attachment.ocrConfidence ? ` (${Math.round(attachment.ocrConfidence * 100)}%)` : ''}`} className="flex shrink-0 items-center gap-0.5 rounded bg-indigo-50 px-1.5 py-0.5 text-[9.5px] font-semibold text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300">
+                <ScanText className="h-2.5 w-2.5" />OCR
+              </span>
+            ) : attachment.previewOnly && attachment.visualAnalysisAvailable ? (
+              <span title="Berkas pindaian/gambar siap untuk pratinjau & analisis visual multimodal" className="flex shrink-0 items-center gap-0.5 rounded bg-purple-50 px-1.5 py-0.5 text-[9.5px] font-semibold text-purple-700 dark:bg-purple-950/60 dark:text-purple-300">
+                <ScanText className="h-2.5 w-2.5" />Visual
+              </span>
+            ) : null}
             {attachment.extractionWarnings?.length ? <span title={attachment.extractionWarnings.join('\n')} className="flex shrink-0 items-center gap-1 text-amber-700 dark:text-amber-300"><AlertCircle className="h-3 w-3" />Ekstraksi parsial</span> : null}
             {attachment.status === 'failed' && <button type="button" disabled={disabled} onClick={() => onRetry(attachment)} className="rounded p-0.5 text-slate-500 hover:bg-slate-200 disabled:opacity-40 dark:hover:bg-slate-700" aria-label={`Coba lagi ${attachment.name}`} title="Coba lagi"><RotateCw className="h-3 w-3" /></button>}
             <button type="button" disabled={disabled} onClick={() => onRemove(attachment)} className="rounded p-0.5 text-slate-500 hover:bg-slate-200 hover:text-rose-600 disabled:opacity-40 dark:hover:bg-slate-700" aria-label={`Hapus ${attachment.name}`} title="Hapus dokumen"><X className="h-3.5 w-3.5" /></button>

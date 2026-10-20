@@ -6,6 +6,7 @@ import { clientDb, createOfflineIdempotencyKey } from '../../lib/clientDb';
 import { useAuth } from '../../contexts/AuthContext';
 import { getStableStudentSession } from '../../lib/authSessionLifecycle';
 import { modalBackdropVariants, modalPanelVariants, reducedMotionVariants } from '../../lib/motionTokens';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 
 export interface MoodLog {
   id: string;
@@ -165,13 +166,13 @@ export const DailyCheckinModal: React.FC<DailyCheckinModalProps> = ({
     }
     submitGuard.current = true;
     setIsSubmitting(true);
-    const payload = { 
-      mood: selectedMood, 
-      notes: journalNote.trim(), 
+    const payload = {
+      mood: selectedMood,
+      notes: journalNote.trim(),
       sleepHours,
       sleepQuality: sleepQuality === 'Nyenyak' ? 'good' : sleepQuality === 'Insomnia' ? 'very_poor' : 'poor',
       factors: selectedFactors,
-      emotions: selectedEmotions 
+      emotions: selectedEmotions
     };
     const finishSaved = (log: MoodLog, message: string, type: 'success' | 'info' | 'warning') => {
       setSelectedMood(null);
@@ -283,10 +284,12 @@ export const DailyCheckinModal: React.FC<DailyCheckinModalProps> = ({
     }
   };
 
+  const modalRef = useFocusTrap<HTMLDivElement>({ isOpen, onClose });
+
   return (
     <AnimatePresence>
       {isOpen && (
-        <motion.div 
+        <motion.div
           className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 md:p-6 bg-slate-900/60 backdrop-blur-xs overflow-y-auto"
           initial="hidden"
           animate="visible"
@@ -295,12 +298,14 @@ export const DailyCheckinModal: React.FC<DailyCheckinModalProps> = ({
           onClick={(e) => {
             if (e.target === e.currentTarget) onClose();
           }}
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="daily-checkin-title"
         >
-          <motion.div 
-            className="relative w-full max-w-lg surface-card rounded-2xl sm:rounded-3xl border border-default shadow-2xl overflow-hidden flex flex-col max-h-[92vh] my-auto"
+          <motion.div
+            ref={modalRef}
+            tabIndex={-1}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="daily-checkin-title"
+            className="relative w-full max-w-lg surface-card rounded-2xl sm:rounded-3xl border border-default shadow-2xl overflow-hidden flex flex-col max-h-[92vh] my-auto focus:outline-none"
             initial="hidden"
             animate="visible"
             exit="exit"
@@ -335,10 +340,11 @@ export const DailyCheckinModal: React.FC<DailyCheckinModalProps> = ({
         <form onSubmit={handleSaveMoodLog} className="p-4 sm:p-6 space-y-5 sm:space-y-6 overflow-y-auto custom-scrollbar flex-1">
           {/* Date Picker */}
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-secondary uppercase tracking-wider block">
+            <label htmlFor="checkin-date" className="text-xs font-semibold text-secondary uppercase tracking-wider block">
               Tanggal Catatan
             </label>
             <input
+              id="checkin-date"
               type="date"
               value={logDate}
               onChange={(e) => setLogDate(e.target.value)}
@@ -391,7 +397,7 @@ export const DailyCheckinModal: React.FC<DailyCheckinModalProps> = ({
                     onClick={() => handleToggleEmotion(tag.label)}
                     className={`px-3 py-1.5 text-xs rounded-xl border transition-all flex items-center gap-1.5 cursor-pointer chip-tactile ${
                       isSelected
-                        ? 'bg-teal-600 border-teal-600 text-white font-semibold shadow-xs'
+                        ? 'bg-teal-700 border-teal-600 text-white font-semibold shadow-xs'
                         : 'surface-muted border-default text-secondary hover:text-primary hover:border-slate-300 dark:hover:border-slate-700'
                     }`}
                   >
@@ -434,7 +440,7 @@ export const DailyCheckinModal: React.FC<DailyCheckinModalProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
             <div className="space-y-2 p-3.5 surface-muted rounded-xl border border-default">
               <div className="flex justify-between items-center">
-                <label className="text-xs font-semibold text-secondary uppercase tracking-wider block">
+                <label htmlFor="checkin-sleep-hours" className="text-xs font-semibold text-secondary uppercase tracking-wider block">
                   Durasi Tidur
                 </label>
                 <span className="text-xs font-bold text-teal-600 dark:text-teal-400">
@@ -442,6 +448,8 @@ export const DailyCheckinModal: React.FC<DailyCheckinModalProps> = ({
                 </span>
               </div>
               <input
+                id="checkin-sleep-hours"
+                aria-label="Durasi Tidur (Jam)"
                 type="range"
                 min="0"
                 max="12"
@@ -458,10 +466,12 @@ export const DailyCheckinModal: React.FC<DailyCheckinModalProps> = ({
             </div>
 
             <div className="space-y-2 p-3.5 surface-muted rounded-xl border border-default">
-              <label className="text-xs font-semibold text-secondary uppercase tracking-wider block">
+              <label htmlFor="checkin-sleep-quality" className="text-xs font-semibold text-secondary uppercase tracking-wider block">
                 Kualitas Tidur
               </label>
               <select
+                id="checkin-sleep-quality"
+                aria-label="Kualitas Tidur"
                 value={sleepQuality}
                 onChange={(e) => setSleepQuality(e.target.value as any)}
                 className="w-full text-sm p-2 surface-card border border-default rounded-lg text-primary focus:outline-none focus:ring-2 focus:ring-teal-500/20"
@@ -476,7 +486,7 @@ export const DailyCheckinModal: React.FC<DailyCheckinModalProps> = ({
           {/* AI Reflection Prompt Guide */}
           <div className="space-y-2.5 pt-1">
             <div className="flex items-center justify-between">
-              <label className="text-xs font-semibold text-secondary uppercase tracking-wider block">
+              <label htmlFor="checkin-journal-note" className="text-xs font-semibold text-secondary uppercase tracking-wider block">
                 Catatan Jurnal Refleksi
               </label>
               <button
@@ -510,6 +520,8 @@ export const DailyCheckinModal: React.FC<DailyCheckinModalProps> = ({
 
             <div className="space-y-1">
               <textarea
+                id="checkin-journal-note"
+                aria-label="Catatan Jurnal Refleksi"
                 placeholder="Ceritakan kejadian, emosi, atau apa yang ada di pikiran Anda hari ini..."
                 value={journalNote}
                 onChange={(e) => setJournalNote(e.target.value.slice(0, 500))}

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Lock, Unlock, KeyRound, AlertCircle, X, RefreshCw } from 'lucide-react';
 import { usePrivacyVault } from '../../contexts/PrivacyVaultContext';
 import { motion } from 'motion/react';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 
 interface VaultPinModalProps {
   isOpen: boolean;
@@ -23,6 +24,7 @@ export const VaultPinModal: React.FC<VaultPinModalProps> = ({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isShaking, setIsShaking] = useState(false);
+  const modalRef = useFocusTrap<HTMLDivElement>({ isOpen, onClose });
 
   if (!isOpen) return null;
 
@@ -123,15 +125,27 @@ export const VaultPinModal: React.FC<VaultPinModalProps> = ({
   const activePinString = (currentMode === 'setup' && step === 'confirm') ? confirmPin : pin;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md animate-fade-in">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md animate-fade-in"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
       <motion.div
+        ref={modalRef}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="vault-pin-title"
+        aria-describedby="vault-pin-desc"
         animate={isShaking ? { x: [-10, 10, -10, 10, -5, 5, 0] } : {}}
         transition={{ duration: 0.4 }}
-        className="w-full max-w-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl p-6 space-y-5 text-center relative overflow-hidden"
+        className="w-full max-w-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl p-6 space-y-5 text-center relative overflow-hidden focus:outline-none"
       >
         {/* Close Button */}
         <button
           onClick={onClose}
+          aria-label="Tutup formulir PIN"
           className="absolute top-4 right-4 p-1.5 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
         >
           <X className="w-4 h-4" />
@@ -143,7 +157,7 @@ export const VaultPinModal: React.FC<VaultPinModalProps> = ({
             {currentMode === 'setup' ? <KeyRound className="w-6 h-6" /> : <Lock className="w-6 h-6" />}
           </div>
 
-          <h3 className="font-bold text-lg text-slate-900 dark:text-slate-100">
+          <h3 id="vault-pin-title" className="font-bold text-lg text-slate-900 dark:text-slate-100">
             {currentMode === 'setup'
               ? step === 'enter' ? 'Buat PIN Bilik Privasi' : 'Konfirmasi PIN Anda'
               : currentMode === 'remove'
@@ -151,7 +165,7 @@ export const VaultPinModal: React.FC<VaultPinModalProps> = ({
               : 'Buka Kunci Bilik Pribadi'}
           </h3>
 
-          <p className="text-xs text-slate-500 dark:text-slate-400 px-2">
+          <p id="vault-pin-desc" className="text-xs text-slate-500 dark:text-slate-400 px-2">
             {currentMode === 'setup'
               ? step === 'enter'
                 ? 'Masukkan 4-6 digit PIN untuk mengunci catatan mood & jurnal emosional Anda.'
@@ -201,6 +215,7 @@ export const VaultPinModal: React.FC<VaultPinModalProps> = ({
           <button
             type="button"
             onClick={handleClear}
+            aria-label="Hapus semua digit PIN"
             className="h-12 rounded-2xl bg-slate-50 dark:bg-slate-800/40 hover:bg-slate-100 text-slate-500 font-semibold text-xs active:scale-95 transition-all cursor-pointer"
           >
             Hapus
@@ -217,6 +232,7 @@ export const VaultPinModal: React.FC<VaultPinModalProps> = ({
           <button
             type="button"
             onClick={handleDelete}
+            aria-label="Hapus satu digit PIN"
             className="h-12 rounded-2xl bg-slate-50 dark:bg-slate-800/40 hover:bg-slate-100 text-slate-500 font-semibold text-xs active:scale-95 transition-all cursor-pointer flex items-center justify-center"
           >
             ⌫
@@ -230,7 +246,7 @@ export const VaultPinModal: React.FC<VaultPinModalProps> = ({
               type="button"
               onClick={handleSetupNext}
               disabled={pin.length < 4}
-              className="w-full py-3 rounded-2xl bg-teal-600 hover:bg-teal-700 disabled:opacity-40 text-white font-bold text-sm shadow-md transition-all cursor-pointer"
+              className="w-full py-3 rounded-2xl bg-teal-700 hover:bg-teal-800 disabled:opacity-40 text-white font-bold text-sm shadow-md transition-all cursor-pointer"
             >
               Lanjutkan Konfirmasi
             </button>
@@ -239,7 +255,7 @@ export const VaultPinModal: React.FC<VaultPinModalProps> = ({
               type="button"
               onClick={handleSubmit}
               disabled={activePinString.length < 4 || isSubmitting}
-              className="w-full py-3 rounded-2xl bg-teal-600 hover:bg-teal-700 disabled:opacity-40 text-white font-bold text-sm shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
+              className="w-full py-3 rounded-2xl bg-teal-700 hover:bg-teal-800 disabled:opacity-40 text-white font-bold text-sm shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
             >
               {isSubmitting ? (
                 <RefreshCw className="w-4 h-4 animate-spin" />

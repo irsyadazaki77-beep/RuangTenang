@@ -1,21 +1,21 @@
-import { 
-  DEFAULT_AI_MODEL_ID, 
+import {
+  DEFAULT_AI_MODEL_ID,
   AUTO_ROUTING_MODEL_ID,
   isAiProfile,
   AiProfileId,
-  ModelTier, 
+  ModelTier,
   ModelCapability,
-  TaskCategory, 
-  LatencyPreference, 
-  QualityPreference, 
-  AiRoutingContext, 
-  RoutingDecision 
+  TaskCategory,
+  LatencyPreference,
+  QualityPreference,
+  AiRoutingContext,
+  RoutingDecision
 } from '../../../shared/aiModelContract.js';
-import { 
-  AI_MODEL_REGISTRY, 
-  AiModelDefinition, 
-  AiModelError, 
-  resolveAiModel, 
+import {
+  AI_MODEL_REGISTRY,
+  AiModelDefinition,
+  AiModelError,
+  resolveAiModel,
   getConfiguredDefaultAiModelId,
   RESILIENT_FALLBACK_AI_MODEL_ID,
   getProfileDefinition,
@@ -59,12 +59,12 @@ export function classifyRequest(context: AiRoutingContext, promptText?: string):
   }
 
   // 1. Attachment-based signals
-  const hasImage = attachments.some(a => 
-    a.mimeType?.startsWith('image/') || 
+  const hasImage = attachments.some(a =>
+    a.mimeType?.startsWith('image/') ||
     /\.(png|jpe?g|webp|gif|bmp|svg)$/i.test(a.filename || '')
   );
 
-  const hasCodeAttachment = attachments.some(a => 
+  const hasCodeAttachment = attachments.some(a =>
     /\.(py|js|ts|tsx|jsx|java|cpp|c|cs|go|rs|php|rb|sql|json|ya?ml|html|css|sh|bash)$/i.test(a.filename || '') ||
     a.mimeType?.includes('javascript') ||
     a.mimeType?.includes('python') ||
@@ -72,7 +72,7 @@ export function classifyRequest(context: AiRoutingContext, promptText?: string):
     a.mimeType?.includes('code')
   );
 
-  const hasDocAttachment = attachments.some(a => 
+  const hasDocAttachment = attachments.some(a =>
     /\.(pdf|docx?|pptx?|xlsx?|csv|txt|md)$/i.test(a.filename || '') ||
     a.mimeType?.includes('pdf') ||
     a.mimeType?.includes('word') ||
@@ -220,7 +220,7 @@ export function classifyRequest(context: AiRoutingContext, promptText?: string):
  * Filter all registered models down to viable candidates.
  */
 export function filterCandidates(
-  context: AiRoutingContext, 
+  context: AiRoutingContext,
   classification: ClassificationSignal,
   availableModels: readonly AiModelDefinition[] = AI_MODEL_REGISTRY
 ): AiModelDefinition[] {
@@ -261,8 +261,8 @@ export function filterCandidates(
  * 2. Stable alphabetical model ID order
  */
 export function scoreCandidate(
-  model: AiModelDefinition, 
-  context: AiRoutingContext, 
+  model: AiModelDefinition,
+  context: AiRoutingContext,
   classification: ClassificationSignal
 ): number {
   let score = 0;
@@ -376,6 +376,7 @@ export class SmartModelRouter {
       if (getProviderHealth(model.provider) === 'unavailable') continue;
       if (context.streamingRequired && !model.capabilities.includes('streaming')) continue;
       if (hasImage && !model.capabilities.includes('vision')) continue;
+      if (context.requestedCapabilities && context.requestedCapabilities.some(cap => !model.capabilities.includes(cap))) continue;
 
       viableCandidates.push(model);
     }
@@ -510,6 +511,11 @@ export class SmartModelRouter {
         throw new AiModelError('MODEL_UNAVAILABLE');
       }
 
+      // Check requested capabilities explicitly requested by caller
+      if (context.requestedCapabilities && context.requestedCapabilities.some(cap => !model.capabilities.includes(cap))) {
+        throw new AiModelError('MODEL_UNAVAILABLE');
+      }
+
       return {
         selectedModelId: model.id,
         provider: model.provider,
@@ -582,8 +588,8 @@ export class SmartModelRouter {
    * Build bounded fallback candidate list without duplicates or infinite loops.
    */
   private getDeterministicFallbackCandidates(
-    primaryModelId: string, 
-    userTier: string, 
+    primaryModelId: string,
+    userTier: string,
     streamingRequired?: boolean
   ): string[] {
     const visited = new Set<string>([primaryModelId]);
@@ -604,7 +610,7 @@ export class SmartModelRouter {
       if (visited.has(id)) continue;
       const model = AI_MODEL_REGISTRY.find(m => m.id === id);
       if (!model) continue;
-      
+
       const normalizedTier = userTier === 'Developer' ? 'Pro' : userTier;
       if (!model.allowedTiers.includes(normalizedTier as ModelTier)) continue;
       if (!aiProviderConfig.isConfigured(model.provider)) continue;

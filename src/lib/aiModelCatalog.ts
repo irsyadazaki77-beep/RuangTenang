@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { apiClient } from './apiClient';
-import { 
-  AiModelCatalogResponse, 
-  AiModelOption, 
+import {
+  AiModelCatalogResponse,
+  AiModelOption,
   AiProfileOption,
   DEFAULT_AI_MODEL_ID,
   DEFAULT_TENANG_PROFILE_ID,
@@ -56,14 +56,13 @@ export function useAiModelCatalog() {
     return () => { active = false; };
   }, []);
 
-  return { 
-    models, 
-    profiles, 
-    defaultModel, 
-    defaultTenangProfile, 
-    defaultKerjaProfile, 
-    loading, 
-    error 
+  return {
+    models,
+    profiles,
+    defaultModel,
+    defaultTenangProfile,
+    defaultKerjaProfile,
+    loading,
+    error
   };
 }
-

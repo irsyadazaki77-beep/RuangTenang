@@ -62,7 +62,7 @@ export function parseAppointmentDateTime(
 
   // Create UTC date object by subtracting timezone offset from local hour
   const startUtc = new Date(Date.UTC(year, month, day, hour - tzOffsetHours, minute, 0));
-  
+
   // Default session duration = 50 minutes
   const endUtc = new Date(startUtc.getTime() + 50 * 60 * 1000);
 
@@ -99,10 +99,10 @@ export function generateIcsFileContent(apt: Appointment): string {
   );
 
   const counselorName = apt.counselorName || 'Psikolog RuangTenang';
-  const meetingLocation = apt.mode === 'video_call' 
-    ? (apt.meetingLink || 'Ruang Video Call Virtual (Jitsi Meet)') 
+  const meetingLocation = apt.mode === 'video_call'
+    ? (apt.meetingLink || 'Ruang Video Call Virtual (Jitsi Meet)')
     : 'Pusat Bimbingan & Konseling UPT Kampus';
-  
+
   const descriptionText = [
     `Sesi Konseling Mental Mahasiswa dengan ${counselorName}`,
     `Mode: ${apt.mode}`,

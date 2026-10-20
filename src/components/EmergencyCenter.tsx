@@ -18,23 +18,20 @@ import { useToast } from "./Toast";
 import { apiClient } from "../lib/apiClient";
 import { useAuth } from "../contexts/AuthContext";
 
-interface EmergencyCenterProps {
-  onTriggerSOS?: () => void;
-}
-
 interface CampusReferralContact {
   label: string;
   phone?: string;
   url?: string;
 }
 
-export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
+export const EmergencyCenter: React.FC<{ onTriggerSOS?: () => void }> = ({
   onTriggerSOS,
 }) => {
   const { user } = useAuth();
   const { showToast } = useToast();
   const [sosStatus, setSosStatus] = useState<SOSDispatchStatus | null>(null);
   const [isTriggeringSOS, setIsTriggeringSOS] = useState(false);
+  const [shareLocation, setShareLocation] = useState(false);
   const [hotlineQuery, setHotlineQuery] = useState("");
   const [campusReferralContacts, setCampusReferralContacts] = useState<CampusReferralContact[]>([]);
 
@@ -85,27 +82,18 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
       if (!navigator.geolocation) {
         return resolve(undefined);
       }
-      
-      navigator.permissions.query({ name: "geolocation" as any }).then((perm) => {
-        if (perm.state === "granted") {
-          navigator.geolocation.getCurrentPosition(
-            (position) => resolve({ latitude: position.coords.latitude, longitude: position.coords.longitude }),
-            () => resolve(undefined),
-            { timeout: 2000, maximumAge: 60000 }
-          );
-        } else {
-          resolve(undefined);
-        }
-      }).catch(() => resolve(undefined));
+
+      navigator.geolocation.getCurrentPosition(
+        (position) => resolve({ latitude: position.coords.latitude, longitude: position.coords.longitude }),
+        () => resolve(undefined),
+        { timeout: 8000, maximumAge: 60000 }
+      );
     });
   };
   const handleSendSOS = async () => {
     setIsTriggeringSOS(true);
     setSosStatus(null);
-    if (onTriggerSOS) {
-      onTriggerSOS();
-    }
-
+    onTriggerSOS?.();
     if (!navigator.onLine) {
       setSosStatus({
         success: false,
@@ -122,7 +110,7 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
     }
 
     try {
-      const coords = await getCoordinates();
+      const coords = shareLocation ? await getCoordinates() : undefined;
       const locationPayload = coords ? {
         latitude: coords.latitude,
         longitude: coords.longitude,
@@ -213,10 +201,16 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
           </div>
           <a
             href={EMERGENCY_CONTACTS[0].url}
+            target="_blank"
+            rel="noopener noreferrer"
             className="w-full py-2.5 px-3.5 bg-rose-50 dark:bg-rose-950/60 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 rounded-lg font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 transition-colors border border-rose-200 dark:border-rose-900 cursor-pointer min-h-[44px] sm:min-h-[36px]"
           >
             <Phone className="w-3.5 h-3.5" />
-            <span>Buka Situs Healing119</span>
+            <span>Buka Healing119 (telepon / chat)</span>
+          </a>
+          <a href="tel:119" className="w-full py-2.5 px-3.5 surface-muted text-primary rounded-lg font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 border border-default cursor-pointer min-h-[44px] sm:min-h-[36px]">
+            <PhoneCall className="w-3.5 h-3.5" />
+            <span>Telepon 119, lalu tekan 8</span>
           </a>
         </div>
 
@@ -232,6 +226,10 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
           </div>
 
           <div className="space-y-2.5">
+            <label className="flex items-start gap-2 text-[11px] text-secondary leading-relaxed">
+              <input type="checkbox" checked={shareLocation} onChange={event => setShareLocation(event.target.checked)} className="mt-0.5 accent-rose-600" />
+              <span>Bagikan lokasi perangkat saat ini bersama sinyal SOS. Lokasi hanya diminta setelah Anda memilih opsi ini.</span>
+            </label>
             <button
               type="button"
               onClick={handleSendSOS}
@@ -250,7 +248,7 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
 
             {sosStatus && (
               <div role="status" aria-live="polite" className={`p-3 rounded-lg border text-xs space-y-1 animate-fade-in ${
-                sosStatus.status === 'SENT' 
+                sosStatus.status === 'SENT'
                   ? 'bg-emerald-50/70 dark:bg-emerald-950/60 border-emerald-200 dark:border-emerald-900 text-emerald-950 dark:text-emerald-200'
                   : (sosStatus.status === 'SIMULATED' || sosStatus.status === 'DIRECT_CALL_ONLY')
                   ? 'bg-amber-50/80 dark:bg-amber-950/60 border-amber-200 dark:border-amber-900 text-amber-950 dark:text-amber-200'
@@ -416,12 +414,13 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
 
           <form onSubmit={handleSaveContact} className="space-y-2.5">
             <div className="space-y-1">
-              <label className="block text-xs font-semibold text-secondary">
+              <label htmlFor="emergency-contact-name" className="block text-xs font-semibold text-secondary">
                 Nama Orang Terdekat:
               </label>
               <div className="relative">
                 <User className="w-3.5 h-3.5 text-muted absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
+                  id="emergency-contact-name"
                   type="text"
                   required
                   value={contact.name}
@@ -435,10 +434,11 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
             </div>
 
             <div className="space-y-1">
-              <label className="block text-xs font-semibold text-secondary">
+              <label htmlFor="emergency-contact-rel" className="block text-xs font-semibold text-secondary">
                 Hubungan / Relasi:
               </label>
               <select
+                id="emergency-contact-rel"
                 value={contact.relationship}
                 onChange={(e) =>
                   setContact({ ...contact, relationship: e.target.value })
@@ -455,12 +455,13 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
             </div>
 
             <div className="space-y-1">
-              <label className="block text-xs font-semibold text-secondary">
+              <label htmlFor="emergency-contact-phone" className="block text-xs font-semibold text-secondary">
                 Nomor HP / WhatsApp:
               </label>
               <div className="relative">
                 <Phone className="w-3.5 h-3.5 text-muted absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
+                  id="emergency-contact-phone"
                   type="text"
                   required
                   value={contact.phone}
@@ -494,7 +495,7 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
 
             <button
               type="submit"
-              className="w-full py-2.5 px-3.5 bg-teal-600 hover:bg-teal-700 text-white font-semibold text-xs sm:text-sm rounded-lg shadow-3xs transition-all flex items-center justify-center gap-1.5 cursor-pointer min-h-[44px] sm:min-h-[36px] border-none"
+              className="w-full py-2.5 px-3.5 bg-teal-700 hover:bg-teal-800 text-white font-semibold text-xs sm:text-sm rounded-lg shadow-3xs transition-all flex items-center justify-center gap-1.5 cursor-pointer min-h-[44px] sm:min-h-[36px] border-none"
             >
               <Save className="w-3.5 h-3.5" />
               <span>

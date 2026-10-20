@@ -1,17 +1,18 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { 
-  Pin, 
-  Archive, 
-  Trash2, 
-  Edit2, 
-  Check, 
-  X, 
-  MessageSquare, 
-  FileCode, 
+import {
+  Pin,
+  Archive,
+  Trash2,
+  Edit2,
+  Check,
+  X,
+  MessageSquare,
+  FileCode,
   GitBranch,
-  AlertTriangle
+  AlertTriangle,
+  MoreHorizontal
 } from 'lucide-react';
-import { isToday } from 'date-fns';
+import { isToday, isYesterday } from 'date-fns';
 import { Chat } from '../../../features/chat/types';
 import { WorkspaceMode } from '../../../features/workspace/types';
 import { SidebarTooltip } from './SidebarTooltip';
@@ -53,8 +54,10 @@ export const SidebarChatList: React.FC<SidebarChatListProps> = ({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
 
   const editInputRef = useRef<HTMLInputElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (editingId && editInputRef.current) {
@@ -62,6 +65,28 @@ export const SidebarChatList: React.FC<SidebarChatListProps> = ({
       editInputRef.current.select();
     }
   }, [editingId]);
+
+  // Click outside to close action popover menu
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpenId(null);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setMenuOpenId(null);
+      }
+    };
+    if (menuOpenId) {
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('keydown', handleKeyDown);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [menuOpenId]);
 
   // Determine active chats dataset
   const rawList = search.trim() ? searchResults : chats;
@@ -91,18 +116,41 @@ export const SidebarChatList: React.FC<SidebarChatListProps> = ({
     return parsed ? isToday(parsed) : false;
   };
 
+  const isYesterdaySafe = (d: any) => {
+    const parsed = safeParseDate(d);
+    return parsed ? isYesterday(parsed) : false;
+  };
+
   const isWithin7DaysSafe = (d: any) => {
     const parsed = safeParseDate(d);
     if (!parsed) return false;
     const now = new Date();
     const diffDays = (now.getTime() - parsed.getTime()) / (1000 * 3600 * 24);
-    return diffDays <= 7 && !isToday(parsed);
+    return diffDays <= 7 && !isToday(parsed) && !isYesterday(parsed);
+  };
+
+  const isWithin30DaysSafe = (d: any) => {
+    const parsed = safeParseDate(d);
+    if (!parsed) return false;
+    const now = new Date();
+    const diffDays = (now.getTime() - parsed.getTime()) / (1000 * 3600 * 24);
+    return diffDays > 7 && diffDays <= 30;
+  };
+
+  const isOlderSafe = (d: any) => {
+    const parsed = safeParseDate(d);
+    if (!parsed) return true;
+    const now = new Date();
+    const diffDays = (now.getTime() - parsed.getTime()) / (1000 * 3600 * 24);
+    return diffDays > 30;
   };
 
   const groups: Record<string, Chat[]> = {
     'Hari Ini': unpinnedChats.filter(c => isTodaySafe(c.updatedAt)),
+    'Kemarin': unpinnedChats.filter(c => isYesterdaySafe(c.updatedAt)),
     '7 Hari Terakhir': unpinnedChats.filter(c => isWithin7DaysSafe(c.updatedAt)),
-    'Terdahulu': unpinnedChats.filter(c => !isTodaySafe(c.updatedAt) && !isWithin7DaysSafe(c.updatedAt))
+    '30 Hari Terakhir': unpinnedChats.filter(c => isWithin30DaysSafe(c.updatedAt)),
+    'Terdahulu': unpinnedChats.filter(c => isOlderSafe(c.updatedAt))
   };
 
   const handleStartEdit = (c: Chat, e: React.MouseEvent) => {
@@ -110,6 +158,7 @@ export const SidebarChatList: React.FC<SidebarChatListProps> = ({
     setEditingId(c.id);
     setEditTitle(c.title);
     setDeleteConfirmId(null);
+    setMenuOpenId(null);
   };
 
   const handleSaveEdit = (id: string, e?: React.SyntheticEvent) => {
@@ -129,6 +178,7 @@ export const SidebarChatList: React.FC<SidebarChatListProps> = ({
     e.stopPropagation();
     setDeleteConfirmId(id);
     setEditingId(null);
+    setMenuOpenId(null);
   };
 
   const handleConfirmDelete = (id: string, e: React.MouseEvent) => {
@@ -236,7 +286,7 @@ export const SidebarChatList: React.FC<SidebarChatListProps> = ({
             </div>
           )}
 
-          {/* Time Groups: Hari Ini, 7 Hari Terakhir, Terdahulu */}
+          {/* Time Groups: Hari Ini, Kemarin, 7 Hari Terakhir, 30 Hari Terakhir, Terdahulu */}
           {Object.entries(groups).map(([label, list]) => list.length > 0 && (
             <div key={label}>
               <div className="px-2 mb-0.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 select-none">
@@ -257,13 +307,16 @@ export const SidebarChatList: React.FC<SidebarChatListProps> = ({
     const isEditing = editingId === c.id;
     const isDeleting = deleteConfirmId === c.id;
     const isWorkspace = c.workspaceMode === 'RUANG_KERJA';
+    const isMenuOpen = menuOpenId === c.id;
 
     return (
-      <div 
-        key={c.id} 
+      <div
+        key={c.id}
         className={`group relative flex items-center justify-between w-full px-2 py-1 text-xs rounded-lg transition-all duration-150 text-left min-h-[34px] ${
-          isActive 
+          isActive
             ? 'bg-emerald-500/10 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 font-medium ring-1 ring-emerald-500/20'
+            : isMenuOpen
+            ? 'bg-slate-200/60 dark:bg-slate-800/80 text-slate-900 dark:text-slate-100'
             : 'text-slate-700 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-800/80 hover:text-slate-900 dark:hover:text-slate-100'
         }`}
       >
@@ -275,7 +328,7 @@ export const SidebarChatList: React.FC<SidebarChatListProps> = ({
         {/* Delete Confirmation Popover Inline */}
         <AnimatePresence>
           {isDeleting && (
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, scale: 0.96 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.96 }}
@@ -318,10 +371,10 @@ export const SidebarChatList: React.FC<SidebarChatListProps> = ({
           ) : (
             <MessageSquare className="w-3.5 h-3.5 shrink-0 text-slate-400 dark:text-slate-500 group-hover:text-slate-600 dark:group-hover:text-slate-300" />
           )}
-          
+
           {isEditing ? (
             <div className="flex items-center gap-1 flex-1 min-w-0" onClick={e => e.stopPropagation()}>
-              <input 
+              <input
                 ref={editInputRef}
                 value={editTitle}
                 onChange={e => setEditTitle(e.target.value)}
@@ -349,15 +402,15 @@ export const SidebarChatList: React.FC<SidebarChatListProps> = ({
               </button>
             </div>
           ) : (
-            <button 
+            <button
               type="button"
-              onClick={() => onSelectChat(c.id)} 
-              className="flex-1 truncate text-left cursor-pointer focus:outline-none flex items-center justify-between gap-1"
+              onClick={() => onSelectChat(c.id)}
+              className="flex-1 min-w-0 truncate text-left cursor-pointer focus:outline-none flex items-center justify-between gap-1 pr-7"
               title={c.title}
             >
               <span className="truncate">{c.title || 'Percakapan Tanpa Judul'}</span>
               {isWorkspace && (
-                <span className="hidden group-hover:inline-flex text-[9px] px-1 py-0.2 rounded bg-emerald-100 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 shrink-0 font-medium">
+                <span className="hidden group-hover:inline-flex text-[9px] px-1 py-0.2 rounded bg-indigo-100 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300 shrink-0 font-medium">
                   Canvas
                 </span>
               )}
@@ -365,66 +418,98 @@ export const SidebarChatList: React.FC<SidebarChatListProps> = ({
           )}
         </div>
 
-        {/* Hover Micro-Action Buttons */}
+        {/* ChatGPT / Gemini Style Context Action Trigger (•••) */}
         {!isEditing && !isDeleting && (
-          <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
-            {/* Pin Toggle Button */}
+          <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center z-10">
             <button
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                onTogglePin(c.id);
+                setMenuOpenId(isMenuOpen ? null : c.id);
               }}
-              className={`p-1 rounded hover:bg-slate-300/60 dark:hover:bg-slate-700 transition-colors cursor-pointer ${
-                c.isPinned ? 'text-amber-500' : 'text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+              className={`p-1 rounded-md transition-colors cursor-pointer ${
+                isMenuOpen
+                  ? 'opacity-100 bg-slate-300/80 dark:bg-slate-700 text-slate-800 dark:text-white'
+                  : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-300/60 dark:hover:bg-slate-700'
               }`}
-              title={c.isPinned ? 'Lepas Pin' : 'Sematkan Pin'}
-              aria-label={c.isPinned ? 'Lepas Pin' : 'Sematkan Pin'}
+              title="Opsi Obrolan"
+              aria-label="Opsi Obrolan"
+              aria-expanded={isMenuOpen}
             >
-              <Pin className="w-3 h-3" />
+              <MoreHorizontal className="w-3.5 h-3.5" />
             </button>
 
-            {/* Rename Button */}
-            <button
-              type="button"
-              onClick={(e) => handleStartEdit(c, e)}
-              className="p-1 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-300/60 dark:hover:bg-slate-700 transition-colors cursor-pointer"
-              title="Ubah Nama"
-              aria-label="Ubah Nama"
-            >
-              <Edit2 className="w-3 h-3" />
-            </button>
+            {/* Contextual Popover Dropdown Menu */}
+            <AnimatePresence>
+              {isMenuOpen && (
+                <motion.div
+                  ref={menuRef}
+                  initial={{ opacity: 0, scale: 0.95, y: 4 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95, y: 4 }}
+                  transition={{ duration: 0.1 }}
+                  className="absolute right-0 top-full mt-1 z-50 w-44 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl p-1 space-y-0.5"
+                  onClick={e => e.stopPropagation()}
+                >
+                  {/* Rename Option */}
+                  <button
+                    type="button"
+                    onClick={(e) => handleStartEdit(c, e)}
+                    className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer text-left"
+                    aria-label="Ubah Nama"
+                  >
+                    <Edit2 className="w-3.5 h-3.5 text-slate-400" />
+                    <span>Ubah Nama</span>
+                  </button>
 
-            {/* Archive Toggle Button */}
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onToggleArchive(c.id);
-              }}
-              className={`p-1 rounded hover:bg-slate-300/60 dark:hover:bg-slate-700 transition-colors cursor-pointer ${
-                c.isArchived ? 'text-emerald-600' : 'text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
-              }`}
-              title={c.isArchived ? 'Buka dari Arsip' : 'Arsipkan'}
-              aria-label={c.isArchived ? 'Buka dari Arsip' : 'Arsipkan'}
-            >
-              <Archive className="w-3 h-3" />
-            </button>
+                  {/* Pin Option */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setMenuOpenId(null);
+                      onTogglePin(c.id);
+                    }}
+                    className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer text-left"
+                    aria-label={c.isPinned ? 'Lepas Pin' : 'Sematkan Pin'}
+                  >
+                    <Pin className={`w-3.5 h-3.5 ${c.isPinned ? 'text-amber-500 fill-amber-500/20' : 'text-slate-400'}`} />
+                    <span>{c.isPinned ? 'Lepas Pin' : 'Sematkan Obrolan'}</span>
+                  </button>
 
-            {/* Delete Trigger Button */}
-            <button
-              type="button"
-              onClick={(e) => handleRequestDelete(c.id, e)}
-              className="p-1 rounded text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-950/50 transition-colors cursor-pointer"
-              title="Hapus Percakapan"
-              aria-label="Hapus Percakapan"
-            >
-              <Trash2 className="w-3 h-3" />
-            </button>
+                  {/* Archive Option */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setMenuOpenId(null);
+                      onToggleArchive(c.id);
+                    }}
+                    className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer text-left"
+                    aria-label={c.isArchived ? 'Buka dari Arsip' : 'Arsipkan'}
+                  >
+                    <Archive className={`w-3.5 h-3.5 ${c.isArchived ? 'text-emerald-500' : 'text-slate-400'}`} />
+                    <span>{c.isArchived ? 'Buka dari Arsip' : 'Arsipkan Obrolan'}</span>
+                  </button>
+
+                  <div className="my-1 border-t border-slate-100 dark:border-slate-800" />
+
+                  {/* Delete Option */}
+                  <button
+                    type="button"
+                    onClick={(e) => handleRequestDelete(c.id, e)}
+                    className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer text-left font-medium"
+                    aria-label="Hapus Percakapan"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+                    <span>Hapus Obrolan</span>
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         )}
       </div>
     );
   }
 };
-

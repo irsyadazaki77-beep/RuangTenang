@@ -1,3 +1,5 @@
+@import "@fontsource-variable/plus-jakarta-sans";
+@import "@fontsource-variable/lora";
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 
@@ -13,28 +15,28 @@
     overscroll-behavior-y: none;
     -webkit-tap-highlight-color: transparent;
   }
-  
+
   html {
     scroll-behavior: smooth;
-    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-family: 'Plus Jakarta Sans Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     transition: background-color 0.4s cubic-bezier(0.4, 0, 0.2, 1), color 0.4s cubic-bezier(0.4, 0, 0.2, 1);
     -webkit-overflow-scrolling: touch;
   }
-  
+
   html.dark {
     color-scheme: dark;
   }
-  
+
   .font-heading {
-    font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+    font-family: 'Plus Jakarta Sans Variable', system-ui, sans-serif;
     font-weight: 600;
   }
 
   .font-serif,
   .font-document {
-    font-family: 'Lora', Georgia, Cambria, 'Times New Roman', Times, serif;
+    font-family: 'Lora Variable', Georgia, Cambria, 'Times New Roman', Times, serif;
   }
-  
+
   body {
     @apply bg-[#fafaf9] text-slate-850 dark:bg-[#080d16] dark:text-slate-100 antialiased selection:bg-teal-100 selection:text-teal-900 dark:selection:bg-teal-950 dark:selection:text-teal-200;
     min-height: 100dvh;
@@ -55,7 +57,7 @@
   input:focus-visible,
   select:focus-visible,
   textarea:focus-visible {
-    outline: 2px solid #0d9488;
+    outline: 2px solid #0f766e;
     outline-offset: 2px;
   }
 }
@@ -217,8 +219,15 @@
 
   /* --- DESIGN TOKENS --- */
   --color-slate-850: #172033;
-  --shadow-2xs: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-  --shadow-3xs: 0 1px 1px 0 rgb(0 0 0 / 0.03);
+  --color-surface-sidebar-light: #f8fafc;
+  --color-surface-sidebar-dark: #0f1117;
+  --color-surface-panel-light: #ffffff;
+  --color-surface-panel-dark: #090d16;
+
+  --shadow-2xs: 0 1px 2px 0 rgb(0 0 0 / 0.04);
+  --shadow-3xs: 0 1px 1px 0 rgb(0 0 0 / 0.02);
+  --shadow-subtle: 0 4px 20px -2px rgba(0, 0, 0, 0.05);
+  --shadow-subtle-dark: 0 4px 24px -2px rgba(0, 0, 0, 0.45);
 
   /* 1. Primary Colors (Teal for wellness, healing, calmness) */
   --color-primary-50: #f0fdfa;
@@ -231,7 +240,7 @@
   --color-primary-700: #0f766e;
   --color-primary-800: #115e59;
   --color-primary-900: #134e4a;
-  
+
   /* 2. Secondary Colors (Slate for grounded, professional system UI) */
   --color-secondary-50: #f8fafc;
   --color-secondary-100: #f1f5f9;
@@ -247,12 +256,12 @@
 
 @layer utilities {
   .surface-page {
-    @apply bg-stone-50/80 dark:bg-slate-950/60 backdrop-blur-3xl;
-    transition: background-color 0.4s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    @apply bg-[#fafaf9] dark:bg-[#080d16];
+    transition: background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
   .surface-card {
-    @apply bg-white/95 dark:bg-slate-900/90 border border-stone-200/70 dark:border-slate-800/80 rounded-xl sm:rounded-2xl shadow-3xs hover:shadow-2xs;
-    transition: background-color 0.4s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.4s cubic-bezier(0.4, 0, 0.2, 1), shadow 0.2s ease;
+    @apply bg-white dark:bg-slate-900/90 border border-slate-200/70 dark:border-slate-800/80 rounded-xl sm:rounded-2xl shadow-3xs hover:shadow-2xs;
+    transition: background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1), shadow 0.2s ease;
   }
   .surface-elevated {
     @apply bg-white dark:bg-slate-900 border border-stone-200/80 dark:border-slate-800 rounded-2xl shadow-xs;
@@ -266,9 +275,12 @@
     @apply text-stone-900 dark:text-stone-100;
   }
   .text-secondary {
-    @apply text-stone-600 dark:text-stone-400;
+    @apply text-stone-700 dark:text-stone-300;
   }
   .text-muted {
+    @apply text-stone-600 dark:text-stone-400;
+  }
+  .text-subtle {
     @apply text-stone-400 dark:text-stone-500;
   }
   .border-default {
@@ -278,7 +290,7 @@
     @apply border-stone-300/80 dark:border-slate-700/80;
   }
   .btn-primary {
-    @apply min-h-10 sm:min-h-9.5 px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 active:scale-[0.98] text-white font-medium text-[13.5px] sm:text-sm shadow-[0_2px_8px_-2px_rgba(13,148,136,0.25)] transition-all duration-150 ease-out cursor-pointer will-change-transform;
+    @apply min-h-10 sm:min-h-9.5 px-4 py-2 rounded-xl bg-teal-700 hover:bg-teal-800 active:scale-[0.98] text-white font-medium text-[13.5px] sm:text-sm shadow-[0_2px_8px_-2px_rgba(15,118,110,0.25)] transition-all duration-150 ease-out cursor-pointer will-change-transform;
   }
   .btn-secondary {
     @apply min-h-10 sm:min-h-9.5 px-3.5 py-2 rounded-xl bg-white dark:bg-slate-900 border border-stone-200/80 dark:border-slate-700 hover:bg-stone-50 dark:hover:bg-slate-800 active:scale-[0.98] text-stone-700 dark:text-stone-300 text-[13.5px] sm:text-sm transition-all duration-150 ease-out cursor-pointer will-change-transform;
@@ -582,5 +594,38 @@
   }
 }
 
+/* Optimization for long workspace conversations (>50 messages) without scroll jitter */
+.workspace-message-virtualized {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 110px;
+}
 
-
+/* Sleek custom scrollbar for Sidebar (ChatGPT / Gemini style) */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.25) transparent;
+}
+.custom-scrollbar::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.2);
+  border-radius: 9999px;
+  transition: background-color 0.2s ease;
+}
+.custom-scrollbar:hover::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.4);
+}
+.dark .custom-scrollbar {
+  scrollbar-color: rgba(148, 163, 184, 0.18) transparent;
+}
+.dark .custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.15);
+}
+.dark .custom-scrollbar:hover::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.35);
+}

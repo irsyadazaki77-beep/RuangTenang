@@ -2,11 +2,11 @@ import { test, expect } from '@playwright/test';
 
 test.describe('Routing E2E', () => {
   const routes = [
-    { path: '/', expectedText: 'Hai Mahasiswa' },
-    { path: '/mood', expectedText: 'Log Mood Harian' },
-    { path: '/screening', expectedText: 'Cek Kondisi Mental' },
-    { path: '/counselors', expectedText: 'Direktori Konselor' },
-    { path: '/emergency', expectedText: 'Pusat Bantuan Krisis & Darurat' },
+    { path: '/', expectedText: /Hai Mahasiswa/i },
+    { path: '/mood', expectedText: /Mood Tracker|Bilik Catatan Suasana Hati|Log Mood Harian/i },
+    { path: '/screening', expectedText: /Cek Kondisi Mental/i },
+    { path: '/counselors', expectedText: /Direktori Konselor/i },
+    { path: '/emergency', expectedText: /Pusat Bantuan Krisis & Darurat/i },
   ];
 
   for (const r of routes) {

@@ -158,14 +158,30 @@ export class PdfAdapter implements DocumentExtractorAdapter {
       // Step 6: Note pages that were not read
       const remainingUnreadPages = unextractedPageNums.length - (ocrApplied ? pagesToOcr.length : 0);
       if (remainingUnreadPages > 0) {
-        extractionWarnings.push(`${remainingUnreadPages} halaman PDF tidak menghasilkan teks atau belum dianalisis OCR.`);
+        extractionWarnings.push(`${remainingUnreadPages} halaman PDF berupa pindaian/gambar dan belum menghasilkan teks OCR.`);
       }
 
       if (blocks.length === 0) {
-        throw new DocumentProcessingException(
-          'PARSER_ERROR',
-          'Dokumen PDF tidak memuat teks yang dapat diekstraksi dan OCR tidak dapat membaca halaman pindaian.'
-        );
+        return {
+          documentId: input.documentId,
+          filename: input.filename,
+          mimeType: input.mimeType,
+          kind: 'pdf',
+          size: input.buffer.length,
+          checksum: input.checksum,
+          pageCount: totalPages || 1,
+          blocks: [],
+          normalizedText: '',
+          extractionWarnings: extractionWarnings.length
+            ? extractionWarnings
+            : ['Dokumen PDF berupa hasil pindaian (scan). Teks belum tersedia dari parser standar; disiapkan untuk analisis visual multimodal.'],
+          metadata: {
+            ocrApplied: false,
+            previewOnly: true,
+            visualAnalysisAvailable: true,
+            unextractedPageCount: unextractedPageNums.length || totalPages || 1
+          }
+        };
       }
 
       // Sort blocks by page number ascending

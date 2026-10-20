@@ -70,12 +70,15 @@ export class AuthController {
       metricsService.recordAuthSession(browserClient ? 'browser_cookie' : 'legacy_bearer');
 
       const isDev = process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test';
-      
+      if (isDev) {
+        console.info(`[DEV_ONLY_EMAIL_SINK] Registration verification code for ${newUser.email}: ${verificationCode}`);
+      }
+
       return res.status(201).json({
         success: true,
         userId: newUser.id,
         ...(browserClient ? {} : { token }),
-        message: isDev ? `Registrasi berhasil. [DEV MODE] Kode verifikasi Anda: ${verificationCode}` : 'Registrasi berhasil. Kode verifikasi email telah dikirim.'
+        message: 'Registrasi berhasil. Kode verifikasi email telah dikirim.'
       });
     } catch (err: any) {
       console.error('Registration error:', err);
@@ -138,12 +141,15 @@ export class AuthController {
         await emailService.sendMfaOtp(user.email, mfaCode);
 
         const isDev = process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test';
+        if (isDev) {
+          console.info(`[DEV_ONLY_EMAIL_SINK] Login MFA code for ${user.email}: ${mfaCode}`);
+        }
 
         return res.json({
           success: true,
           mfaRequired: true,
           mfaToken,
-          message: isDev ? `Autentikasi Multi-Faktor (MFA 2FA) diperlukan. [DEV MODE] Kode MFA: ${mfaCode}` : 'Autentikasi Multi-Faktor (MFA 2FA) diperlukan. Kode verifikasi telah dikirim.'
+          message: 'Autentikasi Multi-Faktor (MFA 2FA) diperlukan. Kode verifikasi telah dikirim.'
         });
       }
 

@@ -5,6 +5,7 @@ import { AuthProvider, useAuth, DEFAULT_GUEST_USER } from '../../contexts/AuthCo
 import { apiClient } from '../../lib/apiClient';
 
 vi.mock('../../lib/apiClient', () => ({
+  AUTH_SESSION_INVALIDATED_EVENT: 'rt-auth-session-invalidated',
   apiClient: {
     post: vi.fn(),
     get: vi.fn()
@@ -13,7 +14,7 @@ vi.mock('../../lib/apiClient', () => ({
 
 const TestComponent = () => {
   const { user, logout } = useAuth();
-  
+
   return (
     <div>
       <div data-testid="user-role">{user?.role}</div>
@@ -30,7 +31,7 @@ describe('Logout Flow Reliability', () => {
   it('changes local state to guest on successful logout', async () => {
     vi.mocked(apiClient.get).mockResolvedValue({ success: true, data: { user: { id: 'guest' } } });
     vi.mocked(apiClient.post).mockResolvedValueOnce({ success: true, data: {} });
-    
+
     render(
       <AuthProvider>
         <TestComponent />
@@ -42,18 +43,18 @@ describe('Logout Flow Reliability', () => {
   });
 
   it('throws an error and does not change state on failed logout', async () => {
-    vi.mocked(apiClient.get).mockResolvedValue({ 
-      success: true, 
-      data: { 
-        user: { id: 'u1', role: 'mahasiswa', name: 'Test', email: 'test@ui', tier: 'Free', usageStats: { chatMessagesSent: 0, appointmentsBooked: 0 } } 
-      } 
+    vi.mocked(apiClient.get).mockResolvedValue({
+      success: true,
+      data: {
+        user: { id: 'u1', role: 'mahasiswa', name: 'Test', email: 'test@ui', tier: 'Free', usageStats: { chatMessagesSent: 0, appointmentsBooked: 0 } }
+      }
     });
     vi.mocked(apiClient.post).mockResolvedValueOnce({ success: false, error: 'Network failure' });
-    
+
     let caughtError: Error | undefined;
     const TestErrorComp = () => {
       const { logout, setUser } = useAuth();
-      
+
       // `setUser` from AuthProvider is re-created each render; depending on it re-ran this
       // effect forever (unbounded render loop -> heap exhaustion). Seed the user exactly once.
       const seeded = React.useRef(false);

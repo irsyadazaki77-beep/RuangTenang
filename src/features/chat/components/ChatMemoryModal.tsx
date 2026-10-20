@@ -186,7 +186,7 @@ export function ChatMemoryModal({
             <button
               type="submit"
               disabled={isAdding || !newContent.trim()}
-              className="flex items-center gap-1 px-3 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-medium transition-colors cursor-pointer disabled:opacity-50"
+              className="flex items-center gap-1 px-3 py-2 bg-teal-700 hover:bg-teal-800 text-white rounded-xl text-xs font-medium transition-colors cursor-pointer disabled:opacity-50"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>{isAdding ? 'Menyimpan...' : 'Tambah'}</span>

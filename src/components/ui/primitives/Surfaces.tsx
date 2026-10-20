@@ -82,26 +82,39 @@ export const Card: React.FC<CardProps> = ({
 export interface AvatarProps {
   name: string;
   src?: string;
-  size?: 'sm' | 'md' | 'lg' | 'xl';
+  size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl';
+  shape?: 'circle' | 'rounded';
   status?: 'online' | 'busy' | 'offline';
   className?: string;
+  imgClassName?: string;
+  onClick?: () => void;
 }
 
 export const Avatar: React.FC<AvatarProps> = ({
   name,
   src,
   size = 'md',
+  shape = 'circle',
   status,
   className = '',
+  imgClassName = '',
+  onClick,
 }) => {
   const [imageFailed, setImageFailed] = React.useState(false);
+
+  React.useEffect(() => {
+    setImageFailed(false);
+  }, [src]);
 
   const sizeClasses = {
     sm: 'w-7 h-7 text-[11px]',
     md: 'w-9 h-9 text-xs',
     lg: 'w-11 h-11 text-sm',
-    xl: 'w-14 h-14 text-base',
+    xl: 'w-13 h-13 text-base',
+    '2xl': 'w-14 h-14 text-base sm:w-16 sm:h-16 sm:text-lg',
   };
+
+  const roundedClasses = shape === 'rounded' ? 'rounded-xl' : 'rounded-full';
 
   const statusClasses = {
     online: 'bg-emerald-500',
@@ -117,22 +130,27 @@ export const Avatar: React.FC<AvatarProps> = ({
   };
 
   return (
-    <div className={`relative inline-flex items-center justify-center shrink-0 ${className}`}>
+    <div
+      onClick={onClick}
+      className={`relative inline-flex items-center justify-center shrink-0 ${onClick ? 'cursor-pointer' : ''} ${className}`}
+      {...(onClick ? { role: 'button', tabIndex: 0 } : {})}
+    >
       {src && !imageFailed ? (
         <img
           src={src}
           alt={name}
           referrerPolicy="no-referrer"
           onError={() => setImageFailed(true)}
-          className={`rounded-full object-cover border border-slate-200/80 dark:border-slate-700 ${sizeClasses[size]}`}
+          className={`${roundedClasses} object-cover border border-slate-200/80 dark:border-slate-700 ${sizeClasses[size]} ${imgClassName}`}
         />
       ) : (
         <div
           className={`
-            rounded-full bg-teal-100/90 dark:bg-teal-950/80 text-teal-800 dark:text-teal-200
+            ${roundedClasses} bg-teal-100/90 dark:bg-teal-950/80 text-teal-800 dark:text-teal-200
             border border-teal-200/80 dark:border-teal-800/60 font-semibold select-none
             flex items-center justify-center
             ${sizeClasses[size]}
+            ${imgClassName}
           `}
         >
           {getInitials(name)}

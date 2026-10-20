@@ -72,10 +72,10 @@ export const WorkspaceTemplateModal: React.FC<WorkspaceTemplateModalProps> = ({
 
   const filteredTemplates = useMemo(() => {
     return ACADEMIC_TEMPLATES.filter(tpl => {
-      const matchesSearch = searchQuery === '' || 
-        tpl.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+      const matchesSearch = searchQuery === '' ||
+        tpl.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         tpl.description.toLowerCase().includes(searchQuery.toLowerCase());
-      
+
       let matchesCategory = true;
       if (activeCategory === 'WRITING') matchesCategory = tpl.targetArtifact === 'DOCUMENT' || tpl.targetArtifact === 'OUTLINE';
       if (activeCategory === 'RESEARCH') matchesCategory = tpl.id.includes('jurnal') || tpl.id.includes('bab1') || tpl.id.includes('proposal');
@@ -104,11 +104,11 @@ export const WorkspaceTemplateModal: React.FC<WorkspaceTemplateModalProps> = ({
   };
 
   return (
-    <div 
+    <div
       className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in"
       onClick={onClose}
     >
-      <div 
+      <div
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
@@ -132,8 +132,8 @@ export const WorkspaceTemplateModal: React.FC<WorkspaceTemplateModalProps> = ({
               </p>
             </div>
           </div>
-          <button 
-            type="button" 
+          <button
+            type="button"
             onClick={onClose}
             className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
             aria-label="Tutup Dialog"

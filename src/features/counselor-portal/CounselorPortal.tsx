@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Stethoscope, 
-  ListOrdered, 
-  FileText, 
-  BarChart3, 
-  ShieldCheck, 
-  AlertCircle, 
-  RefreshCw, 
-  Lock, 
-  Plus, 
+import {
+  Stethoscope,
+  ListOrdered,
+  FileText,
+  BarChart3,
+  ShieldCheck,
+  AlertCircle,
+  RefreshCw,
+  Lock,
+  Plus,
   CheckCircle2
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
@@ -161,7 +161,7 @@ export const CounselorPortal: React.FC = () => {
         <div className="pt-2">
           <a
             href="/"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-semibold shadow-xs transition-colors"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold shadow-xs transition-colors"
           >
             Kembali ke Beranda
           </a>
@@ -244,63 +244,87 @@ export const CounselorPortal: React.FC = () => {
         )}
       </div>
 
-      {/* Main Tabs Navigation */}
-      <div className="flex border-b border-default space-x-1 overflow-x-auto no-scrollbar">
-        <button
-          type="button"
-          onClick={() => setActiveTab('triage')}
-          className={`flex items-center gap-2 py-3 px-4 text-xs sm:text-sm font-semibold border-b-2 transition whitespace-nowrap cursor-pointer ${
-            activeTab === 'triage'
-              ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400 font-bold'
-              : 'border-transparent text-secondary hover:text-primary'
-          }`}
+      {/* Main Tabs Navigation with Scroll Affordance */}
+      <div className="relative border-b border-default">
+        <div
+          role="tablist"
+          aria-label="Navigasi Fitur Portal Konselor"
+          className="flex space-x-1 overflow-x-auto no-scrollbar"
         >
-          <ListOrdered className="w-4 h-4" />
-          <span>Antrean Triage ({triageItems.filter((i) => i.status !== 'RESOLVED').length})</span>
-        </button>
+          <button
+            type="button"
+            role="tab"
+            id="tab-triage"
+            aria-controls="panel-triage"
+            aria-selected={activeTab === 'triage'}
+            onClick={() => setActiveTab('triage')}
+            className={`flex items-center gap-2 py-3 px-4 text-xs sm:text-sm font-semibold border-b-2 transition whitespace-nowrap cursor-pointer ${
+              activeTab === 'triage'
+                ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400 font-bold'
+                : 'border-transparent text-secondary hover:text-primary'
+            }`}
+          >
+            <ListOrdered className="w-4 h-4" />
+            <span>Antrean Triage ({triageItems.filter((i) => i.status !== 'RESOLVED').length})</span>
+          </button>
 
-        <button
-          type="button"
-          onClick={() => {
-            setSelectedStudentForSoap(null);
-            setActiveNoteForEdit(null);
-            setActiveTab('soap-editor');
-          }}
-          className={`flex items-center gap-2 py-3 px-4 text-xs sm:text-sm font-semibold border-b-2 transition whitespace-nowrap cursor-pointer ${
-            activeTab === 'soap-editor'
-              ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400 font-bold'
-              : 'border-transparent text-secondary hover:text-primary'
-          }`}
-        >
-          <Plus className="w-4 h-4" />
-          <span>Buat Catatan SOAP Baru</span>
-        </button>
+          <button
+            type="button"
+            role="tab"
+            id="tab-soap-editor"
+            aria-controls="panel-soap-editor"
+            aria-selected={activeTab === 'soap-editor'}
+            onClick={() => {
+              setSelectedStudentForSoap(null);
+              setActiveNoteForEdit(null);
+              setActiveTab('soap-editor');
+            }}
+            className={`flex items-center gap-2 py-3 px-4 text-xs sm:text-sm font-semibold border-b-2 transition whitespace-nowrap cursor-pointer ${
+              activeTab === 'soap-editor'
+                ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400 font-bold'
+                : 'border-transparent text-secondary hover:text-primary'
+            }`}
+          >
+            <Plus className="w-4 h-4" />
+            <span>Buat Catatan SOAP Baru</span>
+          </button>
 
-        <button
-          type="button"
-          onClick={() => setActiveTab('soap-history')}
-          className={`flex items-center gap-2 py-3 px-4 text-xs sm:text-sm font-semibold border-b-2 transition whitespace-nowrap cursor-pointer ${
-            activeTab === 'soap-history'
-              ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400 font-bold'
-              : 'border-transparent text-secondary hover:text-primary'
-          }`}
-        >
-          <FileText className="w-4 h-4" />
-          <span>Riwayat SOAP Terenkripsi ({soapNotes.length})</span>
-        </button>
+          <button
+            type="button"
+            role="tab"
+            id="tab-soap-history"
+            aria-controls="panel-soap-history"
+            aria-selected={activeTab === 'soap-history'}
+            onClick={() => setActiveTab('soap-history')}
+            className={`px-4 py-3 flex items-center gap-2 text-xs sm:text-sm font-semibold border-b-2 transition whitespace-nowrap cursor-pointer ${
+              activeTab === 'soap-history'
+                ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400 font-bold'
+                : 'border-transparent text-secondary hover:text-primary'
+            }`}
+          >
+            <FileText className="w-4 h-4" />
+            <span>Riwayat SOAP Terenkripsi ({soapNotes.length})</span>
+          </button>
 
-        <button
-          type="button"
-          onClick={() => setActiveTab('analytics')}
-          className={`flex items-center gap-2 py-3 px-4 text-xs sm:text-sm font-semibold border-b-2 transition whitespace-nowrap cursor-pointer ${
-            activeTab === 'analytics'
-              ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400 font-bold'
-              : 'border-transparent text-secondary hover:text-primary'
-          }`}
-        >
-          <BarChart3 className="w-4 h-4" />
-          <span>Telemetri & Analitik Kampus</span>
-        </button>
+          <button
+            type="button"
+            role="tab"
+            id="tab-analytics"
+            aria-controls="panel-analytics"
+            aria-selected={activeTab === 'analytics'}
+            onClick={() => setActiveTab('analytics')}
+            className={`flex items-center gap-2 py-3 px-4 text-xs sm:text-sm font-semibold border-b-2 transition whitespace-nowrap cursor-pointer ${
+              activeTab === 'analytics'
+                ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400 font-bold'
+                : 'border-transparent text-secondary hover:text-primary'
+            }`}
+          >
+            <BarChart3 className="w-4 h-4" />
+            <span>Telemetri & Analitik Kampus</span>
+          </button>
+        </div>
+        {/* Right gradient fade mask indicating more tabs on narrow viewports */}
+        <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-slate-50 dark:from-slate-900 to-transparent sm:hidden opacity-80" />
       </div>
 
       {/* Tab Panels */}

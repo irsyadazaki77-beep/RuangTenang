@@ -1,7 +1,8 @@
 import React from 'react';
 import { Bookmark, FileText, Sparkles, X } from 'lucide-react';
 import type { WorkspaceInspector } from '../hooks/workspaceViewState';
-import type { WorkspaceFileAttachment } from '../types';
+import type { WorkspaceChapterScope, WorkspaceFileAttachment } from '../types';
+import { CHAPTER_SCOPE_LABELS } from '../utils/workspaceContext';
 import type { WorkspacePlan } from '../../../../shared/contracts/workspace';
 import type { FileSourceReference } from '../../../../shared/contracts/files';
 import { WorkspaceSourcePreview } from './WorkspaceSourcePreview';
@@ -11,6 +12,8 @@ import { WorkspaceTasksPanel } from './WorkspaceTasksPanel';
 const WorkspaceMemorySection = React.lazy(() =>
   import('./WorkspaceMemorySection').then(module => ({ default: module.WorkspaceMemorySection }))
 );
+
+const CHAPTER_SCOPES: WorkspaceChapterScope[] = ['ALL', 'BAB_1', 'BAB_2', 'BAB_3', 'BAB_4', 'BAB_5', 'LAMPIRAN'];
 
 export interface WorkspaceInspectorPanelProps {
   isOpen: boolean;
@@ -71,8 +74,10 @@ export interface WorkspaceInspectorPanelProps {
   onCancelWorkflow: () => void;
   onCompleteWorkflow: () => void;
   focusedTaskId?: string;
-  // Memory state
+  // Memory & Chapter Scope state
   canPersistMemory: boolean;
+  activeChapterScope?: WorkspaceChapterScope;
+  onChangeChapterScope?: (scope: WorkspaceChapterScope) => void;
 }
 
 export const WorkspaceInspectorPanel: React.FC<WorkspaceInspectorPanelProps> = React.memo(({
@@ -130,14 +135,16 @@ export const WorkspaceInspectorPanel: React.FC<WorkspaceInspectorPanelProps> = R
   onCancelWorkflow,
   onCompleteWorkflow,
   focusedTaskId,
-  canPersistMemory
+  canPersistMemory,
+  activeChapterScope = 'ALL',
+  onChangeChapterScope
 }) => {
   if (!isOpen) return null;
 
   return (
     <aside
       aria-label="Panel RuangKerja"
-      className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white dark:bg-slate-950 xl:border-l xl:border-slate-200/80 xl:dark:border-slate-800 ${
+      className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white/80 dark:bg-slate-950/80 backdrop-blur-md xl:border-l xl:border-slate-200/80 xl:dark:border-slate-800 ${
         activeInspectorTab === 'sources'
           ? 'absolute inset-x-0 bottom-0 z-40 h-[min(65dvh,36rem)] rounded-t-2xl shadow-2xl xl:relative xl:inset-auto xl:z-auto xl:h-auto xl:rounded-none xl:shadow-none'
           : ''
@@ -156,7 +163,7 @@ export const WorkspaceInspectorPanel: React.FC<WorkspaceInspectorPanelProps> = R
                 : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
             }`}
           >
-            <Sparkles className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+            <Sparkles className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
             Konteks
           </button>
           <button
@@ -170,7 +177,7 @@ export const WorkspaceInspectorPanel: React.FC<WorkspaceInspectorPanelProps> = R
                 : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
             }`}
           >
-            Referensi{workspaceAttachments.length > 0 && <span className="ml-1 text-[10px] text-slate-500">({workspaceAttachments.length})</span>}
+            File{workspaceAttachments.length > 0 && <span className="ml-1 text-[10px] text-slate-500">({workspaceAttachments.length})</span>}
           </button>
           <button
             type="button"
@@ -183,7 +190,7 @@ export const WorkspaceInspectorPanel: React.FC<WorkspaceInspectorPanelProps> = R
                 : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
             }`}
           >
-            <Bookmark className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+            <Bookmark className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
             Memori
           </button>
           <button
@@ -207,7 +214,7 @@ export const WorkspaceInspectorPanel: React.FC<WorkspaceInspectorPanelProps> = R
           type="button"
           aria-label="Tutup panel"
           onClick={onClose}
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:hover:bg-slate-800"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:hover:bg-slate-800"
         >
           <X className="h-4 w-4" aria-hidden="true" />
         </button>
@@ -215,10 +222,10 @@ export const WorkspaceInspectorPanel: React.FC<WorkspaceInspectorPanelProps> = R
 
       {(activeInspectorTab === 'files' || activeInspectorTab === 'sources') && (
         <div className="flex h-10 shrink-0 items-center gap-1 border-b border-slate-100 px-3 dark:border-slate-800" role="group" aria-label="Jenis referensi">
-          <button type="button" aria-pressed={activeInspectorTab === 'files'} onClick={() => onSelectTab('files')} className={`min-h-8 rounded-md px-3 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${activeInspectorTab === 'files' ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-900'}`}>
+          <button type="button" aria-pressed={activeInspectorTab === 'files'} onClick={() => onSelectTab('files')} className={`min-h-8 rounded-md px-3 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${activeInspectorTab === 'files' ? 'bg-indigo-50 text-indigo-800 dark:bg-indigo-950/50 dark:text-indigo-200' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-900'}`}>
             File
           </button>
-          <button type="button" aria-pressed={activeInspectorTab === 'sources'} onClick={() => onSelectTab('sources')} className={`min-h-8 rounded-md px-3 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${activeInspectorTab === 'sources' ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-900'}`}>
+          <button type="button" aria-pressed={activeInspectorTab === 'sources'} onClick={() => onSelectTab('sources')} className={`min-h-8 rounded-md px-3 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${activeInspectorTab === 'sources' ? 'bg-indigo-50 text-indigo-800 dark:bg-indigo-950/50 dark:text-indigo-200' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-900'}`}>
             Sumber
           </button>
           <span className="ml-auto text-[10px] text-slate-500">File & sumber</span>
@@ -233,10 +240,42 @@ export const WorkspaceInspectorPanel: React.FC<WorkspaceInspectorPanelProps> = R
             <p className="mt-1 text-[11px] text-slate-500">
               {selectedReadyWorkspaceFileCount} dokumen siap · {includeCanvasInContext && visibleActiveArtifactTitle ? visibleActiveArtifactTitle : 'Canvas tidak disertakan'} · {selectedText.trim() ? 'teks dipilih disertakan' : 'tanpa teks terpilih'}
             </p>
+            {onChangeChapterScope && (
+              <div className="mt-2.5 pt-2 border-t border-slate-100 dark:border-slate-800">
+                <p className="text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                  Fokus Sub-Dokumen / Bab (Isolasi Konteks Bab):
+                </p>
+                <div className="flex flex-wrap gap-1">
+                  {CHAPTER_SCOPES.map(scope => {
+                    const isActive = activeChapterScope === scope;
+                    return (
+                      <button
+                        key={scope}
+                        type="button"
+                        aria-pressed={isActive}
+                        onClick={() => onChangeChapterScope(scope)}
+                        className={`px-2 py-0.5 rounded-md text-[10.5px] font-medium transition-colors cursor-pointer ${
+                          isActive
+                            ? 'bg-emerald-600 text-white font-semibold'
+                            : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200'
+                        }`}
+                      >
+                        {CHAPTER_SCOPE_LABELS[scope].shortLabel}
+                      </button>
+                    );
+                  })}
+                </div>
+                {activeChapterScope !== 'ALL' && (
+                  <p className="mt-1.5 text-[10px] text-emerald-700 dark:text-emerald-300">
+                    Aktif: {CHAPTER_SCOPE_LABELS[activeChapterScope].fullLabel}
+                  </p>
+                )}
+              </div>
+            )}
             <button
               type="button"
               onClick={() => onSelectTab('files')}
-              className="mt-2 min-h-8 rounded-md px-2 text-[11px] font-semibold text-emerald-800 hover:bg-emerald-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:text-emerald-200 dark:hover:bg-emerald-950/40"
+              className="mt-2 min-h-8 rounded-md px-2 text-[11px] font-semibold text-indigo-800 hover:bg-indigo-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-indigo-200 dark:hover:bg-indigo-950/40"
             >
               Kelola file konteks
             </button>
@@ -246,7 +285,7 @@ export const WorkspaceInspectorPanel: React.FC<WorkspaceInspectorPanelProps> = R
               type="checkbox"
               checked={includeCanvasInContext}
               onChange={event => onToggleIncludeCanvasInContext(event.target.checked)}
-              className="accent-emerald-600"
+              className="accent-indigo-600"
             />
             Gunakan Canvas aktif <span className="ml-auto max-w-[55%] truncate text-[10px] font-normal text-slate-500">{visibleActiveArtifactTitle || 'Belum ada Canvas'}</span>
           </label>
@@ -260,7 +299,7 @@ export const WorkspaceInspectorPanel: React.FC<WorkspaceInspectorPanelProps> = R
                 type="button"
                 disabled={!canEditInstructions}
                 onClick={onToggleInstructionsEditing}
-                className="shrink-0 rounded-md px-2 py-1 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:text-emerald-300 dark:hover:bg-emerald-950"
+                className="shrink-0 rounded-md px-2 py-1 text-[11px] font-semibold text-indigo-700 hover:bg-indigo-50 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-indigo-300 dark:hover:bg-indigo-950"
               >
                 {isInstructionsEditing ? 'Batal' : 'Ubah'}
               </button>
@@ -274,7 +313,7 @@ export const WorkspaceInspectorPanel: React.FC<WorkspaceInspectorPanelProps> = R
                   rows={4}
                   aria-label="Instruksi Workspace"
                   placeholder="Contoh: Gunakan IEEE dan bahasa Indonesia formal."
-                  className="w-full resize-y rounded-md border border-slate-200 bg-white p-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:border-slate-700 dark:bg-slate-950"
+                  className="w-full resize-y rounded-md border border-slate-200 bg-white p-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-slate-700 dark:bg-slate-950"
                 />
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] text-slate-500">{instructionsDraft.length}/4000</span>
@@ -282,7 +321,7 @@ export const WorkspaceInspectorPanel: React.FC<WorkspaceInspectorPanelProps> = R
                     type="button"
                     disabled={isInstructionsSaving}
                     onClick={() => void onSaveInstructions()}
-                    className="rounded-md bg-emerald-700 px-2.5 py-1.5 text-[11px] font-semibold text-white disabled:opacity-50"
+                    className="rounded-md bg-indigo-600 hover:bg-indigo-700 px-2.5 py-1.5 text-[11px] font-semibold text-white disabled:opacity-50"
                   >
                     {isInstructionsSaving ? 'Menyimpan…' : 'Simpan'}
                   </button>
@@ -302,7 +341,7 @@ export const WorkspaceInspectorPanel: React.FC<WorkspaceInspectorPanelProps> = R
             <button
               type="button"
               onClick={onAddFileClick}
-              className="min-h-9 shrink-0 rounded-lg bg-emerald-700 px-3 text-[11px] font-semibold text-white hover:bg-emerald-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+              className="min-h-9 shrink-0 rounded-lg bg-indigo-600 hover:bg-indigo-700 px-3 text-[11px] font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
             >
               Tambah file
             </button>
@@ -327,12 +366,24 @@ export const WorkspaceInspectorPanel: React.FC<WorkspaceInspectorPanelProps> = R
                       disabled={!ready}
                       checked={ready && selectedWorkspaceFileIds.includes(file.id!)}
                       onChange={event => onSelectFileCheckbox(file.id!, event.target.checked)}
-                      className="accent-emerald-600 disabled:opacity-40"
+                      className="accent-indigo-600 disabled:opacity-40"
                     />
                     <FileText className="h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-xs text-slate-700 dark:text-slate-200">{file.name}</span>
-                      <span className={`text-[10px] ${ready ? 'text-emerald-700 dark:text-emerald-300' : 'text-slate-500'}`}>
+                      <span className="flex items-center gap-1.5 text-xs text-slate-700 dark:text-slate-200">
+                        <span className="truncate">{file.name}</span>
+                        {file.ocrApplied && (
+                          <span className="shrink-0 rounded bg-emerald-100 px-1 py-0.2 text-[9px] font-semibold text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                            OCR
+                          </span>
+                        )}
+                        {file.visualAnalysisAvailable && !file.ocrApplied && (
+                          <span className="shrink-0 rounded bg-sky-100 px-1 py-0.2 text-[9px] font-semibold text-sky-800 dark:bg-sky-950 dark:text-sky-300">
+                            Visual
+                          </span>
+                        )}
+                      </span>
+                      <span className={`text-[10px] ${ready ? 'text-indigo-700 dark:text-indigo-300' : 'text-slate-500'}`}>
                         {status}
                         {file.status === 'ready' && includeFilesInContext ? (selectedWorkspaceFileIds.includes(file.id!) ? ' · Disertakan' : ' · Tidak disertakan') : ''}
                         {file.status === 'ready' && !includeFilesInContext ? ' · Konteks dinonaktifkan' : ''}
@@ -344,7 +395,7 @@ export const WorkspaceInspectorPanel: React.FC<WorkspaceInspectorPanelProps> = R
                         type="button"
                         aria-label={`Pratinjau ${file.name}`}
                         onClick={() => onOpenFilePreview(file.id!)}
-                        className="min-h-8 rounded px-2 text-[11px] font-medium text-emerald-700 hover:bg-emerald-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:text-emerald-300 dark:hover:bg-emerald-950/40"
+                        className="min-h-8 rounded px-2 text-[11px] font-medium text-indigo-700 hover:bg-indigo-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-indigo-300 dark:hover:bg-indigo-950/40"
                       >
                         Preview
                       </button>
@@ -359,7 +410,7 @@ export const WorkspaceInspectorPanel: React.FC<WorkspaceInspectorPanelProps> = R
               type="checkbox"
               checked={includeFilesInContext}
               onChange={event => onToggleIncludeFilesInContext(event.target.checked)}
-              className="accent-emerald-600"
+              className="accent-indigo-600"
             />
             Sertakan file terpilih pada respons berikutnya <span className="ml-auto text-[10px] text-slate-500">{selectedReadyWorkspaceFileCount} aktif</span>
           </label>
@@ -412,6 +463,8 @@ export const WorkspaceInspectorPanel: React.FC<WorkspaceInspectorPanelProps> = R
             key={chatId || logicalWorkspaceIdentity}
             chatId={chatId}
             canPersist={canPersistMemory}
+            activeChapterScope={activeChapterScope}
+            onChangeChapterScope={onChangeChapterScope}
           />
         </React.Suspense>
       </div>

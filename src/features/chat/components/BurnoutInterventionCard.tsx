@@ -328,7 +328,7 @@ export const BurnoutInterventionCard: React.FC<BurnoutInterventionCardProps> = (
               <button
                 type="button"
                 onClick={() => setGroundingStep(groundingStep + 1)}
-                className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-teal-600 hover:bg-teal-700 text-white text-xs font-semibold cursor-pointer transition-colors"
+                className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold cursor-pointer transition-colors"
               >
                 <span>Sudah Saya Sadari</span>
                 <ChevronRight className="w-3.5 h-3.5" />

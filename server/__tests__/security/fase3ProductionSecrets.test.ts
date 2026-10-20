@@ -82,6 +82,7 @@ describe('FASE 3 — Production Secrets & Fail-Closed Security Tests', () => {
     process.env.JWT_SECRET = 'a-very-long-valid-jwt-secret-key-for-prod-32chars!';
     process.env.ENCRYPTION_KEY = 'a-very-long-valid-encryption-key-for-prod-32chars!';
     process.env.BLIND_INDEX_SECRET = 'a-very-long-valid-blind-index-key-for-prod-32chars!';
+    process.env.BACKUP_ENCRYPTION_KEY = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
     process.env.DATABASE_URL = 'postgresql://user:pass@localhost:5432/db';
 
     process.env.REQUIRE_TURN = 'true';

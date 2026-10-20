@@ -66,9 +66,12 @@ function parseCrossrefItem(item: any, retrievedAt: string): AcademicPaper | null
   };
 }
 
-async function crossref(path: string): Promise<any> {
+async function crossref(path: string, signal?: AbortSignal): Promise<any> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), CROSSREF_TIMEOUT_MS);
+  const abortFromCaller = () => controller.abort();
+  if (signal?.aborted) controller.abort();
+  else signal?.addEventListener('abort', abortFromCaller, { once: true });
   try {
     const response = await fetch(`https://api.crossref.org/works/${path}`, {
       headers: { Accept: 'application/json' }, signal: controller.signal
@@ -77,14 +80,15 @@ async function crossref(path: string): Promise<any> {
     return await response.json();
   } finally {
     clearTimeout(timer);
+    signal?.removeEventListener('abort', abortFromCaller);
   }
 }
 
-export async function resolveDOI(doiString: string): Promise<AcademicPaper | null> {
+export async function resolveDOI(doiString: string, signal?: AbortSignal): Promise<AcademicPaper | null> {
   const doi = normalizeDoi(doiString);
   if (!/^10\.\d{4,9}\/[-._;()/A-Za-z0-9]+$/i.test(doi)) return null;
   try {
-    const payload = await crossref(encodeURIComponent(doi));
+    const payload = await crossref(encodeURIComponent(doi), signal);
     const item = payload?.message;
     const paper = parseCrossrefItem(item, new Date().toISOString());
     if (!paper || paper.doi?.toLowerCase() !== doi.toLowerCase()) return null;
@@ -94,16 +98,16 @@ export async function resolveDOI(doiString: string): Promise<AcademicPaper | nul
   }
 }
 
-export async function searchAcademicPapers(query: string): Promise<AcademicPaper[]> {
+export async function searchAcademicPapers(query: string, signal?: AbortSignal): Promise<AcademicPaper[]> {
   const normalized = query.trim();
   if (!normalized) return [];
   const doiMatch = normalized.match(DOI_REGEX);
   if (doiMatch) {
-    const paper = await resolveDOI(doiMatch[1]);
+    const paper = await resolveDOI(doiMatch[1], signal);
     return paper ? [paper] : [];
   }
   try {
-    const payload = await crossref(`?query=${encodeURIComponent(normalized)}&rows=10`);
+    const payload = await crossref(`?query=${encodeURIComponent(normalized)}&rows=10`, signal);
     const retrievedAt = new Date().toISOString();
     const items = Array.isArray(payload?.message?.items) ? payload.message.items : [];
     const unique = new Map<string, AcademicPaper>();

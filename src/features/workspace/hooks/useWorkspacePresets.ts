@@ -1,11 +1,11 @@
 import { useState, useCallback, useMemo, useEffect } from 'react';
-import type { 
-  WorkspaceAiPreset, 
-  PresetId, 
+import type {
+  WorkspaceAiPreset,
+  PresetId,
   UserPersonalizationPreferences,
   PresetSelectionSnapshot
 } from '../../../lib/aiPresets';
-import { AUTO_ROUTING_MODEL_ID } from '../../../lib/aiModels';
+import { AUTO_ROUTING_MODEL_ID, isKerjaProfile } from '../../../lib/aiModels';
 import { BUILT_IN_PRESETS, DEFAULT_PRESET_ID, getBuiltInPresetById } from '../constants/presetConstants';
 import {
   loadUserCustomPresets,
@@ -91,8 +91,8 @@ export function useWorkspacePresets({
     if (target.routingMode === 'auto') {
       onModelChange(AUTO_ROUTING_MODEL_ID);
     } else if (target.preferredModelId) {
-      // Validate model exists in catalog before forcing it
-      const exists = models.some(m => m.id === target.preferredModelId && m.selectable);
+      // Validate model exists in catalog or is an official Kerja profile before forcing it
+      const exists = isKerjaProfile(target.preferredModelId) || models.some(m => m.id === target.preferredModelId && m.selectable);
       onModelChange(exists ? target.preferredModelId : AUTO_ROUTING_MODEL_ID);
     }
   }, [allPresets, userId, models, onModelChange]);
@@ -149,8 +149,8 @@ export function useWorkspacePresets({
       return { success: false, error: 'Preset sumber tidak ditemukan.' };
     }
 
-    const targetName = (newName && newName.trim()) 
-      ? newName.trim() 
+    const targetName = (newName && newName.trim())
+      ? newName.trim()
       : `${source.name} (Salinan)`;
 
     return createCustomPreset({

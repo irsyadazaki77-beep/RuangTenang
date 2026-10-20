@@ -35,8 +35,8 @@ console.log(`Total JS Compressed Size: ${totalKb} KB`);
 console.log(`Largest Chunk (${largestChunkName}): ${largestKb} KB`);
 
 // Target budgets for modern rich enterprise SPA with separate lazy-loaded vendor chunks:
-// vendor-mermaid (~1.4MB gzipped) is strictly lazy-loaded on canvas diagram render
-const TOTAL_BUDGET_KB = 3000; // Target is <3000 KB total compressed across all lazy-loaded split chunks
+// vendor-mermaid (~1.4MB gzipped) and export engines (XLSX, PPTX, DOCX) are strictly lazy-loaded on demand
+const TOTAL_BUDGET_KB = 3200; // Target is <3200 KB total compressed across all lazy-loaded split chunks
 const CHUNK_BUDGET_KB = 1500; // Max individual chunk size compressed (allows isolated vendor-mermaid chunk)
 
 let failed = false;

@@ -15,7 +15,7 @@ export const RhythmicTypingIndicator: React.FC<RhythmicTypingIndicatorProps> = (
   const shouldReduceMotion = useReducedMotion();
 
   return (
-    <div 
+    <div
       className={`flex items-center gap-2.5 py-1.5 pl-1 sm:pl-2 select-none animate-fade-in ${className}`}
       role="status"
       aria-live="polite"
@@ -23,7 +23,7 @@ export const RhythmicTypingIndicator: React.FC<RhythmicTypingIndicatorProps> = (
     >
       {/* Mini App Avatar Indicator */}
       {avatarSrc && (
-        <div className="w-6 h-6 rounded-lg bg-teal-50 dark:bg-teal-950/60 border border-teal-200/80 dark:border-teal-900/60 flex items-center justify-center p-1 shrink-0 shadow-2xs">
+        <div className="w-8 h-8 rounded-xl bg-white dark:bg-teal-50 flex items-center justify-center p-0.5 shrink-0">
           <img src={avatarSrc} alt="" className="w-full h-full object-contain pointer-events-none" />
         </div>
       )}

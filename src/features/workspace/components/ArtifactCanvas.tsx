@@ -1,15 +1,15 @@
 import React, { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback, useDeferredValue } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { modalBackdropVariants, modalPanelVariants } from '../../../lib/motionTokens';
-import { 
-  Code2, 
-  FileText, 
-  Quote, 
-  Copy, 
-  Check, 
-  Download, 
-  Play, 
-  Sparkles, 
+import {
+  Code2,
+  FileText,
+  Quote,
+  Copy,
+  Check,
+  Download,
+  Play,
+  Sparkles,
   BookMarked,
   Workflow,
   History,
@@ -45,12 +45,12 @@ const AcademicParaphraseModal = React.lazy(() => import('./AcademicParaphraseMod
 const ArtifactCanvasEditor = React.lazy(() => import('./ArtifactCanvasEditor').then(m => ({ default: m.ArtifactCanvasEditor })));
 const ArtifactTableEditor = React.lazy(() => import('./ArtifactDataEditors').then(m => ({ default: m.ArtifactTableEditor })));
 const ArtifactPresentationEditor = React.lazy(() => import('./ArtifactDataEditors').then(m => ({ default: m.ArtifactPresentationEditor })));
-import { 
-  downloadBibTeXFile, 
-  downloadRISFile, 
-  parseCitations, 
-  formatAsAPA7, 
-  formatAsIEEE, 
+import {
+  downloadBibTeXFile,
+  downloadRISFile,
+  parseCitations,
+  formatAsAPA7,
+  formatAsIEEE,
   formatAsHarvard,
   generateBibTeX,
   generateRIS
@@ -114,7 +114,8 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
   const [isCopied, setIsCopied] = useState(false);
   const [internalExpanded, setInternalExpanded] = useState(false);
   const isExpanded = controlledExpanded !== undefined ? controlledExpanded : internalExpanded;
-  const toggleExpand = controlledToggleExpand || (() => setInternalExpanded(prev => !prev));
+  const toggleInternalExpand = useCallback(() => setInternalExpanded(prev => !prev), []);
+  const toggleExpand = controlledToggleExpand || toggleInternalExpand;
 
   const [viewMode, setViewMode] = useState<CanvasViewMode>('preview');
   const [isPresentationStudio, setIsPresentationStudio] = useState(artifact.language === 'presentation' || isPresentationContent(artifact.content));
@@ -502,15 +503,20 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
         e.preventDefault();
         handleManualSave();
-      }
-      if (e.key === 'Escape') {
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'e') {
+        e.preventDefault();
+        setShowExportModal(true);
+      } else if (e.altKey && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        toggleExpand();
+      } else if (e.key === 'Escape') {
         setShowMoreMenu(false);
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleManualSave]);
+  }, [handleManualSave, toggleExpand]);
 
   // Close dropdowns when clicking outside
   useEffect(() => {
@@ -610,10 +616,10 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
     setIsExportingDocx(true);
     setShowMoreMenu(false);
     try {
-      const typeLabel = templateType === 'skripsi' 
-        ? 'skripsi baku 4-4-3-3' 
-        : templateType === 'ieee_apa' 
-        ? 'paper IEEE / APA' 
+      const typeLabel = templateType === 'skripsi'
+        ? 'skripsi baku 4-4-3-3'
+        : templateType === 'ieee_apa'
+        ? 'paper IEEE / APA'
         : 'makalah';
       showToast(`Menyusun naskah format ${typeLabel} (.docx)...`, 'info');
       const { exportToAcademicDocx } = await import('../utils/exportDocx');
@@ -869,7 +875,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
   };
 
   return (
-    <div 
+    <div
       className={`flex flex-col h-full bg-slate-50/60 dark:bg-[#0B101B] transition-all duration-200 overflow-hidden ${
         isExpanded ? 'fixed inset-0 z-50 bg-white dark:bg-slate-950' : 'relative w-full'
       }`}
@@ -1021,8 +1027,8 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
           ) : isMermaid ? (
             <div className="max-w-3xl mx-auto space-y-4">
               <React.Suspense fallback={<div className="p-8 text-center text-xs text-slate-400">Merender diagram Mermaid...</div>}>
-                <MermaidRenderer 
-                  chart={editableContent} 
+                <MermaidRenderer
+                  chart={editableContent}
                   title={artifact.title}
                   onRequestFixDiagram={(rawCode) => {
                     if (onRequestRevision) {
@@ -1126,10 +1132,27 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
                     </button>
                     <button
                       type="button"
-                      onClick={handleDownloadBibTeX}
-                      className="px-2 py-0.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 text-[10.5px] font-mono cursor-pointer"
+                      onClick={() => handleCopyCitationFormatted('BIBTEX')}
+                      title="Salin format BibTeX untuk Zotero / Mendeley (Import from Clipboard)"
+                      className="px-2 py-0.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 text-[10.5px] font-medium cursor-pointer"
                     >
-                      .bib
+                      Zotero/Mendeley (.bib)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleDownloadBibTeX}
+                      title="Unduh berkas BibTeX (.bib)"
+                      className="px-2 py-0.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[10.5px] font-mono cursor-pointer"
+                    >
+                      ↓.bib
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleDownloadRIS}
+                      title="Unduh berkas RIS (.ris)"
+                      className="px-2 py-0.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[10.5px] font-mono cursor-pointer"
+                    >
+                      ↓.ris
                     </button>
                   </div>
                 </div>
@@ -1250,7 +1273,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
       {/* 5. MODAL KONFIRMASI HAPUS DOKUMEN */}
       <AnimatePresence>
         {showDeleteConfirm && (
-          <motion.div 
+          <motion.div
             className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs select-none"
             variants={modalBackdropVariants}
             initial="hidden"
@@ -1258,7 +1281,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
             exit="exit"
             onClick={() => { if (!isDeleting) setShowDeleteConfirm(false); }}
           >
-            <motion.div 
+            <motion.div
               className="w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl p-5 space-y-4"
               variants={modalPanelVariants}
               initial="hidden"

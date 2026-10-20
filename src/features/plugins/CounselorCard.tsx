@@ -10,7 +10,7 @@ export default function CounselorCard({ onAction }: { onAction?: () => void }) {
       <div className="flex-1">
         <h3 className="font-semibold text-slate-800">Cari & Jadwalkan Konselor</h3>
         <p className="text-sm text-slate-500 mt-1 mb-3">Temukan psikolog atau konselor kampus yang sesuai dengan kebutuhan Anda.</p>
-        <button onClick={onAction} className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-sm font-medium transition-colors">
+        <button onClick={onAction} className="px-4 py-2 bg-teal-700 hover:bg-teal-800 text-white rounded-lg text-sm font-medium transition-colors">
           Lihat Direktori
         </button>
       </div>

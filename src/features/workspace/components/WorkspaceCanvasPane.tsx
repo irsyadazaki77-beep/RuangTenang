@@ -1,10 +1,10 @@
 import React, { Suspense, useState, useMemo } from 'react';
-import { 
-  FileText, 
-  FileCode, 
-  Quote, 
-  ListTree, 
-  FilePlus, 
+import {
+  FileText,
+  FileCode,
+  Quote,
+  ListTree,
+  FilePlus,
   X,
   Search,
   ChevronDown,
@@ -12,8 +12,10 @@ import {
   Table2
 } from 'lucide-react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
-import { WorkspaceArtifact, ArtifactType, WorkspaceTab, WorkspaceArtifactSelection, ArtifactPatch } from '../types';
+import { WorkspaceArtifact, ArtifactType, WorkspaceTab, WorkspaceArtifactSelection, ArtifactPatch, WorkspaceChapterScope } from '../types';
+import { CHAPTER_SCOPE_LABELS, inferArtifactChapterScope } from '../utils/workspaceContext';
 import { WorkspaceToolDefinition } from '../tools/toolTypes';
+import { LazyMarkdown } from '../../../components/common/LazyMarkdown';
 
 const ArtifactCanvas = React.lazy(() => import('./ArtifactCanvas').then(module => ({ default: module.ArtifactCanvas })));
 
@@ -138,9 +140,9 @@ function ProposalPreview({ proposal, onDismiss }: {
             </div>
           </div>
         ) : (
-          <pre className="whitespace-pre-wrap break-words font-sans text-sm leading-7 text-slate-800 dark:text-slate-200 max-w-4xl mx-auto">
-            {proposal.content}
-          </pre>
+          <div className="prose dark:prose-invert max-w-4xl mx-auto text-sm leading-relaxed text-slate-800 dark:text-slate-200">
+            <LazyMarkdown content={proposal.content} />
+          </div>
         )}
       </div>
     </section>
@@ -180,7 +182,12 @@ interface WorkspaceCanvasPaneProps {
   onDismissInlineEdit?: () => void;
   onDraftContentChange?: (artifactId: string, content: string) => void;
   revisionCommit?: { artifactId: string; content: string; version: number } | null;
+  activeChapterScope?: WorkspaceChapterScope;
+  onChangeChapterScope?: (scope: WorkspaceChapterScope) => void;
+  onCreateChapterArtifact?: (scope: WorkspaceChapterScope) => void;
 }
+
+const CHAPTER_SCOPES: WorkspaceChapterScope[] = ['ALL', 'BAB_1', 'BAB_2', 'BAB_3', 'BAB_4', 'BAB_5', 'LAMPIRAN'];
 
 export const WorkspaceCanvasPane: React.FC<WorkspaceCanvasPaneProps> = React.memo(({
   artifacts,
@@ -214,7 +221,10 @@ export const WorkspaceCanvasPane: React.FC<WorkspaceCanvasPaneProps> = React.mem
   inlineEditPatch,
   onDismissInlineEdit,
   onDraftContentChange,
-  revisionCommit
+  revisionCommit,
+  activeChapterScope = 'ALL',
+  onChangeChapterScope,
+  onCreateChapterArtifact
 }) => {
   const shouldReduceMotion = useReducedMotion();
   const [isDesktopLayout, setIsDesktopLayout] = useState(() => typeof window === 'undefined'
@@ -237,49 +247,92 @@ export const WorkspaceCanvasPane: React.FC<WorkspaceCanvasPaneProps> = React.mem
 
   const getArtifactTabIcon = (type: ArtifactType) => {
     switch (type) {
-      case 'CODE': return <FileCode className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />;
+      case 'CODE': return <FileCode className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />;
       case 'CITATION': return <Quote className="w-3.5 h-3.5 text-amber-500" />;
       case 'OUTLINE': return <ListTree className="w-3.5 h-3.5 text-teal-500" />;
       case 'CHART': return <BarChart3 className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400" />;
-      case 'TABLE': return <Table2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />;
-      default: return <FileText className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />;
+      case 'TABLE': return <Table2 className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />;
+      default: return <FileText className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />;
     }
   };
 
-  // Filter artifacts by search query & type filter
+  // Filter artifacts by search query, type filter, and optional chapter scope
   const filteredArtifacts = useMemo(() => {
-    return artifacts.filter(art => {
+    const base = artifacts.filter(art => {
       const matchType = filterType === 'ALL' || art.type === filterType;
-      const matchQuery = !searchQuery.trim() || 
+      const matchQuery = !searchQuery.trim() ||
         art.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         art.type.toLowerCase().includes(searchQuery.toLowerCase());
       return matchType && matchQuery;
     });
-  }, [artifacts, filterType, searchQuery]);
+    if (activeChapterScope === 'ALL') return base;
+    const chapterMatches = base.filter(art => inferArtifactChapterScope(art.title, art.chapterScope) === activeChapterScope);
+    return chapterMatches.length > 0 ? chapterMatches : base;
+  }, [artifacts, filterType, searchQuery, activeChapterScope]);
 
   return (
     <>
       {/* DESKTOP RIGHT PANE: LIVE ARTIFACT CANVAS */}
       {isCanvasOpen && isDesktopLayout && (
-        <section 
-        className="hidden min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white transition-all duration-200 xl:flex dark:bg-slate-950"
+        <section
+        className="hidden min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white/80 dark:bg-slate-950/80 backdrop-blur-md transition-all duration-200 xl:flex"
         >
-          {isCreatingArtifact && <div role="status" className="flex h-8 shrink-0 items-center gap-2 border-b border-emerald-100 bg-emerald-50/70 px-3 text-xs font-medium text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-300"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />Membuat dokumen di Canvas…</div>}
+          {isCreatingArtifact && <div role="status" className="flex h-8 shrink-0 items-center gap-2 border-b border-indigo-100 bg-indigo-50/70 px-3 text-xs font-medium text-indigo-800 dark:border-indigo-900/50 dark:bg-indigo-950/30 dark:text-indigo-300"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-indigo-500" />Membuat dokumen di Canvas…</div>}
           {activeArtifact?.persistenceStatus && activeArtifact.persistenceStatus !== 'persistent' && <div className="flex min-h-8 shrink-0 items-center justify-between gap-2 border-b border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200" role="status">
             <span>{activeArtifact.persistenceStatus === 'failed' ? 'Draf masih tersimpan lokal. Penyimpanan ke Ruang Kerja belum berhasil.' : activeArtifact.persistenceStatus === 'saving' ? 'Menyimpan draf ke Ruang Kerja…' : 'Draf tersimpan lokal dan akan dipindahkan setelah chat dibuat.'}</span>
             {activeArtifact.persistenceStatus === 'failed' && hasWorkspaceChat && <button type="button" className="font-semibold underline underline-offset-2" onClick={() => { void Promise.resolve(onSaveArtifact(activeArtifact.content, activeArtifact.title)).catch(() => undefined); }}>Coba simpan</button>}
           </div>}
+          {/* Sub-Document / Chapter Context Selector Strip (Multi-turn Context Memory Per-Bab) */}
+          {onChangeChapterScope && (
+            <div className="h-8 px-3 bg-slate-50/90 dark:bg-slate-900/80 border-b border-slate-200/70 dark:border-slate-800/80 flex items-center justify-between gap-2 shrink-0 z-10">
+              <div role="group" aria-label="Fokus Sub-Dokumen / Bab" className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mr-1 shrink-0">
+                  Fokus Bab:
+                </span>
+                {CHAPTER_SCOPES.map(scope => {
+                  const isScopeActive = activeChapterScope === scope;
+                  const meta = CHAPTER_SCOPE_LABELS[scope];
+                  return (
+                    <button
+                      key={scope}
+                      type="button"
+                      aria-pressed={isScopeActive}
+                      onClick={() => onChangeChapterScope(scope)}
+                      title={meta.fullLabel}
+                      className={`h-6 px-2 rounded-md text-[11px] font-medium whitespace-nowrap transition-colors cursor-pointer shrink-0 ${
+                        isScopeActive
+                          ? 'bg-emerald-600 text-white font-semibold shadow-2xs'
+                          : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200/70 dark:hover:bg-slate-800'
+                      }`}
+                    >
+                      {meta.shortLabel}
+                    </button>
+                  );
+                })}
+              </div>
+              {activeChapterScope !== 'ALL' && onCreateChapterArtifact && (
+                <button
+                  type="button"
+                  onClick={() => onCreateChapterArtifact(activeChapterScope)}
+                  className="h-6 px-2 rounded-md bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-[10.5px] font-semibold whitespace-nowrap shrink-0 cursor-pointer"
+                  title={`Buat dokumen draf khusus untuk ${CHAPTER_SCOPE_LABELS[activeChapterScope].fullLabel}`}
+                >
+                  + Draf {CHAPTER_SCOPE_LABELS[activeChapterScope].shortLabel}
+                </button>
+              )}
+            </div>
+          )}
           {/* Multi-Artifact Tab & Filter Strip (when > 1 artifacts exist) */}
           {artifacts.length > 1 && (
             <div className="h-9 px-3 bg-white dark:bg-secondary-900 border-b border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-1 shrink-0 z-10">
               {/* Tab Strip with Horizontal Scroll */}
-              <div className="flex items-center gap-1 overflow-x-auto no-scrollbar flex-1 min-w-0 py-1">
+              <div role="group" aria-label="Pilih dokumen Canvas" className="flex items-center gap-1 overflow-x-auto no-scrollbar flex-1 min-w-0 py-1">
                 {filteredArtifacts.map((art) => {
                   const isActive = art.id === activeArtifactId;
                   return (
                     <button
                       key={art.id}
-                      aria-selected={isActive}
+                      aria-pressed={isActive}
                       type="button"
                       onClick={() => onSelectArtifact(art.id)}
                       className={`h-6.5 px-2.5 rounded-md text-xs font-medium flex items-center gap-1.5 whitespace-nowrap transition-colors cursor-pointer shrink-0 ${
@@ -312,7 +365,7 @@ export const WorkspaceCanvasPane: React.FC<WorkspaceCanvasPaneProps> = React.mem
                       placeholder="Cari..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      className="h-6 w-20 sm:w-28 text-[11px] pl-5 pr-1.5 bg-slate-100 dark:bg-slate-800 border-none rounded-md text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      className="h-6 w-20 sm:w-28 text-[11px] pl-5 pr-1.5 bg-slate-100 dark:bg-slate-800 border-none rounded-md text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                     />
                     <Search className="w-3 h-3 text-slate-400 absolute left-1.5 pointer-events-none" />
                   </div>
@@ -339,8 +392,8 @@ export const WorkspaceCanvasPane: React.FC<WorkspaceCanvasPaneProps> = React.mem
                               setShowFilterDropdown(false);
                             }}
                             className={`w-full text-left px-2 py-1 rounded-lg text-[10.5px] cursor-pointer ${
-                              filterType === t 
-                                ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 font-semibold' 
+                              filterType === t
+                                ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 font-semibold'
                                 : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
                             }`}
                           >
@@ -392,7 +445,7 @@ export const WorkspaceCanvasPane: React.FC<WorkspaceCanvasPaneProps> = React.mem
                 <button
                   type="button"
                   onClick={() => onCreateNewArtifact('DOCUMENT')}
-                  className="h-8 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-2xs transition-all cursor-pointer flex items-center gap-1.5"
+                  className="h-8 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-2xs transition-all cursor-pointer flex items-center gap-1.5"
                 >
                   <FilePlus className="w-3.5 h-3.5" />
                   <span>+ Buat Draf Baru</span>
@@ -402,7 +455,7 @@ export const WorkspaceCanvasPane: React.FC<WorkspaceCanvasPaneProps> = React.mem
                   onClick={() => onCreateNewArtifact('CODE')}
                   className="h-8 px-2.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold shadow-3xs transition-all cursor-pointer flex items-center gap-1"
                 >
-                  <FileCode className="w-3.5 h-3.5 text-emerald-500" />
+                  <FileCode className="w-3.5 h-3.5 text-indigo-500" />
                   <span>+ Kode</span>
                 </button>
                 <button
@@ -441,7 +494,7 @@ export const WorkspaceCanvasPane: React.FC<WorkspaceCanvasPaneProps> = React.mem
             {/* Mobile Drawer Top Bar */}
             <div className="flex items-center justify-between px-3 py-2 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 shrink-0">
               <div className="flex items-center gap-2 min-w-0">
-                <FileCode className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                <FileCode className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
                 <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">
                   {activeArtifact?.title || 'Canvas Dokumen'}
                 </h4>
@@ -456,6 +509,16 @@ export const WorkspaceCanvasPane: React.FC<WorkspaceCanvasPaneProps> = React.mem
                 <span>Tutup</span>
               </button>
             </div>
+
+            {/* Mobile Persistence & Status Banner */}
+            {activeArtifact?.persistenceStatus && activeArtifact.persistenceStatus !== 'persistent' && (
+              <div className="flex min-h-8 shrink-0 items-center justify-between gap-2 border-b border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200" role="status">
+                <span className="truncate">{activeArtifact.persistenceStatus === 'failed' ? 'Draf masih tersimpan lokal.' : activeArtifact.persistenceStatus === 'saving' ? 'Menyimpan draf ke Ruang Kerja…' : 'Draf tersimpan lokal.'}</span>
+                {activeArtifact.persistenceStatus === 'failed' && hasWorkspaceChat && (
+                  <button type="button" className="font-semibold underline underline-offset-2 shrink-0" onClick={() => { void Promise.resolve(onSaveArtifact(activeArtifact.content, activeArtifact.title)).catch(() => undefined); }}>Coba simpan</button>
+                )}
+              </div>
+            )}
 
             {/* Drawer Body */}
             <div className="flex-1 overflow-hidden">
@@ -492,7 +555,7 @@ export const WorkspaceCanvasPane: React.FC<WorkspaceCanvasPaneProps> = React.mem
                   <button
                     type="button"
                     onClick={() => onCreateNewArtifact('DOCUMENT')}
-                    className="h-8 px-3 mt-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-2xs transition-all cursor-pointer flex items-center gap-1.5"
+                    className="h-8 px-3 mt-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-2xs transition-all cursor-pointer flex items-center gap-1.5"
                   >
                     <FilePlus className="w-3.5 h-3.5" />
                     <span>+ Buat Draf Baru</span>

@@ -33,6 +33,7 @@ function isValidRedisHost(host: string | undefined): boolean {
 
 export class RedisService {
   private client: Redis | null = null;
+  private subscriberClient: Redis | null = null;
   private isConnected: boolean = false;
   private memoryCache = new Map<string, CacheEntry>();
   private lastWarnTimestamp = 0;
@@ -366,8 +367,52 @@ export class RedisService {
     }
   }
 
+  public async publish(channel: string, message: string): Promise<number> {
+    if (this.isConnected && this.client) {
+      try {
+        return await this.client.publish(channel, message);
+      } catch (err: any) {
+        this.logWarnOnce(`[REDIS_FALLBACK] Publish failed for ${channel}: ${err?.message || err}`);
+      }
+    }
+    return 0;
+  }
+
+  public async subscribe(channel: string, callback: (message: string) => void): Promise<void> {
+    if (!this.isConnected || !this.client) return;
+    try {
+      if (!this.subscriberClient) {
+        const rawUrl = process.env.REDIS_URL;
+        if (rawUrl && isValidRedisUrl(rawUrl)) {
+          this.subscriberClient = new Redis(rawUrl, { maxRetriesPerRequest: 1, lazyConnect: true, password: process.env.REDIS_PASSWORD || undefined });
+        } else if (process.env.REDIS_HOST && isValidRedisHost(process.env.REDIS_HOST)) {
+          this.subscriberClient = new Redis({ host: process.env.REDIS_HOST.trim(), port: parseInt(process.env.REDIS_PORT || '6379', 10), password: process.env.REDIS_PASSWORD || undefined, lazyConnect: true });
+        }
+        if (this.subscriberClient) {
+          this.subscriberClient.on('error', () => {});
+        }
+      }
+      if (this.subscriberClient) {
+        await this.subscriberClient.subscribe(channel);
+        this.subscriberClient.on('message', (ch, msg) => {
+          if (ch === channel) callback(msg);
+        });
+      }
+    } catch (err: any) {
+      this.logWarnOnce(`[REDIS_SUBSCRIBE_FAILED] Channel ${channel}: ${err?.message || err}`);
+    }
+  }
+
   public async disconnect(): Promise<void> {
     this.memoryCache.clear();
+    if (this.subscriberClient) {
+      try {
+        await this.subscriberClient.quit();
+      } catch {
+        // Ignore subscriber disconnect error
+      }
+      this.subscriberClient = null;
+    }
     if (this.client) {
       try {
         await this.client.quit();

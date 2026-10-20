@@ -18,6 +18,19 @@ test.describe('Workspace navigation and responsive shell', () => {
     await expect(page.getByRole('button', { name: 'Canvas' })).toHaveAttribute('aria-pressed', 'false');
   });
 
+  test('loads the academic template gallery when requested', async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem('rt_onboarding_completed_guest', 'true'));
+    await page.goto('/workspace/new?__test__=true', { waitUntil: 'domcontentloaded' });
+    await expect(page.getByRole('textbox', { name: 'Pesan untuk Asisten RuangKerja' })).toBeVisible({ timeout: 20_000 });
+
+    await page.getByRole('button', { name: 'AI & Opsi' }).click();
+    const options = page.getByRole('dialog', { name: 'AI & Opsi' });
+    await options.getByRole('button', { name: 'Template', exact: true }).click();
+    const gallery = page.getByRole('dialog', { name: 'Galeri Template Akademik' });
+    await expect(gallery).toBeVisible();
+    await expect(gallery.getByRole('button', { name: /Draf Bab 1/ })).toBeVisible();
+  });
+
   test('keeps the workspace inside common viewport widths', async ({ page }) => {
     await page.addInitScript(() => localStorage.setItem('rt_onboarding_completed_guest', 'true'));
     for (const width of [360, 390, 768, 1024, 1440]) {
@@ -58,6 +71,11 @@ test.describe('Workspace navigation and responsive shell', () => {
   test('restores a guest Canvas draft with an honest local-only save status', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.addInitScript(() => {
+      const initializedKey = '__workspace_e2e_storage_initialized';
+      if (sessionStorage.getItem(initializedKey) === 'true') return;
+      localStorage.clear();
+      sessionStorage.clear();
+      sessionStorage.setItem(initializedKey, 'true');
       localStorage.setItem('rt_onboarding_completed_guest', 'true');
       localStorage.setItem('ruangtenang_last_seen_version', 'v3.4.0');
     });
@@ -78,8 +96,9 @@ test.describe('Workspace navigation and responsive shell', () => {
     await composer.fill('Ringkas hasil survei ini');
     await page.getByRole('button', { name: 'Kirim Pesan' }).click();
     await expect(page.getByText('Fixture jawaban untuk Canvas.')).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole('button', { name: 'Hentikan respons' })).toHaveCount(0);
     await page.getByRole('button', { name: 'Kirim ke Canvas' }).last().click();
-    await expect(page.getByText('Draf lokal (belum tersimpan ke server)')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('banner').getByText('Jawaban AI', { exact: true })).toBeVisible({ timeout: 15_000 });
 
     await page.reload({ waitUntil: 'domcontentloaded' });
     await expect(composer).toBeVisible({ timeout: 20_000 });

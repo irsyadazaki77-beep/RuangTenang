@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { TableKit } from '@tiptap/extension-table';
@@ -89,18 +89,54 @@ export const ArtifactCanvasEditor: React.FC<ArtifactCanvasEditorProps> = ({
     onSelectTextRef.current(range ? { ...range, text } : null);
   };
 
+  const lastEmittedMarkdownRef = useRef(content);
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const editor = useEditor({
     extensions: [StarterKit, TableKit, Markdown],
     content,
     contentType: 'markdown',
     immediatelyRender: false,
-    onUpdate: ({ editor: current }) => onChangeRef.current(current.getMarkdown()),
+    onUpdate: ({ editor: current }) => {
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = setTimeout(() => {
+        debounceTimerRef.current = null;
+        const md = current.getMarkdown();
+        lastEmittedMarkdownRef.current = md;
+        onChangeRef.current(md);
+      }, 50);
+    },
     onSelectionUpdate: ({ editor: current }) => captureRichTextSelection(current)
+  }, []);
+
+  const flushChange = useCallback(() => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+    if (editor && mode === 'visual') {
+      const md = editor.getMarkdown();
+      if (md !== lastEmittedMarkdownRef.current) {
+        lastEmittedMarkdownRef.current = md;
+        onChangeRef.current(md);
+      }
+    }
+  }, [editor, mode]);
+
+  useEffect(() => () => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
   }, []);
 
   useEffect(() => {
     if (!editor || mode !== 'visual') return;
-    if (editor.getMarkdown() !== content) editor.commands.setContent(content, { contentType: 'markdown', emitUpdate: false });
+    if (content === lastEmittedMarkdownRef.current) return;
+    if (editor.getMarkdown() !== content) {
+      lastEmittedMarkdownRef.current = content;
+      editor.commands.setContent(content, { contentType: 'markdown', emitUpdate: false });
+    }
   }, [content, editor, mode]);
 
   const toggle = (action: () => void) => { action(); editor?.view.focus(); };
@@ -116,7 +152,7 @@ export const ArtifactCanvasEditor: React.FC<ArtifactCanvasEditorProps> = ({
         </div>}
         {isRichText && <div role="group" aria-label="Jenis editor" className="flex rounded-lg bg-slate-100 p-0.5 dark:bg-slate-800">
           <button type="button" aria-pressed={mode === 'visual'} onClick={() => setMode('visual')} className={`rounded-md px-2 py-1 text-[10px] ${mode === 'visual' ? 'bg-white font-semibold text-slate-900 shadow-sm dark:bg-slate-700 dark:text-white' : ''}`}>Visual</button>
-          <button type="button" aria-pressed={mode === 'markdown'} onClick={() => setMode('markdown')} className={`rounded-md px-2 py-1 text-[10px] ${mode === 'markdown' ? 'bg-white font-semibold text-slate-900 shadow-sm dark:bg-slate-700 dark:text-white' : ''}`}>Markdown</button>
+          <button type="button" aria-pressed={mode === 'markdown'} onClick={() => { flushChange(); setMode('markdown'); }} className={`rounded-md px-2 py-1 text-[10px] ${mode === 'markdown' ? 'bg-white font-semibold text-slate-900 shadow-sm dark:bg-slate-700 dark:text-white' : ''}`}>Markdown</button>
         </div>}
         <span className="hidden text-[11px] sm:inline">Ctrl + S · {wordCount} kata</span>
       </div>
@@ -133,7 +169,7 @@ export const ArtifactCanvasEditor: React.FC<ArtifactCanvasEditorProps> = ({
         <button type="button" title="Urungkan" aria-label="Urungkan" disabled={!editor?.can().undo()} onClick={() => toggle(() => editor?.chain().focus().undo().run())} className="rounded-md p-1.5 hover:bg-slate-100 disabled:opacity-40 dark:hover:bg-slate-800"><Undo2 className="h-4 w-4" /></button>
         <button type="button" title="Ulangi" aria-label="Ulangi" disabled={!editor?.can().redo()} onClick={() => toggle(() => editor?.chain().focus().redo().run())} className="rounded-md p-1.5 hover:bg-slate-100 disabled:opacity-40 dark:hover:bg-slate-800"><Redo2 className="h-4 w-4" /></button>
       </div>
-      <EditorContent editor={editor} onBlur={onBlur} className="min-h-125 flex-1 overflow-auto px-5 py-4 text-sm leading-7 text-slate-800 outline-none dark:text-slate-100 [&_.tiptap]:min-h-110 [&_.tiptap]:outline-none [&_h1]:my-5 [&_h1]:text-2xl [&_h1]:font-bold [&_h2]:my-4 [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:my-3 [&_h3]:text-lg [&_h3]:font-semibold [&_p]:my-3 [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:pl-6 [&_li]:my-1 [&_blockquote]:my-4 [&_blockquote]:border-l-2 [&_blockquote]:border-emerald-500 [&_blockquote]:pl-4 [&_table]:my-4 [&_table]:w-full [&_table]:border-collapse [&_th]:border [&_th]:border-slate-300 [&_th]:bg-slate-50 [&_th]:p-2 [&_td]:border [&_td]:border-slate-300 [&_td]:p-2 dark:[&_th]:border-slate-700 dark:[&_th]:bg-slate-800 dark:[&_td]:border-slate-700" />
+      <EditorContent editor={editor} onBlur={() => { flushChange(); onBlur(); }} className="min-h-125 flex-1 overflow-auto px-5 py-4 text-sm leading-7 text-slate-800 outline-none dark:text-slate-100 [&_.tiptap]:min-h-110 [&_.tiptap]:outline-none [&_h1]:my-5 [&_h1]:text-2xl [&_h1]:font-bold [&_h2]:my-4 [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:my-3 [&_h3]:text-lg [&_h3]:font-semibold [&_p]:my-3 [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:pl-6 [&_li]:my-1 [&_blockquote]:my-4 [&_blockquote]:border-l-2 [&_blockquote]:border-emerald-500 [&_blockquote]:pl-4 [&_table]:my-4 [&_table]:w-full [&_table]:border-collapse [&_th]:border [&_th]:border-slate-300 [&_th]:bg-slate-50 [&_th]:p-2 [&_td]:border [&_td]:border-slate-300 [&_td]:p-2 dark:[&_th]:border-slate-700 dark:[&_th]:bg-slate-800 dark:[&_td]:border-slate-700" />
     </>}
     {selection && <div role="toolbar" aria-label="Aksi AI untuk teks terpilih" className="flex flex-wrap items-center gap-1.5 border-b border-emerald-100 bg-emerald-50/70 px-3 py-2 dark:border-emerald-900/60 dark:bg-emerald-950/25">
       <span className="mr-1 flex items-center gap-1 text-[11px] font-medium text-emerald-800 dark:text-emerald-300"><Sparkles className="h-3.5 w-3.5" />Teks dipilih</span>

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest';
 import request from 'supertest';
 import express from 'express';
 import cookieParser from 'cookie-parser';
@@ -164,9 +164,8 @@ describe('FASE 1 SECURITY HOTFIX REGRESSION TEST SUITE', () => {
       const originalAdminPw = process.env.ADMIN_SEED_PASSWORD;
       const originalStudentPw = process.env.STUDENT_SEED_PASSWORD;
 
-      // Temporarily clear users to trigger seedInitialDataIfNeeded check
-      const existingUsers = await prisma.users.findMany();
-      await prisma.users.deleteMany({});
+      // Mock users count to 0 without deleting actual data
+      const countSpy = vi.spyOn(prisma.users, 'count').mockResolvedValue(0);
 
       try {
         process.env.NODE_ENV = 'development';
@@ -177,9 +176,7 @@ describe('FASE 1 SECURITY HOTFIX REGRESSION TEST SUITE', () => {
 
         await expect(seedInitialDataIfNeeded()).rejects.toThrow(/COUNSELOR_SEED_PASSWORD/);
       } finally {
-        if (existingUsers.length > 0) {
-          await prisma.users.createMany({ data: existingUsers });
-        }
+        countSpy.mockRestore();
         process.env.NODE_ENV = originalNodeEnv;
         process.env.SEED_DEMO_DATA = originalSeedDemo;
         if (originalCounselorPw) process.env.COUNSELOR_SEED_PASSWORD = originalCounselorPw;
@@ -194,9 +191,9 @@ describe('FASE 1 SECURITY HOTFIX REGRESSION TEST SUITE', () => {
   // ==========================================
   describe('2. Counselor Verification & GET Endpoint Hardening', () => {
     it('should return empty array and NOT mutate DB when counselors table is empty', async () => {
-      // Temporarily delete all counselors
-      const existingCounselors = await prisma.counselors.findMany();
-      await prisma.counselors.deleteMany({});
+      // Mock counselors findMany and count without deleting database
+      const findManySpy = vi.spyOn(prisma.counselors, 'findMany').mockResolvedValue([]);
+      const countSpy = vi.spyOn(prisma.counselors, 'count').mockResolvedValue(0);
 
       try {
         const res = await request(app).get('/api/v1/counselors');
@@ -207,9 +204,8 @@ describe('FASE 1 SECURITY HOTFIX REGRESSION TEST SUITE', () => {
         const countAfter = await prisma.counselors.count();
         expect(countAfter).toBe(0);
       } finally {
-        if (existingCounselors.length > 0) {
-          await prisma.counselors.createMany({ data: existingCounselors });
-        }
+        findManySpy.mockRestore();
+        countSpy.mockRestore();
       }
     });
 

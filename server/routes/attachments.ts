@@ -9,7 +9,7 @@ import { attachmentStorageService, MAX_FILE_SIZE } from '../services/attachmentS
 import { documentIngestionService } from '../services/file-intelligence/documentIngestionService.js';
 import { DocumentProcessingException } from '../services/file-intelligence/fileTypes.js';
 import { attachmentUploadLimiter } from '../middleware/rateLimiters.js';
-import { guestAttachmentSession, optionalAttachmentOwner } from '../middleware/guestAttachmentSession.js';
+import { guestAttachmentSession } from '../middleware/guestAttachmentSession.js';
 import { MAX_ATTACHMENT_UPLOAD_BATCH, MAX_WORKSPACE_ACTIVE_ATTACHMENTS } from '../../shared/contracts/files.js';
 import { TabularAnalysisRequestSchema, TabularTransformRequestSchema } from '../../shared/contracts/tabular.js';
 import { createTabularDataset, parseTabularWorkbook, runTabularAnalysis, toSafeCsv, toSafeXlsx, previewTabularTransform } from '../services/tabularDatasetService.js';
@@ -90,6 +90,27 @@ router.get('/chat/attachments/:id/dataset', optionalAuth, guestAttachmentSession
     const sheetName = typeof req.query.sheet === 'string' ? req.query.sheet : undefined;
     const dataset = createTabularDataset({ attachmentId: loaded.attachment.id, workspaceId: loaded.attachment.chatId || loaded.attachment.id, filename: loaded.attachment.filename, checksum: loaded.attachment.checksum || '', createdAt: loaded.attachment.createdAt, workbook: loaded.workbook, sheetName });
     return res.json({ success: true, data: dataset });
+  } finally { loaded.buffer.fill(0); }
+});
+
+/** Load a spreadsheet once to return its full profile and the first bounded page together. */
+router.get('/chat/attachments/:id/dataset/overview', optionalAuth, guestAttachmentSession(), async (req: Request, res: Response) => {
+  const loaded = await loadOwnedTabularAttachment(req.params.id, req.attachmentOwnerId!);
+  if ('error' in loaded) return sendAttachmentError(res, loaded.error.code, loaded.error.message, loaded.error.status);
+  try {
+    const requestedSheet = typeof req.query.sheet === 'string' ? req.query.sheet : undefined;
+    if (requestedSheet && !loaded.workbook.sheets.some(candidate => candidate.name === requestedSheet)) {
+      return sendAttachmentError(res, 'SHEET_NOT_FOUND', 'Sheet tidak ditemukan pada workbook ini.', 404);
+    }
+    const dataset = createTabularDataset({ attachmentId: loaded.attachment.id, workspaceId: loaded.attachment.chatId || loaded.attachment.id, filename: loaded.attachment.filename, checksum: loaded.attachment.checksum || '', createdAt: loaded.attachment.createdAt, workbook: loaded.workbook, sheetName: requestedSheet });
+    const sheetName = dataset.sheetName || dataset.activeSheet;
+    const sheet = loaded.workbook.sheets.find(candidate => candidate.name === sheetName);
+    if (!sheet) return sendAttachmentError(res, 'SHEET_NOT_FOUND', 'Sheet tidak ditemukan pada workbook ini.', 404);
+    const limit = 25;
+    return res.json({ success: true, data: {
+      dataset,
+      preview: { sheetName: sheet.name, columns: sheet.headers, rows: sheet.rows.slice(0, limit), offset: 0, limit, rowCount: sheet.rows.length }
+    } });
   } finally { loaded.buffer.fill(0); }
 });
 
@@ -334,6 +355,10 @@ router.post(
             pageCount: saved.pageCount,
             slideCount: saved.slideCount,
             sheetCount: saved.sheetCount,
+            ocrApplied: saved.ocrApplied,
+            visualAnalysisAvailable: saved.visualAnalysisAvailable,
+            previewOnly: saved.previewOnly,
+            extractionWarnings: saved.extractionWarnings,
             url: saved.url || `/api/v1/chat/attachments/${saved.id}`
           });
           releaseWorkspaceReservation(1);
@@ -424,6 +449,12 @@ router.get('/chat/:chatId/attachments', optionalAuth, guestAttachmentSession(), 
           pageCount: metadata.pageCount,
           slideCount: metadata.slideCount,
           sheetCount: metadata.sheetCount,
+          extractionWarnings: Array.isArray(metadata.extractionWarnings) ? metadata.extractionWarnings : undefined,
+          visualAnalysisAvailable: Boolean(metadata.visualAnalysisAvailable || attachment.fileKind === 'image'),
+          previewOnly: Boolean(metadata.previewOnly),
+          ocrApplied: Boolean(metadata.ocrApplied),
+          ocrConfidence: typeof metadata.ocrConfidence === 'number' ? metadata.ocrConfidence : undefined,
+          readingUncertainty: typeof metadata.readingUncertainty === 'string' ? metadata.readingUncertainty : undefined,
           chunkCount: attachment._count?.chunks ?? 0,
           errorMessage: attachment.processingError || undefined,
           url: `/api/v1/chat/attachments/${attachment.id}`,
@@ -454,7 +485,24 @@ router.get('/chat/attachments/:id/preview', optionalAuth, guestAttachmentSession
     if (attachment.isEncrypted) previewText = encryptionService.decryptSensitive(previewText) || '';
     let metadata: Record<string, unknown> = {};
     try { metadata = attachment.metadata ? JSON.parse(attachment.metadata) as Record<string, unknown> : {}; } catch { /* optional */ }
-    return res.json({ success: true, data: { id: attachment.id, filename: attachment.filename, mimeType: attachment.mimeType, fileKind: attachment.fileKind, size: attachment.size, chunkCount: metadata.chunkCount, previewText: previewText.slice(0, 20_000) } });
+    return res.json({
+      success: true,
+      data: {
+        id: attachment.id,
+        filename: attachment.filename,
+        mimeType: attachment.mimeType,
+        fileKind: attachment.fileKind,
+        size: attachment.size,
+        chunkCount: metadata.chunkCount,
+        ocrApplied: Boolean(metadata.ocrApplied),
+        previewOnly: Boolean(metadata.previewOnly),
+        visualAnalysisAvailable: Boolean(metadata.visualAnalysisAvailable || attachment.fileKind === 'image'),
+        ocrConfidence: typeof metadata.ocrConfidence === 'number' ? metadata.ocrConfidence : undefined,
+        readingUncertainty: typeof metadata.readingUncertainty === 'string' ? metadata.readingUncertainty : undefined,
+        extractionWarnings: Array.isArray(metadata.extractionWarnings) ? metadata.extractionWarnings : undefined,
+        previewText: previewText.slice(0, 20_000)
+      }
+    });
   } catch {
     return sendAttachmentError(res, 'ATTACHMENT_PREVIEW_FAILED', 'Preview dokumen gagal dimuat.', 500);
   }

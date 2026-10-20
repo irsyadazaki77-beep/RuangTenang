@@ -200,7 +200,7 @@ export const userRepository = {
       take,
       skip: offset,
     });
-    
+
     if (list.length === 0) return [];
 
     const userIds = list.map(u => u.id);
@@ -344,18 +344,20 @@ export const userRepository = {
 
   async updateUserProfileDetails(
     userId: string,
-    updates: { name?: string; university?: string; email?: string },
+    updates: { name?: string; university?: string; email?: string; emailVerified?: boolean },
   ): Promise<UserRecord | null> {
     const current = await prisma.users.findUnique({ where: { id: userId } });
     if (!current) return null;
 
+    const dataToUpdate: any = {};
+    if (updates.name !== undefined) dataToUpdate.name = updates.name;
+    if (updates.university !== undefined) dataToUpdate.university = updates.university;
+    if (updates.email !== undefined) dataToUpdate.email = updates.email;
+    if (updates.emailVerified !== undefined) dataToUpdate.emailVerified = updates.emailVerified;
+
     const updated = await prisma.users.update({
       where: { id: userId },
-      data: {
-        name: updates.name,
-        university: updates.university,
-        email: updates.email,
-      },
+      data: dataToUpdate,
     });
 
     await auditRepository.logAudit(

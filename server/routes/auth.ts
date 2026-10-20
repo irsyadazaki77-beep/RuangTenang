@@ -48,6 +48,40 @@ router.post('/sso/campus-login', loginLimiter, (_req: Request, res: Response) =>
 
 
 
+// Request Step-Up MFA Challenge for sensitive actions
+router.post('/mfa/challenge', requireAuth, mfaLimiter, async (req: Request, res: Response) => {
+  try {
+    const user = await serverDb.getUserById(req.user.userId);
+    if (!user) {
+      return res.status(404).json({ success: false, code: 'USER_NOT_FOUND', error: 'Pengguna tidak ditemukan.' });
+    }
+
+    if (!user.mfaEnabled && user.role !== 'admin' && user.role !== 'konselor' && user.role !== 'campus_admin') {
+      return res.status(400).json({ success: false, code: 'MFA_NOT_ENABLED', error: 'MFA tidak aktif pada akun ini.' });
+    }
+
+    const mfaCode = authService.generate6DigitCode();
+    const mfaToken = 'mfa-stepup-' + Date.now() + '-' + crypto.randomBytes(4).toString('hex');
+    await serverDb.setMfaCode(user.id, mfaCode, mfaToken);
+    await emailService.sendMfaOtp(user.email, mfaCode);
+
+    const isDev = process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test';
+    if (isDev) {
+      console.info(`[DEV_ONLY_EMAIL_SINK] Step-up MFA OTP for ${user.email}: ${mfaCode}`);
+    }
+
+    res.json({
+      success: true,
+      mfaRequired: true,
+      mfaToken,
+      message: 'Kode verifikasi keamanan (MFA) telah dikirim ke alamat email Anda.'
+    });
+  } catch (err: any) {
+    console.error('Step-up MFA challenge error:', err);
+    res.status(500).json({ success: false, error: 'Gagal mengirim kode verifikasi MFA.' });
+  }
+});
+
 // MFA Verify
 router.post('/mfa/verify', mfaLimiter, async (req: Request, res: Response) => {
   try {
@@ -282,7 +316,7 @@ router.post('/update-tier', requireAuth, async (req: Request, res: Response) => 
     }
 
     const { targetUserId, tier } = req.body;
-    
+
     if (!targetUserId) {
       return res.status(400).json({ error: 'targetUserId wajib diisi.' });
     }

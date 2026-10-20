@@ -1,12 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { 
-  Send, 
-  Plus, 
-  Square, 
-  Paperclip, 
-  X, 
-  FileText, 
-  ShieldCheck, 
+import {
+  Send,
+  Plus,
+  Square,
+  Paperclip,
+  X,
+  FileText,
+  ShieldCheck,
   Command,
   MicOff,
   Mic,
@@ -20,21 +20,25 @@ import { useToast } from '../../../components/Toast';
 import { useComposerVoiceInput } from '../hooks/useComposerVoiceInput';
 
 interface Props {
-  onSend: (msg: string, plugin?: string, attachments?: Attachment[]) => void;
+  onSend: (msg: string, plugin?: string, attachments?: Attachment[]) => void | boolean;
   isTyping: boolean;
   onStop: () => void;
+  aiConsentAllowed?: boolean | null;
+  aiConsentPromptOpen?: boolean;
   chatId?: string;
   onCommand?: (cmd: string) => void;
   onOpenPlugin?: (pluginId: string) => void;
   quotaExceeded?: boolean;
 }
 
-export function ChatComposer({ 
-  onSend, 
-  isTyping, 
-  onStop, 
-  chatId, 
-  onCommand, 
+export function ChatComposer({
+  onSend,
+  isTyping,
+  onStop,
+  aiConsentAllowed = true,
+  aiConsentPromptOpen = false,
+  chatId,
+  onCommand,
   onOpenPlugin,
   quotaExceeded = false
 }: Props) {
@@ -44,6 +48,7 @@ export function ChatComposer({
   const [showActionMenu, setShowActionMenu] = useState(false);
   const [showCommands, setShowCommands] = useState(false);
   const [selectedCmdIndex, setSelectedCmdIndex] = useState(0);
+  const waitingForConsentRef = useRef(false);
   const { isListening, toggleListening } = useComposerVoiceInput(input, setInput);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -55,6 +60,27 @@ export function ChatComposer({
     if (draft) setInput(draft);
     setAttachments([]);
   }, [chatId]);
+
+  useEffect(() => {
+    if (!waitingForConsentRef.current) return;
+    if (aiConsentAllowed !== true && !aiConsentPromptOpen) {
+      waitingForConsentRef.current = false;
+      return;
+    }
+    if (aiConsentAllowed !== true) return;
+    waitingForConsentRef.current = false;
+    setInput('');
+    setAttachments(current => {
+      current.forEach(attachment => {
+        if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
+      });
+      return [];
+    });
+    safeLocalStorage.removeItem(`draft_${chatId || 'new'}`);
+    setShowActionMenu(false);
+    setShowCommands(false);
+    if (textareaRef.current) textareaRef.current.style.height = 'auto';
+  }, [aiConsentAllowed, aiConsentPromptOpen, chatId]);
 
   useEffect(() => {
     if (input.trim()) {
@@ -92,20 +118,20 @@ export function ChatComposer({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const filteredCommands = CHAT_COMMANDS.filter(c => 
+  const filteredCommands = CHAT_COMMANDS.filter(c =>
     c.cmd.toLowerCase().startsWith(input.toLowerCase()) ||
     c.label.toLowerCase().includes(input.slice(1).toLowerCase())
   );
 
   const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
   const ALLOWED_TYPES = [
-    'application/pdf', 
-    'image/jpeg', 
-    'image/png', 
-    'image/webp', 
-    'text/plain', 
-    'text/markdown', 
-    'application/msword', 
+    'application/pdf',
+    'image/jpeg',
+    'image/png',
+    'image/webp',
+    'text/plain',
+    'text/markdown',
+    'application/msword',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
   ];
 
@@ -233,10 +259,16 @@ export function ChatComposer({
     }
 
     const validAttachments = attachments.filter(a => ['success', 'ready', 'visual_ready'].includes(a.status));
+    let accepted: void | boolean;
     if (validAttachments.length > 0) {
-      onSend(input.trim(), undefined, validAttachments);
+      accepted = onSend(input.trim(), undefined, validAttachments);
     } else {
-      onSend(input.trim());
+      accepted = onSend(input.trim());
+    }
+
+    if (accepted === false) {
+      waitingForConsentRef.current = true;
+      return;
     }
 
     setInput('');
@@ -285,12 +317,12 @@ export function ChatComposer({
   const hasContent = Boolean(input.trim() || attachments.length > 0);
 
   return (
-    <div 
+    <div
       ref={composerContainerRef}
       className="w-full sticky bottom-0 z-20 shrink-0 bg-gradient-to-t from-slate-50/80 via-slate-50/40 to-transparent dark:from-[#080d16]/80 dark:via-[#080d16]/40 pointer-events-none [&>*]:pointer-events-auto"
     >
       <div className="pt-1 pb-safe pb-[max(0.5rem,env(safe-area-inset-bottom))] px-3 max-w-2xl mx-auto w-full relative">
-        
+
         {/* 1. Quick Slash Commands Dropdown */}
         <AnimatePresence>
           {showCommands && filteredCommands.length > 0 && (
@@ -321,8 +353,8 @@ export function ChatComposer({
                       onClick={() => handleExecuteCommand(c.cmd)}
                       onMouseEnter={() => setSelectedCmdIndex(index)}
                       className={`w-full text-left px-2.5 py-2 rounded-xl transition-all flex items-center gap-2.5 cursor-pointer text-xs min-h-[44px] ${
-                        isSelected 
-                          ? 'bg-teal-50 dark:bg-teal-950/50 text-teal-700 dark:text-teal-300 font-medium shadow-2xs' 
+                        isSelected
+                          ? 'bg-teal-50 dark:bg-teal-950/50 text-teal-700 dark:text-teal-300 font-medium shadow-2xs'
                           : 'text-stone-700 dark:text-slate-300 hover:bg-stone-100/80 dark:hover:bg-slate-800/60'
                       }`}
                       role="option"
@@ -431,21 +463,21 @@ export function ChatComposer({
         </AnimatePresence>
 
         {/* Hidden File Input */}
-        <input 
-          type="file" 
-          ref={fileInputRef} 
-          className="hidden" 
-          multiple 
-          accept=".pdf,image/*,.txt,.md,.doc,.docx" 
-          onChange={handleFileSelect} 
+        <input
+          type="file"
+          ref={fileInputRef}
+          className="hidden"
+          multiple
+          accept=".pdf,image/*,.txt,.md,.doc,.docx"
+          onChange={handleFileSelect}
         />
 
         {/* 3. Attachments Preview Bar */}
         {attachments.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mb-2 px-1">
             {attachments.map(att => (
-              <div 
-                key={att.id} 
+              <div
+                key={att.id}
                 className="relative flex items-center gap-2 p-1.5 pr-2 bg-white dark:bg-slate-900 border border-stone-200/90 dark:border-slate-800 rounded-xl shadow-xs text-xs"
               >
                 {att.previewUrl ? (
@@ -482,8 +514,8 @@ export function ChatComposer({
         {/* 4. Floating Island Input Bar with Restrained Borders */}
         <div className="relative w-full max-w-2xl mx-auto">
           {/* Input Container */}
-          <div className="relative flex items-center gap-1 sm:gap-1.5 p-1.5 sm:p-2 rounded-2xl bg-white dark:bg-slate-900 border border-stone-200/90 dark:border-slate-800 shadow-2xs transition-all duration-150 focus-within:border-teal-500/80 dark:focus-within:border-teal-500/80 focus-within:ring-1 focus-within:ring-teal-500/20">
-            
+          <div className="relative flex items-center gap-1 sm:gap-1.5 p-1.5 sm:p-2 rounded-2xl bg-white dark:bg-[#0f141f] border border-slate-200/80 dark:border-slate-800 shadow-subtle dark:shadow-subtle-dark transition-all duration-150 focus-within:border-teal-500/80 dark:focus-within:border-teal-500/80 focus-within:ring-1 focus-within:ring-teal-500/20">
+
             {/* Left Actions: Plus (+) & Mic */}
             <div className="flex items-center gap-0.5 shrink-0">
               <motion.button
@@ -493,7 +525,7 @@ export function ChatComposer({
                   setShowActionMenu(!showActionMenu);
                   setShowCommands(false);
                 }}
-                className={`w-8.5 h-8.5 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-slate-800 shrink-0 transition-colors cursor-pointer ${
+                className={`min-w-11 min-h-11 sm:min-w-10 sm:min-h-10 lg:min-w-9.5 lg:min-h-9.5 rounded-xl flex items-center justify-center text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-slate-800 shrink-0 transition-colors cursor-pointer ${
                   showActionMenu ? 'rotate-45 text-teal-700 dark:text-teal-300 bg-teal-50 dark:bg-teal-950/60' : ''
                 }`}
                 aria-label="Buka Menu Bantuan & Fitur"
@@ -507,7 +539,7 @@ export function ChatComposer({
                 type="button"
                 whileTap={{ scale: 0.94 }}
                 onClick={toggleListening}
-                className={`w-8.5 h-8.5 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center shrink-0 transition-all cursor-pointer ${
+                className={`min-w-11 min-h-11 sm:min-w-10 sm:min-h-10 lg:min-w-9.5 lg:min-h-9.5 rounded-xl flex items-center justify-center shrink-0 transition-all cursor-pointer ${
                   isListening
                     ? 'bg-rose-500 text-white animate-pulse shadow-3xs'
                     : 'text-stone-400 hover:text-teal-600 dark:hover:text-teal-400 hover:bg-stone-100 dark:hover:bg-slate-800'
@@ -519,7 +551,7 @@ export function ChatComposer({
                 {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
               </motion.button>
             </div>
-            
+
             {/* Textarea Input - Font size 16px on mobile prevents iOS Safari forced viewport auto-zoom */}
             <textarea
               ref={textareaRef}
@@ -534,18 +566,18 @@ export function ChatComposer({
               }}
               onKeyDown={handleKeyDown}
               placeholder={
-                quotaExceeded 
+                quotaExceeded
                   ? "Kuota harian telah digunakan. Istirahatlah sejenak dan kembali besok."
-                  : isListening 
-                    ? "Mendengarkan ucapan Anda (Bahasa Indonesia)..." 
+                  : isListening
+                    ? "Mendengarkan ucapan Anda (Bahasa Indonesia)..."
                     : "Ketik apa yang kamu rasakan..."
               }
               className="flex-1 bg-transparent text-[16px] sm:text-[14px] text-stone-850 dark:text-stone-100 placeholder:text-stone-400 dark:placeholder:text-slate-500 focus:outline-none resize-none min-h-[38px] py-2 px-1.5 leading-relaxed overflow-y-auto custom-scrollbar disabled:opacity-60 disabled:cursor-not-allowed"
               rows={1}
               disabled={isTyping || quotaExceeded}
-              aria-label="Ketik pesan konsultasi"
+              aria-label="Tulis pesan untuk asisten AI"
             />
-            
+
             {/* Primary Conversational Send / Stop Action Button */}
             <AnimatePresence mode="wait" initial={false}>
               {isTyping ? (
@@ -557,7 +589,7 @@ export function ChatComposer({
                   exit={{ scale: 0.85, opacity: 0 }}
                   transition={{ duration: 0.12 }}
                   onClick={onStop}
-                  className="w-8.5 h-8.5 sm:w-9 sm:h-9 rounded-xl bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center shrink-0 cursor-pointer shadow-3xs"
+                  className="min-w-11 min-h-11 sm:min-w-10 sm:min-h-10 lg:min-w-9.5 lg:min-h-9.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center shrink-0 cursor-pointer shadow-3xs"
                   aria-label="Hentikan Jawaban AI"
                   title="Hentikan respons AI"
                 >
@@ -574,9 +606,9 @@ export function ChatComposer({
                   whileTap={hasContent ? { scale: 0.94 } : undefined}
                   onClick={handleSend}
                   disabled={!hasContent}
-                  className={`w-8.5 h-8.5 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center shrink-0 transition-all duration-120 ${
+                  className={`min-w-11 min-h-11 sm:min-w-10 sm:min-h-10 lg:min-w-9.5 lg:min-h-9.5 rounded-xl flex items-center justify-center shrink-0 transition-all duration-120 ${
                     hasContent
-                      ? 'bg-teal-600 hover:bg-teal-700 text-white shadow-3xs cursor-pointer'
+                      ? 'bg-teal-700 hover:bg-teal-800 text-white shadow-3xs cursor-pointer'
                       : 'text-stone-300 dark:text-slate-600 bg-transparent cursor-not-allowed'
                   }`}
                   aria-label="Kirim Pesan"
@@ -588,10 +620,10 @@ export function ChatComposer({
             </AnimatePresence>
           </div>
         </div>
-        
+
         {/* Reassurance Caption */}
         <p className="text-[11px] text-stone-400 dark:text-slate-500 text-center mt-1.5 select-none">
-          Ruang aman tanpa penghakiman <span className="opacity-40">·</span> Data dilindungi dengan kontrol keamanan
+          Persetujuan diminta sebelum pesan diproses oleh AI
         </p>
       </div>
     </div>

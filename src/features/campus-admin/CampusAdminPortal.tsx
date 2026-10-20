@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { Plus, Trash2, Phone, Code, Sliders } from 'lucide-react';
 import { apiClient } from '../../lib/apiClient';
 
 interface CampusSettings {
@@ -11,6 +12,13 @@ interface CampusSettings {
   aiEnabled: boolean;
   retentionDays: number;
   isActive: boolean;
+}
+
+interface ReferralContactDraft {
+  id: string;
+  label: string;
+  phone: string;
+  url: string;
 }
 
 interface CampusMetric {
@@ -41,9 +49,12 @@ export const CampusAdminPortal: React.FC<{ userName: string; onLogout: () => voi
   const [metrics, setMetrics] = useState<CampusMetric[]>([]);
   const [counselors, setCounselors] = useState<CampusCounselor[]>([]);
   const [timeZone, setTimeZone] = useState('Asia/Jakarta');
+  const [isCustomTimeZone, setIsCustomTimeZone] = useState(false);
   const [brandName, setBrandName] = useState('');
   const [primaryColor, setPrimaryColor] = useState('#0f766e');
   const [contactsText, setContactsText] = useState('[]');
+  const [contactsDrafts, setContactsDrafts] = useState<ReferralContactDraft[]>([]);
+  const [useRawJsonMode, setUseRawJsonMode] = useState(false);
   const [aiEnabled, setAiEnabled] = useState(true);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -67,10 +78,20 @@ export const CampusAdminPortal: React.FC<{ userName: string; onLogout: () => voi
       const overviewResponse = overviewResult.data;
       const counselorsResponse = counselorsResult.data;
       setCampus(settingsResponse.campus);
-      setTimeZone(settingsResponse.campus.timeZone);
+      const tz = settingsResponse.campus.timeZone || 'Asia/Jakarta';
+      setTimeZone(tz);
+      setIsCustomTimeZone(tz !== 'Asia/Jakarta' && tz !== 'Asia/Makassar' && tz !== 'Asia/Jayapura');
       setBrandName(settingsResponse.campus.branding?.brandName || settingsResponse.campus.name);
       setPrimaryColor(settingsResponse.campus.branding?.primaryColor || '#0f766e');
-      setContactsText(JSON.stringify(settingsResponse.campus.referralContacts || [], null, 2));
+
+      const serverContacts = settingsResponse.campus.referralContacts || [];
+      setContactsText(JSON.stringify(serverContacts, null, 2));
+      setContactsDrafts(serverContacts.map((c, i) => ({
+        id: `c-${i}-${Date.now()}`,
+        label: c.label || '',
+        phone: c.phone || '',
+        url: c.url || ''
+      })));
       setAiEnabled(settingsResponse.campus.aiEnabled);
       setMetrics(overviewResponse.events || []);
       setCounselors((counselorsResponse.counselors || []).map(counselor => ({
@@ -87,20 +108,46 @@ export const CampusAdminPortal: React.FC<{ userName: string; onLogout: () => voi
 
   useEffect(() => { void load(); }, [load]);
 
+  const handleAddContact = () => {
+    setContactsDrafts(prev => [
+      ...prev,
+      { id: `c-${Date.now()}`, label: '', phone: '', url: '' }
+    ]);
+  };
+
+  const handleRemoveContact = (id: string) => {
+    setContactsDrafts(prev => prev.filter(c => c.id !== id));
+  };
+
+  const handleUpdateContact = (id: string, updates: Partial<ReferralContactDraft>) => {
+    setContactsDrafts(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
+  };
+
   const saveSettings = async (event: React.FormEvent) => {
     event.preventDefault();
     setSaving(true);
     setNotice('');
     setError('');
     let referralContacts: CampusSettings['referralContacts'];
-    try {
-      const parsed: unknown = JSON.parse(contactsText);
-      if (!Array.isArray(parsed)) throw new Error('Kontak rujukan harus berupa daftar JSON.');
-      referralContacts = parsed;
-    } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Format kontak rujukan tidak valid.');
-      setSaving(false);
-      return;
+
+    if (useRawJsonMode) {
+      try {
+        const parsed: unknown = JSON.parse(contactsText);
+        if (!Array.isArray(parsed)) throw new Error('Kontak rujukan harus berupa daftar JSON.');
+        referralContacts = parsed;
+      } catch (saveError) {
+        setError(saveError instanceof Error ? saveError.message : 'Format kontak rujukan JSON tidak valid.');
+        setSaving(false);
+        return;
+      }
+    } else {
+      referralContacts = contactsDrafts
+        .filter(c => c.label.trim())
+        .map(c => ({
+          label: c.label.trim(),
+          ...(c.phone.trim() ? { phone: c.phone.trim() } : {}),
+          ...(c.url.trim() ? { url: c.url.trim() } : {})
+        }));
     }
 
     try {
@@ -112,6 +159,7 @@ export const CampusAdminPortal: React.FC<{ userName: string; onLogout: () => voi
       });
       if (!response.success || !response.data?.campus) throw new Error('Campus settings were not saved');
       setCampus(response.data.campus);
+      setContactsText(JSON.stringify(response.data.campus.referralContacts || [], null, 2));
       setNotice('Pengaturan kampus tersimpan.');
     } catch {
       setError('Pengaturan tidak tersimpan. Periksa kembali isian dan coba lagi.');
@@ -217,22 +265,183 @@ export const CampusAdminPortal: React.FC<{ userName: string; onLogout: () => voi
               <label className="text-sm font-medium">Nama tampilan
                 <input className={`${inputClass} mt-1`} value={brandName} onChange={event => setBrandName(event.target.value)} maxLength={80} required />
               </label>
-              <label className="text-sm font-medium">Zona waktu
-                <input className={`${inputClass} mt-1`} value={timeZone} onChange={event => setTimeZone(event.target.value)} maxLength={64} required aria-describedby="timezone-help" />
-                <span id="timezone-help" className="mt-1 block text-xs font-normal text-secondary">Gunakan nama zona IANA, misalnya Asia/Jakarta.</span>
-              </label>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium block">Zona waktu kampus</label>
+                <select
+                  value={isCustomTimeZone ? 'custom' : timeZone}
+                  onChange={event => {
+                    if (event.target.value === 'custom') {
+                      setIsCustomTimeZone(true);
+                    } else {
+                      setIsCustomTimeZone(false);
+                      setTimeZone(event.target.value);
+                    }
+                  }}
+                  className={`${inputClass}`}
+                  aria-label="Pilih zona waktu kampus"
+                >
+                  <option value="Asia/Jakarta">WIB — Asia/Jakarta (Jawa, Sumatera, Kalbar, Kalteng)</option>
+                  <option value="Asia/Makassar">WITA — Asia/Makassar (Bali, Nusa Tenggara, Kalsel, Kaltim, Kaltara, Sulawesi)</option>
+                  <option value="Asia/Jayapura">WIT — Asia/Jayapura (Maluku, Papua)</option>
+                  <option value="custom">Zona Waktu IANA Lainnya (Ketik Manual)</option>
+                </select>
+                {isCustomTimeZone && (
+                  <input
+                    className={`${inputClass} mt-1`}
+                    value={timeZone}
+                    onChange={event => setTimeZone(event.target.value)}
+                    maxLength={64}
+                    placeholder="Contoh: Asia/Pontianak"
+                    required
+                    aria-label="Zona waktu IANA kustom"
+                  />
+                )}
+                <span className="block text-xs font-normal text-secondary">
+                  Jadwal konsultasi mahasiswa akan disesuaikan dengan zona waktu ini.
+                </span>
+              </div>
               <label className="text-sm font-medium">Warna utama
                 <input className={`${inputClass} mt-1`} value={primaryColor} onChange={event => setPrimaryColor(event.target.value)} pattern="^#[0-9a-fA-F]{6}$" aria-describedby="color-help" />
                 <span id="color-help" className="mt-1 block text-xs font-normal text-secondary">Format hex, seperti #0f766e.</span>
               </label>
-              <label className="flex items-center gap-3 rounded-xl border border-default p-3 text-sm font-medium">
+              <label className="flex items-center gap-3 rounded-xl border border-default p-3 text-sm font-medium md:col-span-2">
                 <input type="checkbox" checked={aiEnabled} onChange={event => setAiEnabled(event.target.checked)} className="h-4 w-4 accent-teal-700" />
                 Izinkan layanan AI untuk kampus ini
               </label>
-              <label className="text-sm font-medium md:col-span-2">Kontak rujukan darurat (JSON)
-                <textarea className={`${inputClass} mt-1 min-h-32 font-mono text-xs`} value={contactsText} onChange={event => setContactsText(event.target.value)} aria-describedby="contacts-help" />
-                <span id="contacts-help" className="mt-1 block text-xs font-normal text-secondary">Setiap item berisi label dan boleh menyertakan phone atau url HTTPS.</span>
-              </label>
+
+              {/* Structured Emergency Contacts Editor */}
+              <div className="md:col-span-2 space-y-3 pt-2 border-t border-default">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <h3 className="text-sm font-semibold text-primary flex items-center gap-2">
+                      <Phone className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+                      <span>Kontak Rujukan Darurat & Krisis Kampus</span>
+                    </h3>
+                    <p className="text-xs text-secondary mt-0.5">
+                      Ditampilkan kepada mahasiswa di Pusat Bantuan Darurat saat terdeteksi risiko tinggi atau membutuhkan pertolongan cepat.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!useRawJsonMode) {
+                        setContactsText(JSON.stringify(
+                          contactsDrafts.filter(c => c.label.trim()).map(c => ({
+                            label: c.label.trim(),
+                            ...(c.phone.trim() ? { phone: c.phone.trim() } : {}),
+                            ...(c.url.trim() ? { url: c.url.trim() } : {})
+                          })),
+                          null,
+                          2
+                        ));
+                      } else {
+                        try {
+                          const parsed = JSON.parse(contactsText);
+                          if (Array.isArray(parsed)) {
+                            setContactsDrafts(parsed.map((c, i) => ({
+                              id: `c-${i}-${Date.now()}`,
+                              label: c.label || '',
+                              phone: c.phone || '',
+                              url: c.url || ''
+                            })));
+                          }
+                        } catch {}
+                      }
+                      setUseRawJsonMode(!useRawJsonMode);
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-default surface-card hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-medium text-secondary hover:text-primary transition-colors cursor-pointer self-start sm:self-auto"
+                  >
+                    {useRawJsonMode ? <Sliders className="w-3.5 h-3.5" /> : <Code className="w-3.5 h-3.5" />}
+                    <span>{useRawJsonMode ? 'Beralih ke Formulir' : 'Mode JSON'}</span>
+                  </button>
+                </div>
+
+                {useRawJsonMode ? (
+                  <div>
+                    <textarea
+                      className={`${inputClass} font-mono text-xs min-h-32`}
+                      value={contactsText}
+                      onChange={event => setContactsText(event.target.value)}
+                      aria-label="Kontak rujukan dalam format JSON"
+                    />
+                    <span className="mt-1 block text-xs font-normal text-secondary">
+                      Format JSON array: [{'{ "label": "...", "phone": "...", "url": "..." }'}]
+                    </span>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {contactsDrafts.length === 0 ? (
+                      <div className="p-4 rounded-xl border border-dashed border-default text-center text-xs text-secondary">
+                        Belum ada kontak rujukan darurat kampus. Klik tombol di bawah untuk menambahkan.
+                      </div>
+                    ) : (
+                      <div className="space-y-2.5">
+                        {contactsDrafts.map((contact, index) => (
+                          <div
+                            key={contact.id}
+                            className="p-3 surface-card rounded-xl border border-default grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-center"
+                          >
+                            <div className="sm:col-span-5">
+                              <label className="text-[11px] font-semibold text-secondary block mb-1">
+                                Nama Layanan / Unit {index + 1} *
+                              </label>
+                              <input
+                                className={inputClass}
+                                placeholder="Cth: Klinik Satgas PPKS Kampus"
+                                value={contact.label}
+                                onChange={e => handleUpdateContact(contact.id, { label: e.target.value })}
+                                required
+                              />
+                            </div>
+                            <div className="sm:col-span-3">
+                              <label className="text-[11px] font-semibold text-secondary block mb-1">
+                                No. Telepon / Hotline
+                              </label>
+                              <input
+                                className={inputClass}
+                                placeholder="Cth: 021-12345678"
+                                value={contact.phone}
+                                onChange={e => handleUpdateContact(contact.id, { phone: e.target.value })}
+                              />
+                            </div>
+                            <div className="sm:col-span-3">
+                              <label className="text-[11px] font-semibold text-secondary block mb-1">
+                                Tautan / URL (Opsional)
+                              </label>
+                              <input
+                                className={inputClass}
+                                placeholder="https://..."
+                                value={contact.url}
+                                onChange={e => handleUpdateContact(contact.id, { url: e.target.value })}
+                              />
+                            </div>
+                            <div className="sm:col-span-1 flex justify-end items-end sm:pt-5">
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveContact(contact.id)}
+                                className="p-2 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg transition-colors cursor-pointer min-h-[38px] min-w-[38px] flex items-center justify-center"
+                                title="Hapus kontak ini"
+                                aria-label={`Hapus kontak ${contact.label || index + 1}`}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={handleAddContact}
+                      className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-default surface-card hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold text-primary transition-colors cursor-pointer min-h-[38px]"
+                    >
+                      <Plus className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+                      <span>Tambah Kontak Rujukan</span>
+                    </button>
+                  </div>
+                )}
+              </div>
               <div className="flex flex-wrap items-center gap-3 md:col-span-2">
                 <button type="submit" disabled={saving} className="rounded-xl bg-teal-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-60">{saving ? 'Menyimpan…' : 'Simpan pengaturan'}</button>
                 {notice && <span className="text-sm text-teal-700 dark:text-teal-300" role="status">{notice}</span>}

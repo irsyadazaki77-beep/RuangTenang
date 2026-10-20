@@ -1,15 +1,15 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useEscapeKey } from '../../hooks/useEscapeKey';
-import { 
-  Video, 
-  VideoOff, 
-  Mic, 
-  MicOff, 
-  PhoneOff, 
-  AlertCircle, 
-  Lock, 
-  Users, 
-  Network, 
+import {
+  Video,
+  VideoOff,
+  Mic,
+  MicOff,
+  PhoneOff,
+  AlertCircle,
+  Lock,
+  Users,
+  Network,
   ScreenShare,
   StopCircle,
   FileText,
@@ -60,7 +60,7 @@ export const VideoConsultationRoom: React.FC<VideoConsultationRoomProps> = ({
   const [participantCount, setParticipantCount] = useState<number>(1);
   const [hasCounselorJoined, setHasCounselorJoined] = useState<boolean>(false);
   const [hasStudentJoined, setHasStudentJoined] = useState<boolean>(false);
-  
+
   // 45-Minute Session Countdown Timer
   const [sessionSecondsLeft, setSessionSecondsLeft] = useState<number>(45 * 60);
   const [fiveMinWarningShown, setFiveMinWarningShown] = useState<boolean>(false);
@@ -368,7 +368,7 @@ export const VideoConsultationRoom: React.FC<VideoConsultationRoomProps> = ({
     try {
       if (signal.type === 'offer') {
         await pc.setRemoteDescription(new RTCSessionDescription(signal.payload));
-        
+
         // Drain pending ICE candidates
         while (pendingIceCandidatesRef.current.length > 0) {
           const candidate = pendingIceCandidatesRef.current.shift();
@@ -387,7 +387,7 @@ export const VideoConsultationRoom: React.FC<VideoConsultationRoomProps> = ({
       } else if (signal.type === 'answer') {
         if (pc.signalingState === 'have-local-offer') {
           await pc.setRemoteDescription(new RTCSessionDescription(signal.payload));
-          
+
           // Drain pending ICE candidates
           while (pendingIceCandidatesRef.current.length > 0) {
             const candidate = pendingIceCandidatesRef.current.shift();
@@ -579,7 +579,7 @@ export const VideoConsultationRoom: React.FC<VideoConsultationRoomProps> = ({
           setParticipantCount(statusRes.data.participantCount || 1);
           setHasCounselorJoined(statusRes.data.hasCounselor || userRole === 'konselor');
           setHasStudentJoined(statusRes.data.hasStudent || userRole === 'mahasiswa');
-          
+
           if (connectionState !== 'connected') {
             setRoomPresenceText(statusRes.data.statusText || 'Menghubungkan ke ruangan...');
           }
@@ -856,7 +856,7 @@ export const VideoConsultationRoom: React.FC<VideoConsultationRoomProps> = ({
     <div className="fixed inset-0 z-50 bg-slate-950 flex animate-in fade-in duration-300 h-[100dvh] w-full overflow-hidden select-none">
       {/* Main Video Area */}
       <div className={`flex-1 flex flex-col relative transition-all duration-300 ${userRole === 'konselor' ? 'lg:mr-[340px]' : ''}`}>
-        
+
         {/* Top Overlay Bar */}
         <div className="absolute top-0 left-0 w-full p-3 sm:p-4 flex flex-col gap-2 z-20 bg-gradient-to-b from-slate-950/95 via-slate-950/70 to-transparent pointer-events-none">
           <div className="flex items-center justify-between">
@@ -878,7 +878,7 @@ export const VideoConsultationRoom: React.FC<VideoConsultationRoomProps> = ({
                 <span className={`w-2 h-2 rounded-full ${isWebRtcConnected ? 'bg-emerald-400 animate-pulse' : isReconnecting ? 'bg-rose-400 animate-ping' : 'bg-amber-400 animate-ping'}`} />
                 {roomPresenceText}
                 {isReconnecting && (
-                  <button 
+                  <button
                     onClick={handleManualReconnect}
                     className="ml-2 inline-flex items-center gap-1 text-[10px] text-amber-300 hover:text-amber-200 underline cursor-pointer"
                   >
@@ -891,10 +891,10 @@ export const VideoConsultationRoom: React.FC<VideoConsultationRoomProps> = ({
             {/* Right Status Controls */}
             <div className="flex items-center gap-2 pointer-events-auto">
               {/* 45-Min Timer Badge with 5-Min Warning */}
-              <div 
+              <div
                 className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold font-mono transition-all border ${
-                  isFiveMinWarning 
-                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 animate-pulse shadow-lg shadow-amber-500/20' 
+                  isFiveMinWarning
+                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 animate-pulse shadow-lg shadow-amber-500/20'
                     : sessionSecondsLeft === 0
                     ? 'bg-rose-500/20 text-rose-300 border-rose-500/50'
                     : 'bg-slate-800/90 text-slate-200 border-slate-700'
@@ -957,8 +957,8 @@ export const VideoConsultationRoom: React.FC<VideoConsultationRoomProps> = ({
                   <strong className="text-emerald-400 font-semibold">Ruang Tele-Konseling WebRTC:</strong> Sesi video peer-to-peer terenkripsi, mendukung presentasi layar skripsi & catatan kolaboratif real-time.
                 </p>
               </div>
-              <button 
-                onClick={() => setShowSimNotice(false)} 
+              <button
+                onClick={() => setShowSimNotice(false)}
                 className="cursor-pointer shrink-0 text-slate-400 hover:text-white px-2 py-0.5 rounded transition-colors text-[11px]"
                 aria-label="Tutup pemberitahuan"
               >
@@ -970,14 +970,14 @@ export const VideoConsultationRoom: React.FC<VideoConsultationRoomProps> = ({
 
         {/* Video Grid / Screen Share Stage */}
         <div className="flex-1 p-2 sm:p-4 grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 mt-24 mb-22 relative overflow-hidden">
-          
+
           {/* Main Stage: Screen Share or Remote Video */}
           {isScreenSharing ? (
             <div className="md:col-span-2 relative bg-slate-900 rounded-2xl overflow-hidden border border-indigo-500/40 shadow-2xl flex flex-col items-center justify-center min-h-[300px]">
-              <video 
-                ref={screenVideoRef} 
-                autoPlay 
-                playsInline 
+              <video
+                ref={screenVideoRef}
+                autoPlay
+                playsInline
                 muted
                 className="w-full h-full object-contain bg-black"
               />
@@ -990,17 +990,17 @@ export const VideoConsultationRoom: React.FC<VideoConsultationRoomProps> = ({
             <>
               {/* Remote Video Participant (Konselor / Mahasiswa) */}
               <div className="relative bg-slate-900 rounded-2xl overflow-hidden border border-slate-800 shadow-2xl flex items-center justify-center group">
-                <video 
+                <video
                   ref={remoteVideoRef}
-                  autoPlay 
-                  playsInline 
+                  autoPlay
+                  playsInline
                   className={`absolute inset-0 w-full h-full object-cover ${hasRemoteStream ? 'block' : 'hidden'}`}
                 />
 
                 {/* Placeholder when remote stream is not yet active */}
                 {!hasRemoteStream && (
                   <div className="flex flex-col items-center justify-center space-y-3 p-6 text-center">
-                    <img 
+                    <img
                       src={userRole === 'mahasiswa' ? (appointment.counselorAvatar || "https://api.dicebear.com/9.x/avataaars/svg?seed=Counselor&backgroundColor=b6e3f4") : "https://api.dicebear.com/9.x/avataaars/svg?seed=Student&backgroundColor=b6e3f4"}
                       alt="Remote Participant"
                       className="w-24 h-24 sm:w-28 sm:h-28 rounded-full border-2 border-slate-700 opacity-80 object-cover"
@@ -1034,11 +1034,11 @@ export const VideoConsultationRoom: React.FC<VideoConsultationRoomProps> = ({
                     <UserIcon />
                   </div>
                 ) : (
-                  <video 
+                  <video
                     ref={localVideoRef}
-                    autoPlay 
-                    muted 
-                    playsInline 
+                    autoPlay
+                    muted
+                    playsInline
                     className="absolute inset-0 w-full h-full object-cover scale-x-[-1]"
                   />
                 )}
@@ -1054,26 +1054,26 @@ export const VideoConsultationRoom: React.FC<VideoConsultationRoomProps> = ({
         {/* Bottom Controls Bar */}
         <div className="absolute bottom-0 left-0 w-full h-20 bg-slate-950/95 backdrop-blur-md border-t border-slate-800/80 flex items-center justify-center gap-3 sm:gap-5 px-4 z-20">
           {/* Mute Button */}
-          <button 
+          <button
             type="button"
             onClick={handleToggleMute}
             className={`w-11 h-11 sm:w-12 sm:h-12 rounded-2xl flex items-center justify-center transition-all cursor-pointer ${
-              isMuted 
-                ? 'bg-rose-500/20 text-rose-400 border border-rose-500/40 hover:bg-rose-500/30' 
+              isMuted
+                ? 'bg-rose-500/20 text-rose-400 border border-rose-500/40 hover:bg-rose-500/30'
                 : 'bg-slate-800 text-slate-200 border border-slate-700 hover:bg-slate-700'
             }`}
             title={isMuted ? 'Nyalakan Mikrofon' : 'Matikan Mikrofon'}
           >
             {isMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
           </button>
-          
+
           {/* Video Toggle Button */}
-          <button 
+          <button
             type="button"
             onClick={handleToggleVideo}
             className={`w-11 h-11 sm:w-12 sm:h-12 rounded-2xl flex items-center justify-center transition-all cursor-pointer ${
-              isVideoOff 
-                ? 'bg-rose-500/20 text-rose-400 border border-rose-500/40 hover:bg-rose-500/30' 
+              isVideoOff
+                ? 'bg-rose-500/20 text-rose-400 border border-rose-500/40 hover:bg-rose-500/30'
                 : 'bg-slate-800 text-slate-200 border border-slate-700 hover:bg-slate-700'
             }`}
             title={isVideoOff ? 'Nyalakan Kamera' : 'Matikan Kamera'}
@@ -1082,12 +1082,12 @@ export const VideoConsultationRoom: React.FC<VideoConsultationRoomProps> = ({
           </button>
 
           {/* Screen Share Button */}
-          <button 
+          <button
             type="button"
             onClick={handleToggleScreenShare}
             className={`w-11 h-11 sm:w-12 sm:h-12 rounded-2xl flex items-center justify-center transition-all cursor-pointer ${
-              isScreenSharing 
-                ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30 border border-indigo-400' 
+              isScreenSharing
+                ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30 border border-indigo-400'
                 : 'bg-slate-800 text-slate-200 border border-slate-700 hover:bg-slate-700'
             }`}
             title={isScreenSharing ? 'Hentikan Berbagi Layar' : 'Berbagi Layar (Draft Skripsi / Tugas)'}
@@ -1096,12 +1096,12 @@ export const VideoConsultationRoom: React.FC<VideoConsultationRoomProps> = ({
           </button>
 
           {/* In-Call Shared Notes Toggle Button */}
-          <button 
+          <button
             type="button"
             onClick={() => setIsInCallNotesOpen(!isInCallNotesOpen)}
             className={`w-11 h-11 sm:w-12 sm:h-12 rounded-2xl flex items-center justify-center transition-all cursor-pointer relative ${
-              isInCallNotesOpen 
-                ? 'bg-teal-600 text-white shadow-lg shadow-teal-600/30 border border-teal-400' 
+              isInCallNotesOpen
+                ? 'bg-teal-700 text-white shadow-lg shadow-teal-600/30 border border-teal-400'
                 : 'bg-slate-800 text-slate-200 border border-slate-700 hover:bg-slate-700'
             }`}
             title="Buka Catatan Kolaborasi Sesi"
@@ -1113,7 +1113,7 @@ export const VideoConsultationRoom: React.FC<VideoConsultationRoomProps> = ({
           </button>
 
           {/* End Call Button */}
-          <button 
+          <button
             type="button"
             onClick={handleEndCall}
             className="w-14 sm:w-16 h-11 sm:h-12 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center shadow-lg shadow-rose-600/30 transition-all cursor-pointer"
@@ -1174,7 +1174,7 @@ export const VideoConsultationRoom: React.FC<VideoConsultationRoomProps> = ({
               <p className="text-[10px] text-slate-400">Tersimpan aman & terenkripsi AES-256</p>
             </div>
           </div>
-          
+
           <div className="flex-1 p-4 bg-slate-900 flex flex-col overflow-y-auto">
             <div className="mb-3 space-y-1.5">
               <label className="text-xs font-semibold text-slate-300">Keluhan Mahasiswa:</label>

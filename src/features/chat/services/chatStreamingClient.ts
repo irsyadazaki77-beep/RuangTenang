@@ -1,5 +1,6 @@
 import { StoredAttachment } from '../types';
 import type { FileSourceReference } from '../../../../shared/contracts/files';
+import { AUTH_SESSION_INVALIDATED_EVENT } from '../../../lib/apiClient';
 
 export type StreamState = 'idle' | 'connecting' | 'streaming' | 'completed' | 'aborted' | 'failed';
 
@@ -35,12 +36,14 @@ export interface StreamCallbacks {
   onQuotaExceeded?: (data: QuotaExceededData) => void;
   onRoutingMetadata?: (data: RoutingEventData) => void;
   onSources?: (sources: FileSourceReference[]) => void;
+  onConsentRequired?: () => void;
 }
 
 export interface StreamPayload {
   message: string;
   chatId?: string;
   isTemporary?: boolean;
+  workspaceMode?: boolean;
   /** Session-only acknowledgement for anonymous AI processing; never account-persisted. */
   guestAiConsent?: boolean;
   pluginResult?: string;
@@ -55,6 +58,7 @@ export interface StreamPayload {
   latencyPreference?: string;
   qualityPreference?: string;
   presetId?: string;
+  history?: Array<{ role: 'user' | 'assistant' | 'model'; content: string }>;
 }
 
 function getCookie(name: string): string | null {
@@ -96,6 +100,7 @@ export class ChatStreamingClient {
     let currentText = '';
     let pluginName = '';
     let announcedChatId: string | undefined;
+    let consentRequiredAnnounced = false;
 
     this.changeState(token, 'connecting', callbacks.onStateChange);
 
@@ -150,6 +155,9 @@ export class ChatStreamingClient {
       }
 
       if (!response.ok) {
+        if (response.status === 401 && typeof window !== 'undefined') {
+          window.dispatchEvent(new Event(AUTH_SESSION_INVALIDATED_EVENT));
+        }
         let errorMsg = `HTTP Kesalahan ${response.status}`;
         try {
           const errData = await response.json();
@@ -214,7 +222,21 @@ export class ChatStreamingClient {
                         callbacks.onChatCreated(parsed.chatId);
                       }
                     }
-                    
+                    if ((parsed.type === 'consent_required' || parsed.code === 'AI_CONSENT_REQUIRED') && !consentRequiredAnnounced) {
+                      consentRequiredAnnounced = true;
+                      if (token === this.activeToken) callbacks.onConsentRequired?.();
+                    }
+                    // Older/still-running servers may only return the local notice
+                    // text without the structured consent_required event.
+                    if (
+                      typeof parsed.text === 'string' &&
+                      /persetujuan pemrosesan ai belum aktif/i.test(parsed.text) &&
+                      !consentRequiredAnnounced
+                    ) {
+                      consentRequiredAnnounced = true;
+                      if (token === this.activeToken) callbacks.onConsentRequired?.();
+                    }
+
                     if (parsed.quotaExceeded || parsed.error === 'DAILY_LIMIT_EXCEEDED') {
                       if (token === this.activeToken && callbacks.onQuotaExceeded) {
                         callbacks.onQuotaExceeded({
@@ -295,7 +317,7 @@ export class ChatStreamingClient {
       };
 
       await readLoop();
-      
+
       if (token !== this.activeToken) {
         return;
       }

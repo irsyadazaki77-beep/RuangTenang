@@ -124,7 +124,9 @@ describe('FASE 11 Performance, Token & Cost Optimization Benchmark Suite', () =>
         chatId: 'workspace_1',
         attachmentIds: ['att_1'],
         userQuery: 'analisis metodologi',
-        sourceChecksums: ['sha256_hash_1']
+        sourceChecksums: ['sha256_hash_1'],
+        maxTokens: 2500,
+        maxChunks: 8
       });
 
       const keyUserB = documentContextCacheService.createCacheKey({
@@ -132,10 +134,28 @@ describe('FASE 11 Performance, Token & Cost Optimization Benchmark Suite', () =>
         chatId: 'workspace_1',
         attachmentIds: ['att_1'],
         userQuery: 'analisis metodologi',
-        sourceChecksums: ['sha256_hash_1']
+        sourceChecksums: ['sha256_hash_1'],
+        maxTokens: 2500,
+        maxChunks: 8
       });
 
       expect(keyUserA).not.toBe(keyUserB);
+
+      const keySmallerBudget = documentContextCacheService.createCacheKey({
+        userId: 'user_A', chatId: 'workspace_1', attachmentIds: ['att_1'],
+        userQuery: 'analisis metodologi', sourceChecksums: ['sha256_hash_1'], maxTokens: 800, maxChunks: 8
+      });
+      const keyFewerChunks = documentContextCacheService.createCacheKey({
+        userId: 'user_A', chatId: 'workspace_1', attachmentIds: ['att_1'],
+        userQuery: 'analisis metodologi', sourceChecksums: ['sha256_hash_1'], maxTokens: 2500, maxChunks: 3
+      });
+      const keyFilteredSection = documentContextCacheService.createCacheKey({
+        userId: 'user_A', chatId: 'workspace_1', attachmentIds: ['att_1'],
+        userQuery: 'analisis metodologi', sourceChecksums: ['sha256_hash_1'], maxTokens: 2500, maxChunks: 8, section: 'Metodologi'
+      });
+      expect(keySmallerBudget).not.toBe(keyUserA);
+      expect(keyFewerChunks).not.toBe(keyUserA);
+      expect(keyFilteredSection).not.toBe(keyUserA);
 
       const mockResult: any = {
         contextBlock: 'Mock Context User A',

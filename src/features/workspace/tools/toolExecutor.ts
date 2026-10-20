@@ -47,9 +47,9 @@ export class WorkspaceToolExecutor {
 
     if (tool.supportedArtifactTypes && context.activeArtifact) {
       if (!tool.supportedArtifactTypes.includes(context.activeArtifact.type)) {
-        return { 
-          valid: false, 
-          error: `Tool "${tool.name}" tidak mendukung tipe artefak ${context.activeArtifact.type}` 
+        return {
+          valid: false,
+          error: `Tool "${tool.name}" tidak mendukung tipe artefak ${context.activeArtifact.type}`
         };
       }
     }
@@ -163,7 +163,7 @@ export class WorkspaceToolExecutor {
   static prepareAiPrompt(tool: WorkspaceToolDefinition, payload: WorkspaceToolExecutionPayload): string {
     const { input, context } = payload;
     const targetText = context.selectedText || context.activeArtifact?.content || '';
-    
+
     if (tool.promptTemplate) {
       return tool.promptTemplate(input, targetText);
     }

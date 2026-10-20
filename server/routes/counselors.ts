@@ -220,7 +220,7 @@ router.get(['/', '/counselors', '/api/counselors', '/api/v1/counselors'], option
         orderBy: { name: 'asc' }
       })
     ]);
-    
+
     if (dbCounselors.length === 0) {
       res.setHeader('X-Total-Count', total);
       res.setHeader('X-Page', page);
@@ -228,7 +228,7 @@ router.get(['/', '/counselors', '/api/counselors', '/api/v1/counselors'], option
       res.setHeader('X-Total-Pages', Math.ceil(total / limit) || 1);
       return res.json([]);
     }
-    
+
     const formattedCounselors = dbCounselors.map(c => {
       let specialties: string[];
       let availability: string[];
@@ -247,7 +247,7 @@ router.get(['/', '/counselors', '/api/counselors', '/api/v1/counselors'], option
       const daysMap = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
       const todayName = daysMap[new Date().getDay()];
       const isAvailableToday = Array.isArray(availability) && availability.includes(todayName);
-      
+
       return {
         id: c.id,
         name: c.name,
@@ -334,7 +334,7 @@ router.get(
             ]
           }
         }),
-        prisma.appointments.findMany({ where: scopedAppointment, select: { notes: true, scheduledAt: true, status: true } })
+        prisma.appointments.findMany({ where: scopedAppointment, select: { userId: true, notes: true, scheduledAt: true, status: true } })
       ]);
 
       const dist = { minimal: 0, mild: 0, moderate: 0, severe: 0 };
@@ -364,8 +364,15 @@ router.get(
       };
 
       if (appointments.length > 0) {
+        const consentByUser = await consentService.getBatchUserConsents(
+          appointments.map(appointment => appointment.userId).filter((userId): userId is string => Boolean(userId))
+        );
         for (const apt of appointments) {
-          const note = (apt.notes || '').toLowerCase();
+          const rawNote = apt.notes || '';
+          const isScreeningReferral = /^\s*\[Rujukan Skrining Mandiri\]/i.test(rawNote);
+          if (isScreeningReferral && consentByUser.get(apt.userId || '')?.consentForCounselorSharing !== true) continue;
+
+          const note = rawNote.toLowerCase();
           if (note.includes('akademik') || note.includes('skripsi')) concernCounts['Kendala Akademik & Skripsi']++;
           else if (note.includes('cemas') || note.includes('anxiety') || note.includes('burnout')) concernCounts['Kecemasan & Burnout']++;
           else if (note.includes('hubungan') || note.includes('teman') || note.includes('keluarga')) concernCounts['Hubungan & Sosial Kampus']++;

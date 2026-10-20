@@ -149,7 +149,7 @@ describe('Server Encryption Unit & Security Tests', () => {
       }
     });
 
-    it('should pass validation in production when keys satisfy strict 32+ char length', () => {
+    it('should pass validation in production when all dedicated keys satisfy their requirements', () => {
       const originalEnv = { ...process.env };
 
       try {
@@ -160,6 +160,8 @@ describe('Server Encryption Unit & Security Tests', () => {
         process.env.BLIND_INDEX_SECRET = 'random-unique-blind-index-token-key-19482018471';
         process.env.DATABASE_URL = 'postgresql://user:pass@localhost:5432/db';
         process.env.ENCRYPTION_KEY = Buffer.alloc(32, 'x').toString('hex'); // 64 hex chars
+        process.env.BACKUP_ENCRYPTION_KEY = Buffer.alloc(32, 'b').toString('hex'); // Dedicated 32-byte hex key
+        process.env.APP_ORIGIN = 'https://ruangtenang.example';
 
         expect(() => {
           validateEnvironment();

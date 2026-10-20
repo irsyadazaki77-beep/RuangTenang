@@ -84,7 +84,7 @@ export function isTextFile(buffer: Buffer, originalExt: string): boolean {
   if (buffer.length >= 2 && buffer[0] === 0x4D && buffer[1] === 0x5A) return false;
   // Disallow ELF binary '\x7fELF'
   if (buffer.length >= 4 && bufEquals(buffer.subarray(0, 4), Buffer.from([0x7f, 0x45, 0x4c, 0x46]))) return false;
-  
+
   return true;
 }
 
@@ -98,14 +98,14 @@ function bufEquals(a: Buffer, b: Buffer): boolean {
 
 export function sanitizeFilename(rawFilename: string): string {
   if (!rawFilename || typeof rawFilename !== 'string') return 'attachment.bin';
-  
+
   // Strip path traversal characters (slashes, backslashes, dot-dots, null bytes)
   let name = rawFilename.replace(/[/\\]/g, '').replace(/\.\.+/g, '').replace(/\0/g, '').trim();
-  
+
   // Remove control characters
   // eslint-disable-next-line no-control-regex
   name = name.replace(/[\x00-\x1F\x7F]/g, '');
-  
+
   // Prevent dangerous double extensions like .php.png or .exe.txt
   name = name.replace(/\.(php|exe|sh|bat|cmd|pl|cgi|asp|aspx|jsp|html|htm|svg|js|cjs|mjs|vbs)\./gi, '.');
 
@@ -117,7 +117,7 @@ export function sanitizeFilename(rawFilename: string): string {
     const base = path.basename(name, ext);
     name = base.substring(0, 250 - ext.length) + ext;
   }
-  
+
   return name;
 }
 
@@ -195,7 +195,7 @@ export const attachmentStorageService = {
     // Check Prompt injection for text files before ingestion for explicit compatibility
     if (clientMime === 'text/plain' || clientMime === 'text/markdown' || originalFilename.endsWith('.txt') || originalFilename.endsWith('.md')) {
       const textContent = buffer.toString('utf8');
-      if (aiSafetyService.detectPromptInjection(textContent)) {
+      if (aiSafetyService.detectPromptInjectionInDocument(textContent)) {
         throw new Error('PROMPT_INJECTION_IN_ATTACHMENT: Terdeteksi upaya prompt injection dalam isi berkas.');
       }
     }
@@ -288,7 +288,7 @@ export const attachmentStorageService = {
       ? Buffer.from(encryptionService.decryptSensitive(storedBuffer.toString('utf8')) || '', 'base64')
       : storedBuffer;
     if (attachment.isEncrypted) storedBuffer.fill(0);
-    
+
     // Integrity check
     if (buffer.length !== attachment.size) {
       console.warn(`[ATTACHMENT_INTEGRITY_WARNING] Buffer length (${buffer.length}) does not match DB record size (${attachment.size})`);

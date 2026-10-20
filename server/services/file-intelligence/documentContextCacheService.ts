@@ -6,7 +6,10 @@ export interface DocumentRetrievalCacheKey {
   chatId?: string;
   attachmentIds: string[];
   userQuery: string;
-  sourceChecksums: string;
+  sourceChecksums: string[];
+  maxTokens: number;
+  maxChunks: number;
+  section?: string;
 }
 
 interface CacheEntry {
@@ -26,13 +29,19 @@ export const documentContextCacheService = {
     attachmentIds?: string[];
     userQuery: string;
     sourceChecksums: string[];
+    maxTokens: number;
+    maxChunks: number;
+    section?: string;
   }): string {
     const rawKey = JSON.stringify({
       userId: params.userId,
       chatId: params.chatId || '',
       attachmentIds: [...(params.attachmentIds || [])].sort(),
       normalizedQuery: (params.userQuery || '').trim().toLowerCase(),
-      checksums: [...params.sourceChecksums].sort()
+      checksums: [...params.sourceChecksums].sort(),
+      maxTokens: params.maxTokens,
+      maxChunks: params.maxChunks,
+      normalizedSection: (params.section || '').trim().toLowerCase()
     });
     return createHash('sha256').update(rawKey).digest('hex');
   },

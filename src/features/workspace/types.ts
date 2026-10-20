@@ -18,14 +18,25 @@ export interface WorkspaceComposerConfig {
   taskWorkspaceInstructions?: string;
 }
 
+export type WorkspaceChapterScope =
+  | 'ALL'
+  | 'BAB_1'
+  | 'BAB_2'
+  | 'BAB_3'
+  | 'BAB_4'
+  | 'BAB_5'
+  | 'LAMPIRAN';
+
 export interface WorkspaceActiveContext {
   workspaceId?: string;
   workspaceInstructions?: string;
   activeFiles: Array<{ id?: string; name: string }>;
-  activeArtifact?: { id: string; title: string; type: ArtifactType; version: number; content: string };
+  activeArtifact?: { id: string; title: string; type: ArtifactType; version: number; content: string; chapterScope?: WorkspaceChapterScope };
   selectedText?: string;
   presetId?: string;
   taskCategory?: string;
+  chapterScope?: WorkspaceChapterScope;
+  chapterMemories?: string[];
 }
 
 export interface WorkspaceRequestSnapshot {
@@ -109,6 +120,7 @@ export interface WorkspaceArtifact {
   createdAt?: string;
   updatedAt: string;
   versions?: ArtifactVersionRecord[];
+  chapterScope?: WorkspaceChapterScope;
 }
 
 /** A text selection captured from the active Canvas editor. Offsets are UTF-16, matching textarea selection APIs. */
@@ -153,7 +165,7 @@ export interface ParsedCitationItem {
 
 export type StreamingStatus = 'idle' | 'connecting' | 'streaming' | 'completed' | 'aborted' | 'error';
 
-export type WorkspaceFileKind = 
+export type WorkspaceFileKind =
   | 'text'
   | 'markdown'
   | 'csv'
@@ -165,11 +177,11 @@ export type WorkspaceFileKind =
   | 'image'
   | 'code';
 
-export type WorkspaceAttachmentStatus = 
-  | 'uploading' 
-  | 'processing' 
-  | 'ready' 
-  | 'failed' 
+export type WorkspaceAttachmentStatus =
+  | 'uploading'
+  | 'processing'
+  | 'ready'
+  | 'failed'
   | 'unsupported'
   | 'error';
 
@@ -190,20 +202,25 @@ export interface WorkspaceFileAttachment {
   slideCount?: number;
   sheetCount?: number;
   extractionWarnings?: string[];
+  ocrApplied?: boolean;
+  visualAnalysisAvailable?: boolean;
+  previewOnly?: boolean;
+  ocrConfidence?: number;
+  readingUncertainty?: string;
   url?: string;
   checksum?: string;
 }
 
-export type FileValidationErrorType = 
-  | 'TOO_LARGE' 
-  | 'EMPTY_FILE' 
-  | 'UNSUPPORTED_TYPE' 
+export type FileValidationErrorType =
+  | 'TOO_LARGE'
+  | 'EMPTY_FILE'
+  | 'UNSUPPORTED_TYPE'
   | 'INVALID_FILE'
   | 'SIGNATURE_MISMATCH'
   | 'MIME_MISMATCH'
-  | 'READ_FAILED' 
-  | 'UPLOAD_FAILED' 
-  | 'PROCESSING_FAILED' 
+  | 'READ_FAILED'
+  | 'UPLOAD_FAILED'
+  | 'PROCESSING_FAILED'
   | 'PROCESSING_TIMEOUT'
   | 'SECURITY_REJECTED'
   | 'UNAUTHORIZED_ACCESS';
@@ -215,14 +232,14 @@ export interface FileValidationResult {
   file?: WorkspaceFileAttachment;
 }
 
-export type WorkspaceErrorType = 
-  | 'network' 
-  | 'validation' 
-  | 'unauthorized' 
-  | 'conflict' 
-  | 'not-found' 
-  | 'parse-error' 
-  | 'persistence-failure' 
+export type WorkspaceErrorType =
+  | 'network'
+  | 'validation'
+  | 'unauthorized'
+  | 'conflict'
+  | 'not-found'
+  | 'parse-error'
+  | 'persistence-failure'
   | 'stream-error';
 
 export interface WorkspaceError {

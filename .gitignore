@@ -57,6 +57,7 @@ playwright-report/
 blob-report/
 .nyc_output/
 .vitest/
+output/
 
 # Temporary Patch Scripts & Linter Reports
 eslint_*.json

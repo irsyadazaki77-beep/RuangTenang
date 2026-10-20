@@ -53,6 +53,17 @@ export interface AiModelDefinition extends AiModelMetadata {
 }
 
 const MODEL_METADATA: AiModelMetadata[] = [
+  {
+    id: 'gemini-4-argon',
+    name: 'Gemini 4 Argon',
+    category: 'Penalaran Mendalam & Analisis',
+    tag: 'Flagship • Penalaran Lanjut',
+    description: 'Model Gemini unggulan untuk penalaran kompleks, analisis panjang, dan tugas multi-langkah.',
+    speed: 'Sedang',
+    reasoning: 'Sangat Tinggi',
+    recommendedFor: 'Analisis kompleks, riset, coding, dan perencanaan bertahap',
+    allowedTiers: ['Free', 'Pro', 'Premium']
+  },
   // --- 1. FRONTIER & DEEP REASONING TIER (Sangat Tinggi) ---
   {
     id: 'deepseek-reasoner',
@@ -154,6 +165,28 @@ const MODEL_METADATA: AiModelMetadata[] = [
     speed: 'Cepat',
     reasoning: 'Tinggi',
     recommendedFor: 'Refleksi emosional mendalam, eksplorasi perasaan, dan bimbingan terarah',
+    allowedTiers: ['Free', 'Pro', 'Premium']
+  },
+  {
+    id: 'gemini-3.6-flash',
+    name: 'Gemini 3.6 Flash',
+    category: 'Model Utama & Seimbang',
+    tag: 'Multimodal • Seimbang',
+    description: 'Model Flash multimodal untuk percakapan, pemahaman dokumen, dan tugas sehari-hari.',
+    speed: 'Cepat',
+    reasoning: 'Tinggi',
+    recommendedFor: 'Percakapan, rangkuman, dan analisis dokumen',
+    allowedTiers: ['Free', 'Pro', 'Premium']
+  },
+  {
+    id: 'gemini-3-flash-preview',
+    name: 'Gemini 3 Flash Preview',
+    category: 'Model Utama & Seimbang',
+    tag: 'Preview • Multimodal',
+    description: 'Model Gemini Flash pratinjau untuk percakapan cepat dan tugas multimodal.',
+    speed: 'Cepat',
+    reasoning: 'Tinggi',
+    recommendedFor: 'Eksperimen fitur Gemini terbaru dan percakapan multimodal',
     allowedTiers: ['Free', 'Pro', 'Premium']
   },
   {
@@ -315,14 +348,21 @@ const providerModels: Record<string, { provider: ProviderId; providerModelId: st
 export const AI_MODEL_REGISTRY: readonly AiModelDefinition[] = MODEL_METADATA.map(model => {
   const providerInfo = providerModels[model.id] ?? { provider: 'gemini' as const, providerModelId: model.id };
   const baseCaps: ModelCapability[] = model.reasoning === 'Standar' ? ['chat', 'streaming'] : ['chat', 'streaming', 'reasoning'];
-  
+
   // Multimodal Vision & OCR capabilities:
-  // Gemini models natively support vision, image_understanding, document_ocr, and audio_transcription
-  // OpenAI gpt-5.1 & gpt-5-mini support vision, image_understanding, and document_ocr
+  // Gemini chat models support multimodal input and function calling. Audio transcription
+  // is only advertised by dedicated transcription models, which are not chat models.
+  // OpenAI gpt-5.1 & gpt-5-mini support vision, image_understanding, document_ocr, and tool_calling
   if (providerInfo.provider === 'gemini') {
-    baseCaps.push('vision', 'image_understanding', 'document_ocr', 'audio_transcription');
-  } else if (providerInfo.provider === 'openai' && (model.id === 'openai-gpt-5.1' || model.id === 'openai-gpt-5-mini')) {
-    baseCaps.push('vision', 'image_understanding', 'document_ocr');
+    baseCaps.push('vision', 'image_understanding', 'document_ocr', 'tool_calling');
+  } else if (providerInfo.provider === 'openai') {
+    if (model.id === 'openai-gpt-5.1' || model.id === 'openai-gpt-5-mini') {
+      baseCaps.push('vision', 'image_understanding', 'document_ocr', 'tool_calling');
+    } else {
+      baseCaps.push('tool_calling');
+    }
+  } else if (providerInfo.provider === 'deepseek' || providerInfo.provider === 'groq') {
+    baseCaps.push('tool_calling');
   }
 
   return {

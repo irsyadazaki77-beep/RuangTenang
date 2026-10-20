@@ -7,7 +7,7 @@ import { validateAndInspectFile, VerifiedFileInfo } from './magicByteValidator.j
 import { DocumentExtractor } from './documentExtractor.js';
 import { normalizationService } from './normalizationService.js';
 import { chunkingService } from './chunkingService.js';
-import { DocumentProcessingException } from './fileTypes.js';
+import { DEFAULT_FILE_LIMITS, DocumentProcessingException } from './fileTypes.js';
 import { AttachmentResponseDTO, SupportedFileKind } from '../../../shared/contracts/files.js';
 
 import { aiSafetyService } from '../ai/aiSafetyService.js';
@@ -56,7 +56,7 @@ export const documentIngestionService = {
     // AI Safety Prompt Injection defense for plain text / markdown files
     if (verified.fileKind === 'text' || verified.fileKind === 'markdown') {
       const textContent = buffer.toString('utf8');
-      if (aiSafetyService.detectPromptInjection(textContent)) {
+      if (aiSafetyService.detectPromptInjectionInDocument(textContent)) {
         throw new DocumentProcessingException(
           'SECURITY_REJECTED',
           'Terdeteksi upaya prompt injection dalam isi berkas.'
@@ -92,6 +92,9 @@ export const documentIngestionService = {
         pageCount: meta.pageCount,
         slideCount: meta.slideCount,
         sheetCount: meta.sheetCount,
+        ocrApplied: Boolean(meta.ocrApplied),
+        visualAnalysisAvailable: Boolean(meta.visualAnalysisAvailable || existing.fileKind === 'image'),
+        previewOnly: Boolean(meta.previewOnly),
         extractionWarnings: Array.isArray(meta.extractionWarnings) ? meta.extractionWarnings : undefined,
         createdAt: existing.createdAt.toISOString(),
         processedAt: existing.processedAt ? existing.processedAt.toISOString() : undefined
@@ -155,7 +158,12 @@ export const documentIngestionService = {
       const normalized = normalizationService.normalizeDocument(extraction as any);
 
       // 7. CHUNK
-      const chunks = chunkingService.createChunks(normalized);
+      let chunkLimitReached = false;
+      const chunks = chunkingService.createChunks(normalized, () => { chunkLimitReached = true; });
+      const extractionWarnings = [
+        ...(extraction.extractionWarnings || []),
+        ...(chunkLimitReached ? [`Hanya ${DEFAULT_FILE_LIMITS.maxChunksPerDocument} bagian awal dokumen yang diindeks; sisanya tidak disertakan sebagai konteks AI.`] : [])
+      ];
 
       // 8. PERSIST CHUNKS & MARK READY
       if (chunks.length > 0) {
@@ -187,7 +195,7 @@ export const documentIngestionService = {
         pageCount: extraction.pageCount,
         slideCount: extraction.slideCount,
         sheetCount: extraction.sheetCount,
-        extractionWarnings: extraction.extractionWarnings || [],
+        extractionWarnings,
         chunkCount: chunks.length,
         extractedChars: normalized.normalizedFullText.length
       };
@@ -216,7 +224,7 @@ export const documentIngestionService = {
         pageCount: extraction.pageCount,
         slideCount: extraction.slideCount,
         sheetCount: extraction.sheetCount,
-        extractionWarnings: extraction.extractionWarnings,
+        extractionWarnings,
         visualAnalysisAvailable: Boolean(extraction.metadata?.visualAnalysisAvailable || verified.fileKind === 'image'),
         previewOnly: Boolean(extraction.metadata?.previewOnly),
         ocrApplied: Boolean(extraction.metadata?.ocrApplied),
@@ -362,7 +370,12 @@ export const documentIngestionService = {
       if (retryController.signal.aborted) throw new DocumentProcessingException('PROCESSING_ABORTED', 'Pemrosesan ulang dibatalkan.');
 
       const normalized = normalizationService.normalizeDocument(extraction as any);
-      const chunks = chunkingService.createChunks(normalized);
+      let chunkLimitReached = false;
+      const chunks = chunkingService.createChunks(normalized, () => { chunkLimitReached = true; });
+      const extractionWarnings = [
+        ...(extraction.extractionWarnings || []),
+        ...(chunkLimitReached ? [`Hanya ${DEFAULT_FILE_LIMITS.maxChunksPerDocument} bagian awal dokumen yang diindeks; sisanya tidak disertakan sebagai konteks AI.`] : [])
+      ];
 
       if (chunks.length > 0) {
         await prisma.documentChunks.createMany({
@@ -390,7 +403,7 @@ export const documentIngestionService = {
         pageCount: extraction.pageCount,
         slideCount: extraction.slideCount,
         sheetCount: extraction.sheetCount,
-        extractionWarnings: extraction.extractionWarnings || [],
+        extractionWarnings,
         chunkCount: chunks.length,
         extractedChars: normalized.normalizedFullText.length
       };
@@ -419,7 +432,10 @@ export const documentIngestionService = {
         pageCount: extraction.pageCount,
         slideCount: extraction.slideCount,
         sheetCount: extraction.sheetCount,
-        extractionWarnings: extraction.extractionWarnings,
+        ocrApplied: Boolean(extraction.metadata?.ocrApplied),
+        visualAnalysisAvailable: Boolean(extraction.metadata?.visualAnalysisAvailable || updated.fileKind === 'image'),
+        previewOnly: Boolean(extraction.metadata?.previewOnly),
+        extractionWarnings,
         createdAt: updated.createdAt.toISOString(),
         processedAt: updated.processedAt?.toISOString()
       };
@@ -506,6 +522,9 @@ export const documentIngestionService = {
       pageCount: meta.pageCount,
       slideCount: meta.slideCount,
       sheetCount: meta.sheetCount,
+      ocrApplied: Boolean(meta.ocrApplied),
+      visualAnalysisAvailable: Boolean(meta.visualAnalysisAvailable || attachment.fileKind === 'image'),
+      previewOnly: Boolean(meta.previewOnly),
       extractionWarnings: Array.isArray(meta.extractionWarnings) ? meta.extractionWarnings : undefined,
       errorMessage: attachment.processingError || undefined,
       createdAt: attachment.createdAt.toISOString(),

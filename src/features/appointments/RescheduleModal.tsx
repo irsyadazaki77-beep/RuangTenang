@@ -94,7 +94,7 @@ export const RescheduleModal: React.FC<RescheduleModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center max-sm:items-end p-3 sm:p-4 max-sm:p-0 animate-fade-in font-sans">
       <div className="surface-card text-primary rounded-2xl max-sm:rounded-b-none max-sm:rounded-t-2xl max-w-md w-full p-4 sm:p-6 shadow-xl relative space-y-4 border border-default max-sm:animate-slide-up transition-transform duration-200">
-        
+
         {/* Drag handle for mobile bottom sheet */}
         <div className="w-10 h-1 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto my-2 sm:hidden shrink-0" />
 
@@ -189,7 +189,7 @@ export const RescheduleModal: React.FC<RescheduleModalProps> = ({
             <button
               type="submit"
               disabled={isSaving || isFullyBooked || availableSlots.length === 0}
-              className="px-5 py-2 min-h-[44px] bg-teal-600 hover:bg-teal-700 text-white text-xs sm:text-sm font-semibold rounded-xl shadow-3xs transition-all disabled:opacity-50 cursor-pointer active:scale-[0.98]"
+              className="px-5 py-2 min-h-[44px] bg-teal-700 hover:bg-teal-800 text-white text-xs sm:text-sm font-semibold rounded-xl shadow-3xs transition-all disabled:opacity-50 cursor-pointer active:scale-[0.98]"
             >
               {isSaving ? 'Menyimpan...' : 'Simpan Jadwal Baru'}
             </button>

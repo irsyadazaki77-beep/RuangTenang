@@ -194,10 +194,10 @@ export const ConsentTab: React.FC<ConsentTabProps> = ({
           />
           <div>
             <span className="text-xs font-bold text-primary block">
-              Izin Pembagian Data Skrining & Refleksi ke Konselor Kampus
+              Izin Berbagi Catatan Skrining & Refleksi dengan Konselor Kampus
             </span>
             <span className="text-[11px] text-secondary block mt-0.5">
-              Membantu konselor kampus melihat catatan skrining dan perkembangan emosi saat Anda berkonsultasi.
+              Jika aktif, ringkasan skrining yang Anda bawa saat membuat janji dan catatan sesi dapat dilihat konselor yang menangani Anda. Nama dan detail jadwal tetap diperlukan untuk mengatur janji.
             </span>
           </div>
         </label>
@@ -242,7 +242,7 @@ export const ConsentTab: React.FC<ConsentTabProps> = ({
           type="button"
           disabled={loading}
           onClick={handleSaveConsent}
-          className="px-4 py-2 min-h-[44px] bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs sm:text-sm font-semibold transition shadow-3xs cursor-pointer active:scale-[0.98]"
+          className="px-4 py-2 min-h-[44px] bg-teal-700 hover:bg-teal-800 text-white rounded-xl text-xs sm:text-sm font-semibold transition shadow-3xs cursor-pointer active:scale-[0.98]"
         >
           {loading ? 'Menyimpan...' : 'Simpan Persetujuan (Consent)'}
         </button>

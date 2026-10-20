@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { Message } from '../types';
 import { apiClient } from '../../../lib/apiClient';
+import { getGuestMessages } from '../../../lib/guestChatStorage';
 
 export function useChatHistory(chatId: string | undefined) {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -29,6 +30,16 @@ export function useChatHistory(chatId: string | undefined) {
     }
 
     const targetChatId = chatId;
+
+    if (targetChatId.startsWith('guest_')) {
+      const localMsgs = getGuestMessages(targetChatId);
+      setMessages(localMsgs);
+      setNextCursor(null);
+      loadedChatIdRef.current = targetChatId;
+      setIsLoadingMessages(false);
+      setFetchMessagesError(null);
+      return;
+    }
 
     if (!cursor) {
       setIsLoadingMessages(true);
