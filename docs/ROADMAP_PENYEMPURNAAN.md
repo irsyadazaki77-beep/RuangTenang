@@ -163,12 +163,14 @@ Centang di bawah berarti perubahan kode pada butir tersebut sudah diterapkan; it
   - [x] Labeli sumber web sebagai eksternal belum diverifikasi dan bedakan daftar rujukan dari bukti dukungan klaim.
   - [x] Lengkapi modal pencarian/import sitasi dengan nama dialog, perangkap fokus, fokus awal, pemulihan fokus, dan penutupan Escape.
   - [x] Batasi ukuran impor .bib/.ris, jelaskan format yang tidak terbaca, dan tampilkan jalur salin manual bila akses clipboard gagal.
+  - [x] Tandai metadata Crossref dan impor secara terpisah; tahun yang hilang tetap kosong/n.d. dan tidak diganti dengan tahun berjalan.
 - [x] Sediakan pemulihan draf Canvas saat halaman dimuat ulang, pertahankan versi dasar agar konflik server terlihat, dan hapus salinan sesi setelah tersimpan atau diganti dengan versi server.
 - [ ] Tinjau artefak teks/tabel/diagram, autosave, konflik, riwayat versi, diff, dan pemulihan.
   - [x] Rebase autosave antre pada versi server terbaru dan bawa metadata versi lengkap ke pemulihan konflik Canvas.
   - [x] Simpan baseline versi/timestamp pada draf Canvas dalam memori; deteksi konflik saat Canvas dibuka kembali dan tahan autosave sampai pengguna memilih versi.
   - [x] Selaraskan keterangan snapshot dengan perilaku server (autosave memperbarui versi aktif) dan jelaskan bahwa draf lokal belum tersimpan ke server serta pemulihannya bergantung pada penyimpanan sesi browser.
   - [x] Terapkan nama dialog, fokus awal, perangkap/pemulihan fokus, dan Escape pada modal sitasi, parafrase, dan galeri template.
+  - [x] Jelaskan batas editor akademik lokal: Konservatif mempertahankan draf, Sintesis memilih kalimat sumber, Restrukturisasi dinonaktifkan, dan estimator hanya membandingkan kedua teks; batasi rincian per kalimat agar kalkulasi tetap terukur.
 - [ ] Tinjau workflow agent, persetujuan sebelum eksekusi, pembatalan, retry, dan pemulihan task gagal.
   - [x] Pisahkan tombol “Stop task” dari “Batalkan plan”; hentikan eksekusi aktif lewat endpoint task, pertahankan plan agar task dapat dicoba lagi, dan muat ulang status jika pembatalan gagal.
   - [x] Segarkan plan setelah kegagalan start, review, transisi, cancel, atau recovery supaya retry tidak memakai status lokal yang usang.

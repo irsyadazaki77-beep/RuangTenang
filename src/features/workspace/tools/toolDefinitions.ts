@@ -80,8 +80,8 @@ export const WORKSPACE_TOOL_DEFINITIONS: WorkspaceToolDefinition[] = [
   },
   {
     id: 'academic_paraphrase',
-    name: 'Parafrase Akademik Beretika',
-    description: 'Membantu menyunting struktur dan diksi naskah akademik tanpa menjamin hasil pemeriksaan similarity.',
+    name: 'Penyunting Akademik Lokal',
+    description: 'Mempertahankan draf atau memilih kalimat sumber secara lokal; mode ini tidak menulis ulang klaim.',
     icon: 'Pencil',
     category: 'Writing',
     executionMode: 'client_utility',
@@ -92,11 +92,11 @@ export const WORKSPACE_TOOL_DEFINITIONS: WorkspaceToolDefinition[] = [
       {
         name: 'style',
         type: 'enum',
-        label: 'Gaya Parafrase',
+        label: 'Mode penyuntingan',
         defaultValue: 'KONSERVATIF',
         options: [
-          { value: 'KONSERVATIF', label: 'Konservatif (Pertahankan Klaim)' },
-          { value: 'RESTRUKTURISASI', label: 'Restrukturisasi Kalimat' },
+          { value: 'KONSERVATIF', label: 'Konservatif (pertahankan teks)' },
+          { value: 'RESTRUKTURISASI', label: 'Restrukturisasi (belum tersedia di mode lokal)' },
           { value: 'SINTESIS', label: 'Sintesis Ringkas' }
         ]
       }

@@ -68,9 +68,20 @@ export class WorkspaceToolExecutor {
     const artifact = context.activeArtifact;
     const content = context.selectedText || artifact?.content || '';
 
-    // 1. Parafrase Akademis
+    // 1. Editor akademik lokal
     if (tool.id === 'academic_paraphrase') {
       const style = (input.style as ParaphraseStyle) || 'KONSERVATIF';
+      if (style === 'RESTRUKTURISASI') {
+        return {
+          success: false,
+          toolId: tool.id,
+          outputType: 'ARTIFACT_UPDATE',
+          error: {
+            code: 'TOOL_UNAVAILABLE',
+            message: 'Restrukturisasi belum tersedia di mode lokal. Pilih Konservatif atau Sintesis Ringkas.'
+          }
+        };
+      }
       const result = paraphraseAcademicText(content, style);
       return {
         success: true,
