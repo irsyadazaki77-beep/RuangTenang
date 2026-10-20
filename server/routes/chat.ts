@@ -11,10 +11,10 @@ import { checkUserAiUsageLimit, rollbackUserAiQuota } from '../services/aiUsageL
 import { serverDb } from '../database.js';
 
 import { encryptionService } from '../services/encryptionService.js';
-import { getLocalFallbackResponse } from './fallbackAi.js';
 
 
 import { aiSafetyService } from '../services/ai/aiSafetyService.js';
+import { consentService } from '../services/consentService.js';
 import { aiGateway } from '../services/ai/aiGateway.js';
 import { validateAndSanitizeToolCall } from '../services/ai/aiToolSchemas.js';
 import { ChatController } from '../controllers/chatController.js';
@@ -23,11 +23,24 @@ import { attachmentStorageService } from '../services/attachmentStorageService.j
 import { documentIngestionService } from '../services/file-intelligence/documentIngestionService.js';
 import { DocumentProcessingException } from '../services/file-intelligence/fileTypes.js';
 import { getVerifiedEmergencyContacts } from '../config/emergencyRegistry.js';
-import { AiModelError, getModelDefinition, resolveAiModel } from '../services/ai/aiModelRegistry.js';
-import { AUTO_ROUTING_MODEL_ID } from '../../shared/aiModelContract.js';
+import {
+  AiModelError,
+  getModelDisplayName,
+  getModelDefinition,
+  resolveAiModel,
+  validateProfileMode,
+  mapLegacyModelToProfile,
+  getProfileDefinition
+} from '../services/ai/aiModelRegistry.js';
+import {
+  AUTO_ROUTING_MODEL_ID,
+  isAiProfile
+} from '../../shared/aiModelContract.js';
 import { smartModelRouter } from '../services/ai/smartModelRouter.js';
+import { optionalAttachmentOwner } from '../middleware/guestAttachmentSession.js';
 
 const router = Router();
+const MAX_WORKSPACE_CONTEXT_CHARS = 72_000;
 
 // Endpoint for inspecting non-sensitive AI performance metrics
 router.get('/ai/metrics', requireAuth, requireRole(['admin']), (req: Request, res: Response) => {
@@ -38,9 +51,9 @@ router.get('/ai/metrics', requireAuth, requireRole(['admin']), (req: Request, re
 
 // Error wrapper helper
 const sendError = (res: Response, code: string, message: string, status = 500) => {
-  res.status(status).json({ 
-    success: false, 
-    code, 
+  res.status(status).json({
+    success: false,
+    code,
     message,
     error: { code, message }
   });
@@ -48,16 +61,41 @@ const sendError = (res: Response, code: string, message: string, status = 500) =
 
 const sendModelSelectionError = (res: Response, error: unknown) => {
   if (!(error instanceof AiModelError)) return false;
-  const status = error.code === 'MODEL_NOT_ALLOWED' ? 403 : 400;
+  const status = error.code === 'MODEL_NOT_ALLOWED' ? 403 : error.code === 'MODEL_UNAVAILABLE' || error.code === 'PROVIDER_NOT_CONFIGURED' ? 503 : 400;
   const messages: Record<AiModelError['code'], string> = {
     MODEL_NOT_FOUND: 'Model AI tidak dikenal.',
     MODEL_NOT_ALLOWED: 'Model ini tidak tersedia untuk paket akun Anda.',
     MODEL_UNAVAILABLE: 'Model AI sedang tidak tersedia.',
-    PROVIDER_NOT_CONFIGURED: 'Penyedia model AI sedang tidak tersedia.'
+    PROVIDER_NOT_CONFIGURED: 'Penyedia model AI sedang tidak tersedia.',
+    INVALID_PROFILE_FOR_MODE: 'Profil AI tidak sesuai dengan mode ruang aktif.'
   };
-  sendError(res, error.code, messages[error.code], status);
+  sendError(res, error.code, messages[error.code] || 'Model AI tidak valid.', status);
   return true;
 };
+
+const authenticateChatStream = (req: Request, res: Response, next: NextFunction) => {
+  // Only explicitly temporary, chat-less requests or guest requests may run anonymously. A stale
+  // login must never silently turn a saved conversation into an in-memory chat.
+  if (
+    req.body?.isTemporary === true &&
+    (!req.body?.chatId || (typeof req.body?.chatId === 'string' && req.body.chatId.startsWith('guest_')))
+  ) {
+    return optionalAuth(req, res, next);
+  }
+  return requireAuth(req, res, next);
+};
+
+function getProfileDegradation(profileId: string | undefined, modelId: string | undefined) {
+  const profile = profileId ? getProfileDefinition(profileId) : undefined;
+  const model = modelId ? getModelDefinition(modelId) : undefined;
+  const rank = (value?: string) => value === 'Sangat Tinggi' ? 2 : value === 'Tinggi' ? 1 : 0;
+  const isDegraded = Boolean(profile && model && rank(model.reasoning) < rank(profile.reasoning));
+  return {
+    isDegraded,
+    degradationNotice: isDegraded ? `Profil ${profile!.name}: ${model!.name} berada di bawah sasaran penalaran profil.` : undefined
+  };
+}
+
 
 // Middleware to check ownership for a specific chat ID
 const checkChatOwnership = async (req: Request, res: Response, next: NextFunction) => {
@@ -65,7 +103,7 @@ const checkChatOwnership = async (req: Request, res: Response, next: NextFunctio
   const userId = req.user?.userId;
   if (!chatId) return sendError(res, 'MISSING_CHAT_ID', 'Chat ID wajib diisi', 400);
   if (!userId) return sendError(res, 'UNAUTHORIZED', 'Sesi tidak valid', 401);
-  
+
   try {
     const chat = await prisma.chats.findFirst({ where: { id: chatId, userId } });
     if (!chat) return sendError(res, 'NOT_FOUND', 'Percakapan tidak ditemukan atau bukan milik Anda', 404);
@@ -207,16 +245,17 @@ router.post('/chat/summary', requireAuth, checkChatOwnership, aiSummaryLimiter, 
 });
 
 // Canonical Chat Endpoint (Non-streaming JSON & Pre-flight Safe Interceptor)
-router.post(['/chat', '/api/chat'], optionalAuth, aiChatLimiter, aiAbuseLimiter, async (req: Request, res: Response) => {
+router.post(['/chat', '/api/chat'], optionalAuth, optionalAttachmentOwner, aiChatLimiter, aiAbuseLimiter, async (req: Request, res: Response) => {
   try {
-    const { 
-      message, 
-      chatId, 
+    const {
+      message,
+      chatId,
       mode,
-      isTemporary, 
-      chatMode, 
-      responseStyle, 
-      aiModel: requestedAiModel
+      isTemporary,
+      chatMode,
+      responseStyle,
+      aiModel: requestedAiModel,
+      guestAiConsent
     } = req.body;
 
     const isAutoRouting = !requestedAiModel || requestedAiModel === AUTO_ROUTING_MODEL_ID;
@@ -243,15 +282,30 @@ router.post(['/chat', '/api/chat'], optionalAuth, aiChatLimiter, aiAbuseLimiter,
       });
     }
 
-    // If manual mode, validate the requested model
-    if (!isAutoRouting) {
+    const isWorkspace = Boolean(mode && mode.toLowerCase().includes('ruang_kerja'));
+    const isProfile = Boolean(requestedAiModel && isAiProfile(requestedAiModel));
+    const canSelectInternalModel = req.user?.role === 'admin' || userTier === 'Developer';
+
+    // Validate mode isolation: Tenang profiles cannot be used in Kerja and vice-versa
+    if (isProfile) {
+      try { validateProfileMode(requestedAiModel, isWorkspace); }
+      catch (error) { if (sendModelSelectionError(res, error)) return; throw error; }
+    } else if (!isAutoRouting) {
+      if (!canSelectInternalModel) {
+        return sendError(res, 'MODEL_NOT_ALLOWED', 'Pemilihan model internal hanya tersedia untuk admin dan akun Developer.', 403);
+      }
       try { resolveAiModel(requestedAiModel, userTier); }
       catch (error) { if (sendModelSelectionError(res, error)) return; throw error; }
     }
 
+    const effectiveProfileId = isProfile
+      ? (requestedAiModel as any)
+      : mapLegacyModelToProfile(requestedAiModel, isWorkspace);
+
     const routingContext = {
       manualModelId: isAutoRouting ? AUTO_ROUTING_MODEL_ID : requestedAiModel,
-      workspaceMode: Boolean(mode && mode.toLowerCase().includes('ruang_kerja')),
+      profileId: effectiveProfileId,
+      workspaceMode: isWorkspace,
       chatMode,
       responseStyle,
       streamingRequired: false,
@@ -274,39 +328,71 @@ router.post(['/chat', '/api/chat'], optionalAuth, aiChatLimiter, aiAbuseLimiter,
       isStreaming: false,
       isTemporary,
       routingDecision,
-      routingContext
+      routingContext,
+      guestAiConsent: guestAiConsent === true
     });
 
+    const actualDegradation = getProfileDegradation(routingDecision.profileId || effectiveProfileId, pipelineRes.modelUsed);
     return res.status(200).json({
       success: true,
       text: pipelineRes.text,
       message: pipelineRes.text,
       isCrisis: pipelineRes.isCrisisOverride,
       modelUsed: pipelineRes.modelUsed,
+      modelName: getModelDisplayName(pipelineRes.modelUsed),
+      profileUsed: routingDecision.profileId || effectiveProfileId,
       modelRequested: routingDecision.selectedModelId,
       providerUsed: getModelDefinition(pipelineRes.modelUsed)?.provider || 'local',
       isFallback: pipelineRes.isFallback,
+      isDegraded: Boolean(routingDecision.isDegraded || actualDegradation.isDegraded),
+      degradationNotice: routingDecision.degradationNotice || actualDegradation.degradationNotice,
       fallbackFrom: pipelineRes.isFallback && pipelineRes.modelUsed !== routingDecision.selectedModelId ? routingDecision.selectedModelId : undefined,
+      fallbackFromName: pipelineRes.isFallback && pipelineRes.modelUsed !== routingDecision.selectedModelId ? getModelDisplayName(routingDecision.selectedModelId) : undefined,
       routingMode: routingDecision.routingMode,
       routingReason: routingDecision.routingReason
     });
+
   } catch (err: any) {
+    if (err?.category === 'AI_CONSENT_REQUIRED') {
+      const notice = 'Persetujuan pemrosesan AI belum aktif, jadi pesan ini tidak dikirim ke penyedia AI. Ini hanya pemberitahuan umum dan tidak ditinjau manusia. Anda tetap dapat membuka latihan mindfulness, direktori konselor, atau Pusat Bantuan Krisis untuk dukungan.';
+      return res.status(200).json({
+        success: true,
+        text: notice,
+        message: notice,
+        modelUsed: 'local-consent-notice',
+        providerUsed: 'local',
+        isFallback: true,
+        isCrisis: false
+      });
+    }
     console.error('Chat endpoint error:', err);
+    if (sendModelSelectionError(res, err)) return;
+    if (err?.category) {
+      const category = err.category;
+      const status = category === 'RATE_LIMIT' || category === 'QUOTA_EXCEEDED' ? 429 : 503;
+      return res.status(status).json({
+        success: false,
+        code: category,
+        retryable: Boolean(err.retryable) || category === 'QUOTA_EXCEEDED',
+        error: category === 'TIMEOUT' ? 'Model terlalu lama merespons. Silakan coba lagi.' : 'Model AI sedang tidak tersedia. Silakan coba lagi.'
+      });
+    }
     return res.status(500).json({ success: false, error: 'Gagal memproses pesan chat.' });
   }
 });
 
 // Main Streaming Chat Route
-router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (req: Request, res: Response) => {
+router.post('/chat/stream', authenticateChatStream, optionalAttachmentOwner, aiChatLimiter, aiAbuseLimiter, async (req: Request, res: Response) => {
   try {
-    const { 
-      message, 
-      chatId, 
+    const {
+      message,
+      chatId,
       mode,
-      isTemporary, 
-      pluginResult, 
-      chatMode, 
-      responseStyle, 
+      isTemporary,
+      guestAiConsent,
+      pluginResult,
+      chatMode,
+      responseStyle,
       aiModel: requestedAiModel,
       attachments,
       workspaceMode,
@@ -316,13 +402,25 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
       presetId,
       includeWorkspaceFiles,
       workspaceAttachmentIds,
-      isolatedTaskExecution
+      workspaceContext,
+      isolatedTaskExecution,
+      history: clientHistory
     } = req.body;
-    
+
     const isAnonymous = !req.user || req.user.userId === 'guest';
+    const isWorkspace = Boolean(workspaceMode) || (mode || '').toLowerCase().includes('ruang_kerja') || (chatMode || '').toLowerCase().includes('ruangkerja');
     const maxLength = isAnonymous ? 500 : 2000;
     let cleanMessage = sanitizeInput(message || '', maxLength);
     cleanMessage = scanAndSanitizePII(cleanMessage).sanitizedText;
+    if (isWorkspace && typeof workspaceContext === 'string' && workspaceContext.length > MAX_WORKSPACE_CONTEXT_CHARS) {
+      return sendError(res, 'WORKSPACE_CONTEXT_TOO_LARGE', 'Konteks Workspace terlalu besar. Pilih teks yang lebih pendek atau nonaktifkan konteks Canvas.', 413);
+    }
+    const safeWorkspaceContext = isWorkspace && typeof workspaceContext === 'string'
+      ? scanAndSanitizePII(workspaceContext.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '')).sanitizedText
+      : undefined;
+    if (safeWorkspaceContext && safeWorkspaceContext.length > MAX_WORKSPACE_CONTEXT_CHARS) {
+      return sendError(res, 'WORKSPACE_CONTEXT_TOO_LARGE', 'Konteks Workspace terlalu besar setelah pemeriksaan privasi. Pilih bagian yang lebih pendek.', 413);
+    }
 
     const userId = req.user?.userId;
     const clientIp = req.ip || req.socket.remoteAddress || '127.0.0.1';
@@ -337,14 +435,75 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
       }
     }
 
-    const isAutoRouting = !requestedAiModel || requestedAiModel === AUTO_ROUTING_MODEL_ID;
+    const hasAiConsent = userId && userId !== 'guest'
+      ? await consentService.canUseAI(userId)
+      : guestAiConsent === true;
 
-    if (!isAutoRouting) {
+    // Ask for consent before creating a chat or storing the user's message.
+    // Keep deterministic crisis support available without involving an AI provider.
+    if (!hasAiConsent) {
+      let crisisHistory: Array<{ role: 'user' | 'model'; parts: Array<{ text: string }> }> = [];
+      if (userId && userId !== 'guest' && chatId) {
+        const ownedChat = await prisma.chats.findFirst({ where: { id: chatId, userId }, select: { id: true } });
+        if (!ownedChat) return sendError(res, 'NOT_FOUND', 'Percakapan tidak ditemukan atau bukan milik Anda', 404);
+
+        const storedMessages = await prisma.chatMessages.findMany({
+          where: { chatId },
+          orderBy: { createdAt: 'desc' },
+          take: 30,
+          select: { role: true, content: true }
+        });
+        crisisHistory = storedMessages.reverse().flatMap(item => {
+          if (item.role !== 'user' && item.role !== 'assistant') return [];
+          return [{
+            role: item.role === 'assistant' ? 'model' as const : 'user' as const,
+            parts: [{ text: encryptionService.decryptSensitive(item.content) || item.content }]
+          }];
+        });
+      }
+
+      const crisisCheck = aiSafetyService.detectCrisis(cleanMessage, crisisHistory, {
+        isRuangKerja: isWorkspace,
+        mode: chatMode || (isWorkspace ? 'RuangKerja' : 'Teman Cerita')
+      });
+      const responseText = crisisCheck.isCrisis
+        ? aiSafetyService.getCrisisSafeResponse()
+        : 'Persetujuan pemrosesan AI belum aktif, jadi pesan ini belum dikirim atau disimpan. Kamu dapat memberi izin untuk mulai chat.';
+
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache, no-transform');
+      res.setHeader('Connection', 'keep-alive');
+      res.setHeader('X-Accel-Buffering', 'no');
+      if (!crisisCheck.isCrisis) {
+        res.write(`data: ${JSON.stringify({ type: 'consent_required', code: 'AI_CONSENT_REQUIRED' })}\n\n`);
+      }
+      res.write(`data: ${JSON.stringify({ text: responseText })}\n\n`);
+      res.write(`data: ${JSON.stringify({ done: true, chatId })}\n\n`);
+      res.write('data: [DONE]\n\n');
+      res.end();
+      return;
+    }
+
+    const isAutoRouting = !requestedAiModel || requestedAiModel === AUTO_ROUTING_MODEL_ID;
+    const isProfile = Boolean(requestedAiModel && isAiProfile(requestedAiModel));
+    const canSelectInternalModel = userRole === 'admin' || userTier === 'Developer';
+
+    // Validate mode isolation: Tenang profiles cannot be used in Kerja and vice-versa
+    if (isProfile) {
+      try { validateProfileMode(requestedAiModel, isWorkspace); }
+      catch (error) { if (sendModelSelectionError(res, error)) return; throw error; }
+    } else if (!isAutoRouting) {
+      if (!canSelectInternalModel) {
+        return sendError(res, 'MODEL_NOT_ALLOWED', 'Pemilihan model internal hanya tersedia untuk admin dan akun Developer.', 403);
+      }
       try { resolveAiModel(requestedAiModel, userTier || 'Free'); }
       catch (error) { if (sendModelSelectionError(res, error)) return; throw error; }
     }
 
-    const isWorkspace = Boolean(workspaceMode) || (mode || '').toLowerCase().includes('ruang_kerja') || (chatMode || '').toLowerCase().includes('ruangkerja');
+    const effectiveProfileId = isProfile
+      ? (requestedAiModel as any)
+      : mapLegacyModelToProfile(requestedAiModel, isWorkspace);
+
     const attachmentLimit = isWorkspace ? MAX_WORKSPACE_ACTIVE_ATTACHMENTS : MAX_CHAT_ATTACHMENTS_PER_MESSAGE;
     if (Array.isArray(attachments) && attachments.length > attachmentLimit) {
       return sendError(res, 'TOO_MANY_FILES', `Maksimal ${attachmentLimit} lampiran aktif diperbolehkan`, 400);
@@ -356,6 +515,7 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
 
     const routingContext = {
       manualModelId: isAutoRouting ? AUTO_ROUTING_MODEL_ID : requestedAiModel,
+      profileId: effectiveProfileId,
       workspaceMode: isWorkspace,
       chatMode,
       responseStyle,
@@ -372,6 +532,7 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
       }))
     };
 
+
     const routingDecision = smartModelRouter.routeModel(routingContext, cleanMessage);
     const aiModel = routingDecision.selectedModelId;
 
@@ -386,8 +547,8 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
       res.setHeader('Content-Type', 'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('Connection', 'keep-alive');
-      res.write('data: ' + JSON.stringify({ 
-        error: 'DAILY_LIMIT_EXCEEDED', 
+      res.write('data: ' + JSON.stringify({
+        error: 'DAILY_LIMIT_EXCEEDED',
         quotaExceeded: true,
         message: empatheticMsg,
         text: `⚠️ ${empatheticMsg}`,
@@ -399,7 +560,8 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
       return;
     }
 
-    let activeIsTemporary = isTemporary || !userId;
+    const isGuestChat = Boolean(isTemporary || !userId || (typeof chatId === 'string' && chatId.startsWith('guest_')));
+    const activeIsTemporary = isGuestChat;
     let currentChatId = chatId;
     let isNewChat = false;
 
@@ -421,10 +583,10 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
               userId,
               title: encryptionService.encryptSensitive(newTitle) || newTitle,
               workspaceMode: isWorkspace ? 'RUANG_KERJA' : 'RUANG_TENANG',
+              ...(isWorkspace ? { workspace: { create: {} } } : {}),
             }
           });
           currentChatId = newChat.id;
-          if (isWorkspace) await prisma.workspaces.create({ data: { chatId: newChat.id } });
         }
 
         if (isWorkspace && currentChatId) {
@@ -459,6 +621,12 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
                 await rollbackUserAiQuota(userId, clientIp);
                 return sendError(res, 'ATTACHMENT_WORKSPACE_MISMATCH', 'Dokumen ini terhubung ke Ruang Kerja lain.', 403);
               }
+              if (!record.chatId && currentChatId) {
+                await prisma.attachments.update({
+                  where: { id: attachmentId },
+                  data: { chatId: currentChatId }
+                }).catch(() => undefined);
+              }
             }
           }
         }
@@ -473,15 +641,15 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
               content: encryptionService.encryptSensitive(cleanMessage) || cleanMessage
             }
           });
-          
-          
+
+
           if (attachments && Array.isArray(attachments) && attachments.length > 0) {
             for (const att of attachments) {
               try {
                 const attId = typeof att === 'string' ? att : att?.id;
                 if (attId) {
                   // Verify IDOR ownership and link messageId and chatId
-                  const result = await attachmentStorageService.getAttachmentForUser(attId, userId || 'guest');
+                  const result = await attachmentStorageService.getAttachmentForUser(attId, req.attachmentOwnerId || '');
                   if (result) {
                     await prisma.attachments.update({
                       where: { id: attId },
@@ -495,14 +663,16 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
                   // Backward compatibility for direct base64 uploads (validates mime, magic bytes, size & saves to disk via canonical pipeline)
                   const base64Clean = att.base64.includes(',') ? att.base64.split(',')[1] : att.base64;
                   const buffer = Buffer.from(base64Clean, 'base64');
-                  await documentIngestionService.ingestFile({
-                    userId: userId || 'guest',
-                    buffer,
-                    originalFilename: att.filename || 'attachment.bin',
-                    clientMime: att.mimeType || 'application/octet-stream',
-                    chatId: currentChatId,
-                    messageId: msgResult.id
-                  });
+                  if (req.attachmentOwnerId) {
+                    await documentIngestionService.ingestFile({
+                      userId: req.attachmentOwnerId,
+                      buffer,
+                      originalFilename: att.filename || 'attachment.bin',
+                      clientMime: att.mimeType || 'application/octet-stream',
+                      chatId: currentChatId,
+                      messageId: msgResult.id
+                    });
+                  }
                 }
               } catch (e: any) {
                 console.error('[ATTACHMENT_PROCESS_ERROR]', e.message);
@@ -527,7 +697,7 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
               }
             }
           }
-          
+
           await prisma.chats.update({
             where: { id: currentChatId },
             data: { updatedAt: new Date() }
@@ -544,8 +714,9 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
           });
         }
       } catch (dbErr: any) {
-        console.warn(`[CHAT_DB_WARNING] Database write failed, falling back to temporary mode: ${dbErr.message}`);
-        activeIsTemporary = true;
+        await rollbackUserAiQuota(userId, clientIp).catch(() => undefined);
+        console.error(`[CHAT_PERSISTENCE_ERROR] Failed to persist chat request: ${dbErr.message}`);
+        return sendError(res, 'CHAT_PERSISTENCE_FAILED', 'Pesan gagal disimpan. Periksa koneksi lalu coba kirim ulang.', 503);
       }
     }
 
@@ -555,7 +726,7 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
         ? attachments.map((attachment: any) => typeof attachment === 'string' ? attachment : attachment?.id).filter((id: unknown): id is string => typeof id === 'string')
         : []
     );
-    
+
     if (!activeIsTemporary && userId && currentChatId) {
       try {
         const history = await prisma.chatMessages.findMany({
@@ -579,13 +750,13 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
           } else if (msg.plugin) {
              messagesToSend.push({ role: 'model', parts: [{ text: `{"tool_call": "${msg.plugin}"}` }] });
           } else {
-            
+
             const parts: any[] = [{ text: decryptedContent }];
             if (msg.attachments && msg.attachments.length > 0) {
               for (const att of msg.attachments) {
                 if (isWorkspace && (!currentWorkspaceAttachmentIds.has(att.id) || (att.fileKind !== 'image' && !att.mimeType?.startsWith('image/')))) continue;
                 try {
-                  const res = await attachmentStorageService.getAttachmentForUser(att.id, userId || 'guest');
+                  const res = await attachmentStorageService.getAttachmentForUser(att.id, req.attachmentOwnerId || '');
                   if (res) {
                     if (att.mimeType === 'text/plain' || att.mimeType === 'text/markdown') {
                       let text = res.buffer.toString('utf8');
@@ -620,7 +791,7 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
               const attId = typeof att === 'string' ? att : att?.id;
               if (isWorkspace && (!attId || !currentWorkspaceAttachmentIds.has(attId) || !att.mimeType?.startsWith('image/'))) continue;
               if (attId) {
-                const res = await attachmentStorageService.getAttachmentForUser(attId, userId || 'guest');
+                const res = await attachmentStorageService.getAttachmentForUser(attId, req.attachmentOwnerId || '');
                 if (res) {
                   if (res.attachment.mimeType === 'text/plain' || res.attachment.mimeType === 'text/markdown') {
                     let text = res.buffer.toString('utf8');
@@ -663,6 +834,14 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
         messagesToSend.push({ role: 'user', parts });
       }
     } else {
+      if (Array.isArray(clientHistory) && clientHistory.length > 0) {
+        for (const item of clientHistory.slice(-20)) {
+          if (item && typeof item.content === 'string' && item.content.trim()) {
+            const role = (item.role === 'assistant' || item.role === 'model') ? 'model' : 'user';
+            messagesToSend.push({ role, parts: [{ text: item.content }] });
+          }
+        }
+      }
       const parts: any[] = [{ text: pluginResult ? `[PLUGIN_RESULT]\n${pluginResult}` : cleanMessage }];
       if (attachments && Array.isArray(attachments) && attachments.length > 0) {
         for (const att of attachments) {
@@ -670,7 +849,7 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
             const attId = typeof att === 'string' ? att : att?.id;
             if (isWorkspace && (!attId || !currentWorkspaceAttachmentIds.has(attId) || !att.mimeType?.startsWith('image/'))) continue;
             if (attId) {
-              const res = await attachmentStorageService.getAttachmentForUser(attId, userId || 'guest');
+              const res = await attachmentStorageService.getAttachmentForUser(attId, req.attachmentOwnerId || '');
               if (res) {
                 if (res.attachment.mimeType === 'text/plain' || res.attachment.mimeType === 'text/markdown') {
                   let text = res.buffer.toString('utf8');
@@ -713,6 +892,106 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
       messagesToSend.push({ role: 'user', parts });
     }
 
+    const runLocalFallback = async (cause?: unknown) => {
+      if (clientDisconnected || reqAbortController.signal.aborted) {
+        if (!res.writableEnded) res.end();
+        return;
+      }
+      const category = typeof cause === 'object' && cause && 'category' in cause && typeof cause.category === 'string'
+        ? cause.category
+        : 'PROVIDER_UNAVAILABLE';
+      const retryable = category !== 'AI_CONSENT_REQUIRED' && category !== 'PROMPT_INJECTION_DETECTED';
+      const message = category === 'AI_CONSENT_REQUIRED'
+        ? 'Aktifkan persetujuan pemrosesan AI untuk menggunakan fitur ini.'
+        : category === 'TIMEOUT'
+          ? 'Provider AI terlalu lama merespons. Coba ulangi permintaan.'
+          : category === 'QUOTA_EXCEEDED' || category === 'RATE_LIMIT'
+            ? 'Batas penggunaan provider AI tercapai. Coba lagi setelah batasnya pulih.'
+            : 'Provider AI tidak dapat menyelesaikan permintaan. Tidak ada jawaban yang dibuat; silakan coba lagi.';
+      console.warn(`[CHAT_STREAM] Request failed category=${category}`);
+      if (category === 'AI_CONSENT_REQUIRED' && userId) {
+        await rollbackUserAiQuota(userId, clientIp).catch(() => undefined);
+      }
+      if (!res.writableEnded) {
+        if (category === 'AI_CONSENT_REQUIRED') {
+          const localNotice = 'Persetujuan pemrosesan AI belum aktif, jadi AI belum dapat memproses pesan ini. Buka persetujuan untuk mulai chat.';
+          res.write(`data: ${JSON.stringify({ type: 'consent_required', code: 'AI_CONSENT_REQUIRED' })}\n\n`);
+          res.write(`data: ${JSON.stringify({ text: localNotice })}\n\n`);
+        } else {
+          res.write(`data: ${JSON.stringify({ error: true, code: category, retryable, message })}\n\n`);
+        }
+        res.write(`data: ${JSON.stringify({ done: true, chatId: currentChatId })}\n\n`);
+        res.write('data: [DONE]\n\n');
+        res.end();
+      }
+    };
+
+    const reqAbortController = new AbortController();
+    let clientDisconnected = false;
+
+    req.on('close', () => {
+      // IncomingMessage also emits `close` after a successfully received body.
+      // Only treat it as a disconnect when the request ended prematurely.
+      if (!req.complete) {
+        clientDisconnected = true;
+        reqAbortController.abort();
+      }
+    });
+    req.on('aborted', () => {
+      clientDisconnected = true;
+      reqAbortController.abort();
+    });
+    res.on('close', () => {
+      if (!res.writableEnded) {
+        clientDisconnected = true;
+        reqAbortController.abort();
+      }
+    });
+
+    const requestStartTime = Date.now();
+    let firstTokenTime = 0;
+
+    let responseStream: any = null;
+    let fullResponseText = '';
+    let pipelineRes: any = null;
+    const requestedWorkspaceAttachmentIds = Array.isArray(workspaceAttachmentIds)
+      ? [...new Set(workspaceAttachmentIds.filter((id: unknown): id is string => typeof id === 'string' && id.length > 0 && id.length <= 100))].slice(0, 8)
+      : [];
+
+    if (requestedWorkspaceAttachmentIds.length > 0) {
+      const isGuestWorkspaceRequest = !userId || userId === 'guest';
+      const attachmentOwnerId = isGuestWorkspaceRequest ? req.attachmentOwnerId : userId;
+      if (!isWorkspace || !attachmentOwnerId) {
+        if (userId) await rollbackUserAiQuota(userId, clientIp).catch(() => undefined);
+        return sendError(res, isWorkspace ? 'GUEST_SESSION_REQUIRED' : 'WORKSPACE_FILE_ACCESS_DENIED', isWorkspace
+          ? 'Sesi lampiran tamu tidak tersedia. Muat ulang Workspace lalu unggah kembali dokumen.'
+          : 'File hanya dapat digunakan dari Workspace yang memilikinya.', isWorkspace ? 401 : 403);
+      }
+      if (!isGuestWorkspaceRequest && currentChatId) {
+        // Link any previously unassigned ready attachments belonging to this user to currentChatId.
+        await prisma.attachments.updateMany({
+          where: { id: { in: requestedWorkspaceAttachmentIds }, userId: attachmentOwnerId, chatId: null, status: 'ready' },
+          data: { chatId: currentChatId }
+        }).catch(() => undefined);
+      }
+
+      const ownedReadyFiles = await prisma.attachments.findMany({
+        where: {
+          id: { in: requestedWorkspaceAttachmentIds },
+          userId: attachmentOwnerId,
+          status: 'ready',
+          chatId: isGuestWorkspaceRequest || !currentChatId ? null : currentChatId
+        },
+        select: { id: true }
+      });
+      if (ownedReadyFiles.length !== requestedWorkspaceAttachmentIds.length) {
+        await rollbackUserAiQuota(userId, clientIp).catch(() => undefined);
+        return sendError(res, 'WORKSPACE_FILE_ACCESS_DENIED', 'File tidak tersedia di Workspace ini.', 403);
+      }
+    }
+
+    // Validate workspace file ownership before opening SSE, so safe HTTP
+    // errors cannot be hidden by the streaming response headers.
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache, no-transform');
     res.setHeader('Connection', 'keep-alive');
@@ -741,125 +1020,12 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
     res.on('finish', cleanupKeepAlive);
     res.on('close', cleanupKeepAlive);
 
-    const runLocalFallback = async () => {
-      if (clientDisconnected || reqAbortController.signal.aborted) {
-        if (!res.writableEnded) res.end();
-        return;
-      }
-      console.warn('Executing Local Fallback AI stream response');
-      const fallbackResponse = getLocalFallbackResponse(cleanMessage || pluginResult || '', chatMode, responseStyle);
-      if (!res.writableEnded) {
-        res.write(`data: ${JSON.stringify({
-          type: 'routing',
-          modelUsed: 'local-empathetic-fallback',
-          isFallback: true,
-          fallbackFrom: aiModel,
-          routingMode: routingDecision.routingMode,
-          routingReason: 'Model penyedia tidak menyelesaikan respons; jawaban lokal digunakan.'
-        })}\n\n`);
-      }
-      
-      if (fallbackResponse.tool_call) {
-        res.write(`data: ${JSON.stringify({ tool_call: fallbackResponse.tool_call, parameters: { reason: fallbackResponse.text } })}\n\n`);
-        
-        if (!activeIsTemporary && userId && currentChatId && !(clientDisconnected || reqAbortController.signal.aborted)) {
-          try {
-            await prisma.chatMessages.create({
-              data: {
-                id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
-                chatId: currentChatId,
-                role: 'assistant',
-                content: encryptionService.encryptSensitive(`Memanggil ${fallbackResponse.tool_call}`) || `Memanggil ${fallbackResponse.tool_call}`,
-                plugin: fallbackResponse.tool_call
-              }
-            });
-          } catch(e) {}
-        }
-      } else {
-        const words = fallbackResponse.text.split(' ');
-        let currentFullText = '';
-        for (const word of words) {
-          if (clientDisconnected || reqAbortController.signal.aborted) break;
-          const chunk = word + ' ';
-          currentFullText += chunk;
-          res.write(`data: ${JSON.stringify({ text: chunk })}\n\n`);
-          await new Promise(resolve => setTimeout(resolve, 30));
-        }
-        
-        if (!activeIsTemporary && userId && currentChatId && !(clientDisconnected || reqAbortController.signal.aborted)) {
-          try {
-            await prisma.chatMessages.create({
-              data: {
-                id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
-                chatId: currentChatId,
-                role: 'assistant',
-                content: encryptionService.encryptSensitive(currentFullText.trim()) || currentFullText.trim()
-              }
-            });
-          } catch(e) {}
-        }
-      }
-
-      if (isNewChat && !activeIsTemporary && userId) {
-        try {
-          const title = (cleanMessage || 'Percakapan').substring(0, 30) + ((cleanMessage && cleanMessage.length > 30) ? '...' : '');
-          res.write(`data: ${JSON.stringify({ newTitle: title })}\n\n`);
-        } catch(e) {}
-      }
-
-      res.write(`data: ${JSON.stringify({ done: true, chatId: currentChatId })}\n\n`);
-      res.write('data: [DONE]\n\n');
-      res.end();
-    };
-
-    const reqAbortController = new AbortController();
-    let clientDisconnected = false;
-
-    req.on('close', () => {
-      clientDisconnected = true;
-      reqAbortController.abort();
-    });
-    req.on('aborted', () => {
-      clientDisconnected = true;
-      reqAbortController.abort();
-    });
-    res.on('close', () => {
-      if (!res.writableEnded) {
-        clientDisconnected = true;
-        reqAbortController.abort();
-      }
-    });
-
-    const requestStartTime = Date.now();
-    let firstTokenTime = 0;
-
-    let responseStream: any = null;
-    let fullResponseText = '';
-    let pipelineRes: any = null;
-    const requestedWorkspaceAttachmentIds = Array.isArray(workspaceAttachmentIds)
-      ? [...new Set(workspaceAttachmentIds.filter((id: unknown): id is string => typeof id === 'string' && id.length > 0 && id.length <= 100))].slice(0, 8)
-      : [];
-
-    if (requestedWorkspaceAttachmentIds.length > 0) {
-      if (!isWorkspace || !currentChatId || !userId || userId === 'guest') {
-        if (userId) await rollbackUserAiQuota(userId, clientIp).catch(() => undefined);
-        return sendError(res, 'WORKSPACE_FILE_ACCESS_DENIED', 'File hanya dapat digunakan dari Workspace yang memilikinya.', 403);
-      }
-      const ownedReadyFiles = await prisma.attachments.findMany({
-        where: { id: { in: requestedWorkspaceAttachmentIds }, chatId: currentChatId, userId, status: 'ready' },
-        select: { id: true }
-      });
-      if (ownedReadyFiles.length !== requestedWorkspaceAttachmentIds.length) {
-        await rollbackUserAiQuota(userId, clientIp).catch(() => undefined);
-        return sendError(res, 'WORKSPACE_FILE_ACCESS_DENIED', 'File tidak tersedia di Workspace ini.', 403);
-      }
-    }
-    
     try {
       // Call the canonical Unified Safety Pipeline
       pipelineRes = await aiSafetyService.runUnifiedPipeline({
         userId,
         input: cleanMessage,
+        attachmentOwnerId: req.attachmentOwnerId,
         chatId: currentChatId,
         mode,
         chatMode,
@@ -875,22 +1041,24 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
         workspaceAttachmentIds: isWorkspace ? requestedWorkspaceAttachmentIds : undefined,
         isStreaming: true,
         isTemporary: activeIsTemporary,
+        guestAiConsent: guestAiConsent === true,
         abortSignal: reqAbortController.signal,
         routingDecision,
-        routingContext
+        routingContext,
+        workspaceContext: safeWorkspaceContext
       });
     } catch (err: any) {
       console.warn('[CHAT_STREAM] Unified safety pipeline threw error, switching to fallback:', err?.message || err);
-      return await runLocalFallback();
+      return await runLocalFallback(err);
     }
 
     if (!pipelineRes) {
-      return await runLocalFallback();
+      return await runLocalFallback(Object.assign(new Error('Pipeline did not return a result.'), { category: 'PROVIDER_ERROR' }));
     }
 
     if (pipelineRes.isConsentFallback || pipelineRes.modelUsed?.startsWith('local-')) {
       console.log('Fallback triggered from pipeline result!');
-      return await runLocalFallback();
+      return await runLocalFallback(Object.assign(new Error('Pipeline did not return a provider response.'), { category: 'PROVIDER_ERROR' }));
     }
 
     if (pipelineRes.isPromptInjectionOverride) {
@@ -943,7 +1111,7 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
 
     if (!responseStream) {
       console.log('Stream falsy, executing fallback!');
-      await runLocalFallback();
+      await runLocalFallback(Object.assign(new Error('Provider did not create a response stream.'), { category: 'PROVIDER_ERROR' }));
       return;
     }
 
@@ -955,18 +1123,25 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
 
       // Emit routing decision event so client can display which model was actually routed
       if (pipelineRes.routingDecision && !res.writableEnded) {
+        const actualDegradation = getProfileDegradation(pipelineRes.routingDecision.profileId || effectiveProfileId, pipelineRes.modelUsed);
         res.write(`data: ${JSON.stringify({
           type: 'routing',
+          profileId: pipelineRes.routingDecision.profileId || effectiveProfileId,
           modelUsed: pipelineRes.modelUsed || pipelineRes.routingDecision.selectedModelId,
+          modelName: getModelDisplayName(pipelineRes.modelUsed || pipelineRes.routingDecision.selectedModelId),
           modelRequested: pipelineRes.routingDecision.selectedModelId,
           providerUsed: getModelDefinition(pipelineRes.modelUsed)?.provider || 'local',
           isFallback: Boolean(pipelineRes.isFallback),
+          isDegraded: Boolean(pipelineRes.routingDecision.isDegraded || actualDegradation.isDegraded),
+          degradationNotice: pipelineRes.routingDecision.degradationNotice || actualDegradation.degradationNotice,
           fallbackFrom: pipelineRes.isFallback ? pipelineRes.routingDecision.selectedModelId : undefined,
+          fallbackFromName: pipelineRes.isFallback ? getModelDisplayName(pipelineRes.routingDecision.selectedModelId) : undefined,
           routingMode: pipelineRes.routingDecision.routingMode,
           routingReason: pipelineRes.routingDecision.routingReason,
           presetId: routingContext.presetId
         })}\n\n`);
       }
+
 
       if (pipelineRes.sourceReferences && pipelineRes.sourceReferences.length > 0 && !res.writableEnded) {
         res.write(`data: ${JSON.stringify({ sources: pipelineRes.sourceReferences })}\n\n`);
@@ -976,6 +1151,33 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
         if (clientDisconnected || reqAbortController.signal.aborted || res.writableEnded) {
           console.log('[SSE] Client disconnected or request aborted, stopping stream');
           break;
+        }
+
+        if ((chunk as any)?.type === 'model_fallback') {
+          const fallbackModelId = (chunk as any).modelUsed as string;
+          const fallbackModel = getModelDefinition(fallbackModelId);
+          const profile = getProfileDefinition(routingDecision.profileId || effectiveProfileId);
+          const rank = (value?: string) => value === 'Sangat Tinggi' ? 2 : value === 'Tinggi' ? 1 : 0;
+          const isDegraded = Boolean(profile && fallbackModel && rank(fallbackModel.reasoning) < rank(profile.reasoning));
+          (pipelineRes as any).modelUsed = fallbackModelId;
+          (pipelineRes as any).isFallback = true;
+          (pipelineRes as any).routingDecision.isDegraded = isDegraded;
+          (pipelineRes as any).routingDecision.degradationNotice = isDegraded
+            ? `Profil ${profile?.name}: respons dialihkan ke model dengan tingkat penalaran yang lebih rendah setelah provider utama gagal.`
+            : undefined;
+          if (!res.writableEnded) {
+            res.write(`data: ${JSON.stringify({
+              type: 'routing', profileId: routingDecision.profileId || effectiveProfileId,
+              modelUsed: fallbackModelId, modelRequested: routingDecision.selectedModelId,
+              modelName: getModelDisplayName(fallbackModelId),
+              providerUsed: fallbackModel?.provider || 'local', isFallback: true,
+              fallbackFrom: (chunk as any).fallbackFrom || routingDecision.selectedModelId,
+              fallbackFromName: getModelDisplayName((chunk as any).fallbackFrom || routingDecision.selectedModelId),
+              isDegraded, degradationNotice: (pipelineRes as any).routingDecision.degradationNotice,
+              routingMode: routingDecision.routingMode, routingReason: `Fallback setelah ${(chunk as any).category || 'kegagalan provider'}.`
+            })}\n\n`);
+          }
+          continue;
         }
 
         const text = chunk.text;
@@ -998,13 +1200,14 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
       // Record performance & usage metrics
       const requestEndTime = Date.now();
       const ttfb = firstTokenTime ? (firstTokenTime - requestStartTime) : (requestEndTime - requestStartTime);
-      
+      const metricInput = [cleanMessage, safeWorkspaceContext].filter(Boolean).join('\n');
+
       aiMetricsService.recordRequestMetric({
         requestId: pipelineRes.requestId || `req_${Date.now()}`,
         ttfbMs: ttfb,
         totalLatencyMs: requestEndTime - requestStartTime,
-        inputChars: (cleanMessage || pluginResult || '').length,
-        estimatedInputTokens: aiMetricsService.estimateTokens(cleanMessage || pluginResult || ''),
+        inputChars: (metricInput || pluginResult || '').length,
+        estimatedInputTokens: aiMetricsService.estimateTokens(metricInput || pluginResult || ''),
         outputChars: fullResponseText.length,
         estimatedOutputTokens: aiMetricsService.estimateTokens(fullResponseText),
         contextSavedTokens: 0,
@@ -1028,10 +1231,10 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
         try {
           const parsed = JSON.parse(fullResponseText.trim());
           const validation = validateAndSanitizeToolCall(parsed);
-          
+
           if (validation.isValid && validation.toolCall) {
             validToolCallParsed = { tool_call: validation.toolCall, parameters: validation.parameters || {} };
-            
+
             if (validToolCallParsed.tool_call === 'ai_memory' && validToolCallParsed.parameters.action === 'save') {
                const memContent = validToolCallParsed.parameters.content;
                if (memContent && userId && !activeIsTemporary) {
@@ -1061,7 +1264,7 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
             if (!res.writableEnded) {
               res.write(`data: ${JSON.stringify({ tool_call: validToolCallParsed.tool_call, parameters: validToolCallParsed.parameters || {} })}\n\n`);
             }
-            
+
             if (!activeIsTemporary && userId && currentChatId) {
                try {
                  await prisma.chatMessages.create({
@@ -1119,7 +1322,7 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
         if (!hasStreamedAnyText && !fullResponseText) {
           // Stream produced nothing, fallback to local response
           console.warn('[CHAT_STREAM] Stream produced no output, running fallback');
-          return await runLocalFallback();
+          return await runLocalFallback(Object.assign(new Error('Provider returned an empty response.'), { category: 'EMPTY_PROVIDER_RESPONSE' }));
         }
 
         if (!activeIsTemporary && userId && currentChatId && fullResponseText) {
@@ -1186,11 +1389,12 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
     }
   } catch (error: any) {
     console.error('[CHAT_STREAM] Outer unhandled error:', error);
+    if (sendModelSelectionError(res, error)) return;
     if (!res.headersSent) {
-      sendError(res, 'INTERNAL_SERVER_ERROR', 'Terjadi kesalahan pada server');
+      sendError(res, 'INTERNAL_SERVER_ERROR', 'Terjadi kesalahan pada server saat memproses pesan.');
     } else if (!res.writableEnded) {
       try {
-        res.write(`data: ${JSON.stringify({ text: "\n\nAku di sini untuk mendengarkanmu. Ceritakan apa yang sedang kamu rasakan yaa 🌿" })}\n\n`);
+        res.write(`data: ${JSON.stringify({ error: true, code: 'INTERNAL_SERVER_ERROR', message: 'Terjadi kesalahan sistem saat memproses respons AI.' })}\n\n`);
         res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
         res.write('data: [DONE]\n\n');
         res.end();
@@ -1203,11 +1407,11 @@ router.post('/chat/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (
 router.post('/chat/truncate-history', requireAuth, checkChatOwnership, async (req: Request, res: Response) => {
   try {
     const { chatId, messageId } = req.body;
-    
+
     if (!chatId || !messageId) {
       return sendError(res, 'INVALID_INPUT', 'Parameter chatId dan messageId diperlukan', 400);
     }
-    
+
     const targetMsg = await prisma.chatMessages.findFirst({ where: { id: messageId, chatId } });
     if (targetMsg) {
       // Delete this message and all subsequent messages
@@ -1218,7 +1422,7 @@ router.post('/chat/truncate-history', requireAuth, checkChatOwnership, async (re
         }
       });
     }
-    
+
     res.json({ success: true });
   } catch (err: any) {
     console.error('Failed to truncate chat history:', err);

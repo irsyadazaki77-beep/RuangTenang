@@ -77,6 +77,31 @@ describe('editable PowerPoint export', () => {
     expect(() => buildPresentationOutline({ title: 'Chart', artifactType: 'CHART', content: '{"type":"bar","rows":[]}' })).toThrow(/sumber yang tercatat|baris dengan nilai numerik/);
   });
 
+  it('exports the PowerPoint Studio slide order, editable text, selected theme, and speaker notes', async () => {
+    const content = JSON.stringify({
+      format: 'ruangtenang-presentation-v1', theme: 'professional',
+      slides: [
+        { id: 's1', title: 'Opening', body: 'Editable opening text', notes: 'Welcome the audience' },
+        { id: 's2', title: 'Findings', body: 'First finding\nSecond finding', notes: 'Explain the result' }
+      ]
+    });
+    expect(buildPresentationOutline({ title: 'Deck', content })).toEqual([
+      { title: 'Opening', layout: 'title', bullets: ['Editable opening text'], notes: 'Welcome the audience' },
+      { title: 'Findings', layout: 'content', bullets: ['First finding', 'Second finding'], notes: 'Explain the result' }
+    ]);
+    const buffer = await createEditablePptxBuffer({ title: 'Deck', content });
+    const zip = await JSZip.loadAsync(buffer);
+    const firstSlide = await zip.file('ppt/slides/slide1.xml')!.async('text');
+    const secondSlide = await zip.file('ppt/slides/slide2.xml')!.async('text');
+    expect(firstSlide).toContain('<a:t>Opening</a:t>');
+    expect(firstSlide).toContain('<a:t>Editable opening text</a:t>');
+    expect(secondSlide).toContain('<a:t>Findings</a:t>');
+    expect(secondSlide).toContain('<a:t>First finding</a:t>');
+    const notesXml = await zip.file('ppt/notesSlides/notesSlide1.xml')!.async('text');
+    expect(notesXml).toContain('Welcome the audience');
+    expect(firstSlide).toContain('2563EB');
+  });
+
   it('splits large deterministic charts so each editable slide has at most twelve categories', () => {
     const rows = Array.from({ length: 27 }, (_, index) => ({ Group: `Group ${index + 1}`, Total: index + 1 }));
     const outline = buildPresentationOutline({

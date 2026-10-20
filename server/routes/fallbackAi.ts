@@ -290,10 +290,17 @@ export function getLocalFallbackFollowups(lastMessage: string): string[] {
   ];
 }
 
-/**
- * Generates a deeply empathetic, highly realistic, and professional response
- * for simulated counselor chat sessions in /api/counselor-chat.
- */
+const COUNSELOR_SIMULATION_CRISIS_KEYWORDS = [
+  'bunuh diri', 'ingin mati', 'tidak ingin hidup', 'akhiri hidup', 'mengakhiri hidup',
+  'menyakiti diri', 'self harm', 'potong nadi', 'tidak kuat lagi'
+];
+
+export function isCounselorSimulationCrisisMessage(messages: { role: string; content: string }[]): boolean {
+  const lastUserMsg = [...messages].reverse().find(message => message.role === 'user')?.content.toLowerCase() || '';
+  return COUNSELOR_SIMULATION_CRISIS_KEYWORDS.some(keyword => lastUserMsg.includes(keyword));
+}
+
+/** Provides a clearly labeled local AI simulation reply for the demo counselor chat. */
 export function getLocalCounselorResponse(
   messages: { role: string; content: string }[],
   counselorName: string,
@@ -302,24 +309,32 @@ export function getLocalCounselorResponse(
   studentName: string,
   concern: string
 ): string {
-  const lastUserMsg = messages[messages.length - 1]?.content.toLowerCase() || '';
-  
-  let responseText = `Halo, ${studentName || 'Kawan'}. Saya ${counselorName || 'Konselor Anda'}. `;
-  
-  if (lastUserMsg.includes('halo') || lastUserMsg.includes('hai') || lastUserMsg.includes('pagi') || lastUserMsg.includes('siang') || lastUserMsg.includes('sore') || lastUserMsg.includes('malam')) {
-    responseText += `Selamat datang di sesi bimbingan konseling simulasi kita hari ini. Terima kasih telah mempercayai saya untuk mendengarkan ceritamu tentang "${concern || 'hal yang kamu rasakan'}". Bagaimana perasaanmu saat ini, dan apa yang bisa kita bahas bersama terlebih dahulu?`;
-  } else if (lastUserMsg.includes('skripsi') || lastUserMsg.includes('tugas') || lastUserMsg.includes('kuliah') || lastUserMsg.includes('dosen') || lastUserMsg.includes('lulus') || lastUserMsg.includes('bimbingan')) {
-    responseText += `Tekanan mengenai skripsi dan perkuliahan memang seringkali terasa sangat luar biasa berat ya. Sangat wajar jika kamu merasa cemas, takut gagal, atau lelah secara mental.\n\nSebagai konselor, saya ingin mengajakmu untuk melihat ini sebagai suatu proses yang bisa kita urai perlahan. Apakah ada bagian spesifik dari skripsi atau kuliahmu yang saat ini dirasa paling memicu kecemasan atau hambatan terbesar bagi Anda? Mari kita diskusikan bersama.`;
-  } else if (lastUserMsg.includes('sedih') || lastUserMsg.includes('menangis') || lastUserMsg.includes('sepi') || lastUserMsg.includes('sendiri') || lastUserMsg.includes('hampa')) {
-    responseText += `Mendengar ceritamu, saya bisa merasakan betapa sepinya dan beratnya perasaan yang sedang kamu lalui sendirian. Terima kasih sudah bersedia membagikan rasa lelahmu ini kepada saya.\n\nSetiap perasaan sedih dan hampa itu nyata dan valid. Kamu tidak harus selalu terlihat kuat setiap saat. Mari kita hening sejenak, ambil napas perlahan. Saya ada di sini menemani Anda. Bisakah kamu bercerita, apa hal utama yang biasanya sedikit memberikan rasa tenang di saat-saat seberat ini?`;
-  } else if (lastUserMsg.includes('cemas') || lastUserMsg.includes('panik') || lastUserMsg.includes('khawatir') || lastUserMsg.includes('overthink') || lastUserMsg.includes('takut')) {
-    responseText += `Kecemasan yang berlebihan sering kali membuat pikiran kita terasa sangat bising, penuh dengan skenario terburuk, dan tubuh menjadi tegang. Saya sangat memahami kondisi yang sedang kamu alami saat ini.\n\nDalam sesi konseling, kita bisa melatih teknik regulasi emosi bersama. Mari kita coba sadari napas kita dahulu. Tarik napas panjang, tahan sebentar, lalu hembuskan perlahan. Cobalah untuk fokus pada momen saat ini. Apa yang sedang kamu pikirkan yang paling membuatmu merasa terancam atau khawatir?`;
-  } else if (lastUserMsg.includes('terima kasih') || lastUserMsg.includes('makasih') || lastUserMsg.includes('thank') || lastUserMsg.includes('makasi')) {
-    responseText += `Sama-sama, ${studentName || 'Kawan'}. Menjadi bagian dari perjalananmu untuk bertumbuh dan merawat kesehatan mental adalah hal yang sangat berharga bagi saya. Ingatlah bahwa kamu memiliki kekuatan di dalam dirimu untuk melewati ini, dan tidak ada salahnya untuk selalu mencari dukungan profesional bila dibutuhkan. Sesi simulasi kita selalu terbuka untukmu.`;
-  } else {
-    responseText += `Saya mendengarkan setiap perkataanmu dengan penuh perhatian, ${studentName || 'Kawan'}. Perjalanan akademis dan pribadi di masa kuliah memang penuh dengan pasang surut yang menantang.\n\nSebagai konselor pendampingmu, saya ingin terus bersamamu mengurai benang kusut di pikiranmu. Bolehkah kamu menceritakan lebih dalam lagi mengenai apa yang sedang berkecamuk di dalam hatimu saat ini? Saya siap mendengarkan.`;
+  const lastUserMsg = [...messages].reverse().find(message => message.role === 'user')?.content.toLowerCase() || '';
+  void concern; // Booking concern is intentionally omitted from the response text.
+
+  const selectedProfile = [counselorName, counselorTitle, specialtiesStr].filter(Boolean).join(' · ');
+  const greeting = `Hai${studentName ? `, ${studentName}` : ''}. Saya asisten AI untuk simulasi profil ${selectedProfile || 'konselor kampus'}; saya bukan konselor manusia. `;
+
+  if (isCounselorSimulationCrisisMessage(messages)) {
+    return `${greeting}Kalau kamu berada dalam bahaya sekarang atau merasa mungkin menyakiti diri, hubungi orang tepercaya dan layanan darurat setempat yang dapat membantu secara langsung. Simulasi ini tidak menghubungi bantuan atau memberi tahu konselor.`;
   }
-  
-  responseText += `\n\n*(Sesi Simulasi Offline - Konseling Virtual)*`;
+
+  let responseText = greeting;
+
+  if (lastUserMsg.includes('halo') || lastUserMsg.includes('hai') || lastUserMsg.includes('pagi') || lastUserMsg.includes('siang') || lastUserMsg.includes('sore') || lastUserMsg.includes('malam')) {
+    responseText += 'Kamu bisa mencoba percakapan ini dengan membagikan hal yang ingin dibahas. Apa yang terasa paling penting bagimu saat ini?';
+  } else if (lastUserMsg.includes('skripsi') || lastUserMsg.includes('tugas') || lastUserMsg.includes('kuliah') || lastUserMsg.includes('dosen') || lastUserMsg.includes('lulus') || lastUserMsg.includes('bimbingan')) {
+    responseText += 'Kedengarannya urusan kuliah sedang banyak memenuhi pikiranmu. Bagian mana yang paling ingin kamu ceritakan lebih dulu?';
+  } else if (lastUserMsg.includes('sedih') || lastUserMsg.includes('menangis') || lastUserMsg.includes('sepi') || lastUserMsg.includes('sendiri') || lastUserMsg.includes('hampa')) {
+    responseText += 'Kamu sedang menggambarkan perasaan yang berat. Apa yang paling kamu butuhkan dari percakapan ini sekarang?';
+  } else if (lastUserMsg.includes('cemas') || lastUserMsg.includes('panik') || lastUserMsg.includes('khawatir') || lastUserMsg.includes('overthink') || lastUserMsg.includes('takut')) {
+    responseText += 'Rasa khawatir bisa terasa memenuhi perhatian. Adakah hal tertentu yang memicu perasaan itu hari ini?';
+  } else if (lastUserMsg.includes('terima kasih') || lastUserMsg.includes('makasih') || lastUserMsg.includes('thank') || lastUserMsg.includes('makasi')) {
+    responseText += 'Sama-sama. Simulasi ini hanya untuk mencoba alur percakapan; jika kamu memerlukan dukungan nyata, kamu dapat menghubungi layanan konselor yang tersedia.';
+  } else {
+    responseText += 'Terima kasih sudah mencoba simulasi ini. Boleh ceritakan bagian mana yang paling ingin kamu bahas lebih lanjut?';
+  }
+
+  responseText += '\n\n*(Asisten AI simulasi; bukan konselor manusia.)*';
   return responseText;
 }

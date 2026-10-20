@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { X, Sparkles } from 'lucide-react';
+import { useFocusTrap } from '../../../hooks/useFocusTrap';
 import { WorkspaceAiPreset, WorkspaceResponseMode, WorkspaceResponseStyle } from '../../../lib/aiPresets';
-import { AUTO_ROUTING_MODEL_ID } from '../../../lib/aiModels';
-import { useAiModelCatalog } from '../../../lib/aiModelCatalog';
+import { AUTO_ROUTING_MODEL_ID, KERJA_PROFILES } from '../../../lib/aiModels';
 import {
   VALID_TASK_CATEGORIES,
   VALID_RESPONSE_MODES,
@@ -43,7 +43,6 @@ export const PresetFormModal: React.FC<PresetFormModalProps> = ({
   initialData,
   mode
 }) => {
-  const { models } = useAiModelCatalog();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [preferredModelId, setPreferredModelId] = useState<string>(AUTO_ROUTING_MODEL_ID);
@@ -74,6 +73,8 @@ export const PresetFormModal: React.FC<PresetFormModalProps> = ({
     setErrorMsg(null);
   }, [initialData, isOpen]);
 
+  const dialogRef = useFocusTrap<HTMLDivElement>({ isOpen, onClose });
+
   if (!isOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -102,19 +103,15 @@ export const PresetFormModal: React.FC<PresetFormModalProps> = ({
   };
 
   return (
-    <div 
-      role="dialog" 
-      aria-modal="true" 
+    <div
+      ref={dialogRef}
+      tabIndex={-1}
+      role="dialog"
+      aria-modal="true"
       aria-labelledby="preset-form-title"
       className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in"
-      onKeyDown={(e) => {
-        if (e.key === 'Escape') {
-          e.preventDefault();
-          onClose();
-        }
-      }}
     >
-      <div 
+      <div
         className="w-full max-w-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90dvh]"
         onClick={(e) => e.stopPropagation()}
       >
@@ -179,10 +176,10 @@ export const PresetFormModal: React.FC<PresetFormModalProps> = ({
             />
           </div>
 
-          {/* Model / Auto Smart Routing */}
+          {/* Model / Profil AI Ruang Kerja */}
           <div>
             <label htmlFor="preset-model" className="block font-medium text-slate-700 dark:text-slate-300 mb-1">
-              Model AI / Penentuan Otomatis
+              Profil Kemampuan AI
             </label>
             <select
               id="preset-model"
@@ -191,14 +188,14 @@ export const PresetFormModal: React.FC<PresetFormModalProps> = ({
               className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500"
             >
               <option value={AUTO_ROUTING_MODEL_ID}>Auto — Pilih otomatis via Smart Router (Disarankan)</option>
-              {models.filter(m => m.selectable).map(m => (
-                <option key={m.id} value={m.id}>
-                  {m.name} ({m.provider} · {m.speed})
+              {KERJA_PROFILES.map(p => (
+                <option key={p.id} value={p.id}>
+                  {p.name} — {p.description}
                 </option>
               ))}
             </select>
             <p className="mt-1 text-[11px] text-slate-400">
-              Jika memilih model spesifik, preset akan menggunakan model tersebut sebagai preferensi.
+              Preset akan mengaktifkan profil AI yang dipilih untuk menjaga konsistensi pengerjaan tugas.
             </p>
           </div>
 

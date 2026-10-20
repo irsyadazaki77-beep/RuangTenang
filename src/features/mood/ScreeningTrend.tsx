@@ -16,14 +16,14 @@ interface MoodLog {
 interface ScreeningTrendProps {
   screenHistory: HistoricalScore[];
   moodLogs?: MoodLog[];
-  currentPhq9: number;
-  currentGad7: number;
-  currentTriage: TriageCategory;
+  currentPhq9: number | null;
+  currentGad7: number | null;
+  currentTriage: TriageCategory | null;
   triageStyle: { bg: string; dot: string; desc: string };
   onNavigateToPrograms: () => void;
   onNavigateToSchedule: () => void;
   onClearHistory: () => void;
-  getTriageBadge: (triage: TriageCategory) => { bg: string; dot: string; desc: string };
+  getTriageBadge: (triage: TriageCategory | null) => { bg: string; dot: string; desc: string };
 }
 
 export const ScreeningTrend: React.FC<ScreeningTrendProps> = ({
@@ -65,7 +65,7 @@ export const ScreeningTrend: React.FC<ScreeningTrendProps> = ({
   // Calculate Deltas (Recent [0] vs Previous [1])
   let phqDelta = 0;
   let gadDelta = 0;
-  
+
   if (screenHistory.length >= 2) {
     const recent = screenHistory[0];
     const previous = screenHistory[1];
@@ -84,10 +84,10 @@ export const ScreeningTrend: React.FC<ScreeningTrendProps> = ({
   const renderDelta = (delta: number) => {
     if (delta === 0) return (
       <span className="text-[11px] font-semibold text-teal-700 dark:text-teal-300 bg-teal-50 dark:bg-teal-950/50 px-2 py-0.5 rounded-md border border-teal-200 dark:border-teal-800 flex items-center gap-1">
-        <Minus className="w-3 h-3" /> Stabil
+        <Minus className="w-3 h-3" /> Tidak berubah
       </span>
     );
-    
+
     if (delta < 0) {
       return (
         <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800 flex items-center gap-1">
@@ -95,7 +95,7 @@ export const ScreeningTrend: React.FC<ScreeningTrendProps> = ({
         </span>
       );
     }
-    
+
     return (
       <span className="text-[11px] font-semibold text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/50 px-2 py-0.5 rounded-md border border-rose-200 dark:border-rose-800 flex items-center gap-1">
         <TrendingUp className="w-3 h-3" /> Naik {Math.abs(delta)} poin
@@ -110,10 +110,10 @@ export const ScreeningTrend: React.FC<ScreeningTrendProps> = ({
         <div>
           <h2 className="text-lg sm:text-xl font-bold text-primary flex items-center gap-2">
             <Activity className="w-5 h-5 text-teal-600 dark:text-teal-400" />
-            <span>Tren Skrining Klinis (PHQ-9 & GAD-7)</span>
+            <span>Riwayat Skrining Mandiri (PHQ-9 & GAD-7)</span>
           </h2>
           <p className="text-xs sm:text-sm text-secondary mt-0.5">
-            Pantau trajektori tingkat gejala depresi dan kecemasan dari riwayat skrining mandiri.
+            Skor kedua instrumen ditampilkan sebagai catatan dari waktu ke waktu; hasilnya bukan diagnosis dan skala keduanya berbeda.
           </p>
         </div>
         <button
@@ -135,12 +135,24 @@ export const ScreeningTrend: React.FC<ScreeningTrendProps> = ({
           <div className="space-y-1">
             <div className="flex items-baseline justify-between gap-2">
               <div className="text-2xl sm:text-3xl font-bold text-primary">
-                {currentPhq9} <span className="text-xs sm:text-sm font-normal text-secondary">/ 27</span>
+                {currentPhq9 !== null ? (
+                  <>
+                    {currentPhq9} <span className="text-xs sm:text-sm font-normal text-secondary">/ 27</span>
+                  </>
+                ) : (
+                  <span>—</span>
+                )}
               </div>
               {screenHistory.length >= 2 && renderDelta(phqDelta)}
             </div>
             <p className="text-xs text-secondary font-medium">
-              Kategori: <span className="font-semibold text-primary">{currentPhq9 <= 4 ? 'Minimal' : currentPhq9 <= 9 ? 'Ringan' : currentPhq9 <= 14 ? 'Sedang' : 'Berat / Parah'}</span>
+              {currentPhq9 !== null ? (
+                <>
+                  Kategori: <span className="font-semibold text-primary">{currentPhq9 <= 4 ? 'Minimal' : currentPhq9 <= 9 ? 'Ringan' : currentPhq9 <= 14 ? 'Sedang' : 'Berat / Parah'}</span>
+                </>
+              ) : (
+                <span className="text-muted">Belum ada hasil skrining</span>
+              )}
             </p>
           </div>
         </div>
@@ -153,12 +165,24 @@ export const ScreeningTrend: React.FC<ScreeningTrendProps> = ({
           <div className="space-y-1">
             <div className="flex items-baseline justify-between gap-2">
               <div className="text-2xl sm:text-3xl font-bold text-primary">
-                {currentGad7} <span className="text-xs sm:text-sm font-normal text-secondary">/ 21</span>
+                {currentGad7 !== null ? (
+                  <>
+                    {currentGad7} <span className="text-xs sm:text-sm font-normal text-secondary">/ 21</span>
+                  </>
+                ) : (
+                  <span>—</span>
+                )}
               </div>
               {screenHistory.length >= 2 && renderDelta(gadDelta)}
             </div>
             <p className="text-xs text-secondary font-medium">
-              Kategori: <span className="font-semibold text-primary">{currentGad7 <= 4 ? 'Minimal' : currentGad7 <= 9 ? 'Ringan' : currentGad7 <= 14 ? 'Sedang' : 'Berat / Parah'}</span>
+              {currentGad7 !== null ? (
+                <>
+                  Kategori: <span className="font-semibold text-primary">{currentGad7 <= 4 ? 'Minimal' : currentGad7 <= 9 ? 'Ringan' : currentGad7 <= 14 ? 'Sedang' : 'Berat / Parah'}</span>
+                </>
+              ) : (
+                <span className="text-muted">Belum ada hasil skrining</span>
+              )}
             </p>
           </div>
         </div>
@@ -174,10 +198,12 @@ export const ScreeningTrend: React.FC<ScreeningTrendProps> = ({
                 ? 'Bantuan krisis dan darurat'
                 : currentTriage === 'Prioritas'
                 ? 'Tindak lanjut konseling'
-                : 'Program Mandiri & Relaksasi'}
+                : currentTriage === 'Ringan'
+                ? 'Program Mandiri & Relaksasi'
+                : 'Belum Ada Hasil Skrining'}
             </div>
             <p className="text-xs text-secondary leading-relaxed line-clamp-2">
-              {triageStyle.desc}
+              {currentTriage ? triageStyle.desc : 'Lakukan tes PHQ-9 & GAD-7 untuk memetakan kondisi dan rekomendasi tindakan.'}
             </p>
           </div>
         </div>
@@ -191,24 +217,24 @@ export const ScreeningTrend: React.FC<ScreeningTrendProps> = ({
               <Activity className="w-4 h-4" />
             </div>
             <span className="text-sm sm:text-base font-bold text-primary">
-              Trajektori Skor Skrining Berkala
+              Riwayat Skor Skrining
             </span>
           </div>
 
           <div className="flex flex-wrap items-center gap-4 text-xs font-medium">
             <span className="flex items-center gap-1.5 text-primary">
-              <span className="w-2.5 h-2.5 bg-rose-500 rounded-full" /> PHQ-9 (Depresi)
+              <span className="w-2.5 h-2.5 bg-rose-500 rounded-full" /> PHQ-9 (maks. 27)
             </span>
             <span className="flex items-center gap-1.5 text-primary">
-              <span className="w-2.5 h-2.5 bg-amber-500 rounded-full" /> GAD-7 (Kecemasan)
+              <span className="w-2.5 h-2.5 bg-amber-500 rounded-full" /> GAD-7 (maks. 21)
             </span>
-            
+
             <div className="flex surface-muted rounded-lg p-0.5 border border-default">
               <button
                 onClick={() => setChartType('line')}
                 className={`px-3 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer ${
-                  chartType === 'line' 
-                    ? 'bg-teal-600 text-white shadow-xs' 
+                  chartType === 'line'
+                    ? 'bg-teal-700 text-white shadow-xs'
                     : 'text-secondary hover:text-primary'
                 }`}
               >
@@ -217,8 +243,8 @@ export const ScreeningTrend: React.FC<ScreeningTrendProps> = ({
               <button
                 onClick={() => setChartType('bar')}
                 className={`px-3 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer ${
-                  chartType === 'bar' 
-                    ? 'bg-teal-600 text-white shadow-xs' 
+                  chartType === 'bar'
+                    ? 'bg-teal-700 text-white shadow-xs'
                     : 'text-secondary hover:text-primary'
                 }`}
               >
@@ -236,7 +262,7 @@ export const ScreeningTrend: React.FC<ScreeningTrendProps> = ({
             <div>
               <p className="text-sm sm:text-base font-bold text-primary">Belum Ada Riwayat Tes Skrining</p>
               <p className="text-xs sm:text-sm text-secondary max-w-md mx-auto mt-1">
-                Lakukan tes skrining PHQ-9 & GAD-7 untuk memetakan grafik tingkat depresi dan kecemasan Anda secara berkala.
+                Lakukan skrining mandiri bila ingin mencatat skor dari waktu ke waktu. Hasilnya bukan diagnosis.
               </p>
             </div>
             <button
@@ -252,21 +278,10 @@ export const ScreeningTrend: React.FC<ScreeningTrendProps> = ({
             <div className="relative h-60 sm:h-72 min-w-[480px] w-full bg-slate-900 rounded-xl p-4 text-white overflow-hidden shadow-inner">
               {/* Horizontal reference lines */}
               <div className="absolute inset-0 flex flex-col justify-between text-[10px] text-slate-400 pointer-events-none pb-8 pt-4 px-4">
-                <div className="border-b border-slate-800 pb-1 flex justify-between">
-                  <span>20 (Parah / Krisis)</span>
-                  <span className="text-rose-400 font-medium">Ambang Krisis</span>
-                </div>
-                <div className="border-b border-slate-800 pb-1 flex justify-between">
-                  <span>10 (Sedang / Prioritas)</span>
-                  <span className="text-amber-400 font-medium">Ambang Prioritas</span>
-                </div>
-                <div className="border-b border-slate-800 pb-1 flex justify-between">
-                  <span>4 (Minimal / Stabil)</span>
-                  <span className="text-teal-400 font-medium">Ambang Stabil</span>
-                </div>
-                <div className="border-b border-slate-800 pb-1 flex justify-between">
-                  <span>0</span>
-                </div>
+                <div className="border-b border-slate-800 pb-1 flex justify-between"><span>Rentang maksimum tiap instrumen</span></div>
+                <div className="border-b border-slate-800 pb-1 flex justify-between"><span>Bagian atas rentang</span></div>
+                <div className="border-b border-slate-800 pb-1 flex justify-between"><span>Bagian bawah rentang</span></div>
+                <div className="border-b border-slate-800 pb-1 flex justify-between"><span>0</span></div>
               </div>
 
               {/* SVG Line Graph */}
@@ -354,8 +369,8 @@ export const ScreeningTrend: React.FC<ScreeningTrendProps> = ({
           <div className="w-full overflow-x-auto custom-scrollbar">
             <div className="relative h-60 sm:h-72 min-w-[480px] w-full bg-slate-900 rounded-xl p-4 text-white overflow-hidden shadow-inner">
               <div className="absolute inset-0 flex flex-col justify-between text-[10px] text-slate-400 pointer-events-none pb-8 pt-4 px-4">
-                <div className="border-b border-slate-800 pb-1 flex justify-between"><span>20 (Parah)</span></div>
-                <div className="border-b border-slate-800 pb-1 flex justify-between"><span>10 (Sedang)</span></div>
+                <div className="border-b border-slate-800 pb-1 flex justify-between"><span>100% rentang skor masing-masing</span></div>
+                <div className="border-b border-slate-800 pb-1 flex justify-between"><span>50% rentang skor masing-masing</span></div>
                 <div className="border-b border-slate-800 pb-1 flex justify-between"><span>0</span></div>
               </div>
 
@@ -407,10 +422,10 @@ export const ScreeningTrend: React.FC<ScreeningTrendProps> = ({
               <Moon className="w-4 h-4" />
             </div>
             <h3 className="font-bold text-primary text-sm sm:text-base">
-              Korelasi Durasi Tidur & Mood
+              Catatan Tidur & Mood
             </h3>
           </div>
-          
+
           {moodLogs.length < 3 ? (
             <div className="py-8 text-center text-xs sm:text-sm text-secondary surface-muted rounded-xl p-4">
               Kumpulkan minimal 3 catatan harian (mood dan tidur) untuk melihat analisis korelasi ini.
@@ -418,30 +433,30 @@ export const ScreeningTrend: React.FC<ScreeningTrendProps> = ({
           ) : (
             <div className="relative h-44 sm:h-48 w-full flex items-end justify-between px-2 sm:px-4 pt-4 pb-6 surface-muted rounded-xl border border-default">
               <div className="absolute inset-0 flex flex-col justify-between text-[10px] text-muted pointer-events-none pb-6 pt-3 px-3">
-                <div className="border-b border-default pb-1 flex justify-between"><span>Tidur Cukup (8+ Jam) / Mood 5</span></div>
-                <div className="border-b border-default pb-1 flex justify-between"><span>Kurang Tidur (&lt;5 Jam) / Mood 1</span></div>
+                <div className="border-b border-default pb-1 flex justify-between"><span>Batang: tidur (jam) · Titik: mood (1–5)</span></div>
+                <div className="border-b border-default pb-1 flex justify-between"><span>Catatan pada tanggal yang sama; bukan analisis sebab-akibat</span></div>
               </div>
-              
+
               <div className="relative h-full w-full flex items-end justify-between z-10">
                 {moodLogs.slice(0, 10).reverse().map((log) => {
                   const hasSleep = log.sleepHours !== null && log.sleepHours !== undefined;
                   const sleepHeight = hasSleep ? Math.min(100, ((log.sleepHours as number) / 12) * 100) : 0;
                   const moodY = 100 - ((log.mood - 1) / 4) * 100;
-                  
+
                   return (
                     <div key={log.id} className="relative flex flex-col items-center flex-1 h-full group">
                       {hasSleep && (
                         <div className="absolute bottom-0 w-3 sm:w-5 bg-indigo-200 dark:bg-indigo-900/60 rounded-t-xs" style={{ height: `${sleepHeight}%` }} />
                       )}
-                      <div 
-                        className="absolute w-2.5 h-2.5 rounded-full bg-teal-500 z-20 shadow border border-white dark:border-slate-800 transition-all group-hover:scale-150" 
+                      <div
+                        className="absolute w-2.5 h-2.5 rounded-full bg-teal-500 z-20 shadow border border-white dark:border-slate-800 transition-all group-hover:scale-150"
                         style={{ top: `${moodY}%` }}
                       />
-                      
+
                       <div className="absolute -bottom-5 text-[9px] text-secondary font-mono">
                         {log.date.split('-')[2]}/{log.date.split('-')[1]}
                       </div>
-                      
+
                       {/* Tooltip */}
                       <div className="opacity-0 group-hover:opacity-100 absolute -top-8 bg-slate-900 text-white text-[10px] px-2 py-1 rounded-md whitespace-nowrap z-30 transition-opacity pointer-events-none">
                         {hasSleep ? `Tidur: ${log.sleepHours} Jam | ` : ''}Mood: {log.mood}/5
@@ -453,7 +468,7 @@ export const ScreeningTrend: React.FC<ScreeningTrendProps> = ({
             </div>
           )}
         </div>
-        
+
         {/* Recovery Milestones */}
         <div className="surface-card rounded-2xl p-4 sm:p-5 border border-default space-y-3 shadow-3xs flex flex-col justify-between">
           <div className="flex items-center gap-2 border-b border-default pb-3">
@@ -461,7 +476,7 @@ export const ScreeningTrend: React.FC<ScreeningTrendProps> = ({
               <Heart className="w-4 h-4" />
             </div>
             <h3 className="font-bold text-primary text-sm sm:text-base">
-              Milestone Pemulihan Emosional
+              Perkembangan Pemantauan Emosi
             </h3>
           </div>
 
@@ -471,14 +486,14 @@ export const ScreeningTrend: React.FC<ScreeningTrendProps> = ({
             </div>
             <div>
               <h4 className="text-sm font-bold text-emerald-900 dark:text-emerald-300 mb-1">
-                Perjalanan Kesejahteraan Mental
+              Catatan dari Waktu ke Waktu
               </h4>
               <p className="text-xs sm:text-sm text-emerald-800/90 dark:text-emerald-400/90 leading-relaxed">
                 {hasImproved
-                  ? `Luar Biasa! Terdapat penurunan skor depresi sebesar ${scoreDiff} poin dibandingkan tes awal Anda. Tetap pertahankan rutinitas self-care dan konseling.`
-                  : moodLogs.length > 5 
-                  ? 'Konsistensi Anda dalam melacak mood sangat baik. Pemahaman diri adalah langkah pertama menuju ketahanan emosional.'
-                  : 'Perjalanan pemulihan Anda baru dimulai. Rutin melakukan check-in harian akan membantu mengidentifikasi pola pemicu stres.'
+                  ? `Skor PHQ-9 Anda turun ${scoreDiff} poin dibandingkan skrining sebelumnya. Tren ini dapat membantu refleksi, tetapi bukan diagnosis atau pengganti percakapan dengan tenaga kesehatan.`
+                  : moodLogs.length > 5
+                  ? 'Anda telah mencatat suasana hati beberapa kali. Catatan berkala dapat membantu melihat pola dari waktu ke waktu.'
+                  : 'Catatan suasana hati dapat membantu Anda melihat pola dari waktu ke waktu. Gunakan hanya jika terasa bermanfaat.'
                 }
               </p>
             </div>
@@ -494,10 +509,12 @@ export const ScreeningTrend: React.FC<ScreeningTrendProps> = ({
             <span>Rekomendasi Langkah Penanganan Selanjutnya:</span>
           </h4>
           <p className="text-xs sm:text-sm text-secondary leading-relaxed">
-            {currentTriage === 'Krisis'
+            {!currentTriage
+              ? 'Belum ada hasil skrining tercatat. Anda dapat mengisi PHQ-9 dan GAD-7 untuk melihat ringkasan skrining mandiri.'
+              : currentTriage === 'Krisis'
               ? 'Jawaban Anda menunjukkan kemungkinan bahaya langsung. Jika ini masih terjadi, hubungi 119 atau pergi ke IGD/fasilitas kesehatan terdekat. Untuk dukungan psikologis awal, gunakan Healing119 di 119 ekstensi 8 atau healing119.id; antrean dapat penuh.'
               : currentTriage === 'Prioritas'
-              ? 'Hasil skrining menunjukkan perlunya tindak lanjut profesional, tetapi bukan diagnosis. Pertimbangkan untuk berbicara dengan konselor atau tenaga kesehatan.'
+              ? 'Hasil skrining menandai pertimbangan untuk tindak lanjut; ini bukan diagnosis. Anda dapat berbicara dengan konselor atau tenaga kesehatan.'
               : 'Skor skrining berada pada rentang rendah. Ini bukan jaminan bahwa tidak ada masalah; hubungi konselor atau tenaga kesehatan bila Anda tetap merasa khawatir.'}
           </p>
         </div>
@@ -532,7 +549,7 @@ export const ScreeningTrend: React.FC<ScreeningTrendProps> = ({
             <button
               onClick={handleDownloadPdf}
               disabled={downloadingPdf}
-              className="px-3 py-1 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+              className="px-3 py-1 bg-teal-700 hover:bg-teal-800 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
             >
               <Download className="w-3.5 h-3.5" />
               <span>{downloadingPdf ? 'Mengunduh...' : 'Unduh Laporan PDF'}</span>
@@ -548,7 +565,7 @@ export const ScreeningTrend: React.FC<ScreeningTrendProps> = ({
             )}
           </div>
         </div>
-        
+
         <div className="overflow-x-auto custom-scrollbar">
           <table className="w-full text-left text-xs sm:text-sm border-collapse min-w-[560px]">
             <thead>

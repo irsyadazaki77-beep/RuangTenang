@@ -33,11 +33,57 @@ export function verifyClaimsAgainstEvidence(answer: string, sources: FileSourceR
       return { citationId: source.citationId!, documentId: source.documentId, filename: source.filename, sourceRef: source.sourceRef, excerpt, exactTextMatch };
     });
     const hasUnknownId = markerIds.some(id => !allowed.has(id));
+
+    // Detect cross-document conflict if multiple sources are cited for the same claim
+    // and they present explicitly contradictory claims (e.g., mutually exclusive polarities)
+    let isConflicting = false;
+    if (evidence.length >= 2) {
+      const opposingPolarityPairs = [
+        ['meningkat', 'menurun'],
+        ['signifikan', 'tidak signifikan'],
+        ['efektif', 'tidak efektif'],
+        ['positif', 'negatif'],
+        ['diterima', 'ditolak'],
+        ['mendukung', 'menentang']
+      ];
+      for (const [pos, neg] of opposingPolarityPairs) {
+        const hasPos = evidence.some(e => e.excerpt.toLowerCase().includes(pos));
+        const hasNeg = evidence.some(e => e.excerpt.toLowerCase().includes(neg));
+        if (hasPos && hasNeg) {
+          isConflicting = true;
+          break;
+        }
+      }
+
+      if (!isConflicting) {
+        // Detect conflicting numerical data (e.g. percentages, measurements, counts)
+        const numPattern = /\b\d+(?:[.,]\d+)?\s*%?/g;
+        const numbersPerEvidence = evidence.map(e => {
+          const matches = (e.excerpt.match(numPattern) || []).map(m => m.replace(/\s+/g, ''));
+          return new Set(matches);
+        });
+        if (numbersPerEvidence.length >= 2 && numbersPerEvidence.every(s => s.size > 0)) {
+          const firstSet = numbersPerEvidence[0];
+          const hasDivergence = numbersPerEvidence.slice(1).some(set => {
+            for (const val of set) {
+              if (!firstSet.has(val)) return true;
+            }
+            return false;
+          });
+          if (hasDivergence) {
+            isConflicting = true;
+          }
+        }
+      }
+    }
+
     const verificationStatus = !citationIds.length || hasUnknownId
       ? 'unsupported' as const
-      : evidence.some(item => item.exactTextMatch)
-        ? 'supported' as const
-        : 'unverified' as const;
+      : isConflicting
+        ? 'conflicting' as const
+        : evidence.some(item => item.exactTextMatch)
+          ? 'supported' as const
+          : 'unverified' as const;
     return { id: randomUUID(), text: claimText.slice(0, 2000), citationIds, verificationStatus, evidence };
   });
   return {

@@ -1,6 +1,9 @@
 import 'dotenv/config';
 import { defineConfig, devices } from '@playwright/test';
 
+const e2eArtifactsDir = process.env.E2E_ARTIFACTS_DIR || 'test-artifacts/fase25.5';
+process.env.E2E_ARTIFACTS_DIR = e2eArtifactsDir;
+
 export default defineConfig({
   testDir: './e2e',
   testMatch: /.*\.spec\.ts/,
@@ -29,13 +32,15 @@ export default defineConfig({
     env: {
       NODE_ENV: 'test',
       E2E_RELAX_AI_LIMITS: '1',
+      E2E_MOCK_AI: '1',
+      E2E_ARTIFACTS_DIR: e2eArtifactsDir,
       PORT: process.env.PORT || '3000',
-      GEMINI_API_KEY: '',
+      GEMINI_API_KEY: 'e2e-mock-gemini-key',
       DEEPSEEK_API_KEY: '',
       GROQ_API_KEY: '',
       OPENROUTER_API_KEY: '',
     },
     reuseExistingServer: !process.env.CI,
-    timeout: 30000,
+    timeout: Number(process.env.PLAYWRIGHT_WEB_SERVER_TIMEOUT_MS) || 90000,
   },
 });

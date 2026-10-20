@@ -12,6 +12,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import { prisma, serverDb } from '../database.js';
 import { runBackup } from './backupTool.js';
 import { retentionService, RetentionCleanupResult } from '../services/retentionService.js';
@@ -46,7 +47,9 @@ export interface DailyMaintenanceReport {
   };
   hygienePurge: {
     expiredSessionsCleaned: number;
+    expiredMobileRefreshTokensCleaned: number;
     expiredIdempotencyRecordsCleaned: number;
+    expiredProductAnalyticsEventsCleaned: number;
     expiredDistributedStatesCleaned: number;
     expiredLocksCleaned: number;
   };
@@ -113,6 +116,7 @@ export async function executeDailyMaintenance(): Promise<DailyMaintenanceReport>
       const maxAgeMs = 7 * 24 * 60 * 60 * 1000;
       const files = fs.readdirSync(backupDir);
       for (const file of files) {
+        if (!/^((postgres|sqlite)-backup-).+\.(dump|db)\.enc$/.test(file)) continue;
         const fullPath = path.join(backupDir, file);
         try {
           const stats = fs.statSync(fullPath);
@@ -137,6 +141,7 @@ export async function executeDailyMaintenance(): Promise<DailyMaintenanceReport>
     success: false,
     totalCleaned: 0,
     moodLogsDeleted: 0,
+      journalEntriesDeleted: 0,
     screeningsDeleted: 0,
     appointmentsDeleted: 0,
     chatsDeleted: 0,
@@ -161,7 +166,9 @@ export async function executeDailyMaintenance(): Promise<DailyMaintenanceReport>
   // 5. Hygiene Purge (Expired Sessions, Idempotency Records, Distributed States & Locks)
   const hygiene = {
     expiredSessionsCleaned: 0,
+    expiredMobileRefreshTokensCleaned: 0,
     expiredIdempotencyRecordsCleaned: 0,
+    expiredProductAnalyticsEventsCleaned: 0,
     expiredDistributedStatesCleaned: 0,
     expiredLocksCleaned: 0
   };
@@ -177,11 +184,27 @@ export async function executeDailyMaintenance(): Promise<DailyMaintenanceReport>
     });
     hygiene.expiredSessionsCleaned = delSessions.count;
 
+    const delMobileRefresh = await (prisma as any).mobileRefreshToken.deleteMany({
+      where: {
+        OR: [
+          { expiresAt: { lt: now } },
+          { revokedAt: { lt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } },
+        ],
+      },
+    });
+    hygiene.expiredMobileRefreshTokensCleaned = delMobileRefresh.count;
+
     // Clean expired idempotency records
     const delIdempotency = await prisma.idempotencyRecord.deleteMany({
       where: { expiresAt: { lt: now } }
     });
     hygiene.expiredIdempotencyRecordsCleaned = delIdempotency.count;
+
+    const productAnalyticsCutoff = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+    const delProductAnalytics = await prisma.productAnalyticsEvents.deleteMany({
+      where: { occurredAt: { lt: productAnalyticsCutoff } }
+    });
+    hygiene.expiredProductAnalyticsEventsCleaned = delProductAnalytics.count;
 
     // Expired distributed states and locks are managed with TTL by Redis and in-memory stores automatically
     hygiene.expiredDistributedStatesCleaned = 0;
@@ -190,6 +213,7 @@ export async function executeDailyMaintenance(): Promise<DailyMaintenanceReport>
     console.log(
       `[5/6 HYGIENE PURGE] Selesai: ` +
       `${hygiene.expiredSessionsCleaned} sesi inaktif, ` +
+      `${hygiene.expiredMobileRefreshTokensCleaned} refresh token mobile kedaluwarsa, ` +
       `${hygiene.expiredIdempotencyRecordsCleaned} record idempotensi, ` +
       `${hygiene.expiredDistributedStatesCleaned} state terdistribusi, ` +
       `${hygiene.expiredLocksCleaned} lock lama dibersihkan.`
@@ -201,7 +225,7 @@ export async function executeDailyMaintenance(): Promise<DailyMaintenanceReport>
   const durationMs = Date.now() - startTime;
   const memUsageMb = Math.round((process.memoryUsage().heapUsed / 1024 / 1024) * 100) / 100;
 
-  const isHealthy = dbStatus === 'CONNECTED' && testEncryptionOk && (backupResult.success || process.env.NODE_ENV !== 'production');
+  const isHealthy = dbStatus === 'CONNECTED' && testEncryptionOk && (backupResult.success || process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test');
   const finalStatus: DailyMaintenanceReport['status'] = isHealthy ? 'SUCCESS' : 'WARNING';
 
   // 6. Audit & Telemetry Logging
@@ -254,7 +278,10 @@ export async function executeDailyMaintenance(): Promise<DailyMaintenanceReport>
 
 // Standalone execution support
 const isDirectCliExecution =
-  (typeof import.meta !== 'undefined' && import.meta.url === `file://${process.argv[1]}`) ||
+  (typeof process !== 'undefined' &&
+    Boolean(process.argv[1]) &&
+    path.resolve(fileURLToPath(import.meta.url)).toLowerCase() ===
+      path.resolve(process.argv[1]).toLowerCase()) ||
   (typeof require !== 'undefined' && typeof module !== 'undefined' && require.main === module);
 
 if (isDirectCliExecution) {

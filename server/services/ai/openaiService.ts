@@ -3,7 +3,7 @@ import type { AiRequestOptions } from './aiRequestService.js';
 import { getModelDefinition } from './aiModelRegistry.js';
 import { AI_RELIABILITY_POLICY, classifyAiError } from './aiReliabilityService.js';
 
-type OpenAIMessage = { role: 'system' | 'user' | 'assistant'; content: string };
+type OpenAIMessage = { role: 'system' | 'user' | 'assistant'; content: string | Array<{ type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } }> };
 
 function buildMessages(options: AiRequestOptions): OpenAIMessage[] {
   const messages: OpenAIMessage[] = [];
@@ -12,7 +12,25 @@ function buildMessages(options: AiRequestOptions): OpenAIMessage[] {
     const content = (item.parts || []).map(part => part.text || '').join('\n').trim();
     if (content) messages.push({ role: item.role === 'model' ? 'assistant' : 'user', content });
   }
-  messages.push({ role: 'user', content: options.prompt });
+
+  // Support multimodal image attachments for OpenAI vision models
+  if (options.attachments && options.attachments.length > 0) {
+    const userContent: Array<{ type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } }> = [
+      { type: 'text', text: options.prompt }
+    ];
+    for (const att of options.attachments) {
+      if (att.base64 && att.mimeType?.startsWith('image/')) {
+        const cleanBase64 = att.base64.includes(',') ? att.base64 : `data:${att.mimeType};base64,${att.base64}`;
+        userContent.push({
+          type: 'image_url',
+          image_url: { url: cleanBase64 }
+        });
+      }
+    }
+    messages.push({ role: 'user', content: userContent });
+  } else {
+    messages.push({ role: 'user', content: options.prompt });
+  }
   return messages;
 }
 
@@ -77,7 +95,7 @@ export const openaiService = {
         body: JSON.stringify({
           model,
           messages: buildMessages(options),
-          max_completion_tokens: Math.min(options.maxOutputTokens || (!options.userId || options.userId === 'guest' ? 500 : 1000), !options.userId || options.userId === 'guest' ? 500 : 1000),
+          max_completion_tokens: Math.min(options.maxOutputTokens || (!options.userId || options.userId === 'guest' ? 1500 : 4096), !options.userId || options.userId === 'guest' ? 2048 : 4096),
           stream: false,
           store: false
         }),
@@ -116,7 +134,7 @@ export const openaiService = {
         body: JSON.stringify({
           model,
           messages: buildMessages(options),
-          max_completion_tokens: !options.userId || options.userId === 'guest' ? 500 : 1000,
+          max_completion_tokens: Math.min(options.maxOutputTokens || (!options.userId || options.userId === 'guest' ? 1500 : 4096), !options.userId || options.userId === 'guest' ? 2048 : 4096),
           stream: true,
           store: false
         }),

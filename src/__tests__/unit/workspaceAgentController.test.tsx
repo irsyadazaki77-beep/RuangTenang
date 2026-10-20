@@ -15,6 +15,42 @@ const completed: AgentExecutionResult = {
 };
 
 describe('useWorkspaceAgentController', () => {
+  it('notifies Canvas only after the server confirms proposal acceptance', async () => {
+    const proposal = { title: 'Evidence report', type: 'DOCUMENT' as const, content: 'Verified draft' };
+    const waitingPlan = { ...plan, tasks: [{ ...plan.tasks[0], status: 'waiting_review', artifactProposal: proposal }] } as WorkspacePlan;
+    const acceptedTask = { ...waitingPlan.tasks[0], status: 'done', outputArtifactId: 'agent-artifact', artifactProposal: proposal };
+    const acceptedPlan = { ...waitingPlan, tasks: [acceptedTask] } as WorkspacePlan;
+    const reviewTask = vi.fn(async () => acceptedPlan);
+    const onTaskAccepted = vi.fn();
+    const { result } = renderHook(() => useWorkspaceAgentController({
+      plan: waitingPlan,
+      startTaskExecution: vi.fn(async () => ({ plan: waitingPlan, claimed: true })),
+      executeAgentTask: vi.fn(async () => ({ execution: completed, plan: waitingPlan })),
+      reviewTask,
+      transitionPlan: vi.fn(async () => waitingPlan),
+      recoverTaskExecution: vi.fn(async () => waitingPlan),
+      isStreaming: false,
+      includeFilesInContext: false,
+      selectedFileIds: [],
+      includeCanvasInContext: false,
+      activeArtifact: null,
+      selectedModel: 'kerja-santai',
+      workspaceId: 'chat:workspace-a',
+      activeSendOperationRef: { current: null },
+      taskGenerationRequestsRef: { current: new Map() },
+      sendMessage: vi.fn(() => true),
+      abortStream: vi.fn(),
+      onAgentTaskCompleted: vi.fn(async () => undefined),
+      onTaskAccepted,
+      showToast: vi.fn()
+    }));
+
+    await act(async () => { result.current.acceptTaskReview('task-1'); await Promise.resolve(); });
+
+    expect(reviewTask).toHaveBeenCalledWith('plan-1', 'task-1', 'accept');
+    expect(onTaskAccepted).toHaveBeenCalledWith(acceptedTask);
+  });
+
   it('runs task execution through the server Agent endpoint and returns its actual result', async () => {
     const activeSendOperationRef = { current: null as string | null };
     const taskGenerationRequestsRef = { current: new Map() };

@@ -18,7 +18,7 @@ describe('AI model registry', () => {
   });
 
   it('resolves only registered models allowed for the requested tier', () => {
-    expect(resolveAiModel('deepseek-chat', 'Free').providerModelId).toBe('deepseek-chat');
+    expect(resolveAiModel('deepseek-chat', 'Free').providerModelId).toBe('deepseek-flash');
     expect(() => resolveAiModel('gemini-3.1-pro-preview', 'Free')).toThrowError(
       expect.objectContaining({ code: 'MODEL_NOT_ALLOWED' })
     );

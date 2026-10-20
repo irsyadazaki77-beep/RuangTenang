@@ -51,6 +51,13 @@ function writeEvent(res: Response, event: Record<string, unknown>) {
   if (!res.writableEnded) res.write(`data: ${JSON.stringify(event)}\n\n`);
 }
 
+function writeOutputChunks(res: Response, identity: Record<string, unknown>, output: string) {
+  const chunkSize = 2048;
+  for (let offset = 0; offset < output.length; offset += chunkSize) {
+    writeEvent(res, { type: 'candidate_chunk', ...identity, text: output.slice(offset, offset + chunkSize) });
+  }
+}
+
 router.post('/chat/compare/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (req: Request, res: Response) => {
   const parsed = comparisonSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ success: false, code: 'INVALID_COMPARISON', message: 'Pilih model unik dan kirim prompt yang valid.' });
@@ -158,7 +165,9 @@ router.post('/chat/compare/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter,
     documentContext: context?.documentContextSnapshot,
     canvasContext: canvasContext ? { ...canvasContext, content: canvasContext.content } : undefined,
     preset: { id: request.presetId, taskCategory: request.taskCategory, responseStyle: request.responseStyle, latencyPreference: request.latencyPreference, qualityPreference: request.qualityPreference },
-    createdAt: new Date().toISOString(), contextFingerprint: '', selectedModelIds: models.map(model => model.id)
+    createdAt: new Date().toISOString(), contextFingerprint: '',
+    selectedModelIds: request.selectedModelIds,
+    candidateModels: models.map((model, index) => ({ candidateId: request.selectedModelIds[index], modelId: model.id, ...(request.selectedModelIds[index] !== model.id ? { profileId: request.selectedModelIds[index] } : {}) }))
   };
 
   const clientIp = req.ip || req.socket.remoteAddress || '127.0.0.1';
@@ -170,8 +179,8 @@ router.post('/chat/compare/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter,
   if (!reservationResult.allowed) return res.status(429).json({ success: false, code: 'DAILY_LIMIT_EXCEEDED', message: 'Kuota harian tidak cukup untuk menjalankan comparison ini.' });
   const snapshot = storeComparisonSnapshot(userId, snapshotInput);
 
-  const reservationByCandidate = new Map(models.map((model, index) => [model.id, reservationResult.reservations[index]]));
-  const attempts = new Map(models.map(model => [randomUUID(), { candidateId: model.id, controller: new AbortController() }]));
+  const reservationByCandidate = new Map(models.map((model, index) => [request.selectedModelIds[index], reservationResult.reservations[index]]));
+  const attempts = new Map(models.map((model, index) => [randomUUID(), { candidateId: request.selectedModelIds[index], controller: new AbortController() }]));
   const attemptIds = new Map([...attempts].map(([attemptId, attempt]) => [attempt.candidateId, attemptId]));
   candidateControllers.set(request.comparisonId, { ownerId: userId, controllers: attempts });
   res.setHeader('Content-Type', 'text/event-stream');
@@ -180,13 +189,26 @@ router.post('/chat/compare/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter,
   res.setHeader('X-Accel-Buffering', 'no');
   res.flushHeaders();
   writeEvent(res, { type: 'comparison_started', comparisonId: request.comparisonId, snapshotId: snapshot.snapshotId, contextFingerprint: snapshot.contextFingerprint, attempts: [...attemptIds].map(([candidateId, attemptId]) => ({ candidateId, attemptId })) });
+
+  // Inform if multiple selected profiles resolve to the exact same underlying model
+  if (new Set(models.map(m => m.id)).size < models.length) {
+    writeEvent(res, {
+      type: 'comparison_notice',
+      comparisonId: request.comparisonId,
+      snapshotId: snapshot.snapshotId,
+      contextFingerprint: snapshot.contextFingerprint,
+      message: 'Catatan: Dua atau lebih profil menggunakan model AI aktual yang sama karena ketersediaan penyedia saat ini.'
+    });
+  }
+
   res.on('close', () => {
     if (!res.writableEnded) attempts.forEach(({ controller }) => controller.abort());
     if (!candidateControllers.get(request.comparisonId)?.controllers.size) candidateControllers.delete(request.comparisonId);
   });
 
-  await Promise.all(models.map(async model => {
-    const candidateId = model.id;
+  await Promise.all(models.map(async (model, modelIndex) => {
+    const candidateId = request.selectedModelIds[modelIndex];
+    const profileId = request.selectedModelIds[modelIndex];
     const attemptId = attemptIds.get(candidateId)!;
     const controller = attempts.get(attemptId)!.controller;
     const providerQueue = providerTails.get(model.provider) || Promise.resolve();
@@ -200,7 +222,8 @@ router.post('/chat/compare/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter,
       }
       const startedAt = Date.now();
       let fullOutput = '';
-      writeEvent(res, { type: 'candidate_started', comparisonId: request.comparisonId, snapshotId: snapshot.snapshotId, contextFingerprint: snapshot.contextFingerprint, candidateId, attemptId, modelId: model.id, modelName: model.name });
+      writeEvent(res, { type: 'candidate_started', comparisonId: request.comparisonId, snapshotId: snapshot.snapshotId, contextFingerprint: snapshot.contextFingerprint, candidateId, attemptId, profileId, modelId: model.id, modelName: model.name });
+
       try {
         const { stream, modelUsed } = await aiRequestService.generateStreamResponse({
           userId, userTier, requestedModelId: model.id, prompt: snapshot.prompt, history: snapshot.recentHistory.map(item => ({ role: item.role, parts: [{ text: item.content }] })), systemInstruction: snapshot.systemInstruction,
@@ -212,7 +235,6 @@ router.post('/chat/compare/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter,
           const text = typeof chunk?.text === 'string' ? chunk.text : chunk?.candidates?.[0]?.content?.parts?.map((part: { text?: string }) => part.text || '').join('') || '';
           if (text) {
             fullOutput += text;
-            writeEvent(res, { type: 'candidate_chunk', comparisonId: request.comparisonId, snapshotId: snapshot.snapshotId, contextFingerprint: snapshot.contextFingerprint, candidateId, attemptId, text });
           }
         }
         if (controller.signal.aborted) {
@@ -221,10 +243,11 @@ router.post('/chat/compare/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter,
           writeEvent(res, { type: 'candidate_failed', comparisonId: request.comparisonId, snapshotId: snapshot.snapshotId, candidateId, attemptId, errorCode: 'OUTPUT_REJECTED', latencyMs: Date.now() - startedAt });
         } else {
           recordCandidateOutput(snapshot.snapshotId, candidateId, attemptId, userId, fullOutput);
+          writeOutputChunks(res, { comparisonId: request.comparisonId, snapshotId: snapshot.snapshotId, contextFingerprint: snapshot.contextFingerprint, candidateId, attemptId }, fullOutput);
           writeEvent(res, { type: 'candidate_completed', comparisonId: request.comparisonId, snapshotId: snapshot.snapshotId, candidateId, attemptId, latencyMs: Date.now() - startedAt });
         }
       } catch (error) {
-        const errorCode = controller.signal.aborted ? 'CANCELLED' : (error as Error).message === 'PROVIDER_NOT_CONFIGURED' ? 'PROVIDER_NOT_CONFIGURED' : 'CANDIDATE_FAILED';
+        const errorCode = controller.signal.aborted ? 'CANCELLED' : (error as Error).message === 'PROVIDER_NOT_CONFIGURED' ? 'PROVIDER_NOT_CONFIGURED' : (error as Error).message === 'MODEL_IDENTITY_MISMATCH' ? 'MODEL_IDENTITY_MISMATCH' : 'CANDIDATE_FAILED';
         writeEvent(res, { type: controller.signal.aborted ? 'candidate_cancelled' : 'candidate_failed', comparisonId: request.comparisonId, snapshotId: snapshot.snapshotId, candidateId, attemptId, errorCode, latencyMs: Date.now() - startedAt });
       } finally {
         attempts.delete(attemptId);
@@ -266,14 +289,15 @@ router.post('/chat/compare/:comparisonId/retry/:candidateId', optionalAuth, aiCh
   if (lookup.status === 'forbidden') return res.status(404).json({ success: false, code: 'SNAPSHOT_NOT_FOUND' });
   const snapshot = lookup.snapshot;
   if (snapshot.comparisonId !== req.params.comparisonId || !snapshot.selectedModelIds.includes(req.params.candidateId)) return res.status(409).json({ success: false, code: 'SNAPSHOT_MISMATCH' });
-  const model = getModelDefinition(req.params.candidateId);
+  const candidate = snapshot.candidateModels.find(item => item.candidateId === req.params.candidateId);
+  const model = candidate ? getModelDefinition(candidate.modelId) : undefined;
   if (!model) return res.status(400).json({ success: false, code: 'MODEL_NOT_FOUND' });
   if (snapshot.workspaceId && userId !== 'guest' && !await prisma.chats.findFirst({ where: { id: snapshot.workspaceId, userId } })) return res.status(404).json({ success: false, code: 'CHAT_NOT_FOUND' });
   const active = candidateControllers.get(snapshot.comparisonId) || { ownerId: userId, controllers: new Map<string, { candidateId: string; controller: AbortController }>() };
   if (active.ownerId !== userId) return res.status(404).json({ success: false, code: 'SNAPSHOT_NOT_FOUND' });
-  if ([...active.controllers.values()].some(item => item.candidateId === model.id)) return res.status(409).json({ success: false, code: 'CANDIDATE_ALREADY_RUNNING' });
+  if ([...active.controllers.values()].some(item => item.candidateId === req.params.candidateId)) return res.status(409).json({ success: false, code: 'CANDIDATE_ALREADY_RUNNING' });
   const controller = new AbortController();
-  active.controllers.set(body.data.attemptId, { candidateId: model.id, controller });
+  active.controllers.set(body.data.attemptId, { candidateId: req.params.candidateId, controller });
   candidateControllers.set(snapshot.comparisonId, active);
   const tier = req.user?.tier || 'Free';
   const ip = req.ip || req.socket.remoteAddress || '127.0.0.1';
@@ -285,33 +309,38 @@ router.post('/chat/compare/:comparisonId/retry/:candidateId', optionalAuth, aiCh
   }
   res.setHeader('Content-Type', 'text/event-stream'); res.setHeader('Cache-Control', 'no-cache, no-transform'); res.setHeader('Connection', 'keep-alive'); res.setHeader('X-Accel-Buffering', 'no'); res.flushHeaders();
   res.on('close', () => { if (!res.writableEnded) controller.abort(); });
-  const identity = { comparisonId: snapshot.comparisonId, snapshotId: snapshot.snapshotId, contextFingerprint: snapshot.contextFingerprint, candidateId: model.id, attemptId: body.data.attemptId, modelId: model.id };
+  const identity = { comparisonId: snapshot.comparisonId, snapshotId: snapshot.snapshotId, contextFingerprint: snapshot.contextFingerprint, candidateId: req.params.candidateId, attemptId: body.data.attemptId, modelId: model.id, ...(candidate?.profileId ? { profileId: candidate.profileId } : {}) };
   const startedAt = Date.now();
   let output = '';
+  let execution: Promise<void> | undefined;
   writeEvent(res, { type: 'candidate_started', ...identity, modelName: model.name });
   try {
     const priorExecution = providerTails.get(model.provider) || Promise.resolve();
-    const execution = priorExecution.catch(() => undefined).then(async () => {
+    execution = priorExecution.catch(() => undefined).then(async () => {
       if (controller.signal.aborted) { await rollbackUserAiQuota(userId, ip).catch(() => undefined); return; }
       const { stream, modelUsed } = await aiRequestService.generateStreamResponse({ userId, userTier: tier, requestedModelId: model.id, prompt: snapshot.prompt, history: snapshot.recentHistory.map(item => ({ role: item.role, parts: [{ text: item.content }] })), systemInstruction: snapshot.systemInstruction, abortSignal: controller.signal, comparisonMode: true });
       if (modelUsed !== model.id) throw new Error('MODEL_IDENTITY_MISMATCH');
       for await (const chunk of stream) {
         if (controller.signal.aborted) break;
         const text = typeof chunk?.text === 'string' ? chunk.text : chunk?.candidates?.[0]?.content?.parts?.map((part: { text?: string }) => part.text || '').join('') || '';
-        if (text) { output += text; writeEvent(res, { type: 'candidate_chunk', ...identity, text }); }
+        if (text) output += text;
       }
     });
     providerTails.set(model.provider, execution);
     await execution;
-    if (providerTails.get(model.provider) === execution) providerTails.delete(model.provider);
     if (controller.signal.aborted) writeEvent(res, { type: 'candidate_cancelled', ...identity, latencyMs: Date.now() - startedAt });
+    else if (!aiSafetyService.validateOutput(output).isValid) writeEvent(res, { type: 'candidate_failed', ...identity, errorCode: 'OUTPUT_REJECTED', latencyMs: Date.now() - startedAt });
     else {
-      recordCandidateOutput(snapshot.snapshotId, model.id, body.data.attemptId, userId, output);
+      recordCandidateOutput(snapshot.snapshotId, req.params.candidateId, body.data.attemptId, userId, output);
+      writeOutputChunks(res, identity, output);
       writeEvent(res, { type: 'candidate_completed', ...identity, latencyMs: Date.now() - startedAt });
     }
   } catch (error) {
-    writeEvent(res, { type: controller.signal.aborted ? 'candidate_cancelled' : 'candidate_failed', ...identity, errorCode: (error as Error).message === 'PROVIDER_NOT_CONFIGURED' ? 'PROVIDER_NOT_CONFIGURED' : 'CANDIDATE_FAILED', latencyMs: Date.now() - startedAt });
+    const errorMessage = (error as Error).message;
+    const errorCode = errorMessage === 'PROVIDER_NOT_CONFIGURED' ? 'PROVIDER_NOT_CONFIGURED' : errorMessage === 'MODEL_IDENTITY_MISMATCH' ? 'MODEL_IDENTITY_MISMATCH' : 'CANDIDATE_FAILED';
+    writeEvent(res, { type: controller.signal.aborted ? 'candidate_cancelled' : 'candidate_failed', ...identity, errorCode, latencyMs: Date.now() - startedAt });
   } finally {
+    if (execution && providerTails.get(model.provider) === execution) providerTails.delete(model.provider);
     active.controllers.delete(body.data.attemptId);
     if (!active.controllers.size) candidateControllers.delete(snapshot.comparisonId);
     writeEvent(res, { type: 'comparison_completed', comparisonId: snapshot.comparisonId, snapshotId: snapshot.snapshotId, contextFingerprint: snapshot.contextFingerprint });
@@ -325,10 +354,11 @@ router.post('/chat/compare/select', optionalAuth, async (req: Request, res: Resp
   if (!body.success || !userId || userId === 'guest') return res.status(400).json({ success: false, code: 'INVALID_SELECTION' });
   const { chatId: requestedChatId, workspaceIdentity, prompt, response, modelId, comparisonId, snapshotId, candidateId, attemptId } = body.data;
   if (!getModelDefinition(modelId)) return res.status(400).json({ success: false, code: 'MODEL_NOT_FOUND' });
-  if (candidateId !== modelId) return res.status(400).json({ success: false, code: 'CANDIDATE_MISMATCH' });
   const snapshotLookup = getComparisonSnapshot(snapshotId, userId);
   if (snapshotLookup.status === 'expired') return res.status(410).json({ success: false, code: 'SNAPSHOT_EXPIRED', message: 'Konteks perbandingan sudah kedaluwarsa. Jalankan Compare Again.' });
   if (snapshotLookup.status === 'forbidden') return res.status(404).json({ success: false, code: 'SNAPSHOT_NOT_FOUND' });
+  const candidateModel = snapshotLookup.snapshot.candidateModels.find(item => item.candidateId === candidateId);
+  if (!candidateModel || candidateModel.modelId !== modelId) return res.status(400).json({ success: false, code: 'CANDIDATE_MISMATCH' });
   if (snapshotLookup.snapshot.comparisonId !== comparisonId || snapshotLookup.snapshot.workspaceId !== requestedChatId || snapshotLookup.snapshot.localWorkspaceId !== workspaceIdentity || snapshotLookup.snapshot.prompt !== prompt || !snapshotLookup.snapshot.selectedModelIds.includes(candidateId)) return res.status(409).json({ success: false, code: 'SNAPSHOT_MISMATCH' });
   const serverRecordedOutput = getRecordedCandidateOutput(snapshotId, candidateId, attemptId, userId);
   if (serverRecordedOutput !== null && serverRecordedOutput !== response) {
@@ -362,14 +392,14 @@ router.post('/chat/compare/select', optionalAuth, async (req: Request, res: Resp
   return res.json({ success: true, promptId, responseId, chatId });
 });
 
-router.post('/chat/compare/analyze', optionalAuth, async (req: Request, res: Response) => {
+router.post('/chat/compare/analyze', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (req: Request, res: Response) => {
   const body = z.object({
     prompt: z.string().min(1).max(2000),
     candidates: z.array(z.object({
       candidateId: z.string().min(1),
       modelId: z.string().min(1),
       modelName: z.string().min(1),
-      output: z.string(),
+      output: z.string().max(100_000),
       status: z.enum(['completed', 'failed', 'cancelled', 'streaming', 'queued']),
       latencyMs: z.number().optional()
     })).min(1).max(3),
@@ -400,14 +430,14 @@ router.post('/chat/compare/analyze', optionalAuth, async (req: Request, res: Res
   return res.json({ success: true, analysis });
 });
 
-router.post('/chat/compare/synthesize', optionalAuth, async (req: Request, res: Response) => {
+router.post('/chat/compare/synthesize', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (req: Request, res: Response) => {
   const body = z.object({
     prompt: z.string().min(1).max(2000),
     candidates: z.array(z.object({
       candidateId: z.string().min(1),
       modelId: z.string().min(1),
       modelName: z.string().min(1),
-      output: z.string(),
+      output: z.string().max(100_000),
       status: z.enum(['completed', 'failed', 'cancelled', 'streaming', 'queued']),
       latencyMs: z.number().optional()
     })).min(1).max(3),

@@ -1,27 +1,29 @@
-import jwt from 'jsonwebtoken';
-import { Response } from 'express';
+import jwt, { type SignOptions } from 'jsonwebtoken';
+import { Request, Response } from 'express';
 import { UserRecord } from '../database.js';
 import crypto from 'crypto';
 import { getJwtSecret } from '../middleware/auth.js';
+import { isProductionLikeEnvironment } from '../config/environment.js';
 
 const COOKIE_NAME = 'rt_auth_token';
 
 export interface TokenPayload {
   userId: string;
   email: string;
-  role: 'mahasiswa' | 'konselor' | 'admin' | 'guest';
+  role: string;
   tier: 'Free' | 'Pro' | 'Developer';
   sessionId: string;
   name: string;
+  sessionType?: 'mobile';
 }
 
 export const authService = {
   /**
    * Generates JWT token for active user session.
    */
-  generateSessionToken(payload: TokenPayload): string {
+  generateSessionToken(payload: TokenPayload, expiresIn: SignOptions['expiresIn'] = '7d'): string {
     return jwt.sign(payload, getJwtSecret(), {
-      expiresIn: '7d',
+      expiresIn,
       issuer: 'ruangtenang',
       audience: 'ruangtenang-web',
       algorithm: 'HS256',
@@ -30,11 +32,23 @@ export const authService = {
     });
   },
 
+  generateMobileAccessToken(payload: TokenPayload): string {
+    return this.generateSessionToken({ ...payload, sessionType: 'mobile' }, 15 * 60);
+  },
+
+  /** Browser mutations carry browser metadata; originless native clients stay legacy-compatible. */
+  isBrowserRequest(req: Request): boolean {
+    return Boolean(
+      req.headers.origin || req.headers.referer || req.headers['sec-fetch-site'] ||
+      req.headers['sec-fetch-mode'] || req.headers['sec-fetch-dest']
+    );
+  },
+
   /**
    * Sets HTTP-only, SameSite secure cookie on response.
    */
   setSessionCookie(res: Response, token: string): void {
-    const isProduction = process.env.NODE_ENV === 'production';
+    const isProduction = isProductionLikeEnvironment();
     const cookieOptions = {
       httpOnly: true, // Prevents JavaScript XSS token theft
       secure: isProduction, // Enforces HTTPS transmission in production
@@ -53,7 +67,7 @@ export const authService = {
    * Clears auth cookies upon logout.
    */
   clearSessionCookie(res: Response): void {
-    const isProduction = process.env.NODE_ENV === 'production';
+    const isProduction = isProductionLikeEnvironment();
     const clearOptions = {
       httpOnly: true,
       secure: isProduction,
@@ -83,6 +97,7 @@ export const authService = {
       role: user.role,
       tier: user.tier,
       university: user.university,
+      campusId: user.campusId,
       mfaEnabled: user.mfaEnabled,
       emailVerified: user.emailVerified,
       createdAt: user.createdAt,

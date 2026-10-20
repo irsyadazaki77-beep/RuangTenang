@@ -26,7 +26,7 @@ describe('Counselor server demo-data isolation', () => {
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual([]);
-    expect(prisma.counselors.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { isDemoData: false } }));
+    expect(prisma.counselors.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { isDemoData: false, campusId: null } }));
   });
 
   it('serves counselor fixtures only when the server-side demo flag is explicitly enabled', async () => {

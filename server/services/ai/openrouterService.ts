@@ -71,7 +71,8 @@ export const openrouterService = {
     const openrouterModel = this.mapModelName(targetModel);
     const messages = this.buildMessages(options);
     const isAnonymous = !options.userId || options.userId === 'guest';
-    const maxTokens = Math.min(options.maxOutputTokens || (isAnonymous ? 600 : 1200), isAnonymous ? 600 : 1200);
+    const defaultMax = isAnonymous ? 1500 : 4096;
+    const maxTokens = Math.min(options.maxOutputTokens || defaultMax, isAnonymous ? 2048 : 4096);
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), AI_RELIABILITY_POLICY.connectTimeoutMs);
@@ -111,8 +112,9 @@ export const openrouterService = {
       const data = await response.json();
       const choice = data.choices?.[0];
       const content = typeof choice?.message?.content === 'string' ? choice.message.content.trim() : '';
-      const reasoning = typeof choice?.message?.reasoning === 'string' ? choice.message.reasoning.trim() : '';
-      const outputText = content || reasoning;
+      // OpenRouter may return private chain-of-thought in `reasoning`.
+      // Only `content` is intended for the user-facing chat.
+      const outputText = content;
       if (!outputText) throw Object.assign(new Error('AI_PROVIDER_CONTENT_ERROR_INVALID_RESPONSE'), { category: 'CONTENT_ERROR', retryable: false });
       clearTimeout(timeoutId);
 
@@ -141,7 +143,8 @@ export const openrouterService = {
     const openrouterModel = this.mapModelName(targetModel);
     const messages = this.buildMessages(options);
     const isAnonymous = !options.userId || options.userId === 'guest';
-    const maxTokens = isAnonymous ? 600 : 1200;
+    const defaultMax = isAnonymous ? 1500 : 4096;
+    const maxTokens = Math.min(options.maxOutputTokens || defaultMax, isAnonymous ? 2048 : 4096);
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), AI_RELIABILITY_POLICY.totalRequestTimeoutMs);
@@ -207,7 +210,8 @@ export const openrouterService = {
                 if (!jsonStr) continue;
                 const parsed = JSON.parse(jsonStr);
                 const delta = parsed.choices?.[0]?.delta;
-                const textContent = delta?.content || delta?.reasoning || '';
+                // Never forward private reasoning tokens to the client.
+                const textContent = delta?.content || '';
 
                 if (textContent) {
                   yield { text: textContent };
@@ -225,7 +229,7 @@ export const openrouterService = {
             const jsonStr = buffer.trim().slice(6).trim();
             const parsed = JSON.parse(jsonStr);
             const delta = parsed.choices?.[0]?.delta;
-            const textContent = delta?.content || delta?.reasoning || '';
+            const textContent = delta?.content || '';
             if (textContent) {
               yield { text: textContent };
             }

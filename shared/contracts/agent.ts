@@ -34,6 +34,7 @@ export const AgentExecutionResultSchema = z.object({
     sourceVersion: z.string().max(128).optional(),
     fileKind: z.enum(['text', 'markdown', 'csv', 'json', 'pdf', 'docx', 'pptx', 'xlsx', 'image', 'code']).optional() satisfies z.ZodType<SupportedFileKind | undefined>,
     filename: z.string().max(500),
+    url: z.string().url().max(600).optional(),
     page: z.number().int().positive().optional(),
     slide: z.number().int().positive().optional(),
     sheet: z.string().max(240).optional(),

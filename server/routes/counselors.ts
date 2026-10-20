@@ -1,6 +1,6 @@
 import { calculatePhq9Severity } from '../../shared/clinical/scoring.js';
 import { Router, Request, Response } from 'express';
-import { requireAuth, requireRole } from '../middleware/auth.js';
+import { optionalAuth, requireAuth, requireRole } from '../middleware/auth.js';
 import { prisma } from '../database.js';
 import { consentService } from '../services/consentService.js';
 import { normalizeRole } from '../middleware/auth.js';
@@ -8,6 +8,23 @@ import { getAssignedStudentUserIds } from '../services/healthDataAuth.js';
 import { redisService } from '../services/redisService.js';
 
 const router = Router();
+
+function resolveTimeZone(candidate: unknown, fallback = 'Asia/Jakarta'): string {
+  const values = [candidate, fallback, 'Asia/Jakarta'];
+  for (const value of values) {
+    if (typeof value !== 'string' || !value.trim() || value.length > 100) continue;
+    try {
+      new Intl.DateTimeFormat('id-ID', { timeZone: value }).format();
+      return value;
+    } catch { /* Ignore invalid IANA timezone names. */ }
+  }
+  return 'Asia/Jakarta';
+}
+
+function getTodayName(timeZone: string): string {
+  const day = new Intl.DateTimeFormat('id-ID', { timeZone, weekday: 'long' }).format(new Date());
+  return day.charAt(0).toLocaleUpperCase('id-ID') + day.slice(1);
+}
 
 const MOCK_COUNSELORS = [
   {
@@ -176,10 +193,14 @@ const INITIAL_RISK_ALERTS = [
   }
 ];
 
-router.get(['/', '/counselors', '/api/counselors', '/api/v1/counselors'], async (req: Request, res: Response) => {
+router.get(['/', '/counselors', '/api/counselors', '/api/v1/counselors'], optionalAuth, async (req: Request, res: Response) => {
   if (process.env.SERVER_DEMO_MODE === 'true') {
+    const timeZone = resolveTimeZone(req.query.timeZone);
+    const todayName = getTodayName(timeZone);
     return res.json(MOCK_COUNSELORS.map(m => ({
       ...m,
+      nextAvailableSlot: `Jadwal rutin: ${m.availableDays.join(', ')}`,
+      availableToday: m.availableDays.includes(todayName),
       isDemoData: true,
       isVerified: false
     })));
@@ -190,8 +211,17 @@ router.get(['/', '/counselors', '/api/counselors', '/api/v1/counselors'], async 
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 50));
     const format = (req.query.format as string) || 'array';
     const offset = (page - 1) * limit;
+    const campusId = req.user?.campusId ?? null;
+    let campusTimeZone = 'Asia/Jakarta';
+    if (campusId) {
+      const campus = await prisma.campuses.findUnique({ where: { id: campusId }, select: { isActive: true, timeZone: true } });
+      if (!campus?.isActive) return res.json([]);
+      campusTimeZone = campus.timeZone || campusTimeZone;
+    }
+    const timeZone = resolveTimeZone(req.query.timeZone, campusTimeZone);
+    const todayName = getTodayName(timeZone);
 
-    const cacheKey = `counselors:list:p${page}:l${limit}:f${format}`;
+    const cacheKey = `counselors:list:c${campusId || 'unassigned'}:tz${encodeURIComponent(timeZone)}:d${todayName}:p${page}:l${limit}:f${format}`;
     const cached = await redisService.get<{ data: any; headers: Record<string, any> }>(cacheKey);
 
     if (cached) {
@@ -207,15 +237,15 @@ router.get(['/', '/counselors', '/api/counselors', '/api/v1/counselors'], async 
     res.setHeader('X-Cache', 'MISS');
 
     const [total, dbCounselors] = await Promise.all([
-      prisma.counselors.count({ where: { isDemoData: false } }),
+      prisma.counselors.count({ where: { isDemoData: false, campusId } }),
       prisma.counselors.findMany({
-        where: { isDemoData: false },
+        where: { isDemoData: false, campusId },
         take: limit,
         skip: offset,
         orderBy: { name: 'asc' }
       })
     ]);
-    
+
     if (dbCounselors.length === 0) {
       res.setHeader('X-Total-Count', total);
       res.setHeader('X-Page', page);
@@ -223,7 +253,7 @@ router.get(['/', '/counselors', '/api/counselors', '/api/v1/counselors'], async 
       res.setHeader('X-Total-Pages', Math.ceil(total / limit) || 1);
       return res.json([]);
     }
-    
+
     const formattedCounselors = dbCounselors.map(c => {
       let specialties: string[];
       let availability: string[];
@@ -238,11 +268,9 @@ router.get(['/', '/counselors', '/api/counselors', '/api/v1/counselors'], async 
         try { languages = JSON.parse(c.languages); } catch (e) {}
       }
 
-      // Authoritative day calculation: check whether today is in counselor's schedule
-      const daysMap = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
-      const todayName = daysMap[new Date().getDay()];
+      // Match the visitor's local calendar day, supplied by the client and validated above.
       const isAvailableToday = Array.isArray(availability) && availability.includes(todayName);
-      
+
       return {
         id: c.id,
         name: c.name,
@@ -259,7 +287,7 @@ router.get(['/', '/counselors', '/api/counselors', '/api/v1/counselors'], async 
         contactPhone: c.contactPhone || '',
         contactWhatsapp: c.contactWhatsapp || '',
         availableDays: availability,
-        nextAvailableSlot: Array.isArray(availability) && availability.length > 0 ? `Tersedia: ${availability.join(', ')}` : 'Sesuai Jadwal',
+        nextAvailableSlot: Array.isArray(availability) && availability.some(Boolean) ? `Jadwal rutin: ${availability.filter(Boolean).join(', ')}` : 'Jadwal belum diatur',
         availableToday: isAvailableToday,
         languages,
         bio: c.bio || '',
@@ -312,9 +340,9 @@ router.get(
 
     try {
       const scopedStudentIds = await getAssignedStudentUserIds(req.user!.userId);
-      const counselor = await prisma.counselors.findFirst({ where: { userId: req.user!.userId }, select: { id: true } });
+      const counselor = await prisma.counselors.findFirst({ where: { userId: req.user!.userId, campusId: req.user!.campusId ?? null }, select: { id: true } });
       const scopedScreening = { userId: { in: scopedStudentIds } };
-      const scopedAppointment = { counselorId: counselor?.id || '__none__' };
+      const scopedAppointment = { counselorId: counselor?.id || '__none__', campusId: req.user!.campusId ?? null };
       const [totalSessions, userCount, allScreenings, highRiskScreenings, appointments] = await Promise.all([
         prisma.appointments.count({ where: scopedAppointment }),
         prisma.users.count({ where: { id: { in: scopedStudentIds } } }),
@@ -329,7 +357,7 @@ router.get(
             ]
           }
         }),
-        prisma.appointments.findMany({ where: scopedAppointment, select: { notes: true, scheduledAt: true, status: true } })
+        prisma.appointments.findMany({ where: scopedAppointment, select: { userId: true, notes: true, scheduledAt: true, status: true } })
       ]);
 
       const dist = { minimal: 0, mild: 0, moderate: 0, severe: 0 };
@@ -359,8 +387,15 @@ router.get(
       };
 
       if (appointments.length > 0) {
+        const consentByUser = await consentService.getBatchUserConsents(
+          appointments.map(appointment => appointment.userId).filter((userId): userId is string => Boolean(userId))
+        );
         for (const apt of appointments) {
-          const note = (apt.notes || '').toLowerCase();
+          const rawNote = apt.notes || '';
+          const isScreeningReferral = /^\s*\[Rujukan Skrining Mandiri\]/i.test(rawNote);
+          if (isScreeningReferral && consentByUser.get(apt.userId || '')?.consentForCounselorSharing !== true) continue;
+
+          const note = rawNote.toLowerCase();
           if (note.includes('akademik') || note.includes('skripsi')) concernCounts['Kendala Akademik & Skripsi']++;
           else if (note.includes('cemas') || note.includes('anxiety') || note.includes('burnout')) concernCounts['Kecemasan & Burnout']++;
           else if (note.includes('hubungan') || note.includes('teman') || note.includes('keluarga')) concernCounts['Hubungan & Sosial Kampus']++;

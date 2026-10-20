@@ -12,6 +12,7 @@ import { useWorkspaceFileIngestion } from '../../features/workspace/hooks/useWor
 import { processFileForWorkspace } from '../../features/workspace/services/fileIngestionService';
 import { AcademicPromptPill, AcademicTaskTemplate, StarterTaskItem, WorkspaceArtifact } from '../../features/workspace/types';
 import { loadWorkspaceModelPreference, readWorkspaceModelPreference, saveWorkspaceModelPreference } from '../../features/workspace/utils/workspaceModelPreference';
+import { STARTER_TASKS } from '../../features/workspace/constants/workspaceConstants';
 
 vi.mock('../../features/workspace/services/fileIngestionService', async importOriginal => ({
   ...await importOriginal<typeof import('../../features/workspace/services/fileIngestionService')>(),
@@ -68,6 +69,19 @@ describe('RuangKerja UX foundation', () => {
       starterTasks={starterTasks} onSelectStarterTask={noop} onRetryMessage={noop} onOpenCanvas={noop} />);
     expect(screen.getByText('Mulai sesuatu')).toBeInTheDocument();
     fireEvent.click(screen.getByText('Buat outline'));
+  });
+
+  it('uses the shared starter actions and sends the selected starter prompt', () => {
+    const onSelectStarterTask = vi.fn();
+    render(<WorkspaceConversation messages={[]} activeStreamingMessage={null} isStreaming={false} artifacts={[]}
+      starterTasks={STARTER_TASKS} onSelectStarterTask={onSelectStarterTask} onRetryMessage={noop} onOpenCanvas={noop} />);
+
+    for (const task of STARTER_TASKS) {
+      expect(screen.getByRole('button', { name: new RegExp(task.title) })).toBeInTheDocument();
+      expect(screen.getByText(task.subtitle)).toBeInTheDocument();
+    }
+    fireEvent.click(screen.getByRole('button', { name: /Analisis dokumen/ }));
+    expect(onSelectStarterTask).toHaveBeenCalledWith(STARTER_TASKS[0].prompt);
   });
 
   it('shows a loading status before initial messages arrive', () => {
@@ -140,13 +154,13 @@ describe('RuangKerja UX foundation', () => {
     expect(screen.getByRole('button', { name: 'Kirim Pesan' })).toBeDisabled();
   });
 
-  it('opens the model picker, searches and selects a model', async () => {
+  it('opens the model picker and selects an official profile', async () => {
     const { props } = renderComposer();
     fireEvent.click(await screen.findByRole('button', { name: 'Pilih model, Gemini 3.8 Flash' }));
-    expect(screen.getByRole('listbox', { name: 'Model AI' })).toBeInTheDocument();
-    fireEvent.change(screen.getByRole('textbox', { name: 'Cari model' }), { target: { value: 'DeepSeek V3' } });
-    fireEvent.click(screen.getByRole('option', { name: /DeepSeek V3 \(Chat\)/ }));
-    expect(props.onModelChange).toHaveBeenCalledWith('deepseek-chat');
+    expect(screen.getByRole('listbox', { name: 'Profil AI RuangKerja' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('option', { name: /Kerja Hard/ }));
+    expect(props.onModelChange).toHaveBeenCalledWith('kerja-hard');
+
   });
 
   it('keeps AI controls closed during streaming', () => {
@@ -160,10 +174,10 @@ describe('RuangKerja UX foundation', () => {
     const trigger = await screen.findByRole('button', { name: 'Pilih model, Gemini 3.8 Flash' });
     fireEvent.click(trigger);
     expect(trigger).toHaveAttribute('aria-expanded', 'true');
-    const search = screen.getByRole('textbox', { name: 'Cari model' });
+    const search = screen.getByRole('listbox');
     fireEvent.keyDown(search, { key: 'ArrowDown' });
     fireEvent.keyDown(search, { key: 'Enter' });
-    expect(props.onModelChange).toHaveBeenCalledWith('deepseek-chat');
+    expect(props.onModelChange).toHaveBeenCalled();
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
   });
 
@@ -234,6 +248,18 @@ describe('RuangKerja UX foundation', () => {
     expect(screen.getByRole('button', { name: 'Template' })).toBeInTheDocument();
   });
 
+  it('keeps the full active context available in the compact composer control', () => {
+    const onOpenContext = vi.fn();
+    renderComposer({ onOpenContext, workspaceContextSummary: '1 dokumen aktif · Proposal' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Buka panel konteks: 1 dokumen aktif · Proposal' }));
+    expect(onOpenContext).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole('button', { name: 'AI & Opsi' }));
+    const options = screen.getByRole('dialog', { name: 'AI & Opsi' });
+    expect(within(options).getByText(/Konteks tambahan untuk pesan berikutnya:/)).toBeInTheDocument();
+    expect(within(options).getByText(/1 dokumen aktif · Proposal/)).toBeInTheDocument();
+  });
+
   it('exposes attachment status and removal action', () => {
     const { props } = renderComposer({ attachedFile: { name: 'paper.pdf', size: 2048, status: 'processing' } });
     expect(screen.getByText('paper.pdf')).toBeInTheDocument();
@@ -248,6 +274,16 @@ describe('RuangKerja UX foundation', () => {
       onConfirmClearWorkspace={noop} />);
     expect(screen.getByRole('button', { name: 'Canvas' })).toBeInTheDocument();
     expect(screen.getByText('Bab Pendahuluan')).toBeInTheDocument();
+  });
+
+  it('keeps the complete workspace title available when the header has to wrap it', () => {
+    const workspaceTitle = 'Proposal Program Pendampingan Mahasiswa Tahun Akademik';
+    render(<WorkspaceHeader workspaceTitle={workspaceTitle} activeArtifact={null} isCanvasOpen mobileActiveTab="chat" hasUnreadArtifact={false}
+      onSetMobileActiveTab={noop} onToggleCanvas={noop} onCreateNewArtifact={noop} onOpenTemplateGallery={noop}
+      onConfirmClearWorkspace={noop} />);
+    const title = screen.getByText(workspaceTitle);
+    expect(title).toHaveAttribute('title', workspaceTitle);
+    expect(title).toHaveClass('line-clamp-2');
   });
 
   it('opens the Context tab from compact workspace navigation', () => {
@@ -358,6 +394,57 @@ describe('RuangKerja UX foundation', () => {
       onSelectStarterTask={noop} onRetryMessage={noop} onOpenCanvas={noop} onSendToCanvas={onSendToCanvas} />);
     fireEvent.click(screen.getByRole('button', { name: 'Kirim ke Canvas' }));
     expect(onSendToCanvas).toHaveBeenCalledWith('Ringkasan hasil penelitian.');
+  });
+
+  it('keeps the current message anchored when older rows are prepended and content below reflows', async () => {
+    let trailingContentExpansion = 0;
+    const initialMessages = [
+      { id: 'm51', role: 'user' as const, content: 'Pesan 51' },
+      { id: 'm52', role: 'assistant' as const, content: 'Pesan 52' }
+    ];
+    function ConversationHarness() {
+      const [messages, setMessages] = React.useState(initialMessages);
+      const [hasOlderMessages, setHasOlderMessages] = React.useState(true);
+      const [isLoadingOlderMessages, setIsLoadingOlderMessages] = React.useState(false);
+      const loadOlderMessages = async () => {
+        setIsLoadingOlderMessages(true);
+        await Promise.resolve();
+        trailingContentExpansion = 100;
+        setMessages(current => [
+          { id: 'm49', role: 'user' as const, content: 'Pesan 49' },
+          { id: 'm50', role: 'assistant' as const, content: 'Pesan 50' },
+          ...current
+        ]);
+        setHasOlderMessages(false);
+        setIsLoadingOlderMessages(false);
+        return true;
+      };
+      return <WorkspaceConversation messages={messages} activeStreamingMessage={null} isStreaming={false} artifacts={[]}
+        starterTasks={[]} onSelectStarterTask={noop} onRetryMessage={noop} onOpenCanvas={noop}
+        hasOlderMessages={hasOlderMessages} isLoadingOlderMessages={isLoadingOlderMessages}
+        onLoadOlderMessages={loadOlderMessages} scrollToMessageId="m52" />;
+    }
+
+    render(<ConversationHarness />);
+    const log = screen.getByRole('log', { name: 'Percakapan RuangKerja' });
+    Object.defineProperty(log, 'scrollHeight', { configurable: true, get: () => log.querySelectorAll('[data-workspace-message-id]').length * 200 + trailingContentExpansion });
+    Object.defineProperty(log, 'clientHeight', { configurable: true, value: 100 });
+    Object.defineProperty(log, 'scrollTop', { configurable: true, writable: true, value: 50 });
+    const anchor = log.querySelector<HTMLElement>('[data-workspace-message-id="m51"]')!;
+    const getAnchorBounds = vi.spyOn(anchor, 'getBoundingClientRect').mockImplementation(() => {
+      const top = 250 + (log.querySelectorAll('[data-workspace-message-id]').length - 2) * 200;
+      return { x: 0, y: top, top, right: 100, bottom: top + 40, left: 0, width: 100, height: 40, toJSON: () => ({}) } as DOMRect;
+    });
+    fireEvent.scroll(log);
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Muat pesan sebelumnya' })); });
+
+    expect(log.querySelectorAll('[data-workspace-message-id]')).toHaveLength(4);
+    expect((log as HTMLElement).scrollTop).toBe(450);
+    // A Markdown row below the anchor can finish layout while the older page is being prepended.
+    expect((log as HTMLElement).scrollTop).not.toBe(550);
+    expect(getAnchorBounds).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole('button', { name: 'Muat pesan sebelumnya' })).not.toBeInTheDocument();
   });
 
   it('rejects unsupported file types without starting an upload', () => {

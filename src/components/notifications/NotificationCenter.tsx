@@ -72,7 +72,7 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ isOpen, 
       if (diffMins < 1) return 'Baru saja';
       if (diffMins < 60) return `${diffMins} menit lalu`;
       if (diffHrs < 24) return `${diffHrs} jam lalu`;
-      
+
       return date.toLocaleDateString('id-ID', {
         day: 'numeric',
         month: 'short',
@@ -91,7 +91,7 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ isOpen, 
 
       {/* Drawer Container */}
       <div className="relative w-full max-w-[380px] surface-card h-full shadow-2xl flex flex-col justify-between border-l border-default animate-slide-right">
-        
+
         {/* Header */}
         <div className="p-3.5 sm:p-4 border-b border-default flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2.5">
@@ -123,7 +123,7 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ isOpen, 
               onClick={() => setActiveTab('all')}
               className={`px-3 py-1.5 min-h-[36px] text-xs font-semibold rounded-xl transition-all cursor-pointer flex items-center justify-center active:scale-[0.98] ${
                 activeTab === 'all'
-                  ? 'bg-teal-600 text-white shadow-3xs'
+                  ? 'bg-teal-700 text-white shadow-3xs'
                   : 'text-secondary hover:text-primary hover:bg-slate-200/50 dark:hover:bg-slate-800/50'
               }`}
             >
@@ -133,7 +133,7 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ isOpen, 
               onClick={() => setActiveTab('unread')}
               className={`px-3 py-1.5 min-h-[36px] text-xs font-semibold rounded-xl transition-all cursor-pointer flex items-center justify-center active:scale-[0.98] ${
                 activeTab === 'unread'
-                  ? 'bg-teal-600 text-white shadow-3xs'
+                  ? 'bg-teal-700 text-white shadow-3xs'
                   : 'text-secondary hover:text-primary hover:bg-slate-200/50 dark:hover:bg-slate-800/50'
               }`}
             >
@@ -167,9 +167,9 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ isOpen, 
         <div className="flex-1 overflow-y-auto p-3 sm:p-3.5 space-y-2 custom-scrollbar surface-card">
           {filtered.length === 0 ? (
             <div className="py-12">
-              <EmptyState 
-                icon="info" 
-                title={activeTab === 'unread' ? 'Tidak ada pesan belum dibaca.' : 'Kotak masuk kosong.'} 
+              <EmptyState
+                icon="info"
+                title={activeTab === 'unread' ? 'Tidak ada pesan belum dibaca.' : 'Kotak masuk kosong.'}
                 description="Notifikasi mengenai konsultasi dan info penting akan masuk ke sini."
                 className="border-none shadow-none"
               />
@@ -240,7 +240,7 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ isOpen, 
         {/* Footer info lock */}
         <div className="p-3 surface-muted border-t border-default text-center shrink-0">
           <p className="text-[10px] text-secondary leading-snug font-medium">
-            Notifikasi Anda disimpan secara lokal & privat.
+            Notifikasi disimpan di browser ini per akun; orang lain yang memakai browser ini mungkin dapat melihatnya.
           </p>
         </div>
       </div>

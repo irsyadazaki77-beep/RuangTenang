@@ -16,7 +16,10 @@ function setValidProductionEnvironment() {
   process.env.JWT_SECRET = crypto.randomBytes(32).toString('hex');
   process.env.ENCRYPTION_KEY = crypto.randomBytes(32).toString('hex');
   process.env.BLIND_INDEX_SECRET = crypto.randomBytes(32).toString('hex');
+  process.env.BACKUP_ENCRYPTION_KEY = crypto.randomBytes(32).toString('hex');
   process.env.DATABASE_URL = 'postgresql://fixture:fixture@localhost:5432/fixture';
+  process.env.APP_ORIGIN = 'https://fixture.example.test';
+  process.env.CORS_ALLOWED_ORIGINS = 'https://fixture.example.test';
   delete process.env.TURN_URL;
   delete process.env.TURN_USERNAME;
   delete process.env.TURN_SHARED_SECRET;
@@ -134,7 +137,7 @@ describe('Fase 12 production secrets hardening', () => {
     expect(dockerignore).toMatch(/^\.env\*/m);
     expect(dockerignore).toMatch(/^!\.env\.example$/m);
     expect(compose).not.toMatch(/\.env\.production\s*:/i);
-    expect(compose).toContain('DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}');
+    expect(compose).toContain('DATABASE_URL_FILE: /run/secrets/database_url');
     expect(dockerfile).not.toMatch(/^ARG\s+(JWT_SECRET|ENCRYPTION_KEY|BLIND_INDEX_SECRET|DATABASE_URL|GEMINI_API_KEY)/mi);
     expect(dockerfile).not.toMatch(/^ENV\s+(JWT_SECRET|ENCRYPTION_KEY|BLIND_INDEX_SECRET|DATABASE_URL|GEMINI_API_KEY)/mi);
     expect(viteConfig).toContain("envPrefix: 'VITE_PUBLIC_'");

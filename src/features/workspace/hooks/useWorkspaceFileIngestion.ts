@@ -3,6 +3,7 @@ import { WorkspaceFileAttachment } from '../types.js';
 import { pollProcessingStatus, processFileForWorkspace, retryWorkspaceFile, validateFileHeader } from '../services/fileIngestionService.js';
 import { WorkspaceApiService } from '../services/workspaceApiService.js';
 import { WorkspaceAttachmentDto } from '../services/workspaceApiService.js';
+import { showWorkspaceLoadFailureOnce } from '../utils/workspaceLoadNotice.js';
 import { MAX_WORKSPACE_ACTIVE_ATTACHMENTS } from '../../../../shared/contracts/files.js';
 import { useToast } from '../../../components/Toast';
 
@@ -30,12 +31,22 @@ function fromDto(dto: WorkspaceAttachmentDto): WorkspaceFileAttachment {
     slideCount: dto.slideCount,
     sheetCount: dto.sheetCount,
     extractionWarnings: dto.extractionWarnings,
+    ocrApplied: dto.ocrApplied,
+    visualAnalysisAvailable: dto.visualAnalysisAvailable,
+    previewOnly: dto.previewOnly,
+    ocrConfidence: dto.ocrConfidence,
+    readingUncertainty: dto.readingUncertainty,
     url: dto.url,
     createdAt: dto.createdAt
   };
 }
 
-export function useWorkspaceFileIngestion(chatId?: string) {
+export function useWorkspaceFileIngestion(
+  chatId?: string,
+  loadAttemptId?: string,
+  aiConsentAllowed: boolean | null = true,
+  onRequestAiConsent?: (cancelPendingSend?: () => void) => void
+) {
   const { showToast } = useToast();
   const [attachments, setAttachments] = useState<WorkspaceFileAttachment[]>([]);
   const [isLoadingAttachments, setIsLoadingAttachments] = useState(Boolean(chatId));
@@ -44,6 +55,7 @@ export function useWorkspaceFileIngestion(chatId?: string) {
   const attachmentsRef = useRef<WorkspaceFileAttachment[]>([]);
   const controllersRef = useRef(new Map<string, AbortController>());
   const deletingAttachmentsRef = useRef(new Set<string>());
+  const removingAttachmentsRef = useRef(new Set<string>());
   const filesRef = useRef(new Map<string, File>());
   const queueRef = useRef<QueuedAttachmentOperation[]>([]);
   const activeUploadsRef = useRef(0);
@@ -81,6 +93,12 @@ export function useWorkspaceFileIngestion(chatId?: string) {
         updateAttachments(list => list.map(item => item.id === attachmentId
           ? { ...item, status: 'processing', errorMessage: 'Masih diproses. Periksa kembali sebentar lagi.' }
           : item));
+      } else if (result.errorMessage !== 'Pemrosesan dibatalkan.') {
+        const message = result.errorMessage || 'Status dokumen tidak dapat diperiksa.';
+        updateAttachments(list => list.map(item => item.id === attachmentId
+          ? { ...item, status: 'processing', errorMessage: message }
+          : item));
+        showToastRef.current(message, 'error');
       }
     }).finally(() => {
       if (controllersRef.current.get(key) === controller) controllersRef.current.delete(key);
@@ -170,6 +188,11 @@ export function useWorkspaceFileIngestion(chatId?: string) {
   }, [pumpQueue, updateAttachments]);
 
   const handleProcessFiles = useCallback((files: File[]) => {
+    if (aiConsentAllowed !== true) {
+      onRequestAiConsent?.();
+      showToastRef.current('Setujui pemrosesan AI terlebih dahulu. Berkas belum diunggah; setelah itu pilih ulang berkasnya.', 'info');
+      return;
+    }
     let activeCount = attachmentsRef.current.length;
     for (const file of files) {
       const active = attachmentsRef.current;
@@ -201,7 +224,7 @@ export function useWorkspaceFileIngestion(chatId?: string) {
       }
       queueOperation({ type: 'upload', file, clientId });
     }
-  }, [queueOperation, updateAttachments]);
+  }, [aiConsentAllowed, onRequestAiConsent, queueOperation, updateAttachments]);
 
   const handleFileUploadChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []);
@@ -224,7 +247,8 @@ export function useWorkspaceFileIngestion(chatId?: string) {
 
   const removeAttachment = useCallback(async (target: WorkspaceFileAttachment) => {
     const key = target.clientId || target.id;
-    if (!key) return;
+    if (!key || removingAttachmentsRef.current.has(key)) return;
+    removingAttachmentsRef.current.add(key);
     const operationGeneration = generationRef.current;
     const operationChatId = chatId;
     const stillCurrent = () => generationRef.current === operationGeneration && chatId === operationChatId;
@@ -240,26 +264,41 @@ export function useWorkspaceFileIngestion(chatId?: string) {
       try {
         await WorkspaceApiService.deleteAttachment(serverId, chatId);
       } catch (error) {
-        if (!stillCurrent()) return;
+        if (!stillCurrent()) {
+          deletingAttachmentsRef.current.delete(key);
+          removingAttachmentsRef.current.delete(key);
+          return;
+        }
         console.error('[Workspace] Attachment deletion failed:', error);
         updateAttachments(list => list.map(attachment => (attachment.clientId || attachment.id) === key
           ? { ...attachment, status: target.status, errorMessage: 'Dokumen gagal dihapus. Dokumen masih aktif.' }
           : attachment));
         if (target.status === 'processing' && serverId) watchProcessing(serverId, key);
         deletingAttachmentsRef.current.delete(key);
+        removingAttachmentsRef.current.delete(key);
         showToastRef.current('Dokumen gagal dihapus. Dokumen masih aktif.', 'error');
         return;
       }
     }
-    if (!stillCurrent()) return;
+    if (!stillCurrent()) {
+      deletingAttachmentsRef.current.delete(key);
+      removingAttachmentsRef.current.delete(key);
+      return;
+    }
     filesRef.current.delete(key);
     updateAttachments(list => list.filter(attachment => (attachment.clientId || attachment.id) !== key));
     deletingAttachmentsRef.current.delete(key);
+    removingAttachmentsRef.current.delete(key);
   }, [chatId, updateAttachments, watchProcessing]);
 
   const retryAttachment = useCallback((target: WorkspaceFileAttachment) => {
     const key = target.clientId || target.id;
     if (!key || target.status !== 'failed') return;
+    if (aiConsentAllowed !== true) {
+      onRequestAiConsent?.();
+      showToastRef.current('Setujui pemrosesan AI sebelum mencoba ulang ekstraksi berkas.', 'info');
+      return;
+    }
     if (target.id) {
       queueOperation({ type: 'retry', clientId: key, attachmentId: target.id });
     } else {
@@ -267,24 +306,32 @@ export function useWorkspaceFileIngestion(chatId?: string) {
       if (localFile) queueOperation({ type: 'upload', clientId: key, file: localFile });
       else showToastRef.current('Pilih ulang dokumen sumber untuk mencoba pemrosesan.', 'error');
     }
-  }, [queueOperation]);
+  }, [aiConsentAllowed, onRequestAiConsent, queueOperation]);
+
+  const recheckAttachment = useCallback((target: WorkspaceFileAttachment) => {
+    if (target.status !== 'processing' || !target.id) return;
+    const key = target.clientId || target.id;
+    updateAttachments(list => list.map(item => item.id === target.id ? { ...item, errorMessage: undefined } : item));
+    watchProcessing(target.id, key);
+  }, [updateAttachments, watchProcessing]);
 
   const openFilePicker = useCallback(() => fileInputRef.current?.click(), []);
 
   useLayoutEffect(() => {
+    let isActive = true;
     const generation = ++generationRef.current;
     isMountedRef.current = true;
     const controller = new AbortController();
     const requestControllers = controllersRef.current;
     const deletingAttachments = deletingAttachmentsRef.current;
+    const removingAttachments = removingAttachmentsRef.current;
     const localFiles = filesRef.current;
-    let active = true;
     attachmentsRef.current = [];
     setAttachments([]);
     setIsLoadingAttachments(Boolean(chatId));
     if (chatId) {
       void WorkspaceApiService.fetchChatAttachments(chatId, controller.signal).then(serverAttachments => {
-        if (!active || !isMountedRef.current) return;
+        if (!isActive || !isMountedRef.current) return;
         const localAttachments = attachmentsRef.current.filter(attachment => !attachment.id);
         const mapped = serverAttachments.map(fromDto);
         const seen = new Set(mapped.map(attachment => `${attachment.name.toLocaleLowerCase()}:${attachment.size}`));
@@ -296,7 +343,7 @@ export function useWorkspaceFileIngestion(chatId?: string) {
           const pollKey = `server:${attachment.id}`;
           controllersRef.current.set(pollKey, statusController);
           void pollProcessingStatus(attachment.id!, 15, 800, statusController.signal, chatId).then(result => {
-            if (!active || statusController.signal.aborted || generationRef.current !== generation || !attachmentsRef.current.some(item => item.id === attachment.id)) return;
+            if (!isActive || statusController.signal.aborted || generationRef.current !== generation || !attachmentsRef.current.some(item => item.id === attachment.id)) return;
             if (result.attachment) {
               const updated = fromDto(result.attachment);
               updateAttachments(list => list.map(item => item.id === updated.id ? updated : item));
@@ -305,31 +352,45 @@ export function useWorkspaceFileIngestion(chatId?: string) {
                 ? { ...item, status: 'processing', errorMessage: 'Masih diproses. Periksa kembali sebentar lagi.' }
                 : item));
             } else {
-              if (result.errorMessage !== 'Pemrosesan dibatalkan.') showToastRef.current(result.errorMessage || 'Status dokumen tidak dapat diperiksa.', 'error');
+              if (result.errorMessage !== 'Pemrosesan dibatalkan.') {
+                const message = result.errorMessage || 'Status dokumen tidak dapat diperiksa.';
+                updateAttachments(list => list.map(item => item.id === attachment.id
+                  ? { ...item, status: 'processing', errorMessage: message }
+                  : item));
+                showToastRef.current(message, 'error');
+              }
             }
-          }).finally(() => controllersRef.current.delete(pollKey));
+          }).finally(() => {
+            if (controllersRef.current.get(pollKey) === statusController) controllersRef.current.delete(pollKey);
+          });
         }
       }).catch(error => {
         if (!controller.signal.aborted) {
           console.error('[Workspace] Attachment list fetch failed:', error);
-          showToastRef.current('Dokumen Workspace gagal dimuat.', 'error');
+          const status = (error as { status?: number } | undefined)?.status;
+          // A stale session is refreshed by AuthContext; a missing/unauthorized
+          // chat is already explained by the conversation loader.
+          if (status !== 401 && status !== 404) {
+            showWorkspaceLoadFailureOnce(loadAttemptId || `workspace-load:${chatId}`, showToastRef.current);
+          }
         }
       }).finally(() => {
-        if (active && isMountedRef.current) setIsLoadingAttachments(false);
+        if (isActive && isMountedRef.current) setIsLoadingAttachments(false);
       });
     }
     return () => {
-      active = false;
+      isActive = false;
       isMountedRef.current = false;
       generationRef.current += 1;
       controller.abort();
       for (const request of requestControllers.values()) request.abort();
       requestControllers.clear();
       deletingAttachments.clear();
+      removingAttachments.clear();
       queueRef.current = [];
       localFiles.clear();
     };
-  }, [chatId, updateAttachments]);
+  }, [chatId, loadAttemptId, updateAttachments]);
 
   return {
     attachments,
@@ -342,6 +403,7 @@ export function useWorkspaceFileIngestion(chatId?: string) {
     handleDrop,
     removeAttachment,
     retryAttachment,
+    recheckAttachment,
     openFilePicker
   };
 }

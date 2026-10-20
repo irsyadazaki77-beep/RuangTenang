@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Clock, Sparkles, Check, Calendar, Video, ArrowRight } from 'lucide-react';
 import { apiClient } from '../../lib/apiClient';
+import { getSafeExternalUrl } from '../../lib/safeUrl';
 
 interface SelfCareTask {
   id: string;
@@ -20,7 +21,7 @@ export const TimelineTasks: React.FC<TimelineTasksProps> = ({
   onNavigateToSchedule
 }) => {
   const [appointments, setAppointments] = useState<any[]>([]);
-  
+
   useEffect(() => {
     apiClient.get<any[]>('/api/v1/appointments?limit=all')
       .then(res => {
@@ -57,7 +58,7 @@ export const TimelineTasks: React.FC<TimelineTasksProps> = ({
               <div>
                 <h4 className="text-sm font-semibold text-primary">Belum Ada Sesi Konseling</h4>
                 <p className="text-xs text-secondary mt-0.5 max-w-sm mx-auto">
-                  Jadwalkan sesi konsultasi 1-on-1 dengan psikolog kampus untuk pendampingan mental terarah.
+                  Lihat profil konselor yang tersedia dan informasi layanan sebelum mengajukan sesi.
                 </p>
               </div>
               {onNavigateToSchedule && (
@@ -81,29 +82,32 @@ export const TimelineTasks: React.FC<TimelineTasksProps> = ({
                       <span className="text-[11px] sm:text-xs font-semibold text-primary flex items-center gap-1.5">
                         <Clock className="w-3.5 h-3.5 text-secondary" /> {apt.date} • {apt.time || apt.timeSlot}
                       </span>
-                      <span className={`px-2 py-0.5 text-[10px] font-bold rounded uppercase tracking-wider ${isUpcoming ? 'bg-teal-600 text-white' : 'surface-muted text-secondary border border-default'}`}>
+                      <span className={`px-2 py-0.5 text-[10px] font-bold rounded uppercase tracking-wider ${isUpcoming ? 'bg-teal-700 text-white' : 'surface-muted text-secondary border border-default'}`}>
                         {isUpcoming ? 'Terjadwal' : 'Selesai'}
                       </span>
                     </div>
                     <h4 className="text-xs sm:text-sm font-semibold text-primary">
-                      Konseling - {apt.counselorName || 'Psikolog Kampus'}
+                      Konseling - {apt.counselorName || 'Konselor Kampus'}
                     </h4>
                     {apt.notes && <p className="text-xs text-secondary leading-normal">{apt.notes}</p>}
-                    {apt.meetingLink && isUpcoming && (
-                      <div className="text-xs text-secondary surface-muted p-2 rounded-lg border border-default flex items-center justify-between gap-2 overflow-hidden">
-                        <span className="truncate flex items-center gap-1">
-                          <Video className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" /> Link Sesi
-                        </span>
-                        <a 
-                          href={apt.meetingLink} 
-                          target="_blank" 
-                          rel="noreferrer" 
-                          className="text-xs bg-teal-50 dark:bg-teal-950/60 hover:bg-teal-100 dark:hover:bg-teal-900 text-teal-700 dark:text-teal-300 px-2.5 py-1 rounded-md font-semibold shrink-0"
-                        >
-                          Buka Ruang Sesi
-                        </a>
-                      </div>
-                    )}
+                    {(() => {
+                      const safeMeetingUrl = getSafeExternalUrl(apt.meetingLink);
+                      return safeMeetingUrl && isUpcoming ? (
+                        <div className="text-xs text-secondary surface-muted p-2 rounded-lg border border-default flex items-center justify-between gap-2 overflow-hidden">
+                          <span className="truncate flex items-center gap-1">
+                            <Video className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" /> Link Sesi
+                          </span>
+                          <a
+                            href={safeMeetingUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs bg-teal-50 dark:bg-teal-950/60 hover:bg-teal-100 dark:hover:bg-teal-900 text-teal-700 dark:text-teal-300 px-2.5 py-1 rounded-md font-semibold shrink-0"
+                          >
+                            Buka Ruang Sesi
+                          </a>
+                        </div>
+                      ) : null;
+                    })()}
                   </div>
                 </div>
               );
@@ -118,21 +122,21 @@ export const TimelineTasks: React.FC<TimelineTasksProps> = ({
             <span className="text-xs sm:text-sm font-bold text-primary">Latihan Mandiri Harian</span>
           </div>
           <p className="text-[11px] text-secondary leading-normal">
-            Selesaikan kebiasaan mikro harian untuk mendukung stabilitas emosi dan fokus studi.
+            Pilih kebiasaan mikro yang ingin dicoba hari ini, lalu tandai setelah selesai.
           </p>
 
           <div className="space-y-2">
             {selfCareChecklist.map((item) => (
-              <div 
-                key={item.id} 
+              <div
+                key={item.id}
                 onClick={() => onToggleSelfCare(item.id)}
                 className={`p-2.5 rounded-xl border transition-all cursor-pointer flex items-start gap-2.5 ${
-                  item.done 
-                    ? 'bg-teal-50/50 dark:bg-teal-950/30 border-teal-200 dark:border-teal-800 text-secondary line-through' 
+                  item.done
+                    ? 'bg-teal-50/50 dark:bg-teal-950/30 border-teal-200 dark:border-teal-800 text-secondary line-through'
                     : 'surface-card border-default text-primary hover:border-slate-300 dark:hover:border-slate-700'
                 }`}
               >
-                <div className={`w-4.5 h-4.5 rounded-md border flex items-center justify-center shrink-0 mt-0.5 transition-colors ${item.done ? 'bg-teal-600 border-teal-600 text-white' : 'border-slate-300 dark:border-slate-600 surface-card'}`}>
+                <div className={`w-4.5 h-4.5 rounded-md border flex items-center justify-center shrink-0 mt-0.5 transition-colors ${item.done ? 'bg-teal-700 border-teal-600 text-white' : 'border-slate-300 dark:border-slate-600 surface-card'}`}>
                   {item.done && <Check className="w-3 h-3 stroke-[3]" />}
                 </div>
                 <span className="text-xs font-medium leading-snug">{item.task}</span>
@@ -146,8 +150,8 @@ export const TimelineTasks: React.FC<TimelineTasksProps> = ({
               <span className="text-primary font-bold">{selfCareChecklist.filter(t => t.done).length} dari {selfCareChecklist.length} selesai</span>
             </div>
             <div className="w-16 surface-muted rounded-full h-2 overflow-hidden border border-default">
-              <div 
-                className="bg-teal-500 h-full transition-all duration-300" 
+              <div
+                className="bg-teal-500 h-full transition-all duration-300"
                 style={{ width: `${(selfCareChecklist.filter(t => t.done).length / selfCareChecklist.length) * 100}%` }}
               />
             </div>

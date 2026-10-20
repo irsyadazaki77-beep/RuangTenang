@@ -124,7 +124,93 @@ export function parseCitations(rawText: string): ParsedReference[] {
     return results;
   }
 
-  // 2. Jika bukan BibTeX, parsing baris per baris (APA, IEEE, Harvard, dsb.)
+  // 1b. Cek apakah teks mengandung struktur RIS (TY  - ... ER  -) dari Zotero / Mendeley / EndNote
+  if (/^TY\s+-\s+/m.test(text)) {
+    const risBlocks = text.split(/ER\s+-\s*$/m).map(b => b.trim()).filter(b => /TY\s+-\s+/i.test(b));
+    risBlocks.forEach((block, idx) => {
+      const lines = block.split(/\r?\n/);
+      let risType = 'article';
+      let citeKey = '';
+      let title = '';
+      const authors: string[] = [];
+      let year = '';
+      let journal = '';
+      let volume = '';
+      let issue = '';
+      let sp = '';
+      let ep = '';
+      let doi: string | undefined;
+      let url = '';
+      let publisher = '';
+
+      lines.forEach(line => {
+        const match = line.match(/^([A-Z0-9]{2})\s+-\s+(.*)$/);
+        if (!match) return;
+        const tag = match[1].toUpperCase();
+        const val = match[2].trim();
+        if (!val) return;
+
+        if (tag === 'TY') {
+          if (val === 'BOOK') risType = 'book';
+          else if (val === 'CONF' || val === 'CPAPER') risType = 'inproceedings';
+          else if (val === 'THES') risType = 'phdthesis';
+          else if (val === 'GEN') risType = 'misc';
+          else risType = 'article';
+        } else if (tag === 'ID') citeKey = val;
+        else if (tag === 'TI' || tag === 'T1') title = title || val;
+        else if (tag === 'AU' || tag === 'A1') authors.push(val);
+        else if (tag === 'PY' || tag === 'Y1' || tag === 'DA') {
+          const ym = val.match(/\b(\d{4})\b/);
+          if (ym) year = ym[1];
+        } else if (tag === 'JO' || tag === 'T2' || tag === 'JF') journal = journal || val;
+        else if (tag === 'VL') volume = val;
+        else if (tag === 'IS') issue = val;
+        else if (tag === 'SP') sp = val;
+        else if (tag === 'EP') ep = val;
+        else if (tag === 'DO') doi = cleanDOI(val);
+        else if (tag === 'UR') url = val;
+        else if (tag === 'PB') publisher = val;
+      });
+
+      const pages = sp && ep ? `${sp}-${ep}` : sp || ep || undefined;
+      if (!citeKey) {
+        const firstAuthorLast = (authors[0] || 'ref').split(/[,\s]+/)[0].toLowerCase().replace(/[^\w]/g, '') || 'ref';
+        citeKey = `${firstAuthorLast}${year || ''}_${idx + 1}`;
+      }
+
+      if (title || authors.length > 0 || doi) {
+        results.push({
+          id: `ref_ris_${Date.now()}_${idx + 1}`,
+          type: risType,
+          citeKey,
+          title,
+          authors,
+          year,
+          journal: journal || undefined,
+          volume: volume || undefined,
+          issue: issue || undefined,
+          pages,
+          doi,
+          url: url || undefined,
+          publisher: publisher || undefined,
+          raw: `${block}\nER  -`,
+          metadataProvenance: {
+            title: title ? 'parsed' : 'missing',
+            authors: authors.length ? 'parsed' : 'missing',
+            year: year ? 'parsed' : 'missing',
+            journal: journal ? 'parsed' : 'missing',
+            doi: doi ? 'parsed' : 'missing'
+          }
+        });
+      }
+    });
+
+    if (results.length > 0) {
+      return results;
+    }
+  }
+
+  // 2. Jika bukan BibTeX atau RIS, parsing baris per baris (APA, IEEE, Harvard, dsb.)
   const lines = text
     .split(/\n+/)
     .map(l => l.replace(/^[-*•\d+.\s[\]]+/, '').trim())
@@ -231,7 +317,7 @@ export function generateRIS(content: string, _defaultTitle = 'Daftar Pustaka'): 
 
   return refs.map(ref => {
     const lines: string[] = [];
-    
+
     // Tag Tipe Dokumen RIS
     let risType = 'JOUR';
     if (ref.type === 'book') risType = 'BOOK';
@@ -253,7 +339,7 @@ export function generateRIS(content: string, _defaultTitle = 'Daftar Pustaka'): 
     if (ref.journal) lines.push(`JO  - ${ref.journal}`);
     if (ref.volume) lines.push(`VL  - ${ref.volume}`);
     if (ref.issue) lines.push(`IS  - ${ref.issue}`);
-    
+
     if (ref.pages) {
       const parts = ref.pages.split(/[-–—]+/);
       if (parts[0]) lines.push(`SP  - ${parts[0].trim()}`);

@@ -74,8 +74,8 @@ router.get(['/telemetry', '/api/telemetry'], requireAuth, requireRole(['admin'])
   }
 });
 
-// Telemetry Log Creation
-router.post(['/telemetry/log', '/api/telemetry/log'], requireAuth, async (req: Request, res: Response) => {
+// Telemetry Log Creation (Admin Only)
+router.post(['/telemetry/log', '/api/telemetry/log'], requireAuth, requireRole(['admin']), async (req: Request, res: Response) => {
   try {
     const parsed = telemetryLogSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -266,9 +266,9 @@ router.get('/reports/pdf', requireAuth, requireRole(['admin']), async (req: Requ
     const { generateRectorateReport, loadRectorateReportMetrics } = await import('../services/reportGenerator.js');
     const metrics = await loadRectorateReportMetrics();
     const filePath = await generateRectorateReport(metrics);
-    
+
     await serverDb.logAudit('GENERATE_REPORT', 'Laporan rektorat bulanan (PDF) dihasilkan.', req.user!.role);
-    
+
     res.download(filePath, `Laporan_Bulanan_Rektorat_${new Date().toISOString().slice(0, 10)}.pdf`);
   } catch (err: any) {
     console.error('Error generating PDF report:', err);
@@ -281,9 +281,9 @@ router.get('/reports/excel', requireAuth, requireRole(['admin']), async (req: Re
     const { generateRectorateExcel, loadRectorateReportMetrics } = await import('../services/reportGenerator.js');
     const metrics = await loadRectorateReportMetrics();
     const filePath = await generateRectorateExcel(metrics);
-    
+
     await serverDb.logAudit('GENERATE_REPORT', 'Laporan rektorat bulanan (Excel) dihasilkan.', req.user!.role);
-    
+
     res.download(filePath, `Laporan_Bulanan_Rektorat_${new Date().toISOString().slice(0, 10)}.xlsx`);
   } catch (err: any) {
     console.error('Error generating Excel report:', err);
@@ -391,6 +391,12 @@ router.post(
               error: 'Kode MFA tidak valid atau sudah kedaluwarsa.'
             });
           }
+
+          // Invalidate single-use MFA code to prevent replay attacks
+          await prisma.users.update({
+            where: { id: adminUser.id },
+            data: { mfaCode: null, mfaToken: null, mfaExpires: null }
+          });
         }
       }
 

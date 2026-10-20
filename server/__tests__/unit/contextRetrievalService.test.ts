@@ -101,4 +101,20 @@ describe('Workspace document context retrieval', () => {
     }));
     expect(result.chunksSelected).toEqual([]);
   });
+
+  it('provides leading chunks when query has no lexical overlap so general document analysis requests succeed', async () => {
+    findChunks.mockResolvedValue([
+      { id: 'chunk-overview-1', attachmentId: 'file-agile', chunkIndex: 0, content: 'This study presents an in-depth case study on Value Chain optimization.', tokenCount: 20, isEncrypted: false, pageStart: 1 },
+      { id: 'chunk-overview-2', attachmentId: 'file-agile', chunkIndex: 1, content: 'Primary findings indicate 15% margin growth in inbound logistics.', tokenCount: 22, isEncrypted: false, pageStart: 2 }
+    ]);
+    const result = await contextRetrievalService.retrieveContext({
+      userId: 'user-a', chatId: 'workspace-1', attachmentIds: ['file-agile'],
+      userQuery: 'Analisis dokumen ini. Rangkum tujuan, temuan utama, bukti pendukung, dan pertanyaan yang belum terjawab.',
+      maxTokens: 200
+    });
+    expect(result.chunksSelected.length).toBeGreaterThan(0);
+    expect(result.chunksSelected[0].id).toBe('chunk-overview-1');
+    expect(result.contextBlock).toContain('Value Chain optimization');
+    expect(result.sourceReferences[0].filename).toBe('Agile.pdf');
+  });
 });

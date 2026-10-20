@@ -77,9 +77,8 @@ router.post(
           hasUserConsent: false,
           message: 'Sesi tamu (belum terautentikasi). Pengiriman SOS otomatis memerlukan akun terverifikasi dengan kontak darurat tersimpan di server. Silakan hubungi nomor hotline darurat resmi secara langsung.',
           hotlines: [
-            { name: 'Hotline Kemenkes RI', phone: '119' },
-            { name: 'LISA Suicide Prevention', phone: '0811-3855-472' },
-            { name: 'Pusat Krisis Kampus', phone: '021-78880123' }
+            { name: 'Dukungan psikologis awal Healing119', phone: '119 ekstensi 8', url: 'https://www.healing119.id/' },
+            { name: 'Darurat medis', phone: '119' }
           ]
         });
       }
@@ -197,7 +196,7 @@ router.post(
 
       if (gatewayResult.status === 'delivered') {
         responseStatus = 'SENT';
-        statusMessage = `Sinyal SOS darurat terkirim via SMS/WhatsApp ke ${maskedName} (${maskedPhone}).`;
+        statusMessage = `Permintaan pengiriman SOS diterima penyedia SMS/WhatsApp untuk kontak ${maskedName} (${maskedPhone}). Status ini belum memastikan pesan diterima atau dibaca oleh kontak.`;
       } else if (gatewayResult.status === 'mock_mode' || gatewayResult.status === 'not_configured') {
         responseStatus = 'SIMULATED';
         statusMessage = `Mode Simulasi: Gateway SMS produksi belum dikonfigurasi. Sinyal SOS dicatat secara internal pada server (${maskedName}: ${maskedPhone}). Untuk bantuan nyata, hubungi nomor hotline 119 / LISA.`;

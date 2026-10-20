@@ -64,7 +64,7 @@ export function useUpcomingAppointment(user: UserSession | null) {
               id: item.id,
               counselorId: item.counselorId,
               counselorName: item.counselor?.name || item.counselorName || 'Konselor Kampus',
-              counselorTitle: item.counselor?.title || 'Psikolog Klinis Kampus',
+              counselorTitle: item.counselor?.title || 'Konselor Kampus',
               counselorAvatar: item.counselor?.avatar || '',
               studentName: item.studentName || user.name,
               studentNIM: item.studentNIM || '',

@@ -88,7 +88,7 @@ export const VersionBadge: React.FC<VersionBadgeProps> = ({
       <div className={`p-4 bg-gradient-to-br from-teal-50/70 to-sky-50/50 dark:from-teal-950/30 dark:to-slate-900 border border-teal-200/80 dark:border-teal-800/80 rounded-2xl space-y-3 ${className}`}>
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-teal-600 text-white flex items-center justify-center shadow-3xs shrink-0">
+            <div className="w-9 h-9 rounded-xl bg-teal-700 text-white flex items-center justify-center shadow-3xs shrink-0">
               <Sparkles className="w-5 h-5" />
             </div>
             <div>
@@ -109,7 +109,7 @@ export const VersionBadge: React.FC<VersionBadgeProps> = ({
           <button
             type="button"
             onClick={onClick}
-            className="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 active:scale-[0.98] text-white text-xs font-bold rounded-xl transition-all shadow-3xs flex items-center gap-1.5 cursor-pointer shrink-0"
+            className="px-3 py-1.5 bg-teal-700 hover:bg-teal-800 active:scale-[0.98] text-white text-xs font-bold rounded-xl transition-all shadow-3xs flex items-center gap-1.5 cursor-pointer shrink-0"
           >
             <History className="w-3.5 h-3.5" />
             <span>Lihat Riwayat</span>
@@ -124,9 +124,9 @@ export const VersionBadge: React.FC<VersionBadgeProps> = ({
           <span className="flex items-center gap-1">
             <CheckCircle2 className="w-3.5 h-3.5 text-teal-600" /> Auto-Updated System
           </span>
-          <button 
-            type="button" 
-            onClick={onClick} 
+          <button
+            type="button"
+            onClick={onClick}
             className="text-teal-700 dark:text-teal-300 font-semibold hover:underline flex items-center gap-0.5 cursor-pointer"
           >
             Catatan Perubahan Lengkap &rarr;

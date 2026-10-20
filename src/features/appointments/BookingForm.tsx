@@ -1,4 +1,4 @@
-import { useEscapeKey } from "../../hooks/useEscapeKey";
+import { useFocusTrap } from "../../hooks/useFocusTrap";
 import React, { useState, useEffect, useRef } from "react";
 import {
   XCircle,
@@ -12,6 +12,8 @@ import { useCounselors } from "../../hooks/useCounselors";
 import { apiClient } from "../../lib/apiClient";
 import { clientDb, createOfflineIdempotencyKey } from "../../lib/clientDb";
 import { addNotification } from "../../lib/notificationStore";
+import { Avatar } from "../../components/ui/primitives/Surfaces";
+import { getAppointmentDateInputValue } from "../../lib/appointmentTime";
 
 interface BookingFormProps {
   isOpen: boolean;
@@ -39,23 +41,25 @@ export const BookingForm: React.FC<BookingFormProps> = ({
   showToast,
   onShowLimitModal,
 }) => {
-  useEscapeKey(onClose, true);
-
   const { counselors, loading } = useCounselors();
 
   const [currentStep, setCurrentStep] = useState<number>(1);
-  const [selectedConcern] = useState<string>(() => {
+  const [canShareReferralNotes, setCanShareReferralNotes] = useState(false);
+  const [selectedConcern, setSelectedConcern] = useState('');
+  useEffect(() => {
+    if (!isOpen || userSession.role !== 'mahasiswa') return;
     try {
       const savedNote = typeof window !== 'undefined' ? sessionStorage.getItem('rt_screening_referral_notes') : null;
       if (savedNote) {
         sessionStorage.removeItem('rt_screening_referral_notes');
-        return savedNote;
+        setSelectedConcern(savedNote);
+        return;
       }
     } catch {
       // ignore
     }
-    return "Kendala Akademik & Skripsi";
-  });
+    setSelectedConcern('');
+  }, [isOpen, userSession.id, userSession.role]);
   const [selectedCounselorId, setSelectedCounselorId] = useState<string>(
     selectedCounselorFromDir?.id || ""
   );
@@ -73,15 +77,16 @@ export const BookingForm: React.FC<BookingFormProps> = ({
     }
   };
 
-  const getInitialBookingDate = () => {
-    const d = new Date();
-    d.setDate(d.getDate() + 1);
-    return d.toISOString().split("T")[0];
+  const initialTimezone = getLocalTimezone();
+  const getInitialBookingDate = (appointmentTimezone: "WIB" | "WITA" | "WIT") => {
+    const tomorrow = new Date(`${getAppointmentDateInputValue(new Date(), appointmentTimezone)}T00:00:00.000Z`);
+    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+    return tomorrow.toISOString().slice(0, 10);
   };
 
-  const [date, setDate] = useState<string>(getInitialBookingDate);
+  const [timezone, setTimezone] = useState<"WIB" | "WITA" | "WIT">(initialTimezone);
+  const [date, setDate] = useState<string>(() => getInitialBookingDate(initialTimezone));
   const [timeSlot, setTimeSlot] = useState("");
-  const [timezone, setTimezone] = useState<"WIB" | "WITA" | "WIT">(getLocalTimezone());
   const [mode] = useState<"video_call">("video_call");
   const [reminderMinutes] = useState<number>(30);
   const [formError, setFormError] = useState<string | null>(null);
@@ -90,56 +95,94 @@ export const BookingForm: React.FC<BookingFormProps> = ({
 
   const [availableSlots, setAvailableSlots] = useState<string[]>([]);
   const [isFullyBooked, setIsFullyBooked] = useState(false);
-  
+  const [availabilityStatus, setAvailabilityStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
+  const [availabilityErrorMessage, setAvailabilityErrorMessage] = useState<string | null>(null);
+  const [availabilityRetryCount, setAvailabilityRetryCount] = useState(0);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const minimumDate = getAppointmentDateInputValue(new Date(), timezone);
+    setDate(currentDate => currentDate < minimumDate ? minimumDate : currentDate);
+  }, [isOpen, timezone]);
+
+  useEffect(() => {
+    if (!isOpen || userSession.role !== 'mahasiswa') return;
+    let active = true;
+    void apiClient.get<any>('/api/v1/privacy/consent').then(response => {
+      if (active && response.success) {
+        setCanShareReferralNotes(response.data?.consent?.consentForCounselorSharing === true);
+      }
+    }).catch(() => { if (active) setCanShareReferralNotes(false); });
+    return () => { active = false; };
+  }, [isOpen, userSession.id, userSession.role]);
+
 
   useEffect(() => {
     if (selectedCounselorFromDir) {
       setSelectedCounselorId(selectedCounselorFromDir.id);
+      setCurrentStep(2);
+    } else {
       setCurrentStep(1);
     }
   }, [selectedCounselorFromDir]);
 
   useEffect(() => {
-    if (!selectedCounselorId || !date) return;
+    if (!selectedCounselorId || !date) {
+      setAvailableSlots([]);
+      setIsFullyBooked(false);
+      setAvailabilityStatus('idle');
+      setAvailabilityErrorMessage(null);
+      return;
+    }
     let isMounted = true;
-    
+    setAvailabilityStatus('loading');
+    setAvailabilityErrorMessage(null);
+    setAvailableSlots([]);
+    setIsFullyBooked(false);
+    setTimeSlot('');
+
+    const query = new URLSearchParams({ counselorId: selectedCounselorId, date, timezone });
+
     apiClient.get<{ availableSlots: string[]; fullyBooked?: boolean }>(
-      `/api/v1/appointments/availability?counselorId=${selectedCounselorId}&date=${date}`,
+      `/api/v1/appointments/availability?${query.toString()}`,
     )
       .then((res) => {
         if (!isMounted) return;
-        
+        if (!res.success || !res.data || !Array.isArray(res.data.availableSlots)) {
+          throw new Error(res.error || 'Ketersediaan slot tidak dapat dimuat.');
+        }
         const data = res.data;
-        if (data && Array.isArray(data.availableSlots)) {
-          setAvailableSlots(data.availableSlots);
-          setIsFullyBooked(
-            data.fullyBooked || data.availableSlots.length === 0,
-          );
-          if (data.availableSlots.length > 0) {
-            setTimeSlot(current => data.availableSlots.includes(current) ? current : data.availableSlots[0]);
-          } else {
-            setTimeSlot("");
-          }
+        setAvailableSlots(data.availableSlots);
+        setIsFullyBooked(data.fullyBooked || data.availableSlots.length === 0);
+        setAvailabilityStatus('ready');
+        if (data.availableSlots.length > 0) {
+          setTimeSlot(data.availableSlots[0]);
         }
       })
       .catch((err) => {
         if (!isMounted) return;
-        
         setAvailableSlots([]);
+        setIsFullyBooked(false);
+        setAvailabilityStatus('error');
+        setAvailabilityErrorMessage(err instanceof Error ? err.message : 'Ketersediaan slot gagal dimuat. Coba lagi.');
         console.warn("Failed to check server availability:", err);
       });
 
     return () => {
       isMounted = false;
     };
-  }, [selectedCounselorId, date]);
+  }, [selectedCounselorId, date, timezone, availabilityRetryCount]);
 
   const handleNextStep = () => {
     setFormError(null);
     if (currentStep === 1) {
       if (!selectedCounselorId) return setFormError("Pilih konselor terlebih dahulu untuk melanjutkan.");
     } else if (currentStep === 2) {
-      if (!date || !timeSlot) return setFormError("Pilih tanggal dan waktu sesi.");
+      if (availabilityStatus === 'loading') return setFormError('Sedang memeriksa slot. Tunggu sebentar.');
+      if (availabilityStatus === 'error') return setFormError(availabilityErrorMessage || 'Ketersediaan slot gagal dimuat. Coba pilih tanggal lagi atau muat ulang halaman.');
+      if (availabilityStatus !== 'ready' || isFullyBooked || !date || !timeSlot || !availableSlots.includes(timeSlot)) {
+        return setFormError(isFullyBooked ? 'Tidak ada slot waktu yang dapat dipilih pada tanggal ini. Pilih tanggal lain.' : 'Pilih slot waktu yang tersedia.');
+      }
     } else if (currentStep === 3) {
       if (!studentName.trim() || !studentNIM.trim() || !studentEmail.trim()) {
         return setFormError("Mohon lengkapi Nama, NIM, dan Email Anda.");
@@ -215,7 +258,7 @@ export const BookingForm: React.FC<BookingFormProps> = ({
       time: timeSlot,
       timezone,
       mode,
-      notes: selectedConcern,
+      notes: canShareReferralNotes ? selectedConcern : '',
       studentNIM: studentNIM.trim(),
     };
 
@@ -241,7 +284,7 @@ export const BookingForm: React.FC<BookingFormProps> = ({
           timeSlot: fullTimeSlot,
           timezone,
           mode,
-          primaryConcern: `${selectedConcern} (Offline)`,
+          primaryConcern: canShareReferralNotes ? `${selectedConcern} (Offline)` : 'Konseling Mental (Offline)',
           status: "PENDING",
           approvalStatus: "PENDING_APPROVAL",
           attendanceStatus: "SCHEDULED",
@@ -305,7 +348,7 @@ export const BookingForm: React.FC<BookingFormProps> = ({
               timeSlot: fullTimeSlot,
               timezone,
               mode,
-              primaryConcern: `${selectedConcern} (Offline)`,
+              primaryConcern: canShareReferralNotes ? `${selectedConcern} (Offline)` : 'Konseling Mental (Offline)',
               status: 'PENDING',
               approvalStatus: 'PENDING_APPROVAL',
               attendanceStatus: 'SCHEDULED',
@@ -355,7 +398,7 @@ export const BookingForm: React.FC<BookingFormProps> = ({
         timeSlot: `${record.time} ${record.timezone || timezone}`,
         timezone: record.timezone || timezone,
         mode: record.mode || mode,
-        primaryConcern: record.notes || selectedConcern,
+        primaryConcern: canShareReferralNotes ? (record.notes || selectedConcern) : 'Konseling Mental',
         status:
           record.status || "PENDING",
         approvalStatus: record.approvalStatus || "PENDING_APPROVAL",
@@ -401,7 +444,7 @@ export const BookingForm: React.FC<BookingFormProps> = ({
             timeSlot: fullTimeSlot,
             timezone,
             mode,
-            primaryConcern: `${selectedConcern} (Offline)`,
+            primaryConcern: canShareReferralNotes ? `${selectedConcern} (Offline)` : 'Konseling Mental (Offline)',
             status: "PENDING",
             approvalStatus: "PENDING_APPROVAL",
             attendanceStatus: "SCHEDULED",
@@ -442,13 +485,27 @@ export const BookingForm: React.FC<BookingFormProps> = ({
     }
   };
 
+  const modalRef = useFocusTrap<HTMLDivElement>({ isOpen, onClose });
+
   if (!isOpen) return null;
 
   const currentCounselor = counselors.find((c) => c.id === selectedCounselorId);
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center max-sm:items-end p-3 sm:p-4 max-sm:p-0 font-sans animate-fade-in">
-      <div className="surface-card text-primary border border-default rounded-2xl max-sm:rounded-b-none max-sm:rounded-t-2xl max-w-lg w-full p-4 sm:p-6 shadow-xl relative max-h-[92dvh] overflow-y-auto flex flex-col justify-between max-sm:animate-slide-up transition-transform duration-200">
+    <div
+      className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center max-sm:items-end p-3 sm:p-4 max-sm:p-0 font-sans animate-fade-in"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div
+        ref={modalRef}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="booking-form-title"
+        className="surface-card text-primary border border-default rounded-2xl max-sm:rounded-b-none max-sm:rounded-t-2xl max-w-lg w-full p-4 sm:p-6 shadow-xl relative max-h-[92dvh] overflow-y-auto flex flex-col justify-between max-sm:animate-slide-up transition-transform duration-200 focus:outline-none"
+      >
         {/* Drag handle for mobile bottom sheet */}
         <div className="w-10 h-1 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto my-2 sm:hidden shrink-0" />
 
@@ -459,7 +516,7 @@ export const BookingForm: React.FC<BookingFormProps> = ({
               <p className="text-[10.5px] font-semibold text-secondary uppercase tracking-wider mb-0.5">
                 Langkah {currentStep} dari 4
               </p>
-              <h2 className="text-lg sm:text-xl font-bold text-primary">
+              <h2 id="booking-form-title" className="text-lg sm:text-xl font-bold text-primary">
                 {currentStep === 1 && "Pilih Konselor"}
                 {currentStep === 2 && "Pilih Jadwal Sesi"}
                 {currentStep === 3 && "Informasi Pribadi"}
@@ -512,7 +569,7 @@ export const BookingForm: React.FC<BookingFormProps> = ({
                   <div
                     className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-xs border transition-all duration-200 ${
                       isCompleted
-                        ? "bg-teal-600 border-teal-600 text-white"
+                        ? "bg-teal-700 border-teal-600 text-white"
                         : isActive
                         ? "surface-card border-teal-600 text-teal-700 dark:text-teal-400 ring-3 ring-teal-500/20 font-bold"
                         : "surface-muted border-default text-secondary"
@@ -534,7 +591,7 @@ export const BookingForm: React.FC<BookingFormProps> = ({
                 </div>
               );
             })}
-            
+
             {/* Connecting line */}
             <div className="absolute top-3 left-[12.5%] right-[12.5%] h-0.5 bg-slate-200 dark:bg-slate-800 z-0">
               <div
@@ -574,10 +631,12 @@ export const BookingForm: React.FC<BookingFormProps> = ({
                             : "surface-card border-default hover:bg-slate-50 dark:hover:bg-slate-800/60"
                         }`}
                       >
-                        <img
+                        <Avatar
                           src={c.avatar}
-                          alt={c.name}
-                          className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl object-cover border border-default shrink-0"
+                          name={c.name}
+                          size="lg"
+                          shape="rounded"
+                          className="shrink-0"
                         />
                         <div className="flex-1 min-w-0">
                           <p
@@ -592,7 +651,7 @@ export const BookingForm: React.FC<BookingFormProps> = ({
                         <div
                           className={`w-4.5 h-4.5 rounded-full border flex items-center justify-center shrink-0 transition-colors ${
                             isSelected
-                              ? "bg-teal-600 border-teal-600 text-white"
+                              ? "bg-teal-700 border-teal-600 text-white"
                               : "border-default"
                           }`}
                         >
@@ -610,24 +669,42 @@ export const BookingForm: React.FC<BookingFormProps> = ({
           {currentStep === 2 && (
             <div className="space-y-4 animate-in fade-in duration-200">
               {currentCounselor ? (
-                <div className="p-3.5 surface-muted border border-default rounded-xl flex items-center gap-3">
-                  <img
-                    src={currentCounselor.avatar}
-                    alt={currentCounselor.name}
-                    className="w-10 h-10 rounded-xl object-cover shrink-0 border border-default"
-                  />
-                  <div>
-                    <p className="text-xs sm:text-sm font-semibold text-primary">
-                      Sesi dengan {currentCounselor.name}
-                    </p>
-                    <p className="text-[11px] text-secondary mt-0.5">
-                      {selectedConcern}
-                    </p>
+                <div className="p-3.5 surface-muted border border-default rounded-xl flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <Avatar
+                      src={currentCounselor.avatar}
+                      name={currentCounselor.name}
+                      size="lg"
+                      shape="rounded"
+                      className="shrink-0"
+                    />
+                    <div className="min-w-0">
+                      <p className="text-xs sm:text-sm font-semibold text-primary truncate">
+                        Sesi dengan {currentCounselor.name}
+                      </p>
+                      <p className="text-[11px] text-secondary truncate mt-0.5">
+                        {currentCounselor.title} &bull; {currentCounselor.university}
+                      </p>
+                    </div>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => setCurrentStep(1)}
+                    className="text-xs font-semibold text-teal-700 dark:text-teal-400 hover:underline shrink-0 p-1.5 min-h-[36px] min-w-[44px] flex items-center justify-center cursor-pointer"
+                  >
+                    Ganti
+                  </button>
                 </div>
               ) : (
-                <div className="p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 rounded-xl text-amber-800 dark:text-amber-300 text-xs">
-                  Pilih konselor terlebih dahulu di Langkah 1.
+                <div className="p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 rounded-xl text-amber-800 dark:text-amber-300 text-xs flex items-center justify-between">
+                  <span>Pilih konselor terlebih dahulu di Langkah 1.</span>
+                  <button
+                    type="button"
+                    onClick={() => setCurrentStep(1)}
+                    className="font-semibold text-amber-900 dark:text-amber-200 underline ml-2"
+                  >
+                    Pilih
+                  </button>
                 </div>
               )}
 
@@ -643,7 +720,7 @@ export const BookingForm: React.FC<BookingFormProps> = ({
                     id="session-date-input"
                     type="date"
                     required
-                    min={new Date().toISOString().split("T")[0]}
+                    min={getAppointmentDateInputValue(new Date(), timezone)}
                     value={date}
                     onChange={(e) => setDate(e.target.value)}
                     className="w-full surface-muted border border-default rounded-xl px-3.5 py-2 text-base sm:text-sm text-primary focus:outline-none focus:border-teal-600 focus:ring-1 focus:ring-teal-600 transition-all min-h-11"
@@ -661,10 +738,14 @@ export const BookingForm: React.FC<BookingFormProps> = ({
                     id="session-time-input"
                     value={timeSlot}
                     onChange={(e) => setTimeSlot(e.target.value)}
-                    disabled={isFullyBooked || availableSlots.length === 0}
+                    disabled={availabilityStatus !== 'ready' || isFullyBooked || availableSlots.length === 0}
                     className="w-full surface-muted border border-default rounded-xl px-3.5 py-2 text-base sm:text-sm text-primary focus:outline-none focus:border-teal-600 focus:ring-1 focus:ring-teal-600 transition-all disabled:opacity-50 min-h-11"
                   >
-                    {availableSlots.length > 0 ? (
+                    {availabilityStatus === 'loading' ? (
+                      <option value="">Memeriksa slot…</option>
+                    ) : availabilityStatus === 'error' ? (
+                      <option value="">Slot gagal dimuat</option>
+                    ) : availableSlots.length > 0 ? (
                       availableSlots.map((slot) => (
                         <option key={slot} value={slot}>
                           {slot}
@@ -677,6 +758,16 @@ export const BookingForm: React.FC<BookingFormProps> = ({
                 </div>
               </div>
 
+              <p role="status" aria-live="polite" className={`text-xs ${availabilityStatus === 'error' ? 'text-rose-600 dark:text-rose-400' : 'text-secondary'}`}>
+                {availabilityStatus === 'loading' && 'Memeriksa ketersediaan jadwal…'}
+                {availabilityStatus === 'error' && <>
+                  <span>{availabilityErrorMessage || 'Ketersediaan tidak bisa dimuat. Coba lagi sebelum melanjutkan.'}</span>{' '}
+                  <button type="button" onClick={() => setAvailabilityRetryCount(count => count + 1)} className="font-semibold underline">Coba lagi</button>
+                </>}
+                {availabilityStatus === 'ready' && isFullyBooked && 'Tidak ada slot waktu yang dapat dipilih pada tanggal ini. Silakan pilih tanggal lain.'}
+                {availabilityStatus === 'ready' && !isFullyBooked && `${availableSlots.length} slot tersedia. Slot dikonfirmasi kembali saat jadwal dikirim.`}
+              </p>
+
               <div className="space-y-1">
                 <label
                   htmlFor="session-timezone"
@@ -687,7 +778,12 @@ export const BookingForm: React.FC<BookingFormProps> = ({
                 <select
                   id="session-timezone"
                   value={timezone}
-                  onChange={(e) => setTimezone(e.target.value as any)}
+                    onChange={(e) => {
+                      const nextTimezone = e.target.value as "WIB" | "WITA" | "WIT";
+                      const minimumDate = getAppointmentDateInputValue(new Date(), nextTimezone);
+                      setTimezone(nextTimezone);
+                      setDate((currentDate) => currentDate < minimumDate ? minimumDate : currentDate);
+                    }}
                   className="w-full surface-muted border border-default rounded-xl px-3.5 py-2 text-base sm:text-sm text-primary focus:outline-none focus:border-teal-600 focus:ring-1 focus:ring-teal-600 transition-all min-h-11"
                 >
                   <option value="WIB">WIB (Jakarta / Jawa / Sumatra)</option>
@@ -736,14 +832,22 @@ export const BookingForm: React.FC<BookingFormProps> = ({
           {currentStep === 4 && (
             <div className="space-y-4 animate-in fade-in duration-200">
               <div className="surface-muted border border-default rounded-xl p-4 space-y-3">
-                <div className="space-y-0.5">
+                <div className="space-y-1">
                   <p className="text-[11px] font-semibold text-secondary">Konselor</p>
-                  <p className="text-xs sm:text-sm font-bold text-primary">{counselors.find(c => c.id === selectedCounselorId)?.name || "-"}</p>
+                  <div className="flex items-center gap-2.5">
+                    <Avatar
+                      src={counselors.find(c => c.id === selectedCounselorId)?.avatar}
+                      name={counselors.find(c => c.id === selectedCounselorId)?.name || "Konselor"}
+                      size="sm"
+                      shape="rounded"
+                    />
+                    <p className="text-xs sm:text-sm font-bold text-primary">{counselors.find(c => c.id === selectedCounselorId)?.name || "-"}</p>
+                  </div>
                 </div>
                 <div className="space-y-0.5">
                   <p className="text-[11px] font-semibold text-secondary">Jadwal Sesi</p>
                   <p className="text-xs sm:text-sm font-bold text-primary">
-                    {date ? new Date(date).toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long", year: "numeric" }) : "-"} — {timeSlot} {timezone}
+                    {date ? new Date(`${date}T12:00:00`).toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long", year: "numeric" }) : "-"} — {timeSlot} {timezone}
                   </p>
                 </div>
                 <div className="space-y-0.5">
@@ -751,17 +855,27 @@ export const BookingForm: React.FC<BookingFormProps> = ({
                   <p className="text-xs sm:text-sm font-bold text-primary">{studentName}</p>
                   <p className="text-[11px] text-secondary mt-0.5">{studentEmail}</p>
                 </div>
+                {selectedConcern && (
+                  <div className="border-t border-default pt-3 space-y-1">
+                    <p className="text-[11px] font-semibold text-secondary">Catatan skrining untuk konselor</p>
+                    {canShareReferralNotes ? (
+                      <p className="text-xs leading-relaxed text-primary">{selectedConcern}</p>
+                    ) : (
+                      <p className="text-xs leading-relaxed text-secondary">Tidak disertakan. Izin berbagi dengan konselor belum aktif.</p>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="p-3 surface-card border border-default rounded-xl">
                 <p className="text-[11px] text-secondary leading-relaxed">
-                  Dengan mengonfirmasi jadwal ini, Anda menyetujui bahwa pembatalan atau perubahan jadwal wajib dilakukan maksimal 24 jam sebelum sesi dimulai.
+                  Ketentuan pembatalan atau perubahan dapat berbeda menurut layanan kampus. Aplikasi ini tidak menetapkan batas waktu khusus di sini; tanyakan kepada konselor atau kampus jika perlu mengubah jadwal.
                 </p>
               </div>
             </div>
           )}
         </div>
-        
+
         {/* Sticky Footer Navigation Buttons */}
         <div className="sticky bottom-0 surface-card border-t border-default pt-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] mt-5 -mx-4 sm:-mx-6 px-4 sm:px-6 flex items-center justify-between gap-2.5 z-10">
           {currentStep > 1 ? (
@@ -797,7 +911,7 @@ export const BookingForm: React.FC<BookingFormProps> = ({
               type="button"
               onClick={handleCreateAppointment}
               disabled={isSubmitting}
-              className="px-5 py-2 min-h-11 bg-teal-600 hover:bg-teal-700 text-white text-xs sm:text-sm font-semibold rounded-xl shadow-3xs transition-all disabled:opacity-50 cursor-pointer ml-auto active:scale-[0.98] flex items-center gap-1.5"
+              className="px-5 py-2 min-h-11 bg-teal-700 hover:bg-teal-800 text-white text-xs sm:text-sm font-semibold rounded-xl shadow-3xs transition-all disabled:opacity-50 cursor-pointer ml-auto active:scale-[0.98] flex items-center gap-1.5"
             >
               {isSubmitting ? "Memproses..." : "Konfirmasi Sesi"}
             </button>

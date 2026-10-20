@@ -10,8 +10,6 @@ import { ShieldCheck,
   ChevronLeft,
   Brain,
   MessageSquare,
-  Gauge,
-  Cpu,
   CheckCircle2,
   History,
   Calendar,
@@ -20,8 +18,12 @@ import { ShieldCheck,
   Volume2
 } from 'lucide-react';
 import { UserSession, SubscriptionTier } from '../../types';
-import { DEFAULT_AI_MODEL_ID } from '../../lib/aiModels';
-import { useAiModelCatalog } from '../../lib/aiModelCatalog';
+import {
+  TENANG_PROFILES,
+  DEFAULT_TENANG_PROFILE_ID,
+  isTenangProfile,
+  migrateLegacyTenangModelToProfile
+} from '../../lib/aiModels';
 import { safeLocalStorage } from '../../lib/storage';
 import { BUILT_IN_PRESETS, DEFAULT_PRESET_ID } from '../workspace/constants/presetConstants';
 import { loadUserPersonalization, saveUserPersonalization, loadUserCustomPresets } from '../workspace/utils/workspacePresetManager';
@@ -62,34 +64,38 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   onOpenChangelog,
 }) => {
   const safeUser = userSession || DEFAULT_GUEST_USER;
-  const { models: availableModels, defaultModel, loading: modelsLoading, error: modelsError } = useAiModelCatalog();
   const [loading, setLoading] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const [aiModel, setAiModel] = useState(() => safeLocalStorage.getItem('aiModel') || DEFAULT_AI_MODEL_ID);
+  const [aiModel, setAiModel] = useState(() => {
+    const saved = safeLocalStorage.getItem('aiModel');
+    return migrateLegacyTenangModelToProfile(saved);
+  });
   const [responseStyle, setResponseStyle] = useState(() => safeLocalStorage.getItem('responseStyle') || 'Seimbang');
-  
+
   const [prefDailyReminders, setPrefDailyReminders] = useState(() => safeLocalStorage.getItem('pref_daily_reminders') !== 'false');
   const [prefCounselingUpdates, setPrefCounselingUpdates] = useState(() => safeLocalStorage.getItem('pref_counseling_updates') !== 'false');
   const [prefNewsletter, setPrefNewsletter] = useState(() => safeLocalStorage.getItem('pref_newsletter') === 'true');
   const [prefAiCompletionChime, setPrefAiCompletionChime] = useState(() => safeLocalStorage.getItem('pref_ai_completion_chime') !== 'false');
 
   useEffect(() => {
-    if (availableModels.length && !availableModels.some(model => model.id === aiModel && model.selectable)) {
-      setAiModel(defaultModel);
+    if (!isTenangProfile(aiModel)) {
+      setAiModel(migrateLegacyTenangModelToProfile(aiModel));
     }
-  }, [availableModels, aiModel, defaultModel]);
+  }, [aiModel]);
 
   const triggerNotificationSaved = () => {
     setSuccessMsg('Preferensi notifikasi berhasil diperbarui.');
     setTimeout(() => setSuccessMsg(null), 3000);
   };
 
-  const handleSelectAiModel = (modelId: string) => {
-    setAiModel(modelId);
-    safeLocalStorage.setItem('aiModel', modelId);
-    setSuccessMsg(`Model AI berhasil diubah ke ${availableModels.find(m => m.id === modelId)?.name || modelId}.`);
+  const handleSelectAiModel = (profileId: string) => {
+    const valid = migrateLegacyTenangModelToProfile(profileId);
+    setAiModel(valid);
+    safeLocalStorage.setItem('aiModel', valid);
+    const p = TENANG_PROFILES.find(item => item.id === valid);
+    setSuccessMsg(`Profil Ruang Tenang berhasil diubah ke ${p?.name || valid}.`);
     setTimeout(() => setSuccessMsg(null), 3000);
   };
 
@@ -272,7 +278,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
 
   return (
     <div className="w-full max-w-5xl mx-auto px-4 sm:px-6 lg:px-6 py-4 sm:py-6 min-w-0 flex flex-col md:flex-row gap-4 lg:gap-6 h-full">
-      
+
       <SettingsSectionNav
         activeTab={activeTab}
         showMobileDetail={showMobileDetail}
@@ -286,17 +292,17 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
       <div className={`flex-1 min-w-0 space-y-4 pb-20 ${!showMobileDetail ? 'hidden md:block' : 'block'}`}>
         {/* Mobile Back Button */}
         {showMobileDetail && (
-          <button 
-            onClick={() => setShowMobileDetail(false)} 
+          <button
+            onClick={() => setShowMobileDetail(false)}
             className="md:hidden flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-teal-600 hover:text-teal-700 px-3.5 py-2 mb-2 rounded-lg bg-teal-50 hover:bg-teal-100 cursor-pointer transition-all self-start min-h-[44px]"
           >
             <ChevronLeft className="w-4 h-4" /> Kembali ke Daftar Pengaturan
           </button>
         )}
-      
+
       {successMsg && (
         <div className="p-4 bg-teal-50 border border-teal-200 rounded-xl text-teal-800 text-xs sm:text-sm flex items-center gap-2.5 shadow-xs animate-in fade-in duration-300">
-          <div className="p-1 bg-teal-600 text-white rounded-full">
+          <div className="p-1 bg-teal-700 text-white rounded-full">
             <Check className="w-4 h-4" />
           </div>
           <p className="font-medium">{successMsg}</p>
@@ -319,7 +325,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
               <UserCheck className="w-4.5 h-4.5 text-secondary" />
               Profil Sesi
             </h3>
-            
+
             <div className="space-y-3">
               <div className="p-3 surface-muted border border-slate-150 rounded-lg flex items-center gap-3">
                 <div className="w-10 h-10 rounded-full bg-slate-800 text-white flex items-center justify-center font-bold text-sm shrink-0 shadow-sm">
@@ -361,86 +367,71 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                 </p>
               </div>
               <span className="text-xs font-medium text-teal-700 dark:text-teal-400 bg-teal-50/70 dark:bg-teal-950/50 px-2.5 py-1 rounded-md border border-teal-200/80 dark:border-teal-800 self-start sm:self-auto">
-                Default Aktif: {availableModels.find(m => m.id === aiModel)?.name || 'Gemini 3.8 Flash'}
+                Profil Aktif: {TENANG_PROFILES.find(p => p.id === aiModel)?.name || 'Tenang Middle'}
               </span>
             </div>
 
-            {/* Model Selection Grid */}
+            {/* Profile Selection Grid */}
             <div className="space-y-3">
               <label className="text-xs font-bold text-secondary uppercase tracking-wide">
-                Daftar Model AI Tersedia
+                Profil Kemampuan AI Ruang Tenang
               </label>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                {availableModels.filter(m => m.selectable).map((model) => {
-                  const isSelected = aiModel === model.id;
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+                {TENANG_PROFILES.map((profile) => {
+                  const isSelected = aiModel === profile.id;
+                  const isDefault = profile.id === DEFAULT_TENANG_PROFILE_ID;
+                  const IconComp = profile.id === 'tenang-turbo' ? Brain : profile.id === 'tenang-low' ? Zap : Sparkles;
+
                   return (
                     <div
-                      key={model.id}
-                      onClick={() => model.selectable && handleSelectAiModel(model.id)}
-                      aria-disabled={!model.selectable}
-                      className={`relative p-4 rounded-xl border transition-all ${model.selectable ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'} flex flex-col justify-between ${
+                      key={profile.id}
+                      onClick={() => handleSelectAiModel(profile.id)}
+                      className={`relative p-4 rounded-xl border transition-all cursor-pointer flex flex-col justify-between ${
                         isSelected
                           ? 'border-teal-600 bg-teal-50/40 shadow-xs ring-1 ring-teal-500'
                           : 'border-default hover:border-default hover:surface-muted surface-card'
                       }`}
                     >
-                      <div className="space-y-2">
+                      <div className="space-y-2.5">
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex items-center gap-2">
-                            <span className="text-xs font-bold text-primary">{model.name}</span>
-                            {model.isDefault && (
+                            <div className={`p-1.5 rounded-lg ${isSelected ? 'bg-teal-100 dark:bg-teal-900/60 text-teal-700 dark:text-teal-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>
+                              <IconComp className="w-4 h-4" />
+                            </div>
+                            <span className="text-xs font-bold text-primary">{profile.name}</span>
+                            {isDefault && (
                               <span className="text-[9.5px] bg-slate-900 text-white font-bold px-1.5 py-0.5 rounded">
                                 Default
                               </span>
                             )}
                           </div>
-                          {isSelected ? (
+                          {isSelected && (
                             <span className="flex items-center gap-1 text-xs font-semibold text-teal-700 dark:text-teal-400 bg-teal-50 dark:bg-teal-950/60 px-2 py-0.5 rounded-md">
                               <CheckCircle2 className="w-3.5 h-3.5 text-teal-600" /> Dipilih
-                            </span>
-                          ) : (
-                            <span className="text-[10px] text-muted bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded font-medium">
-                              {model.tag}
                             </span>
                           )}
                         </div>
 
                         <p className="text-xs text-secondary leading-relaxed">
-                          {model.provider} · {model.capabilities.join(' · ')} · {model.availability === 'configured' ? 'Terkonfigurasi' : model.availability === 'temporarily_unavailable' ? 'Sementara tidak tersedia' : 'Penyedia belum dikonfigurasi'}
+                          {profile.description}
                         </p>
-
-                        <div className="p-2 surface-muted/80 rounded-lg border border-default text-[11px] text-secondary space-y-1">
-                          <div className="flex items-center justify-between text-[10.5px]">
-                            <span className="text-muted flex items-center gap-1">
-                              <Gauge className="w-3 h-3 text-muted" /> Kecepatan:
-                            </span>
-                            <span className="font-semibold text-secondary">{model.speed}</span>
-                          </div>
-                          <div className="flex items-center justify-between text-[10.5px]">
-                            <span className="text-muted flex items-center gap-1">
-                              <Cpu className="w-3 h-3 text-muted" /> Penalaran:
-                            </span>
-                            <span className="font-semibold text-secondary">{model.reasoning}</span>
-                          </div>
-                        </div>
                       </div>
 
-                      <div className="pt-2.5 mt-2 border-t border-slate-150/70 flex items-center justify-between text-[11px]">
-                        <span className="text-muted text-[10px] truncate max-w-[200px]">
-                          {model.allowedTiers.join(' · ')}
+                      <div className="pt-3 mt-3 border-t border-slate-150/70 dark:border-slate-800 flex items-center justify-between text-[11px]">
+                        <span className="text-muted text-[10.5px]">
+                          {profile.id === 'tenang-turbo' ? 'Reasoning tinggi' : profile.id === 'tenang-low' ? 'Latensi terendah' : 'Seimbang & adaptif'}
                         </span>
                         <button
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            if (model.selectable) handleSelectAiModel(model.id);
+                            handleSelectAiModel(profile.id);
                           }}
-                          disabled={!model.selectable}
                           className={`text-xs font-semibold px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
                             isSelected
-                              ? 'bg-teal-600 text-white shadow-xs'
-                              : 'bg-slate-100 hover:bg-slate-200 text-secondary'
+                              ? 'bg-teal-700 text-white shadow-xs'
+                              : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-secondary'
                           }`}
                         >
                           {isSelected ? 'Aktif' : 'Gunakan'}
@@ -450,8 +441,6 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                   );
                 })}
               </div>
-              {modelsLoading && <p className="text-xs text-muted">Memuat model...</p>}
-              {modelsError && <p className="text-xs text-rose-600">Daftar model tidak dapat dimuat.</p>}
             </div>
 
             {/* Default Response Style Option */}
@@ -460,7 +449,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                 <MessageSquare className="w-4 h-4 text-teal-600" />
                 Gaya Respons Default
               </label>
-              
+
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
                 {[
                   { id: 'Singkat', label: 'Singkat', desc: 'Ringkas & langsung ke poin' },
@@ -498,7 +487,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
               <p className="text-xs text-muted">
                 Pilih preset yang otomatis aktif setiap kali membuka RuangKerja baru.
               </p>
-              
+
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
                 {[...BUILT_IN_PRESETS, ...loadUserCustomPresets(safeUser.id)].map(preset => {
                   const currentPersonalization = loadUserPersonalization(safeUser.id);
@@ -605,7 +594,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                   className="w-full flex items-center justify-between p-4 rounded-xl border border-teal-200 hover:border-teal-300 bg-teal-50/50 hover:bg-teal-50 transition-all text-left group shadow-sm"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="p-2 bg-teal-600 text-white rounded-lg shrink-0 shadow-sm">
+                    <div className="p-2 bg-teal-700 text-white rounded-lg shrink-0 shadow-sm">
                       <ShieldCheck className="w-5 h-5 text-white" />
                     </div>
                     <div>
@@ -613,7 +602,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                       <p className="text-xs text-teal-800 mt-0.5">Consent, Ekspor Data, Koreksi & Hapus Data</p>
                     </div>
                   </div>
-                  <span className="text-xs bg-teal-600 text-white font-bold px-3 py-1 rounded-lg shadow-sm">
+                  <span className="text-xs bg-teal-700 text-white font-bold px-3 py-1 rounded-lg shadow-sm">
                     Atur
                   </span>
                 </button>
@@ -868,11 +857,11 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
 
             {/* Plans Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pt-4 min-w-0">
-              
+
               {/* Plan 1: Free Tier */}
               <div className={`border rounded-xl p-5 flex flex-col space-y-4 transition-all w-full min-w-0 ${
-                safeUser.tier === 'Free' 
-                  ? 'border-slate-800 surface-muted/60 ring-2 ring-slate-850/5' 
+                safeUser.tier === 'Free'
+                  ? 'border-slate-800 surface-muted/60 ring-2 ring-slate-850/5'
                   : 'border-default hover:border-default surface-card'
               }`}>
                 <div className="space-y-3 flex-1 flex flex-col">
@@ -894,7 +883,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                     <span className="text-xl font-bold text-primary">Rp 0</span>
                     <span className="text-xs text-secondary"> / selamanya</span>
                   </div>
-                  
+
                   {/* Features List */}
                   <ul className="text-xs text-secondary space-y-2.5 pt-4 border-t border-default mt-auto">
                     <li className="flex items-start gap-2">
@@ -925,12 +914,12 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
 
               {/* Plan 2: Pro Tier */}
               <div className={`border rounded-xl p-5 flex flex-col space-y-4 transition-all relative overflow-hidden w-full min-w-0 ${
-                safeUser.tier === 'Pro' 
-                  ? 'border-teal-600 bg-teal-50/10 ring-2 ring-teal-600/20' 
+                safeUser.tier === 'Pro'
+                  ? 'border-teal-600 bg-teal-50/10 ring-2 ring-teal-600/20'
                   : 'border-default hover:border-default surface-card shadow-sm'
               }`}>
                 {/* Popular badge */}
-                <div className="absolute top-0 right-0 bg-teal-600 text-white font-bold text-[9px] uppercase tracking-wider px-3 py-1 rounded-bl-lg shadow-sm">
+                <div className="absolute top-0 right-0 bg-teal-700 text-white font-bold text-[9px] uppercase tracking-wider px-3 py-1 rounded-bl-lg shadow-sm">
                   Pro
                 </div>
 
@@ -974,7 +963,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                     className={`w-full py-2.5 rounded-lg text-sm font-semibold transition-all ${
                       safeUser.tier === 'Pro'
                         ? 'bg-teal-100 text-teal-700 cursor-not-allowed'
-                        : 'bg-teal-600 hover:bg-teal-700 text-white shadow-sm active:scale-95'
+                        : 'bg-teal-700 hover:bg-teal-800 text-white shadow-sm active:scale-95'
                     }`}
                   >
                     {safeUser.tier === 'Pro' ? 'Paket Aktif' : 'Aktifkan Pro'}
@@ -984,8 +973,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
 
               {/* Plan 3: Developer Tier */}
               <div className={`border rounded-xl p-5 flex flex-col space-y-4 transition-all relative overflow-hidden w-full min-w-0 ${
-                safeUser.tier === 'Developer' 
-                  ? 'border-indigo-600 bg-indigo-50/20 ring-2 ring-indigo-600/20' 
+                safeUser.tier === 'Developer'
+                  ? 'border-indigo-600 bg-indigo-50/20 ring-2 ring-indigo-600/20'
                   : 'border-default hover:border-default surface-card shadow-sm'
               }`}>
                 {/* Dev Badge */}
@@ -1045,7 +1034,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
           </div>
         </div>
       )}
-      
+
       {/* Tab Versi & Pembaruan */}
       {activeTab === 'versi' && (
         <div className="space-y-4 animate-in fade-in duration-200">
@@ -1053,7 +1042,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
           <div className="p-5 sm:p-6 bg-gradient-to-br from-teal-500/10 via-sky-500/5 to-transparent border border-teal-200/80 dark:border-teal-800/80 rounded-2xl space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-2xl bg-teal-600 text-white flex items-center justify-center shadow-3xs shrink-0">
+                <div className="w-12 h-12 rounded-2xl bg-teal-700 text-white flex items-center justify-center shadow-3xs shrink-0">
                   <Sparkles className="w-6 h-6" />
                 </div>
                 <div>
@@ -1078,7 +1067,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                 <button
                   type="button"
                   onClick={onOpenChangelog}
-                  className="px-4 py-2 bg-teal-600 hover:bg-teal-700 active:scale-[0.98] text-white text-xs font-bold rounded-xl transition-all shadow-3xs flex items-center gap-1.5 cursor-pointer"
+                  className="px-4 py-2 bg-teal-700 hover:bg-teal-800 active:scale-[0.98] text-white text-xs font-bold rounded-xl transition-all shadow-3xs flex items-center gap-1.5 cursor-pointer"
                 >
                   <History className="w-4 h-4" />
                   <span>Buka Popup Catatan Rilis</span>
@@ -1117,11 +1106,11 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
 
             <div className="space-y-4">
               {APP_CHANGELOG.map((rel) => (
-                <div 
+                <div
                   key={rel.version}
                   className={`p-4 sm:p-5 surface-card dark:bg-slate-900 border rounded-2xl space-y-3.5 shadow-3xs ${
-                    rel.isLatest 
-                      ? 'border-teal-500/80 dark:border-teal-500/60 ring-2 ring-teal-500/10' 
+                    rel.isLatest
+                      ? 'border-teal-500/80 dark:border-teal-500/60 ring-2 ring-teal-500/10'
                       : 'border-default dark:border-slate-800'
                   }`}
                 >
@@ -1168,7 +1157,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                     {rel.changes.map(ch => {
                       const cat = CATEGORY_METADATA[ch.category];
                       return (
-                        <div 
+                        <div
                           key={ch.id}
                           className="p-3 bg-stone-50/70 dark:bg-slate-800/50 border border-default/70 dark:border-slate-700/60 rounded-xl space-y-1"
                         >
@@ -1320,7 +1309,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
           </div>
         </div>
       )}
-      
+
       </div>
 
     </div>

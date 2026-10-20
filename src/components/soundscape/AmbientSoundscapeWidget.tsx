@@ -81,16 +81,16 @@ export const AmbientSoundscapeWidget: React.FC<AmbientSoundscapeWidgetProps> = (
     }
   };
 
-  const filteredTracks = SOUNDSCAPE_TRACKS.filter(t => 
+  const filteredTracks = SOUNDSCAPE_TRACKS.filter(t =>
     currentMode === 'RUANG_KERJA' ? t.category === 'RUANG_KERJA' : t.category === 'RUANG_TENANG'
   );
 
   return (
     <>
       {/* Floating Widget: Compact Icon when Inactive vs Ambient Pill when Playing */}
-      <aside 
+      <aside
         aria-label="Pemutar Suara Latar Ambient & Timer Fokus"
-        className="fixed bottom-[5.5rem] right-3 sm:bottom-20 sm:right-4 z-20 flex items-center gap-2 select-none pointer-events-auto"
+        className="fixed bottom-28 right-3.5 sm:bottom-20 sm:right-4 z-20 flex items-center gap-2 select-none pointer-events-auto"
       >
         <AnimatePresence mode="wait">
           {!engineState.isPlaying || isMinimized ? (
@@ -111,14 +111,14 @@ export const AmbientSoundscapeWidget: React.FC<AmbientSoundscapeWidgetProps> = (
                 }}
                 className={`group relative w-8 h-8 sm:w-8.5 sm:h-8.5 rounded-full flex items-center justify-center backdrop-blur-md border shadow-2xs hover:shadow-xs transition-all cursor-pointer ${
                   engineState.isPlaying
-                    ? 'bg-teal-600 text-white border-teal-500 shadow-teal-600/20'
+                    ? 'bg-teal-700 text-white border-teal-500 shadow-teal-600/20'
                     : 'bg-white/90 dark:bg-slate-900/90 border-stone-200/70 dark:border-slate-800 text-stone-500 dark:text-slate-400 hover:text-teal-600 dark:hover:text-teal-400 hover:border-stone-300 dark:hover:border-slate-700'
                 }`}
                 title="Buka Pemutar Soundscape"
                 aria-label="Buka Pemutar Soundscape Ambient"
               >
                 <Headphones className="w-3.5 h-3.5" />
-                
+
                 {/* Tooltip on hover */}
                 <span className="absolute right-full mr-2 px-2 py-0.5 rounded-md text-[10px] font-medium bg-stone-900 text-white dark:bg-stone-100 dark:text-stone-900 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap shadow-3xs">
                   {engineState.isPlaying ? 'Soundscape Aktif' : 'Soundscape'}
@@ -140,7 +140,7 @@ export const AmbientSoundscapeWidget: React.FC<AmbientSoundscapeWidgetProps> = (
                 {/* Quick Play/Pause */}
                 <button
                   onClick={() => soundscapeEngine.togglePlay()}
-                  className="w-7 h-7 sm:w-7.5 sm:h-7.5 rounded-full flex items-center justify-center bg-teal-600 text-white hover:bg-teal-700 transition-all cursor-pointer shrink-0 shadow-3xs"
+                  className="w-7 h-7 sm:w-7.5 sm:h-7.5 rounded-full flex items-center justify-center bg-teal-700 text-white hover:bg-teal-800 transition-all cursor-pointer shrink-0 shadow-3xs"
                   title="Jeda Suara Ambient"
                   aria-label="Jeda Suara Ambient"
                 >
@@ -366,7 +366,7 @@ export const AmbientSoundscapeWidget: React.FC<AmbientSoundscapeWidgetProps> = (
                                     onClick={() => soundscapeEngine.toggleTrack(track.id)}
                                     className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all cursor-pointer shrink-0 ${
                                       isActive
-                                        ? 'bg-teal-600 text-white shadow-xs'
+                                        ? 'bg-teal-700 text-white shadow-xs'
                                         : 'bg-stone-100 dark:bg-slate-800 text-stone-500 hover:bg-stone-200'
                                     }`}
                                   >
@@ -478,7 +478,7 @@ export const AmbientSoundscapeWidget: React.FC<AmbientSoundscapeWidgetProps> = (
                         className="w-full flex items-center justify-between p-3.5 rounded-2xl border border-teal-200 dark:border-teal-900 bg-teal-50/60 dark:bg-teal-950/40 hover:bg-teal-100 dark:hover:bg-teal-900/60 transition-colors cursor-pointer text-left"
                       >
                         <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-xl bg-teal-600 text-white flex items-center justify-center font-bold text-xs">
+                          <div className="w-9 h-9 rounded-xl bg-teal-700 text-white flex items-center justify-center font-bold text-xs">
                             25m
                           </div>
                           <div>
@@ -527,7 +527,7 @@ export const AmbientSoundscapeWidget: React.FC<AmbientSoundscapeWidgetProps> = (
 
                 <button
                   onClick={() => soundscapeEngine.togglePlay()}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 active:scale-95 text-white text-xs font-bold shadow-md shadow-teal-500/20 transition-all cursor-pointer"
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-teal-700 hover:bg-teal-800 active:scale-95 text-white text-xs font-bold shadow-md shadow-teal-500/20 transition-all cursor-pointer"
                 >
                   {engineState.isPlaying ? (
                     <>

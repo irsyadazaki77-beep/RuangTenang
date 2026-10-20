@@ -16,6 +16,7 @@ export interface WorkspaceComparisonSnapshot {
   createdAt: string;
   contextFingerprint: string;
   selectedModelIds: string[];
+  candidateModels: Array<{ candidateId: string; modelId: string; profileId?: string }>;
 };
 
 interface Entry { userId: string; snapshot: WorkspaceComparisonSnapshot; expiresAt: number; }
@@ -60,7 +61,8 @@ export function storeComparisonSnapshot(userId: string, input: WorkspaceComparis
     documentContext: copy.documentContext,
     canvasContext: copy.canvasContext,
     preset: copy.preset,
-    selectedModelIds: copy.selectedModelIds
+    selectedModelIds: copy.selectedModelIds,
+    candidateModels: copy.candidateModels
   };
   const snapshot = deepFreeze({
     ...copy,

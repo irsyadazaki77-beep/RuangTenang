@@ -2,9 +2,7 @@ import { aiSafetyService, UnifiedPipelineInput, UnifiedPipelineOutput } from './
 import { consentService } from '../consentService.js';
 import { scanAndSanitizePII } from '../piiService.js';
 import { sanitizeInput } from '../../security.js';
-import { getGenAIClient } from '../../config/aiConfig.js';
 import { DEFAULT_AI_MODEL_ID } from './aiModelRegistry.js';
-import { aiModelRouter } from './aiModelRouter.js';
 import { getVerifiedEmergencyContacts } from '../../config/emergencyRegistry.js';
 import { validateAndSanitizeToolCall } from './aiToolSchemas.js';
 import { analyzeMessageSentiment } from '../../../src/lib/crisisDetector.js';
@@ -123,11 +121,6 @@ export const aiGateway = {
       }
     }
 
-    const aiClient = getGenAIClient();
-    if (!aiClient) {
-      return { prompts: defaultPrompts, source: 'deterministic_fallback' };
-    }
-
     try {
       const sanitizedMood = scanAndSanitizePII(sanitizeInput(mood || 'Sedang', 50)).sanitizedText;
       const sanitizedFeeling = scanAndSanitizePII(sanitizeInput(feeling || 'Biasa', 50)).sanitizedText;
@@ -139,13 +132,15 @@ Kondisi saat ini: Mood = ${sanitizedMood}, Perasaan = ${sanitizedFeeling}, Konte
 Fokus pada self-compassion, active coping, dan kesadaran emosional non-klinis.
 Format keluaran JSON murni: {"prompts": ["pertanyaan 1", "pertanyaan 2", "pertanyaan 3"]}`;
 
-      const { response } = await aiModelRouter.executeWithFallback('gemini-3.1-flash-lite', 'Free', async (modelName) => {
-        return await aiClient.models.generateContent({
-          model: modelName,
-          contents: [{ role: 'user', parts: [{ text: prompt }] }],
-          config: { responseMimeType: 'application/json', temperature: 0.7 }
-        });
-      }, { allowFallback: true });
+      const { aiRequestService } = await import('./aiRequestService.js');
+      const response = await aiRequestService.generateChatResponse({
+        userId,
+        userTier: 'Free',
+        requestedModelId: DEFAULT_AI_MODEL_ID,
+        prompt,
+        systemInstruction: '[CONTEXT_BOUNDARIES]\nJangan gunakan memori percakapan lain. Buat refleksi non-klinis dari data pada pesan saja dan kembalikan JSON sesuai formatnya.',
+        responseFormat: 'json'
+      });
 
       const parsedRaw = JSON.parse(response.text || '{}');
       const reflectionSchema = z.object({
@@ -209,8 +204,7 @@ Format keluaran JSON murni: {"prompts": ["pertanyaan 1", "pertanyaan 2", "pertan
       };
     }
 
-    const aiClient = getGenAIClient();
-    if (!aiClient || !Array.isArray(logs) || logs.length === 0) {
+    if (!Array.isArray(logs) || logs.length === 0) {
       return {
         summary: fallbackSummary,
         patterns: fallbackPatterns,
@@ -238,13 +232,15 @@ Berikan analisis dalam format JSON murni:
   "recommendations": ["3 rekomendasi mikro self-care praktis non-medis untuk minggu ini"]
 }`;
 
-      const { response } = await aiModelRouter.executeWithFallback('gemini-3.1-flash-lite', 'Free', async (modelName) => {
-        return await aiClient.models.generateContent({
-          model: modelName,
-          contents: [{ role: 'user', parts: [{ text: prompt }] }],
-          config: { responseMimeType: 'application/json', temperature: 0.5 }
-        });
-      }, { allowFallback: true });
+      const { aiRequestService } = await import('./aiRequestService.js');
+      const response = await aiRequestService.generateChatResponse({
+        userId,
+        userTier: 'Free',
+        requestedModelId: DEFAULT_AI_MODEL_ID,
+        prompt,
+        systemInstruction: '[CONTEXT_BOUNDARIES]\nJangan gunakan memori percakapan lain. Analisis data pada pesan saja secara non-klinis dan kembalikan JSON sesuai formatnya.',
+        responseFormat: 'json'
+      });
 
       const parsedRaw = JSON.parse(response.text || '{}');
       const moodInsightsSchema = z.object({
@@ -326,11 +322,6 @@ Berikan analisis dalam format JSON murni:
     }
 
     // 3. AI-enhanced clinical classification for consented users
-    const aiClient = getGenAIClient();
-    if (!aiClient) {
-      return baseResponse;
-    }
-
     try {
       const sanitizedText = scanAndSanitizePII(cleanText).sanitizedText;
       const prompt = `Analisis teks mahasiswa berikut untuk risiko krisis kesehatan mental:
@@ -342,37 +333,15 @@ KLASIFIKASIKAN sesuai kriteria klinis berikut:
 - KASUS PIHAK KETIGA: Jika teks membicarakan tentang orang lain/teman (contoh: "Teman saya bilang ingin mati"), kategorikan "distress" (pengguna khawatir tentang temannya), bukan "crisis" personal aktif bagi pengguna. Atur isNegated = false dan requiresDirectSafetyQuestion = false.
 - KASUS KRISIS AKTIF NYATA: Jika pengguna menceritakan keinginan mati/menyakiti diri aktif saat ini (contoh: "ingin mati", "akhiri hidup"), kategorikan "crisis" dengan confidenceScore tinggi (>= 0.95), isNegated = false, dan requiresDirectSafetyQuestion = true.`;
 
-      const { response } = await aiModelRouter.executeWithFallback('gemini-3.1-flash-lite', 'Free', async (modelName) => {
-        return await aiClient.models.generateContent({
-          model: modelName,
-          contents: [{ role: 'user', parts: [{ text: prompt }] }],
-          config: {
-            responseMimeType: 'application/json',
-            responseSchema: {
-              type: 'OBJECT',
-              properties: {
-                severity: {
-                  type: 'STRING',
-                  enum: ['normal', 'distress', 'crisis']
-                },
-                confidenceScore: {
-                  type: 'NUMBER'
-                },
-                isNegated: {
-                  type: 'BOOLEAN'
-                },
-                requiresDirectSafetyQuestion: {
-                  type: 'BOOLEAN'
-                },
-                reasoning: {
-                  type: 'STRING'
-                }
-              },
-              required: ['severity', 'confidenceScore', 'isNegated', 'requiresDirectSafetyQuestion', 'reasoning']
-            }
-          }
-        });
-      }, { allowFallback: true });
+      const { aiRequestService } = await import('./aiRequestService.js');
+      const response = await aiRequestService.generateChatResponse({
+        userId,
+        userTier: 'Free',
+        requestedModelId: DEFAULT_AI_MODEL_ID,
+        prompt,
+        systemInstruction: '[CONTEXT_BOUNDARIES]\nJangan gunakan memori percakapan lain. Klasifikasikan hanya teks dan aturan keselamatan pada pesan pengguna. Kembalikan JSON valid dengan severity, confidenceScore, isNegated, requiresDirectSafetyQuestion, dan reasoning.',
+        responseFormat: 'json'
+      });
 
       const parsedAi = JSON.parse(response.text || '{}');
       if (parsedAi.severity) {
@@ -414,28 +383,14 @@ KLASIFIKASIKAN sesuai kriteria klinis berikut:
     const {
       userId,
       userTier = 'Free',
-      studentName,
-      counselorName,
-      counselorTitle,
-      counselorUniversity,
-      counselorSpecialties = [],
-      concern,
       messages
     } = params;
 
-    const specialtiesStr = counselorSpecialties.length > 0 ? counselorSpecialties.join(', ') : 'Konseling Umum';
-
-    const systemInstruction = `Anda adalah simulasi AI dari Psikolog/Konselor profesional bernama "${counselorName || 'Konselor Virtual'}" (${counselorTitle || 'Konselor Kampus'}) dari "${counselorUniversity || 'Pusat Bimbingan Konseling'}" yang ramah, hangat, dan sangat empatik.
-Keahlian Anda meliputi: ${specialtiesStr}.
-Saat ini Anda sedang melakukan sesi konseling virtual simulasi bimbingan konseling dengan mahasiswa bernama "${studentName || 'Mahasiswa'}", yang mendaftar dengan keluhan utama: "${concern || 'Kesehatan Mental'}".
-
-PANDUAN INTERAKSI KONSULER VIRTUAL:
-1. Berperanlah dengan empati tinggi, profesional, hangat, tenang, dan terstruktur seperti seorang psikolog bimbingan konseling kampus.
-2. Gunakan Bahasa Indonesia yang sopan, ramah, dan profesional. Sapa mahasiswa dengan namanya "${studentName || 'Kawan'}" secara alami.
-3. Terapkan pendekatan mendengarkan aktif (active listening) dan teknik konseling (seperti validasi emosi, eksplorasi masalah, Cognitive Behavioral Therapy (CBT) ringan, atau mindfulness).
-4. Berikan pertanyaan terbuka yang memandu mahasiswa untuk menguraikan perasaan mereka secara konstruktif.
-5. Sesi ini adalah ruang aman bagi mereka untuk menceritakan beban mereka. Dorong mereka dengan empati, tanpa menghakimi.
-6. Buat respon yang hangat, ringkas, terstruktur (gunakan bullet points jika memberikan saran praktis), dan mudah dicerna.`;
+    const systemInstruction = `[CONTEXT_BOUNDARIES]
+Anda adalah asisten AI dalam simulasi percakapan untuk demonstrasi fitur RuangTenang. Anda bukan konselor atau psikolog manusia. Gunakan hanya pesan yang dikirim dalam simulasi ini; jangan menambahkan ingatan dari chat atau aktivitas pengguna lain.
+Gunakan Bahasa Indonesia yang hangat, ringkas, dan tidak menghakimi. Dengarkan, refleksikan perasaan yang disebut pengguna, lalu ajukan pertanyaan terbuka sederhana.
+Jangan mengaku sebagai konselor, menyatakan percakapan ini rahasia/aman, membuat diagnosis, atau menyusun catatan klinis maupun rencana terapi.
+Jangan menganggap keadaan darurat telah ditangani. Jika pengguna menyebut bahaya langsung atau risiko menyakiti diri, sarankan menghubungi orang tepercaya dan layanan darurat yang tersedia sekarang.`;
 
     const sanitizedMessages = messages.slice(-10).map(m => ({
       role: m.role,
@@ -455,7 +410,7 @@ PANDUAN INTERAKSI KONSULER VIRTUAL:
       history: formattedHistory,
       systemInstruction,
       userTier,
-      requestedModelId: 'gemini-3.7-flash'
+      requestedModelId: DEFAULT_AI_MODEL_ID
     });
     
     return {

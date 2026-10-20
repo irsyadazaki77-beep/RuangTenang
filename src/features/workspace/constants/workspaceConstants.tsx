@@ -1,5 +1,5 @@
 import React from 'react';
-import { BookOpen, Quote, ListTree, FileCode } from 'lucide-react';
+import { BookOpen, Code2, FileText, FlaskConical } from 'lucide-react';
 import { WorkspaceArtifact, StarterTaskItem, AcademicPromptPill } from '../types';
 
 export const DEFAULT_WELCOME_ARTIFACT_ID = 'art_welcome';
@@ -34,7 +34,7 @@ export function createWelcomeMessage(userName?: string) {
   return {
     id: 'msg_welcome',
     role: 'assistant' as const,
-    content: `Halo ${displayName}! 👋 Saya asisten akademik RuangKerja. 
+    content: `Halo ${displayName}! 👋 Saya asisten akademik RuangKerja.
 
 Ada tugas kuliah, draf skripsi, resume jurnal, atau kode yang butuh di-review dan dioptimasi hari ini? Ketik langsung tugas Anda atau pilih instruksi di bawah.`,
     createdAt: new Date()
@@ -43,36 +43,36 @@ Ada tugas kuliah, draf skripsi, resume jurnal, atau kode yang butuh di-review da
 
 export const STARTER_TASKS: StarterTaskItem[] = [
   {
-    id: 'bedah-paper',
-    title: 'Bedah Paper & Jurnal',
-    subtitle: 'Ringkas problem gap, variabel & metodologi Bab 2',
-    icon: <BookOpen className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />,
+    id: 'analisis-dokumen',
+    title: 'Analisis dokumen',
+    subtitle: 'Ringkas tujuan, temuan, bukti, dan pertanyaan',
+    icon: <FileText className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />,
     primary: true,
-    prompt: 'Bantu saya membedah dan menganalisis jurnal/paper ilmiah ini: ekstrak latar belakang masalah, urgensi riset, metodologi dan instrumen analisis yang digunakan, temuan kunci, serta buat ringkasan eksekutif yang sistematis:\n\n[Tempelkan abstrak atau isi jurnal di sini]'
+    prompt: 'Bantu saya menganalisis dokumen yang saya lampirkan. Rangkum tujuan, temuan utama, bukti pendukung, dan pertanyaan yang masih terbuka.'
   },
   {
-    id: 'format-sitasi',
-    title: 'Format Sitasi APA 7th / IEEE',
-    subtitle: 'Susun bibliografi otomatis & ekspor berkas .bib',
-    icon: <Quote className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />,
+    id: 'tulis-dokumen',
+    title: 'Tulis dokumen',
+    subtitle: 'Mulai dari tujuan, pembaca, dan bahan yang ada',
+    icon: <BookOpen className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />,
     primary: false,
-    prompt: 'Tolong review bagian metodologi penelitian dan periksa format sitasi serta daftar pustaka berikut sesuai standar APA 7th Edition dan IEEE:\n\n[Tempelkan draf referensi di sini]'
+    prompt: 'Bantu saya menulis dokumen. Tanyakan tujuan, pembaca, dan bahan yang sudah tersedia sebelum menyusun draf.'
   },
   {
-    id: 'struktur-skripsi',
-    title: 'Struktur Skripsi Bab 1-3',
-    subtitle: 'Kerangka pendahuluan piramida terbalik & landasan teori',
-    icon: <ListTree className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />,
+    id: 'review-kode',
+    title: 'Review kode',
+    subtitle: 'Cari bug, risiko keamanan, dan perbaikan penting',
+    icon: <Code2 className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />,
     primary: false,
-    prompt: 'Bantu saya menyusun kerangka penulisan (outline) skripsi yang komprehensif mulai dari Bab 1 (Pendahuluan), Bab 2 (Tinjauan Pustaka), hingga Bab 3 (Metodologi Penelitian):\n\n[Topik / Judul Skripsi: ]'
+    prompt: 'Tinjau kode yang saya berikan. Cari bug, risiko keamanan, dan perbaikan paling penting dengan penjelasan singkat.'
   },
   {
-    id: 'debug-kode',
-    title: 'Debug Kode & Optimasi Big-O',
-    subtitle: 'Telusuri bug, perbaiki runtime, dan analisis kompleksitas',
-    icon: <FileCode className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />,
+    id: 'riset-topik',
+    title: 'Riset topik',
+    subtitle: 'Susun pertanyaan, kata kunci, dan sumber yang perlu dicek',
+    icon: <FlaskConical className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />,
     primary: false,
-    prompt: 'Tolong telusuri bug/error pada kode program berikut, jelaskan penyebab masalahnya, berikan kode perbaikan yang bersih dan efisien, serta analisis kompleksitas waktu (Big-O):\n\n[Tempelkan kode dan pesan error di sini]'
+    prompt: 'Bantu saya meneliti topik ini. Susun pertanyaan riset, kata kunci pencarian, sumber yang relevan, dan hal yang perlu diverifikasi.'
   }
 ];
 

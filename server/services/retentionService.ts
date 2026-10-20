@@ -6,6 +6,7 @@ export interface RetentionCleanupResult {
   success: boolean;
   totalCleaned: number;
   moodLogsDeleted: number;
+  journalEntriesDeleted: number;
   screeningsDeleted: number;
   appointmentsDeleted: number;
   chatsDeleted: number;
@@ -34,6 +35,7 @@ async function deleteAttachmentRecords(records: Array<{ id: string; data: string
 }
 
 import { encryptionService } from './encryptionService.js';
+import { createCampusAnalyticsActorHash } from './campusProductAnalyticsService.js';
 
 export class RetentionService {
   /**
@@ -42,6 +44,7 @@ export class RetentionService {
   async runRetentionCleanup(): Promise<RetentionCleanupResult> {
     const allConsents = await prisma.userConsents.findMany();
     let moodLogsDeleted = 0;
+    let journalEntriesDeleted = 0;
     let screeningsDeleted = 0;
     let appointmentsDeleted = 0;
     let chatsDeleted = 0;
@@ -65,6 +68,9 @@ export class RetentionService {
         }
       });
       moodLogsDeleted += deletedMoods.count;
+
+      const deletedJournals = await prisma.userJournalEntry.deleteMany({ where: { userId, updatedAt: { lt: cutoff } } });
+      journalEntriesDeleted += deletedJournals.count;
 
       // 2. Screenings
       const deletedScreens = await prisma.screenings.deleteMany({
@@ -157,11 +163,9 @@ export class RetentionService {
     const guestMessageChatIds = new Map(oldGuestMessages.map((message) => [message.id, message.chatId]));
     const oldGuestAttachments = await prisma.attachments.findMany({
       where: {
-        userId: 'guest',
         OR: [
-          { chatId: { in: oldGuestChatIds } },
-          { messageId: { in: oldGuestMessages.map((message) => message.id) } },
-          { chatId: null, messageId: null, createdAt: { lt: guestCutoff } }
+          { userId: 'guest', createdAt: { lt: guestCutoff } },
+          { userId: { startsWith: 'guest:' }, createdAt: { lt: guestCutoff } }
         ]
       },
       select: { id: true, data: true, chatId: true, messageId: true }
@@ -212,12 +216,13 @@ export class RetentionService {
       // Non-blocking
     }
 
-    const totalCleaned = moodLogsDeleted + screeningsDeleted + appointmentsDeleted + chatsDeleted + temporaryChatsDeleted + attachmentsDeleted;
+    const totalCleaned = moodLogsDeleted + journalEntriesDeleted + screeningsDeleted + appointmentsDeleted + chatsDeleted + temporaryChatsDeleted + attachmentsDeleted;
 
     return {
       success: true,
       totalCleaned,
       moodLogsDeleted,
+      journalEntriesDeleted,
       screeningsDeleted,
       appointmentsDeleted,
       chatsDeleted,
@@ -239,6 +244,12 @@ export class RetentionService {
       const user = await tx.users.findUnique({ where: { id: userId } });
       const userEmail = user?.email || 'anonymized';
       let count = 0;
+
+      const analyticsActorHash = user?.campusId ? createCampusAnalyticsActorHash(userId, user.campusId) : null;
+      if (analyticsActorHash && user?.campusId) {
+        const delAnalyticsEvents = await tx.productAnalyticsEvents.deleteMany({ where: { campusId: user.campusId, actorHash: analyticsActorHash } });
+        count += delAnalyticsEvents.count;
+      }
 
       // 1. Message Bookmarks and Attachments (Must delete before Chat Messages to prevent foreign key issues)
       const delBookmarks = await tx.messageBookmarks.deleteMany({ where: { userId } });
@@ -276,6 +287,9 @@ export class RetentionService {
       // 3. Mood Logs & Self Care Tasks
       const delMoods = await tx.moodLogs.deleteMany({ where: { userId } });
       count += delMoods.count;
+
+      const delJournals = await tx.userJournalEntry.deleteMany({ where: { userId } });
+      count += delJournals.count;
 
       const delSelfCare = await tx.selfCareTasks.deleteMany({ where: { userId } });
       count += delSelfCare.count;
@@ -369,6 +383,13 @@ export class RetentionService {
     return await prisma.$transaction(async (tx) => {
       let count = 0;
 
+      const user = await tx.users.findUnique({ where: { id: userId }, select: { campusId: true } });
+      const analyticsActorHash = user?.campusId ? createCampusAnalyticsActorHash(userId, user.campusId) : null;
+      if (analyticsActorHash && user?.campusId) {
+        const delAnalyticsEvents = await tx.productAnalyticsEvents.deleteMany({ where: { campusId: user.campusId, actorHash: analyticsActorHash } });
+        count += delAnalyticsEvents.count;
+      }
+
       // Clean bookmarks and attachments first
       const delBookmarks = await tx.messageBookmarks.deleteMany({ where: { userId } });
       count += delBookmarks.count;
@@ -403,6 +424,9 @@ export class RetentionService {
       const delMoods = await tx.moodLogs.deleteMany({ where: { userId } });
       count += delMoods.count;
 
+      const delJournals = await tx.userJournalEntry.deleteMany({ where: { userId } });
+      count += delJournals.count;
+
       const delSelfCare = await tx.selfCareTasks.deleteMany({ where: { userId } });
       count += delSelfCare.count;
 
@@ -429,6 +453,7 @@ export class RetentionService {
       user,
       consents,
       moods,
+      journals,
       screenings,
       appointments,
       chats,
@@ -456,6 +481,7 @@ export class RetentionService {
         where: { userId },
         orderBy: { timestamp: 'desc' }
       }),
+      prisma.userJournalEntry.findMany({ where: { userId }, orderBy: { updatedAt: 'desc' } }),
       prisma.screenings.findMany({
         where: { userId },
         orderBy: { timestamp: 'desc' }
@@ -526,6 +552,11 @@ export class RetentionService {
         factors: m.factors ? JSON.parse(m.factors) : null,
         timestamp: m.timestamp
       })),
+      journals: journals.map((journal) => ({
+        kind: journal.kind,
+        entries: JSON.parse(encryptionService.decryptSensitive(journal.content) || '[]'),
+        updatedAt: journal.updatedAt
+      })),
       screenings: screenings.map((s) => ({
         id: s.id,
         phq9Score: s.phq9Score,
@@ -593,7 +624,7 @@ export class RetentionService {
   /**
    * Hashes a user email using HMAC-SHA256 with BLIND_INDEX_SECRET as the salt
    * to protect against rainbow table attacks and comply with UU PDP.
-   * 
+   *
    * @param email - Plaintext email address of the user.
    * @returns Deterministic 64-character hex-encoded SHA-256 HMAC hash.
    */

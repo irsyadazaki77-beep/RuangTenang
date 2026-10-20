@@ -99,7 +99,7 @@ export const Chip: React.FC<ChipProps> = ({
         ${isSm ? 'text-xs px-2.5 py-1 rounded-lg min-h-[28px]' : 'text-xs sm:text-sm px-3 py-1.5 rounded-xl min-h-[34px]'}
         ${
           active
-            ? 'bg-teal-600 text-white shadow-3xs border border-teal-600'
+            ? 'bg-teal-700 text-white shadow-3xs border border-teal-600'
             : 'bg-slate-100/80 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 border border-slate-200/70 dark:border-slate-700/60 hover:bg-slate-200/70 dark:hover:bg-slate-700/70'
         }
         disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100

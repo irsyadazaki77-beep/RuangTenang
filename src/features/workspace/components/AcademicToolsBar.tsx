@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { 
-  BookOpen, 
-  Quote, 
-  Code2, 
-  FileText, 
-  Sparkles, 
-  Pencil, 
+import {
+  BookOpen,
+  Quote,
+  Code2,
+  FileText,
+  Sparkles,
+  Pencil,
   ChevronRight,
   Lightbulb,
   X
@@ -200,11 +200,11 @@ export const AcademicToolsBar: React.FC<AcademicToolsBarProps> = ({
       </div>
 
       {selectedForModal && (
-        <div 
+        <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in"
           onClick={() => setSelectedForModal(null)}
         >
-          <div 
+          <div
             className="w-full max-w-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-2xl space-y-4 animate-scale-up"
             onClick={e => e.stopPropagation()}
           >
@@ -222,8 +222,8 @@ export const AcademicToolsBar: React.FC<AcademicToolsBarProps> = ({
                   </p>
                 </div>
               </div>
-              <button 
-                type="button" 
+              <button
+                type="button"
                 onClick={() => setSelectedForModal(null)}
                 className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                 aria-label="Tutup"

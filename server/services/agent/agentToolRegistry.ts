@@ -3,7 +3,7 @@ import { TabularAnalysisRequestSchema } from '../../../shared/contracts/tabular.
 import { isWebSearchConfigured } from '../webSearchService.js';
 
 export type AgentTaskType = 'analysis' | 'writing' | 'research' | 'coding' | 'review' | 'transform';
-export type AgentToolPermission = 'read' | 'propose';
+export type AgentToolPermission = 'read' | 'propose' | 'write';
 
 export interface AgentToolDefinition {
   id: string;
@@ -165,6 +165,122 @@ export const AGENT_TOOL_REGISTRY: readonly AgentToolDefinition[] = Object.freeze
     executionLocation: 'server', permission: 'read', requiresApproval: false,
     timeoutMs: 15_000, isIdempotent: true,
     allowedTaskTypes: ['research']
+  },
+  {
+    id: 'propose_document_draft',
+    version: '1.0.0',
+    description: 'Propose a structured document or comprehensive academic draft with sections, citations, and references formatted for Word/DOCX export and Canvas review.',
+    inputSchema: z.object({
+      title: z.string().trim().min(1).max(200),
+      summary: z.string().trim().min(5).max(1_000),
+      sections: z.array(z.object({
+        heading: z.string().trim().min(1).max(200),
+        level: z.number().int().min(1).max(3).default(2),
+        body: z.string().trim().min(1).max(10_000)
+      }).strict()).min(1).max(30),
+      references: z.array(z.string().trim().min(1).max(500)).max(50).optional()
+    }).strict(),
+    outputSchema: z.object({
+      proposalStatus: z.literal('ready_for_review'),
+      artifactType: z.literal('DOCUMENT'),
+      title: z.string().max(200),
+      sectionCount: z.number().int().positive(),
+      estimatedWords: z.number().int().positive(),
+      formattedMarkdown: z.string().max(20_000)
+    }).strict(),
+    executionLocation: 'server', permission: 'propose', requiresApproval: false,
+    timeoutMs: 10_000, isIdempotent: true,
+    allowedTaskTypes: ['writing', 'analysis', 'transform', 'review']
+  },
+  {
+    id: 'propose_presentation_deck',
+    version: '1.0.0',
+    description: 'Propose a structured slide presentation deck with slides, bullet points, and speaker notes compatible with PowerPoint/PPTX export and Canvas presentation studio.',
+    inputSchema: z.object({
+      title: z.string().trim().min(1).max(200),
+      theme: z.enum(['academic_minimal', 'professional', 'technology', 'clean_corporate']).default('academic_minimal'),
+      slides: z.array(z.object({
+        title: z.string().trim().min(1).max(200),
+        body: z.string().trim().min(1).max(3_000),
+        notes: z.string().trim().max(1_000).optional()
+      }).strict()).min(1).max(50)
+    }).strict(),
+    outputSchema: z.object({
+      proposalStatus: z.literal('ready_for_review'),
+      artifactType: z.literal('DOCUMENT'),
+      language: z.literal('presentation'),
+      title: z.string().max(200),
+      slideCount: z.number().int().positive(),
+      deckJson: z.string().max(20_000)
+    }).strict(),
+    executionLocation: 'server', permission: 'propose', requiresApproval: false,
+    timeoutMs: 10_000, isIdempotent: true,
+    allowedTaskTypes: ['writing', 'analysis', 'transform']
+  },
+  {
+    id: 'propose_tabular_dataset',
+    version: '1.0.0',
+    description: 'Propose a structured tabular dataset with typed columns and rows compatible with Excel/XLSX export and Canvas spreadsheet studio.',
+    inputSchema: z.object({
+      title: z.string().trim().min(1).max(200),
+      columns: z.array(z.string().trim().min(1).max(100)).min(1).max(30),
+      columnTypes: z.record(z.string(), z.enum(['text', 'number', 'date'])).optional(),
+      rows: z.array(z.record(z.string(), z.unknown())).min(1).max(100),
+      sourceProvenance: z.string().trim().max(300).optional()
+    }).strict(),
+    outputSchema: z.object({
+      proposalStatus: z.literal('ready_for_review'),
+      artifactType: z.literal('TABLE'),
+      title: z.string().max(200),
+      columnCount: z.number().int().positive(),
+      rowCount: z.number().int().positive(),
+      tableJson: z.string().max(20_000)
+    }).strict(),
+    executionLocation: 'server', permission: 'propose', requiresApproval: false,
+    timeoutMs: 10_000, isIdempotent: true,
+    allowedTaskTypes: ['analysis', 'transform', 'writing']
+  },
+  {
+    id: 'revise_workspace_artifact',
+    version: '1.0.0',
+    description: 'Propose a revision to an existing workspace artifact based on feedback or instructions.',
+    inputSchema: z.object({
+      artifactId: nonEmptyId,
+      instructions: z.string().trim().min(3).max(2_000),
+      revisedTitle: z.string().trim().min(1).max(200).optional(),
+      revisedContent: z.string().min(1).max(20_000)
+    }).strict(),
+    outputSchema: z.object({
+      proposalStatus: z.literal('revision_proposed'),
+      targetArtifactId: z.string().max(100),
+      title: z.string().max(200),
+      contentLength: z.number().int().positive()
+    }).strict(),
+    executionLocation: 'server', permission: 'propose', requiresApproval: false,
+    timeoutMs: 10_000, isIdempotent: true,
+    allowedTaskTypes: ['writing', 'transform', 'review']
+  },
+  {
+    id: 'verify_artifact_structure',
+    version: '1.0.0',
+    description: 'Deterministically verify the structural integrity and exporter compatibility (DOCX/PPTX/XLSX) of an artifact content or proposal before delivery.',
+    inputSchema: z.object({
+      targetType: z.enum(['document', 'presentation', 'table']),
+      content: z.string().min(1).max(20_000)
+    }).strict(),
+    outputSchema: z.object({
+      isValid: z.boolean(),
+      targetType: z.enum(['document', 'presentation', 'table']),
+      checks: z.array(z.object({
+        name: z.string().max(100),
+        passed: z.boolean(),
+        details: z.string().max(300)
+      }).strict()).max(10),
+      warnings: z.array(z.string().max(300)).max(10)
+    }).strict(),
+    executionLocation: 'server', permission: 'read', requiresApproval: false,
+    timeoutMs: 10_000, isIdempotent: true,
+    allowedTaskTypes: ['analysis', 'writing', 'review', 'transform']
   }
 ]);
 
@@ -172,16 +288,18 @@ export function getAgentToolDefinition(toolId: string): AgentToolDefinition | un
   return AGENT_TOOL_REGISTRY.find(tool => tool.id === toolId);
 }
 
-export function getAllowedAgentToolIds(taskType: AgentTaskType, context: { attachmentIds: string[]; artifactId?: string }): Set<string> {
+export function getAllowedAgentToolIds(taskType: AgentTaskType, context: { attachmentIds: string[]; artifactId?: string; hasDependencyArtifacts?: boolean; allowExternalSearch?: boolean }): Set<string> {
   const ids = new Set<string>();
+  const canReadArtifact = Boolean(context.artifactId || context.hasDependencyArtifacts);
   for (const tool of AGENT_TOOL_REGISTRY) {
     if (!tool.allowedTaskTypes.includes(taskType)) continue;
     if (tool.id === 'search_workspace_documents' && context.attachmentIds.length === 0) continue;
     if (tool.id === 'compare_workspace_documents' && context.attachmentIds.length < 2) continue;
     if (tool.id === 'extract_assignment_guidelines' && context.attachmentIds.length === 0) continue;
     if ((tool.id === 'inspect_workspace_dataset' || tool.id === 'analyze_workspace_dataset') && context.attachmentIds.length === 0) continue;
-    if (tool.id === 'read_workspace_artifact' && !context.artifactId) continue;
-    if (tool.id === 'search_web' && !isWebSearchConfigured()) continue;
+    if (tool.id === 'read_workspace_artifact' && !canReadArtifact) continue;
+    if (tool.id === 'revise_workspace_artifact' && !canReadArtifact) continue;
+    if (tool.id === 'search_web' && (context.allowExternalSearch === false || !isWebSearchConfigured())) continue;
     ids.add(tool.id);
   }
   return ids;

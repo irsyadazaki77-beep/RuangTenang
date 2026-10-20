@@ -11,7 +11,7 @@ import {
   KeyRound,
   CheckCircle2,
   AlertTriangle,
-  ChevronLeft, 
+  ChevronLeft,
   ChevronRight,
   Lock,
   Ghost,
@@ -31,13 +31,15 @@ interface PrivacyCenterModalProps {
   onClose: () => void;
   userSession: UserSession;
   setUserSession: (session: UserSession) => void;
+  onAiConsentChange?: (allowed: boolean) => void;
 }
 
 export const PrivacyCenterModal: React.FC<PrivacyCenterModalProps> = ({
   isOpen,
   onClose,
   userSession,
-  setUserSession
+  setUserSession,
+  onAiConsentChange
 }) => {
   useEscapeKey(onClose, true);
 
@@ -75,7 +77,7 @@ export const PrivacyCenterModal: React.FC<PrivacyCenterModalProps> = ({
         }
       }
     };
-    
+
     // Set initial focus
     const focusable = getFocusableElements();
     (focusable[0] || modalRef.current)?.focus();
@@ -87,7 +89,9 @@ export const PrivacyCenterModal: React.FC<PrivacyCenterModalProps> = ({
     };
   }, [isOpen]);
 
-  const [showMobileDetail, setShowMobileDetail] = useState(false);
+  // Open directly on the selected consent panel so mobile users see the form,
+  // not only the category list, when the consent dialog is first shown.
+  const [showMobileDetail, setShowMobileDetail] = useState(true);
   const [activeTab, setActiveTab] = useState<
     'consent' | 'export' | 'correct' | 'retention' | 'sessions' | 'access_logs' | 'erasure'
   >('consent');
@@ -208,6 +212,7 @@ export const PrivacyCenterModal: React.FC<PrivacyCenterModalProps> = ({
       });
       if (res.success) {
         setMsg({ type: 'success', text: `Preferensi consent berhasil disimpan (Kebijakan ${policyVersion}, Versi ${consentVersion}).` });
+        onAiConsentChange?.(consentForAI);
         if (res.data?.record) {
           setConsentTimestamp(res.data.record.consentTimestamp);
         }
@@ -239,7 +244,8 @@ export const PrivacyCenterModal: React.FC<PrivacyCenterModalProps> = ({
       const res = await apiClient.post<any>('/api/v1/privacy/consent/revoke', {});
       if (res.success) {
         setMsg({ type: 'success', text: 'Seluruh izin persetujuan telah dicabut dan memori AI dibersihkan.' });
-        fetchPrivacyData();  
+        onAiConsentChange?.(false);
+        fetchPrivacyData();
       } else {
         setMsg({ type: 'error', text: res.error || 'Gagal mencabut consent.' });
       }
@@ -341,7 +347,7 @@ export const PrivacyCenterModal: React.FC<PrivacyCenterModalProps> = ({
       const res = await apiClient.post<any>('/api/v1/auth/sessions/revoke', { sessionId });
       if (res.success) {
         setMsg({ type: 'success', text: 'Sesi perangkat telah berhasil dicabut.' });
-        fetchPrivacyData();  
+        fetchPrivacyData();
       }
     } catch {
       setMsg({ type: 'error', text: 'Gagal mencabut sesi.' });
@@ -408,7 +414,7 @@ export const PrivacyCenterModal: React.FC<PrivacyCenterModalProps> = ({
         aria-labelledby="privacy-modal-title"
         className="surface-card text-primary rounded-2xl max-sm:rounded-none shadow-xl border border-default w-full max-w-4xl max-h-[90vh] max-sm:h-[100dvh] max-sm:max-h-[100dvh] max-sm:w-full max-sm:animate-slide-up flex flex-col overflow-hidden relative transition-all duration-200"
       >
-        
+
         {/* Header */}
         <div className="px-4 sm:px-6 py-3.5 surface-card text-primary flex items-center justify-between shrink-0 border-b border-default">
           <div className="flex items-center gap-3">
@@ -446,10 +452,10 @@ export const PrivacyCenterModal: React.FC<PrivacyCenterModalProps> = ({
           </div>
         )}
 
-        
+
         {/* Modal Layout: Sidebar + Main Content */}
         <div className="flex-1 flex flex-col md:flex-row overflow-hidden surface-page">
-          
+
           {/* Unified Navigation Sidebar */}
           <div className={`w-full md:w-64 md:flex-col surface-muted border-r border-default p-2.5 space-y-1 shrink-0 overflow-y-auto ${showMobileDetail ? 'hidden md:flex' : 'flex flex-col'}`}>
             {tabItems.map((tab) => {
@@ -461,7 +467,7 @@ export const PrivacyCenterModal: React.FC<PrivacyCenterModalProps> = ({
                   onClick={() => { setActiveTab(tab.id); setMsg(null); setShowMobileDetail(true); }}
                   className={`w-full text-left px-3 py-2 min-h-[44px] rounded-xl text-xs font-semibold transition-colors flex items-center justify-between cursor-pointer active:scale-[0.98] ${
                     isActive
-                      ? tab.id === 'erasure' ? 'bg-rose-600 text-white shadow-3xs' : 'bg-teal-600 text-white shadow-3xs'
+                      ? tab.id === 'erasure' ? 'bg-rose-600 text-white shadow-3xs' : 'bg-teal-700 text-white shadow-3xs'
                       : tab.id === 'erasure' ? 'text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30' : 'text-secondary hover:text-primary hover:bg-slate-200/50 dark:hover:bg-slate-800/50'
                   }`}
                 >
@@ -475,15 +481,15 @@ export const PrivacyCenterModal: React.FC<PrivacyCenterModalProps> = ({
             })}
           </div>
 
-          
+
 
           {/* Main Tab Panel */}
           <div className={`flex-1 p-4 sm:p-6 overflow-y-auto space-y-4 surface-page text-primary ${!showMobileDetail ? 'hidden md:block' : 'block'}`}>
-            
+
             {/* TAB 1: Consent AI & Features */}
             {showMobileDetail && (
-              <button 
-                onClick={() => setShowMobileDetail(false)} 
+              <button
+                onClick={() => setShowMobileDetail(false)}
                 className="md:hidden flex items-center gap-1.5 text-xs font-semibold text-teal-600 dark:text-teal-400 hover:text-teal-700 px-3.5 py-2 mb-4 rounded-lg bg-teal-50 dark:bg-teal-900/40 cursor-pointer transition-all min-h-[44px] w-fit"
               >
                 <ChevronLeft className="w-4 h-4" /> Kembali ke Kategori
@@ -519,7 +525,7 @@ export const PrivacyCenterModal: React.FC<PrivacyCenterModalProps> = ({
                         1. Temporary / Incognito
                       </div>
                       <p className="text-secondary text-[10.5px] leading-tight">
-                        Obrolan sementara efemeral. Teks diproses transient di RAM tanpa disimpan ke basis data atau cache browser.
+                        Pesan baru tidak ditambahkan ke riwayat akun. Pesan tetap dikirim ke provider AI; lampiran tetap diunggah ke server dan mengikuti retensi aplikasi. RuangTenang tidak menghapus salinan provider atau cadangan dari fitur ini. Mode ini bukan penyamaran browser.
                       </p>
                     </div>
 
@@ -543,6 +549,9 @@ export const PrivacyCenterModal: React.FC<PrivacyCenterModalProps> = ({
                       </p>
                     </div>
                   </div>
+                  <p className="text-secondary text-[10.5px] leading-relaxed">
+                    Draf Canvas RuangKerja dapat disimpan sementara di session storage browser agar pulih setelah halaman dimuat ulang. Isinya tidak dienkripsi oleh penyimpanan ini; gunakan dengan hati-hati pada perangkat atau profil browser bersama.
+                  </p>
                 </div>
 
                 {activeTab === 'consent' && (
@@ -655,7 +664,7 @@ export const PrivacyCenterModal: React.FC<PrivacyCenterModalProps> = ({
                 <button
                   type="submit"
                   disabled={loading}
-                  className="px-4 py-2 min-h-[44px] bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs sm:text-sm font-semibold transition shadow-3xs cursor-pointer active:scale-[0.98]"
+                  className="px-4 py-2 min-h-[44px] bg-teal-700 hover:bg-teal-800 text-white rounded-xl text-xs sm:text-sm font-semibold transition shadow-3xs cursor-pointer active:scale-[0.98]"
                 >
                   {loading ? 'Menyimpan...' : 'Perbarui Data Pribadi'}
                 </button>
@@ -693,7 +702,7 @@ export const PrivacyCenterModal: React.FC<PrivacyCenterModalProps> = ({
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-bold text-primary">{option.label}</span>
                         {retentionDays === option.days && (
-                          <span className="px-1.5 py-0.5 bg-teal-600 text-white text-[9px] font-bold rounded">
+                          <span className="px-1.5 py-0.5 bg-teal-700 text-white text-[9px] font-bold rounded">
                             Aktif
                           </span>
                         )}

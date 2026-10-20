@@ -1,12 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { 
-  Send, 
-  Plus, 
-  Square, 
-  Paperclip, 
-  X, 
-  FileText, 
-  ShieldCheck, 
+import {
+  Send,
+  Plus,
+  Square,
+  Paperclip,
+  X,
+  FileText,
+  ShieldCheck,
   Command,
   MicOff,
   Mic,
@@ -18,23 +18,34 @@ import { CHAT_COMMANDS, CHAT_PLUGINS } from '../constants/commands';
 import { Attachment } from '../types';
 import { useToast } from '../../../components/Toast';
 import { useComposerVoiceInput } from '../hooks/useComposerVoiceInput';
+import { readGuestAiConsent } from '../../../lib/guestAiConsent';
 
 interface Props {
-  onSend: (msg: string, plugin?: string, attachments?: Attachment[]) => void;
+  onSend: (msg: string, plugin?: string, attachments?: Attachment[]) => void | boolean;
   isTyping: boolean;
   onStop: () => void;
+  aiConsentAllowed?: boolean | null;
+  aiConsentPromptOpen?: boolean;
+  onRequestAiConsent?: () => void;
+  isTemporary?: boolean;
   chatId?: string;
+  draftOwnerId?: string;
   onCommand?: (cmd: string) => void;
   onOpenPlugin?: (pluginId: string) => void;
   quotaExceeded?: boolean;
 }
 
-export function ChatComposer({ 
-  onSend, 
-  isTyping, 
-  onStop, 
-  chatId, 
-  onCommand, 
+export function ChatComposer({
+  onSend,
+  isTyping,
+  onStop,
+  aiConsentAllowed = true,
+  aiConsentPromptOpen = false,
+  onRequestAiConsent,
+  isTemporary = false,
+  chatId,
+  draftOwnerId = 'guest',
+  onCommand,
   onOpenPlugin,
   quotaExceeded = false
 }: Props) {
@@ -44,23 +55,70 @@ export function ChatComposer({
   const [showActionMenu, setShowActionMenu] = useState(false);
   const [showCommands, setShowCommands] = useState(false);
   const [selectedCmdIndex, setSelectedCmdIndex] = useState(0);
+  const waitingForConsentRef = useRef(false);
+  const draftWasJustLoadedRef = useRef(false);
+  const wasTemporaryRef = useRef(isTemporary);
+  const isTemporaryRef = useRef(isTemporary);
+  isTemporaryRef.current = isTemporary;
   const { isListening, toggleListening } = useComposerVoiceInput(input, setInput);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const composerContainerRef = useRef<HTMLDivElement>(null);
+  const attachmentsRef = useRef<Attachment[]>([]);
+  attachmentsRef.current = attachments;
+  const draftStorageKey = `ruangtenang:chat-draft:${encodeURIComponent(draftOwnerId)}:${encodeURIComponent(chatId || 'new')}`;
+  useEffect(() => () => {
+    attachmentsRef.current.forEach(attachment => {
+      if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
+    });
+  }, []);
   // Load and persist draft per chat session
   useEffect(() => {
-    const draft = safeLocalStorage.getItem(`draft_${chatId || 'new'}`);
-    if (draft) setInput(draft);
+    const draft = isTemporaryRef.current ? null : safeLocalStorage.getItem(draftStorageKey);
+    draftWasJustLoadedRef.current = true;
+    wasTemporaryRef.current = isTemporaryRef.current;
+    if (isTemporaryRef.current) safeLocalStorage.removeItem(draftStorageKey);
+    setInput(draft || '');
+    attachmentsRef.current.forEach(attachment => {
+      if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
+    });
     setAttachments([]);
-  }, [chatId]);
+  }, [draftStorageKey]);
 
   useEffect(() => {
-    if (input.trim()) {
-      safeLocalStorage.setItem(`draft_${chatId || 'new'}`, input);
+    if (!waitingForConsentRef.current) return;
+    if (aiConsentAllowed !== true && !aiConsentPromptOpen) {
+      waitingForConsentRef.current = false;
+      return;
+    }
+    if (aiConsentAllowed !== true) return;
+    waitingForConsentRef.current = false;
+    setInput('');
+    setAttachments(current => {
+      current.forEach(attachment => {
+        if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
+      });
+      return [];
+    });
+    safeLocalStorage.removeItem(draftStorageKey);
+    setShowActionMenu(false);
+    setShowCommands(false);
+    if (textareaRef.current) textareaRef.current.style.height = 'auto';
+  }, [aiConsentAllowed, aiConsentPromptOpen, draftStorageKey]);
+
+  useEffect(() => {
+    if (draftWasJustLoadedRef.current) {
+      draftWasJustLoadedRef.current = false;
+      return;
+    }
+    if (isTemporary || wasTemporaryRef.current) {
+      safeLocalStorage.removeItem(draftStorageKey);
+      wasTemporaryRef.current = isTemporary;
+    } else if (input.trim()) {
+      safeLocalStorage.setItem(draftStorageKey, input);
     } else {
-      safeLocalStorage.removeItem(`draft_${chatId || 'new'}`);
+      safeLocalStorage.removeItem(draftStorageKey);
     }
 
     // Auto-grow textarea smoothly from 40px up to 120px without layout jump
@@ -78,7 +136,7 @@ export function ChatComposer({
     const isSlash = input.startsWith('/');
     setShowCommands(isSlash);
     if (isSlash) setSelectedCmdIndex(0);
-  }, [input, chatId]);
+  }, [input, draftStorageKey, isTemporary]);
 
   // Click outside to dismiss open menus
   useEffect(() => {
@@ -92,28 +150,35 @@ export function ChatComposer({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const filteredCommands = CHAT_COMMANDS.filter(c => 
+  const filteredCommands = CHAT_COMMANDS.filter(c =>
     c.cmd.toLowerCase().startsWith(input.toLowerCase()) ||
     c.label.toLowerCase().includes(input.slice(1).toLowerCase())
   );
 
   const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
   const ALLOWED_TYPES = [
-    'application/pdf', 
-    'image/jpeg', 
-    'image/png', 
-    'image/webp', 
-    'text/plain', 
-    'text/markdown', 
-    'application/msword', 
+    'application/pdf',
+    'image/jpeg',
+    'image/png',
+    'image/webp',
+    'text/plain',
+    'text/markdown',
+    'application/msword',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
   ];
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
+    if (aiConsentAllowed !== true) {
+      e.target.value = '';
+      onRequestAiConsent?.();
+      showToast('Setujui pemrosesan AI terlebih dahulu. Setelah itu, pilih ulang berkas yang ingin diunggah.', 'info');
+      return;
+    }
 
     if (attachments.length + files.length > 3) {
+      e.target.value = '';
       showToast('Maksimal 3 lampiran diperbolehkan dalam satu pesan.', 'warning');
       return;
     }
@@ -149,9 +214,16 @@ export function ChatComposer({
       // Upload via backend endpoint
       const formData = new FormData();
       formData.append('files', file);
+      const csrfCookie = document.cookie.match(/(?:^|; )XSRF-TOKEN=([^;]+)/)?.[1];
+      const uploadHeaders: Record<string, string> = {
+        'X-Requested-With': 'XMLHttpRequest',
+        'X-Guest-AI-Consent': String(readGuestAiConsent())
+      };
+      if (csrfCookie) uploadHeaders['X-CSRF-Token'] = decodeURIComponent(csrfCookie);
 
       fetch('/api/v1/chat/attachments/upload', {
         method: 'POST',
+        headers: uploadHeaders,
         credentials: 'include',
         body: formData
       })
@@ -163,14 +235,23 @@ export function ChatComposer({
           return;
         }
         const uploadedAtt = data.attachment || (data.attachments && data.attachments[0]);
+        if (!uploadedAtt || typeof uploadedAtt.id !== 'string' || !uploadedAtt.id) {
+          setAttachments(prev => prev.map(a => a.id === id ? { ...a, status: 'error', errorMessage: 'Metadata berkas dari server tidak lengkap' } : a));
+          return;
+        }
+        const visualAnalysisAvailable = uploadedAtt.visualAnalysisAvailable === true;
+        const status = visualAnalysisAvailable ? 'visual_ready' : 'ready';
         setAttachments(prev => prev.map(a => a.id === id ? {
           ...a,
-          status: 'success',
+          status,
           serverAttachmentId: uploadedAtt.id,
           filename: uploadedAtt.filename,
           mimeType: uploadedAtt.mimeType,
           size: uploadedAtt.size,
-          url: uploadedAtt.url
+          url: uploadedAtt.url,
+          visualAnalysisAvailable,
+          ocrApplied: Boolean(uploadedAtt.ocrApplied),
+          previewOnly: Boolean(uploadedAtt.previewOnly)
         } : a));
       })
       .catch(() => {
@@ -194,7 +275,7 @@ export function ChatComposer({
 
   const handleExecuteCommand = (cmdStr: string) => {
     setInput('');
-    safeLocalStorage.removeItem(`draft_${chatId || 'new'}`);
+    safeLocalStorage.removeItem(draftStorageKey);
     setShowCommands(false);
     setShowActionMenu(false);
     if (textareaRef.current) {
@@ -219,21 +300,39 @@ export function ChatComposer({
     }
     if ((!input.trim() && attachments.length === 0) || isTyping) return;
 
+    if (attachments.some(attachment => attachment.status === 'uploading' || attachment.status === 'processing')) {
+      showToast('Tunggu sampai semua berkas selesai diunggah sebelum mengirim pesan.', 'info');
+      return;
+    }
+    if (attachments.some(attachment => attachment.status === 'error')) {
+      showToast('Hapus berkas yang gagal diunggah sebelum mengirim. Pesan belum dikirim.', 'warning');
+      return;
+    }
+
     if (input.startsWith('/')) {
       handleExecuteCommand(input.trim());
       return;
     }
 
-    const validAttachments = attachments.filter(a => a.status === 'success');
+    const validAttachments = attachments.filter(a => ['success', 'ready', 'visual_ready'].includes(a.status));
+    let accepted: void | boolean;
     if (validAttachments.length > 0) {
-      onSend(input.trim(), undefined, validAttachments);
+      accepted = onSend(input.trim(), undefined, validAttachments);
     } else {
-      onSend(input.trim());
+      accepted = onSend(input.trim());
     }
 
+    if (accepted === false) {
+      waitingForConsentRef.current = true;
+      return;
+    }
+
+    attachments.forEach(attachment => {
+      if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
+    });
     setInput('');
     setAttachments([]);
-    safeLocalStorage.removeItem(`draft_${chatId || 'new'}`);
+    safeLocalStorage.removeItem(draftStorageKey);
     setShowActionMenu(false);
     setShowCommands(false);
 
@@ -277,12 +376,12 @@ export function ChatComposer({
   const hasContent = Boolean(input.trim() || attachments.length > 0);
 
   return (
-    <div 
+    <div
       ref={composerContainerRef}
       className="w-full sticky bottom-0 z-20 shrink-0 bg-gradient-to-t from-slate-50/80 via-slate-50/40 to-transparent dark:from-[#080d16]/80 dark:via-[#080d16]/40 pointer-events-none [&>*]:pointer-events-auto"
     >
       <div className="pt-1 pb-safe pb-[max(0.5rem,env(safe-area-inset-bottom))] px-3 max-w-2xl mx-auto w-full relative">
-        
+
         {/* 1. Quick Slash Commands Dropdown */}
         <AnimatePresence>
           {showCommands && filteredCommands.length > 0 && (
@@ -313,8 +412,8 @@ export function ChatComposer({
                       onClick={() => handleExecuteCommand(c.cmd)}
                       onMouseEnter={() => setSelectedCmdIndex(index)}
                       className={`w-full text-left px-2.5 py-2 rounded-xl transition-all flex items-center gap-2.5 cursor-pointer text-xs min-h-[44px] ${
-                        isSelected 
-                          ? 'bg-teal-50 dark:bg-teal-950/50 text-teal-700 dark:text-teal-300 font-medium shadow-2xs' 
+                        isSelected
+                          ? 'bg-teal-50 dark:bg-teal-950/50 text-teal-700 dark:text-teal-300 font-medium shadow-2xs'
                           : 'text-stone-700 dark:text-slate-300 hover:bg-stone-100/80 dark:hover:bg-slate-800/60'
                       }`}
                       role="option"
@@ -363,7 +462,7 @@ export function ChatComposer({
               <div className="px-2 pb-1.5 mb-1 border-b border-stone-100 dark:border-slate-800 flex items-center justify-between">
                 <span className="text-xs font-semibold text-stone-700 dark:text-stone-300">Layanan & Fitur</span>
                 <span className="text-[10px] font-medium text-teal-700 dark:text-teal-300 bg-teal-50 dark:bg-teal-950/80 px-2 py-0.5 rounded-full border border-teal-200/60 dark:border-teal-800/60">
-                  Rahasia & Aman
+                  Proses berkas
                 </span>
               </div>
 
@@ -371,6 +470,12 @@ export function ChatComposer({
               <button
                 type="button"
                 onClick={() => {
+                  if (aiConsentAllowed !== true) {
+                    onRequestAiConsent?.();
+                    showToast('Setujui pemrosesan AI terlebih dahulu. Setelah itu, pilih ulang berkas yang ingin diunggah.', 'info');
+                    setShowActionMenu(false);
+                    return;
+                  }
                   fileInputRef.current?.click();
                   setShowActionMenu(false);
                 }}
@@ -416,28 +521,28 @@ export function ChatComposer({
               {/* Privacy Footer Reassurance */}
               <div className="mt-1.5 pt-1.5 border-t border-stone-100 dark:border-slate-800/80 flex items-center gap-1.5 px-2 text-[10.5px] text-stone-500 dark:text-slate-400">
                 <ShieldCheck className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 shrink-0" />
-                <span>Percakapan dilindungi dengan kontrol keamanan dan enkripsi penyimpanan.</span>
+                <span>Persetujuan AI diperlukan sebelum unggah. Berkas diproses server; OCR gambar atau hasil pindai dapat memakai provider cloud yang dikonfigurasi.</span>
               </div>
             </motion.div>
           )}
         </AnimatePresence>
 
         {/* Hidden File Input */}
-        <input 
-          type="file" 
-          ref={fileInputRef} 
-          className="hidden" 
-          multiple 
-          accept=".pdf,image/*,.txt,.md,.doc,.docx" 
-          onChange={handleFileSelect} 
+        <input
+          type="file"
+          ref={fileInputRef}
+          className="hidden"
+          multiple
+          accept=".pdf,image/*,.txt,.md,.doc,.docx"
+          onChange={handleFileSelect}
         />
 
         {/* 3. Attachments Preview Bar */}
         {attachments.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mb-2 px-1">
             {attachments.map(att => (
-              <div 
-                key={att.id} 
+              <div
+                key={att.id}
                 className="relative flex items-center gap-2 p-1.5 pr-2 bg-white dark:bg-slate-900 border border-stone-200/90 dark:border-slate-800 rounded-xl shadow-xs text-xs"
               >
                 {att.previewUrl ? (
@@ -452,8 +557,11 @@ export function ChatComposer({
                 <div className="flex-1 min-w-0 max-w-[140px]">
                   <div className="font-medium text-[11.5px] text-stone-800 dark:text-stone-200 truncate">{att.file.name}</div>
                   {att.status === 'uploading' && <div className="text-[10px] text-teal-600 dark:text-teal-400">Mengunggah...</div>}
-                  {att.status === 'error' && <div className="text-[10px] text-red-500 truncate">{att.errorMessage}</div>}
+                  {att.status === 'processing' && <div className="text-[10px] text-amber-500 dark:text-amber-400">Memproses...</div>}
+                  {att.status === 'visual_ready' && <div className="text-[10px] text-teal-600 dark:text-teal-400 font-medium">OCR visual tersedia</div>}
+                  {att.status === 'ready' && <div className="text-[10px] text-emerald-600">{att.previewOnly ? 'Pratinjau saja' : att.ocrApplied ? 'Teks OCR siap' : 'Berkas siap dikirim'}</div>}
                   {att.status === 'success' && <div className="text-[10px] text-emerald-600">Siap dikirim</div>}
+                  {att.status === 'error' && <div className="text-[10px] text-rose-500 truncate">{att.errorMessage || 'Gagal diproses'}</div>}
                 </div>
                 <button
                   type="button"
@@ -471,8 +579,8 @@ export function ChatComposer({
         {/* 4. Floating Island Input Bar with Restrained Borders */}
         <div className="relative w-full max-w-2xl mx-auto">
           {/* Input Container */}
-          <div className="relative flex items-center gap-1 sm:gap-1.5 p-1.5 sm:p-2 rounded-2xl bg-white dark:bg-slate-900 border border-stone-200/90 dark:border-slate-800 shadow-2xs transition-all duration-150 focus-within:border-teal-500/80 dark:focus-within:border-teal-500/80 focus-within:ring-1 focus-within:ring-teal-500/20">
-            
+          <div className="relative flex items-center gap-1 sm:gap-1.5 p-1.5 sm:p-2 rounded-2xl bg-white dark:bg-[#0f141f] border border-slate-200/80 dark:border-slate-800 shadow-subtle dark:shadow-subtle-dark transition-all duration-150 focus-within:border-teal-500/80 dark:focus-within:border-teal-500/80 focus-within:ring-1 focus-within:ring-teal-500/20">
+
             {/* Left Actions: Plus (+) & Mic */}
             <div className="flex items-center gap-0.5 shrink-0">
               <motion.button
@@ -482,7 +590,7 @@ export function ChatComposer({
                   setShowActionMenu(!showActionMenu);
                   setShowCommands(false);
                 }}
-                className={`w-8.5 h-8.5 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-slate-800 shrink-0 transition-colors cursor-pointer ${
+                className={`min-w-11 min-h-11 sm:min-w-10 sm:min-h-10 lg:min-w-9.5 lg:min-h-9.5 rounded-xl flex items-center justify-center text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-slate-800 shrink-0 transition-colors cursor-pointer ${
                   showActionMenu ? 'rotate-45 text-teal-700 dark:text-teal-300 bg-teal-50 dark:bg-teal-950/60' : ''
                 }`}
                 aria-label="Buka Menu Bantuan & Fitur"
@@ -496,7 +604,7 @@ export function ChatComposer({
                 type="button"
                 whileTap={{ scale: 0.94 }}
                 onClick={toggleListening}
-                className={`w-8.5 h-8.5 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center shrink-0 transition-all cursor-pointer ${
+                className={`min-w-11 min-h-11 sm:min-w-10 sm:min-h-10 lg:min-w-9.5 lg:min-h-9.5 rounded-xl flex items-center justify-center shrink-0 transition-all cursor-pointer ${
                   isListening
                     ? 'bg-rose-500 text-white animate-pulse shadow-3xs'
                     : 'text-stone-400 hover:text-teal-600 dark:hover:text-teal-400 hover:bg-stone-100 dark:hover:bg-slate-800'
@@ -508,7 +616,7 @@ export function ChatComposer({
                 {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
               </motion.button>
             </div>
-            
+
             {/* Textarea Input - Font size 16px on mobile prevents iOS Safari forced viewport auto-zoom */}
             <textarea
               ref={textareaRef}
@@ -523,18 +631,18 @@ export function ChatComposer({
               }}
               onKeyDown={handleKeyDown}
               placeholder={
-                quotaExceeded 
+                quotaExceeded
                   ? "Kuota harian telah digunakan. Istirahatlah sejenak dan kembali besok."
-                  : isListening 
-                    ? "Mendengarkan ucapan Anda (Bahasa Indonesia)..." 
+                  : isListening
+                    ? "Mendengarkan ucapan Anda (Bahasa Indonesia)..."
                     : "Ketik apa yang kamu rasakan..."
               }
               className="flex-1 bg-transparent text-[16px] sm:text-[14px] text-stone-850 dark:text-stone-100 placeholder:text-stone-400 dark:placeholder:text-slate-500 focus:outline-none resize-none min-h-[38px] py-2 px-1.5 leading-relaxed overflow-y-auto custom-scrollbar disabled:opacity-60 disabled:cursor-not-allowed"
               rows={1}
               disabled={isTyping || quotaExceeded}
-              aria-label="Ketik pesan konsultasi"
+              aria-label="Tulis pesan untuk asisten AI"
             />
-            
+
             {/* Primary Conversational Send / Stop Action Button */}
             <AnimatePresence mode="wait" initial={false}>
               {isTyping ? (
@@ -546,7 +654,7 @@ export function ChatComposer({
                   exit={{ scale: 0.85, opacity: 0 }}
                   transition={{ duration: 0.12 }}
                   onClick={onStop}
-                  className="w-8.5 h-8.5 sm:w-9 sm:h-9 rounded-xl bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center shrink-0 cursor-pointer shadow-3xs"
+                  className="min-w-11 min-h-11 sm:min-w-10 sm:min-h-10 lg:min-w-9.5 lg:min-h-9.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center shrink-0 cursor-pointer shadow-3xs"
                   aria-label="Hentikan Jawaban AI"
                   title="Hentikan respons AI"
                 >
@@ -563,9 +671,9 @@ export function ChatComposer({
                   whileTap={hasContent ? { scale: 0.94 } : undefined}
                   onClick={handleSend}
                   disabled={!hasContent}
-                  className={`w-8.5 h-8.5 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center shrink-0 transition-all duration-120 ${
+                  className={`min-w-11 min-h-11 sm:min-w-10 sm:min-h-10 lg:min-w-9.5 lg:min-h-9.5 rounded-xl flex items-center justify-center shrink-0 transition-all duration-120 ${
                     hasContent
-                      ? 'bg-teal-600 hover:bg-teal-700 text-white shadow-3xs cursor-pointer'
+                      ? 'bg-teal-700 hover:bg-teal-800 text-white shadow-3xs cursor-pointer'
                       : 'text-stone-300 dark:text-slate-600 bg-transparent cursor-not-allowed'
                   }`}
                   aria-label="Kirim Pesan"
@@ -577,10 +685,10 @@ export function ChatComposer({
             </AnimatePresence>
           </div>
         </div>
-        
+
         {/* Reassurance Caption */}
         <p className="text-[11px] text-stone-400 dark:text-slate-500 text-center mt-1.5 select-none">
-          Ruang aman tanpa penghakiman <span className="opacity-40">·</span> Data dilindungi dengan kontrol keamanan
+          Persetujuan diminta sebelum pesan diproses oleh AI
         </p>
       </div>
     </div>

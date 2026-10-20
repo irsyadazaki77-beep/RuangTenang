@@ -116,9 +116,9 @@ export const BurnoutInterventionCard: React.FC<BurnoutInterventionCardProps> = (
   const getPhaseText = () => {
     switch (breathPhase) {
       case 'Inhale': return 'Tarik Napas Perlahan (4 detik)';
-      case 'Hold1': return 'Tahan Napas Nyaman (4 detik)';
+      case 'Hold1': return 'Jeda jika nyaman (4 detik)';
       case 'Exhale': return 'Hembuskan Perlahan (4 detik)';
-      case 'Hold2': return 'Jeda Sejenak Tenang (4 detik)';
+      case 'Hold2': return 'Jeda sebentar, jika nyaman (4 detik)';
     }
   };
 
@@ -237,7 +237,7 @@ export const BurnoutInterventionCard: React.FC<BurnoutInterventionCardProps> = (
               <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-snug">
                 {isBreathingRunning
                   ? `Siklus terselesaikan: ${completedCycles} putaran`
-                  : 'Menurunkan detak jantung dan meredakan ketegangan sistem saraf otonom.'}
+                  : 'Ikuti ritme napas dengan nyaman; berhenti jika terasa tidak nyaman.'}
               </p>
             </div>
           </div>
@@ -328,7 +328,7 @@ export const BurnoutInterventionCard: React.FC<BurnoutInterventionCardProps> = (
               <button
                 type="button"
                 onClick={() => setGroundingStep(groundingStep + 1)}
-                className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-teal-600 hover:bg-teal-700 text-white text-xs font-semibold cursor-pointer transition-colors"
+                className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold cursor-pointer transition-colors"
               >
                 <span>Sudah Saya Sadari</span>
                 <ChevronRight className="w-3.5 h-3.5" />
@@ -355,13 +355,10 @@ export const BurnoutInterventionCard: React.FC<BurnoutInterventionCardProps> = (
         <div className="bg-white/80 dark:bg-slate-800/60 rounded-2xl p-4 border border-slate-200/60 dark:border-slate-800/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div>
             <h5 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
-              <span>Konsultasi Bebas Biaya Mahasiswa</span>
-              <span className="text-[10px] bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 px-2 py-0.5 rounded-full font-medium">
-                Rahasia & Aman
-              </span>
+              <span>Hubungi Konselor Kampus</span>
             </h5>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
-              Anda tidak perlu menanggung beban akademik ini sendirian. Buat janji temu dengan psikolog/konselor kampus berlisensi.
+              Lihat direktori untuk mengetahui profil dan ketersediaan. Biaya, akses, dan cara layanan menangani privasi dapat berbeda menurut kampus.
             </p>
           </div>
 

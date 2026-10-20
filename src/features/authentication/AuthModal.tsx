@@ -4,6 +4,7 @@ import { User, AlertCircle, CheckCircle, UserPlus, LogIn, KeyRound, ShieldCheck,
 import { UserSession } from '../../types';
 import { apiClient } from '../../lib/apiClient';
 import { useAuth } from '../../contexts/AuthContext';
+import { BrandLogo } from '../../components/ui/BrandLogo';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -54,7 +55,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         }
       }
     };
-    
+
     // Set initial focus
     const focusable = modalRef.current?.querySelectorAll(
       'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
@@ -70,11 +71,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   }, [onClose]);
 
   const [activeTab, setActiveTab] = useState<AuthTab>('login');
+  const isCampusSsoEnabled = false;
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [university, setUniversity] = useState('Universitas Indonesia');
-  
+
   // Security State
   const [mfaToken, setMfaToken] = useState('');
   const [mfaCode, setMfaCode] = useState('');
@@ -150,7 +152,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     try {
       const emailDomain = ssoProvider.domain.startsWith('*') ? 'kampus.ac.id' : ssoProvider.domain.split(',')[0].trim();
       const ssoEmail = email.trim().includes('@') ? email.trim() : `mahasiswa_${Math.floor(Math.random() * 89999 + 10000)}@${emailDomain}`;
-      
+
       const response = await apiClient.post<any>('/api/v1/auth/sso/campus-login', {
         email: ssoEmail,
         name: name.trim() || `Civitas Akademika (${ssoProvider.name.split(' ')[1] || 'Kampus'})`,
@@ -380,9 +382,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         <div className="bg-slate-900 dark:bg-slate-950 text-white px-5 py-4 shrink-0 border-b border-slate-800">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
-              <div className="p-1.5 bg-white/10 dark:bg-white/5 rounded-xl border border-white/10 shrink-0">
-                <img src="/favicon.svg" alt="RuangTenang" className="w-6 h-6 object-contain" />
-              </div>
+              <BrandLogo size="md" iconOnly />
               <div>
                 <h3 className="text-base font-bold tracking-tight text-white">RuangTenang</h3>
                 <p className="text-[11px] text-teal-400 font-medium">Autentikasi & Keamanan Sesi</p>
@@ -436,7 +436,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   </button>
                   <button
                     onClick={onClose}
-                    className="flex-1 py-2 px-3 min-h-[44px] bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer flex items-center justify-center"
+                    className="flex-1 py-2 px-3 min-h-[44px] bg-teal-700 hover:bg-teal-800 text-white rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer flex items-center justify-center"
                   >
                     Tutup
                   </button>
@@ -457,7 +457,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <button
                   type="button"
                   onClick={() => { setActiveTab('sso'); resetFormState(); }}
-                  className={`flex-1 py-2 px-2 text-xs font-semibold border-b-2 transition min-h-[40px] cursor-pointer whitespace-nowrap flex items-center justify-center gap-1 ${activeTab === 'sso' ? 'border-teal-600 text-teal-700 dark:text-teal-400 font-bold' : 'border-transparent text-secondary hover:text-primary'}`}
+                  className={`hidden flex-1 py-2 px-2 text-xs font-semibold border-b-2 transition min-h-[40px] cursor-pointer whitespace-nowrap flex items-center justify-center gap-1 ${activeTab === 'sso' ? 'border-teal-600 text-teal-700 dark:text-teal-400 font-bold' : 'border-transparent text-secondary hover:text-primary'}`}
                 >
                   <GraduationCap className="w-3.5 h-3.5 text-teal-600" />
                   <span>SSO Kampus</span>
@@ -544,7 +544,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     <button
                       type="submit"
                       disabled={loading}
-                      className="w-full py-2.5 min-h-[44px] bg-teal-600 hover:bg-teal-700 active:scale-[0.98] text-white rounded-xl text-sm font-semibold shadow-3xs transition cursor-pointer disabled:opacity-50 flex items-center justify-center space-x-2"
+                      className="w-full py-2.5 min-h-[44px] bg-teal-700 hover:bg-teal-800 active:scale-[0.98] text-white rounded-xl text-sm font-semibold shadow-3xs transition cursor-pointer disabled:opacity-50 flex items-center justify-center space-x-2"
                     >
                       <LogIn className="w-4 h-4" />
                       <span>{loading ? 'Memproses...' : 'Masuk Akun'}</span>
@@ -554,18 +554,18 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       type="button"
                       onClick={() => { setActiveTab('sso'); resetFormState(); }}
                       disabled={loading}
-                      className="w-full py-2.5 min-h-[44px] bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-900/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded-xl text-sm font-semibold transition cursor-pointer disabled:opacity-50 flex items-center justify-center space-x-2"
+                      className="hidden w-full py-2.5 min-h-[44px] bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-900/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded-xl text-sm font-semibold transition cursor-pointer disabled:opacity-50 flex items-center justify-center space-x-2"
                     >
                       <GraduationCap className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
                       <span>Masuk dengan SSO Kampus</span>
                     </button>
-                    
+
                     <div className="relative flex items-center py-1">
                       <div className="flex-grow border-t border-default"></div>
                       <span className="flex-shrink-0 mx-3 text-secondary text-xs font-medium">Atau</span>
                       <div className="flex-grow border-t border-default"></div>
                     </div>
-                    
+
                     {currentSession?.role === 'guest' ? (
                       <button
                         type="button"
@@ -592,7 +592,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               )}
 
               {/* TAB: SSO KAMPUS */}
-              {activeTab === 'sso' && (
+              {isCampusSsoEnabled && activeTab === 'sso' && (
                 <div className="space-y-4 animate-fade-in">
                   <div className="p-3 bg-indigo-50/80 dark:bg-indigo-950/40 border border-indigo-200/80 dark:border-indigo-900/50 rounded-xl text-xs text-indigo-900 dark:text-indigo-200">
                     <div className="flex items-center gap-2 font-bold mb-1">
@@ -687,7 +687,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   <button
                     type="submit"
                     disabled={loading}
-                    className="w-full py-2.5 min-h-[44px] bg-teal-600 hover:bg-teal-700 text-white active:scale-[0.98] rounded-xl text-xs sm:text-sm font-semibold shadow-3xs transition cursor-pointer disabled:opacity-50 flex items-center justify-center space-x-2"
+                    className="w-full py-2.5 min-h-[44px] bg-teal-700 hover:bg-teal-800 text-white active:scale-[0.98] rounded-xl text-xs sm:text-sm font-semibold shadow-3xs transition cursor-pointer disabled:opacity-50 flex items-center justify-center space-x-2"
                   >
                     <ShieldCheck className="w-4 h-4" />
                     <span>{loading ? 'Memverifikasi...' : 'Verifikasi & Masuk Sesi'}</span>
@@ -770,7 +770,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   <button
                     type="submit"
                     disabled={loading}
-                    className="w-full py-2.5 min-h-[44px] bg-teal-600 hover:bg-teal-700 active:scale-[0.98] text-white rounded-xl text-sm font-semibold shadow-3xs transition cursor-pointer disabled:opacity-50 flex items-center justify-center space-x-2 mt-1"
+                    className="w-full py-2.5 min-h-[44px] bg-teal-700 hover:bg-teal-800 active:scale-[0.98] text-white rounded-xl text-sm font-semibold shadow-3xs transition cursor-pointer disabled:opacity-50 flex items-center justify-center space-x-2 mt-1"
                   >
                     <UserPlus className="w-4 h-4" />
                     <span>{loading ? 'Memproses...' : 'Daftar Akun Mahasiswa'}</span>
@@ -802,7 +802,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   <button
                     type="submit"
                     disabled={loading}
-                    className="w-full py-2.5 min-h-[44px] bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs sm:text-sm font-semibold shadow-3xs transition cursor-pointer disabled:opacity-50 flex items-center justify-center space-x-2"
+                    className="w-full py-2.5 min-h-[44px] bg-teal-700 hover:bg-teal-800 text-white rounded-xl text-xs sm:text-sm font-semibold shadow-3xs transition cursor-pointer disabled:opacity-50 flex items-center justify-center space-x-2"
                   >
                     <MailCheck className="w-4 h-4" />
                     <span>{loading ? 'Memverifikasi...' : 'Aktivasi & Verifikasi Email'}</span>
@@ -829,7 +829,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       <button
                         type="submit"
                         disabled={loading}
-                        className="w-full py-2.5 min-h-[44px] bg-teal-600 hover:bg-teal-700 active:scale-[0.98] text-white rounded-xl text-xs sm:text-sm font-semibold shadow-3xs transition cursor-pointer disabled:opacity-50 flex items-center justify-center space-x-2"
+                        className="w-full py-2.5 min-h-[44px] bg-teal-700 hover:bg-teal-800 active:scale-[0.98] text-white rounded-xl text-xs sm:text-sm font-semibold shadow-3xs transition cursor-pointer disabled:opacity-50 flex items-center justify-center space-x-2"
                       >
                         <KeyRound className="w-4 h-4" />
                         <span>{loading ? 'Memproses...' : 'Kirim Token Reset Kata Sandi'}</span>

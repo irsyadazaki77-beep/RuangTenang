@@ -1,7 +1,13 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Check, ChevronDown, Search, Sparkles } from 'lucide-react';
-import { useAiModelCatalog } from '../../../lib/aiModelCatalog';
-import { AUTO_ROUTING_MODEL_ID } from '../../../lib/aiModels';
+import React, { useEffect, useRef, useState } from 'react';
+import { Brain, Check, ChevronDown, Sparkles, Zap } from 'lucide-react';
+import {
+  DEFAULT_KERJA_PROFILE_ID,
+  isKerjaProfile,
+  KerjaProfileId,
+  KERJA_PROFILES
+} from '../../../lib/aiModels';
+import { migrateLegacyWorkspaceModelToProfile } from '../utils/workspaceModelPreference';
+import { isOllamaOnlyCatalog, useAiModelCatalog } from '../../../lib/aiModelCatalog';
 
 interface WorkspaceModelSelectorProps {
   value: string;
@@ -10,74 +16,89 @@ interface WorkspaceModelSelectorProps {
   overlayPlacement?: 'anchored' | 'viewport';
 }
 
-/** Uses the server's sanitized model catalog and supports Auto Smart Routing. */
+const PROFILE_ICONS: Record<KerjaProfileId, React.ComponentType<{ className?: string }>> = {
+  'kerja-fast': Zap,
+  'kerja-santai': Sparkles,
+  'kerja-hard': Brain,
+};
+
 export const WorkspaceModelSelector = React.memo(function WorkspaceModelSelector({
   value,
   onChange,
   disabled = false,
   overlayPlacement = 'anchored'
 }: WorkspaceModelSelectorProps) {
-  const { models, loading, error, defaultModel } = useAiModelCatalog();
-  const isAuto = value === AUTO_ROUTING_MODEL_ID;
-  const selectedModel = isAuto
-    ? { id: AUTO_ROUTING_MODEL_ID, name: 'Auto — Pilih otomatis', speed: 'Adaptif', provider: 'Sistem', category: 'Smart Routing' }
-    : (models.find(model => model.id === value)
-      ?? models.find(model => model.id === defaultModel)
-      ?? models[0]);
+  const { models, profiles, loading: catalogLoading, error: catalogError, refresh: refreshCatalog } = useAiModelCatalog();
+  const isOllamaOnly = isOllamaOnlyCatalog(models);
+  const kerjaProfiles = KERJA_PROFILES.map(profile => {
+    const catalogProfile = profiles.find(item => item.id === profile.id && item.scope === 'kerja');
+    return catalogProfile ? { ...profile, ...catalogProfile, id: profile.id } : profile;
+  });
+  const serverProfile = (id: KerjaProfileId) => profiles.find(profile => profile.id === id && profile.scope === 'kerja');
+  const canSelectProfile = (id: KerjaProfileId) => Boolean(serverProfile(id)?.selectable && !catalogLoading && !catalogError);
+  const isWorkspaceChatModel = (model: (typeof models)[number]) => model.capabilities.includes('chat') && model.capabilities.includes('streaming');
+  // Check if incoming value is an active profile or a recognized manual model
+  const isProfile = isKerjaProfile(value);
+  const isRecognizedModel = Boolean(models.some(m => m.id === value));
+  const activeProfileId: KerjaProfileId = isProfile
+    ? value
+    : migrateLegacyWorkspaceModelToProfile(value);
+  const activeProfile = kerjaProfiles.find(profile => profile.id === activeProfileId) ?? KERJA_PROFILES[1];
+  const selectedManualModel = models.find(model => model.id === value);
+  const selectedManualModelUsable = Boolean(selectedManualModel && selectedManualModel.selectable && selectedManualModel.available && isWorkspaceChatModel(selectedManualModel));
+
+  // If incoming value is unknown legacy model, migrate to default profile
+  useEffect(() => {
+    if (value && !isProfile && !isRecognizedModel && models.length > 0) {
+      onChange(activeProfileId);
+    }
+  }, [value, isProfile, isRecognizedModel, models.length, activeProfileId, onChange]);
+
   const [open, setOpen] = useState(false);
-  const [search, setSearch] = useState('');
-  const [activeIndex, setActiveIndex] = useState(0);
-  const searchRef = useRef<HTMLInputElement>(null);
+  const [showAdvanced, setShowAdvanced] = useState(() => !isProfile && isRecognizedModel);
+  const [activeIndex, setActiveIndex] = useState(() =>
+    Math.max(0, KERJA_PROFILES.findIndex(p => p.id === activeProfileId))
+  );
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const listId = 'workspace-model-options';
-
-  const filteredModels = useMemo(() => {
-    const query = search.trim().toLocaleLowerCase();
-    return models.filter(model => model.selectable).filter(model => !query ||
-      `${model.name} ${model.id} ${model.category} ${model.provider}`.toLocaleLowerCase().includes(query));
-  }, [models, search]);
-
-  const groups = useMemo(() => filteredModels.reduce<Record<string, typeof filteredModels>>((result, model) => {
-    (result[model.category] ??= []).push(model);
-    return result;
-  }, {}), [filteredModels]);
+  const listRef = useRef<HTMLDivElement>(null);
+  const listId = 'workspace-profile-options';
 
   useEffect(() => {
-    setActiveIndex(Math.max(0, filteredModels.findIndex(model => model.id === value)));
-  }, [filteredModels, value]);
+    const idx = KERJA_PROFILES.findIndex(p => p.id === activeProfileId);
+    if (idx !== -1) setActiveIndex(idx);
+  }, [activeProfileId]);
 
   useEffect(() => {
-    if (value === AUTO_ROUTING_MODEL_ID) return;
-    if (models.length && !models.some(model => model.id === value && model.selectable)) onChange(defaultModel);
-  }, [models, value, defaultModel, onChange]);
-
-  useEffect(() => {
-    if (open) searchRef.current?.focus();
+    if (open) listRef.current?.focus();
   }, [open]);
 
   const close = () => {
     setOpen(false);
-    setSearch('');
     triggerRef.current?.focus();
   };
 
-  const selectActive = () => {
-    if (activeIndex === -1) {
-      onChange(AUTO_ROUTING_MODEL_ID);
-      close();
-      return;
-    }
-    const model = filteredModels[activeIndex];
-    if (model?.selectable) {
-      onChange(model.id);
+  const selectIndex = (index: number) => {
+    const profile = kerjaProfiles[index];
+    if (profile && canSelectProfile(profile.id)) {
+      onChange(profile.id);
       close();
     }
   };
 
-  const moveActive = (direction: number) => {
-    if (filteredModels.length === 0) return;
-    setActiveIndex(index => (index + direction + filteredModels.length) % filteredModels.length);
+  const moveActiveIndex = (direction: 1 | -1) => {
+    setActiveIndex(current => {
+      for (let offset = 1; offset <= kerjaProfiles.length; offset += 1) {
+        const next = (current + direction * offset + kerjaProfiles.length) % kerjaProfiles.length;
+        if (canSelectProfile(kerjaProfiles[next].id)) return next;
+      }
+      return current;
+    });
   };
+
+  const ActiveIcon = PROFILE_ICONS[activeProfile.id] || Sparkles;
+  const displayName = isKerjaProfile(value)
+    ? activeProfile.name
+    : (models.find(m => m.id === value)?.name || activeProfile.name);
 
   return (
     <div className="relative">
@@ -88,100 +109,204 @@ export const WorkspaceModelSelector = React.memo(function WorkspaceModelSelector
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={listId}
-        aria-label={`Pilih model, ${selectedModel?.name ?? 'Default'}`}
-        onClick={() => setOpen(value => !value)}
-        onKeyDown={event => { if (event.key === 'Escape' && open) close(); }}
-        className="h-8 max-w-[min(24vw,8.5rem)] inline-flex min-w-0 items-center gap-1.5 rounded-lg px-2 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-200/70 dark:hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
-        title={disabled ? 'Model tidak dapat diubah selama respons berlangsung' : 'Pilih model'}
+        aria-label={`Pilih model, ${displayName}`}
+        onClick={() => {
+          const next = !open;
+          setOpen(next);
+          if (next) void refreshCatalog();
+        }}
+        onKeyDown={event => {
+          if (event.key === 'Escape' && open) {
+            event.preventDefault();
+            close();
+          }
+        }}
+        className="inline-flex h-9 w-9 shrink-0 items-center justify-center gap-1 rounded-lg px-0 text-xs text-slate-700 transition-colors hover:bg-slate-200/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-50 dark:text-slate-200 dark:hover:bg-slate-800 sm:h-8 sm:w-auto sm:max-w-[min(30vw,10.5rem)] sm:justify-start sm:gap-1.5 sm:px-2"
+        title={disabled ? 'Profil AI tidak dapat diubah selama pemrosesan' : `Profil AI: ${displayName}`}
       >
-        <Sparkles className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
-        <span className="truncate font-medium">{isAuto ? 'Auto' : selectedModel?.name ?? (loading ? 'Memuat...' : 'Default')}</span>
-        <ChevronDown className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+        <ActiveIcon className="h-3.5 w-3.5 shrink-0 text-indigo-600 dark:text-indigo-400" />
+        <span className="hidden truncate font-medium sm:inline">{activeProfile.name}</span>
+        <ChevronDown className="h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden="true" />
       </button>
+
       {open && !disabled && (
         <>
-          <button type="button" className="fixed inset-0 z-40 cursor-default" aria-label="Tutup pilihan model" onClick={close} />
+          <button
+            type="button"
+            className="fixed inset-0 z-40 cursor-default"
+            aria-label="Tutup pilihan profil AI"
+            onClick={close}
+          />
           <div
-            className={`fixed inset-x-2 bottom-3 z-50 max-h-[min(70dvh,34rem)] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900 ${overlayPlacement === 'anchored' ? 'md:absolute md:inset-auto md:bottom-full md:left-0 md:mb-2 md:w-[min(24rem,calc(100vw-2rem))]' : 'md:inset-x-auto md:bottom-20 md:left-4 md:w-[min(24rem,calc(100vw-2rem))]'}`}
+            className={`fixed inset-x-2 bottom-3 z-50 overflow-hidden rounded-xl border border-slate-200 bg-white p-2 shadow-2xl dark:border-slate-800 dark:bg-slate-900 ${
+              overlayPlacement === 'anchored'
+                ? 'md:absolute md:inset-auto md:bottom-full md:left-0 md:mb-2 md:w-84'
+                : 'md:inset-x-auto md:bottom-20 md:left-4 md:w-84'
+            }`}
             onKeyDown={event => {
-              if (event.key === 'Escape') { event.preventDefault(); close(); }
-              if (event.key === 'ArrowDown') { event.preventDefault(); moveActive(1); }
-              if (event.key === 'ArrowUp') { event.preventDefault(); moveActive(-1); }
-              if (event.key === 'Enter' && (event.target === searchRef.current || (event.target as HTMLElement).getAttribute('role') === 'listbox')) {
-                event.preventDefault(); selectActive();
+              if (event.key === 'Escape') {
+                event.preventDefault();
+                close();
+              } else if (event.key === 'ArrowDown') {
+                event.preventDefault();
+                moveActiveIndex(1);
+              } else if (event.key === 'ArrowUp') {
+                event.preventDefault();
+                moveActiveIndex(-1);
+              } else if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                selectIndex(activeIndex);
               }
             }}
           >
-            <div className="border-b border-slate-100 p-3 dark:border-slate-800">
-              <div className="font-semibold text-sm">Pilih Model</div>
-              <label className="mt-2 flex h-9 items-center gap-2 rounded-lg border border-slate-200 px-2.5 dark:border-slate-700">
-                <Search className="h-4 w-4 text-slate-400" aria-hidden="true" />
-                <input ref={searchRef} value={search} onChange={event => setSearch(event.target.value)} placeholder="Cari model..." aria-label="Cari model" aria-controls={listId} aria-autocomplete="list" aria-activedescendant={filteredModels[activeIndex] ? `workspace-model-${filteredModels[activeIndex].id}` : undefined} className="min-w-0 flex-1 bg-transparent text-sm outline-none" />
-              </label>
-              <p className="mt-1.5 text-[11px] text-slate-500">{error ? 'Daftar model tidak dapat dimuat.' : 'Pilih model spesifik atau biarkan sistem memilih otomatis.'}</p>
+            <div className="px-2.5 py-1.5 border-b border-slate-150 dark:border-slate-800/80 mb-1">
+              <div className="font-semibold text-xs text-slate-900 dark:text-slate-100">
+                Tingkat Kemampuan AI
+              </div>
+              <p className="text-[10.5px] text-slate-500 dark:text-slate-400 mt-0.5">
+                {isOllamaOnly
+                  ? 'Provider yang dikonfigurasi: Ollama. Permintaan diproses di endpoint server yang dapat berada di host lain; konfigurasi tidak memastikan endpoint sedang merespons.'
+                  : 'RuangKerja memilih model dan provider terbaik secara otomatis sesuai profil.'}
+              </p>
             </div>
-            <div id={listId} role="listbox" aria-label="Model AI" tabIndex={0} className="max-h-[min(48dvh,24rem)] overflow-y-auto p-2 outline-none">
-              {/* Auto Model Option */}
-              {(!search || 'auto otomatis smart routing'.includes(search.toLowerCase())) && (
-                <div className="mb-2 pb-2 border-b border-slate-100 dark:border-slate-800">
+
+            <div
+              id={listId}
+              ref={listRef}
+              role="listbox"
+              aria-label="Profil AI RuangKerja"
+              tabIndex={0}
+              className="space-y-1 outline-none"
+            >
+              {catalogLoading && <p role="status" className="px-2.5 py-1 text-[10px] text-slate-500">Memuat ketersediaan profil…</p>}
+              {catalogError && <p role="alert" className="px-2.5 py-1 text-[10px] text-amber-700 dark:text-amber-300">Status profil tidak dapat dimuat. Coba tutup lalu buka pemilih ini lagi.</p>}
+              {!profiles.some(profile => profile.scope === 'kerja') && !catalogLoading && !catalogError && <p role="alert" className="px-2.5 py-1 text-[10px] text-amber-700 dark:text-amber-300">Status profil RuangKerja tidak tersedia dari katalog server. Profil dinonaktifkan sampai status dapat dimuat.</p>}
+              {selectedManualModel && !catalogLoading && !catalogError && !selectedManualModelUsable && <p role="status" className="px-2.5 py-1 text-[10px] text-amber-700 dark:text-amber-300">{!isWorkspaceChatModel(selectedManualModel) ? 'Model manual ini tidak mendukung chat streaming di RuangKerja.' : 'Model manual yang tersimpan kini tidak tersedia.'} Pilih profil atau model lain.</p>}
+              {kerjaProfiles.map((profile, index) => {
+                const isSelected = profile.id === activeProfileId;
+                const isFocused = index === activeIndex;
+                const IconComponent = PROFILE_ICONS[profile.id] || Sparkles;
+                const isDefault = profile.id === DEFAULT_KERJA_PROFILE_ID;
+                const selectable = canSelectProfile(profile.id);
+                const serverStatus = serverProfile(profile.id);
+                const unavailableReason = !serverStatus ? 'Status ketersediaan tidak tersedia.' : serverStatus.available ? 'Tidak tersedia untuk paket akun ini.' : 'Tidak ada model yang tersedia untuk profil ini saat ini.';
+
+                return (
                   <button
+                    key={profile.id}
                     type="button"
                     role="option"
-                    id="workspace-model-auto"
-                    aria-selected={isAuto}
-                    onClick={() => { onChange(AUTO_ROUTING_MODEL_ID); close(); }}
-                    className={`flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${isAuto ? 'bg-emerald-50 dark:bg-emerald-950/40' : 'hover:bg-slate-50 dark:hover:bg-slate-800'}`}
+                    id={`workspace-profile-${profile.id}`}
+                    aria-selected={isSelected}
+                    aria-disabled={!selectable}
+                    disabled={!selectable}
+                    onMouseEnter={() => setActiveIndex(index)}
+                    onClick={() => selectIndex(index)}
+                    title={!selectable ? unavailableReason : undefined}
+                    className={`flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-50 ${
+                      isSelected
+                        ? 'bg-indigo-50 dark:bg-indigo-950/50 text-slate-900 dark:text-slate-100'
+                        : isFocused
+                        ? 'bg-slate-100 dark:bg-slate-800/70 text-slate-800 dark:text-slate-200'
+                        : 'hover:bg-slate-50 dark:hover:bg-slate-800/40 text-slate-700 dark:text-slate-300'
+                    }`}
                   >
-                    <div className="p-1 rounded-md bg-emerald-100 dark:bg-emerald-900/50 text-emerald-600 dark:text-emerald-400 mt-0.5">
-                      <Sparkles className="w-3.5 h-3.5" />
+                    <div
+                      className={`p-1.5 rounded-md mt-0.5 shrink-0 ${
+                        isSelected
+                          ? 'bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300'
+                          : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
+                      }`}
+                    >
+                      <IconComponent className="w-4 h-4" />
                     </div>
-                    <span className="min-w-0 flex-1">
-                      <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-900 dark:text-emerald-200">
-                        Auto — Pilih otomatis
-                        <span className="text-[10px] font-normal px-1.5 py-0.2 rounded bg-emerald-200/60 dark:bg-emerald-800/60 text-emerald-800 dark:text-emerald-300">Rekomendasi</span>
-                      </span>
-                      <span className="mt-0.5 block text-[10px] text-slate-500 dark:text-slate-400">
-                        Sistem memilih model paling sesuai berdasarkan berkas, analisis tugas, dan kapabilitas.
-                      </span>
-                    </span>
-                    {isAuto && <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />}
-                  </button>
-                </div>
-              )}
 
-              {Object.entries(groups).map(([category, models]) => (
-                <section key={category} aria-label={category}>
-                  <h3 className="px-2 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400">{category}</h3>
-                  {models.map(model => {
-                    const index = filteredModels.findIndex(item => item.id === model.id);
-                    const isSelected = model.id === value;
-                    return (
-                      <button
-                        key={model.id}
-                        type="button"
-                        role="option"
-                        id={`workspace-model-${model.id}`}
-                        aria-selected={isSelected}
-                        aria-disabled={!model.selectable}
-                        onMouseEnter={() => setActiveIndex(index)}
-                        disabled={!model.selectable}
-                        onClick={() => { onChange(model.id); close(); }}
-                        className={`flex w-full items-start gap-2 rounded-lg px-2.5 py-2 text-left disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${index === activeIndex ? 'bg-emerald-50 dark:bg-emerald-950/40' : 'hover:bg-slate-50 dark:hover:bg-slate-800'}`}
-                      >
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-xs font-medium">{model.name}</span>
-                          <span className="mt-0.5 block truncate text-[10px] text-slate-500">{model.provider} · {model.speed} · {model.availability === 'configured' ? 'Terkonfigurasi' : model.availability === 'temporarily_unavailable' ? 'Sementara tidak tersedia' : 'Penyedia belum dikonfigurasi'}</span>
-                        </span>
-                        {isSelected && <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" aria-hidden="true" />}
-                      </button>
-                    );
-                  })}
-                </section>
-              ))}
-              {filteredModels.length === 0 && (!search || !'auto otomatis smart routing'.includes(search.toLowerCase())) && (
-                <p className="p-4 text-center text-xs text-slate-500">{loading ? 'Memuat model...' : error ? 'Daftar model tidak dapat dimuat.' : 'Model tidak ditemukan.'}</p>
-              )}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-semibold">{profile.name}</span>
+                        {isDefault && (
+                          <span className="text-[9.5px] font-medium px-1.5 py-0.2 rounded bg-indigo-200/70 dark:bg-indigo-900/70 text-indigo-800 dark:text-indigo-200">
+                            Default
+                          </span>
+                        )}
+                      </div>
+                      <p className="mt-0.5 text-[10.5px] text-slate-500 dark:text-slate-400 leading-snug">
+                        {selectable ? profile.description : unavailableReason}
+                      </p>
+                    </div>
+
+                    {isSelected && (
+                      <Check
+                        className="mt-1 h-4 w-4 shrink-0 text-indigo-600 dark:text-indigo-400"
+                        aria-hidden="true"
+                      />
+                    )}
+                  </button>
+                );
+              })}
             </div>
+
+            {/* Advanced Section: Manual Model Selection */}
+            {models && models.length > 0 && (
+              <div className="mt-2 border-t border-slate-150 pt-2 dark:border-slate-800/80">
+                <button
+                  type="button"
+                  onClick={() => setShowAdvanced(prev => !prev)}
+                  className="flex w-full items-center justify-between px-2.5 py-1 text-[11px] font-semibold text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200 transition-colors cursor-pointer rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/40"
+                  aria-expanded={showAdvanced}
+                >
+                  <span className="flex items-center gap-1.5">
+                    <span>Pengaturan Model Manual</span>
+                    {!isKerjaProfile(value) && (
+                      <span className="rounded bg-indigo-100 px-1 py-0.2 text-[9px] font-semibold text-indigo-800 dark:bg-indigo-950/80 dark:text-indigo-300">
+                        Manual Aktif
+                      </span>
+                    )}
+                  </span>
+                  <ChevronDown
+                    className={`h-3.5 w-3.5 transition-transform duration-150 ${showAdvanced ? 'rotate-180' : ''}`}
+                    aria-hidden="true"
+                  />
+                </button>
+
+                {showAdvanced && (
+                  <div className="mt-1.5 max-h-48 space-y-1 overflow-y-auto px-1 custom-scrollbar">
+                    <p className="px-1.5 py-0.5 text-[9.5px] text-slate-500 dark:text-slate-400">
+                      Pilih model spesifik untuk instruksi teknis langsung (tanpa fallback tersembunyi):
+                    </p>
+                    {models
+                      .filter(m => m.selectable && m.available && isWorkspaceChatModel(m) && !catalogLoading && !catalogError)
+                      .map(m => {
+                        const isManualSelected = value === m.id;
+                        return (
+                          <button
+                            key={m.id}
+                            type="button"
+                            onClick={() => {
+                              onChange(m.id);
+                              close();
+                            }}
+                            className={`flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left text-xs transition-colors ${
+                              isManualSelected
+                                ? 'bg-indigo-50 font-semibold text-indigo-900 dark:bg-indigo-950/60 dark:text-indigo-200'
+                                : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+                            }`}
+                          >
+                            <div className="min-w-0 flex-1 pr-2">
+                              <div className="truncate text-[11px] font-medium">{m.name}</div>
+                              <div className="truncate text-[9.5px] text-slate-400">{m.provider} · {m.speed}</div>
+                            </div>
+                            {isManualSelected && (
+                              <Check className="h-3.5 w-3.5 shrink-0 text-indigo-600 dark:text-indigo-400" />
+                            )}
+                          </button>
+                        );
+                      })}
+                    {!catalogLoading && !catalogError && models.every(model => !model.selectable || !model.available || !isWorkspaceChatModel(model)) && <p role="status" className="px-1.5 py-1 text-[10px] text-slate-500">Tidak ada model manual chat streaming yang tersedia saat ini.</p>}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </>
       )}

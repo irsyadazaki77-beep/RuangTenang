@@ -103,7 +103,7 @@ export function BranchChatModal({
             maxLength={80}
             autoFocus
           />
-          
+
           {/* Quick preset chips */}
           <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
             <span className="text-[10.5px] text-slate-400 mr-0.5">Pilihan cepat:</span>
@@ -136,7 +136,7 @@ export function BranchChatModal({
           <button
             type="submit"
             disabled={loading}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium transition-colors cursor-pointer disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs bg-teal-700 hover:bg-teal-800 text-white rounded-lg font-medium transition-colors cursor-pointer disabled:opacity-50"
           >
             <GitBranch className="w-3.5 h-3.5" />
             <span>{loading ? 'Membuat Cabang...' : 'Mulai Obrolan Cabang'}</span>

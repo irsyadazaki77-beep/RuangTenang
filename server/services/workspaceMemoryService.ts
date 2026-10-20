@@ -111,6 +111,12 @@ export class WorkspaceMemoryService {
       throw new Error('PROMPT_INJECTION_DETECTED: Konten memori ditolak oleh filter keamanan.');
     }
 
+    // Safety & Ethical boundary: Never store self-harm, suicide plans, or formal diagnostic statements as long-term memories
+    const lowerSafe = safeContent.toLowerCase();
+    if (/\b(bunuh diri|melukai diri|suicide|self-harm|sayat|overdosis|akhiri hidup|diagnosa bipolar|diagnosa skizofrenia|gangguan kepribadian)\b/i.test(lowerSafe)) {
+      throw new Error('CLINICAL_SAFETY_REJECTED: Informasi krisis atau kondisi medis sensitif tidak boleh disimpan sebagai memori proyek jangka panjang.');
+    }
+
     // Encrypt content at rest
     const encryptedContent = encryptionService.encryptRequiredSensitive(safeContent);
 
@@ -394,6 +400,7 @@ ${lines.join('\n')}
           where: { id: mem.id },
           data: {
             status: 'superseded',
+            isActive: false,
             updatedAt: new Date()
           }
         });

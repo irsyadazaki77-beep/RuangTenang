@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { prisma } from "../../server/database";
 import { AppointmentRecord } from "../../server/database";
 import { encryptionService } from "../../server/services/encryptionService";
@@ -9,6 +10,48 @@ const HARD_MAX_PAGE_SIZE = 100;
 const SERIALIZABLE_TX_OPTIONS = process.env.DATABASE_URL?.startsWith('postgres')
   ? { isolationLevel: 'Serializable' as const }
   : undefined;
+const INDONESIAN_WEEKDAYS = ['minggu', 'senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu'];
+const APPOINTMENT_SLOT_TIMES = ['09:00', '10:30', '14:00', '16:00'] as const;
+
+function parseCounselorAvailability(availability: string): string[] {
+  try {
+    const parsed: unknown = JSON.parse(availability);
+    if (Array.isArray(parsed)) return parsed.filter((entry): entry is string => typeof entry === 'string').map(entry => entry.trim()).filter(Boolean);
+    if (typeof parsed === 'string' && parsed.trim()) return parsed.split(/[;,]/).map(entry => entry.trim()).filter(Boolean);
+    return [];
+  } catch {
+    return availability.split(/[;,]/).map(entry => entry.trim()).filter(Boolean);
+  }
+}
+
+function getConfiguredCounselorWeekdays(availability: string): Set<string> {
+  const weekdays = parseCounselorAvailability(availability)
+    .map(entry => entry.toLocaleLowerCase('id-ID'))
+    .filter(entry => INDONESIAN_WEEKDAYS.includes(entry));
+  return new Set(weekdays);
+}
+
+function getIndonesianWeekday(date: string): string | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+  const parsed = new Date(`${date}T12:00:00Z`);
+  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== date) return null;
+  return INDONESIAN_WEEKDAYS[parsed.getUTCDay()];
+}
+
+export function isCounselorScheduledOnDate(availability: string, date: string): boolean {
+  const configuredWeekdays = getConfiguredCounselorWeekdays(availability);
+  const requestedWeekday = getIndonesianWeekday(date);
+  if (!requestedWeekday) return false;
+  if (configuredWeekdays.size > 0) return configuredWeekdays.has(requestedWeekday);
+
+  // Keep older profiles that stored daily clock hours usable, while treating an empty or invalid schedule as unavailable.
+  const legacyDailyHours = parseCounselorAvailability(availability);
+  return legacyDailyHours.length > 0 && legacyDailyHours.every(entry => /^([01]\d|2[0-3]):[0-5]\d$/.test(entry));
+}
+
+function isOfferedAppointmentTime(time: string): boolean {
+  return APPOINTMENT_SLOT_TIMES.some(slot => slot === time);
+}
 
 /**
  * Calculates absolute UTC DateTime from local date string, time string, and timezone.
@@ -35,6 +78,15 @@ export function utcToLocalAppointmentFields(scheduledAt: Date, tz: string = 'WIB
   const timeMatch = isoString.split('T')[1].match(/^(\d{2}):(\d{2})/);
   const time = timeMatch ? `${timeMatch[1]}:${timeMatch[2]}` : '09:00';
   return { date, time, timezone: tz as "WIB" | "WITA" | "WIT" };
+}
+
+async function clearAppointmentAvailabilityCache(counselorId: string, date: string): Promise<void> {
+  await Promise.all([
+    redisService.del(`availability:${counselorId}:${date}`),
+    ...(['WIB', 'WITA', 'WIT'] as const).map(timezone =>
+      redisService.del(`availability:${counselorId}:${date}:${timezone}`)
+    )
+  ]);
 }
 
 /**
@@ -69,7 +121,7 @@ function mapDbAppointmentToRecord(a: any): AppointmentRecord {
  * ============================================================================
  * RUANGTENANG KAMPUS - APPOINTMENT REPOSITORY (WITH BLIND INDEXING)
  * ============================================================================
- * 
+ *
  * @class AppointmentRepository
  * @description
  * High-security Repository for managing student mental health appointments.
@@ -81,7 +133,7 @@ function mapDbAppointmentToRecord(a: any): AppointmentRecord {
 export class AppointmentRepository {
   /**
    * Cleans up appointments older than a given cutoff date.
-   * 
+   *
    * @param cutoffDate - Expiration date boundary.
    * @returns Total number of records deleted.
    */
@@ -99,7 +151,7 @@ export class AppointmentRepository {
   /**
    * Retrieves a paginated list of appointments with optional user filtering.
    * Decrypts AES-256-GCM encrypted fields before returning records.
-   * 
+   *
    * @param limit - Page size limit (capped at HARD_MAX_PAGE_SIZE = 100).
    * @param offset - Pagination offset count.
    * @param userId - Optional student user ID filter.
@@ -120,7 +172,7 @@ export class AppointmentRepository {
 
   /**
    * Finds a single appointment by its primary key ID and returns decrypted contents.
-   * 
+   *
    * @param id - Unique appointment record ID.
    * @returns Decrypted `AppointmentRecord` or `null` if not found.
    */
@@ -135,13 +187,13 @@ export class AppointmentRepository {
 
   /**
    * Finds appointments associated with a specific Student NIM using HMAC-SHA256 Blind Indexing.
-   * 
+   *
    * Cryptographic Workflow:
    * 1. Computes the deterministic HMAC-SHA256 blind index hash for the input `nim`.
    * 2. Executes a database-indexed query (`SELECT * FROM Appointments WHERE studentNimHash = ?`).
    * 3. Maps raw database records through `encryptionService.decryptSensitive()` to reveal
    *    plaintext `studentNIM`, `studentEmail`, and `notes`.
-   * 
+   *
    * @param nim - Plaintext Student NIM (e.g. "13520999").
    * @returns Array of matching, fully decrypted `AppointmentRecord` objects.
    */
@@ -170,12 +222,12 @@ export class AppointmentRepository {
 
   /**
    * Finds appointments associated with a specific Student Email using HMAC-SHA256 Blind Indexing.
-   * 
+   *
    * Cryptographic Workflow:
    * 1. Computes the deterministic HMAC-SHA256 blind index hash for the input `email`.
    * 2. Executes a database-indexed query (`SELECT * FROM Appointments WHERE studentEmailHash = ?`).
    * 3. Maps raw database records through `encryptionService.decryptSensitive()`.
-   * 
+   *
    * @param email - Plaintext Student Email (e.g. "mahasiswa@ui.ac.id").
    * @returns Array of matching, fully decrypted `AppointmentRecord` objects.
    */
@@ -201,47 +253,61 @@ export class AppointmentRepository {
 
   /**
    * Checks slot availability for a counselor on a given date with Redis caching.
-   * 
+   *
    * @param counselorId - ID of the target counselor.
    * @param date - Date string in YYYY-MM-DD format.
    */
-  async getAppointmentAvailability(counselorId: string, date: string) {
-    const cacheKey = `availability:${counselorId}:${date}`;
+  async getAppointmentAvailability(counselorId: string, date: string, timezone: 'WIB' | 'WITA' | 'WIT' = 'WIB') {
+    const cacheKey = `availability:${counselorId}:${date}:${timezone}`;
     const cached = await redisService.get<any>(cacheKey);
     if (cached) {
       return cached;
     }
 
-    const standardSlots = ["09:00", "10:30", "14:00", "16:00"];
-    const tz = 'WIB';
-    const slotTimes = standardSlots.map(time => calculateScheduledAtUtc(date, time, tz));
-
-    const activeSlots = await prisma.appointmentSlot.findMany({
+    const counselor = await prisma.counselors.findUnique({
+      where: { id: counselorId },
+      select: { availability: true },
+    });
+    const isScheduledDay = counselor ? isCounselorScheduledOnDate(counselor.availability, date) : false;
+    const standardSlots = isScheduledDay ? [...APPOINTMENT_SLOT_TIMES] : [];
+    const slotTimes = standardSlots.map(time => calculateScheduledAtUtc(date, time, timezone));
+    const sessionWindowMs = DEFAULT_SESSION_DURATION_MINUTES * 60_000;
+    const minimumStartTime = Date.now() + 5 * 60_000;
+    const candidateSlots = standardSlots
+      .map((time, index) => ({ time, scheduledAt: slotTimes[index] }))
+      .filter(slot => slot.scheduledAt.getTime() > minimumStartTime);
+    const activeAppointments = candidateSlots.length ? await prisma.appointments.findMany({
       where: {
         counselorId,
-        scheduledAt: { in: slotTimes },
+        scheduledAt: {
+          gt: new Date(Math.min(...candidateSlots.map(slot => slot.scheduledAt.getTime())) - sessionWindowMs),
+          lt: new Date(Math.max(...candidateSlots.map(slot => slot.scheduledAt.getTime())) + sessionWindowMs),
+        },
+        status: { notIn: ['CANCELLED', 'REJECTED'] },
       },
-    });
+      select: { scheduledAt: true },
+    }) : [];
 
-    const bookedSlots = activeSlots.map((s) => {
-      const fields = utcToLocalAppointmentFields(new Date(s.scheduledAt), tz);
-      return fields.time;
-    });
-
-    const availableSlots = standardSlots.filter(
-      (slot) => !bookedSlots.includes(slot),
-    );
+    const bookedSlots = candidateSlots.filter(slot => {
+      const candidateTime = slot.scheduledAt.getTime();
+      return activeAppointments.some(appointment => {
+        const existingTime = new Date(appointment.scheduledAt).getTime();
+        return existingTime > candidateTime - sessionWindowMs && existingTime < candidateTime + sessionWindowMs;
+      });
+    }).map(slot => slot.time);
+    const availableSlots = candidateSlots.map(slot => slot.time).filter(slot => !bookedSlots.includes(slot));
 
     const result = {
       counselorId,
       date,
+      timezone,
       allSlots: standardSlots,
       bookedSlots,
       availableSlots,
       fullyBooked: availableSlots.length === 0,
     };
 
-    await redisService.set(cacheKey, result, 60);
+    await redisService.set(cacheKey, result, 15);
 
     return result;
   }
@@ -250,7 +316,7 @@ export class AppointmentRepository {
    * Adds a new appointment to the database with dual security mechanisms:
    * 1. AES-256-GCM Application-Level Encryption for `notes`, `studentNIM`, and `studentEmail`.
    * 2. HMAC-SHA256 Blind Index generation for `studentNimHash` and `studentEmailHash`.
-   * 
+   *
    * @param appt - Appointment data containing raw student details and notes.
    * @returns Saved and decrypted `AppointmentRecord`.
    * @throws {Error} Throws "SLOT_ALREADY_BOOKED" if the target slot is unavailable.
@@ -258,7 +324,7 @@ export class AppointmentRepository {
   async addAppointment(
     appt: Omit<AppointmentRecord, "id" | "createdAt">,
   ): Promise<AppointmentRecord> {
-    const id = "appt-" + Date.now() + "-" + Math.floor(Math.random() * 1000);
+    const id = `appt-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
     const initialStatus = appt.status || "PENDING";
     const initialApproval =
       appt.approvalStatus ||
@@ -287,7 +353,7 @@ export class AppointmentRepository {
       }
 
       // Check if counselor exists in authoritative database
-      let counselorRecord = resolvedCounselorId 
+      let counselorRecord = resolvedCounselorId
         ? await tx.counselors.findUnique({ where: { id: resolvedCounselorId } })
         : null;
 
@@ -296,7 +362,7 @@ export class AppointmentRepository {
         if (process.env.NODE_ENV === 'test' || process.env.VITE_PUBLIC_DEMO_MODE === 'true' || process.env.VITEST === 'true') {
           counselorRecord = await tx.counselors.create({
             data: {
-              id: resolvedCounselorId || ("cns-test-" + Date.now() + "-" + Math.floor(Math.random() * 1000)),
+              id: resolvedCounselorId || `cns-test-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`,
               name: appt.counselorName || "Test Counselor",
               role: "Konselor Mahasiswa",
               specialties: JSON.stringify(["Konseling Umum"]),
@@ -315,9 +381,13 @@ export class AppointmentRepository {
       const scheduledAt = calculateScheduledAtUtc(appt.date, appt.time, appt.timezone || "WIB");
 
       // Validate slot timing: expired/past slots cannot be booked in production
-      const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
-      if (process.env.NODE_ENV !== 'test' && process.env.VITEST !== 'true' && scheduledAt.getTime() < fiveMinutesAgo) {
+      const minimumStartTime = Date.now() + 5 * 60 * 1000;
+      if (process.env.NODE_ENV !== 'test' && process.env.VITEST !== 'true' && scheduledAt.getTime() <= minimumStartTime) {
         throw new Error("SLOT_EXPIRED");
+      }
+
+      if (!isCancelledOrRejected && (!isCounselorScheduledOnDate(counselorRecord.availability, appt.date) || !isOfferedAppointmentTime(appt.time))) {
+        throw new Error('SLOT_UNAVAILABLE');
       }
 
       // Check slot availability
@@ -345,6 +415,7 @@ export class AppointmentRepository {
         data: {
           id,
           counselorId: resolvedCounselorId,
+          campusId: appt.campusId || null,
           counselorName: appt.counselorName,
           scheduledAt,
           timezone: appt.timezone || 'WIB',
@@ -385,7 +456,7 @@ export class AppointmentRepository {
       try {
         await tx.auditLogs.create({
           data: {
-            id: "log-" + Date.now() + "-" + Math.floor(Math.random() * 1000),
+            id: `log-${crypto.randomUUID()}`,
             action: "CREATE_APPOINTMENT",
             details: `Jadwal konseling (Status: ${initialStatus}) dibuat untuk ID sesi ${id} tanggal ${appt.date} (${created.scheduledAt.toISOString()})`,
             timestamp: new Date(),
@@ -396,7 +467,7 @@ export class AppointmentRepository {
         console.warn("Non-fatal audit log failure in transaction:", logErr);
       }
 
-      await redisService.del(`availability:${resolvedCounselorId}:${appt.date}`);
+      await clearAppointmentAvailabilityCache(resolvedCounselorId, appt.date);
 
       return mapDbAppointmentToRecord(created);
     }, SERIALIZABLE_TX_OPTIONS);
@@ -405,7 +476,7 @@ export class AppointmentRepository {
   /**
    * Updates an existing appointment, recalculating ciphertexts and blind index hashes
    * whenever sensitive student NIM or Email fields are updated.
-   * 
+   *
    * @param id - Appointment ID.
    * @param updates - Partial object containing updated appointment fields.
    */
@@ -429,18 +500,30 @@ export class AppointmentRepository {
       const isChangingSlot =
         (updates.date && updates.date !== currentFields.date) ||
         (updates.time && updates.time !== currentFields.time) ||
+        (updates.timezone !== undefined && updates.timezone !== currentTimezone) ||
         (updates.counselorId && updates.counselorId !== current.counselorId);
 
       const wasCancelledOrRejected = ["CANCELLED", "REJECTED"].includes(current.status);
 
       const targetTimezone = updates.timezone || currentTimezone || "WIB";
       const scheduledAt = calculateScheduledAtUtc(targetDate, targetTime, targetTimezone);
+      const confirmingAppointment = updates.status === 'CONFIRMED' && current.status !== 'CONFIRMED';
+      if (!isCancelledOrRejected && (isChangingSlot || confirmingAppointment) && process.env.NODE_ENV !== 'test' && process.env.VITEST !== 'true' && scheduledAt.getTime() <= Date.now() + 5 * 60_000) {
+        throw new Error('SLOT_EXPIRED');
+      }
+      const shouldReserveSlot = !isCancelledOrRejected && (isChangingSlot || wasCancelledOrRejected || confirmingAppointment);
+      if (shouldReserveSlot) {
+        const targetCounselor = await tx.counselors.findUnique({ where: { id: targetCounselorId }, select: { availability: true } });
+        if (!targetCounselor || !isCounselorScheduledOnDate(targetCounselor.availability, targetDate) || !isOfferedAppointmentTime(targetTime)) {
+          throw new Error('SLOT_UNAVAILABLE');
+        }
+      }
 
       if (isCancelledOrRejected) {
         await tx.appointmentSlot.deleteMany({
           where: { appointmentId: id },
         });
-      } else if (isChangingSlot || wasCancelledOrRejected) {
+      } else if (isChangingSlot || wasCancelledOrRejected || confirmingAppointment) {
         await tx.appointmentSlot.deleteMany({
           where: { appointmentId: id },
         });
@@ -500,6 +583,7 @@ export class AppointmentRepository {
 
       const updateData = {
           counselorId: updates.counselorId,
+          campusId: updates.campusId,
           counselorName: updates.counselorName,
           scheduledAt,
           timezone: targetTimezone,
@@ -531,7 +615,7 @@ export class AppointmentRepository {
       try {
         await tx.auditLogs.create({
           data: {
-            id: "log-" + Date.now() + "-" + Math.floor(Math.random() * 1000),
+            id: `log-${crypto.randomUUID()}`,
             action: "UPDATE_APPOINTMENT",
             details: `Jadwal konseling ID ${id} diperbarui. Status: ${updated.status}`,
             timestamp: new Date(),
@@ -542,9 +626,9 @@ export class AppointmentRepository {
         console.warn("Non-fatal audit log failure in transaction:", logErr);
       }
 
-      await redisService.del(`availability:${current.counselorId}:${currentFields.date}`);
+      await clearAppointmentAvailabilityCache(current.counselorId, currentFields.date);
       if (targetCounselorId !== current.counselorId || targetDate !== currentFields.date) {
-        await redisService.del(`availability:${targetCounselorId}:${targetDate}`);
+        await clearAppointmentAvailabilityCache(targetCounselorId, targetDate);
       }
 
       return mapDbAppointmentToRecord(updated);
@@ -553,7 +637,7 @@ export class AppointmentRepository {
 
   /**
    * Deletes an appointment record and associated slot reservations.
-   * 
+   *
    * @param id - Appointment ID to remove.
    * @returns `true` if deleted successfully, `false` otherwise.
    */
@@ -572,7 +656,7 @@ export class AppointmentRepository {
 
         await tx.auditLogs.create({
           data: {
-            id: "log-" + Date.now() + "-" + Math.floor(Math.random() * 1000),
+            id: `log-${crypto.randomUUID()}`,
             action: "DELETE_APPOINTMENT",
             details: `Jadwal konseling ID ${id} dihapus.`,
             timestamp: new Date(),
@@ -581,8 +665,8 @@ export class AppointmentRepository {
         });
 
         if (appt) {
-          const apptFields = utcToLocalAppointmentFields(new Date(appt.scheduledAt), 'WIB');
-          await redisService.del(`availability:${appt.counselorId}:${apptFields.date}`);
+          const apptFields = utcToLocalAppointmentFields(new Date(appt.scheduledAt), appt.timezone || 'WIB');
+          await clearAppointmentAvailabilityCache(appt.counselorId, apptFields.date);
         }
       });
 

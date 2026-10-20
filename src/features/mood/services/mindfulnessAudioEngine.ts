@@ -1,7 +1,7 @@
 // Web Audio engine is isolated from the mindfulness screen so the UI owns only session state.
 class MindfulnessAudioEngine {
   private ctx: AudioContext | null = null;
-  
+
   // Binaural Beats Nodes
   private oscL: OscillatorNode | null = null;
   private oscR: OscillatorNode | null = null;
@@ -186,11 +186,11 @@ class MindfulnessAudioEngine {
 
     const triggerSingleChime = () => {
       if (!this.ctx || !this.masterGain) return;
-      
+
       // Chime note selection (Pentatonic scale for guaranteed harmony: F4, G4, A4, C5, D5, F5)
       const scale = [349.23, 392.00, 440.00, 523.25, 587.33, 698.46];
       const frequency = scale[Math.floor(Math.random() * scale.length)];
-      
+
       // Oscillator 1: Carrier
       const carrier = this.ctx.createOscillator();
       carrier.type = 'triangle';
@@ -220,7 +220,7 @@ class MindfulnessAudioEngine {
       // Routing
       modulator.connect(modGain);
       modGain.connect(carrier.frequency);
-      
+
       carrier.connect(panner);
       panner.connect(gainNode);
       gainNode.connect(this.masterGain);
@@ -228,7 +228,7 @@ class MindfulnessAudioEngine {
       // Start & Stop triggers
       modulator.start();
       carrier.start();
-      
+
       modulator.stop(this.ctx.currentTime + duration);
       carrier.stop(this.ctx.currentTime + duration);
 
@@ -246,7 +246,7 @@ class MindfulnessAudioEngine {
 
     // Run first chime immediately, then schedule random occurrences every 3-7 seconds
     triggerSingleChime();
-    
+
     const scheduleNext = () => {
       const delay = 3000 + Math.random() * 4500;
       this.chimeTimer = window.setTimeout(() => {

@@ -1,15 +1,18 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { 
-  ChevronRight, 
-  Check, 
-  ShieldCheck, 
+import {
+  ChevronRight,
+  Check,
+  ShieldCheck,
   MessageCircleHeart,
   ArrowRight
 } from 'lucide-react';
 import { apiClient } from '../../lib/apiClient';
 import { clientDb } from '../../lib/clientDb';
+import { writeGuestAiConsent } from '../../lib/guestAiConsent';
 import { safeLocalStorage } from '../../lib/storage';
+import { trackProductEvent } from '../../lib/productAnalytics';
+import { BrandLogo } from '../../components/ui/BrandLogo';
 
 interface OnboardingFlowProps {
   userId: string;
@@ -74,7 +77,7 @@ const NEEDS: NeedOption[] = [
     id: 'listen',
     icon: '🛋️',
     label: 'Sekadar didengarkan',
-    desc: 'Bercerita bebas tanpa dinasihati atau dihakimi'
+    desc: 'Tentukan apakah kamu ingin didengarkan, diberi ide, atau keduanya'
   },
   {
     id: 'unclutter',
@@ -85,14 +88,14 @@ const NEEDS: NeedOption[] = [
   {
     id: 'calm',
     icon: '🌬️',
-    label: 'Meredakan panik & cemas',
-    desc: 'Latihan pernapasan dan grounding singkat'
+    label: 'Mencoba latihan saat merasa cemas',
+    desc: 'Latihan napas atau grounding yang bisa dilewati kapan saja'
   },
   {
     id: 'academic',
     icon: '📚',
     label: 'Menghadapi beban tugas/skripsi',
-    desc: 'Langkah kecil mengatasi prokrastinasi & burnout'
+    desc: 'Pecah tugas besar menjadi langkah yang lebih kecil'
   }
 ];
 
@@ -124,9 +127,13 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ userId, onComple
     safeLocalStorage.setItem(`rt_user_mood_${userId}`, selectedMood);
     safeLocalStorage.setItem(`rt_user_goals_${userId}`, JSON.stringify(selectedNeeds));
 
+    // Guest consent is deliberately session-scoped: it is not an account consent
+    // record and must not persist in shared browser storage after this tab closes.
+    if (userId === 'guest') writeGuestAiConsent(consentForAI);
+
     try {
       await clientDb.saveEncrypted(
-        `onboarding_${userId}`, 
+        `onboarding_${userId}`,
         JSON.stringify({ completed: true, mood: selectedMood, goals: selectedNeeds })
       );
     } catch {
@@ -135,10 +142,10 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ userId, onComple
 
     if (userId && userId !== 'guest') {
       try {
-        await apiClient.post('/api/v1/user/onboarding', { 
-          completed: true, 
-          mood: selectedMood, 
-          goals: selectedNeeds 
+        await apiClient.post('/api/v1/user/onboarding', {
+          completed: true,
+          mood: selectedMood,
+          goals: selectedNeeds
         });
         if (consentTouched) {
           await apiClient.post('/api/v1/privacy/consent', {
@@ -152,6 +159,7 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ userId, onComple
       } catch (err) {
         console.warn('Failed to sync onboarding to server:', err);
       }
+      trackProductEvent('activation_completed');
     }
   };
 
@@ -177,7 +185,7 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ userId, onComple
   return (
     <div className="fixed inset-0 z-50 bg-stone-900/60 dark:bg-black/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 animate-fade-in">
       <div className="surface-card rounded-2xl max-w-md w-full p-4 sm:p-5 shadow-xl border border-stone-200/80 dark:border-slate-800 flex flex-col justify-between max-h-[90dvh] overflow-y-auto text-stone-800 dark:text-stone-100 relative">
-        
+
         {/* Header Bar: Step dots & Skip */}
         <div className="flex justify-between items-center mb-4 shrink-0">
           <div className="flex gap-1.5 items-center">
@@ -185,8 +193,8 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ userId, onComple
               <div
                 key={s}
                 className={`h-1.5 rounded-full transition-all duration-300 ${
-                  s === step 
-                    ? 'w-6 bg-teal-600 dark:bg-teal-500' 
+                  s === step
+                    ? 'w-6 bg-teal-600 dark:bg-teal-500'
                     : s < step
                       ? 'w-2 bg-teal-300 dark:bg-teal-800'
                       : 'w-1.5 bg-stone-200 dark:bg-slate-700'
@@ -206,7 +214,7 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ userId, onComple
         {/* Content Area with Soft Fluid Transitions */}
         <div className="flex-1 flex flex-col justify-center min-h-[280px]">
           <AnimatePresence mode="wait">
-            
+
             {/* STEP 1: Welcome and explicit privacy choices */}
             {step === 1 && (
               <motion.div
@@ -218,9 +226,7 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ userId, onComple
                 className="space-y-3"
               >
                 {/* Official RuangTenang Brand Presence Badge */}
-                <div className="relative w-12 h-12 rounded-xl bg-white dark:bg-slate-800 border border-teal-200/80 dark:border-teal-800 shadow-2xs flex items-center justify-center p-2 shrink-0">
-                  <img src="/favicon.svg" alt="RuangTenang" className="w-full h-full object-contain pointer-events-none select-none" />
-                </div>
+                <BrandLogo size="lg" iconOnly />
 
                 <div>
                   <h3 className="text-lg sm:text-xl font-bold text-stone-900 dark:text-stone-100 tracking-tight leading-snug">
@@ -275,6 +281,17 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ userId, onComple
                       </label>
                     )}
                   </div>
+
+                  <details className="text-[10.5px] leading-relaxed text-stone-600 dark:text-stone-300">
+                    <summary className="min-h-8 w-fit cursor-pointer rounded font-medium text-teal-800 underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 dark:text-teal-300">
+                      Detail pemrosesan dan penyimpanan
+                    </summary>
+                    <div className="space-y-1 pl-1">
+                      <p>Model dapat berjalan melalui Ollama pada endpoint yang dikonfigurasi atau provider AI lain. Endpoint Ollama tidak selalu berada di perangkatmu.</p>
+                      <p>Percakapan dapat disimpan aplikasi sesuai kebijakan retensi. Mode model Ollama tidak otomatis membuat penyimpanan aplikasi hanya lokal.</p>
+                      <p>Jika pencarian web diaktifkan dan digunakan, kueri yang disaring dapat dikirim ke layanan pencarian eksternal. Penyaringan pola bukan anonimisasi yang terjamin.</p>
+                    </div>
+                  </details>
                 </div>
               </motion.div>
             )}
@@ -322,7 +339,7 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ userId, onComple
                           </div>
                         </div>
                         {isSelected && (
-                          <div className="w-4 h-4 rounded-full bg-teal-600 flex items-center justify-center text-white shrink-0">
+                          <div className="w-4 h-4 rounded-full bg-teal-700 flex items-center justify-center text-white shrink-0">
                             <Check className="w-3 h-3" strokeWidth={3} />
                           </div>
                         )}
@@ -376,7 +393,7 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ userId, onComple
                           </div>
                         </div>
                         {isSelected && (
-                          <div className="w-4 h-4 rounded-full bg-teal-600 flex items-center justify-center text-white shrink-0">
+                          <div className="w-4 h-4 rounded-full bg-teal-700 flex items-center justify-center text-white shrink-0">
                             <Check className="w-3 h-3" strokeWidth={3} />
                           </div>
                         )}
@@ -424,7 +441,7 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ userId, onComple
                   <button
                     type="button"
                     onClick={() => handleFinishWithPrompt(getStarterPrompt())}
-                    className="w-full mt-1.5 py-2 px-3.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs sm:text-[13px] font-semibold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs active:scale-[0.98] min-h-[40px]"
+                    className="w-full mt-1.5 py-2 px-3.5 bg-teal-700 hover:bg-teal-800 text-white rounded-lg text-xs sm:text-[13px] font-semibold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs active:scale-[0.98] min-h-[40px]"
                   >
                     <span>Kirim Pesan Ini Sekarang</span>
                     <ArrowRight className="w-3.5 h-3.5" />
@@ -455,7 +472,7 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ userId, onComple
 
           <button
             onClick={handleNext}
-            className="px-4 py-2 bg-teal-600 hover:bg-teal-700 active:scale-[0.98] text-white text-xs sm:text-[13px] font-semibold rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer min-h-[38px]"
+            className="px-4 py-2 bg-teal-700 hover:bg-teal-800 active:scale-[0.98] text-white text-xs sm:text-[13px] font-semibold rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer min-h-[38px]"
           >
             <span>{step === 4 ? (consentForAI ? 'Buka Ruang Obrolan' : 'Selesaikan') : 'Lanjut'}</span>
             <ChevronRight className="w-3.5 h-3.5" />

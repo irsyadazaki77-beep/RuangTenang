@@ -29,7 +29,7 @@ export const ScoreGaugeMeter: React.FC<{
   return (
     <div className="flex flex-col items-center justify-center p-3 sm:p-4 surface-card rounded-2xl border border-default shadow-3xs hover:shadow-2xs transition-all relative overflow-hidden">
       <span className="text-xs font-semibold text-secondary mb-2 text-center">{label}</span>
-      
+
       <div className="relative w-28 h-28 flex items-center justify-center my-1">
         <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
           {/* Background Track */}
@@ -69,4 +69,3 @@ export const ScoreGaugeMeter: React.FC<{
     </div>
   );
 };
-

@@ -1,10 +1,11 @@
-import { 
-  FileValidationResult, 
-  WorkspaceFileAttachment, 
-  WorkspaceFileKind, 
-  FileValidationErrorType 
+import {
+  FileValidationResult,
+  WorkspaceFileAttachment,
+  WorkspaceFileKind,
+  FileValidationErrorType
 } from '../types.js';
 import { MAX_UPLOAD_FILE_SIZE_BYTES, SUPPORTED_WORKSPACE_FILE_EXTENSIONS } from '../../../../shared/contracts/files.js';
+import { readGuestAiConsent } from '../../../lib/guestAiConsent.js';
 
 export const MAX_FILE_SIZE_BYTES = MAX_UPLOAD_FILE_SIZE_BYTES;
 
@@ -35,10 +36,10 @@ export function validateFileHeader(file: File): FileValidationResult {
   }
 
   if (file.size > MAX_FILE_SIZE_BYTES) {
-    return { 
-      valid: false, 
-      error: 'TOO_LARGE', 
-      message: `Ukuran berkas (${(file.size / (1024 * 1024)).toFixed(1)}MB) melebihi batas maksimal 5MB.` 
+    return {
+      valid: false,
+      error: 'TOO_LARGE',
+      message: `Ukuran berkas (${(file.size / (1024 * 1024)).toFixed(1)}MB) melebihi batas maksimal 5MB.`
     };
   }
 
@@ -67,6 +68,11 @@ export interface AttachmentStatusResponseDTO {
   slideCount?: number;
   sheetCount?: number;
   extractionWarnings?: string[];
+  ocrApplied?: boolean;
+  visualAnalysisAvailable?: boolean;
+  previewOnly?: boolean;
+  ocrConfidence?: number;
+  readingUncertainty?: string;
   errorMessage?: string;
   errorCode?: string;
 }
@@ -102,15 +108,26 @@ export async function pollProcessingStatus(
         signal
       });
 
-      if (res.ok) {
-        const data = await res.json();
-        const att = data.attachment as AttachmentStatusResponseDTO | undefined;
-        if (att) {
-          if (att.id !== attachmentId) return { success: false, errorMessage: 'ID status lampiran tidak cocok.' };
-          latest = att;
-          if (att.status === 'ready' || att.status === 'failed' || att.status === 'unsupported') {
-            return { success: true, attachment: att };
-          }
+      if (!res.ok) {
+        const errorMessage = res.status === 401
+          ? 'Sesi berakhir. Masuk kembali untuk memeriksa status berkas.'
+          : res.status === 403
+            ? 'Akses untuk memeriksa berkas ditolak.'
+            : res.status === 404
+              ? 'Lampiran tidak ditemukan atau telah dihapus.'
+              : res.status === 429
+                ? 'Pemeriksaan status terlalu sering. Coba lagi sebentar.'
+                : 'Status berkas tidak dapat diperiksa. Coba lagi.';
+        return { success: false, timeout: false, errorMessage };
+      }
+
+      const data = await res.json();
+      const att = data.attachment as AttachmentStatusResponseDTO | undefined;
+      if (att) {
+        if (att.id !== attachmentId) return { success: false, errorMessage: 'ID status lampiran tidak cocok.' };
+        latest = att;
+        if (att.status === 'ready' || att.status === 'failed' || att.status === 'unsupported') {
+          return { success: true, attachment: att };
         }
       }
     } catch (err: unknown) {
@@ -195,9 +212,16 @@ export async function processFileForWorkspace(
       formData.append('chatId', chatId);
     }
     formData.append('workspaceMode', 'true');
+    const csrfCookie = document.cookie.match(/(?:^|; )XSRF-TOKEN=([^;]+)/)?.[1];
+    const uploadHeaders: Record<string, string> = {
+      'X-Requested-With': 'XMLHttpRequest',
+      'X-Guest-AI-Consent': String(readGuestAiConsent())
+    };
+    if (csrfCookie) uploadHeaders['X-CSRF-Token'] = decodeURIComponent(csrfCookie);
 
     const res = await fetch('/api/v1/chat/attachments/upload', {
       method: 'POST',
+      headers: uploadHeaders,
       credentials: 'include',
       body: formData,
       signal
@@ -230,30 +254,17 @@ export async function processFileForWorkspace(
       const pollResult = await pollProcessingStatus(att.id, 15, 800, signal, chatId);
       if (pollResult.success && pollResult.attachment) {
         att = pollResult.attachment;
-      } else if (pollResult.timeout) {
-        if (pollResult.attachment?.status === 'processing' || pollResult.attachment?.status === 'pending') {
-          return { valid: true, file: { id: att.id, name: att.filename || file.name, size: att.size || file.size, mimeType: att.mimeType || file.type || 'application/octet-stream', fileKind: (att.fileKind as WorkspaceFileKind) || 'text', status: 'processing', url: att.url || `/api/v1/chat/attachments/${att.id}` } };
-        }
-        return {
-          valid: false,
-          error: 'PROCESSING_TIMEOUT',
-          message: 'Pemrosesan dokumen melebihi batas waktu tunggu. Silakan coba lagi.',
-          file: {
-            id: att.id,
-            name: att.filename || file.name,
-            size: att.size || file.size,
-            mimeType: att.mimeType || file.type || 'application/octet-stream',
-            fileKind: (att.fileKind as WorkspaceFileKind) || 'text',
-            status: 'failed',
-            url: att.url || `/api/v1/chat/attachments/${att.id}`
-          }
-        };
       } else {
-        return {
-          valid: false,
-          error: 'PROCESSING_FAILED',
-          message: pollResult.errorMessage || 'Pemrosesan berkas terhenti.'
-        };
+        return { valid: true, file: {
+          id: att.id,
+          name: att.filename || file.name,
+          size: att.size || file.size,
+          mimeType: att.mimeType || file.type || 'application/octet-stream',
+          fileKind: (att.fileKind as WorkspaceFileKind) || 'text',
+          status: 'processing',
+          url: att.url || `/api/v1/chat/attachments/${att.id}`,
+          errorMessage: pollResult.errorMessage || (pollResult.timeout ? 'Pemrosesan masih berlangsung. Periksa lagi sebentar.' : undefined)
+        } };
       }
     }
 
@@ -305,6 +316,11 @@ export async function processFileForWorkspace(
       slideCount: att.slideCount,
       sheetCount: att.sheetCount,
       extractionWarnings: att.extractionWarnings,
+      ocrApplied: att.ocrApplied,
+      visualAnalysisAvailable: att.visualAnalysisAvailable,
+      previewOnly: att.previewOnly,
+      ocrConfidence: att.ocrConfidence,
+      readingUncertainty: att.readingUncertainty,
       url: att.url || `/api/v1/chat/attachments/${att.id}`,
       checksum: att.checksum
     };
@@ -331,7 +347,15 @@ export async function retryWorkspaceFile(attachmentId: string, signal?: AbortSig
   try {
     const scope = chatId ? `?chatId=${encodeURIComponent(chatId)}` : '';
     const response = await fetch(`/api/v1/chat/attachments/${encodeURIComponent(attachmentId)}/retry${scope}`, {
-      method: 'POST', credentials: 'include', signal
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest',
+        'X-Guest-AI-Consent': String(readGuestAiConsent())
+      },
+      credentials: 'include',
+      body: JSON.stringify({ guestAiConsent: readGuestAiConsent() }),
+      signal
     });
     const payload = await response.json();
     if (!response.ok || !payload.success) {
@@ -341,10 +365,7 @@ export async function retryWorkspaceFile(attachmentId: string, signal?: AbortSig
     if (attachment?.status === 'processing' || attachment?.status === 'pending') {
       const polled = await pollProcessingStatus(attachmentId, 15, 800, signal, chatId);
       if (!polled.success || !polled.attachment) {
-        if (polled.attachment?.status === 'processing' || polled.attachment?.status === 'pending') {
-          return { valid: true, file: { id: polled.attachment.id, name: polled.attachment.filename, mimeType: polled.attachment.mimeType, size: polled.attachment.size, fileKind: polled.attachment.fileKind, status: 'processing', url: polled.attachment.url } };
-        }
-        return { valid: false, error: 'PROCESSING_TIMEOUT', message: polled.errorMessage || 'Pemrosesan dokumen belum selesai. Coba lagi.' };
+        return { valid: true, file: { id: attachment.id, name: attachment.filename, mimeType: attachment.mimeType, size: attachment.size, fileKind: attachment.fileKind, status: 'processing', url: attachment.url, errorMessage: polled.errorMessage || (polled.timeout ? 'Pemrosesan masih berlangsung. Periksa lagi sebentar.' : undefined) } };
       }
       attachment = polled.attachment;
     }
@@ -365,7 +386,12 @@ export async function retryWorkspaceFile(attachmentId: string, signal?: AbortSig
         pageCount: attachment.pageCount,
         slideCount: attachment.slideCount,
         sheetCount: attachment.sheetCount,
-        extractionWarnings: attachment.extractionWarnings
+        extractionWarnings: attachment.extractionWarnings,
+        ocrApplied: attachment.ocrApplied,
+        visualAnalysisAvailable: attachment.visualAnalysisAvailable,
+        previewOnly: attachment.previewOnly,
+        ocrConfidence: attachment.ocrConfidence,
+        readingUncertainty: attachment.readingUncertainty
       }
     };
   } catch (error) {

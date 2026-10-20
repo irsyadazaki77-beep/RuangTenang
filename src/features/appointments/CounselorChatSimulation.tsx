@@ -1,35 +1,28 @@
 import { useEscapeKey } from '../../hooks/useEscapeKey';
 import React, { useState, useEffect, useCallback } from 'react';
-import { Send, Bot, AlertCircle, XCircle, Check } from 'lucide-react';
+import { Send, Bot, AlertCircle, XCircle } from 'lucide-react';
 import { Appointment } from '../../types';
-import { useCounselors } from '../../hooks/useCounselors';
 import { apiClient } from '../../lib/apiClient';
 
 interface CounselorChatSimulationProps {
   appointment: Appointment | null;
   onClose: () => void;
-  onCompleteSession: (appointmentId: string, summaryNotes: string) => void;
   showToast: (message: string, type: 'success' | 'error' | 'warning' | 'info') => void;
 }
 
 export const CounselorChatSimulation: React.FC<CounselorChatSimulationProps> = ({
   appointment,
   onClose,
-  onCompleteSession,
   showToast
 }) => {
-  const { counselors } = useCounselors();
   useEscapeKey(onClose, true);
 
   const [chatMessages, setChatMessages] = useState<{ role: 'user' | 'assistant'; content: string; timestamp: string }[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [isGeneratingResponse, setIsGeneratingResponse] = useState(false);
-  const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
 
-  const initializeNewChat = useCallback((apt: Appointment) => {
-    if (counselors.length === 0) return;
-    const counselor = counselors.find(c => c.id === apt.counselorId) || counselors[0];
-    const initialGreeting = `Halo ${apt.studentName}! Selamat datang di Sesi Konseling Virtual RuangTenang Kampus 🤍. Saya ${counselor.name} 👋. Saya di sini siap merangkul, mendengarkan ceritamu, dan mendampingimu terkait masalah "${apt.primaryConcern}". Jangan ragu atau takut bercerita yaa, sesi ini sepenuhnya privat, aman, & rahasia 🔐✨. Apa yang paling berat atau sedang mengganjal di hatimu saat ini, kawan?`;
+  const initializeNewChat = useCallback(() => {
+    const initialGreeting = 'Ini simulasi percakapan dengan asisten AI, bukan layanan konseling manusia. Jika kamu ingin mencoba, ceritakan hal yang ingin dibahas tanpa menyertakan informasi yang tidak perlu.';
     
     const initialMsg = {
       role: 'assistant' as const,
@@ -37,11 +30,11 @@ export const CounselorChatSimulation: React.FC<CounselorChatSimulationProps> = (
       timestamp: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
     };
     setChatMessages([initialMsg]);
-  }, [counselors]);
+  }, []);
 
   useEffect(() => {
     if (appointment) {
-      initializeNewChat(appointment);
+      initializeNewChat();
     }
   }, [appointment, initializeNewChat]);
 
@@ -66,21 +59,14 @@ export const CounselorChatSimulation: React.FC<CounselorChatSimulationProps> = (
     
 
     try {
-      const counselor = counselors.find(c => c.id === appointment.counselorId) || counselors[0];
       const res = await apiClient.post<any>('/api/v1/counselor-chat', {
-        messages: updatedMessages.map(m => ({ role: m.role, content: m.content })),
-        counselorName: counselor.name,
-        counselorTitle: counselor.title,
-        counselorUniversity: counselor.university,
-        counselorSpecialties: counselor.specialties,
-        studentName: appointment.studentName,
-        concern: appointment.primaryConcern
+        messages: updatedMessages.map(m => ({ role: m.role, content: m.content }))
       });
 
       const data = res.data;
       const botMsg = {
         role: 'assistant' as const,
-        content: (data && data.reply) || `Terima kasih atas ceritanya, ${appointment.studentName}. Saya sangat menghargai keberanian Anda berbagi rasa ini. Silakan ceritakan lebih lanjut, saya terus menyimak.`,
+        content: (data && data.reply) || 'Asisten simulasi belum dapat menjawab. Coba kirim pesan lagi atau hubungi konselor melalui layanan yang tersedia.',
         timestamp: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
       };
 
@@ -91,7 +77,7 @@ export const CounselorChatSimulation: React.FC<CounselorChatSimulationProps> = (
       console.warn('Counselor simulation API error:', err);
       const fallbackMsg = {
         role: 'assistant' as const,
-        content: `Terima kasih sudah berbagi cerita, ${appointment.studentName}. Sebagai konselor Anda, saya sangat mendengarkan kecemasan dan apa yang mengganggu kenyamanan Anda. Kita akan melaluinya pelan-pelan bersama-sama. Silakan utarakan apa lagi yang Anda rasakan.`,
+        content: 'Simulasi tidak dapat terhubung saat ini. Coba lagi nanti atau hubungi konselor melalui layanan yang tersedia.',
         timestamp: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
       };
       const finalMessages = [...updatedMessages, fallbackMsg];
@@ -102,60 +88,9 @@ export const CounselorChatSimulation: React.FC<CounselorChatSimulationProps> = (
     }
   };
 
-  const handleCompleteClick = async () => {
-    setIsGeneratingSummary(true);
-
-    try {
-      const counselor = counselors.find(c => c.id === appointment.counselorId) || counselors[0];
-      
-      const summaryPrompt = [
-        {
-          role: 'user',
-          content: `Tolong buatkan Ringkasan Hasil Konseling Klinis yang sangat formal, profesional, dan realistis berdasarkan percakapan bimbingan konseling simulasi berikut ini:
-          ${JSON.stringify(chatMessages)}
-          
-          Ringkasan HARUS mencakup bab-bab berikut dengan gaya penulisan psikolog profesional:
-          1. ANALISIS KONDISI EMOSIONAL MAHASISWA (menguraikan mood, tingkat kecemasan, serta distress akademis yang dirasakan).
-          2. MASALAH UTAMA YANG TERIDENTIFIKASI (penyebab stres, burnout, bimbingan dosen, atau overthinking).
-          3. REKOMENDASI TERAPEUTIK & COPING STRATEGY (teknik grounding, pembagian waktu, restrukturisasi kognitif, dll).
-          4. RENCANA TINDAK LANJUT (follow-up plan).
-          
-          PENTING: Jawab dalam Bahasa Indonesia yang formal dan profesional. Jangan gunakan bahasa gaul.`
-        }
-      ];
-
-      let summaryTextResult = '';
-
-      try {
-        const res = await apiClient.post<any>('/api/v1/counselor-chat', {
-          messages: summaryPrompt,
-          counselorName: counselor.name,
-          counselorTitle: counselor.title,
-          counselorUniversity: counselor.university,
-          counselorSpecialties: counselor.specialties,
-          studentName: appointment.studentName,
-          concern: appointment.primaryConcern
-        });
-        const data = res.data;
-        summaryTextResult = data?.reply || '';
-      } catch {
-        summaryTextResult = `RINGKASAN SESI KONSELING SIMULASI\n` +
-          `Konselor: ${counselor.name}\n` +
-          `Mahasiswa: ${appointment.studentName} (${appointment.studentNIM || 'N/A'})\n` +
-          `Keluhan Utama: ${appointment.primaryConcern}\n\n` +
-          `1. ANALISIS EMOSIONAL:\nMahasiswa menunjukkan tingkat kelelahan emosional (burnout) yang dipicu oleh beban akademis dan kecemasan terkait masa depan.\n\n` +
-          `2. COPING STRATEGY:\n- Latih teknik pernapasan 4-7-8 untuk menenangkan detak jantung saat panik.\n- Membagi draf pengerjaan skripsi menjadi bagian kecil terstruktur.\n- Mengurangi screen-time gawai sebelum tidur malam.`;
-      }
-
-      onCompleteSession(appointment.id, summaryTextResult);
-      onClose();
-      showToast('Sesi Konseling berhasil diselesaikan! Ringkasan & saran psikologis telah diterbitkan.', 'success');
-    } catch (err) {
-      console.error(err);
-      showToast('Gagal menyelesaikan sesi secara formal.', 'error');
-    } finally {
-      setIsGeneratingSummary(false);
-    }
+  const handleCompleteClick = () => {
+    showToast('Simulasi diakhiri. Status janji temu dan catatan konseling tidak diubah.', 'info');
+    onClose();
   };
 
   return (
@@ -175,27 +110,25 @@ export const CounselorChatSimulation: React.FC<CounselorChatSimulationProps> = (
             />
             <div>
               <h3 className="font-sans font-semibold tracking-tight text-slate-900 text-sm sm:text-base leading-tight">
-                {appointment.counselorName}
+                Simulasi AI
               </h3>
               <p className="text-xs text-emerald-600 font-medium flex items-center gap-1 mt-0.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                Sesi Konseling Aktif (Simulasi)
+                Profil: {appointment.counselorName}
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
             <button
               onClick={handleCompleteClick}
-              disabled={isGeneratingSummary}
-              className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-all disabled:opacity-50"
-              title="Selesaikan sesi ini dan buat Ringkasan & Saran Klinis otomatis"
+              className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-all"
+              title="Akhiri simulasi tanpa mengubah janji temu atau catatan konseling"
             >
-              <Check className="w-3.5 h-3.5" />
-              <span>Selesaikan & Ringkas</span>
+              <XCircle className="w-3.5 h-3.5" />
+              <span>Akhiri Simulasi</span>
             </button>
             <button
               onClick={onClose}
-              disabled={isGeneratingSummary}
               className="p-1.5 text-slate-600 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
               title="Tutup jendela chat"
             >
@@ -208,8 +141,8 @@ export const CounselorChatSimulation: React.FC<CounselorChatSimulationProps> = (
         <div className="bg-amber-50 border-b border-amber-100 px-4 py-2 flex items-start gap-2.5 shrink-0 text-[11px] sm:text-xs text-amber-600">
           <AlertCircle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
           <div>
-            <p className="font-semibold">Sesi Simulasi Interaktif Aktif</p>
-            <p className="opacity-90">Ini adalah sesi bimbingan konseling simulasi untuk proyek Anda. Seluruh tanggapan psikolog dihasilkan secara virtual oleh AI.</p>
+            <p className="font-semibold">Simulasi AI — bukan konseling manusia</p>
+            <p className="opacity-90">Pesan diproses melalui model AI dan endpoint yang dikonfigurasi. Percakapan ini tidak disimpan sebagai catatan janji temu; pengelolaan data lain mengikuti kebijakan layanan.</p>
           </div>
         </div>
 
@@ -229,7 +162,7 @@ export const CounselorChatSimulation: React.FC<CounselorChatSimulationProps> = (
                 )}
                 <div className="max-w-[85%] sm:max-w-[75%] flex flex-col">
                   <span className={`text-[10px] font-medium mb-1 ${isUser ? 'text-right text-slate-600' : 'text-slate-600'}`}>
-                    {isUser ? 'Anda' : appointment.counselorName}
+                    {isUser ? 'Anda' : 'Asisten simulasi AI'}
                   </span>
                   <div
                     className={`rounded-2xl px-4 py-2.5 text-sm leading-relaxed shadow-xs whitespace-pre-wrap ${
@@ -254,12 +187,12 @@ export const CounselorChatSimulation: React.FC<CounselorChatSimulationProps> = (
                 <Bot className="w-4 h-4 text-slate-600" />
               </div>
               <div className="flex flex-col">
-                <span className="text-[10px] font-medium text-slate-600 mb-1">{appointment.counselorName}</span>
+                <span className="text-[10px] font-medium text-slate-600 mb-1">Asisten simulasi AI</span>
                 <div className="surface-card rounded-2xl rounded-tl-none px-4 py-3 text-sm text-slate-600 flex items-center gap-2">
                   <span className="w-1.5 h-1.5 rounded-full bg-slate-500 animate-calm-pulse [animation-delay:0ms]"></span>
                   <span className="w-1.5 h-1.5 rounded-full bg-slate-500 animate-calm-pulse [animation-delay:200ms]"></span>
                   <span className="w-1.5 h-1.5 rounded-full bg-slate-500 animate-calm-pulse [animation-delay:400ms]"></span>
-                  <span className="font-medium text-xs text-slate-600 ml-1">Sedang mengetik tanggapan...</span>
+                  <span className="font-medium text-xs text-slate-600 ml-1">Menyiapkan tanggapan simulasi...</span>
                 </div>
               </div>
             </div>
@@ -272,31 +205,18 @@ export const CounselorChatSimulation: React.FC<CounselorChatSimulationProps> = (
             type="text"
             value={chatInput}
             onChange={(e) => setChatInput(e.target.value)}
-            disabled={isGeneratingResponse || isGeneratingSummary}
-            placeholder={isGeneratingResponse ? "Harap tunggu jawaban konselor..." : "Ketik pesan Anda terkait beban atau kecemasan..."}
+            disabled={isGeneratingResponse}
+            placeholder={isGeneratingResponse ? "Menunggu tanggapan simulasi..." : "Ketik pesan Anda untuk mencoba simulasi..."}
             className="flex-1 bg-slate-50 rounded-xl px-4 py-3 text-base sm:text-sm focus:outline-none focus:border-slate-800 focus:bg-white text-slate-800 transition-colors"
           />
           <button
             type="submit"
-            disabled={!chatInput.trim() || isGeneratingResponse || isGeneratingSummary}
+            disabled={!chatInput.trim() || isGeneratingResponse}
             className="p-3 bg-slate-800 hover:bg-slate-900 disabled:bg-slate-100 disabled:text-slate-600 text-white rounded-xl transition-all shadow-xs shrink-0"
           >
             <Send className="w-4 h-4" />
           </button>
         </form>
-
-        {/* Summary Generating Loader Overlay */}
-        {isGeneratingSummary && (
-          <div className="absolute inset-0 bg-slate-900/75 backdrop-blur-xs flex flex-col items-center justify-center text-center p-6 space-y-4 z-50 animate-in fade-in">
-            <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
-            <div className="space-y-1">
-              <h4 className="text-white font-sans font-semibold tracking-tight text-base">Konselor Sesi Sedang Menyusun Laporan</h4>
-              <p className="text-slate-300 text-xs max-w-sm">
-                Mohon tunggu sebentar. AI Psikolog sedang menyintesis seluruh percakapan Anda untuk merumuskan lembar Analisis Klinis, Rekomendasi Coping, dan Rencana Tindak Lanjut formal.
-              </p>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

@@ -6,7 +6,7 @@ import jsxA11yPlugin from 'eslint-plugin-jsx-a11y';
 
 export default tseslint.config(
   {
-    ignores: ['dist/**', 'node_modules/**', 'backups/**', 'coverage/**']
+    ignores: ['dist/**', 'node_modules/**', 'backups/**', 'coverage/**', 'output/**', 'tmp/**', 'test-results/**']
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,

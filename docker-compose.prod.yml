@@ -17,11 +17,13 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-ruangtenang_prod}
       POSTGRES_USER: ${POSTGRES_USER:-ruangtenang_admin}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Database password is required}
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
       PGDATA: /var/lib/postgresql/data/pgdata
       TZ: Asia/Jakarta
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    secrets:
+      - postgres_password
     networks:
       - internal_backend
     # Security: No ports exposed to host or internet; internal network only
@@ -46,21 +48,27 @@ services:
     image: redis:7-alpine
     container_name: ruangtenang_redis_prod
     restart: unless-stopped
-    command: >
-      redis-server 
-      --requirepass ${REDIS_PASSWORD:?Redis password is required}
-      --appendonly yes 
-      --maxmemory 512mb 
-      --maxmemory-policy volatile-lru
-      --save 60 1
-      --loglevel notice
+    environment:
+      REDIS_PASSWORD_FILE: /run/secrets/redis_password
+    command:
+      - sh
+      - -ec
+      - |
+        password="$$(cat /run/secrets/redis_password)"
+        case "$$password" in *[!A-Za-z0-9_-]*|'') echo "Invalid Redis secret format" >&2; exit 1 ;; esac
+        umask 077
+        printf 'requirepass %s\nappendonly yes\nmaxmemory 512mb\nmaxmemory-policy volatile-lru\nsave 60 1\nloglevel notice\n' "$$password" > /tmp/redis.conf
+        if [ "$$(id -u)" = 0 ]; then chown redis:redis /tmp/redis.conf; chmod 600 /tmp/redis.conf; exec su-exec redis redis-server /tmp/redis.conf; fi
+        exec redis-server /tmp/redis.conf
     volumes:
       - redis_data:/data
+    secrets:
+      - redis_password
     networks:
       - internal_backend
     # Security: No ports exposed to host or internet; internal network only
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$(cat /run/secrets/redis_password)\" redis-cli ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -90,22 +98,30 @@ services:
       TRUST_PROXY: "1"
       
       # Database & Cache Connection Strings (Using internal service names)
-      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
-      REDIS_URL: redis://:${REDIS_PASSWORD}@cache:6379
+      DATABASE_URL_FILE: /run/secrets/database_url
+      REDIS_URL: redis://cache:6379
+      REDIS_PASSWORD_FILE: /run/secrets/redis_password
       
       # Security & Cryptography Keys
-      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
-      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY is required}
-      BLIND_INDEX_SECRET: ${BLIND_INDEX_SECRET:?BLIND_INDEX_SECRET is required}
+      JWT_SECRET_FILE: /run/secrets/jwt_secret
+      ENCRYPTION_KEY_FILE: /run/secrets/encryption_key
+      BLIND_INDEX_SECRET_FILE: /run/secrets/blind_index_secret
+      BACKUP_ENCRYPTION_KEY_FILE: /run/secrets/backup_encryption_key
+      IP_HASH_KEY_FILE: /run/secrets/ip_hash_key
 
       # Optional TURN REST credentials are generated per request from the shared secret.
       TURN_URL: ${TURN_URL:-}
       TURN_USERNAME: ${TURN_USERNAME:-}
-      TURN_SHARED_SECRET: ${TURN_SHARED_SECRET:-}
+      TURN_SHARED_SECRET_FILE: /run/secrets/turn_shared_secret
       REQUIRE_TURN: ${REQUIRE_TURN:-false}
       
       # AI & External Integrations
-      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_API_KEY_FILE: /run/secrets/gemini_api_key
+      DEEPSEEK_API_KEY_FILE: /run/secrets/deepseek_api_key
+      GROQ_API_KEY_FILE: /run/secrets/groq_api_key
+      OPENROUTER_API_KEY_FILE: /run/secrets/openrouter_api_key
+      OPENAI_API_KEY_FILE: /run/secrets/openai_api_key
+      TAVILY_API_KEY_FILE: /run/secrets/tavily_api_key
       APP_ORIGIN: ${APP_ORIGIN:-https://ruangtenang.example.ac.id}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://ruangtenang.example.ac.id}
       
@@ -116,11 +132,29 @@ services:
       ENABLE_PUBLIC_DOCS: ${ENABLE_PUBLIC_DOCS:-false}
       
       # Emergency & SMS Services (Twilio Optional)
-      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
-      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      TWILIO_ACCOUNT_SID_FILE: /run/secrets/twilio_account_sid
+      TWILIO_AUTH_TOKEN_FILE: /run/secrets/twilio_auth_token
       TWILIO_PHONE_NUMBER: ${TWILIO_PHONE_NUMBER:-}
     volumes:
       - uploads_data:/app/uploads
+      - backups_data:/app/backups
+    secrets:
+      - database_url
+      - redis_password
+      - jwt_secret
+      - encryption_key
+      - blind_index_secret
+      - backup_encryption_key
+      - ip_hash_key
+      - turn_shared_secret
+      - gemini_api_key
+      - deepseek_api_key
+      - groq_api_key
+      - openrouter_api_key
+      - openai_api_key
+      - tavily_api_key
+      - twilio_account_sid
+      - twilio_auth_token
     networks:
       - internal_backend
       - frontend_public
@@ -143,6 +177,25 @@ services:
         reservations:
           memory: 512M
 
+  # One-off migration image retains Prisma CLI and development tooling; it is never deployed as the web runtime.
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: migrator
+    environment:
+      NODE_ENV: production
+      DATABASE_URL_FILE: /run/secrets/database_url
+    secrets:
+      - database_url
+    networks:
+      - internal_backend
+    command:
+      - sh
+      - -ec
+      - DATABASE_URL="$$(cat /run/secrets/database_url)" npx prisma migrate deploy --schema prisma/schema.postgres.prisma
+    profiles: [tools]
+
   # ----------------------------------------------------------------------------
   # 4. Hardened Nginx Reverse Proxy (SSL, CSP, Rate Limiting, Compression)
   # ----------------------------------------------------------------------------
@@ -150,12 +203,14 @@ services:
     image: nginx:1.27-alpine
     container_name: ruangtenang_proxy_prod
     restart: unless-stopped
+    environment:
+      CANONICAL_HOST: ${CANONICAL_HOST:?Canonical host is required}
     ports:
       - "80:80"
       - "443:443"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/conf.d/default.conf:/etc/nginx/templates/default.conf.template:ro
       - ./nginx/ssl:/etc/nginx/ssl:ro
       - ./nginx/certbot/conf:/etc/letsencrypt:ro
       - ./nginx/certbot/www:/var/www/certbot:ro
@@ -164,6 +219,11 @@ services:
     depends_on:
       web:
         condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "5"
     healthcheck:
       test: ["CMD", "nginx", "-t"]
       interval: 30s
@@ -200,3 +260,41 @@ volumes:
     name: ruangtenang_redis_prod_data
   uploads_data:
     name: ruangtenang_uploads_prod_data
+  backups_data:
+    name: ruangtenang_backups_prod_data
+
+secrets:
+  postgres_password:
+    file: ${POSTGRES_PASSWORD_FILE:?Set POSTGRES_PASSWORD_FILE in .env.production}
+  redis_password:
+    file: ${REDIS_PASSWORD_FILE:?Set REDIS_PASSWORD_FILE in .env.production}
+  database_url:
+    file: ${DATABASE_URL_FILE:?Set DATABASE_URL_FILE in .env.production}
+  jwt_secret:
+    file: ${JWT_SECRET_FILE:?Set JWT_SECRET_FILE in .env.production}
+  encryption_key:
+    file: ${ENCRYPTION_KEY_FILE:?Set ENCRYPTION_KEY_FILE in .env.production}
+  blind_index_secret:
+    file: ${BLIND_INDEX_SECRET_FILE:?Set BLIND_INDEX_SECRET_FILE in .env.production}
+  backup_encryption_key:
+    file: ${BACKUP_ENCRYPTION_KEY_FILE:?Set BACKUP_ENCRYPTION_KEY_FILE in .env.production}
+  ip_hash_key:
+    file: ${IP_HASH_KEY_FILE:-./secrets/ip_hash_key}
+  turn_shared_secret:
+    file: ${TURN_SHARED_SECRET_FILE:-./secrets/turn_shared_secret}
+  gemini_api_key:
+    file: ${GEMINI_API_KEY_FILE:-./secrets/gemini_api_key}
+  deepseek_api_key:
+    file: ${DEEPSEEK_API_KEY_FILE:-./secrets/deepseek_api_key}
+  groq_api_key:
+    file: ${GROQ_API_KEY_FILE:-./secrets/groq_api_key}
+  openrouter_api_key:
+    file: ${OPENROUTER_API_KEY_FILE:-./secrets/openrouter_api_key}
+  openai_api_key:
+    file: ${OPENAI_API_KEY_FILE:-./secrets/openai_api_key}
+  tavily_api_key:
+    file: ${TAVILY_API_KEY_FILE:-./secrets/tavily_api_key}
+  twilio_account_sid:
+    file: ${TWILIO_ACCOUNT_SID_FILE:-./secrets/twilio_account_sid}
+  twilio_auth_token:
+    file: ${TWILIO_AUTH_TOKEN_FILE:-./secrets/twilio_auth_token}

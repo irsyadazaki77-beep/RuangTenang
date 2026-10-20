@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  Settings, 
-  Sun, 
-  Moon, 
-  LogOut, 
-  LogIn, 
+import {
+  Settings,
+  Sun,
+  Moon,
+  LogOut,
+  LogIn,
   AlertCircle,
   MoreVertical,
   ShieldCheck
@@ -159,9 +159,9 @@ export const SidebarFooter: React.FC<SidebarFooterProps> = ({
   return (
     <div ref={menuRef} className="mt-auto border-t border-slate-200/60 dark:border-slate-800/80 px-2.5 py-2 space-y-1.5 shrink-0 relative bg-slate-50/40 dark:bg-[#111315]/80">
       {/* 1. Compact SOS Strip Button (1 Line) */}
-      <button 
+      <button
         type="button"
-        onClick={handleOpenEmergency} 
+        onClick={handleOpenEmergency}
         className="w-full flex items-center justify-between px-2.5 py-1.2 rounded-lg text-xs font-semibold text-rose-700 dark:text-rose-300 bg-rose-50/80 dark:bg-rose-950/40 hover:bg-rose-100/90 dark:hover:bg-rose-900/40 border border-rose-200/80 dark:border-rose-900/60 transition-colors cursor-pointer"
         title="Bantuan krisis psikologis dan darurat medis"
       >
@@ -179,9 +179,9 @@ export const SidebarFooter: React.FC<SidebarFooterProps> = ({
       <div className="relative">
         <div className="flex items-center justify-between gap-1 p-0.5 rounded-lg hover:bg-slate-200/50 dark:hover:bg-slate-800/60 transition-colors">
           {isGuest ? (
-            <button 
+            <button
               type="button"
-              onClick={() => { onOpenAuth?.(); onCloseMobile(); }} 
+              onClick={() => { onOpenAuth?.(); onCloseMobile(); }}
               className="flex items-center gap-2 py-1 px-1.5 rounded-md text-left flex-1 min-w-0 cursor-pointer"
               title="Masuk Akun"
             >
@@ -225,18 +225,18 @@ export const SidebarFooter: React.FC<SidebarFooterProps> = ({
           )}
 
           {/* Direct Controls or Menu Toggle */}
-          <div className="flex items-center gap-0.5 shrink-0 pr-0.5">
+          <div className="flex items-center gap-1 shrink-0 pr-0.5">
             <button
               type="button"
               onClick={toggleTheme}
-              className="p-1.5 rounded-md text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200/70 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+              className="min-w-[36px] min-h-[36px] p-2 flex items-center justify-center rounded-lg text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/70 dark:hover:bg-slate-700 transition-colors cursor-pointer"
               aria-label="Ganti Tema"
               title={actualTheme === 'dark' ? 'Mode Terang' : 'Mode Gelap'}
             >
               {actualTheme === 'dark' ? (
-                <Moon className="w-3.5 h-3.5 text-amber-400" />
+                <Moon className="w-4 h-4 text-amber-400" />
               ) : (
-                <Sun className="w-3.5 h-3.5 text-amber-600" />
+                <Sun className="w-4 h-4 text-amber-600" />
               )}
             </button>
 
@@ -244,25 +244,25 @@ export const SidebarFooter: React.FC<SidebarFooterProps> = ({
               <button
                 type="button"
                 onClick={() => setIsMenuOpen(!isMenuOpen)}
-                className={`p-1.5 rounded-md transition-colors cursor-pointer ${
-                  isMenuOpen 
-                    ? 'bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-white' 
-                    : 'text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200/70 dark:hover:bg-slate-700'
+                className={`min-w-[36px] min-h-[36px] p-2 flex items-center justify-center rounded-lg transition-colors cursor-pointer ${
+                  isMenuOpen
+                    ? 'bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-white'
+                    : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/70 dark:hover:bg-slate-700'
                 }`}
                 aria-label="Menu Pengguna"
                 title="Menu Pengguna"
               >
-                <MoreVertical className="w-3.5 h-3.5" />
+                <MoreVertical className="w-4 h-4" />
               </button>
             ) : (
               <button
                 type="button"
                 onClick={() => { onOpenSettings?.(); onCloseMobile(); }}
-                className="p-1.5 rounded-md text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200/70 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                className="min-w-[36px] min-h-[36px] p-2 flex items-center justify-center rounded-lg text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/70 dark:hover:bg-slate-700 transition-colors cursor-pointer"
                 aria-label="Pengaturan"
                 title="Pengaturan"
               >
-                <Settings className="w-3.5 h-3.5" />
+                <Settings className="w-4 h-4" />
               </button>
             )}
           </div>

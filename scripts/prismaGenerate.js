@@ -10,9 +10,16 @@ if (fs.existsSync(pgSchemaPath)) {
   const pgContent = fs.readFileSync(pgSchemaPath, 'utf8');
   const sqliteDatasource = `datasource db {\n  provider = "sqlite"\n  url      = "file:./ruangtenang_sqlite.db"\n}`;
   const synchronizedSqlite = pgContent.replace(/datasource db \{[\s\S]*?\}/, sqliteDatasource);
-  
-  fs.writeFileSync(sqliteSchemaPath, synchronizedSqlite, 'utf8');
-  console.log('[PRISMA VALIDATE] Successfully synchronized schema.sqlite.prisma from PostgreSQL Single Source of Truth (schema.postgres.prisma).');
+
+  const existingSqlite = fs.existsSync(sqliteSchemaPath) ? fs.readFileSync(sqliteSchemaPath, 'utf8') : '';
+  if (existingSqlite !== synchronizedSqlite) {
+    try {
+      fs.writeFileSync(sqliteSchemaPath, synchronizedSqlite, 'utf8');
+      console.log('[PRISMA VALIDATE] Successfully synchronized schema.sqlite.prisma from PostgreSQL Single Source of Truth (schema.postgres.prisma).');
+    } catch (writeErr) {
+      console.warn('[PRISMA VALIDATE] Warning: Could not update schema.sqlite.prisma (file might be locked by another process):', writeErr?.message || writeErr);
+    }
+  }
 }
 
 const dbUrl = (process.env.DATABASE_URL || '').trim();
@@ -58,4 +65,3 @@ if (!isPostgres && !dbExists) {
     console.error('[PRISMA INIT] Warning: Failed to auto-initialize SQLite schema:', pushErr);
   }
 }
-

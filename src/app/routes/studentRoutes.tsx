@@ -39,9 +39,12 @@ export interface StudentRouteContext {
   onSwitchMode: (mode: WorkspaceMode) => void;
   onOpenSidebar: () => void;
   onOpenSettings: () => void;
+  onOpenPrivacyCenter?: () => void;
   onOpenChangelog: () => void;
+  aiConsentAllowed?: boolean | null;
+  aiConsentPromptOpen?: boolean;
+  onRequestAiConsent?: (cancelPendingSend?: () => void) => void;
   onPersisted: () => void;
-  onTriggerSOS: () => void;
   navigate: (path: string) => void;
 }
 
@@ -50,11 +53,13 @@ const canAccessCounselorTools = (role: string) => role === 'konselor' || role ==
 export function createStudentRoutes(context: StudentRouteContext): AppRoute[] {
   const {
     user, setUser, chats, setChats, isLoadingChats = false, selectedCounselor, setSelectedCounselor,
-    onSwitchMode, onOpenSidebar, onOpenSettings, onOpenChangelog, onPersisted, onTriggerSOS, navigate
+    onSwitchMode, onOpenSidebar, onOpenSettings, onOpenPrivacyCenter, onOpenChangelog,
+    aiConsentAllowed, aiConsentPromptOpen, onRequestAiConsent, onPersisted, navigate
   } = context;
   const openProps = { onOpenSidebar, onOpenSettings, onOpenChangelog };
-  const mainChat = <MainChat user={user} chats={chats} setChats={setChats} {...openProps} />;
-  const workspace = <StudentWorkspace user={user} chats={chats} setChats={setChats} {...openProps} onSwitchMode={onSwitchMode} />;
+  const consentProps = { aiConsentAllowed, onRequestAiConsent };
+  const mainChat = <MainChat key={`${user.id}:${user.role}`} user={user} chats={chats} setChats={setChats} onOpenPrivacyCenter={onOpenPrivacyCenter} {...openProps} {...consentProps} aiConsentPromptOpen={aiConsentPromptOpen} />;
+  const workspace = <StudentWorkspace user={user} chats={chats} setChats={setChats} {...openProps} {...consentProps} onSwitchMode={onSwitchMode} />;
   const layout = (title: string, subtitle: string, badge: string, children: ReactNode) => (
     <WorkspaceLayout title={title} subtitle={subtitle} badge={badge} onOpenSidebar={onOpenSidebar} onOpenChangelog={onOpenChangelog}>
       {children}
@@ -64,25 +69,28 @@ export function createStudentRoutes(context: StudentRouteContext): AppRoute[] {
   return [
     { path: '/', element: mainChat, mode: 'ruangtenang', sidebarSection: 'primary' },
     { path: '/c/:chatId', element: mainChat, mode: 'ruangtenang', sidebarSection: 'history' },
-    { path: '/workspace', element: <WorkspaceHome chats={chats} isLoading={isLoadingChats} onOpenSidebar={onOpenSidebar} />, mode: 'ruangkerja', sidebarSection: 'primary' },
-    { path: '/workspace/new', element: <WorkspaceEntry user={user} chats={chats} setChats={setChats} {...openProps} onSwitchMode={onSwitchMode} />, mode: 'ruangkerja', sidebarSection: 'primary' },
+    { path: '/workspace', element: <WorkspaceHome key={`${user.id}:${user.role}`} chats={chats} isLoading={isLoadingChats} isGuest={user.role === 'guest'} onOpenSidebar={onOpenSidebar} />, mode: 'ruangkerja', sidebarSection: 'primary' },
+    { path: '/workspace/new', element: <WorkspaceEntry user={user} chats={chats} setChats={setChats} {...openProps} {...consentProps} onSwitchMode={onSwitchMode} />, mode: 'ruangkerja', sidebarSection: 'primary' },
     { path: '/workspace/c/:chatId', element: workspace, mode: 'ruangkerja', sidebarSection: 'history' },
     {
       path: '/mood', sidebarSection: 'tools',
-      element: layout('Mood Tracker & Progress', 'Pantau perkembangan kesehatan mental dan emosi Anda secara berkala', 'Lokal & Privat',
-        <PrivacyGuard title="Bilik Catatan Suasana Hati Terkunci" description="Jurnal mood dan catatan emosional Anda dilindungi dengan PIN keamanan terenkripsi.">
-          <UserProgressTracker onOpenScreening={() => navigate('/screening')} onNavigateToSchedule={() => navigate('/counselors')} />
+      element: layout('Mood Tracker & Progress', 'Catat pengalaman dan tinjau pola dari waktu ke waktu. Catatan mengikuti penyimpanan akun atau mode tamu.', 'Mood & Jurnal',
+        <PrivacyGuard title="Bilik Catatan Suasana Hati Terkunci" description="PIN membatasi akses halaman ini pada sesi browser. PIN tidak mengenkripsi catatan yang tersimpan di perangkat.">
+          <UserProgressTracker key={`${user.id}:${user.role}`} onOpenScreening={() => navigate('/screening')} onNavigateToSchedule={() => navigate('/counselors')} onOpenPrivacyCenter={onOpenPrivacyCenter} />
         </PrivacyGuard>)
     },
     {
       path: '/mindfulness', sidebarSection: 'tools',
-      element: layout('Workshop Meditasi & Tenang Mandiri', 'Latih ketenangan diri, atasi panik, dan catat jurnal syukur harian', 'Lokakarya Batin', <MindfulnessWorkshop />)
+      element: layout('Workshop Meditasi & Tenang Mandiri', 'Coba latihan jeda dan refleksi sesuai kenyamanan; hentikan kapan saja.', 'Lokakarya Batin',
+        <PrivacyGuard title="Lokakarya Pribadi Terkunci" description="PIN membatasi akses halaman ini pada sesi browser. PIN tidak mengenkripsi catatan yang tersimpan di perangkat.">
+          <MindfulnessWorkshop key={`${user.id}:${user.role}`} userId={user.id} />
+        </PrivacyGuard>)
     },
     {
       path: '/screening', sidebarSection: 'tools',
       element: layout('Cek Kondisi Mental', 'Instrumen cek kondisi awal mandiri. BUKAN alat diagnosis medis.', 'Cek Kondisi',
-        <PrivacyGuard title="Riwayat Skrining Terkunci" description="Hasil evaluasi mandiri PHQ-9 & GAD-7 Anda dilindungi dengan PIN keamanan terenkripsi.">
-          <ScreeningModal isOpen isPageMode onClose={() => navigate('/mood')} onComplete={() => undefined} onPersisted={onPersisted} />
+        <PrivacyGuard title="Riwayat Skrining Terkunci" description="PIN membatasi akses halaman ini pada sesi browser. Hasil skrining terenkripsi di server, tetapi PIN tidak mengenkripsi salinan lokal.">
+          <ScreeningModal key={`${user.id}:${user.role}`} isOpen isPageMode onClose={() => navigate('/mood')} onComplete={() => undefined} onPersisted={onPersisted} />
         </PrivacyGuard>)
     },
     {
@@ -91,7 +99,7 @@ export function createStudentRoutes(context: StudentRouteContext): AppRoute[] {
         <div className="max-w-7xl mx-auto p-3 sm:p-4 md:p-5 w-full space-y-4">
           <div className="surface-card rounded-2xl p-3 sm:p-4 border border-teal-200/60 dark:border-teal-900/60 bg-teal-50/40 dark:bg-teal-950/20 flex flex-col md:flex-row items-center justify-between gap-3 shadow-3xs">
             <div className="flex items-center gap-3 w-full md:w-auto">
-              <div className="w-8 h-8 rounded-xl bg-teal-600 text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-3xs">1-2-3</div>
+              <div className="w-8 h-8 rounded-xl bg-teal-700 text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-3xs">1-2-3</div>
               <div><h3 className="text-xs sm:text-sm font-bold text-teal-900 dark:text-teal-200">Alur Pemesanan Sesi Konseling Terstruktur</h3><p className="text-[11px] text-teal-700 dark:text-teal-400">1. Pilih Konselor → 2. Pilih Slot & Waktu → 3. Konfirmasi Jadwal</p></div>
             </div>
             <div className="flex items-center gap-2 text-[11px] font-semibold text-teal-800 dark:text-teal-300 shrink-0">
@@ -99,7 +107,7 @@ export function createStudentRoutes(context: StudentRouteContext): AppRoute[] {
             </div>
           </div>
           <div className="flex flex-col xl:flex-row gap-3.5 sm:gap-4.5">
-            <div className="flex-1 xl:w-2/3"><CounselorDirectory onSelectCounselorForBooking={setSelectedCounselor} /></div>
+            <div className="flex-1 xl:w-2/3"><CounselorDirectory key={`${user.id}:${user.role}:${user.campusId || ''}`} onSelectCounselorForBooking={setSelectedCounselor} /></div>
             <div className="xl:w-1/3"><AppointmentScheduler selectedCounselorFromDir={selectedCounselor} userSession={user} setUserSession={setUser} /></div>
           </div>
         </div>)
@@ -119,7 +127,7 @@ export function createStudentRoutes(context: StudentRouteContext): AppRoute[] {
     {
       path: '/emergency', sidebarSection: 'tools',
       element: layout('Pusat Bantuan Krisis & Darurat', 'Healing119, bantuan medis darurat, dan sinyal SOS ke kontak pilihan Anda', 'Bantuan',
-        <div className="max-w-4xl mx-auto p-3 sm:p-4 md:p-5 w-full"><EmergencyCenter onTriggerSOS={onTriggerSOS} /></div>)
+        <div className="max-w-4xl mx-auto p-3 sm:p-4 md:p-5 w-full"><EmergencyCenter key={`${user.id}:${user.role}`} onOpenPrivacyCenter={onOpenPrivacyCenter} /></div>)
     },
     { path: '*', element: <Navigate to="/" replace /> }
   ];

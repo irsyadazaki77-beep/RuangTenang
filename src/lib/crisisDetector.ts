@@ -321,7 +321,7 @@ const THIRD_PARTY_INDICATORS = [
 /**
  * Clinical Response Protocols Reviewed & Approved by Mental Health Professionals
  * (UPT Bimbingan & Konseling Universitas Indonesia)
- * 
+ *
  * These protocols outline safe, non-stigmatizing, empathetic, and evidence-based
  * guidelines for responding to students expressing different levels of distress or crisis.
  */
@@ -382,7 +382,7 @@ export function analyzeMessageSentiment(text: string): CrisisAnalysisResult {
   // Check for negations in text
   const hasNegation = NEGATION_PATTERNS.some(neg => lower.includes(neg) || normalized.includes(neg) || collapsed.includes(neg));
   // Check for past-tense indicators, but make sure it's not "tidak pernah" or "nggak pernah"
-  const hasPastTense = PAST_TENSE_INDICATORS.some(past => lower.includes(past) || normalized.includes(past) || collapsed.includes(past)) && 
+  const hasPastTense = PAST_TENSE_INDICATORS.some(past => lower.includes(past) || normalized.includes(past) || collapsed.includes(past)) &&
     !lower.includes('tidak pernah') && !lower.includes('ga pernah') && !lower.includes('nggak pernah') &&
     !normalized.includes('tidak pernah') && !normalized.includes('ga pernah') && !normalized.includes('nggak pernah');
   // Check for third-party indicators

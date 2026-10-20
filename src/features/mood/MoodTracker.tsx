@@ -1,19 +1,20 @@
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useEscapeKey } from '../../hooks/useEscapeKey';
-import { calculateStreak } from '../../utils/streak';
-import { 
-  Smile, 
-  Moon, 
-  Trash2, 
-  Calendar, 
-  Flame, 
-  Sparkles, 
-  Search, 
-  Tag, 
-  RefreshCw, 
-  CheckCircle2, 
-  Plus, 
+import { calculateStreak, getLocalIsoDateString, parseLocalIsoDateString } from '../../utils/streak';
+import {
+  Smile,
+  Moon,
+  Trash2,
+  Calendar,
+  Flame,
+  Sparkles,
+  Search,
+  Tag,
+  RefreshCw,
+  CheckCircle2,
+  Plus,
+  Pencil,
   ChevronRight,
   Brain,
   MessageSquare
@@ -30,13 +31,15 @@ interface MoodTrackerProps {
   setMoodLogs: React.Dispatch<React.SetStateAction<MoodLog[]>>;
   showToast: (msg: string, type?: 'info' | 'success' | 'warning' | 'error', title?: string) => void;
   onRequestOpenCheckin?: () => void;
+  onRequestEditCheckin?: (log: MoodLog) => void;
 }
 
 export const MoodTracker: React.FC<MoodTrackerProps> = ({
   moodLogs,
   setMoodLogs,
   showToast,
-  onRequestOpenCheckin
+  onRequestOpenCheckin,
+  onRequestEditCheckin
 }) => {
   const navigate = useNavigate();
   const [isCheckinModalOpen, setIsCheckinModalOpen] = useState<boolean>(false);
@@ -51,7 +54,7 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
   const [timeRange, setTimeRange] = useState<'7' | '30' | '90'>('30');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedFactorFilter, setSelectedFactorFilter] = useState<string | null>(null);
-  
+
   const [aiInsight, setAiInsight] = useState<{
     summary: string;
     patterns: string[];
@@ -69,7 +72,7 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
 
   const handleCheckinSaved = (canonicalLog: MoodLog) => {
     setMoodLogs(prev => {
-      const filtered = prev.filter(log => log.id !== canonicalLog.id && log.date !== canonicalLog.date);
+      const filtered = prev.filter(log => log.id !== canonicalLog.id);
       return [canonicalLog, ...filtered].sort(
         (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
       );
@@ -145,7 +148,7 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
     for (let i = daysCount - 1; i >= 0; i--) {
       const date = new Date(today);
       date.setDate(today.getDate() - i);
-      const dateString = date.toISOString().split('T')[0];
+      const dateString = getLocalIsoDateString(date);
       const matchLog = moodLogs.find(log => log.date === dateString);
       grid.push({
         date: dateString,
@@ -187,11 +190,11 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
   // Filtered mood logs for the history list
   const filteredLogs = useMemo(() => {
     return moodLogs.filter(log => {
-      const matchesSearch = searchQuery.trim() === '' || 
+      const matchesSearch = searchQuery.trim() === '' ||
         log.notes.toLowerCase().includes(searchQuery.toLowerCase()) ||
         log.emotions.some(e => e.toLowerCase().includes(searchQuery.toLowerCase()));
-      
-      const matchesFactor = !selectedFactorFilter || 
+
+      const matchesFactor = !selectedFactorFilter ||
         (log.factors && log.factors.includes(selectedFactorFilter));
       return matchesSearch && matchesFactor;
     });
@@ -247,10 +250,10 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
               <span className="text-xs font-semibold text-secondary">Hari Berturut-turut</span>
             </div>
             <p className="text-xs text-muted mt-1 leading-normal">
-              {streakCount >= 7 
-                ? 'Luar biasa! Konsistensi tinggi 🔥' 
-                : streakCount >= 3 
-                ? 'Bagus! Pertahankan ritme check-in 👍' 
+              {streakCount >= 7
+                ? 'Luar biasa! Konsistensi tinggi 🔥'
+                : streakCount >= 3
+                ? 'Bagus! Pertahankan ritme check-in 👍'
                 : 'Check-in setiap hari untuk kebiasaan'}
             </p>
           </div>
@@ -350,7 +353,7 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
                   onClick={() => setTimeRange(range)}
                   className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
                     timeRange === range
-                      ? 'bg-teal-600 text-white shadow-xs'
+                      ? 'bg-teal-700 text-white shadow-xs'
                       : 'text-secondary hover:text-primary'
                   }`}
                 >
@@ -423,13 +426,13 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
                     <span className="text-[11px] leading-tight select-none">
                       {cell.dayNumber}
                     </span>
-                    
+
                     {/* Tooltip */}
                     <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block bg-slate-900 dark:bg-slate-950 text-white border border-slate-700 px-3 py-2 rounded-xl text-xs whitespace-nowrap z-50 shadow-xl pointer-events-none">
                       <p className="font-bold text-teal-300">{cell.label}</p>
                       <p className="mt-0.5">
-                        {cell.log 
-                          ? `Mood: ${MOOD_OPTIONS[cell.log.mood - 1].label}${cell.log.sleepHours != null ? ` (${cell.log.sleepHours} Jam tidur)` : ''}` 
+                        {cell.log
+                          ? `Mood: ${MOOD_OPTIONS[cell.log.mood - 1].label}${cell.log.sleepHours != null ? ` (${cell.log.sleepHours} Jam tidur)` : ''}`
                           : 'Tidak ada catatan mood'}
                       </p>
                       {cell.log?.emotions?.length ? <p className="text-[10px] text-slate-300 mt-0.5">Emosi: {cell.log.emotions.join(', ')}</p> : null}
@@ -465,8 +468,8 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
                     <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block bg-slate-900 dark:bg-slate-950 text-white border border-slate-700 px-3 py-2 rounded-xl text-xs whitespace-nowrap z-50 shadow-xl pointer-events-none">
                       <p className="font-bold text-teal-300">{cell.label}</p>
                       <p className="mt-0.5">
-                        {cell.log 
-                          ? `Mood: ${MOOD_OPTIONS[cell.log.mood - 1].label}${cell.log.sleepHours != null ? ` (${cell.log.sleepHours} Jam)` : ''}` 
+                        {cell.log
+                          ? `Mood: ${MOOD_OPTIONS[cell.log.mood - 1].label}${cell.log.sleepHours != null ? ` (${cell.log.sleepHours} Jam)` : ''}`
                           : 'Tidak ada catatan'}
                       </p>
                     </div>
@@ -482,7 +485,7 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
       <div className="surface-card rounded-2xl p-4 sm:p-5 border border-teal-200 dark:border-teal-900/50 space-y-3.5 shadow-3xs">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-teal-600 text-white flex items-center justify-center shadow-xs shrink-0">
+            <div className="w-9 h-9 rounded-xl bg-teal-700 text-white flex items-center justify-center shadow-xs shrink-0">
               <Sparkles className="w-4 h-4" />
             </div>
             <div>
@@ -543,7 +546,7 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
       <div className="surface-card rounded-2xl p-4 sm:p-5 border border-default space-y-4 shadow-3xs">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <h3 className="font-bold text-base text-primary">Riwayat Catatan Jurnal Mood</h3>
-          
+
           {/* Search Input */}
           <div className="relative w-full sm:max-w-xs">
             <Search className="w-3.5 h-3.5 text-secondary absolute left-3 top-3" />
@@ -578,7 +581,7 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
               onClick={() => setSelectedFactorFilter(selectedFactorFilter === tag ? null : tag)}
               className={`px-2.5 py-1 text-xs rounded-lg font-medium transition-all cursor-pointer ${
                 selectedFactorFilter === tag
-                  ? 'bg-teal-600 text-white'
+                  ? 'bg-teal-700 text-white'
                   : 'surface-muted text-secondary hover:text-primary'
               }`}
             >
@@ -604,15 +607,15 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
             {filteredLogs.map((log) => {
               const moodOpt = MOOD_OPTIONS.find(o => o.value === log.mood) || MOOD_OPTIONS[2];
-              const dateObj = new Date(log.date);
-              const isToday = log.date === new Date().toISOString().split('T')[0];
-              const formattedDate = isToday 
-                ? 'Hari Ini' 
+              const dateObj = parseLocalIsoDateString(log.date);
+              const isToday = log.date === getLocalIsoDateString();
+              const formattedDate = isToday
+                ? 'Hari Ini'
                 : dateObj.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'short' });
 
               return (
-                <div 
-                  key={log.id} 
+                <div
+                  key={log.id}
                   className="surface-card rounded-xl p-4 border border-default space-y-3 hover:border-slate-300 dark:hover:border-slate-700 transition-all relative group shadow-3xs"
                 >
                   <div className="flex items-start justify-between gap-3">
@@ -628,15 +631,29 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
                         </span>
                       </div>
                     </div>
-                    
-                    <button
-                      onClick={() => handleDeleteMoodLog(log.id)}
-                      className="text-muted hover:text-rose-600 p-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors opacity-70 group-hover:opacity-100 cursor-pointer"
-                      title="Hapus Catatan"
-                      aria-label="Hapus catatan mood"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+
+                    <div className="flex items-center gap-1">
+                      {onRequestEditCheckin && !log.id.startsWith('offline-') && (
+                        <button
+                          type="button"
+                          onClick={() => onRequestEditCheckin(log)}
+                          className="text-muted hover:text-teal-700 dark:hover:text-teal-300 p-1.5 rounded-lg hover:bg-teal-50 dark:hover:bg-teal-950/40 transition-colors opacity-70 group-hover:opacity-100 cursor-pointer"
+                          title="Edit catatan mood"
+                          aria-label={`Edit catatan mood ${formattedDate}`}
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteMoodLog(log.id)}
+                        className="text-muted hover:text-rose-600 p-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors opacity-70 group-hover:opacity-100 cursor-pointer"
+                        title="Hapus Catatan"
+                        aria-label="Hapus catatan mood"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
 
                   {log.notes && (
@@ -712,7 +729,7 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
             <div className="p-3 bg-teal-50 dark:bg-teal-950/50 text-teal-600 dark:text-teal-400 rounded-2xl w-12 h-12 flex items-center justify-center mx-auto">
               <Sparkles className="w-6 h-6 animate-pulse" />
             </div>
-            
+
             <div className="space-y-1.5 text-center">
               <h4 className="text-base font-bold text-primary">Diskusikan Hasil di Chat?</h4>
               <p className="text-xs sm:text-sm text-secondary leading-relaxed">

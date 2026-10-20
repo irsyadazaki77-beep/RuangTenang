@@ -1,4 +1,5 @@
 import path from 'path';
+import { isProductionLikeEnvironment } from './environment.js';
 
 export type DatabaseProvider = 'sqlite' | 'postgresql';
 
@@ -13,7 +14,7 @@ export interface DatabaseConfiguration {
 }
 
 export function resolveDatabaseConfiguration(): DatabaseConfiguration {
-  const isProduction = process.env.NODE_ENV === 'production';
+  const isProduction = isProductionLikeEnvironment();
   const dbUrl = (process.env.DATABASE_URL || '').trim();
   const hasPostgresUrl = dbUrl.startsWith('postgresql://') || dbUrl.startsWith('postgres://');
   const explicitProvider = (process.env.DB_PROVIDER || '').toLowerCase().trim();

@@ -43,7 +43,7 @@ export function buildSourceRef(params: {
 }
 
 export const chunkingService = {
-  createChunks(doc: NormalizedDocument): DocumentChunk[] {
+  createChunks(doc: NormalizedDocument, onTruncated?: () => void): DocumentChunk[] {
     const chunks: DocumentChunk[] = [];
     const maxChars = DEFAULT_FILE_LIMITS.maxChunkChars;
     const overlapChars = DEFAULT_FILE_LIMITS.chunkOverlapChars;
@@ -53,7 +53,19 @@ export const chunkingService = {
     let currentSlide: number | undefined;
     let currentSheet: string | undefined;
     let currentSection: string | undefined;
+    let currentIsVisual = false;
+    let currentOcrConf: number | undefined;
+    let currentUncertainty: string | undefined;
     let chunkIndex = 0;
+    let hasUnchunkedContent = false;
+    let isTruncated = false;
+    const maxChunksPerDocument = DEFAULT_FILE_LIMITS.maxChunksPerDocument;
+
+    const markTruncated = () => {
+      if (isTruncated) return;
+      isTruncated = true;
+      onTruncated?.();
+    };
 
     const finalizeChunk = () => {
       if (!currentChunkText.trim()) return;
@@ -85,7 +97,10 @@ export const chunkingService = {
         sheetName: currentSheet,
         section: currentSection,
         sourceRef,
-        checksum
+        checksum,
+        isVisualExtraction: currentIsVisual || undefined,
+        ocrConfidence: currentOcrConf,
+        readingUncertainty: currentUncertainty
       });
 
       chunkIndex++;
@@ -96,20 +111,33 @@ export const chunkingService = {
       } else {
         currentChunkText = '';
       }
+      hasUnchunkedContent = false;
       currentPages = [];
+      currentIsVisual = false;
+      currentOcrConf = undefined;
+      currentUncertainty = undefined;
     };
 
-    for (const block of doc.blocks) {
+    for (let blockIndex = 0; blockIndex < doc.blocks.length; blockIndex += 1) {
+      const block = doc.blocks[blockIndex];
+      if (chunks.length >= maxChunksPerDocument) {
+        if (hasUnchunkedContent || doc.blocks.slice(blockIndex).some(item => item.text.trim().length > 0)) markTruncated();
+        break;
+      }
       if (block.pageNumber !== undefined) currentPages.push(block.pageNumber);
       if (block.slideNumber !== undefined) currentSlide = block.slideNumber;
       if (block.sheetName !== undefined) currentSheet = block.sheetName;
       if (block.section) currentSection = block.section;
+      if (block.isVisualExtraction) currentIsVisual = true;
+      if (block.ocrConfidence) currentOcrConf = block.ocrConfidence;
+      if (block.readingUncertainty) currentUncertainty = block.readingUncertainty;
 
       const blockText = block.text.trim();
       if (!blockText) continue;
 
       if ((currentChunkText.length + blockText.length + 2) <= maxChars) {
         currentChunkText += (currentChunkText ? '\n\n' : '') + blockText;
+        hasUnchunkedContent = true;
       } else {
         // Current buffer is full, flush it
         if (currentChunkText.length > 0) {
@@ -122,21 +150,30 @@ export const chunkingService = {
           for (const sent of sentences) {
             if ((currentChunkText.length + sent.length + 1) > maxChars && currentChunkText.length > 0) {
               finalizeChunk();
+              if (chunks.length >= maxChunksPerDocument) {
+                markTruncated();
+                break;
+              }
             }
             currentChunkText += (currentChunkText ? ' ' : '') + sent;
+            hasUnchunkedContent = true;
           }
         } else {
           currentChunkText = blockText;
+          hasUnchunkedContent = true;
         }
       }
 
-      if (chunks.length >= DEFAULT_FILE_LIMITS.maxChunksPerDocument) {
+      if (chunks.length >= maxChunksPerDocument) {
+        if (hasUnchunkedContent || doc.blocks.slice(blockIndex + 1).some(item => item.text.trim().length > 0)) markTruncated();
         break;
       }
     }
 
-    if (currentChunkText.trim()) {
+    if (currentChunkText.trim() && chunks.length < maxChunksPerDocument) {
       finalizeChunk();
+    } else if (chunks.length >= maxChunksPerDocument && hasUnchunkedContent) {
+      markTruncated();
     }
 
     return chunks;

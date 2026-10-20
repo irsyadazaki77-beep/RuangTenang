@@ -1,9 +1,10 @@
 import React from 'react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { ArtifactCanvas } from '../../features/workspace/components/ArtifactCanvas';
+import { WorkspaceAttachmentList } from '../../features/workspace/components/WorkspaceAttachmentList';
 import { WorkspaceCanvasPane } from '../../features/workspace/components/WorkspaceCanvasPane';
-import { WorkspaceArtifact } from '../../features/workspace/types';
+import { WorkspaceArtifact, WorkspaceFileAttachment } from '../../features/workspace/types';
 import { ArtifactPatch } from '../../features/workspace/types';
 
 vi.mock('../../components/common/LazyMarkdown', () => ({
@@ -74,6 +75,53 @@ describe('Workspace Canvas 2.0 UX & Behavior', () => {
     expect(screen.getByText('Riwayat Versi')).toBeInTheDocument();
   });
 
+  it('shows an Agent proposal in Canvas as an unsaved preview without invoking persistence', () => {
+    const save = vi.fn();
+    render(<WorkspaceCanvasPane
+      artifacts={[mockArtifact]} activeArtifact={mockArtifact}
+      proposalPreview={{ taskId: 'task-1', title: 'Value Chain Report', type: 'DOCUMENT', content: '# Evidence-backed draft' }}
+      activeArtifactId={mockArtifact.id} isCanvasOpen isCanvasExpanded={false} isStreaming={false} mobileActiveTab="chat"
+      onSelectArtifact={vi.fn()} onCloseCanvas={vi.fn()} onToggleExpand={vi.fn()} onUpdateActiveArtifact={vi.fn()}
+      onSaveArtifact={save} onRollbackVersion={vi.fn()} onRequestRevision={vi.fn()} onCreateNewArtifact={vi.fn()}
+      onSetMobileActiveTab={vi.fn()} onDismissProposalPreview={vi.fn()}
+    />);
+
+    expect(screen.getByRole('region', { name: 'Preview proposal Agent' })).toBeInTheDocument();
+    expect(screen.getByText('Proposal Agent · belum disimpan')).toBeInTheDocument();
+    expect(screen.getByText('# Evidence-backed draft')).toBeInTheDocument();
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it('exposes the active Canvas document with pressed toggle semantics', () => {
+    const secondArtifact = { ...mockArtifact, id: 'art_456', title: 'Catatan Riset', version: 1, versions: [] };
+    const onSelectArtifact = vi.fn();
+    render(<WorkspaceCanvasPane
+      artifacts={[mockArtifact, secondArtifact]} activeArtifact={mockArtifact} activeArtifactId={mockArtifact.id}
+      isCanvasOpen isCanvasExpanded={false} isStreaming={false} mobileActiveTab="chat"
+      onSelectArtifact={onSelectArtifact} onCloseCanvas={vi.fn()} onToggleExpand={vi.fn()}
+      onUpdateActiveArtifact={vi.fn()} onSaveArtifact={vi.fn()} onRollbackVersion={vi.fn()}
+      onRequestRevision={vi.fn()} onCreateNewArtifact={vi.fn()} onSetMobileActiveTab={vi.fn()}
+    />);
+
+    const documentPicker = screen.getByRole('group', { name: 'Pilih dokumen Canvas' });
+    const active = within(documentPicker).getByRole('button', { name: /Analisis Metodologi/ });
+    const inactive = within(documentPicker).getByRole('button', { name: /Catatan Riset/ });
+    expect(active).toHaveAttribute('aria-pressed', 'true');
+    expect(inactive).toHaveAttribute('aria-pressed', 'false');
+    fireEvent.click(inactive);
+    expect(onSelectArtifact).toHaveBeenCalledWith('art_456');
+  });
+
+  it('discloses when an uploaded document was only partially indexed', () => {
+    const attachment: WorkspaceFileAttachment = {
+      id: 'att-large', clientId: 'att-large', name: 'large.txt', size: 464_000, mimeType: 'text/plain', fileKind: 'text', status: 'ready',
+      extractionWarnings: ['Hanya 100 bagian awal dokumen yang diindeks; sisanya tidak disertakan sebagai konteks AI.']
+    };
+    render(<WorkspaceAttachmentList attachments={[attachment]} onRemove={vi.fn()} onRetry={vi.fn()} />);
+
+    expect(screen.getByText('Ekstraksi parsial')).toHaveAttribute('title', attachment.extractionWarnings?.[0]);
+  });
+
   it('renders a long raw document gutter as text instead of one element per line', async () => {
     const longContent = Array.from({ length: 2000 }, (_, index) => `Line ${index + 1}`).join('\n');
     render(
@@ -95,11 +143,13 @@ describe('Workspace Canvas 2.0 UX & Behavior', () => {
   it('restores an unsaved document draft after closing and reopening Canvas', async () => {
     render(<CanvasDraftHarness />);
     fireEvent.click(await screen.findByTitle('Edit Dokumen Langsung (Autosave)'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Markdown' }, { timeout: 15_000 }));
     const textarea = screen.getByPlaceholderText(/Ketik atau sesuaikan draf dokumen/) as HTMLTextAreaElement;
     fireEvent.change(textarea, { target: { value: '# Draf yang belum disimpan' } });
     fireEvent.click(screen.getByRole('button', { name: 'Tutup Canvas' }));
     fireEvent.click(screen.getByRole('button', { name: 'Buka Canvas' }));
     fireEvent.click(screen.getByTitle('Edit Dokumen Langsung (Autosave)'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Markdown' }, { timeout: 15_000 }));
     expect(screen.getByPlaceholderText(/Ketik atau sesuaikan draf dokumen/)).toHaveValue('# Draf yang belum disimpan');
     expect(screen.getByText('Belum disimpan')).toBeInTheDocument();
   });
@@ -127,7 +177,7 @@ describe('Workspace Canvas 2.0 UX & Behavior', () => {
     expect(onSaveArtifact).toHaveBeenCalledWith(mockArtifact.content, 'Metodologi Penelitian Baru');
   });
 
-  it('switches seamlessly between view modes: preview, edit, raw, and diff', () => {
+  it('switches seamlessly between view modes: preview, edit, raw, and diff', async () => {
     render(
       <ArtifactCanvas
         artifact={mockArtifact}
@@ -141,6 +191,7 @@ describe('Workspace Canvas 2.0 UX & Behavior', () => {
 
     // Switch to edit mode via mode segmented control
     fireEvent.click(screen.getByTitle('Edit Dokumen Langsung (Autosave)'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Markdown' }));
     const textarea = screen.getByPlaceholderText(/Ketik atau sesuaikan draf dokumen/);
     expect(textarea).toBeInTheDocument();
 
@@ -167,6 +218,7 @@ describe('Workspace Canvas 2.0 UX & Behavior', () => {
 
     // Switch to Edit
     fireEvent.click(screen.getByTitle('Edit Dokumen Langsung (Autosave)'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Markdown' }));
     const textarea = screen.getByPlaceholderText(/Ketik atau sesuaikan draf dokumen/);
 
     // Type new text
@@ -188,6 +240,7 @@ describe('Workspace Canvas 2.0 UX & Behavior', () => {
     render(<ArtifactCanvas artifact={mockArtifact} onSaveArtifact={onSaveArtifact} />);
 
     fireEvent.click(screen.getByTitle('Edit Dokumen Langsung (Autosave)'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Markdown' }));
     const editor = screen.getByPlaceholderText(/Ketik atau sesuaikan draf dokumen/);
     fireEvent.change(editor, { target: { value: '# Draf A' } });
     fireEvent.click(screen.getByRole('button', { name: /Simpan/ }));
@@ -219,6 +272,7 @@ describe('Workspace Canvas 2.0 UX & Behavior', () => {
     const { rerender } = render(<ArtifactCanvas artifact={mockArtifact} onRequestInlineEdit={onRequestInlineEdit} onSaveArtifact={onSaveArtifact} />);
 
     fireEvent.click(screen.getByTitle('Edit Dokumen Langsung (Autosave)'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Markdown' }));
     const textarea = screen.getByPlaceholderText(/Ketik atau sesuaikan draf dokumen/) as HTMLTextAreaElement;
     textarea.setSelectionRange(start, start + selected.length);
     fireEvent.select(textarea);
@@ -251,13 +305,14 @@ describe('Workspace Canvas 2.0 UX & Behavior', () => {
     };
     render(<ArtifactCanvas artifact={mockArtifact} onSaveArtifact={onSaveArtifact} inlineEditPatch={stalePatch} />);
     fireEvent.click(screen.getByTitle('Edit Dokumen Langsung (Autosave)'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Markdown' }));
     fireEvent.change(screen.getByPlaceholderText(/Ketik atau sesuaikan draf dokumen/), { target: { value: `${mockArtifact.content}\nPerubahan manual` } });
     fireEvent.click(screen.getByRole('button', { name: 'Terapkan' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Dokumen telah berubah sejak revisi dibuat');
     expect(onSaveArtifact).not.toHaveBeenCalled();
   });
 
-  it('rejects a proposed edit without changing or saving the artifact', () => {
+  it('rejects a proposed edit without changing or saving the artifact', async () => {
     const onSaveArtifact = vi.fn();
     const onDismissInlineEdit = vi.fn();
     const patch: ArtifactPatch = {
@@ -271,7 +326,7 @@ describe('Workspace Canvas 2.0 UX & Behavior', () => {
     };
     render(<ArtifactCanvas artifact={mockArtifact} onSaveArtifact={onSaveArtifact} inlineEditPatch={patch} onDismissInlineEdit={onDismissInlineEdit} />);
     fireEvent.click(screen.getByTitle('Edit Dokumen Langsung (Autosave)'));
-    fireEvent.click(screen.getByRole('button', { name: 'Tolak' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Tolak' }));
     expect(onDismissInlineEdit).toHaveBeenCalledOnce();
     expect(onSaveArtifact).not.toHaveBeenCalled();
   });

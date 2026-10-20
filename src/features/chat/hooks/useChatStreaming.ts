@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { ChatStreamingClient, StreamPayload } from '../services/chatStreamingClient';
+import { ChatStreamingClient, StreamPayload, RoutingEventData } from '../services/chatStreamingClient';
 import { playCompletionChime } from '../../../lib/soundEffects';
 
 export function useChatStreaming() {
@@ -9,13 +9,17 @@ export function useChatStreaming() {
   const currentTokenRef = useRef(0);
   const rafRef = useRef<number | null>(null);
   const chunkBufferRef = useRef<string>('');
+  const flushChunkRef = useRef<(() => void) | null>(null);
 
   const abortStream = useCallback(() => {
-    currentTokenRef.current++;
+    const flushPendingChunks = flushChunkRef.current;
     if (rafRef.current) {
       cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
     }
+    flushPendingChunks?.();
+    flushChunkRef.current = null;
+    currentTokenRef.current++;
     chunkBufferRef.current = '';
     if (clientRef.current) {
       clientRef.current.abort();
@@ -33,6 +37,7 @@ export function useChatStreaming() {
         clientRef.current.abort();
         clientRef.current = null;
       }
+      flushChunkRef.current = null;
     };
   }, []);
 
@@ -41,13 +46,14 @@ export function useChatStreaming() {
     callbacks: {
       onMessageStart: (msgId: string) => void;
       onChunk: (text: string) => void;
-      onPluginSwitch: (pluginName: string) => void;
+      onPluginSwitch: (pluginName: string, parameters?: Record<string, unknown>) => void;
       onMessageComplete: (fullText: string) => void;
       onError: (error: string) => void;
       onFollowUps?: (followUps: string[]) => void;
       onChatCreated?: (chatId: string) => void;
       onQuotaExceeded?: (data: { message: string; resetAt?: string; suggestedActions?: string[] }) => void;
-      onRoutingMetadata?: (data: { modelUsed: string; routingMode: 'manual' | 'auto'; routingReason: string; isFallback?: boolean; fallbackFrom?: string }) => void;
+      onRoutingMetadata?: (data: RoutingEventData) => void;
+      onConsentRequired?: () => void;
     }
   ) => {
     const token = ++currentTokenRef.current;
@@ -58,6 +64,7 @@ export function useChatStreaming() {
       cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
     }
+    flushChunkRef.current = null;
     chunkBufferRef.current = '';
 
 
@@ -77,6 +84,7 @@ export function useChatStreaming() {
       }
       rafRef.current = null;
     };
+    flushChunkRef.current = flushChunkBuffer;
 
     try {
       await client.stream(payload, {
@@ -88,7 +96,7 @@ export function useChatStreaming() {
         onChunk: (text) => {
           if (token !== currentTokenRef.current) return;
           // Batch fast token emissions into 60 FPS rAF frames to prevent main thread choke
-          const isTest = 
+          const isTest =
             (typeof process !== 'undefined' && (process.env?.NODE_ENV === 'test' || process.env?.VITEST === 'true')) ||
             (typeof window !== 'undefined' && Boolean((window as any).__vitest_worker__ || (window as any).vi || (globalThis as any).vi)) ||
             (typeof import.meta !== 'undefined' && Boolean((import.meta as any).env?.VITEST || (import.meta as any).env?.MODE === 'test'));
@@ -102,10 +110,10 @@ export function useChatStreaming() {
             }
           }
         },
-        onPluginSwitch: (pluginName) => {
+        onPluginSwitch: (pluginName, parameters) => {
           if (token !== currentTokenRef.current) return;
           flushChunkBuffer();
-          callbacks.onPluginSwitch(pluginName);
+          callbacks.onPluginSwitch(pluginName, parameters);
         },
         onMessageComplete: (text) => {
           if (token !== currentTokenRef.current) return;
@@ -114,6 +122,7 @@ export function useChatStreaming() {
             rafRef.current = null;
           }
           flushChunkBuffer();
+          flushChunkRef.current = null;
           setIsTyping(false);
           setStreamingError(null);
           if (text && text.length > 150) {
@@ -127,7 +136,9 @@ export function useChatStreaming() {
             cancelAnimationFrame(rafRef.current);
             rafRef.current = null;
           }
+          flushChunkBuffer();
           chunkBufferRef.current = '';
+          flushChunkRef.current = null;
           setIsTyping(false);
           setStreamingError(err);
           callbacks.onError(err);
@@ -147,6 +158,10 @@ export function useChatStreaming() {
         onRoutingMetadata: (data) => {
           if (token !== currentTokenRef.current) return;
           callbacks.onRoutingMetadata?.(data);
+        },
+        onConsentRequired: () => {
+          if (token !== currentTokenRef.current) return;
+          callbacks.onConsentRequired?.();
         }
       });
     } finally {

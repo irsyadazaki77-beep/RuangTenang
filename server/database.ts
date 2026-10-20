@@ -1,4 +1,5 @@
 import { PrismaClient } from "@prisma/client";
+import { isLocalDevelopmentOrTest, isProductionLikeEnvironment } from "./config/environment.js";
 import { userRepository } from "./repositories/userRepository";
 import { authRepository } from "./repositories/authRepository";
 import { appointmentRepository } from "./repositories/appointmentRepository";
@@ -49,7 +50,7 @@ export const prisma = globalForPrisma.prisma ?? new PrismaClient({
   ],
 });
 
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
+if (isLocalDevelopmentOrTest()) globalForPrisma.prisma = prisma;
 
 try {
   (prisma as any).$on?.('query', (e: any) => {
@@ -115,9 +116,10 @@ export interface UserRecord {
   name: string;
   email: string;
   passwordHash: string;
-  role: "mahasiswa" | "konselor" | "admin";
+  role: "mahasiswa" | "konselor" | "admin" | "campus_admin";
   tier: "Free" | "Pro" | "Developer";
   university: string;
+  campusId?: string;
   createdAt: string;
   emailVerified?: boolean;
   emailVerificationCode?: string;
@@ -148,6 +150,7 @@ export interface MoodLogRecord {
 export interface AppointmentRecord {
   id: string;
   counselorId: string;
+  campusId?: string;
   counselorName: string;
   date: string;
   time: string;
@@ -320,19 +323,19 @@ export interface CounselorRecord {
   location?: string;
   isDemoData: boolean;
   userId?: string;
+  campusId?: string;
   createdAt: string;
 }
 
 // Ensure database is ready and initialized
 export async function ensureDatabaseReady(): Promise<void> {
-  const isProd = process.env.NODE_ENV === 'production';
+  const isProd = isProductionLikeEnvironment();
   const dbUrl = (process.env.DATABASE_URL || '').trim();
   const explicitProvider = (process.env.DB_PROVIDER || '').toLowerCase().trim();
   const hasPostgresUrl = dbUrl.startsWith('postgresql://') || dbUrl.startsWith('postgres://');
   const isPostgres = hasPostgresUrl || (explicitProvider === 'postgresql' && hasPostgresUrl);
 
-  const isPreview = process.env.IS_AI_STUDIO_PREVIEW === 'true' || process.env.PREVIEW_MODE === 'true';
-  if (isProd && !isPostgres && !isPreview) {
+  if (isProd && !isPostgres) {
     throw new Error('FATAL DATABASE ERROR: Production requires PostgreSQL database engine');
   }
 
@@ -386,7 +389,7 @@ export async function ensureDatabaseReady(): Promise<void> {
 
 // Placeholder for demo seed
 export async function seedInitialDataIfNeeded(): Promise<void> {
-  if (process.env.NODE_ENV === 'production' || process.env.SEED_DEMO_DATA !== 'true') {
+  if (isProductionLikeEnvironment() || process.env.SEED_DEMO_DATA !== 'true') {
     return;
   }
 

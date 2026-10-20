@@ -50,6 +50,11 @@ export function writeLocalDrafts(workspaceIdentity: string, drafts: WorkspaceArt
   }
 }
 
+function upsertLocalDraft(workspaceIdentity: string, draft: WorkspaceArtifact, userId?: string) {
+  const drafts = readLocalDrafts(workspaceIdentity, userId).filter(item => item.id !== draft.id);
+  writeLocalDrafts(workspaceIdentity, [draft, ...drafts], userId);
+}
+
 export function useWorkspaceArtifacts({
   chatId,
   userId,
@@ -185,6 +190,7 @@ export function useWorkspaceArtifacts({
     }
     if (!chatId) {
       const localSaved = { ...savingArtifact, title: title || savingArtifact.title, content, persistenceStatus: 'local' as const };
+      upsertLocalDraft(workspaceIdentity, localSaved, userId);
       setArtifacts(prev => prev.map(a => a.id === savingArtifact.id ? localSaved : a));
       return localSaved;
     }
@@ -199,6 +205,17 @@ export function useWorkspaceArtifacts({
     try {
       const previouslyConfirmed = confirmedArtifactsRef.current.get(savingArtifact.id);
       const isServerBacked = !!previouslyConfirmed || savingArtifact.persistenceStatus === 'persistent' || (!savingArtifact.persistenceStatus && !!savingArtifact.chatId);
+      // A queued autosave may have captured the same old version before the prior save
+      // completed. Rebase it on the latest confirmed version from this tab to avoid a
+      // false conflict; keep an explicitly newer base when resolving a server conflict.
+      const useExplicitBase = expectedVersion !== undefined
+        && (!previouslyConfirmed || expectedVersion > (previouslyConfirmed.version || 1));
+      const saveBaseVersion = useExplicitBase
+        ? expectedVersion
+        : previouslyConfirmed?.version ?? expectedVersion ?? savingArtifact.version ?? 1;
+      const saveBaseUpdatedAt = useExplicitBase
+        ? expectedUpdatedAt || savingArtifact.updatedAt
+        : previouslyConfirmed?.updatedAt || expectedUpdatedAt || savingArtifact.updatedAt;
       if (!isServerBacked) setArtifacts(prev => prev.map(a => a.id === savingArtifact.id ? { ...a, persistenceStatus: 'saving' } : a));
       const saved = !isServerBacked
         ? await persistArtifact({ ...savingArtifact, title: title || savingArtifact.title, content }, chatId)
@@ -209,8 +226,8 @@ export function useWorkspaceArtifacts({
             type: savingArtifact.type,
             chatId,
             createNewVersion: createVersionSnapshot,
-            expectedVersion: expectedVersion ?? previouslyConfirmed?.version ?? savingArtifact.version ?? 1,
-            expectedUpdatedAt: expectedUpdatedAt || previouslyConfirmed?.updatedAt || savingArtifact.updatedAt
+            expectedVersion: saveBaseVersion,
+            expectedUpdatedAt: saveBaseUpdatedAt
           });
 
       if (saved) {
@@ -239,13 +256,13 @@ export function useWorkspaceArtifacts({
           console.warn('[useWorkspaceArtifacts] Could not refresh conflicting artifact:', refreshError);
         }
       }
-      showToast('Draf masih tersimpan lokal. Penyimpanan ke Ruang Kerja belum berhasil.', 'error');
+      showToast('Penyimpanan ke server belum berhasil. Coba lagi sebelum meninggalkan Workspace.', 'error');
       throw err;
     } finally {
       release();
       if (saveTailsRef.current.get(saveKey) === tail) saveTailsRef.current.delete(saveKey);
     }
-  }, [activeArtifact, chatId, identityScope, persistArtifact, showToast]);
+  }, [activeArtifact, chatId, identityScope, persistArtifact, showToast, userId, workspaceIdentity]);
 
   const migrateLocalArtifacts = useCallback(async (targetChatId: string): Promise<boolean> => {
     if (!targetChatId) return false;
@@ -308,15 +325,16 @@ export function useWorkspaceArtifacts({
       title: type === 'CODE' ? 'Skrip Kode Baru' : type === 'CITATION' ? 'Daftar Sitasi Ilmiah' : 'Draf Dokumen Baru',
       type,
       language: type === 'CODE' ? 'python' : undefined,
-      content: type === 'CODE' 
-        ? `# Tulis kode program di sini\ndef main():\n    print("Hello RuangKerja")\n\nif __name__ == "__main__":\n    main()` 
-        : type === 'CITATION' 
-        ? `# Daftar Sitasi & Bibliografi\n\nTambahkan referensi yang memiliki metadata sumber, atau pilih sumber dari Perpustakaan Sumber.` 
+      content: type === 'CODE'
+        ? `# Tulis kode program di sini\ndef main():\n    print("Hello RuangKerja")\n\nif __name__ == "__main__":\n    main()`
+        : type === 'CITATION'
+        ? `# Daftar Sitasi & Bibliografi\n\nTambahkan referensi yang memiliki metadata sumber, atau pilih sumber dari Perpustakaan Sumber.`
         : `# Draf Dokumen Baru\n\nTulis catatan atau draf akademik Anda di sini...`,
       version: 1,
       updatedAt: new Date().toISOString()
     };
 
+    if (!chatId) upsertLocalDraft(workspaceIdentity, newArt, userId);
     setArtifacts(prev => [newArt, ...prev]);
     setActiveArtifactId(newArt.id);
 
@@ -347,6 +365,7 @@ export function useWorkspaceArtifacts({
       id, chatId: chatId || undefined, localWorkspaceId: workspaceIdentity, localOwnerId: userId || 'guest', persistenceStatus: chatId ? 'saving' : 'local', title: title.slice(0, 120), type: 'DOCUMENT',
       content, version: 1, updatedAt: new Date().toISOString()
     };
+    if (!chatId) upsertLocalDraft(workspaceIdentity, draft, userId);
     setArtifacts(current => [draft, ...current.filter(item => item.id !== id)]);
     setActiveArtifactId(id);
     setHasUnreadArtifact(true);
@@ -392,6 +411,7 @@ export function useWorkspaceArtifacts({
 
     if (!chatId) {
       if (currentIdentityRef.current === identityScope) {
+        upsertLocalDraft(workspaceIdentity, clonedArt, userId);
         setArtifacts(prev => [clonedArt, ...prev]);
         setActiveArtifactId(clonedArt.id);
       }

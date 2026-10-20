@@ -1,6 +1,6 @@
 export type MessageRole = "user" | "assistant" | "system";
 
-export type UserRole = "guest" | "mahasiswa" | "konselor" | "admin";
+export type UserRole = "guest" | "mahasiswa" | "konselor" | "admin" | "campus_admin";
 
 export type SubscriptionTier = "Free" | "Pro" | "Developer";
 
@@ -15,6 +15,7 @@ export interface UserSession {
     appointmentsBooked: number;
   };
   university?: string;
+  campusId?: string;
   token?: string;
   isDemo?: boolean;
 }
@@ -344,11 +345,15 @@ export interface SOSDispatchStatus {
     | "SENT_TO_SERVER"
     | "DELIVERED_SIMULATED"
     | "DIRECT_CALL_ONLY"
-    | "GUEST_DIRECT_CALL_ONLY";
+    | "GUEST_DIRECT_CALL_ONLY"
+    | "CONTACT_MISSING"
+    | "CONSENT_REQUIRED"
+    | "COOLDOWN_ACTIVE"
+    | "RATE_LIMIT_EXCEEDED";
   timestamp: string;
   recipientName?: string;
   recipientPhone?: string;
-  hasUserConsent: boolean;
+  hasUserConsent?: boolean;
   message: string;
 }
 

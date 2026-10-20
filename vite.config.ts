@@ -49,7 +49,7 @@ export default defineConfig(() => {
     },
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, '.'),
+        '@': path.resolve(import.meta.dirname, '.'),
       },
       dedupe: ['react', 'react-dom'],
     },
@@ -65,12 +65,15 @@ export default defineConfig(() => {
       ]
     },
     server: {
-      // HMR is disabled in AI Studio via DISABLE_HMR env var.
-      // Do not modifyâfile watching is disabled to prevent flickering during agent edits.
+      // Keep HMR disabled, but let Vite watch source files so a page refresh
+      // picks up edits served by this embedded Express development server.
       hmr: false,
-      watch: null,
+    },
+    esbuild: {
+      legalComments: 'none',
     },
     build: {
+      target: 'es2022',
       sourcemap: false,
       rollupOptions: {
         output: {

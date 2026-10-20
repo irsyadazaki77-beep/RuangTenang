@@ -1,6 +1,7 @@
 import { SupportedFileKind, ExtractedDocument, DocumentBlock } from '../../../../shared/contracts/files.js';
 import { DocumentExtractorAdapter, ExtractionInput } from './types.js';
 import { DEFAULT_FILE_LIMITS, DocumentProcessingException } from '../fileTypes.js';
+import { isVisualOcrAvailable, performVisualOcr } from '../visualIntelligenceService.js';
 
 export class PdfAdapter implements DocumentExtractorAdapter {
   supports(kind: SupportedFileKind): boolean {
@@ -17,12 +18,14 @@ export class PdfAdapter implements DocumentExtractorAdapter {
       const parser = new PDFParse({ data: input.buffer });
 
       let textResult: any;
+      let totalPages = 0;
       try {
         const documentInfo = await parser.getInfo();
-        if (documentInfo.total > DEFAULT_FILE_LIMITS.maxPdfPages) {
+        totalPages = documentInfo.total || 0;
+        if (totalPages > DEFAULT_FILE_LIMITS.maxPdfPages) {
           throw new DocumentProcessingException(
             'EXTRACTION_LIMIT',
-            `Jumlah halaman PDF (${documentInfo.total}) melebihi batas maksimal ${DEFAULT_FILE_LIMITS.maxPdfPages} halaman.`
+            `Jumlah halaman PDF (${totalPages}) melebihi batas maksimal ${DEFAULT_FILE_LIMITS.maxPdfPages} halaman.`
           );
         }
         textResult = await parser.getText();
@@ -30,63 +33,27 @@ export class PdfAdapter implements DocumentExtractorAdapter {
         await parser.destroy();
       }
 
-
-
-      if (!textResult || !textResult.pages || textResult.pages.length === 0) {
-        // Fallback if pages array is empty but raw text exists
-        const rawText = (textResult?.text || '').trim();
-        if (!rawText) {
-          throw new DocumentProcessingException('PARSER_ERROR', 'Dokumen PDF tidak memuat teks yang dapat diekstraksi (mungkin pindaian gambar murni).');
-        }
-
-        return {
-          documentId: input.documentId,
-          filename: input.filename,
-          mimeType: input.mimeType,
-          kind: 'pdf',
-          size: input.buffer.length,
-          checksum: input.checksum,
-          pageCount: Number.isInteger(textResult?.total) && textResult.total > 0 ? textResult.total : undefined,
-          blocks: [{
-            blockId: `${input.documentId}_b0`,
-            text: rawText
-          }],
-          normalizedText: rawText,
-          extractionWarnings: ['PDF parser tidak memberikan lokasi per halaman. OCR tidak tersedia; teks dari halaman pindaian atau konten visual mungkin tidak ikut diekstrak.']
-        };
+      const pagesList: any[] = textResult?.pages || [];
+      if (totalPages === 0 && pagesList.length > 0) {
+        totalPages = pagesList.length;
       }
 
-      const totalPages = textResult.total || textResult.pages.length;
-      if (totalPages > DEFAULT_FILE_LIMITS.maxPdfPages) {
-        throw new DocumentProcessingException(
-          'EXTRACTION_LIMIT',
-          `Jumlah halaman PDF (${totalPages}) melebihi batas maksimal ${DEFAULT_FILE_LIMITS.maxPdfPages} halaman.`
-        );
-      }
-
+      // Check if text extraction yielded text or if pages are blank/scanned
       const blocks: DocumentBlock[] = [];
       let totalChars = 0;
       const extractionWarnings: string[] = [];
-      const pagesWithoutText = textResult.pages.filter((page: any) => !(page?.text || '').trim()).length;
-      if (pagesWithoutText > 0) {
-        extractionWarnings.push(`${pagesWithoutText} halaman PDF tidak menghasilkan teks. Halaman pindaian atau konten visual mungkin tidak teranalisis; OCR tidak tersedia.`);
-      }
-      if (textResult.pages.length < totalPages) {
-        extractionWarnings.push(`Parser hanya mengembalikan ${textResult.pages.length} dari ${totalPages} halaman PDF.`);
-      }
-      if (textResult.pages.some((page: any) => !Number.isInteger(page?.num) || page.num < 1)) {
-        extractionWarnings.push('Nomor halaman asli tidak tersedia untuk sebagian halaman; lokasi tersebut tidak diberi nomor buatan.');
-      }
+      const unextractedPageNums: number[] = [];
 
-      for (let i = 0; i < textResult.pages.length; i++) {
-        if (input.abortSignal?.aborted) {
-          throw new DocumentProcessingException('PROCESSING_ABORTED', 'Proses ekstraksi dibatalkan.');
-        }
-
-        const pageItem = textResult.pages[i];
-        const pageNum = Number.isInteger(pageItem.num) && pageItem.num > 0 ? pageItem.num : undefined;
+      for (let i = 0; i < pagesList.length; i++) {
+        const pageItem = pagesList[i];
+        const pageNum = Number.isInteger(pageItem.num) && pageItem.num > 0 ? pageItem.num : i + 1;
         const pageText = (pageItem.text || '').trim();
-        if (!pageText) continue;
+
+        if (!pageText || pageText.length < 15) {
+          // Page has no text or inadequate extraction (likely scanned)
+          unextractedPageNums.push(pageNum);
+          continue;
+        }
 
         totalChars += pageText.length;
         if (totalChars > DEFAULT_FILE_LIMITS.maxExtractedChars) {
@@ -96,14 +63,14 @@ export class PdfAdapter implements DocumentExtractorAdapter {
           );
         }
 
-        // Split long page text into paragraphs
+        // Split text into paragraphs
         const paragraphs = pageText.split(/\n\s*\n/).filter((p: string) => p.trim().length > 0);
         if (paragraphs.length === 0) {
           blocks.push({
             blockId: `${input.documentId}_p${pageNum}_b0`,
             text: pageText,
             pageNumber: pageNum,
-            ...(pageNum ? { section: `Halaman ${pageNum}` } : {})
+            section: `Halaman ${pageNum}`
           });
         } else {
           paragraphs.forEach((p: string, pIdx: number) => {
@@ -111,22 +78,120 @@ export class PdfAdapter implements DocumentExtractorAdapter {
               blockId: `${input.documentId}_p${pageNum}_b${pIdx}`,
               text: p.trim(),
               pageNumber: pageNum,
-              ...(pageNum ? { section: `Halaman ${pageNum}` } : {})
+              section: `Halaman ${pageNum}`
             });
           });
         }
       }
 
-      if (blocks.length === 0) {
-        throw new DocumentProcessingException('PARSER_ERROR', 'Tidak ditemukan teks terbaca pada dokumen PDF.');
+      // If textResult had fallback text and no pages were identified as scanned/empty
+      if (blocks.length === 0 && unextractedPageNums.length === 0 && textResult?.text?.trim()) {
+        const rawText = textResult.text.trim();
+        blocks.push({
+          blockId: `${input.documentId}_b0`,
+          text: rawText
+        });
       }
+
+      // Step 2 & 3: TIERED OCR / VISION EXTRACTION for pages that require OCR
+      // Limit OCR to at most 5 pages to control cost, timeout, and memory
+      const MAX_OCR_PAGES = 5;
+      let ocrApplied = false;
+      const pagesToOcr = unextractedPageNums.slice(0, MAX_OCR_PAGES);
+
+      if (pagesToOcr.length > 0) {
+        try {
+          const freshParser = new PDFParse({ data: input.buffer });
+          let screenshots: any;
+          try {
+            screenshots = await freshParser.getScreenshot({
+              partial: pagesToOcr,
+              imageDataUrl: true
+            });
+          } finally {
+            await freshParser.destroy();
+          }
+
+          if (screenshots?.pages && screenshots.pages.length > 0) {
+            for (const shot of screenshots.pages) {
+              if (input.abortSignal?.aborted) break;
+              const pageNum = shot.pageNumber;
+              const dataUrl = shot.dataUrl;
+              if (!dataUrl || !dataUrl.includes(',')) continue;
+
+              const base64Data = dataUrl.split(',')[1];
+              const imageBuf = Buffer.from(base64Data, 'base64');
+
+              const ocrRes = await performVisualOcr({
+                buffer: imageBuf,
+                mimeType: 'image/png',
+                filename: `${input.filename}_hal_${pageNum}.png`,
+                purpose: 'document_ocr',
+                abortSignal: input.abortSignal
+              });
+
+              if (ocrRes && ocrRes.text.trim()) {
+                ocrApplied = true;
+                const ocrText = ocrRes.text.trim();
+                const ocrParas = ocrText.split(/\n\s*\n/).filter((p: string) => p.trim().length > 0);
+                ocrParas.forEach((p: string, pIdx: number) => {
+                  blocks.push({
+                    blockId: `${input.documentId}_p${pageNum}_ocr_b${pIdx}`,
+                    text: p.trim(),
+                    pageNumber: pageNum,
+                    section: `Halaman ${pageNum} (OCR)`,
+                    isVisualExtraction: true,
+                    ocrConfidence: ocrRes.ocrConfidence,
+                    readingUncertainty: ocrRes.readingUncertainty
+                  });
+                });
+              } else {
+                extractionWarnings.push(`Halaman ${pageNum} berupa pindaian dan tidak berhasil dibaca oleh OCR.`);
+              }
+            }
+          }
+        } catch (ocrErr: any) {
+          console.warn('[PDF_ADAPTER] Tiered OCR failed or unavailable:', ocrErr.message);
+        }
+      }
+
+      // Step 6: Note pages that were not read
+      const remainingUnreadPages = unextractedPageNums.length - (ocrApplied ? pagesToOcr.length : 0);
+      if (remainingUnreadPages > 0) {
+        extractionWarnings.push(`${remainingUnreadPages} halaman PDF berupa pindaian/gambar dan belum menghasilkan teks OCR.`);
+      }
+
+      if (blocks.length === 0) {
+        return {
+          documentId: input.documentId,
+          filename: input.filename,
+          mimeType: input.mimeType,
+          kind: 'pdf',
+          size: input.buffer.length,
+          checksum: input.checksum,
+          pageCount: totalPages || 1,
+          blocks: [],
+          normalizedText: '',
+          extractionWarnings: extractionWarnings.length
+            ? extractionWarnings
+            : ['Dokumen PDF berupa hasil pindaian (scan). Teks belum tersedia dari parser standar; disiapkan untuk analisis visual multimodal.'],
+          metadata: {
+            ocrApplied: false,
+            previewOnly: true,
+            visualAnalysisAvailable: isVisualOcrAvailable(),
+            unextractedPageCount: unextractedPageNums.length || totalPages || 1
+          }
+        };
+      }
+
+      // Sort blocks by page number ascending
+      blocks.sort((a, b) => (a.pageNumber || 0) - (b.pageNumber || 0));
 
       const pageGroups: Record<number, string[]> = {};
       blocks.forEach(b => {
-        if (b.pageNumber) {
-          if (!pageGroups[b.pageNumber]) pageGroups[b.pageNumber] = [];
-          pageGroups[b.pageNumber].push(b.text);
-        }
+        const pNum = b.pageNumber || 1;
+        if (!pageGroups[pNum]) pageGroups[pNum] = [];
+        pageGroups[pNum].push(b.text);
       });
 
       const pageBoundaryTexts: string[] = [];
@@ -145,9 +210,14 @@ export class PdfAdapter implements DocumentExtractorAdapter {
         kind: 'pdf',
         size: input.buffer.length,
         checksum: input.checksum,
-        pageCount: totalPages,
+        pageCount: totalPages || 1,
         blocks,
         normalizedText,
+        metadata: {
+          ocrApplied,
+          visualAnalysisAvailable: isVisualOcrAvailable(),
+          unextractedPageCount: unextractedPageNums.length
+        },
         ...(extractionWarnings.length ? { extractionWarnings } : {})
       };
     } catch (err: any) {

@@ -158,6 +158,7 @@ describe('Password Change Session Revocation Tests', () => {
     // 2. Login session A
     const loginA = await request(app)
       .post('/api/auth/login')
+      .set('Origin', 'http://localhost:3000')
       .send({ email: TEST_EMAIL, password: 'OldPassword123!' });
     
     expect(loginA.status).toBe(200);
@@ -167,6 +168,7 @@ describe('Password Change Session Revocation Tests', () => {
     // 3. Login session B
     const loginB = await request(app)
       .post('/api/auth/login')
+      .set('Origin', 'http://localhost:3000')
       .send({ email: TEST_EMAIL, password: 'OldPassword123!' });
     
     expect(loginB.status).toBe(200);
@@ -207,6 +209,7 @@ describe('Password Change Session Revocation Tests', () => {
     // 7. Verify old password fails
     const oldLogin = await request(app)
       .post('/api/auth/login')
+      .set('Origin', 'http://localhost:3000')
       .send({ email: TEST_EMAIL, password: 'OldPassword123!' });
     // Expect 401 Unauthorized or 400 depending on your exact login controller behavior
     expect([400, 401]).toContain(oldLogin.status);
@@ -214,6 +217,7 @@ describe('Password Change Session Revocation Tests', () => {
     // 8. Verify new password succeeds
     const newLogin = await request(app)
       .post('/api/auth/login')
+      .set('Origin', 'http://localhost:3000')
       .send({ email: TEST_EMAIL, password: 'NewPassword123!' });
     expect(newLogin.status).toBe(200);
   });
@@ -231,7 +235,7 @@ describe('Session Management & Zero-Trust Tier Tests', () => {
   });
 
   it('correctly detects current session with isCurrent: true in /api/auth/sessions', async () => {
-    await request(app).post('/api/auth/register').send({
+    await request(app).post('/api/auth/register').set('Origin', 'http://localhost:3000').send({
       name: 'Session Detection User',
       email: SESSION_USER_EMAIL,
       password: 'Password123!',
@@ -244,6 +248,7 @@ describe('Session Management & Zero-Trust Tier Tests', () => {
 
     const loginRes = await request(app)
       .post('/api/auth/login')
+      .set('Origin', 'http://localhost:3000')
       .send({ email: SESSION_USER_EMAIL, password: 'Password123!' });
     
     const cookie = loginRes.headers['set-cookie']?.[0];
@@ -285,6 +290,7 @@ describe('Session Management & Zero-Trust Tier Tests', () => {
   it('revokes a single session when /api/auth/sessions/revoke is called', async () => {
     const loginRes = await request(app)
       .post('/api/auth/login')
+      .set('Origin', 'http://localhost:3000')
       .send({ email: SESSION_USER_EMAIL, password: 'Password123!' });
     
     const cookie = loginRes.headers['set-cookie']?.[0];
@@ -315,16 +321,19 @@ describe('Session Management & Zero-Trust Tier Tests', () => {
   it('revokes all sessions when /api/auth/logout-all is called', async () => {
     const loginA = await request(app)
       .post('/api/auth/login')
+      .set('Origin', 'http://localhost:3000')
       .send({ email: SESSION_USER_EMAIL, password: 'Password123!' });
     const cookieA = loginA.headers['set-cookie']?.[0];
 
     const loginB = await request(app)
       .post('/api/auth/login')
+      .set('Origin', 'http://localhost:3000')
       .send({ email: SESSION_USER_EMAIL, password: 'Password123!' });
     const cookieB = loginB.headers['set-cookie']?.[0];
 
     const logoutAllRes = await request(app)
       .post('/api/auth/logout-all')
+      .set('Origin', 'http://localhost:3000')
       .set('Cookie', cookieA);
 
     expect(logoutAllRes.status).toBe(200);
@@ -351,6 +360,7 @@ describe('HttpOnly Cookie Authentication Compliance Tests', () => {
   it('sets rt_auth_token cookie with HttpOnly, SameSite=Lax, and Path=/ on registration', async () => {
     const res = await request(app)
       .post('/api/auth/register')
+      .set('Origin', 'http://localhost:3000')
       .send({
         name: 'Cookie Compliance User',
         email: COOKIE_TEST_EMAIL,
@@ -359,6 +369,7 @@ describe('HttpOnly Cookie Authentication Compliance Tests', () => {
       });
 
     expect(res.status).toBe(201);
+    expect(res.body.token).toBeUndefined();
     const rawCookies = res.headers['set-cookie'];
     const cookies = (Array.isArray(rawCookies) ? rawCookies : (rawCookies ? [rawCookies] : [])) as string[];
     expect(cookies).toBeDefined();
@@ -378,12 +389,14 @@ describe('HttpOnly Cookie Authentication Compliance Tests', () => {
 
     const res = await request(app)
       .post('/api/auth/login')
+      .set('Origin', 'http://localhost:3000')
       .send({
         email: COOKIE_TEST_EMAIL,
         password: 'Password123!'
       });
 
     expect(res.status).toBe(200);
+    expect(res.body.token).toBeUndefined();
     const rawCookies = res.headers['set-cookie'];
     const cookies = (Array.isArray(rawCookies) ? rawCookies : (rawCookies ? [rawCookies] : [])) as string[];
     expect(cookies).toBeDefined();
@@ -397,7 +410,8 @@ describe('HttpOnly Cookie Authentication Compliance Tests', () => {
 
   it('clears rt_auth_token cookie on logout with Max-Age=0 or expired date', async () => {
     const res = await request(app)
-      .post('/api/auth/logout');
+      .post('/api/auth/logout')
+      .set('Origin', 'http://localhost:3000');
 
     expect(res.status).toBe(200);
     const rawCookies = res.headers['set-cookie'];

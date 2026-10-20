@@ -47,6 +47,7 @@ const verifyAndLoadSession = async (token: string, res: Response) => {
       role: user.role,
       tier: user.tier,
       name: user.name,
+      campusId: user.campusId || undefined,
       sessionId: decoded.sessionId,
     };
   } catch (err: any) {
@@ -91,7 +92,7 @@ export const optionalAuth = async (req: Request, res: Response, next: NextFuncti
   next();
 };
 
-export type CanonicalRole = 'guest' | 'mahasiswa' | 'konselor' | 'peer_counselor' | 'admin' | 'unknown';
+export type CanonicalRole = 'guest' | 'mahasiswa' | 'konselor' | 'peer_counselor' | 'campus_admin' | 'admin' | 'unknown';
 
 export const normalizeRole = (role: string | undefined): CanonicalRole => {
   if (!role) return 'guest';
@@ -99,8 +100,23 @@ export const normalizeRole = (role: string | undefined): CanonicalRole => {
   if (r === 'student' || r === 'mahasiswa') return 'mahasiswa';
   if (r === 'peer_counselor' || r === 'peer-counselor') return 'peer_counselor';
   if (r === 'konselor' || r === 'counselor' || r === 'licensed_psychologist' || r === 'clinical_counselor') return 'konselor';
-  if (r === 'admin' || r === 'campus_admin' || r === 'campus-admin') return 'admin';
+  if (r === 'campus_admin' || r === 'campus-admin') return 'campus_admin';
+  if (r === 'admin') return 'admin';
   return 'unknown';
+};
+
+/** A campus administrator is scoped to the campus loaded from their account record. */
+export const requireCampusAdmin = (req: Request, res: Response, next: NextFunction) => {
+  if (!req.user) {
+    return res.status(401).json({ success: false, code: 'UNAUTHORIZED', message: 'Akses ditolak. Silakan login.' });
+  }
+  if (normalizeRole(req.user.role) !== 'campus_admin') {
+    return res.status(403).json({ success: false, code: 'FORBIDDEN', message: 'Akses khusus administrator kampus.' });
+  }
+  if (!req.user.campusId) {
+    return res.status(403).json({ success: false, code: 'CAMPUS_NOT_ASSIGNED', message: 'Akun administrator belum terhubung ke kampus.' });
+  }
+  next();
 };
 
 export const requireRole = (allowedRoles: (string)[]) => {

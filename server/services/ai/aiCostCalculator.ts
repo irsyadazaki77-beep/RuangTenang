@@ -37,7 +37,7 @@ export const MODEL_PRICING_REGISTRY: Readonly<Record<string, ModelPricing>> = Ob
   'openrouter-nemotron-super-120b': { inputPerMillionUsd: 0.0, outputPerMillionUsd: 0.0, pricingStatus: 'verified', source: 'OpenRouter Free Model Tier', validatedDate: '2026-03-01' },
   'openrouter-nemotron-lightning': { inputPerMillionUsd: 0.0, outputPerMillionUsd: 0.0, pricingStatus: 'verified', source: 'OpenRouter Free Model Tier', validatedDate: '2026-03-01' },
   'openrouter-cohere-code': { inputPerMillionUsd: 0.0, outputPerMillionUsd: 0.0, pricingStatus: 'verified', source: 'OpenRouter Free Model Tier', validatedDate: '2026-03-01' },
-  'openrouter-ling-flash': { inputPerMillionUsd: 0.0, outputPerMillionUsd: 0.0, pricingStatus: 'verified', source: 'OpenRouter Free Model Tier', validatedDate: '2026-03-01' },
+  'openrouter-ling-flash': { inputPerMillionUsd: 0.075, outputPerMillionUsd: 0.225, pricingStatus: 'verified', source: 'OpenRouter Models API', validatedDate: '2026-10-14' },
 
   // OpenAI Models (Source: OpenAI API Pricing, verified 2026-02)
   'openai-gpt-4o-mini': { inputPerMillionUsd: 0.15, outputPerMillionUsd: 0.60, pricingStatus: 'verified', source: 'OpenAI Standard API Pricing', validatedDate: '2026-02-01' },

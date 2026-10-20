@@ -12,6 +12,9 @@ export interface ApiResponse<T = unknown> {
   message?: string;
 }
 
+export const AUTH_SESSION_INVALIDATED_EVENT = 'rt-auth-session-invalidated';
+let lastAuthInvalidatedEventAt = 0;
+
 function extractErrorMessage(body: unknown, fallbackMessage: string): string {
   if (!body) return fallbackMessage;
   if (typeof body === 'object' && body !== null) {
@@ -184,6 +187,16 @@ export async function fetchWithTimeoutAndRetry<T = unknown>(
         // ignore json parse error on non-ok
       }
 
+      // Protected requests can be the first signal that a session expired. Notify
+      // AuthContext so the UI stops rendering data for the stale account.
+      if (res.status === 401 && !url.includes('/api/auth/')) {
+        const now = Date.now();
+        if (now - lastAuthInvalidatedEventAt > 1000 && typeof window !== 'undefined') {
+          lastAuthInvalidatedEventAt = now;
+          window.dispatchEvent(new Event(AUTH_SESSION_INVALIDATED_EVENT));
+        }
+      }
+
       const retryAfter = typeof res.headers?.get === 'function' ? res.headers.get('retry-after') : null;
       let retryAfterMs: number | undefined;
       if (retryAfter) {
@@ -280,6 +293,12 @@ export const apiClient = {
     fetchWithTimeoutAndRetry<T>(url, {
       ...options,
       method: 'PUT',
+      body: body !== undefined ? (typeof body === 'string' ? body : JSON.stringify(body)) : undefined
+    }),
+  patch: <T = unknown>(url: string, body?: unknown, options: RequestInit = {}) =>
+    fetchWithTimeoutAndRetry<T>(url, {
+      ...options,
+      method: 'PATCH',
       body: body !== undefined ? (typeof body === 'string' ? body : JSON.stringify(body)) : undefined
     }),
   delete: <T = unknown>(url: string, options: RequestInit = {}) =>

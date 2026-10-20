@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Check, Copy, FilePlus2, GitMerge, Sparkles, Square, SquareStop } from 'lucide-react';
 import { useAiModelCatalog } from '../../../lib/aiModelCatalog';
+import { KERJA_PROFILES } from '../../../lib/aiModels';
 import type { WorkspaceComparisonCandidate, WorkspaceComparisonRun } from '../types';
 
 interface Props {
@@ -15,9 +16,10 @@ function csrfHeaders(): Record<string, string> {
   return { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest', ...(match ? { 'X-CSRF-Token': decodeURIComponent(match[1]) } : {}) };
 }
 
-const CandidateCard = React.memo(function CandidateCard({ candidate, run, selected, selectionLocked, onUse, onCanvas, onCancel, onRetry }: {
+const CandidateCard = React.memo(function CandidateCard({ candidate, run, providerLabel, selected, selectionLocked, onUse, onCanvas, onCancel, onRetry }: {
   candidate: WorkspaceComparisonCandidate;
   run: WorkspaceComparisonRun;
+  providerLabel?: string;
   selected: boolean;
   selectionLocked: boolean;
   onUse: Props['onUseResponse'];
@@ -46,6 +48,8 @@ const CandidateCard = React.memo(function CandidateCard({ candidate, run, select
       <div className="min-w-0">
         <div className="truncate text-xs font-semibold text-slate-800 dark:text-slate-100">{candidate.modelName}</div>
         <div className="flex items-center gap-1.5 mt-0.5">
+          {candidate.profileId && KERJA_PROFILES.some(profile => profile.id === candidate.profileId) && <span className="text-[9px] text-slate-400">{KERJA_PROFILES.find(profile => profile.id === candidate.profileId)?.name}</span>}
+          {providerLabel && <span className="text-[9px] font-medium text-indigo-600 dark:text-indigo-300">via {providerLabel}</span>}
           <span className={`inline-block px-1.5 py-0.2 rounded-full border text-[9px] font-medium ${statusDisplay.color}`}>
             {statusDisplay.text}
           </span>
@@ -102,6 +106,8 @@ export const WorkspaceComparisonPanel = React.memo(function WorkspaceComparisonP
   const candidateChunkBuffersRef = useRef(new Map<string, CandidateChunkBuffer>());
   const candidateChunkTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const runIdRef = useRef<string | null>(null);
+  const analysisRequestIdRef = useRef<string | null>(null);
+  const synthesisRequestIdRef = useRef<string | null>(null);
 
   const modelsRef = useRef(models);
   modelsRef.current = models;
@@ -135,6 +141,17 @@ export const WorkspaceComparisonPanel = React.memo(function WorkspaceComparisonP
     updateCandidate(candidateId, { status: 'streaming', output: (candidate?.output || '') + buffer.chunks.join('') }, attemptId);
   }, [updateCandidate]);
 
+  const failPendingCandidates = useCallback((message: string, candidateId?: string, attemptId?: string) => {
+    const pending = candidatesRef.current.filter(candidate =>
+      (!candidateId || candidate.candidateId === candidateId) && (candidate.status === 'queued' || candidate.status === 'streaming')
+    );
+    for (const candidate of pending) {
+      const currentAttemptId = candidateId ? attemptId : candidateAttemptsRef.current.get(candidate.candidateId) || candidate.attemptId;
+      if (currentAttemptId) flushCandidateChunks(candidate.candidateId, currentAttemptId);
+      updateCandidate(candidate.candidateId, { status: 'failed', error: message }, currentAttemptId);
+    }
+  }, [flushCandidateChunks, updateCandidate]);
+
   const enqueueCandidateChunk = useCallback((candidateId: string, attemptId: string, text: string) => {
     const key = `${candidateId}:${attemptId}`;
     let buffer = candidateChunkBuffersRef.current.get(key);
@@ -160,7 +177,13 @@ export const WorkspaceComparisonPanel = React.memo(function WorkspaceComparisonP
     candidateAttemptsRef.current.clear();
     activeRetryControllers.forEach(item => item.abort());
     activeRetryControllers.clear();
-    const nextCandidates = run.selectedModelIds.map(modelId => ({ candidateId: modelId, modelId, modelName: modelsRef.current.find(model => model.id === modelId)?.name || modelId, status: 'queued' as const, output: '' }));
+    const nextCandidates = run.selectedModelIds.map(modelId => ({
+      candidateId: modelId,
+      modelId,
+      modelName: modelsRef.current.find(model => model.id === modelId)?.name || KERJA_PROFILES.find(profile => profile.id === modelId)?.name || 'Model AI',
+      status: 'queued' as const,
+      output: ''
+    }));
     candidatesRef.current = nextCandidates;
     setCandidates(nextCandidates);
     setActiveMobileId(nextCandidates[0]?.candidateId || '');
@@ -169,6 +192,10 @@ export const WorkspaceComparisonPanel = React.memo(function WorkspaceComparisonP
     setSelectionPending(false);
     setConsensusAnalysis(null);
     setSynthesizedResult(null);
+    analysisRequestIdRef.current = null;
+    synthesisRequestIdRef.current = null;
+    setIsAnalyzing(false);
+    setIsSynthesizing(false);
     setIsRunning(true);
 
     const start = async () => {
@@ -190,7 +217,7 @@ export const WorkspaceComparisonPanel = React.memo(function WorkspaceComparisonP
           buffer = lines.pop() || '';
           for (const line of lines) {
             if (!line.startsWith('data: ')) continue;
-            let event: { type: string; comparisonId: string; snapshotId?: string; contextFingerprint?: string; candidateId?: string; attemptId?: string; attempts?: Array<{ candidateId: string; attemptId: string }>; modelName?: string; text?: string; latencyMs?: number; errorCode?: string };
+            let event: { type: string; comparisonId: string; snapshotId?: string; contextFingerprint?: string; candidateId?: string; attemptId?: string; attempts?: Array<{ candidateId: string; attemptId: string }>; modelId?: string; modelName?: string; profileId?: string; message?: string; text?: string; latencyMs?: number; errorCode?: string };
             try { event = JSON.parse(line.slice(6)); } catch { continue; }
             if (!active || event.comparisonId !== run.comparisonId || event.snapshotId !== run.snapshotId || runIdRef.current !== runKey) continue;
             if (event.type === 'comparison_started' && event.attempts) {
@@ -200,11 +227,15 @@ export const WorkspaceComparisonPanel = React.memo(function WorkspaceComparisonP
               });
               continue;
             }
+            if (event.type === 'comparison_notice' && event.message) {
+              setNotice(event.message);
+              continue;
+            }
             const id = event.candidateId;
             if (!id || !event.attemptId) continue;
             if (event.type === 'candidate_started' && run.selectedModelIds.includes(id)) {
               candidateAttemptsRef.current.set(id, event.attemptId);
-              updateCandidate(id, { status: 'streaming', modelName: event.modelName || id, comparisonId: event.comparisonId, snapshotId: event.snapshotId, attemptId: event.attemptId, contextFingerprint: event.contextFingerprint }, event.attemptId);
+              updateCandidate(id, { status: 'streaming', modelId: event.modelId || id, modelName: event.modelName || id, profileId: event.profileId, comparisonId: event.comparisonId, snapshotId: event.snapshotId, attemptId: event.attemptId, contextFingerprint: event.contextFingerprint }, event.attemptId);
             } else if (candidateAttemptsRef.current.get(id) !== event.attemptId) continue;
             else if (event.type === 'candidate_chunk' && event.text) enqueueCandidateChunk(id, event.attemptId, event.text);
             else if (event.type === 'candidate_completed') {
@@ -214,7 +245,7 @@ export const WorkspaceComparisonPanel = React.memo(function WorkspaceComparisonP
               flushCandidateChunks(id, event.attemptId);
               updateCandidate(id, {
                 status: 'failed', latencyMs: event.latencyMs,
-                error: event.errorCode === 'OUTPUT_REJECTED' ? 'Respons ditahan oleh pemeriksaan keamanan.' : event.errorCode === 'PROVIDER_NOT_CONFIGURED' ? 'Provider model ini belum tersedia.' : 'Model gagal menyelesaikan respons.'
+                error: event.errorCode === 'OUTPUT_REJECTED' ? 'Respons ditahan oleh pemeriksaan keamanan.' : event.errorCode === 'MODEL_IDENTITY_MISMATCH' ? 'Provider mengembalikan model berbeda; respons ditahan.' : event.errorCode === 'PROVIDER_NOT_CONFIGURED' ? 'Provider model ini belum tersedia.' : 'Model gagal menyelesaikan respons.'
               }, event.attemptId);
             } else if (event.type === 'candidate_cancelled') {
               flushCandidateChunks(id, event.attemptId);
@@ -222,8 +253,15 @@ export const WorkspaceComparisonPanel = React.memo(function WorkspaceComparisonP
             }
           }
         }
+        if (active && !controller.signal.aborted && runIdRef.current === runKey) {
+          failPendingCandidates('Stream berhenti sebelum respons selesai. Coba lagi.');
+        }
       } catch (error) {
-        if (active && !controller.signal.aborted) setNotice(error instanceof Error ? error.message : 'Comparison terputus.');
+        if (active && !controller.signal.aborted) {
+          const message = error instanceof Error ? error.message : 'Comparison terputus.';
+          setNotice(message);
+          failPendingCandidates(message);
+        }
       } finally {
         if (active && runIdRef.current === runKey) setIsRunning(retryControllersRef.current.size > 0);
       }
@@ -245,7 +283,7 @@ export const WorkspaceComparisonPanel = React.memo(function WorkspaceComparisonP
       abortRef.current = null;
       if (runIdRef.current === runKey) runIdRef.current = null;
     };
-  }, [run, updateCandidate, discardCandidateChunkBuffers, enqueueCandidateChunk, flushCandidateChunks]);
+  }, [run, updateCandidate, discardCandidateChunkBuffers, enqueueCandidateChunk, flushCandidateChunks, failPendingCandidates]);
 
   const cancelOne = useCallback(async (candidateId: string) => {
     if (!run) return;
@@ -319,7 +357,7 @@ export const WorkspaceComparisonPanel = React.memo(function WorkspaceComparisonP
             updateCandidate(candidateId, {
               status: 'failed',
               latencyMs: event.latencyMs,
-              error: event.errorCode === 'OUTPUT_REJECTED' ? 'Respons ditahan oleh pemeriksaan keamanan.' : 'Model gagal menyelesaikan respons.'
+              error: event.errorCode === 'OUTPUT_REJECTED' ? 'Respons ditahan oleh pemeriksaan keamanan.' : event.errorCode === 'MODEL_IDENTITY_MISMATCH' ? 'Provider mengembalikan model berbeda; respons ditahan.' : 'Model gagal menyelesaikan respons.'
             }, attemptId);
           } else if (event.type === 'candidate_cancelled') {
             flushCandidateChunks(candidateId, attemptId);
@@ -327,24 +365,33 @@ export const WorkspaceComparisonPanel = React.memo(function WorkspaceComparisonP
           }
         }
       }
+      if (!controller.signal.aborted && runIdRef.current === `${run.workspaceIdentity || ''}:${run.chatId || ''}:${run.comparisonId}:${run.snapshotId}`) {
+        failPendingCandidates('Stream berhenti sebelum respons selesai. Coba lagi.', candidateId, attemptId);
+      }
     } catch {
-      if (!controller.signal.aborted) updateCandidate(candidateId, { status: 'failed', error: 'Gagal menghubungi model.' }, attemptId);
+      if (!controller.signal.aborted) failPendingCandidates('Gagal menghubungi model. Coba lagi.', candidateId, attemptId);
     } finally {
       retryControllersRef.current.delete(attemptId);
       if (runIdRef.current === `${run.workspaceIdentity || ''}:${run.chatId || ''}:${run.comparisonId}:${run.snapshotId}`) setIsRunning(Boolean(abortRef.current && !abortRef.current.signal.aborted) || retryControllersRef.current.size > 0);
     }
-  }, [run, updateCandidate, enqueueCandidateChunk, flushCandidateChunks, discardCandidateChunkBuffers]);
+  }, [run, updateCandidate, enqueueCandidateChunk, flushCandidateChunks, discardCandidateChunkBuffers, failPendingCandidates]);
 
   const useCandidateResponse = useCallback((selectedRun: WorkspaceComparisonRun, selectedCandidate: WorkspaceComparisonCandidate) => {
     if (selectionPending || selectedCandidateId) return;
+    const selectedRunKey = `${selectedRun.workspaceIdentity || ''}:${selectedRun.chatId || ''}:${selectedRun.comparisonId}:${selectedRun.snapshotId}`;
     setSelectionPending(true);
     void Promise.resolve(onUseResponse(selectedRun, selectedCandidate)).then(result => {
-      if (result !== false) setSelectedCandidateId(selectedCandidate.candidateId);
-    }).finally(() => setSelectionPending(false));
+      if (runIdRef.current === selectedRunKey && result !== false) setSelectedCandidateId(selectedCandidate.candidateId);
+    }).finally(() => {
+      if (runIdRef.current === selectedRunKey) setSelectionPending(false);
+    });
   }, [onUseResponse, selectedCandidateId, selectionPending]);
 
   const handleAnalyzeConsensus = useCallback(async () => {
     if (!run || isAnalyzing) return;
+    const requestId = crypto.randomUUID();
+    const runKey = `${run.workspaceIdentity || ''}:${run.chatId || ''}:${run.comparisonId}:${run.snapshotId}`;
+    analysisRequestIdRef.current = requestId;
     setIsAnalyzing(true);
     try {
       const res = await fetch('/api/v1/chat/compare/analyze', {
@@ -360,16 +407,22 @@ export const WorkspaceComparisonPanel = React.memo(function WorkspaceComparisonP
       });
       if (!res.ok) throw new Error('Evaluasi perbandingan gagal');
       const data = await res.json();
-      if (data.analysis) setConsensusAnalysis(data.analysis);
+      if (runIdRef.current === runKey && analysisRequestIdRef.current === requestId && data.analysis) setConsensusAnalysis(data.analysis);
     } catch (err: any) {
-      setNotice(err?.message || 'Gagal menganalisis konsensus');
+      if (runIdRef.current === runKey && analysisRequestIdRef.current === requestId) setNotice(err?.message || 'Gagal menganalisis konsensus');
     } finally {
-      setIsAnalyzing(false);
+      if (analysisRequestIdRef.current === requestId) {
+        analysisRequestIdRef.current = null;
+        setIsAnalyzing(false);
+      }
     }
   }, [run, candidates, isAnalyzing]);
 
   const handleSynthesizeConsensus = useCallback(async () => {
     if (!run || isSynthesizing) return;
+    const requestId = crypto.randomUUID();
+    const runKey = `${run.workspaceIdentity || ''}:${run.chatId || ''}:${run.comparisonId}:${run.snapshotId}`;
+    synthesisRequestIdRef.current = requestId;
     setIsSynthesizing(true);
     try {
       const res = await fetch('/api/v1/chat/compare/synthesize', {
@@ -385,11 +438,14 @@ export const WorkspaceComparisonPanel = React.memo(function WorkspaceComparisonP
       });
       if (!res.ok) throw new Error('Sintesis jawaban gagal');
       const data = await res.json();
-      if (data.synthesis) setSynthesizedResult(data.synthesis);
+      if (runIdRef.current === runKey && synthesisRequestIdRef.current === requestId && data.synthesis) setSynthesizedResult(data.synthesis);
     } catch (err: any) {
-      setNotice(err?.message || 'Gagal menyusun sintesis');
+      if (runIdRef.current === runKey && synthesisRequestIdRef.current === requestId) setNotice(err?.message || 'Gagal menyusun sintesis');
     } finally {
-      setIsSynthesizing(false);
+      if (synthesisRequestIdRef.current === requestId) {
+        synthesisRequestIdRef.current = null;
+        setIsSynthesizing(false);
+      }
     }
   }, [run, candidates, isSynthesizing]);
 
@@ -513,7 +569,7 @@ export const WorkspaceComparisonPanel = React.memo(function WorkspaceComparisonP
       }} className="min-h-9 shrink-0 rounded-lg border border-slate-200 px-3 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:border-slate-700">{candidate.modelName} · {candidate.status === 'completed' ? 'Selesai' : candidate.status === 'failed' ? 'Gagal' : candidate.status === 'cancelled' ? 'Stop' : candidate.status === 'streaming' ? 'Menjawab' : 'Menunggu'}</button>)}
     </div>
     <div className="grid grid-cols-1 gap-2 md:grid-cols-2 2xl:grid-cols-3">
-      {candidates.map(candidate => <div key={candidate.candidateId} className={candidate.candidateId === activeMobileId ? '' : 'hidden md:block'}><CandidateCard candidate={candidate} run={run} selected={candidate.candidateId === selectedCandidateId} selectionLocked={selectedCandidateId !== null || selectionPending} onUse={useCandidateResponse} onCanvas={onSendToCanvas} onCancel={cancelOne} onRetry={retryOne} /></div>)}
+      {candidates.map(candidate => <div key={candidate.candidateId} className={candidate.candidateId === activeMobileId ? '' : 'hidden md:block'}><CandidateCard candidate={candidate} run={run} providerLabel={models.find(model => model.id === candidate.modelId)?.provider} selected={candidate.candidateId === selectedCandidateId} selectionLocked={selectedCandidateId !== null || selectionPending} onUse={useCandidateResponse} onCanvas={onSendToCanvas} onCancel={cancelOne} onRetry={retryOne} /></div>)}
     </div>
   </section>;
 });

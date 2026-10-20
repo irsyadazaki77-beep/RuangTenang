@@ -17,6 +17,8 @@ export const AGENT_EXECUTION_LIMITS = Object.freeze({
   maxTotalTokens: boundedInteger('WORKSPACE_AGENT_MAX_TOTAL_TOKENS', 16_000, 2_000, 40_000),
   maxOutputTokens: boundedInteger('WORKSPACE_AGENT_MAX_OUTPUT_TOKENS', 900, 128, 2_000),
   maxToolOutputChars: boundedInteger('WORKSPACE_AGENT_MAX_TOOL_OUTPUT_CHARS', 12_000, 1_000, 30_000),
+  maxToolRetries: boundedInteger('WORKSPACE_AGENT_MAX_TOOL_RETRIES', 2, 0, 3),
+  toolRetryBaseDelayMs: boundedInteger('WORKSPACE_AGENT_TOOL_RETRY_BASE_MS', 200, 50, 2_000),
   modelCallTimeoutMs: boundedInteger('WORKSPACE_AGENT_MODEL_TIMEOUT_MS', 45_000, 5_000, 90_000)
 });
 

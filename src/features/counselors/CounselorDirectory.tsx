@@ -1,4 +1,4 @@
-import { useEscapeKey } from "../../hooks/useEscapeKey";
+import { useFocusTrap } from "../../hooks/useFocusTrap";
 import React, { useState } from "react";
 import {
   Search,
@@ -21,6 +21,7 @@ import { CounselorDirectorySkeleton } from "../../components/common/Skeleton";
 import { EmptyState } from "../../components/common/EmptyState";
 import { ErrorState } from "../../components/common/ErrorState";
 import { useCounselors } from '../../hooks/useCounselors';
+import { Avatar } from "../../components/ui/primitives/Surfaces";
 
 export interface CounselorDirectoryProps {
   onSelectCounselorForBooking: (counselor: Counselor) => void;
@@ -40,7 +41,10 @@ export const CounselorDirectory: React.FC<CounselorDirectoryProps> = ({
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [selectedCounselorModal, setSelectedCounselorModal] =
     useState<Counselor | null>(null);
-  useEscapeKey(() => setSelectedCounselorModal(null), !!selectedCounselorModal);
+  const detailModalRef = useFocusTrap<HTMLDivElement>({
+    isOpen: Boolean(selectedCounselorModal),
+    onClose: () => setSelectedCounselorModal(null),
+  });
 
   const CONCERN_CATEGORIES: { id: string; label: string; specialtyIds: CounselorSpecialtyId[] }[] = [
     { id: "Semua", label: "Semua", specialtyIds: [] },
@@ -66,9 +70,10 @@ export const CounselorDirectory: React.FC<CounselorDirectoryProps> = ({
       selectedConcernCategory.specialtyIds.some(id => cSpecialtyIds.includes(id));
 
     const matchesMethod = methodFilter === "Semua" || c.consultationType.includes(methodFilter as any);
-    const matchesCost = costFilter === "Semua" || (costFilter === "Gratis" ? c.isFreeForStudents : !c.isFreeForStudents);
-    const matchesCampus = campusFilter === "Semua" || c.university.includes(campusFilter);
-        const matchesAvailability = availabilityFilter === "Semua" || (availabilityFilter === "Hari Ini" ? c.availableToday : true);
+    const isFreeForStudents = c.isFreeForStudents || c.price === 0;
+    const matchesCost = costFilter === "Semua" || (costFilter === "Gratis" ? isFreeForStudents : !isFreeForStudents);
+    const matchesCampus = campusFilter === "Semua" || c.university.trim() === campusFilter;
+    const matchesAvailability = availabilityFilter === "Semua" || (availabilityFilter === "Hari Ini" ? c.availableToday : true);
 
     return matchesSearch && matchesConcern && matchesMethod && matchesCost && matchesCampus && matchesAvailability;
   });
@@ -86,8 +91,9 @@ export const CounselorDirectory: React.FC<CounselorDirectoryProps> = ({
           Temui Konselor & Psikolog
         </h2>
         <p className="text-xs sm:text-sm text-secondary leading-relaxed max-w-2xl">
-          Konseling profesional & rahasia untuk masalah skripsi, adaptasi
-          perkuliahan, kecemasan, atau masalah pribadi.
+          Lihat profil, fokus layanan, dan informasi akses untuk masalah skripsi,
+          adaptasi perkuliahan, kecemasan, atau hal pribadi. Kebijakan privasi
+          mengikuti layanan konselor atau kampus terkait.
         </p>
       </div>
 
@@ -99,6 +105,7 @@ export const CounselorDirectory: React.FC<CounselorDirectoryProps> = ({
             <Search className="w-4 h-4 text-secondary absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
               type="text"
+              aria-label="Cari nama konselor, kampus, atau topik"
               placeholder="Cari nama konselor, kampus, atau topik..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -106,17 +113,23 @@ export const CounselorDirectory: React.FC<CounselorDirectoryProps> = ({
             />
           </div>
 
-          <div className="flex items-center gap-2">
-            <select value={selectedConcern} onChange={(e) => setSelectedConcern(e.target.value)} className="surface-page border border-default text-primary text-xs sm:text-sm rounded-lg px-2.5 py-2 focus:outline-none focus:border-teal-500 min-h-[44px] sm:min-h-[42px]">
+          <div className="flex items-center gap-2 w-full md:w-auto">
+            <select
+              value={selectedConcern}
+              onChange={(e) => setSelectedConcern(e.target.value)}
+              aria-label="Kebutuhan konseling"
+              className="flex-1 md:flex-initial min-w-0 max-w-full surface-page border border-default text-primary text-xs sm:text-sm rounded-lg px-2.5 py-2 focus:outline-none focus:border-teal-500 min-h-[44px] sm:min-h-[42px] truncate"
+            >
               {CONCERN_CATEGORIES.map((cat) => (
                 <option key={cat.id} value={cat.id}>Kebutuhan: {cat.label === 'Semua' ? 'Semua' : cat.label}</option>
               ))}
             </select>
-            
+
             <button
               onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
-              className={`p-2.5 sm:px-3 rounded-lg border transition-all cursor-pointer min-h-[44px] sm:min-h-[42px] flex items-center gap-1.5 text-xs sm:text-sm font-medium ${
-                showAdvancedFilters ? 'bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-400 border-teal-200 dark:border-teal-800' : 'surface-page border-default text-secondary hover:text-primary'
+              aria-label="Filter Konselor"
+              className={`shrink-0 p-2.5 sm:px-3 rounded-lg border transition-all cursor-pointer min-h-[44px] min-w-[44px] sm:min-h-[42px] flex items-center justify-center gap-1.5 text-xs sm:text-sm font-medium ${
+                showAdvancedFilters ? 'bg-teal-50 dark:bg-teal-900/30 text-teal-800 dark:text-teal-300 border-teal-200 dark:border-teal-800' : 'surface-page border-default text-secondary hover:text-primary'
               }`}
             >
               <Filter className="w-3.5 h-3.5" />
@@ -124,37 +137,56 @@ export const CounselorDirectory: React.FC<CounselorDirectoryProps> = ({
             </button>
           </div>
         </div>
-        
+
         {/* Advanced Filters */}
         {showAdvancedFilters && (
-          <div className="flex flex-wrap gap-2 pt-2.5 border-t border-default animate-in slide-in-from-top-2 fade-in">
-            <select value={methodFilter} onChange={(e) => setMethodFilter(e.target.value)} className="surface-card border border-default text-primary text-xs rounded-lg px-2.5 py-2 focus:outline-none focus:border-teal-500 min-h-[44px] sm:min-h-[38px]">
+          <div className="grid grid-cols-1 xs:grid-cols-2 sm:flex sm:flex-wrap gap-2 pt-2.5 border-t border-default animate-in slide-in-from-top-2 fade-in">
+            <select
+              value={methodFilter}
+              onChange={(e) => setMethodFilter(e.target.value)}
+              aria-label="Metode konseling"
+              className="w-full sm:w-auto surface-card border border-default text-primary text-xs rounded-lg px-2.5 py-2 focus:outline-none focus:border-teal-500 min-h-[44px] sm:min-h-[38px]"
+            >
               <option value="Semua">Semua Metode</option>
               <option value="video_call">Video Call</option>
               <option value="in_person">Tatap Muka</option>
             </select>
 
-            <select value={costFilter} onChange={(e) => setCostFilter(e.target.value)} className="surface-card border border-default text-primary text-xs rounded-lg px-2.5 py-2 focus:outline-none focus:border-teal-500 min-h-[44px] sm:min-h-[38px]">
+            <select
+              value={costFilter}
+              onChange={(e) => setCostFilter(e.target.value)}
+              aria-label="Kategori biaya"
+              className="w-full sm:w-auto surface-card border border-default text-primary text-xs rounded-lg px-2.5 py-2 focus:outline-none focus:border-teal-500 min-h-[44px] sm:min-h-[38px]"
+            >
               <option value="Semua">Semua Biaya</option>
               <option value="Gratis">Gratis (Mahasiswa)</option>
               <option value="Berbayar">Berbayar</option>
             </select>
 
-            <select value={campusFilter} onChange={(e) => setCampusFilter(e.target.value)} className="surface-card border border-default text-primary text-xs rounded-lg px-2.5 py-2 focus:outline-none focus:border-teal-500 min-h-[44px] sm:min-h-[38px]">
+            <select
+              value={campusFilter}
+              onChange={(e) => setCampusFilter(e.target.value)}
+              aria-label="Pilihan kampus"
+              className="w-full sm:w-auto surface-card border border-default text-primary text-xs rounded-lg px-2.5 py-2 focus:outline-none focus:border-teal-500 min-h-[44px] sm:min-h-[38px]"
+            >
               <option value="Semua">Semua Kampus</option>
-              <option value="UI">UI</option>
-              <option value="ITB">ITB</option>
-              <option value="UGM">UGM</option>
-              <option value="UNAIR">UNAIR</option>
-            </select>
-            
-            <select value={availabilityFilter} onChange={(e) => setAvailabilityFilter(e.target.value)} className="surface-card border border-default text-primary text-xs rounded-lg px-2.5 py-2 focus:outline-none focus:border-teal-500 min-h-[44px] sm:min-h-[38px]">
-              <option value="Semua">Semua Ketersediaan</option>
-              <option value="Hari Ini">Tersedia Hari Ini</option>
+              {Array.from(new Set(counselors.map(counselor => counselor.university.trim()).filter(Boolean)))
+                .sort((a, b) => a.localeCompare(b, 'id'))
+                .map(university => <option key={university} value={university}>{university}</option>)}
             </select>
 
-            <div className="flex-1" />
-            
+            <select
+              value={availabilityFilter}
+              onChange={(e) => setAvailabilityFilter(e.target.value)}
+              aria-label="Filter jadwal layanan rutin"
+              className="w-full sm:w-auto surface-card border border-default text-primary text-xs rounded-lg px-2.5 py-2 focus:outline-none focus:border-teal-500 min-h-[44px] sm:min-h-[38px]"
+            >
+              <option value="Semua">Semua Ketersediaan</option>
+              <option value="Hari Ini">Jadwal rutin hari ini</option>
+            </select>
+
+            <div className="hidden sm:flex sm:flex-1" />
+
             <button
               onClick={() => {
                 setSearchQuery("");
@@ -164,12 +196,13 @@ export const CounselorDirectory: React.FC<CounselorDirectoryProps> = ({
                 setCampusFilter("Semua");
                 setAvailabilityFilter("Semua");
               }}
-              className="px-3 py-2 text-rose-600 dark:text-rose-400 text-xs font-medium hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg transition-colors cursor-pointer min-h-[44px] sm:min-h-[36px] flex items-center"
+              className="w-full sm:w-auto px-3 py-2 text-rose-600 dark:text-rose-400 text-xs font-semibold hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg transition-colors cursor-pointer min-h-[44px] sm:min-h-[36px] flex items-center justify-center gap-1"
             >
               Reset
             </button>
           </div>
         )}
+        <p className="text-[11px] text-muted">Hari layanan mengikuti jadwal rutin konselor; slot yang masih kosong dikonfirmasi saat memilih tanggal.</p>
       </div>
 
       {/* Directory Grid */}
@@ -209,13 +242,12 @@ export const CounselorDirectory: React.FC<CounselorDirectoryProps> = ({
               <div className="space-y-3">
                 {/* Essentials: Photo, Name, Title, University */}
                 <div className="flex items-center gap-3">
-                  <img
+                  <Avatar
                     src={counselor.avatar}
-                    alt={counselor.name}
-                    width={52}
-                    height={52}
-                    loading="lazy"
-                    className="w-12 h-12 sm:w-13 sm:h-13 rounded-full object-cover border border-default shadow-3xs shrink-0 cursor-pointer group-hover:scale-[1.02] transition-transform"
+                    name={counselor.name}
+                    size="xl"
+                    shape="circle"
+                    className="border border-default shadow-3xs shrink-0 cursor-pointer group-hover:scale-[1.02] transition-transform"
                     onClick={() => setSelectedCounselorModal(counselor)}
                   />
                   <div className="space-y-0.5 flex-1 min-w-0">
@@ -239,10 +271,10 @@ export const CounselorDirectory: React.FC<CounselorDirectoryProps> = ({
               {/* Essential Details: Available schedule, method, and 1 primary CTA */}
               <div className="pt-3 border-t border-default space-y-3">
                 <div className="flex items-center justify-between text-xs sm:text-sm">
-                  <span className="text-secondary text-xs">Sesi Terdekat</span>
+                  <span className="text-secondary text-xs">Hari layanan rutin</span>
                   <span className="font-medium text-primary text-xs flex items-center gap-1.5 surface-muted px-2 py-0.5 rounded-md">
                     <Calendar className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
-                    {counselor.nextAvailableSlot}
+                    {counselor.availableDays?.filter(Boolean).join(', ') || 'Jadwal belum diatur'}
                   </span>
                 </div>
 
@@ -256,7 +288,7 @@ export const CounselorDirectory: React.FC<CounselorDirectoryProps> = ({
 
                   <button
                     onClick={() => onSelectCounselorForBooking(counselor)}
-                    className="flex-1 py-2 bg-teal-600 hover:bg-teal-700 text-white font-medium text-xs sm:text-sm rounded-lg shadow-3xs transition-all flex items-center justify-center gap-1.5 cursor-pointer min-h-[44px] sm:min-h-[36px]"
+                    className="flex-1 py-2 bg-teal-700 hover:bg-teal-800 text-white font-medium text-xs sm:text-sm rounded-lg shadow-3xs transition-all flex items-center justify-center gap-1.5 cursor-pointer min-h-[44px] sm:min-h-[36px]"
                   >
                     <span>Jadwalkan</span>
                   </button>
@@ -269,8 +301,20 @@ export const CounselorDirectory: React.FC<CounselorDirectoryProps> = ({
 
       {/* Detail Modal */}
       {selectedCounselorModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3.5">
-          <div className="surface-card border border-default rounded-2xl max-w-lg w-full p-4 sm:p-5 shadow-xl space-y-3.5 relative text-primary animate-fade-in my-4 max-h-[92vh] overflow-y-auto">
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3.5"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setSelectedCounselorModal(null);
+          }}
+        >
+          <div
+            ref={detailModalRef}
+            tabIndex={-1}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="counselor-modal-name"
+            className="surface-card border border-default rounded-2xl max-w-lg w-full p-4 sm:p-5 shadow-xl space-y-3.5 relative text-primary animate-fade-in my-4 max-h-[92vh] overflow-y-auto focus:outline-none"
+          >
             <button
               onClick={() => setSelectedCounselorModal(null)}
               className="absolute top-3 right-3 p-1.5 text-secondary hover:text-primary rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer min-h-[44px] min-w-[44px] sm:min-h-[36px] sm:min-w-[36px] flex items-center justify-center"
@@ -281,12 +325,12 @@ export const CounselorDirectory: React.FC<CounselorDirectoryProps> = ({
 
             {/* Profile Header */}
             <div className="flex flex-col sm:flex-row items-center sm:items-start gap-3 text-center sm:text-left">
-              <img
+              <Avatar
                 src={selectedCounselorModal.avatar}
-                alt={selectedCounselorModal.name}
-                width={56}
-                height={56}
-                className="w-14 h-14 rounded-xl object-cover border border-default shadow-3xs shrink-0"
+                name={selectedCounselorModal.name}
+                size="2xl"
+                shape="rounded"
+                className="border border-default shadow-3xs shrink-0"
               />
               <div className="space-y-0.5 min-w-0 flex-1">
                 {selectedCounselorModal.isDemoData ? (
@@ -302,7 +346,7 @@ export const CounselorDirectory: React.FC<CounselorDirectoryProps> = ({
                     <Users className="w-3 h-3 text-secondary" /> Belum Terverifikasi
                   </span>
                 )}
-                <h2 className="font-bold text-base sm:text-lg text-primary tracking-tight">
+                <h2 id="counselor-modal-name" className="font-bold text-base sm:text-lg text-primary tracking-tight">
                   {selectedCounselorModal.name}
                 </h2>
                 <p className="text-xs text-secondary font-medium">
@@ -401,7 +445,7 @@ export const CounselorDirectory: React.FC<CounselorDirectoryProps> = ({
                   setSelectedCounselorModal(null);
                   onSelectCounselorForBooking(counselor);
                 }}
-                className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs sm:text-sm rounded-lg shadow-3xs transition-all flex items-center justify-center gap-1.5 cursor-pointer min-h-[44px] sm:min-h-[36px]"
+                className="px-4 py-2 bg-teal-700 hover:bg-teal-800 text-white font-bold text-xs sm:text-sm rounded-lg shadow-3xs transition-all flex items-center justify-center gap-1.5 cursor-pointer min-h-[44px] sm:min-h-[36px]"
               >
                 <span>Pilih & Jadwalkan</span>
                 <ArrowRight className="w-3.5 h-3.5" />

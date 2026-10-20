@@ -70,9 +70,11 @@ describe('Sidebar Overhaul Unit Tests', () => {
       </ThemeProvider>
     );
 
-    // 1. Dual Mode Switcher Slider
-    expect(screen.getAllByText('RuangTenang').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByRole('button', { name: /RuangKerja/i })).toBeInTheDocument();
+    // 1. Dual Mode Switcher Dropdown (ChatGPT/Gemini Style)
+    const modeDropdownBtn = screen.getByRole('button', { name: /Mode: RuangTenang/i });
+    expect(modeDropdownBtn).toBeInTheDocument();
+    fireEvent.click(modeDropdownBtn);
+    expect(screen.getByRole('button', { name: /^RuangKerja$/i })).toBeInTheDocument();
 
     // 2. Dynamic New Chat Icon Button
     expect(screen.getByRole('button', { name: /Chat Baru/i })).toBeInTheDocument();
@@ -114,7 +116,10 @@ describe('Sidebar Overhaul Unit Tests', () => {
     expect(screen.getByText('Curhat Cemas Skripsi')).toBeInTheDocument();
     expect(screen.queryByText('Review Jurnal IEEE AI')).not.toBeInTheDocument();
 
-    // Click RuangKerja mode
+    // Open mode dropdown and click RuangKerja mode
+    const modeDropdownBtn = screen.getByRole('button', { name: /Mode: RuangTenang/i });
+    fireEvent.click(modeDropdownBtn);
+
     const kerjaBtn = screen.getByRole('button', { name: /^RuangKerja$/i });
     fireEvent.click(kerjaBtn);
     expect(onSwitchMode).toHaveBeenCalledWith('RUANG_KERJA');
@@ -167,18 +172,96 @@ describe('Sidebar Overhaul Unit Tests', () => {
       </ThemeProvider>
     );
 
-    const deleteButtons = screen.getAllByLabelText('Hapus Percakapan');
-    expect(deleteButtons.length).toBeGreaterThan(0);
-    fireEvent.click(deleteButtons[0]);
+    // 1. Click More Options (•••) popover button
+    const moreButtons = screen.getAllByLabelText('Opsi Obrolan');
+    expect(moreButtons.length).toBeGreaterThan(0);
+    fireEvent.click(moreButtons[0]);
+
+    // 2. Click Delete button inside popover menu
+    const deleteBtn = screen.getByLabelText('Hapus Percakapan');
+    fireEvent.click(deleteBtn);
 
     // Popover question appears
     expect(screen.getByText(/Hapus obrolan ini\?/i)).toBeInTheDocument();
-    
+
     // Confirm button inside popover
     const confirmBtn = screen.getByRole('button', { name: /^Hapus$/i });
     fireEvent.click(confirmBtn);
 
     expect(onDeleteChat).toHaveBeenCalled();
   });
-});
 
+  it('correctly categorizes chats into "Kemarin" date group', () => {
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    const chatsWithYesterday: Chat[] = [
+      {
+        id: 'chat-yesterday',
+        title: 'Konseling Kemarin Malam',
+        createdAt: yesterday.toISOString(),
+        updatedAt: yesterday.toISOString(),
+        messages: [],
+        isPinned: false,
+        isArchived: false,
+        workspaceMode: 'RUANG_TENANG'
+      }
+    ];
+
+    const noop = vi.fn();
+
+    render(
+      <ThemeProvider>
+        <MemoryRouter>
+          <Sidebar
+            isOpen={true}
+            setIsOpen={noop}
+            chats={chatsWithYesterday}
+            onNewChat={noop}
+            onSelectChat={noop}
+            onDeleteChat={noop}
+            onUpdateTitle={noop}
+            onTogglePin={noop}
+            onToggleArchive={noop}
+          />
+        </MemoryRouter>
+      </ThemeProvider>
+    );
+
+    expect(screen.getByText('Kemarin')).toBeInTheDocument();
+    expect(screen.getByText('Konseling Kemarin Malam')).toBeInTheDocument();
+  });
+
+  it('triggers inline rename mode when clicking Ubah Nama from More menu', () => {
+    const noop = vi.fn();
+
+    render(
+      <ThemeProvider>
+        <MemoryRouter>
+          <Sidebar
+            isOpen={true}
+            setIsOpen={noop}
+            chats={mockChats}
+            onNewChat={noop}
+            onSelectChat={noop}
+            onDeleteChat={noop}
+            onUpdateTitle={noop}
+            onTogglePin={noop}
+            onToggleArchive={noop}
+          />
+        </MemoryRouter>
+      </ThemeProvider>
+    );
+
+    // Open More Options menu
+    const moreButtons = screen.getAllByLabelText('Opsi Obrolan');
+    fireEvent.click(moreButtons[0]);
+
+    // Click Ubah Nama
+    const renameBtn = screen.getByLabelText('Ubah Nama');
+    fireEvent.click(renameBtn);
+
+    // Input field should now be present for inline renaming
+    expect(screen.getByTitle('Simpan nama')).toBeInTheDocument();
+  });
+});

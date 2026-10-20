@@ -1,19 +1,19 @@
 {
   "name": "ruang-tenang-kampus",
   "private": true,
-  "version": "3.3.1",
+  "version": "3.4.0",
   "type": "module",
   "engines": {
     "node": ">=22.12.0"
   },
   "scripts": {
-    "dev": "node scripts/prismaGenerate.js && tsx server.ts",
+    "dev": "node scripts/prismaGenerate.js && tsx watch server.ts",
     "build": "vite build && esbuild server.ts --bundle --platform=node --format=esm --packages=external --sourcemap --outfile=dist/server.mjs",
-    "build:production": "vite build && esbuild server.ts --bundle --platform=node --format=esm --packages=external --sourcemap --outfile=dist/server.mjs",
+    "build:production": "vite build && esbuild server.ts --bundle --platform=node --format=esm --packages=external --outfile=dist/server.mjs && esbuild server/scripts/backupTool.ts --bundle --platform=node --format=esm --packages=external --outfile=dist/backupTool.mjs && esbuild scripts/rehearseEncryptedBackup.ts --bundle --platform=node --format=esm --packages=external --outfile=dist/rehearseEncryptedBackup.mjs",
     "start": "node dist/server.mjs",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint .",
+    "lint": "eslint . --ignore-pattern tmp/**",
     "test": "node scripts/prismaGenerate.js && vitest run --fileParallelism=false",
     "test:unit": "node scripts/prismaGenerate.js && vitest run src/__tests__/unit server/__tests__/unit --fileParallelism=false",
     "audit:screening-severity": "tsx scripts/auditScreeningSeverity.ts",
@@ -22,6 +22,7 @@
     "test:security": "node scripts/prismaGenerate.js && vitest run src/__tests__/security server/__tests__/security --fileParallelism=false",
     "test:e2e": "playwright test",
     "db:backup": "tsx server/scripts/backupTool.ts",
+    "db:backup:rehearse": "tsx scripts/rehearseEncryptedBackup.ts",
     "db:generate:sqlite": "prisma generate --schema prisma/schema.sqlite.prisma",
     "db:generate:postgres": "prisma generate --schema prisma/schema.postgres.prisma",
     "db:push:sqlite": "npx prisma db push --schema prisma/schema.sqlite.prisma",
@@ -38,10 +39,16 @@
     "test:smoke": "tsx scripts/smokeTest.ts"
   },
   "dependencies": {
+    "@fontsource-variable/lora": "^5.3.0",
+    "@fontsource-variable/plus-jakarta-sans": "^5.3.0",
     "@google/genai": "^2.15.0",
     "@prisma/client": "6",
     "@tailwindcss/typography": "^0.5.20",
     "@tailwindcss/vite": "^4.1.14",
+    "@tiptap/extension-table": "^3.32.0",
+    "@tiptap/markdown": "^3.32.0",
+    "@tiptap/react": "^3.32.0",
+    "@tiptap/starter-kit": "^3.32.0",
     "@vitejs/plugin-react": "^5.0.4",
     "bcryptjs": "^3.0.3",
     "compression": "^1.8.1",
@@ -102,7 +109,7 @@
     "@types/react-dom": "^19.3.0",
     "@types/supertest": "^7.2.1",
     "autoprefixer": "^10.4.21",
-    "esbuild": "^0.25.0",
+    "esbuild": "^0.28.2",
     "eslint": "^9.21.0",
     "eslint-plugin-jsx-a11y": "^6.10.2",
     "eslint-plugin-react": "^7.37.4",
@@ -123,6 +130,11 @@
   "overrides": {
     "pptxgenjs": {
       "image-size": "^2.0.4"
-    }
+    },
+    "deepmerge-ts": "8.0.2",
+    "postcss-selector-parser": "7.1.6",
+    "uuid": "11.1.1",
+    "argparse": "3.0.2",
+    "sprintf-js": "1.1.3"
   }
 }

@@ -266,15 +266,12 @@ describe('Phase 6: Comprehensive AI Context Isolation & Data Boundary Enforcemen
     }
   });
 
-  it('8. Fallback AI model maintains exact privacy and consent parity', async () => {
+  it('8. Rejects AI processing when the user has not provided consent', async () => {
     // User without AI consent
-    const pipelineResNoConsent = await aiSafetyService.runUnifiedPipeline({
+    await expect(aiSafetyService.runUnifiedPipeline({
       userId: userA,
       input: 'Halo, bisakah bantu aku?',
       isStreaming: false
-    });
-
-    expect(pipelineResNoConsent.isConsentFallback).toBe(true);
-    expect(pipelineResNoConsent.modelUsed).toContain('fallback');
+    })).rejects.toMatchObject({ category: 'AI_CONSENT_REQUIRED', retryable: false });
   });
 });

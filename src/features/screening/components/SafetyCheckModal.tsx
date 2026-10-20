@@ -68,7 +68,7 @@ export const SafetyCheckModal: React.FC<SafetyCheckModalProps> = ({
   return (
     <AnimatePresence>
       {isOpen && (
-        <motion.div 
+        <motion.div
           key="safety-backdrop"
           initial="hidden"
           animate="visible"
@@ -76,7 +76,7 @@ export const SafetyCheckModal: React.FC<SafetyCheckModalProps> = ({
           variants={shouldReduceMotion ? reducedMotionVariants : modalBackdropVariants}
           className="fixed inset-0 z-[60] bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4"
         >
-          <motion.div 
+          <motion.div
             key="safety-panel"
             ref={panelRef}
             initial="hidden"
@@ -93,9 +93,9 @@ export const SafetyCheckModal: React.FC<SafetyCheckModalProps> = ({
         <div className="flex items-start gap-2.5 bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900 p-3 rounded-lg text-rose-950 dark:text-rose-200">
           <ShieldAlert className="w-5 h-5 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
           <div>
-            <h3 id="safety-check-title" className="font-semibold text-xs sm:text-sm text-rose-900 dark:text-rose-300">Prosedur Keselamatan (Safety Check)</h3>
+            <h3 id="safety-check-title" className="font-semibold text-xs sm:text-sm text-rose-900 dark:text-rose-300">Pertanyaan keselamatan tambahan</h3>
             <p id="safety-check-description" className="text-[11px] text-rose-800 dark:text-rose-400 leading-relaxed mt-0.5">
-              Jawaban pada pertanyaan ke-9 menunjukkan adanya pikiran menyakiti diri. Keselamatan dan kesehatan emosionalmu adalah prioritas utama kami.
+              Jawabanmu menunjukkan bahwa pikiran bahwa lebih baik mati atau ingin menyakiti diri mungkin muncul dalam dua minggu terakhir. Jawaban ini tidak memberi tahu apakah kamu sedang dalam bahaya saat ini.
             </p>
           </div>
         </div>
@@ -197,7 +197,7 @@ export const SafetyCheckModal: React.FC<SafetyCheckModalProps> = ({
           <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 p-3 rounded-lg space-y-2">
             <div className="flex items-center gap-1.5 font-medium text-amber-900 dark:text-amber-200 text-xs">
               <PhoneCall className="w-3.5 h-3.5 text-amber-600" />
-              <span>Dukungan psikologis awal (24 jam; antrean dapat penuh):</span>
+              <span>Dukungan psikologis awal (periksa jam layanan resmi; antrean dapat penuh):</span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
               {EMERGENCY_CONTACTS.filter(contact => contact.availabilityStatus === 'ACTIVE').map((contact) => (

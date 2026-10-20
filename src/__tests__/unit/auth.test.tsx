@@ -6,6 +6,7 @@ import { AuthProvider, useAuth } from '../../contexts/AuthContext';
 import { apiClient } from '../../lib/apiClient';
 
 vi.mock('../../lib/apiClient', () => ({
+  AUTH_SESSION_INVALIDATED_EVENT: 'rt-auth-session-invalidated',
   apiClient: {
     get: vi.fn(),
     post: vi.fn()
@@ -163,4 +164,3 @@ describe('HttpOnly Cookie Auth Lifecycle & Bootstrap Tests', () => {
     expect(currentUser?.role).toBe('guest');
   });
 });
-

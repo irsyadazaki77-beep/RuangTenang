@@ -6,7 +6,7 @@ test.describe('Aurora 2.1 Baseline Visual Capture & Diagnostics', () => {
   test('Capture Ruang Tenang & Ruang Kerja baseline states', async ({ page }, testInfo) => {
     test.setTimeout(90_000);
     const capture = async (name: string) => {
-      const directory = path.join('test-artifacts', 'baseline', testInfo.project.name);
+      const directory = path.join(process.env.E2E_ARTIFACTS_DIR || 'test-artifacts', 'baseline', testInfo.project.name);
       await mkdir(directory, { recursive: true });
       await page.screenshot({ path: path.join(directory, `${name}.png`), animations: 'disabled' });
     };

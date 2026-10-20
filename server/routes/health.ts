@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../database.js';
+import { isProductionLikeEnvironment } from '../config/environment.js';
 
 const router = Router();
 
@@ -25,7 +26,7 @@ router.get('/readiness', async (req: Request, res: Response) => {
     res.status(503).json({
       status: 'error',
       database: 'disconnected',
-      message: process.env.NODE_ENV === 'production' ? 'Service Unavailable' : error.message,
+      message: isProductionLikeEnvironment() ? 'Service Unavailable' : error.message,
       timestamp: new Date().toISOString()
     });
   }

@@ -4,6 +4,7 @@ import { aiSafetyService } from '../../services/ai/aiSafetyService.js';
 import { prisma } from '../../database.js';
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 
 describe('Attachment Context RuangTenang Security & Upload Verification', () => {
   const testUserId = `usr_test_${Date.now()}`;
@@ -75,7 +76,24 @@ describe('Attachment Context RuangTenang Security & Upload Verification', () => 
     await expect(
       attachmentStorageService.getAttachmentForUser(validAttachmentId, otherUserId)
     ).rejects.toThrow(/UNAUTHORIZED_ACCESS/);
-  });
+  }, 15000);
+
+  it('isolates guest attachments by opaque per-browser owner identifiers', async () => {
+    const ownerA = `guest:${crypto.randomBytes(32).toString('hex')}`;
+    const ownerB = `guest:${crypto.randomBytes(32).toString('hex')}`;
+    const png = Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D]);
+    const attachment = await attachmentStorageService.saveAttachment({
+      userId: ownerA,
+      buffer: png,
+      originalFilename: 'guest_private.png',
+      clientMime: 'image/png'
+    });
+
+    expect((await attachmentStorageService.getAttachmentForUser(attachment.id, ownerA))?.attachment.id).toBe(attachment.id);
+    await expect(attachmentStorageService.getAttachmentForUser(attachment.id, ownerB)).rejects.toThrow(/UNAUTHORIZED_ACCESS/);
+    await expect(attachmentStorageService.getAttachmentForUser(attachment.id, 'guest')).rejects.toThrow(/UNAUTHORIZED_ACCESS/);
+    await attachmentStorageService.deleteAttachment(attachment.id, ownerA);
+  }, 15000);
 
   it('5. Should sanitize malicious filenames and path traversal sequences', () => {
     const maliciousNames = [

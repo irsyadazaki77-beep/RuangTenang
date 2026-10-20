@@ -9,10 +9,12 @@ type Panel = 'data' | 'profile' | 'analysis' | 'transform';
 
 const valueText = (value: unknown) => value === null || value === undefined ? '' : typeof value === 'object' ? JSON.stringify(value) : String(value);
 
-export const WorkspaceFilePreviewModal: React.FC<Props> = ({ attachmentId, onClose, onArtifactCreated }) => {
+const WorkspaceFilePreviewContent: React.FC<Props> = ({ attachmentId, onClose, onArtifactCreated }) => {
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const onCloseRef = useRef(onClose);
+  const sheetGenerationRef = useRef(0);
+  const tableRequestControllerRef = useRef<AbortController | null>(null);
   onCloseRef.current = onClose;
   const [preview, setPreview] = useState<WorkspaceAttachmentPreviewDto | null>(null);
   const [dataset, setDataset] = useState<TabularDataset | null>(null);
@@ -66,53 +68,82 @@ export const WorkspaceFilePreviewModal: React.FC<Props> = ({ attachmentId, onClo
   }, [attachmentId]);
 
   useEffect(() => {
+    const generation = ++sheetGenerationRef.current;
     const controller = new AbortController();
+    tableRequestControllerRef.current?.abort();
+    tableRequestControllerRef.current = controller;
     setPreview(null); setDataset(null); setTable(null); setError(null); setAnalysis(null);
     void WorkspaceApiService.fetchAttachmentPreview(attachmentId, controller.signal).then(async value => {
-      if (controller.signal.aborted) return;
+      if (controller.signal.aborted || generation !== sheetGenerationRef.current) return;
       setPreview(value);
       if (value.fileKind === 'csv' || value.fileKind === 'xlsx') {
-        const profile = await WorkspaceApiService.fetchTabularDataset(attachmentId, undefined, controller.signal);
-        if (controller.signal.aborted) return;
+        const overview = await WorkspaceApiService.fetchTabularDatasetOverview(attachmentId, undefined, controller.signal);
+        if (controller.signal.aborted || generation !== sheetGenerationRef.current) return;
+        const profile = overview.dataset;
         setDataset(profile);
+        setTable(overview.preview);
         const defaultNumber = profile.columns.find(item => ['number', 'integer', 'currency', 'percentage'].includes(item.inferredType));
         setColumn(defaultNumber?.name || '');
         const firstCategory = profile.columns.find(item => item.name !== defaultNumber?.name && ['string', 'boolean', 'date'].includes(item.inferredType));
         setGroupBy(firstCategory?.name || '');
-        const firstSheet = profile.sheetName || profile.activeSheet;
-        const rows = await WorkspaceApiService.fetchTabularPreview(attachmentId, firstSheet, 0, controller.signal);
-        if (!controller.signal.aborted) setTable(rows);
       }
     }).catch(reason => {
-      if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : 'Preview tidak tersedia.');
+      if (!controller.signal.aborted && generation === sheetGenerationRef.current) setError(reason instanceof Error ? reason.message : 'Preview tidak tersedia.');
+    }).finally(() => {
+      if (tableRequestControllerRef.current === controller) tableRequestControllerRef.current = null;
     });
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      if (tableRequestControllerRef.current === controller) tableRequestControllerRef.current = null;
+      sheetGenerationRef.current += 1;
+    };
   }, [attachmentId]);
 
   const selectSheet = async (sheetName: string) => {
+    const generation = ++sheetGenerationRef.current;
+    tableRequestControllerRef.current?.abort();
+    const controller = new AbortController();
+    tableRequestControllerRef.current = controller;
     setOffset(0); setTable(null); setAnalysis(null);
+    setError(null); setAnalysisError(null); setTransformError(null); setTransformPreview(null); setDerivedArtifact(null); setSavedAnalysis(false);
     try {
-      const [profile, rows] = await Promise.all([
-        WorkspaceApiService.fetchTabularDataset(attachmentId, sheetName),
-        WorkspaceApiService.fetchTabularPreview(attachmentId, sheetName, 0)
-      ]);
-      setDataset(profile); setTable(rows); setTransformPreview(null); setDerivedArtifact(null); setShowQuality(false);
+      const overview = await WorkspaceApiService.fetchTabularDatasetOverview(attachmentId, sheetName, controller.signal);
+      if (controller.signal.aborted || generation !== sheetGenerationRef.current) return;
+      const profile = overview.dataset;
+      setDataset(profile); setTable(overview.preview); setTransformPreview(null); setDerivedArtifact(null); setShowQuality(false);
       const numeric = profile.columns.find(item => ['number', 'integer', 'currency', 'percentage'].includes(item.inferredType));
       setColumn(numeric?.name || '');
       setGroupBy(profile.columns.find(item => item.name !== numeric?.name && ['string', 'boolean', 'date'].includes(item.inferredType))?.name || '');
-    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Sheet gagal dimuat.'); }
+      setFilterColumn(''); setFilterValue(''); setFilterValueTo(''); setFillColumn(''); setDateColumn(''); setNumberColumn('');
+      setAnalyzing(false); setAnalysisError(null); setTransformError(null);
+    } catch (reason) {
+      if (!controller.signal.aborted && generation === sheetGenerationRef.current) setError(reason instanceof Error ? reason.message : 'Sheet gagal dimuat.');
+    } finally {
+      if (tableRequestControllerRef.current === controller) tableRequestControllerRef.current = null;
+    }
   };
 
   const movePage = async (nextOffset: number) => {
     if (!dataset) return;
+    const generation = sheetGenerationRef.current;
+    tableRequestControllerRef.current?.abort();
+    const controller = new AbortController();
+    tableRequestControllerRef.current = controller;
     const bounded = Math.max(0, Math.min(Math.max(0, dataset.rowCount - 1), nextOffset));
-    setOffset(bounded); setTable(null);
-    try { setTable(await WorkspaceApiService.fetchTabularPreview(attachmentId, dataset.sheetName || dataset.activeSheet, bounded)); }
-    catch (reason) { setError(reason instanceof Error ? reason.message : 'Halaman data gagal dimuat.'); }
+    setOffset(bounded); setTable(null); setError(null);
+    try {
+      const page = await WorkspaceApiService.fetchTabularPreview(attachmentId, dataset.sheetName || dataset.activeSheet, bounded, controller.signal);
+      if (!controller.signal.aborted && generation === sheetGenerationRef.current) setTable(page);
+    } catch (reason) {
+      if (!controller.signal.aborted && generation === sheetGenerationRef.current) setError(reason instanceof Error ? reason.message : 'Halaman data gagal dimuat.');
+    } finally {
+      if (tableRequestControllerRef.current === controller) tableRequestControllerRef.current = null;
+    }
   };
 
   const runAnalysis = async () => {
     if (!dataset) return;
+    const generation = sheetGenerationRef.current;
     const valueRequired = filterColumn && !['is_empty', 'is_not_empty'].includes(filterOperation);
     if (valueRequired && !filterValue.trim()) { setAnalysisError('Isi nilai filter sebelum menjalankan analisis.'); return; }
     if (filterOperation === 'between' && !filterValueTo.trim()) { setAnalysisError('Isi batas atas filter rentang.'); return; }
@@ -121,9 +152,10 @@ export const WorkspaceFilePreviewModal: React.FC<Props> = ({ attachmentId, onClo
       const filters: TabularAnalysisRequest['filters'] = filterColumn ? [{ column: filterColumn, operation: filterOperation, ...(!['is_empty', 'is_not_empty'].includes(filterOperation) ? { value: filterValue } : {}), ...(filterOperation === 'between' ? { valueTo: filterValueTo } : {}) }] : [];
       const groupedDate = Boolean(groupBy && dataset.columns.find(item => item.name === groupBy)?.inferredType === 'date');
       const plan: TabularAnalysisRequest = { sheetName: dataset.sheetName, ...(groupBy ? { groupBy } : {}), ...(groupedDate && dateBucket ? { dateBucket } : {}), ...(aggregation !== 'count' && column ? { column } : {}), aggregation, filters, limit: 100 };
-      setAnalysis(await WorkspaceApiService.analyzeTabularDataset(attachmentId, plan));
-    } catch (reason) { setAnalysisError(reason instanceof Error ? reason.message : 'Analisis gagal dijalankan.'); }
-    finally { setAnalyzing(false); }
+      const result = await WorkspaceApiService.analyzeTabularDataset(attachmentId, plan);
+      if (generation === sheetGenerationRef.current) setAnalysis(result);
+    } catch (reason) { if (generation === sheetGenerationRef.current) setAnalysisError(reason instanceof Error ? reason.message : 'Analisis gagal dijalankan.'); }
+    finally { if (generation === sheetGenerationRef.current) setAnalyzing(false); }
   };
 
   const saveAnalysisArtifact = async (asChart = false) => {
@@ -185,7 +217,7 @@ export const WorkspaceFilePreviewModal: React.FC<Props> = ({ attachmentId, onClo
         {(['data', 'profile', 'analysis', 'transform'] as Panel[]).map(item => <button key={item} type="button" onClick={() => setPanel(item)} aria-pressed={panel === item} className={`rounded-t-lg px-3 py-2 text-xs font-semibold ${panel === item ? 'border-b-2 border-emerald-600 text-emerald-700 dark:text-emerald-300' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}>
           {item === 'data' ? <><Table2 className="mr-1.5 inline h-3.5 w-3.5" />Data</> : item === 'profile' ? 'Profile' : item === 'analysis' ? <><BarChart3 className="mr-1.5 inline h-3.5 w-3.5" />Analisis</> : <><WandSparkles className="mr-1.5 inline h-3.5 w-3.5" />Transformasi</>}
         </button>)}
-        {dataset.sheets.length > 1 && <label className="ml-auto flex items-center gap-2 pb-2 text-[11px] text-slate-500">Sheet<select aria-label="Pilih sheet" value={dataset.sheetName || dataset.activeSheet} onChange={event => void selectSheet(event.target.value)} className="max-w-48 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100">{dataset.sheets.map(sheet => <option key={sheet.name} value={sheet.name}>{sheet.name}{sheet.empty ? ' (kosong)' : ''}</option>)}</select></label>}
+        {dataset.sheets.length > 1 && <label className="ml-auto flex items-center gap-2 pb-2 text-[11px] text-slate-500">Sheet<select aria-label="Pilih sheet" disabled={transforming || analyzing} value={dataset.sheetName || dataset.activeSheet} onChange={event => void selectSheet(event.target.value)} className="max-w-48 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-800 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100">{dataset.sheets.map(sheet => <option key={sheet.name} value={sheet.name}>{sheet.name}{sheet.empty ? ' (kosong)' : ''}</option>)}</select></label>}
       </div>}
       <div className="min-h-0 flex-1 overflow-auto p-4">
         {!preview && !error && <div className="flex min-h-40 items-center justify-center gap-2 text-xs text-slate-500"><LoaderCircle className="h-4 w-4 animate-spin" />Memuat preview…</div>}
@@ -212,8 +244,47 @@ export const WorkspaceFilePreviewModal: React.FC<Props> = ({ attachmentId, onClo
             {derivedArtifact ? <p className="mt-3 text-xs font-medium text-emerald-800 dark:text-emerald-300">Dataset turunan tersimpan di Canvas: {derivedArtifact.title}</p> : <button type="button" disabled={transforming} onClick={() => void confirmTransform()} className="mt-3 rounded-lg border border-emerald-700 px-3 py-2 text-xs font-semibold text-emerald-800 hover:bg-emerald-50 disabled:opacity-50 dark:text-emerald-300 dark:hover:bg-emerald-950/40">{transforming ? 'Membuat dataset…' : 'Konfirmasi dan buat dataset turunan'}</button>}
           </div>}
         </div>}
-        {preview && !tabular && <pre className="whitespace-pre-wrap break-words font-sans text-xs leading-6 text-slate-700 dark:text-slate-200">{preview.previewText || 'Tidak ada teks yang dapat ditampilkan untuk file ini.'}{preview.previewText.length >= 20_000 ? '\n\n— Preview dibatasi hingga 20.000 karakter —' : ''}</pre>}
+        {preview && !tabular && (
+          <div className="space-y-3">
+            {(preview.ocrApplied || preview.previewOnly || (preview.extractionWarnings && preview.extractionWarnings.length > 0)) && (
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-indigo-200/80 bg-indigo-50/60 px-3.5 py-2.5 text-xs text-indigo-900 dark:border-indigo-900/60 dark:bg-indigo-950/30 dark:text-indigo-200">
+                <div className="space-y-0.5">
+                  <p className="font-semibold">
+                    {preview.ocrApplied
+                      ? `Ekstraksi Teks OCR Multimodal Aktif${preview.ocrConfidence ? ` · Keyakinan ${Math.round(preview.ocrConfidence * 100)}%` : ''}`
+                      : 'Mode Pratinjau Visual / Dokumen Pindaian'}
+                  </p>
+                  {preview.readingUncertainty && <p className="text-[11px] text-amber-700 dark:text-amber-300">{preview.readingUncertainty}</p>}
+                  {preview.extractionWarnings && preview.extractionWarnings.length > 0 && (
+                    <p className="text-[11px] text-slate-600 dark:text-slate-300">{preview.extractionWarnings.join(' · ')}</p>
+                  )}
+                </div>
+              </div>
+            )}
+            {preview.fileKind === 'image' && (
+              <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50 p-3 text-center dark:border-slate-800 dark:bg-slate-950">
+                <img
+                  src={`/api/v1/chat/attachments/${encodeURIComponent(preview.id)}`}
+                  alt={preview.filename}
+                  className="mx-auto max-h-96 rounded-lg object-contain shadow-xs"
+                />
+              </div>
+            )}
+            <pre className="whitespace-pre-wrap break-words font-sans text-xs leading-6 text-slate-700 dark:text-slate-200">
+              {preview.previewText || (preview.fileKind === 'image'
+                ? preview.visualAnalysisAvailable
+                  ? 'Berkas gambar tersedia untuk pratinjau; ekstraksi teks belum berhasil.'
+                  : 'Berkas hanya tersedia untuk pratinjau. Provider OCR visual tidak tersedia pada konfigurasi saat ini.'
+                : 'Tidak ada teks yang dapat ditampilkan untuk file ini.')}
+              {preview.previewText.length >= 20_000 ? '\n\n— Preview dibatasi hingga 20.000 karakter —' : ''}
+            </pre>
+          </div>
+        )}
       </div>
     </section>
   </div>;
 };
+
+export const WorkspaceFilePreviewModal: React.FC<Props> = props => (
+  <WorkspaceFilePreviewContent key={props.attachmentId} {...props} />
+);

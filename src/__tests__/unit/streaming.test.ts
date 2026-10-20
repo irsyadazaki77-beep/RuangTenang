@@ -46,6 +46,88 @@ describe('Chat Streaming Client & Race Condition Tests', () => {
     expect(onMessageComplete).toHaveBeenCalledWith('Halo dunia!');
   });
 
+  it('announces a created chat when its completion event also contains sources', async () => {
+    const encoder = new TextEncoder();
+    const body = new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text: 'Jawaban' })}\n\n`));
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ done: true, chatId: 'chat-new', sources: [] })}\n\n`));
+        controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+        controller.close();
+      }
+    });
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, body });
+
+    const onChatCreated = vi.fn();
+    const onSources = vi.fn();
+    const client = new ChatStreamingClient();
+    await client.stream({ message: 'Hai' }, { onChatCreated, onSources });
+
+    expect(onChatCreated).toHaveBeenCalledOnce();
+    expect(onChatCreated).toHaveBeenCalledWith('chat-new');
+    expect(onSources).toHaveBeenCalledWith([]);
+  });
+
+  it('surfaces the consent-required signal separately from the local notice text', async () => {
+    const encoder = new TextEncoder();
+    const body = new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'consent_required', code: 'AI_CONSENT_REQUIRED' })}\n\n`));
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text: 'Persetujuan belum aktif.' })}\n\n`));
+        controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+        controller.close();
+      }
+    });
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, body });
+
+    const onConsentRequired = vi.fn();
+    const onChunk = vi.fn();
+    const client = new ChatStreamingClient();
+    await client.stream({ message: 'Hai' }, { onConsentRequired, onChunk });
+
+    expect(onConsentRequired).toHaveBeenCalledOnce();
+    expect(onChunk).toHaveBeenCalledWith('Persetujuan belum aktif.');
+  });
+
+  it('opens the consent flow when an older server only returns the local consent notice', async () => {
+    const encoder = new TextEncoder();
+    const body = new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text: 'Persetujuan pemrosesan AI belum aktif, jadi pesan ini tidak dikirim ke penyedia AI.' })}\n\n`));
+        controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+        controller.close();
+      }
+    });
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, body });
+
+    const onConsentRequired = vi.fn();
+    const client = new ChatStreamingClient();
+    await client.stream({ message: 'Hai' }, { onConsentRequired });
+
+    expect(onConsentRequired).toHaveBeenCalledOnce();
+  });
+
+  it('reports EOF before the done marker as a failed, retryable response', async () => {
+    const encoder = new TextEncoder();
+    const onChunk = vi.fn();
+    const onMessageComplete = vi.fn();
+    const onError = vi.fn();
+    const body = new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text: 'Potongan belum lengkap' })}\n\n`));
+        controller.close();
+      }
+    });
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, body });
+
+    const client = new ChatStreamingClient();
+    await client.stream({ message: 'Analisis ini' }, { onChunk, onMessageComplete, onError });
+
+    expect(onChunk).toHaveBeenCalledWith('Potongan belum lengkap');
+    expect(onMessageComplete).not.toHaveBeenCalled();
+    expect(onError).toHaveBeenCalledWith(expect.stringContaining('Respons terputus sebelum selesai'));
+  });
+
   it('handles race condition: start stream 1 -> abort -> start stream 2 with only stream 2 output retained', async () => {
     const stream1Chunks: string[] = [];
     const stream2Chunks: string[] = [];

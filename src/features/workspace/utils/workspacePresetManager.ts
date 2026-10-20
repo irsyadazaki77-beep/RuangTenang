@@ -1,10 +1,10 @@
-import type { 
-  WorkspaceAiPreset, 
-  PresetId, 
+import type {
+  WorkspaceAiPreset,
+  PresetId,
   UserPersonalizationPreferences,
   PresetSelectionSnapshot
 } from '../../../lib/aiPresets';
-import { AUTO_ROUTING_MODEL_ID } from '../../../lib/aiModels';
+import { AUTO_ROUTING_MODEL_ID, isKerjaProfile } from '../../../lib/aiModels';
 import { DEFAULT_PRESET_ID } from '../constants/presetConstants';
 import { safeLocalStorage } from '../../../lib/storage';
 import { getCachedAiModelCatalog } from '../../../lib/aiModelCatalog';
@@ -83,7 +83,7 @@ export function validateCustomPreset(
     const trimmedModel = raw.preferredModelId.trim();
     if (trimmedModel !== AUTO_ROUTING_MODEL_ID) {
       const catalog = getCachedAiModelCatalog();
-      if (catalog && !catalog.models.some(m => m.id === trimmedModel)) {
+      if (!isKerjaProfile(trimmedModel) && catalog && !catalog.models.some(m => m.id === trimmedModel)) {
         return { valid: false, error: `Model "${trimmedModel}" tidak ditemukan dalam katalog.` };
       }
       preferredModelId = trimmedModel;

@@ -5,6 +5,7 @@
 
 import crypto from 'crypto';
 import { resolveDatabaseConfiguration } from './databaseConfig.js';
+import { isLocalDevelopmentOrTest, isProductionLikeEnvironment } from './environment.js';
 
 const KNOWN_INSECURE_DEMO_SECRETS = [
   'secret-key-123',
@@ -57,22 +58,13 @@ export function isKnownInsecureDemoSecret(secret?: string): boolean {
 }
 
 export function validateEnvironment(): void {
-  const isProd = process.env.NODE_ENV === 'production';
+  const isProd = isProductionLikeEnvironment();
 
   const jwtSecret = process.env.JWT_SECRET;
   const encryptionKey = process.env.ENCRYPTION_KEY || process.env.DATA_ENCRYPTION_KEY || process.env.ENCRYPTION_SECRET;
   const blindIndexSecret = process.env.BLIND_INDEX_SECRET;
 
   if (isProd) {
-    const configuredOrigins = [process.env.APP_ORIGIN, process.env.CORS_ALLOWED_ORIGINS]
-      .filter(Boolean)
-      .join(',')
-      .split(',')
-      .map(origin => origin.trim());
-    if (configuredOrigins.includes('*')) {
-      throw new Error('FATAL SECURITY ERROR: Wildcard CORS origins are not allowed in production');
-    }
-
     if (!jwtSecret) {
       throw new Error('FATAL SECURITY ERROR: JWT_SECRET environment variable is missing');
     }
@@ -106,6 +98,14 @@ export function validateEnvironment(): void {
       throw new Error('FATAL SECURITY ERROR: Insecure demo BLIND_INDEX_SECRET detected in production');
     }
 
+    const backupKey = process.env.BACKUP_ENCRYPTION_KEY;
+    if (!backupKey || !/^[0-9a-fA-F]{64}$/.test(backupKey)) {
+      throw new Error('FATAL SECURITY ERROR: BACKUP_ENCRYPTION_KEY must be a dedicated 32-byte hex key.');
+    }
+    if ([jwtSecret, encryptionKey, blindIndexSecret].some(key => key === backupKey)) {
+      throw new Error('FATAL SECURITY ERROR: Backup encryption key must be independent from application keys.');
+    }
+
     // TURN Server Config validation in production
     const turnUrl = process.env.TURN_URL;
     const turnUser = process.env.TURN_USERNAME;
@@ -123,8 +123,22 @@ export function validateEnvironment(): void {
         throw new Error('FATAL SECURITY ERROR: Static or insecure TURN credentials are not allowed in production; use TURN_SHARED_SECRET');
       }
     }
-  } else {
-    // Local development/test or Preview: safely set development test fixtures if completely unset
+
+    const configuredOrigins = [process.env.APP_ORIGIN, process.env.CORS_ALLOWED_ORIGINS]
+      .flatMap(value => (value || '').split(',').map(origin => origin.trim()).filter(Boolean));
+    if (configuredOrigins.includes('*')) {
+      throw new Error('FATAL SECURITY ERROR: Wildcard CORS origins are not allowed outside development/test');
+    }
+    if (!configuredOrigins.length) throw new Error('FATAL SECURITY ERROR: APP_ORIGIN or CORS_ALLOWED_ORIGINS is required outside development/test');
+    for (const origin of configuredOrigins) {
+      let parsed: URL;
+      try { parsed = new URL(origin); } catch { throw new Error('FATAL SECURITY ERROR: CORS origins must be exact absolute origins'); }
+      if (!['http:', 'https:'].includes(parsed.protocol) || parsed.origin !== origin || parsed.pathname !== '/' || parsed.search || parsed.hash) {
+        throw new Error('FATAL SECURITY ERROR: CORS origins must be exact scheme/host/port origins');
+      }
+    }
+  } else if (isLocalDevelopmentOrTest()) {
+    // Fixed defaults are restricted to explicit local development and test.
     if (!process.env.JWT_SECRET) {
       process.env.JWT_SECRET = 'dev-only-jwt-secret-ruangtenang-key-32chars';
     }
@@ -143,7 +157,7 @@ export function validateEnvironment(): void {
 }
 
 export function getValidatedJwtSecret(): string {
-  const isProd = process.env.NODE_ENV === 'production';
+  const isProd = isProductionLikeEnvironment();
 
   let secret = process.env.JWT_SECRET;
   if (isProd) {
@@ -155,6 +169,7 @@ export function getValidatedJwtSecret(): string {
     }
   }
   if (!secret) {
+    if (!isLocalDevelopmentOrTest()) throw new Error('FATAL SECURITY ERROR: JWT_SECRET is required outside development/test');
     secret = 'dev-only-jwt-secret-ruangtenang-key-32chars';
     process.env.JWT_SECRET = secret;
   }
@@ -162,7 +177,7 @@ export function getValidatedJwtSecret(): string {
 }
 
 export function getValidatedEncryptionKey(version: string = 'k1'): Buffer {
-  const isProd = process.env.NODE_ENV === 'production';
+  const isProd = isProductionLikeEnvironment();
 
   let rawKey: string | undefined;
   const upperVer = version.toUpperCase();
@@ -193,6 +208,7 @@ export function getValidatedEncryptionKey(version: string = 'k1'): Buffer {
   }
 
   if (!rawKey) {
+    if (!isLocalDevelopmentOrTest()) throw new Error('FATAL SECURITY ERROR: ENCRYPTION_KEY is required outside development/test');
     rawKey = 'dev-only-aes-encryption-key-ruangtenang-32chars';
     process.env.ENCRYPTION_KEY = rawKey;
     process.env.DATA_ENCRYPTION_KEY = rawKey;
@@ -230,7 +246,7 @@ export interface TurnConfig {
 export const TURN_CREDENTIAL_TTL_SECONDS = 10 * 60;
 
 export function getValidatedTurnConfig(): TurnConfig | null {
-  const isProd = process.env.NODE_ENV === 'production';
+  const isProd = isProductionLikeEnvironment();
 
   const turnUrl = process.env.TURN_URL;
   const turnUser = process.env.TURN_USERNAME;

@@ -33,7 +33,6 @@ log_header()  {
 # ------------------------------------------------------------------------------
 COMPOSE_FILE="docker-compose.prod.yml"
 ENV_FILE=".env.production"
-BACKUP_DIR="./backups"
 MAX_HEALTH_ATTEMPTS=30
 HEALTH_INTERVAL=2
 
@@ -60,54 +59,38 @@ if [ ! -f "$ENV_FILE" ]; then
     exit 1
 fi
 
-# Validate presence of critical secrets in .env.production
-REQUIRED_VARS=("JWT_SECRET" "ENCRYPTION_KEY" "BLIND_INDEX_SECRET" "DATABASE_URL" "POSTGRES_PASSWORD" "REDIS_PASSWORD")
-for var in "${REQUIRED_VARS[@]}"; do
-    if ! grep -q "^${var}=" "$ENV_FILE" || [ -z "$(grep "^${var}=" "$ENV_FILE" | cut -d '=' -f2-)" ]; then
-        log_error "Required environment variable '${var}' is missing or empty in '${ENV_FILE}'."
+# Production credentials are provided as mounted secret files, never as env values.
+REQUIRED_SECRET_PATHS=("JWT_SECRET_FILE" "ENCRYPTION_KEY_FILE" "BLIND_INDEX_SECRET_FILE" "BACKUP_ENCRYPTION_KEY_FILE" "DATABASE_URL_FILE" "POSTGRES_PASSWORD_FILE" "REDIS_PASSWORD_FILE")
+for var in "${REQUIRED_SECRET_PATHS[@]}"; do
+    secret_path=$(grep -E "^${var}=" "$ENV_FILE" | tail -n 1 | cut -d '=' -f2- | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'$//")
+    if [ -z "$secret_path" ] || [ ! -f "$secret_path" ]; then
+        log_error "Required mounted secret file configured by '${var}' is missing."
         exit 1
     fi
+    chmod 600 "$secret_path"
 done
 
-# Ensure backup directory exists
-mkdir -p "$BACKUP_DIR"
+bash scripts/initOptionalSecretFiles.sh
 log_success "Pre-flight checks passed."
 
 # ------------------------------------------------------------------------------
-# 2. Automated PostgreSQL Database Backup
+# 2. Build Multi-Stage Production Images
 # ------------------------------------------------------------------------------
-log_info "Step 2: Checking existing database state for backup..."
-
-DB_CONTAINER_NAME="ruangtenang_db_prod"
-if [ "$(docker ps -q -f name=${DB_CONTAINER_NAME})" ]; then
-    TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-    BACKUP_FILE="${BACKUP_DIR}/db_backup_${TIMESTAMP}.sql.gz"
-    log_info "Creating automated database snapshot: ${BACKUP_FILE}"
-    
-    # Safely source database credentials for pg_dump
-    POSTGRES_USER=$(grep "^POSTGRES_USER=" "$ENV_FILE" | cut -d '=' -f2- | tr -d ' "\047' || echo "ruangtenang_admin")
-    POSTGRES_DB=$(grep "^POSTGRES_DB=" "$ENV_FILE" | cut -d '=' -f2- | tr -d ' "\047' || echo "ruangtenang_prod")
-    
-    if docker exec -t "${DB_CONTAINER_NAME}" pg_dump -U "${POSTGRES_USER}" "${POSTGRES_DB}" | gzip > "${BACKUP_FILE}" && [ -s "${BACKUP_FILE}" ]; then
-        BACKUP_SIZE=$(ls -lh "${BACKUP_FILE}" | awk '{print $5}')
-        log_success "Database snapshot saved successfully (${BACKUP_FILE}, size: ${BACKUP_SIZE})."
-    else
-        log_error "Database backup failed or created an empty file! Halting deployment to prevent data loss."
-        exit 1
-    fi
-    
-    # Prune old backups keeping latest 10 snapshots
-    find "${BACKUP_DIR}" -name "db_backup_*.sql.gz" -type f -mtime +7 -delete 2>/dev/null || true
-else
-    log_info "Database container is not currently running. Skipping preliminary backup."
-fi
-
-# ------------------------------------------------------------------------------
-# 3. Build Multi-Stage Production Images
-# ------------------------------------------------------------------------------
-log_info "Step 3: Building production multi-stage container images..."
+log_info "Step 2: Building production multi-stage container images..."
 ${DOCKER_COMPOSE} build --pull
 log_success "Docker images built successfully."
+
+# ------------------------------------------------------------------------------
+# 3. Encrypted PostgreSQL Backup
+# ------------------------------------------------------------------------------
+DB_CONTAINER_NAME="ruangtenang_db_prod"
+if [ "$(docker ps -q -f name=${DB_CONTAINER_NAME})" ]; then
+    log_info "Step 3: Creating authenticated, encrypted PostgreSQL backup..."
+    ${DOCKER_COMPOSE} run --rm --no-deps web node dist/backupTool.mjs
+    log_success "Encrypted backup completed before migration."
+else
+    log_info "Database container is not running. Skipping the pre-deploy backup on first installation."
+fi
 
 # ------------------------------------------------------------------------------
 # 4. Launch Supporting Services & Execute Prisma Migrations
@@ -123,7 +106,7 @@ until [ "$(docker inspect -f '{{.State.Health.Status}}' ${DB_CONTAINER_NAME} 2>/
 done
 
 log_info "Executing Prisma database migrations (schema.postgres.prisma)..."
-${DOCKER_COMPOSE} run --rm --no-deps web npx prisma migrate deploy --schema prisma/schema.postgres.prisma
+${DOCKER_COMPOSE} run --rm --no-deps migrate
 log_success "Database migrations deployed successfully."
 
 # ------------------------------------------------------------------------------

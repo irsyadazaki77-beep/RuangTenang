@@ -7,7 +7,7 @@ import { validateAndInspectFile, VerifiedFileInfo } from './magicByteValidator.j
 import { DocumentExtractor } from './documentExtractor.js';
 import { normalizationService } from './normalizationService.js';
 import { chunkingService } from './chunkingService.js';
-import { DocumentProcessingException } from './fileTypes.js';
+import { DEFAULT_FILE_LIMITS, DocumentProcessingException } from './fileTypes.js';
 import { AttachmentResponseDTO, SupportedFileKind } from '../../../shared/contracts/files.js';
 
 import { aiSafetyService } from '../ai/aiSafetyService.js';
@@ -39,6 +39,10 @@ export const documentIngestionService = {
   async ingestFile(input: IngestFileInput): Promise<AttachmentResponseDTO> {
     const { userId, buffer, originalFilename, clientMime, chatId, messageId, abortSignal } = input;
 
+    if (!userId || userId === 'guest') {
+      throw new DocumentProcessingException('OWNERSHIP_ERROR', 'Sesi pemilik lampiran tidak tersedia.');
+    }
+
     if (abortSignal?.aborted) {
       throw new DocumentProcessingException('PROCESSING_ABORTED', 'Proses unggah berkas dibatalkan.');
     }
@@ -52,7 +56,7 @@ export const documentIngestionService = {
     // AI Safety Prompt Injection defense for plain text / markdown files
     if (verified.fileKind === 'text' || verified.fileKind === 'markdown') {
       const textContent = buffer.toString('utf8');
-      if (aiSafetyService.detectPromptInjection(textContent)) {
+      if (aiSafetyService.detectPromptInjectionInDocument(textContent)) {
         throw new DocumentProcessingException(
           'SECURITY_REJECTED',
           'Terdeteksi upaya prompt injection dalam isi berkas.'
@@ -88,6 +92,9 @@ export const documentIngestionService = {
         pageCount: meta.pageCount,
         slideCount: meta.slideCount,
         sheetCount: meta.sheetCount,
+        ocrApplied: Boolean(meta.ocrApplied),
+        visualAnalysisAvailable: Boolean(meta.visualAnalysisAvailable),
+        previewOnly: Boolean(meta.previewOnly),
         extractionWarnings: Array.isArray(meta.extractionWarnings) ? meta.extractionWarnings : undefined,
         createdAt: existing.createdAt.toISOString(),
         processedAt: existing.processedAt ? existing.processedAt.toISOString() : undefined
@@ -111,7 +118,7 @@ export const documentIngestionService = {
           id: attachmentId,
           messageId: messageId || null,
           chatId: chatId || null,
-          userId: userId || 'guest',
+          userId,
           filename: verified.sanitizedName,
           mimeType: verified.verifiedMime,
           size: verified.size,
@@ -133,31 +140,6 @@ export const documentIngestionService = {
       throw dbErr;
     }
 
-    // If image kind, mark ready immediately (preview_only) without text extraction
-    if (verified.fileKind === 'image') {
-      await prisma.attachments.update({
-        where: { id: attachmentId },
-        data: {
-          status: 'ready',
-          processedAt: new Date(),
-          metadata: JSON.stringify({ previewOnly: true })
-        }
-      });
-
-      return {
-        id: attachmentId,
-        filename: verified.sanitizedName,
-        mimeType: verified.verifiedMime,
-        fileKind: verified.fileKind,
-        size: verified.size,
-        status: 'ready',
-        url: `/api/v1/chat/attachments/${attachmentId}`,
-        checksum: verified.checksum,
-        createdAt: record.createdAt.toISOString(),
-        processedAt: new Date().toISOString()
-      };
-    }
-
     // 5. PROCESS: Execute format-aware extraction adapter
     const processingBuffer = Buffer.from(buffer);
     try {
@@ -176,7 +158,12 @@ export const documentIngestionService = {
       const normalized = normalizationService.normalizeDocument(extraction as any);
 
       // 7. CHUNK
-      const chunks = chunkingService.createChunks(normalized);
+      let chunkLimitReached = false;
+      const chunks = chunkingService.createChunks(normalized, () => { chunkLimitReached = true; });
+      const extractionWarnings = [
+        ...(extraction.extractionWarnings || []),
+        ...(chunkLimitReached ? [`Hanya ${DEFAULT_FILE_LIMITS.maxChunksPerDocument} bagian awal dokumen yang diindeks; sisanya tidak disertakan sebagai konteks AI.`] : [])
+      ];
 
       // 8. PERSIST CHUNKS & MARK READY
       if (chunks.length > 0) {
@@ -184,7 +171,7 @@ export const documentIngestionService = {
           data: chunks.map(c => ({
             id: c.id,
             attachmentId,
-            userId: userId || 'guest',
+            userId,
             chunkIndex: c.index,
             content: encryptionService.encryptRequiredSensitive(c.text),
             isEncrypted: true,
@@ -202,10 +189,13 @@ export const documentIngestionService = {
       }
 
       const metadataObj = {
+        visualAnalysisAvailable: Boolean(extraction.metadata?.visualAnalysisAvailable),
+        previewOnly: Boolean(extraction.metadata?.previewOnly),
+        ocrApplied: Boolean(extraction.metadata?.ocrApplied),
         pageCount: extraction.pageCount,
         slideCount: extraction.slideCount,
         sheetCount: extraction.sheetCount,
-        extractionWarnings: extraction.extractionWarnings || [],
+        extractionWarnings,
         chunkCount: chunks.length,
         extractedChars: normalized.normalizedFullText.length
       };
@@ -215,7 +205,7 @@ export const documentIngestionService = {
         data: {
           status: 'ready',
           processedAt: new Date(),
-          extractedText: encryptionService.encryptRequiredSensitive(normalized.normalizedFullText.substring(0, 10_000)),
+          extractedText: normalized.normalizedFullText.trim() ? encryptionService.encryptRequiredSensitive(normalized.normalizedFullText.substring(0, 10_000)) : null,
           isEncrypted: true,
           encryptionVersion: encryptionService.getCurrentKeyVersion(),
           metadata: JSON.stringify(metadataObj)
@@ -234,7 +224,10 @@ export const documentIngestionService = {
         pageCount: extraction.pageCount,
         slideCount: extraction.slideCount,
         sheetCount: extraction.sheetCount,
-        extractionWarnings: extraction.extractionWarnings,
+        extractionWarnings,
+        visualAnalysisAvailable: Boolean(extraction.metadata?.visualAnalysisAvailable),
+        previewOnly: Boolean(extraction.metadata?.previewOnly),
+        ocrApplied: Boolean(extraction.metadata?.ocrApplied),
         createdAt: updated.createdAt.toISOString(),
         processedAt: updated.processedAt ? updated.processedAt.toISOString() : undefined
       };
@@ -298,7 +291,7 @@ export const documentIngestionService = {
       throw new DocumentProcessingException('OWNERSHIP_ERROR', 'Dokumen tidak ditemukan.');
     }
 
-    if (attachment.userId !== userId && !(attachment.userId === 'guest' && userId === 'guest')) {
+    if (!userId || userId === 'guest' || attachment.userId === 'guest' || attachment.userId !== userId) {
       throw new DocumentProcessingException('OWNERSHIP_ERROR', 'Anda tidak memiliki hak akses ke dokumen ini.');
     }
     if (chatId && attachment.chatId !== chatId) {
@@ -377,14 +370,19 @@ export const documentIngestionService = {
       if (retryController.signal.aborted) throw new DocumentProcessingException('PROCESSING_ABORTED', 'Pemrosesan ulang dibatalkan.');
 
       const normalized = normalizationService.normalizeDocument(extraction as any);
-      const chunks = chunkingService.createChunks(normalized);
+      let chunkLimitReached = false;
+      const chunks = chunkingService.createChunks(normalized, () => { chunkLimitReached = true; });
+      const extractionWarnings = [
+        ...(extraction.extractionWarnings || []),
+        ...(chunkLimitReached ? [`Hanya ${DEFAULT_FILE_LIMITS.maxChunksPerDocument} bagian awal dokumen yang diindeks; sisanya tidak disertakan sebagai konteks AI.`] : [])
+      ];
 
       if (chunks.length > 0) {
         await prisma.documentChunks.createMany({
           data: chunks.map(c => ({
             id: c.id,
             attachmentId,
-            userId: userId || 'guest',
+            userId,
             chunkIndex: c.index,
             content: encryptionService.encryptRequiredSensitive(c.text),
             isEncrypted: true,
@@ -405,7 +403,7 @@ export const documentIngestionService = {
         pageCount: extraction.pageCount,
         slideCount: extraction.slideCount,
         sheetCount: extraction.sheetCount,
-        extractionWarnings: extraction.extractionWarnings || [],
+        extractionWarnings,
         chunkCount: chunks.length,
         extractedChars: normalized.normalizedFullText.length
       };
@@ -434,7 +432,10 @@ export const documentIngestionService = {
         pageCount: extraction.pageCount,
         slideCount: extraction.slideCount,
         sheetCount: extraction.sheetCount,
-        extractionWarnings: extraction.extractionWarnings,
+        ocrApplied: Boolean(extraction.metadata?.ocrApplied),
+        visualAnalysisAvailable: Boolean(extraction.metadata?.visualAnalysisAvailable),
+        previewOnly: Boolean(extraction.metadata?.previewOnly),
+        extractionWarnings,
         createdAt: updated.createdAt.toISOString(),
         processedAt: updated.processedAt?.toISOString()
       };
@@ -463,7 +464,7 @@ export const documentIngestionService = {
 
     if (!attachment) return false;
 
-    if (attachment.userId !== userId && !(attachment.userId === 'guest' && userId === 'guest')) {
+    if (!userId || userId === 'guest' || attachment.userId === 'guest' || attachment.userId !== userId) {
       throw new DocumentProcessingException('OWNERSHIP_ERROR', 'Anda tidak berhak menghapus berkas ini.');
     }
     if (chatId && attachment.chatId !== chatId) {
@@ -479,13 +480,17 @@ export const documentIngestionService = {
       throw new DocumentProcessingException('STORAGE_ERROR', 'Berkas fisik tidak dapat dihapus dengan aman.');
     }
 
-    // Cascade delete in Prisma deletes chunks and attachment record
+    // Delete chunks and attachment record. deleteMany makes concurrent deletes idempotent.
     await prisma.documentChunks.deleteMany({
       where: { attachmentId }
     });
 
-    await prisma.attachments.delete({
-      where: { id: attachmentId }
+    await prisma.attachments.deleteMany({
+      where: {
+        id: attachmentId,
+        userId,
+        ...(chatId ? { chatId } : {})
+      }
     });
 
     return true;
@@ -501,7 +506,7 @@ export const documentIngestionService = {
 
     if (!attachment) return null;
 
-    if (attachment.userId !== userId && !(attachment.userId === 'guest' && userId === 'guest')) {
+    if (!userId || userId === 'guest' || attachment.userId === 'guest' || attachment.userId !== userId) {
       throw new DocumentProcessingException('OWNERSHIP_ERROR', 'Akses tidak diizinkan.');
     }
     if (chatId && attachment.chatId !== chatId) return null;
@@ -521,6 +526,9 @@ export const documentIngestionService = {
       pageCount: meta.pageCount,
       slideCount: meta.slideCount,
       sheetCount: meta.sheetCount,
+      ocrApplied: Boolean(meta.ocrApplied),
+      visualAnalysisAvailable: Boolean(meta.visualAnalysisAvailable),
+      previewOnly: Boolean(meta.previewOnly),
       extractionWarnings: Array.isArray(meta.extractionWarnings) ? meta.extractionWarnings : undefined,
       errorMessage: attachment.processingError || undefined,
       createdAt: attachment.createdAt.toISOString(),

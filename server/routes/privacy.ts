@@ -10,6 +10,7 @@ import { exportLimiter, accountDeletionLimiter } from '../middleware/rateLimiter
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { prisma } from '../database.js';
+import { emailService } from '../services/emailService.js';
 
 const router = Router();
 
@@ -31,6 +32,7 @@ export const correctDataSchema = z.object({
   name: z.string().min(2).max(100).optional(),
   university: z.string().min(2).max(150).optional(),
   email: z.string().email().optional(),
+  currentPassword: z.string().min(1).optional(),
 }).strict();
 
 export const retentionPolicySchema = z.object({
@@ -99,37 +101,103 @@ router.get(['/download-data', '/export'], requireAuth, exportLimiter, async (req
   }
 });
 
-// Correct User Data
+// Correct User Data (Protected against unauthorized email changes & account takeover)
 router.post('/correct-data', requireAuth, async (req: Request, res: Response) => {
   try {
     const parsed = correctDataSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({
+        success: false,
+        code: 'VALIDATION_ERROR',
         error: 'Validasi gagal.',
         details: parsed.error.issues.map(e => ({ path: e.path.join('.'), message: e.message }))
       });
     }
 
-    const updated = await serverDb.updateUserProfileDetails(req.user!.userId, parsed.data);
+    const user = await serverDb.getUserById(req.user!.userId);
+    if (!user) {
+      return res.status(404).json({ success: false, code: 'USER_NOT_FOUND', error: 'Pengguna tidak ditemukan.' });
+    }
+
+    const { name, university, email, currentPassword } = parsed.data;
+    const requestedEmail = email ? email.trim().toLowerCase() : undefined;
+    const isEmailChange = Boolean(requestedEmail && requestedEmail !== user.email.toLowerCase());
+
+    if (isEmailChange) {
+      // 1. Re-authenticate password for sensitive email modification
+      if (!currentPassword) {
+        return res.status(400).json({
+          success: false,
+          code: 'PASSWORD_REQUIRED',
+          error: 'Kata sandi saat ini wajib diisi untuk mengubah alamat email.'
+        });
+      }
+
+      const isPasswordValid = await bcrypt.compare(currentPassword, user.passwordHash);
+      if (!isPasswordValid) {
+        return res.status(401).json({
+          success: false,
+          code: 'INVALID_PASSWORD',
+          error: 'Kata sandi saat ini tidak sesuai.'
+        });
+      }
+
+      // 2. Prevent taking over an already registered email
+      const existingUser = await serverDb.getUserByEmail(requestedEmail!);
+      if (existingUser && existingUser.id !== user.id) {
+        return res.status(400).json({
+          success: false,
+          code: 'EMAIL_ALREADY_REGISTERED',
+          error: 'Alamat email baru sudah terdaftar pada akun lain.'
+        });
+      }
+    }
+
+    const updates: { name?: string; university?: string; email?: string; emailVerified?: boolean } = {};
+    if (name !== undefined) updates.name = name.trim();
+    if (university !== undefined) updates.university = university.trim();
+
+    if (isEmailChange) {
+      updates.email = requestedEmail;
+      updates.emailVerified = false;
+    }
+
+    const updated = await serverDb.updateUserProfileDetails(user.id, updates);
     if (!updated) {
-      return res.status(404).json({ error: 'Pengguna tidak ditemukan.' });
+      return res.status(404).json({ success: false, code: 'USER_NOT_FOUND', error: 'Pengguna tidak ditemukan.' });
+    }
+
+    let verificationMessage = '';
+    if (isEmailChange) {
+      // 3. Issue new verification code for the new email
+      const verificationCode = authService.generate6DigitCode();
+      await serverDb.setEmailVerificationCode(user.id, verificationCode);
+      await emailService.sendVerificationCode(requestedEmail!, verificationCode, updated.name);
+
+      const isDev = process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test';
+      if (isDev) {
+        console.info(`[DEV_ONLY_EMAIL_SINK] Verification code for ${requestedEmail}: ${verificationCode}`);
+      }
+      verificationMessage = ' Alamat email berhasil diubah. Kode verifikasi baru telah dikirim ke email tersebut.';
     }
 
     res.json({
       success: true,
-      message: 'Data pribadi berhasil diperbarui.',
+      message: `Data pribadi berhasil diperbarui.${verificationMessage}`,
+      emailVerificationRequired: isEmailChange,
       user: {
         id: updated.id,
         name: updated.name,
         email: updated.email,
         university: updated.university,
         role: updated.role,
-        tier: updated.tier
+        tier: updated.tier,
+        emailVerified: updated.emailVerified
       }
     });
   } catch (err: any) {
     console.error('Error updating user profile:', err);
-    res.status(500).json({ error: 'Gagal memperbarui data pribadi.' });
+    res.status(500).json({ success: false, code: 'UPDATE_PROFILE_FAILED', error: 'Gagal memperbarui data pribadi.' });
   }
 });
 
@@ -217,7 +285,7 @@ router.post(['/erasure-request', '/db/data-erasure'], requireAuth, accountDeleti
     // Confirmation check for self-erasure
     const { confirmText, confirmPassword, mfaCode } = req.body;
     const isConfirmedText = confirmText === 'HAPUS AKUN SAYA' || req.body.confirmDelete === true;
-    
+
     if (!isConfirmedText) {
       return res.status(400).json({
         success: false,
@@ -251,7 +319,7 @@ router.post(['/erasure-request', '/db/data-erasure'], requireAuth, accountDeleti
 
     if (user.mfaEnabled) {
       let isRecentAuth = false;
-      
+
       if (req.user!.sessionId) {
          const session = await prisma.userSession.findUnique({ where: { id: req.user!.sessionId } });
          if (session) {
@@ -270,7 +338,7 @@ router.post(['/erasure-request', '/db/data-erasure'], requireAuth, accountDeleti
              error: 'Akun Anda mengaktifkan MFA. Mohon masukkan kode MFA atau lakukan verifikasi terbaru (recent authentication).'
            });
         }
-        
+
         const hashedCode = crypto.createHash('sha256').update(mfaCode.trim()).digest('hex');
         const isValidMfa = user.mfaCode === hashedCode && user.mfaExpires && user.mfaExpires > new Date();
         if (!isValidMfa) {

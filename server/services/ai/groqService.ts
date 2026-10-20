@@ -71,8 +71,8 @@ export const groqService = {
     const groqModel = this.mapModelName(targetModel);
     const messages = this.buildMessages(options);
     const isAnonymous = !options.userId || options.userId === 'guest';
-    // Groq free on_demand tier token limits: 500 (anon) / 1000 (user) to give room for reasoning models
-    const maxTokens = Math.min(options.maxOutputTokens || (isAnonymous ? 500 : 1000), isAnonymous ? 500 : 1000);
+    const defaultMax = isAnonymous ? 1500 : 4096;
+    const maxTokens = Math.min(options.maxOutputTokens || defaultMax, isAnonymous ? 2048 : 4096);
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), AI_RELIABILITY_POLICY.connectTimeoutMs);
@@ -109,7 +109,9 @@ export const groqService = {
 
       const data = await response.json();
       const choice = data.choices?.[0];
-      const outputText = (choice?.message?.content || choice?.message?.reasoning || '').trim();
+      // Groq may return private chain-of-thought in `reasoning`. Only `content`
+      // is the user-facing answer and must ever be returned to the chat.
+      const outputText = (choice?.message?.content || '').trim();
       if (typeof outputText !== 'string' || !outputText) throw Object.assign(new Error('AI_PROVIDER_CONTENT_ERROR_INVALID_RESPONSE'), { category: 'CONTENT_ERROR', retryable: false });
       clearTimeout(timeoutId);
 
@@ -138,7 +140,8 @@ export const groqService = {
     const groqModel = this.mapModelName(targetModel);
     const messages = this.buildMessages(options);
     const isAnonymous = !options.userId || options.userId === 'guest';
-    const maxTokens = isAnonymous ? 500 : 1000;
+    const defaultMax = isAnonymous ? 1500 : 4096;
+    const maxTokens = Math.min(options.maxOutputTokens || defaultMax, isAnonymous ? 2048 : 4096);
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), AI_RELIABILITY_POLICY.totalRequestTimeoutMs);
@@ -202,7 +205,8 @@ export const groqService = {
                 if (!jsonStr) continue;
                 const parsed = JSON.parse(jsonStr);
                 const delta = parsed.choices?.[0]?.delta;
-                const textContent = delta?.content || delta?.reasoning || '';
+                // Do not forward Groq's private reasoning field to the client.
+                const textContent = delta?.content || '';
 
                 if (textContent) {
                   yield { text: textContent };
@@ -220,7 +224,7 @@ export const groqService = {
             const jsonStr = buffer.trim().slice(6).trim();
             const parsed = JSON.parse(jsonStr);
             const delta = parsed.choices?.[0]?.delta;
-            const textContent = delta?.content || delta?.reasoning || '';
+            const textContent = delta?.content || '';
             if (textContent) {
               yield { text: textContent };
             }

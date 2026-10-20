@@ -5,6 +5,7 @@ import { AuthProvider, useAuth, DEFAULT_GUEST_USER } from '../../contexts/AuthCo
 import { apiClient } from '../../lib/apiClient';
 
 vi.mock('../../lib/apiClient', () => ({
+  AUTH_SESSION_INVALIDATED_EVENT: 'rt-auth-session-invalidated',
   apiClient: {
     get: vi.fn(),
     post: vi.fn()
@@ -19,7 +20,7 @@ describe('Auth Session Race Conditions', () => {
   it('prevents old refreshSession from overwriting a newer login session', async () => {
     let resolveRefresh: (val: any) => void;
     const refreshPromise = new Promise(res => { resolveRefresh = res; });
-    
+
     vi.mocked(apiClient.get).mockImplementation((url) => {
       if (url === '/api/v1/auth/me') {
         return refreshPromise as any;

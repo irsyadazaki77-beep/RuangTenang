@@ -1,10 +1,11 @@
 import express from 'express';
 import { maskSensitivePayload } from './utils/logger.js';
+import { isProductionLikeEnvironment } from './config/environment.js';
 
 const router = express.Router();
 
 router.post('/log-error', (req, res) => {
-  const isProd = process.env.NODE_ENV === 'production';
+  const isProd = isProductionLikeEnvironment();
   console.log('--- CLIENT ERROR LOG ---');
   
   // Clean PII and sensitive data recursively using maskSensitivePayload

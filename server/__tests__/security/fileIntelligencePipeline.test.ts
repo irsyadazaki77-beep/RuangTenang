@@ -16,7 +16,7 @@ import { chunkingService, estimateTokenCount } from '../../services/file-intelli
 import { normalizationService } from '../../services/file-intelligence/normalizationService.js';
 import { attachmentStorageService } from '../../services/attachmentStorageService.js';
 import { aiContextBuilder } from '../../services/ai/aiContextBuilder.js';
-import { DocumentProcessingException } from '../../services/file-intelligence/fileTypes.js';
+import { DEFAULT_FILE_LIMITS, DocumentProcessingException } from '../../services/file-intelligence/fileTypes.js';
 
 // Helpers to generate genuine binary files for testing
 async function createPdfBuffer(pagesText: string[]): Promise<Buffer> {
@@ -564,5 +564,24 @@ describe('FASE 8 — File Intelligence & Document Ingestion Pipeline Security Te
 
     // Normal mental health companion should NOT include academic document context unless explicitly attached
     expect(builtContext.systemContext).not.toContain('<untrusted_document_context');
+  });
+
+  // 31. Large single-block chunk cap and extraction disclosure
+  it('31. Enforces the chunk cap and warns when a long text document is only partially indexed', async () => {
+    const sentence = 'Evidence supports reproducible analysis and study methods.';
+    const longText = Array.from({ length: 8_000 }, () => sentence).join(' ');
+    const result = await documentIngestionService.ingestFile({
+      userId: userA,
+      buffer: Buffer.from(longText, 'utf8'),
+      originalFilename: 'large-single-block.txt',
+      chatId: testChatId
+    });
+    createdAttachmentIds.push(result.id);
+
+    expect(result.extractionWarnings).toContain(`Hanya ${DEFAULT_FILE_LIMITS.maxChunksPerDocument} bagian awal dokumen yang diindeks; sisanya tidak disertakan sebagai konteks AI.`);
+    const saved = await prisma.attachments.findUnique({ where: { id: result.id }, select: { metadata: true } });
+    const metadata = JSON.parse(saved?.metadata || '{}') as { chunkCount?: number; extractedChars?: number };
+    expect(metadata.chunkCount).toBe(DEFAULT_FILE_LIMITS.maxChunksPerDocument);
+    expect(metadata.extractedChars).toBe(longText.length);
   });
 });

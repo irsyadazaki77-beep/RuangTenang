@@ -1,21 +1,21 @@
 import React from 'react';
-import { 
-  BarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  Tooltip, 
-  ResponsiveContainer, 
-  LineChart, 
-  Line, 
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  LineChart,
+  Line,
   CartesianGrid,
   Cell
 } from 'recharts';
-import { 
-  Activity, 
-  TrendingUp, 
-  Users, 
-  ShieldAlert, 
+import {
+  Activity,
+  TrendingUp,
+  Users,
+  ShieldAlert,
   Clock,
   Inbox
 } from 'lucide-react';
@@ -121,14 +121,14 @@ export const CounselorAnalytics: React.FC<CounselorAnalyticsProps> = ({ stats })
                   <CartesianGrid strokeDasharray="3 3" opacity={0.15} />
                   <XAxis dataKey="month" tick={{ fontSize: 11 }} />
                   <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: '#1e293b', 
-                      borderRadius: '12px', 
-                      border: 'none', 
-                      color: '#fff', 
-                      fontSize: '12px' 
-                    }} 
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: '#1e293b',
+                      borderRadius: '12px',
+                      border: 'none',
+                      color: '#fff',
+                      fontSize: '12px'
+                    }}
                   />
                   <Line type="monotone" dataKey="screening" stroke="#6366f1" strokeWidth={2.5} name="Skrining Mahasiswa" />
                   <Line type="monotone" dataKey="counseling" stroke="#06b6d4" strokeWidth={2.5} name="Sesi Konseling" />
@@ -162,14 +162,14 @@ export const CounselorAnalytics: React.FC<CounselorAnalyticsProps> = ({ stats })
                   <CartesianGrid strokeDasharray="3 3" opacity={0.15} />
                   <XAxis dataKey="name" tick={{ fontSize: 10 }} interval={0} />
                   <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: '#1e293b', 
-                      borderRadius: '12px', 
-                      border: 'none', 
-                      color: '#fff', 
-                      fontSize: '12px' 
-                    }} 
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: '#1e293b',
+                      borderRadius: '12px',
+                      border: 'none',
+                      color: '#fff',
+                      fontSize: '12px'
+                    }}
                   />
                   <Bar dataKey="count" radius={[6, 6, 0, 0]}>
                     {severityData.map((entry, index) => (

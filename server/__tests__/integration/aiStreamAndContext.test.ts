@@ -25,20 +25,26 @@ describe('FASE 9: AI Context & Streaming System Upgrade Tests', () => {
     });
 
     it('summarizes older messages for long chat history (>10 messages) and caches result', async () => {
-      const longHistory = Array.from({ length: 15 }, (_, i) => ({
-        id: `msg_${i}`,
-        role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
-        content: `Mahasiswa merasa cemas dengan skripsi dan perkuliahan babak ${i}`
-      }));
+      const { geminiAdapter } = await import('../../services/ai/geminiAdapter.js');
+      const generate = vi.spyOn(geminiAdapter, 'generate').mockResolvedValue({ text: 'Ringkasan pesan sebelumnya tentang skripsi.' } as any);
+      try {
+        const longHistory = Array.from({ length: 15 }, (_, i) => ({
+          id: `msg_${i}`,
+          role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+          content: `Mahasiswa merasa cemas dengan skripsi dan perkuliahan babak ${i}`
+        }));
 
-      const res1 = await chatSummarizer.getOrUpdateSummary('chat_long_1', longHistory);
-      expect(res1.summary).not.toBe('');
-      expect(res1.tokensSaved).toBeGreaterThan(0);
+        const res1 = await chatSummarizer.getOrUpdateSummary('chat_long_1', longHistory);
+        expect(res1.summary).not.toBe('');
+        expect(res1.tokensSaved).toBeGreaterThan(0);
 
-      // Second call for the same chat history should hit the cache instantly
-      const res2 = await chatSummarizer.getOrUpdateSummary('chat_long_1', longHistory);
-      expect(res2.summary).toBe(res1.summary);
-      expect(res2.lastSummarizedMsgId).toBe(res1.lastSummarizedMsgId);
+        // Second call for the same chat history should hit the cache instantly
+        const res2 = await chatSummarizer.getOrUpdateSummary('chat_long_1', longHistory);
+        expect(res2.summary).toBe(res1.summary);
+        expect(res2.lastSummarizedMsgId).toBe(res1.lastSummarizedMsgId);
+      } finally {
+        generate.mockRestore();
+      }
     }, 15000);
   });
 

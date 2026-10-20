@@ -18,34 +18,62 @@ import { useToast } from "./Toast";
 import { apiClient } from "../lib/apiClient";
 import { useAuth } from "../contexts/AuthContext";
 
-interface EmergencyCenterProps {
-  onTriggerSOS?: () => void;
+interface CampusReferralContact {
+  label: string;
+  phone?: string;
+  url?: string;
 }
 
-export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
+const createEmptyEmergencyContact = (): EmergencyContact => ({
+  name: "",
+  relationship: "",
+  phone: "",
+  whatsapp: "",
+  hasConsent: false,
+  consentDate: undefined,
+});
+
+export const EmergencyCenter: React.FC<{ onTriggerSOS?: () => void; onOpenPrivacyCenter?: () => void }> = ({
   onTriggerSOS,
+  onOpenPrivacyCenter,
 }) => {
   const { user } = useAuth();
+  const canUseDigitalSOS = Boolean(user?.id && user.role !== 'guest');
   const { showToast } = useToast();
   const [sosStatus, setSosStatus] = useState<SOSDispatchStatus | null>(null);
   const [isTriggeringSOS, setIsTriggeringSOS] = useState(false);
+  const [isContactLoading, setIsContactLoading] = useState(false);
+  const [contactLoadError, setContactLoadError] = useState("");
+  const [contactReloadKey, setContactReloadKey] = useState(0);
+  const [shareLocation, setShareLocation] = useState(false);
   const [hotlineQuery, setHotlineQuery] = useState("");
+  const [campusReferralContacts, setCampusReferralContacts] = useState<CampusReferralContact[]>([]);
 
-  const [contact, setContact] = useState<EmergencyContact>({
-    name: "",
-    relationship: "",
-    phone: "",
-    whatsapp: "",
-    hasConsent: false,
-    consentDate: undefined,
-  });
+  const [contact, setContact] = useState<EmergencyContact>(createEmptyEmergencyContact);
 
   const [isSavedSuccessfully, setIsSavedSuccessfully] = useState(false);
 
   useEffect(() => {
-    apiClient.get<any>('/api/v1/emergency-contact')
-      .then(res => {
-        const data = res.data;
+    const controller = new AbortController();
+    let active = true;
+    setContact(createEmptyEmergencyContact());
+    setIsSavedSuccessfully(false);
+    setSosStatus(null);
+    setShareLocation(false);
+    setContactLoadError("");
+
+    const shouldLoadContact = Boolean(user?.id && user.role !== 'guest');
+    setIsContactLoading(shouldLoadContact);
+    if (!shouldLoadContact) return () => controller.abort();
+
+    apiClient.get<any>('/api/v1/emergency-contact', { signal: controller.signal })
+      .then(response => {
+        if (!active) return;
+        if (!response.success) {
+          setContactLoadError(response.error || "Kontak darurat belum dapat dimuat.");
+          return;
+        }
+        const data = response.data;
         if (data && !data.error && !data.code) {
           setContact({
             name: data.name || "",
@@ -57,42 +85,58 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
           });
         }
       })
-      .catch(e => console.warn("Failed to load emergency contact from backend:", e));
-  }, []);
+      .catch(e => {
+        if (active && !controller.signal.aborted) {
+          console.warn("Failed to load emergency contact from backend:", e);
+          setContactLoadError("Kontak darurat belum dapat dimuat. Periksa koneksi lalu coba lagi.");
+        }
+      })
+      .finally(() => {
+        if (active) setIsContactLoading(false);
+      });
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [user?.id, user?.role, contactReloadKey]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setCampusReferralContacts([]);
+    if (!user?.campusId) return () => { cancelled = true; };
+    apiClient.get<{ campus?: { referralContacts?: CampusReferralContact[] } }>('/api/v1/campuses/me')
+      .then(response => {
+        const contacts = response.data?.campus?.referralContacts;
+        if (!cancelled && response.success && Array.isArray(contacts)) setCampusReferralContacts(contacts);
+      })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [user?.campusId]);
 
   const getCoordinates = (): Promise<{ latitude: number; longitude: number } | undefined> => {
     return new Promise((resolve) => {
       if (!navigator.geolocation) {
         return resolve(undefined);
       }
-      
-      navigator.permissions.query({ name: "geolocation" as any }).then((perm) => {
-        if (perm.state === "granted") {
-          navigator.geolocation.getCurrentPosition(
-            (position) => resolve({ latitude: position.coords.latitude, longitude: position.coords.longitude }),
-            () => resolve(undefined),
-            { timeout: 2000, maximumAge: 60000 }
-          );
-        } else {
-          resolve(undefined);
-        }
-      }).catch(() => resolve(undefined));
+
+      navigator.geolocation.getCurrentPosition(
+        (position) => resolve({ latitude: position.coords.latitude, longitude: position.coords.longitude }),
+        () => resolve(undefined),
+        { timeout: 8000, maximumAge: 60000 }
+      );
     });
   };
   const handleSendSOS = async () => {
     setIsTriggeringSOS(true);
     setSosStatus(null);
-    if (onTriggerSOS) {
-      onTriggerSOS();
-    }
-
+    onTriggerSOS?.();
     if (!navigator.onLine) {
       setSosStatus({
         success: false,
         dispatchId: "SOS-LOCAL-" + Date.now().toString().slice(-4),
         status: "DIRECT_CALL_ONLY",
         timestamp: new Date().toISOString(),
-        hasUserConsent: contact.hasConsent,
+        hasUserConsent: false,
         message:
           "SOS digital tidak dapat dikirim karena perangkat sedang offline. Gunakan tombol Telepon Langsung untuk menghubungi bantuan.",
       });
@@ -102,7 +146,7 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
     }
 
     try {
-      const coords = await getCoordinates();
+      const coords = shareLocation ? await getCoordinates() : undefined;
       const locationPayload = coords ? {
         latitude: coords.latitude,
         longitude: coords.longitude,
@@ -110,13 +154,6 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
       } : undefined;
 
       const response = await apiClient.post<any>("/api/v1/sos/trigger", {
-        emergencyContact: contact && contact.name && contact.phone ? {
-          name: contact.name,
-          phone: contact.phone,
-          relationship: contact.relationship,
-        } : undefined,
-        hasUserConsent: contact.hasConsent,
-        studentName: user?.name || "Mahasiswa",
         location: locationPayload,
       });
 
@@ -124,11 +161,17 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
       const data = response.data || response;
       setSosStatus(data);
       if (data.status === 'SENT') {
-        showToast("Sinyal SOS darurat berhasil dikirim via SMS/WA!", "success");
+        showToast("Permintaan SOS diterima oleh penyedia SMS/WA. Status penerimaan kontak belum dapat dipastikan.", "success");
       } else if (data.status === 'SIMULATED') {
         showToast("Sinyal SOS hanya dicatat dalam mode simulasi. Untuk dukungan psikologis buka Healing119; untuk darurat medis hubungi 119.", "info");
+      } else if (data.status === 'CONSENT_REQUIRED') {
+        showToast("Aktifkan izin SOS di Pusat Privasi sebelum mengirim sinyal digital.", "warning");
+      } else if (data.status === 'CONTACT_MISSING') {
+        showToast("Simpan kontak darurat terlebih dahulu.", "warning");
+      } else if (data.status === 'COOLDOWN_ACTIVE' || data.status === 'RATE_LIMIT_EXCEEDED') {
+        showToast(data.message || "Pengiriman SOS sementara dibatasi.", "warning");
       } else {
-        showToast("Sinyal SOS gagal terkirim. Segera hubungi hotline darurat 119.", "error");
+        showToast("Sinyal SOS gagal terkirim. Gunakan Healing119 untuk dukungan psikologis; untuk darurat medis hubungi 119 atau pergi ke IGD.", "error");
       }
     } catch (_e: any) {
       setSosStatus({
@@ -136,7 +179,7 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
         dispatchId: "SOS-LOCAL-" + Date.now().toString().slice(-4),
         status: "DIRECT_CALL_ONLY",
         timestamp: new Date().toISOString(),
-        hasUserConsent: contact.hasConsent,
+        hasUserConsent: false,
         message:
           "Tidak dapat terhubung ke server. Untuk dukungan psikologis buka healing119.id atau hubungi 119 ekstensi 8. Untuk darurat medis, hubungi 119 atau pergi ke fasilitas kesehatan terdekat.",
       });
@@ -193,10 +236,16 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
           </div>
           <a
             href={EMERGENCY_CONTACTS[0].url}
+            target="_blank"
+            rel="noopener noreferrer"
             className="w-full py-2.5 px-3.5 bg-rose-50 dark:bg-rose-950/60 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 rounded-lg font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 transition-colors border border-rose-200 dark:border-rose-900 cursor-pointer min-h-[44px] sm:min-h-[36px]"
           >
             <Phone className="w-3.5 h-3.5" />
-            <span>Buka Situs Healing119</span>
+            <span>Buka Healing119 (telepon / chat)</span>
+          </a>
+          <a href="tel:119" className="w-full py-2.5 px-3.5 surface-muted text-primary rounded-lg font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 border border-default cursor-pointer min-h-[44px] sm:min-h-[36px]">
+            <PhoneCall className="w-3.5 h-3.5" />
+            <span>Telepon 119, lalu tekan 8</span>
           </a>
         </div>
 
@@ -204,14 +253,18 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
         <div className="surface-card rounded-xl p-3.5 sm:p-4 flex flex-col justify-between space-y-3.5 group hover:shadow-xs border border-default shadow-3xs transition-all">
           <div className="space-y-1.5">
             <h2 className="text-sm sm:text-base font-bold text-primary">
-              Sinyal Pesan Darurat ke Kampus / Wali
+              Sinyal SOS ke Kontak Darurat
             </h2>
             <p className="text-xs text-secondary leading-relaxed">
-              Kirimkan pemberitahuan instan otomatis kepada kontak darurat pribadi yang telah Anda simpan di profil Anda.
+              Kirim permintaan ke kontak pribadi tersimpan. Fitur ini memerlukan koneksi, kontak dan dua persetujuan aktif, serta penyedia pesan yang dikonfigurasi. Status diterima penyedia belum memastikan kontak menerima atau membaca pesan; untuk bantuan segera, gunakan layanan langsung di atas.
             </p>
           </div>
 
           <div className="space-y-2.5">
+            <label className="flex items-start gap-2 text-[11px] text-secondary leading-relaxed">
+              <input type="checkbox" checked={shareLocation} onChange={event => setShareLocation(event.target.checked)} className="mt-0.5 accent-rose-600" />
+              <span>Bagikan lokasi perangkat saat ini bersama sinyal SOS. Lokasi hanya diminta setelah Anda memilih opsi ini.</span>
+            </label>
             <button
               type="button"
               onClick={handleSendSOS}
@@ -229,10 +282,10 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
             </button>
 
             {sosStatus && (
-              <div className={`p-3 rounded-lg border text-xs space-y-1 animate-fade-in ${
-                sosStatus.status === 'SENT' 
+              <div role="status" aria-live="polite" className={`p-3 rounded-lg border text-xs space-y-1 animate-fade-in ${
+                sosStatus.status === 'SENT'
                   ? 'bg-emerald-50/70 dark:bg-emerald-950/60 border-emerald-200 dark:border-emerald-900 text-emerald-950 dark:text-emerald-200'
-                  : (sosStatus.status === 'SIMULATED' || sosStatus.status === 'DIRECT_CALL_ONLY')
+                : (sosStatus.status === 'SIMULATED' || sosStatus.status === 'DIRECT_CALL_ONLY' || sosStatus.status === 'GUEST_DIRECT_CALL_ONLY' || sosStatus.status === 'COOLDOWN_ACTIVE' || sosStatus.status === 'RATE_LIMIT_EXCEEDED')
                   ? 'bg-amber-50/80 dark:bg-amber-950/60 border-amber-200 dark:border-amber-900 text-amber-950 dark:text-amber-200'
                   : 'bg-rose-50/70 dark:bg-rose-950/60 border-rose-200 dark:border-rose-900 text-rose-950 dark:text-rose-200'
               }`}>
@@ -240,7 +293,7 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
                   {sosStatus.status === 'SENT' ? (
                     <>
                       <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                      <span className="text-emerald-900 dark:text-emerald-200">Sinyal SOS Berhasil Terkirim (SMS/WA)</span>
+                      <span className="text-emerald-900 dark:text-emerald-200">Permintaan SOS Diterima Penyedia SMS/WA</span>
                     </>
                   ) : sosStatus.status === 'SIMULATED' ? (
                     <>
@@ -257,6 +310,21 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
                       <AlertCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
                       <span className="text-rose-900 dark:text-rose-200">Sesi Tamu: Gunakan Telepon Langsung</span>
                     </>
+                  ) : sosStatus.status === 'CONSENT_REQUIRED' ? (
+                    <>
+                      <AlertCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                      <span className="text-rose-900 dark:text-rose-200">Izin SOS di Pusat Privasi Belum Aktif</span>
+                    </>
+                  ) : sosStatus.status === 'CONTACT_MISSING' ? (
+                    <>
+                      <AlertCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                      <span className="text-rose-900 dark:text-rose-200">Kontak Darurat Belum Tersimpan</span>
+                    </>
+                  ) : sosStatus.status === 'COOLDOWN_ACTIVE' || sosStatus.status === 'RATE_LIMIT_EXCEEDED' ? (
+                    <>
+                      <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                      <span className="text-amber-900 dark:text-amber-200">Pengiriman SOS Sementara Dibatasi</span>
+                    </>
                   ) : (
                     <>
                       <AlertCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
@@ -265,8 +333,15 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
                   )}
                 </p>
                 <p className="text-secondary leading-relaxed text-[11px]">
-                  {sosStatus.message}
+                  {sosStatus.status === 'SENT'
+                    ? `${sosStatus.message} Status ini hanya mengonfirmasi permintaan diterima penyedia; aplikasi belum dapat memastikan kontak membaca atau menerima pesan.`
+                    : sosStatus.message}
                 </p>
+                {sosStatus.status === 'CONSENT_REQUIRED' && onOpenPrivacyCenter && (
+                  <button type="button" onClick={onOpenPrivacyCenter} className="min-h-9 rounded-md border border-rose-300 px-2.5 text-[11px] font-semibold text-rose-900 hover:bg-rose-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 dark:border-rose-800 dark:text-rose-200 dark:hover:bg-rose-950">
+                    Buka Pusat Privasi
+                  </button>
+                )}
                 <div className="text-[9.5px] text-secondary pt-0.5 flex justify-between">
                   <span>ID: {sosStatus.dispatchId}</span>
                   <span>
@@ -283,6 +358,35 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 sm:gap-4">
         {/* LEFT/MAIN COLUMN: HELPLINE DIRECTORY (7 cols) */}
         <div className="lg:col-span-7 surface-card rounded-xl p-3.5 sm:p-4 space-y-3 border border-default shadow-3xs">
+          {user?.campusId && (
+            <section className="space-y-2 rounded-xl border border-teal-200 bg-teal-50/60 p-3 dark:border-teal-900 dark:bg-teal-950/30" aria-labelledby="campus-referrals-title">
+              <div>
+                <h3 id="campus-referrals-title" className="text-xs font-bold text-primary">Kontak rujukan kampus</h3>
+                <p className="mt-0.5 text-xs text-secondary">Kontak yang dikonfigurasi kampus Anda. Untuk darurat medis, hubungi 119 atau fasilitas kesehatan terdekat.</p>
+              </div>
+              {campusReferralContacts.length > 0 ? (
+                <ul className="space-y-1.5">
+                  {campusReferralContacts.map((item, index) => (
+                    <li key={`${item.label}-${index}`} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-surface p-2.5 text-xs">
+                      <span className="font-medium">{item.label}</span>
+                      {(item.url || item.phone) && (
+                        <a
+                          href={item.url || `tel:${(item.phone || '').replace(/[^\d+]/g, '')}`}
+                          target={item.url ? '_blank' : undefined}
+                          rel={item.url ? 'noopener noreferrer' : undefined}
+                          className="font-semibold text-teal-700 underline underline-offset-2 dark:text-teal-300"
+                        >
+                          {item.url ? 'Buka layanan' : item.phone}
+                        </a>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-xs text-secondary">Belum ada kontak rujukan kampus yang dikonfigurasi.</p>
+              )}
+            </section>
+          )}
           <div className="space-y-0.5">
             <h2 className="text-xs sm:text-sm font-bold text-primary flex items-center gap-1.5">
               <HeartHandshake className="w-4 h-4 text-teal-600 dark:text-teal-400" />
@@ -359,20 +463,31 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
               Kontak Darurat Pribadi
             </h2>
             <p className="text-xs text-secondary">
-              Konfigurasikan kontak kerabat terdekat atau sahabat pilihan Anda untuk notifikasi SOS instan.
+              Simpan kontak kerabat atau sahabat yang dapat menerima permintaan SOS melalui penyedia pesan yang dikonfigurasi.
             </p>
           </div>
 
+          {isContactLoading && <p role="status" className="text-xs text-secondary">Memuat kontak darurat…</p>}
+          {contactLoadError && (
+            <div role="alert" className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-950 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
+              <span>{contactLoadError}</span>
+              <button type="button" onClick={() => setContactReloadKey(value => value + 1)} className="min-h-9 rounded-md border border-amber-400 px-2.5 font-semibold hover:bg-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 dark:border-amber-800 dark:hover:bg-amber-950">Muat ulang</button>
+            </div>
+          )}
+          {user?.role === 'guest' && <p className="text-xs text-secondary">Sesi tamu dapat memakai bantuan langsung; menyimpan kontak dan mengirim SOS digital memerlukan akun.</p>}
+
           <form onSubmit={handleSaveContact} className="space-y-2.5">
             <div className="space-y-1">
-              <label className="block text-xs font-semibold text-secondary">
+              <label htmlFor="emergency-contact-name" className="block text-xs font-semibold text-secondary">
                 Nama Orang Terdekat:
               </label>
               <div className="relative">
                 <User className="w-3.5 h-3.5 text-muted absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
+                  id="emergency-contact-name"
                   type="text"
                   required
+                  disabled={!canUseDigitalSOS || isContactLoading}
                   value={contact.name}
                   onChange={(e) =>
                     setContact({ ...contact, name: e.target.value })
@@ -384,10 +499,12 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
             </div>
 
             <div className="space-y-1">
-              <label className="block text-xs font-semibold text-secondary">
+              <label htmlFor="emergency-contact-rel" className="block text-xs font-semibold text-secondary">
                 Hubungan / Relasi:
               </label>
               <select
+                id="emergency-contact-rel"
+                disabled={!canUseDigitalSOS || isContactLoading}
                 value={contact.relationship}
                 onChange={(e) =>
                   setContact({ ...contact, relationship: e.target.value })
@@ -404,14 +521,17 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
             </div>
 
             <div className="space-y-1">
-              <label className="block text-xs font-semibold text-secondary">
+              <label htmlFor="emergency-contact-phone" className="block text-xs font-semibold text-secondary">
                 Nomor HP / WhatsApp:
               </label>
               <div className="relative">
                 <Phone className="w-3.5 h-3.5 text-muted absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
-                  type="text"
+                  id="emergency-contact-phone"
+                  type="tel"
+                  inputMode="tel"
                   required
+                  disabled={!canUseDigitalSOS || isContactLoading}
                   value={contact.phone}
                   onChange={(e) =>
                     setContact({ ...contact, phone: e.target.value })
@@ -426,6 +546,7 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
               <input
                 type="checkbox"
                 id="hasConsent"
+                disabled={!canUseDigitalSOS || isContactLoading}
                 checked={contact.hasConsent}
                 onChange={(e) =>
                   setContact({
@@ -440,10 +561,14 @@ export const EmergencyCenter: React.FC<EmergencyCenterProps> = ({
                 Saya memberikan persetujuan (consent) untuk menghubungi kontak darurat ini secara otomatis jika saya memicu sinyal SOS.
               </label>
             </div>
+            <p className="text-[10.5px] text-secondary leading-relaxed">
+              Pengiriman SOS juga memerlukan izin aktif di Pusat Privasi. Saat disimpan, kontak dan persetujuan ini tersimpan di server akun Anda.
+            </p>
 
             <button
               type="submit"
-              className="w-full py-2.5 px-3.5 bg-teal-600 hover:bg-teal-700 text-white font-semibold text-xs sm:text-sm rounded-lg shadow-3xs transition-all flex items-center justify-center gap-1.5 cursor-pointer min-h-[44px] sm:min-h-[36px] border-none"
+              disabled={!canUseDigitalSOS || isContactLoading}
+              className="w-full py-2.5 px-3.5 bg-teal-700 hover:bg-teal-800 text-white font-semibold text-xs sm:text-sm rounded-lg shadow-3xs transition-all flex items-center justify-center gap-1.5 cursor-pointer min-h-[44px] sm:min-h-[36px] border-none disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Save className="w-3.5 h-3.5" />
               <span>

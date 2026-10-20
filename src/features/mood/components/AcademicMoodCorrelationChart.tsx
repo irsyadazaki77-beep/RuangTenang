@@ -4,6 +4,7 @@ import {
   TrendingUp, 
   GraduationCap
 } from 'lucide-react';
+import { parseLocalIsoDateString } from '../../../utils/streak';
 
 interface AcademicMoodCorrelationChartProps {
   logs: MoodLog[];
@@ -19,9 +20,9 @@ export const AcademicMoodCorrelationChart: React.FC<AcademicMoodCorrelationChart
       .slice(-14);
 
     return sorted.map((log, idx) => {
-      const parsedDate = new Date(log.date);
+      const parsedDate = parseLocalIsoDateString(log.date);
       const dayLabel = parsedDate.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric' });
-      const sleepHours = typeof log.sleepHours === 'number' && !isNaN(log.sleepHours) ? log.sleepHours : 7;
+      const sleepHours = typeof log.sleepHours === 'number' && Number.isFinite(log.sleepHours) ? log.sleepHours : null;
       
       // Academic factors
       const academicFactors = (log.factors || []).filter(f => 
@@ -48,16 +49,17 @@ export const AcademicMoodCorrelationChart: React.FC<AcademicMoodCorrelationChart
     const totalMood = chartData.reduce((acc, d) => acc + d.mood, 0);
     const avgMood = (totalMood / chartData.length).toFixed(1);
 
-    const totalSleep = chartData.reduce((acc, d) => acc + d.sleepHours, 0);
-    const avgSleep = (totalSleep / chartData.length).toFixed(1);
+    const logsWithSleep = chartData.filter((entry): entry is typeof entry & { sleepHours: number } => entry.sleepHours !== null);
+    const totalSleep = logsWithSleep.reduce((acc, d) => acc + d.sleepHours, 0);
+    const avgSleep = logsWithSleep.length > 0 ? (totalSleep / logsWithSleep.length).toFixed(1) : null;
 
     // Sleep vs Mood correlation
-    const lowSleepHours = chartData.filter(d => d.sleepHours < 6);
+    const lowSleepHours = logsWithSleep.filter(d => d.sleepHours < 6);
     const avgMoodLowSleep = lowSleepHours.length > 0
       ? (lowSleepHours.reduce((acc, d) => acc + d.mood, 0) / lowSleepHours.length).toFixed(1)
       : null;
 
-    const goodSleepHours = chartData.filter(d => d.sleepHours >= 7);
+    const goodSleepHours = logsWithSleep.filter(d => d.sleepHours >= 7);
     const avgMoodGoodSleep = goodSleepHours.length > 0
       ? (goodSleepHours.reduce((acc, d) => acc + d.mood, 0) / goodSleepHours.length).toFixed(1)
       : null;
@@ -96,9 +98,9 @@ export const AcademicMoodCorrelationChart: React.FC<AcademicMoodCorrelationChart
     return (
       <div className="p-6 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-center space-y-2">
         <GraduationCap className="w-8 h-8 text-slate-400 mx-auto" />
-        <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">Belum Ada Data Log Harian Cukup</p>
+        <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">Belum Ada Catatan Mood</p>
         <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
-          Catat mood dan durasi tidur harianmu minimal 2 hari untuk melihat visualisasi korelasi stres akademik dan kestabilan emosi.
+          Catat mood, durasi tidur, atau faktor harian untuk melihat ringkasan deskriptif. Sedikit catatan belum cukup untuk menunjukkan pola yang konsisten.
         </p>
       </div>
     );
@@ -116,13 +118,17 @@ export const AcademicMoodCorrelationChart: React.FC<AcademicMoodCorrelationChart
   const getX = (i: number) => paddingX + (i / Math.max(chartData.length - 1, 1)) * graphWidth;
   // Mood scale 1-5 -> Y
   const getMoodY = (m: number) => paddingY + graphHeight - ((m - 1) / 4) * graphHeight;
-  // Sleep scale 0-12 -> Y
-  const getSleepY = (s: number) => paddingY + graphHeight - (s / 12) * graphHeight;
+  // Sleep scale 0-24 -> Y, matching the allowed recorded range.
+  const getSleepY = (s: number) => paddingY + graphHeight - (s / 24) * graphHeight;
 
   // Build SVG Path for Mood
   const moodPath = chartData.map((d, i) => `${i === 0 ? 'M' : 'L'} ${getX(i)} ${getMoodY(d.mood)}`).join(' ');
   // Build SVG Path for Sleep
-  const sleepPath = chartData.map((d, i) => `${i === 0 ? 'M' : 'L'} ${getX(i)} ${getSleepY(d.sleepHours)}`).join(' ');
+  const sleepPath = chartData.map((d, i) => {
+    if (d.sleepHours === null) return '';
+    const startsSegment = i === 0 || chartData[i - 1].sleepHours === null;
+    return `${startsSegment ? 'M' : 'L'} ${getX(i)} ${getSleepY(d.sleepHours)}`;
+  }).filter(Boolean).join(' ');
 
   const selectedData = selectedPointIndex !== null ? chartData[selectedPointIndex] : chartData[chartData.length - 1];
 
@@ -133,10 +139,10 @@ export const AcademicMoodCorrelationChart: React.FC<AcademicMoodCorrelationChart
         <div>
           <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
             <TrendingUp className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-            <span>Korelasi Durasi Tidur, Mood & Pemicu Akademik</span>
+            <span>Catatan Mood, Tidur & Faktor Harian</span>
           </h3>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            Analisis 14 hari terakhir untuk memahami hubungan istirahat dan beban studi terhadap emosi.
+            Ringkasan maksimal 14 catatan terakhir. Ini menggambarkan data yang dicatat, bukan korelasi statistik atau penilaian klinis.
           </p>
         </div>
 
@@ -148,7 +154,7 @@ export const AcademicMoodCorrelationChart: React.FC<AcademicMoodCorrelationChart
           </span>
           <span className="flex items-center gap-1.5 text-indigo-600 dark:text-indigo-400">
             <span className="w-3 h-1 bg-indigo-500 rounded-full border-b border-dashed" />
-            Jam Tidur (0-12h)
+            Jam Tidur (0-24h)
           </span>
         </div>
       </div>
@@ -187,18 +193,7 @@ export const AcademicMoodCorrelationChart: React.FC<AcademicMoodCorrelationChart
             );
           })}
 
-          {/* Sleep Area Shading */}
-          <path 
-            d={`${sleepPath} L ${getX(chartData.length - 1)} ${paddingY + graphHeight} L ${getX(0)} ${paddingY + graphHeight} Z`}
-            fill="url(#sleepGradient)"
-            opacity="0.25"
-          />
-
           <defs>
-            <linearGradient id="sleepGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#6366f1" stopOpacity="0.6" />
-              <stop offset="100%" stopColor="#6366f1" stopOpacity="0.0" />
-            </linearGradient>
             <linearGradient id="moodGradient" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor="#0d9488" stopOpacity="0.4" />
               <stop offset="100%" stopColor="#0d9488" stopOpacity="0.0" />
@@ -257,6 +252,7 @@ export const AcademicMoodCorrelationChart: React.FC<AcademicMoodCorrelationChart
                   stroke="#ffffff" 
                   strokeWidth={isSelected ? 3 : 1.5} 
                 />
+                {d.sleepHours !== null && <circle cx={mx} cy={getSleepY(d.sleepHours)} r="3" fill="#6366f1" stroke="#fff" strokeWidth="1" />}
 
                 {/* X Axis Label */}
                 <text 
@@ -284,9 +280,9 @@ export const AcademicMoodCorrelationChart: React.FC<AcademicMoodCorrelationChart
             </div>
             <div>
               <div className="font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                <span>{new Date(selectedData.date).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span>
+                <span>{parseLocalIsoDateString(selectedData.date).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span>
                 <span className="px-2 py-0.5 rounded-md bg-indigo-500/10 text-indigo-500 font-mono text-[11px]">
-                  {selectedData.sleepHours} Jam Tidur
+                  {selectedData.sleepHours === null ? 'Tidur tidak dicatat' : `${selectedData.sleepHours} Jam Tidur`}
                 </span>
               </div>
               <p className="text-slate-500 dark:text-slate-400 mt-0.5">
@@ -316,28 +312,28 @@ export const AcademicMoodCorrelationChart: React.FC<AcademicMoodCorrelationChart
       {analytics && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
           <div className="p-3 rounded-2xl bg-teal-50/60 dark:bg-teal-950/20 border border-teal-200/50 dark:border-teal-900/40">
-            <span className="text-[11px] text-teal-700 dark:text-teal-400 font-semibold block">Rata-rata Mood</span>
+            <span className="text-[11px] text-teal-700 dark:text-teal-400 font-semibold block">Rata-rata dari {analytics.totalEntries} catatan mood</span>
             <div className="text-lg font-bold text-teal-900 dark:text-teal-200 mt-0.5">{analytics.avgMood} / 5.0</div>
             <p className="text-[11px] text-teal-600/80 dark:text-teal-400/70 mt-0.5">
-              {parseFloat(analytics.avgMood) >= 3.5 ? 'Kondisi emosional stabil' : 'Perlu perhatian dukungan coping'}
+              Skor pencatatan mandiri; tidak menunjukkan diagnosis atau kondisi secara keseluruhan.
             </p>
           </div>
 
           <div className="p-3 rounded-2xl bg-indigo-50/60 dark:bg-indigo-950/20 border border-indigo-200/50 dark:border-indigo-900/40">
             <span className="text-[11px] text-indigo-700 dark:text-indigo-400 font-semibold block">Durasi Tidur & Mood</span>
-            <div className="text-lg font-bold text-indigo-900 dark:text-indigo-200 mt-0.5">{analytics.avgSleep} Jam / Malam</div>
+            <div className="text-lg font-bold text-indigo-900 dark:text-indigo-200 mt-0.5">{analytics.avgSleep === null ? 'Belum ada data' : `${analytics.avgSleep} Jam / Malam`}</div>
             <p className="text-[11px] text-indigo-600/80 dark:text-indigo-400/70 mt-0.5">
-              {analytics.avgMoodGoodSleep ? `Mood saat tidur cukup: ${analytics.avgMoodGoodSleep}/5` : 'Pertahankan ritme tidur'}
+              {analytics.avgMoodGoodSleep ? `Rata-rata mood pada catatan tidur ≥7 jam: ${analytics.avgMoodGoodSleep}/5` : 'Belum ada catatan tidur ≥7 jam'}
             </p>
           </div>
 
           <div className="p-3 rounded-2xl bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200/50 dark:border-amber-900/40">
             <span className="text-[11px] text-amber-700 dark:text-amber-400 font-semibold block">Pemicu Akademik Terbanyak</span>
             <div className="text-sm font-bold text-amber-900 dark:text-amber-200 mt-1 truncate">
-              {analytics.topAcademicTriggers[0]?.factor || 'Tugas Kuliah / Deadline'}
+              {analytics.topAcademicTriggers[0]?.factor || 'Belum ada faktor yang dicatat'}
             </div>
             <p className="text-[11px] text-amber-600/80 dark:text-amber-400/70 mt-0.5">
-              {analytics.topAcademicTriggers[0] ? `Tercatat ${analytics.topAcademicTriggers[0].count} kali dalam 14 hari` : 'Pola seimbang'}
+              {analytics.topAcademicTriggers[0] ? `Tercatat ${analytics.topAcademicTriggers[0].count} kali dalam ${analytics.totalEntries} catatan` : 'Tidak ada faktor tercatat pada periode ini'}
             </p>
           </div>
         </div>

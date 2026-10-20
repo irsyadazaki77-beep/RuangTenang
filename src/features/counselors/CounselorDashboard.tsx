@@ -25,10 +25,10 @@ export const CounselorDashboard: React.FC = () => {
       if (res.success) {
         const data = res.data;
         const items = Array.isArray(data) ? data : (data?.data || []);
-        
+
         // Filter high risk (hasSelfHarmRisk or riskLevel tinggi/krisis)
         const risky = items.filter((s: any) => s.hasSelfHarmRisk || s.riskLevel?.toLowerCase() === 'krisis' || s.riskLevel?.toLowerCase() === 'tinggi');
-        
+
         const alerts: RiskAlert[] = risky.map((s: any, idx: number) => {
            const indicators = s.riskIndicators ? (typeof s.riskIndicators === 'string' ? JSON.parse(s.riskIndicators) : s.riskIndicators) : [];
            return {
@@ -407,18 +407,18 @@ export const CounselorDashboard: React.FC = () => {
               ))}
             </div>
           ) : errorRisk ? (
-            <ErrorState 
-              type="network" 
-              title="Gagal Memuat Antrean Krisis" 
-              description={errorRisk} 
-              onRetry={fetchRiskAlerts} 
+            <ErrorState
+              type="network"
+              title="Gagal Memuat Antrean Krisis"
+              description={errorRisk}
+              onRetry={fetchRiskAlerts}
               className="py-4"
             />
           ) : filteredAlerts.length === 0 ? (
-            <EmptyState 
-              icon="info" 
-              title="Tidak Ada Antrean Krisis" 
-              description="Saat ini tidak ada mahasiswa yang membutuhkan penanganan krisis berdasarkan filter pencarian Anda." 
+            <EmptyState
+              icon="info"
+              title="Tidak Ada Antrean Krisis"
+              description="Saat ini tidak ada mahasiswa yang membutuhkan penanganan krisis berdasarkan filter pencarian Anda."
               actionLabel={searchRisk || levelFilter !== 'Semua' || statusFilter !== 'Semua' ? 'Reset Filter' : undefined}
               onAction={() => {
                 setSearchRisk('');
@@ -585,18 +585,18 @@ export const CounselorDashboard: React.FC = () => {
             ))}
           </div>
         ) : apptsError ? (
-          <ErrorState 
-            type="network" 
-            title="Gagal Memuat Jadwal" 
-            description={apptsError} 
+          <ErrorState
+            type="network"
+            title="Gagal Memuat Jadwal"
+            description={apptsError}
             onRetry={fetchCounselorAppointments}
             className="py-6"
           />
         ) : counselorAppts.length === 0 ? (
-          <EmptyState 
-            icon="calendar" 
-            title="Tidak Ada Jadwal Konseling" 
-            description="Tidak ada jadwal konseling yang sesuai dengan filter saat ini." 
+          <EmptyState
+            icon="calendar"
+            title="Tidak Ada Jadwal Konseling"
+            description="Tidak ada jadwal konseling yang sesuai dengan filter saat ini."
             actionLabel={apptStatusFilter !== 'Semua' ? 'Lihat Semua Status' : undefined}
             onAction={() => setApptStatusFilter('Semua')}
             className="py-8 border border-slate-100 bg-slate-50"
@@ -625,7 +625,7 @@ export const CounselorDashboard: React.FC = () => {
                         {appt.status === 'PENDING' ? '⏳ Menunggu Konfirmasi' : appt.status === 'CONFIRMED' ? '✅ Terkonfirmasi' : appt.status === 'IN_PROGRESS' ? '🔵 Sedang Berlangsung' : appt.status === 'COMPLETED' ? '✅ Selesai' : appt.status === 'REJECTED' ? '❌ Ditolak' : '🚫 Dibatalkan'}
                     </span>
                   </div>
-                  
+
                   <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-600">
                     <div>
                       <span className="block text-slate-400 mb-0.5">Konselor</span>
@@ -653,7 +653,7 @@ export const CounselorDashboard: React.FC = () => {
                           </button>
                           <button
                             onClick={() => handleApproveAppointment(appt.id)}
-                            className="flex-1 py-1.5 bg-teal-600 hover:bg-teal-700 text-white font-medium rounded transition-all shadow-2xs"
+                            className="flex-1 py-1.5 bg-teal-700 hover:bg-teal-800 text-white font-medium rounded transition-all shadow-2xs"
                           >
                             Konfirmasi
                           </button>
@@ -713,7 +713,7 @@ export const CounselorDashboard: React.FC = () => {
                           <div className="flex items-center justify-end gap-1.5">
                             <button
                               onClick={() => handleApproveAppointment(appt.id)}
-                              className="px-2.5 py-1 bg-teal-600 hover:bg-teal-700 text-white font-medium rounded transition-all shadow-2xs"
+                              className="px-2.5 py-1 bg-teal-700 hover:bg-teal-800 text-white font-medium rounded transition-all shadow-2xs"
                             >
                               Konfirmasi
                             </button>

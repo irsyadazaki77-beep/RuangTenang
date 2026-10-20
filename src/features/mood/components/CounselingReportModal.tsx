@@ -1,14 +1,14 @@
 import React, { useState } from 'react';
 import { MoodLog, UserSession } from '../../../types';
-import { 
-  FileText, 
-  Printer, 
-  X, 
-  ShieldCheck, 
-  HeartHandshake, 
-  GraduationCap, 
+import {
+  FileText,
+  Printer,
+  X,
+  HeartHandshake,
+  GraduationCap,
   CheckCircle2
 } from 'lucide-react';
+import { parseLocalIsoDateString } from '../../../utils/streak';
 
 interface CounselingReportModalProps {
   isOpen: boolean;
@@ -23,21 +23,23 @@ export const CounselingReportModal: React.FC<CounselingReportModalProps> = ({
   logs,
   user
 }) => {
-  const [includeReflectionNotes, setIncludeReflectionNotes] = useState<boolean>(true);
+  const [includeReflectionNotes, setIncludeReflectionNotes] = useState<boolean>(false);
   const [anonymizeName, setAnonymizeName] = useState<boolean>(false);
 
   if (!isOpen) return null;
 
-  const validLogs = logs.slice(0, 30);
+  const validLogs = [...logs]
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    .slice(0, 30);
   const totalLogs = validLogs.length;
   const avgMood = totalLogs > 0
     ? (validLogs.reduce((acc, l) => acc + l.mood, 0) / totalLogs).toFixed(1)
-    : '0';
+    : '—';
 
   const logsWithSleep = validLogs.filter(l => typeof l.sleepHours === 'number' && !isNaN(l.sleepHours));
   const avgSleep = logsWithSleep.length > 0
     ? (logsWithSleep.reduce((acc, l) => acc + (l.sleepHours as number), 0) / logsWithSleep.length).toFixed(1)
-    : '7.0';
+    : null;
 
   // Extract Academic & Emotional Triggers
   const triggerMap: Record<string, number> = {};
@@ -64,39 +66,39 @@ export const CounselingReportModal: React.FC<CounselingReportModalProps> = ({
   });
 
   const studentDisplayName = anonymizeName
-    ? `Mahasiswa ID #${user?.id?.slice(0, 8) || 'ANON-77'}`
+    ? 'Identitas disamarkan'
     : user?.name || 'Mahasiswa RuangTenang';
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 overflow-y-auto animate-in fade-in duration-200">
       <div className="bg-white text-slate-900 rounded-3xl max-w-3xl w-full shadow-2xl flex flex-col max-h-[90vh] overflow-hidden my-auto border border-slate-200">
-        
+
         {/* Modal Action Bar (Hidden in Print) */}
         <div className="p-4 bg-slate-900 text-white flex items-center justify-between print:hidden shrink-0">
           <div className="flex items-center gap-2">
             <FileText className="w-5 h-5 text-teal-400" />
             <div>
-              <h3 className="text-sm font-bold">Ringkasan Laporan Konseling Mahasiswa (PDF)</h3>
-              <p className="text-[11px] text-slate-400">Siap dicetak atau disimpan sebagai arsip sesi konselor</p>
+              <h3 className="text-sm font-bold">Ringkasan Catatan Kesejahteraan</h3>
+              <p className="text-[11px] text-slate-400">Tampilan ini dapat dicetak atau disimpan melalui browser</p>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
             <label className="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer select-none">
-              <input 
-                type="checkbox" 
-                checked={includeReflectionNotes} 
-                onChange={(e) => setIncludeReflectionNotes(e.target.checked)} 
+              <input
+                type="checkbox"
+                checked={includeReflectionNotes}
+                onChange={(e) => setIncludeReflectionNotes(e.target.checked)}
                 className="rounded text-teal-500"
               />
-              <span>Sertakan Catatan</span>
+              <span>Sertakan catatan refleksi</span>
             </label>
 
             <label className="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer select-none">
-              <input 
-                type="checkbox" 
-                checked={anonymizeName} 
-                onChange={(e) => setAnonymizeName(e.target.checked)} 
+              <input
+                type="checkbox"
+                checked={anonymizeName}
+                onChange={(e) => setAnonymizeName(e.target.checked)}
                 className="rounded text-teal-500"
               />
               <span>Anonimkan Nama</span>
@@ -105,7 +107,7 @@ export const CounselingReportModal: React.FC<CounselingReportModalProps> = ({
             <button
               type="button"
               onClick={handlePrint}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-semibold shadow-sm transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-teal-700 hover:bg-teal-500 text-white text-xs font-semibold shadow-sm transition-colors cursor-pointer"
             >
               <Printer className="w-3.5 h-3.5" />
               <span>Cetak / PDF</span>
@@ -124,7 +126,7 @@ export const CounselingReportModal: React.FC<CounselingReportModalProps> = ({
 
         {/* Printable Report Body */}
         <div id="printable-counseling-report" className="p-6 sm:p-10 overflow-y-auto space-y-6 text-xs sm:text-sm leading-relaxed font-sans">
-          
+
           {/* Institutional Document Header */}
           <div className="border-b-2 border-slate-800 pb-4 flex flex-col sm:flex-row sm:items-start justify-between gap-4">
             <div>
@@ -133,22 +135,25 @@ export const CounselingReportModal: React.FC<CounselingReportModalProps> = ({
                 <span>Pusat Bimbingan & Konseling Mahasiswa</span>
               </div>
               <h1 className="text-lg sm:text-xl font-extrabold text-slate-900 mt-1">
-                Laporan Ringkasan Kesejahteraan & Beban Akademik
+                Ringkasan Catatan Kesejahteraan & Aktivitas Akademik
               </h1>
               <p className="text-xs text-slate-500 mt-0.5">
-                Dokumen Ringkasan Psikologis Terpadu Platform RuangTenang & RuangKerja
+                Dibuat dari catatan mandiri yang tercatat di RuangTenang
               </p>
             </div>
 
             <div className="text-right text-xs space-y-1 sm:shrink-0">
               <div className="font-mono text-slate-600 font-bold">No: {reportId}</div>
               <div className="text-slate-500">{currentDateStr}</div>
-              <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-semibold">
-                <ShieldCheck className="w-3 h-3" />
-                Kerahasiaan Medis Terlindungi
+              <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200 text-[10px] font-semibold">
+                Ringkasan mandiri
               </div>
             </div>
           </div>
+
+          <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+            Ringkasan ini bukan rekam medis, evaluasi klinis, atau diagnosis. Isinya berasal dari catatan yang dimasukkan pengguna; cetak atau bagikan hanya jika sesuai dengan pilihan dan kebutuhan Anda.
+          </p>
 
           {/* Student Profile & Scope */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3.5 bg-slate-50 rounded-xl border border-slate-200">
@@ -158,39 +163,39 @@ export const CounselingReportModal: React.FC<CounselingReportModalProps> = ({
             </div>
             <div>
               <span className="text-[10px] text-slate-400 font-semibold uppercase block">Rentang Periode</span>
-              <span className="font-bold text-slate-800">{totalLogs} Hari Terakhir</span>
+              <span className="font-bold text-slate-800">{totalLogs} log terbaru</span>
             </div>
             <div>
               <span className="text-[10px] text-slate-400 font-semibold uppercase block">Rata-Rata Mood</span>
-              <span className="font-bold text-teal-700">{avgMood} / 5.0</span>
+              <span className="font-bold text-teal-700">{totalLogs ? `${avgMood} / 5.0` : 'Belum ada data'}</span>
             </div>
             <div>
               <span className="text-[10px] text-slate-400 font-semibold uppercase block">Rata-Rata Tidur</span>
-              <span className="font-bold text-indigo-700">{avgSleep} Jam/Malam</span>
+              <span className="font-bold text-indigo-700">{avgSleep === null ? 'Belum ada data' : `${avgSleep} Jam/Malam`}</span>
             </div>
           </div>
 
-          {/* Section 1: Clinical Indicators */}
+          {/* Section 1: Self-reported log summary */}
           <div className="space-y-2">
             <h3 className="font-bold text-slate-900 text-sm border-l-3 border-teal-600 pl-2">
-              1. Indikator Kesejahteraan Emosional & Pola Istirahat
+              1. Ringkasan Pencatatan Mandiri
             </h3>
             <p className="text-xs text-slate-600">
-              Berdasarkan pencatatan mandiri mahasiswa selama periode berjalan, stabilitas suasana hati berada pada skor <strong>{avgMood}/5.0</strong> dengan durasi istirahat malam rata-rata <strong>{avgSleep} jam</strong>.
+              Dari {totalLogs} catatan mood yang dipilih, rata-rata skor yang dicatat adalah <strong>{totalLogs ? `${avgMood}/5.0` : 'belum tersedia'}</strong>. Rata-rata durasi tidur dari {logsWithSleep.length} catatan yang memuat data tidur adalah <strong>{avgSleep === null ? 'belum tersedia' : `${avgSleep} jam`}</strong>.
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
               <div className="p-3 rounded-lg border border-slate-200 bg-white">
-                <span className="font-semibold text-xs text-slate-700 block mb-1">Evaluasi Ritme Istirahat:</span>
+                <span className="font-semibold text-xs text-slate-700 block mb-1">Catatan durasi tidur:</span>
                 <p className="text-xs text-slate-600">
-                  {parseFloat(avgSleep) < 6 
-                    ? '⚠️ Terdapat indikasi defisit tidur kronis yang berpotensi memicu kerentanan kognitif dan penurunan regulasi emosi saat menghadapi deadline.'
-                    : '✅ Durasi istirahat harian berada dalam rentang adekuat untuk mendukung pemulihan fungsi kognitif.'}
+                  {avgSleep === null
+                    ? 'Belum ada catatan durasi tidur pada periode yang dipilih.'
+                    : `Rata-rata sederhana ini berasal dari ${logsWithSleep.length} catatan pengguna dan bukan penilaian kecukupan atau kualitas tidur.`}
                 </p>
               </div>
               <div className="p-3 rounded-lg border border-slate-200 bg-white">
-                <span className="font-semibold text-xs text-slate-700 block mb-1">Skrining Mandiri Terintegrasi:</span>
+                <span className="font-semibold text-xs text-slate-700 block mb-1">Cakupan ringkasan:</span>
                 <p className="text-xs text-slate-600">
-                  Data log terintegrasi dengan modul skrining klinis PHQ-9 (Depresi) & GAD-7 (Kecemasan) untuk memantau eskalasi stres akademik.
+                  Ringkasan ini hanya memuat log mood, durasi tidur, dan faktor yang dicatat; jawaban skrining tidak disertakan.
                 </p>
               </div>
             </div>
@@ -199,10 +204,10 @@ export const CounselingReportModal: React.FC<CounselingReportModalProps> = ({
           {/* Section 2: Dominant Academic Triggers */}
           <div className="space-y-2">
             <h3 className="font-bold text-slate-900 text-sm border-l-3 border-indigo-600 pl-2">
-              2. Matriks Pemicu Stres Akademik Dominan
+              2. Faktor yang Paling Sering Dicatat
             </h3>
             <p className="text-xs text-slate-600">
-              Faktor eksternal dan akademik yang paling sering diasosiasikan dengan fluktuasi suasana hati mahasiswa:
+              Frekuensi pencatatan faktor tidak membuktikan bahwa faktor tersebut menyebabkan perubahan suasana hati.
             </p>
             <div className="flex flex-wrap gap-2 pt-1">
               {sortedTriggers.length > 0 ? (
@@ -232,7 +237,7 @@ export const CounselingReportModal: React.FC<CounselingReportModalProps> = ({
                   .map((l, i) => (
                     <div key={i} className="p-3 rounded-lg bg-slate-50 border border-slate-200 text-xs">
                       <div className="flex items-center justify-between text-[11px] text-slate-500 font-medium mb-1">
-                        <span>{new Date(l.date).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'short' })}</span>
+                        <span>{parseLocalIsoDateString(l.date).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'short' })}</span>
                         <span className="font-semibold text-teal-700">Skor Mood: {l.mood}/5</span>
                       </div>
                       <p className="italic text-slate-700">"{l.notes}"</p>
@@ -242,16 +247,16 @@ export const CounselingReportModal: React.FC<CounselingReportModalProps> = ({
             </div>
           )}
 
-          {/* Section 4: Counselor Guidance & Recommendations */}
+          {/* Section 4: Optional discussion prompts */}
           <div className="p-4 rounded-xl bg-teal-50/70 border border-teal-200 space-y-2">
             <h4 className="font-bold text-xs text-teal-900 uppercase tracking-wide flex items-center gap-1.5">
               <CheckCircle2 className="w-4 h-4 text-teal-700" />
-              Rekomendasi Tindak Lanjut Sesi Konseling
+              Topik yang dapat dibahas jika Anda menghendaki
             </h4>
             <ul className="list-disc list-inside text-xs text-teal-950 space-y-1 leading-relaxed">
-              <li>Lakukan eksplorasi mendalam pada faktor pemicu utama (<strong>{sortedTriggers[0]?.[0] || 'Tugas Kuliah/Skripsi'}</strong>) dalam 15 menit awal sesi.</li>
-              <li>Tinjau efektivitas teknik relaksasi *Mindfulness Workshop* (Grounding 5-4-3-2-1 dan Box Breathing) yang telah diakses mahasiswa.</li>
-              <li>Eksplorasi pembagian milestone tugas akademik di *RuangKerja* untuk mereduksi beban kognitif jangka pendek.</li>
+              <li>Pilih catatan atau faktor yang ingin Anda bicarakan dengan konselor.</li>
+              <li>Koreksi atau jelaskan konteks catatan yang menurut Anda kurang mewakili pengalaman.</li>
+              <li>Diskusikan dukungan yang terasa sesuai dengan kebutuhan Anda saat ini.</li>
             </ul>
           </div>
 
@@ -259,14 +264,14 @@ export const CounselingReportModal: React.FC<CounselingReportModalProps> = ({
           <div className="pt-6 border-t border-slate-200 flex items-end justify-between text-xs text-slate-500">
             <div>
               <p className="text-[10px] text-slate-400">
-                Dicetak secara otomatis dari Platform RuangTenang & RuangKerja.<br />
-                Dokumen ini bersifat rahasia dan hanya untuk keperluan bimbingan konseling.
+                Ringkasan dibuat dari log yang dipilih dan tidak diverifikasi secara klinis.<br />
+                Tinjau isi dan hapus bagian yang tidak ingin Anda bagikan sebelum mencetak.
               </p>
             </div>
             <div className="text-right space-y-8">
-              <p>Tanda Tangan Konselor Pendamping,</p>
-              <div className="font-bold text-slate-800 border-t border-slate-400 pt-1">
-                ( Konselor Profesional RuangTenang )
+              <p>Ruang untuk catatan tindak lanjut (opsional)</p>
+              <div className="font-medium text-slate-500 border-t border-slate-400 pt-1">
+                Diisi bersama konselor bila diperlukan
               </div>
             </div>
           </div>

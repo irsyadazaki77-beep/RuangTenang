@@ -9,7 +9,7 @@ export const authRepository = {
   // Active Sessions & Revocation
   async addActiveSession(userId: string, session: ActiveSession): Promise<void> {
     const hashedSessionId = crypto.createHash('sha256').update(session.sessionId).digest('hex');
-    
+
     await prisma.userSession.upsert({
       where: { id: hashedSessionId },
       update: {
@@ -78,7 +78,7 @@ export const authRepository = {
     if (user && user.activeSessions && user.activeSessions !== "[]") {
       await migrateLegacyUserDataIfNeeded(user);
     }
-    
+
     await prisma.userSession.deleteMany({
       where: {
         userId,
@@ -88,12 +88,30 @@ export const authRepository = {
         ],
       },
     });
+
+    const refreshRows = await (prisma as any).mobileRefreshToken.findMany({
+      where: { userId, revokedAt: null },
+      select: { id: true, sessionId: true, familyId: true },
+    });
+    const revokedFamilies = [...new Set(refreshRows
+      .filter((row: any) => row.sessionId === sessionId || crypto.createHash('sha256').update(row.sessionId).digest('hex') === sessionId || crypto.createHash('sha256').update(row.sessionId).digest('hex') === hashedId)
+      .map((row: any) => row.familyId))];
+    if (revokedFamilies.length) {
+      await (prisma as any).mobileRefreshToken.updateMany({
+        where: { familyId: { in: revokedFamilies }, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+    }
   },
 
   async removeAllActiveSessions(userId: string): Promise<void> {
     await prisma.$transaction(async (tx) => {
       await tx.userSession.deleteMany({
         where: { userId },
+      });
+      await (tx as any).mobileRefreshToken.updateMany({
+        where: { userId, revokedAt: null },
+        data: { revokedAt: new Date() },
       });
       await tx.users.update({
         where: { id: userId },
@@ -421,74 +439,88 @@ export const authRepository = {
     const trimmedToken = mfaToken.trim();
     const trimmedCode = code.trim();
     const hashedToken = crypto.createHash('sha256').update(trimmedToken).digest('hex');
-
-    const user = await prisma.users.findFirst({
-      where: { mfaToken: hashedToken },
-    });
-    if (!user) return null;
-
-    // Check expiration
-    if (user.mfaExpires && new Date(user.mfaExpires).getTime() < Date.now()) {
-      // Invalidate expired challenge
-      await prisma.users.update({
-        where: { id: user.id },
-        data: { mfaCode: null, mfaToken: null, mfaExpires: null },
-      });
-      return null;
-    }
-
-    if (!user.mfaCode) return null;
-
-    // Constant-time timing-safe comparison on hash
     const hashedInput = crypto.createHash('sha256').update(trimmedCode).digest('hex');
-    let isMatch = false;
 
-    if (user.mfaCode.length === 64) {
-      const inputBuf = Buffer.from(hashedInput, 'utf-8');
-      const storedBuf = Buffer.from(user.mfaCode, 'utf-8');
-      isMatch = inputBuf.length === storedBuf.length && crypto.timingSafeEqual(inputBuf, storedBuf);
-    }
-
-    if (isMatch) {
-      // One-time consumption: immediately destroy MFA secrets
-      const updated = await prisma.users.update({
-        where: { id: user.id },
-        data: {
-          mfaCode: null,
-          mfaToken: null,
-          mfaExpires: null,
-          failedLoginAttempts: 0,
-        },
+    const result = await prisma.$transaction(async (tx) => {
+      const user = await tx.users.findFirst({
+        where: { mfaToken: hashedToken },
       });
+      if (!user) return null;
 
-      await auditRepository.logAudit(
-        "MFA_VERIFIED",
-        `Autentikasi Multi-Faktor (MFA) berhasil untuk user ID ${user.id}`,
-        user.id,
-      );
-      return mapUserToRecord(updated);
-    } else {
-      // Failed attempt on MFA: track and limit to max 3 attempts
-      const newFailed = (user.failedLoginAttempts || 0) + 1;
-      if (newFailed >= 3) {
-        // Invalidate MFA challenge to prevent brute force
-        await prisma.users.update({
-          where: { id: user.id },
+      // Check expiration
+      if (user.mfaExpires && new Date(user.mfaExpires).getTime() < Date.now()) {
+        // Invalidate expired challenge
+        await tx.users.updateMany({
+          where: { id: user.id, mfaToken: hashedToken },
+          data: { mfaCode: null, mfaToken: null, mfaExpires: null },
+        });
+        return null;
+      }
+
+      if (!user.mfaCode) return null;
+
+      // Constant-time timing-safe comparison on hash
+      let isMatch = false;
+      if (user.mfaCode.length === 64) {
+        const inputBuf = Buffer.from(hashedInput, 'utf-8');
+        const storedBuf = Buffer.from(user.mfaCode, 'utf-8');
+        isMatch = inputBuf.length === storedBuf.length && crypto.timingSafeEqual(inputBuf, storedBuf);
+      }
+
+      if (isMatch) {
+        // One-time atomic consumption: conditionally clear only if mfaToken matches hashedToken
+        const updateResult = await tx.users.updateMany({
+          where: { id: user.id, mfaToken: hashedToken },
           data: {
             mfaCode: null,
             mfaToken: null,
             mfaExpires: null,
-            failedLoginAttempts: newFailed,
+            failedLoginAttempts: 0,
           },
         });
-      } else {
-        await prisma.users.update({
+
+        if (updateResult.count === 0) {
+          // Concurrently consumed by another request
+          return null;
+        }
+
+        const updated = await tx.users.findUnique({
           where: { id: user.id },
-          data: { failedLoginAttempts: newFailed },
         });
+        return updated ? { success: true as const, user: updated } : null;
+      } else {
+        // Failed attempt on MFA: atomically track and limit to max 3 attempts
+        const updatedUser = await tx.users.update({
+          where: { id: user.id },
+          data: { failedLoginAttempts: { increment: 1 } },
+          select: { id: true, failedLoginAttempts: true },
+        });
+
+        if ((updatedUser.failedLoginAttempts || 0) >= 3) {
+          // Invalidate MFA challenge to prevent brute force
+          await tx.users.updateMany({
+            where: { id: user.id, mfaToken: hashedToken },
+            data: {
+              mfaCode: null,
+              mfaToken: null,
+              mfaExpires: null,
+            },
+          });
+        }
+        return { success: false as const };
       }
-      return null;
+    });
+
+    if (result && 'success' in result && result.success) {
+      await auditRepository.logAudit(
+        "MFA_VERIFIED",
+        `Autentikasi Multi-Faktor (MFA) berhasil untuk user ID ${result.user.id}`,
+        result.user.id,
+      );
+      return mapUserToRecord(result.user);
     }
+
+    return null;
   },
 
   // Security Notifications
@@ -497,7 +529,7 @@ export const authRepository = {
     title: string,
     message: string,
   ): Promise<SecurityNotification> {
-    const id = "secnotif-" + Date.now() + "-" + Math.floor(Math.random() * 1000);
+    const id = `secnotif-${crypto.randomUUID()}`;
     const timestamp = new Date();
 
     const created = await prisma.securityNotification.create({

@@ -5,7 +5,8 @@ const input = () => ({
   snapshotId: 'snapshot-1', comparisonId: 'comparison-1', workspaceId: 'chat-1', prompt: 'Prompt',
   systemInstruction: 'Shared instruction', recentHistory: [{ role: 'user' as const, content: 'History' }],
   canvasContext: { artifactId: 'artifact-1', title: 'Canvas', version: 3, content: 'Canvas content longer than the old 1000 character cap.' },
-  createdAt: new Date().toISOString(), contextFingerprint: '', selectedModelIds: ['model-a', 'model-b']
+  createdAt: new Date().toISOString(), contextFingerprint: '', selectedModelIds: ['model-a', 'model-b'],
+  candidateModels: [{ candidateId: 'model-a', modelId: 'model-a' }, { candidateId: 'model-b', modelId: 'model-b' }]
 });
 
 afterEach(() => { vi.useRealTimers(); __clearComparisonSnapshotsForTests(); });

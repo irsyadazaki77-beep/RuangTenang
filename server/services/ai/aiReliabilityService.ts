@@ -23,10 +23,10 @@ const envInt = (key: string, fallback: number, max: number) => {
 };
 
 export const AI_RELIABILITY_POLICY = Object.freeze({
-  connectTimeoutMs: envMs('AI_CONNECT_TIMEOUT_MS', 20_000, 120_000),
-  firstTokenTimeoutMs: envMs('AI_FIRST_TOKEN_TIMEOUT_MS', 45_000, 180_000),
+  connectTimeoutMs: envMs('AI_CONNECT_TIMEOUT_MS', 60_000, 300_000),
+  firstTokenTimeoutMs: envMs('AI_FIRST_TOKEN_TIMEOUT_MS', 180_000, 600_000),
   streamIdleTimeoutMs: envMs('AI_STREAM_IDLE_TIMEOUT_MS', 30_000, 120_000),
-  totalRequestTimeoutMs: envMs('AI_TOTAL_REQUEST_TIMEOUT_MS', 120_000, 600_000),
+  totalRequestTimeoutMs: envMs('AI_TOTAL_REQUEST_TIMEOUT_MS', 300_000, 900_000),
   maxRetries: envInt('AI_MAX_RETRIES', 1, 2),
   retryBaseDelayMs: envMs('AI_RETRY_BASE_DELAY_MS', 500, 10_000),
   retryMaxDelayMs: envMs('AI_RETRY_MAX_DELAY_MS', 4_000, 30_000),
@@ -52,7 +52,7 @@ export function classifyAiError(error: unknown): AiProviderError {
   else if (/content/.test(raw)) category = 'CONTENT_ERROR';
   else if ([500, 502, 503, 504].includes(status) || /unavailable|overloaded/.test(raw)) category = 'PROVIDER_UNAVAILABLE';
   else if (/fetch failed|network|econn|socket|connection/.test(raw)) category = 'NETWORK_ERROR';
-  const retryable = ['TIMEOUT', 'NETWORK_ERROR', 'PROVIDER_UNAVAILABLE', 'RATE_LIMIT'].includes(category);
+  const retryable = ['TIMEOUT', 'NETWORK_ERROR', 'PROVIDER_UNAVAILABLE', 'RATE_LIMIT', 'MODEL_NOT_FOUND'].includes(category);
   return Object.assign(err, { category, retryable, statusCode: Number.isFinite(status) ? status : undefined });
 }
 
@@ -129,11 +129,12 @@ export async function executeWithReliability<T>(provider: ProviderId, operation:
     let timedOut = false;
     let timeoutReject!: (error: Error) => void;
     const timeoutPromise = new Promise<never>((_, reject) => { timeoutReject = reject; });
+    const effectiveTimeout = provider === 'ollama' ? Math.max(AI_RELIABILITY_POLICY.connectTimeoutMs, 60_000) : AI_RELIABILITY_POLICY.connectTimeoutMs;
     const timer = setTimeout(() => {
       timedOut = true;
       controller.abort();
       timeoutReject(new Error('AI_CONNECT_TIMEOUT'));
-    }, AI_RELIABILITY_POLICY.connectTimeoutMs);
+    }, effectiveTimeout);
     try {
       const result = await Promise.race([operation(controller.signal), timeoutPromise]);
       record(provider);

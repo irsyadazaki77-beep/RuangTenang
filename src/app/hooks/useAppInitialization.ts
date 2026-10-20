@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { UserSession, Counselor } from '../../types';
 import { apiClient } from '../../lib/apiClient';
@@ -8,6 +8,8 @@ import { getWorkspaceModeFromPath } from '../../features/workspace/utils/workspa
 
 interface LocationState {
   selectedCounselor?: Counselor;
+  selectedCounselorUserId?: string;
+  selectedCounselorCampusId?: string;
 }
 
 export function useAppInitialization(user: UserSession | null) {
@@ -16,14 +18,21 @@ export function useAppInitialization(user: UserSession | null) {
   const [selectedCounselor, setSelectedCounselor] = useState<Counselor | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
 
+  useLayoutEffect(() => {
+    setSelectedCounselor(null);
+  }, [user?.id, user?.role, user?.campusId]);
+
   useEffect(() => {
     safeLocalStorage.setItem('ruangtenang_workspace_mode', workspaceMode);
   }, [workspaceMode]);
 
   useEffect(() => {
-    const nextCounselor = (location.state as LocationState | null)?.selectedCounselor;
-    if (nextCounselor) setSelectedCounselor(nextCounselor);
-  }, [location.state]);
+    const routeState = location.state as LocationState | null;
+    if (routeState?.selectedCounselor && routeState.selectedCounselorUserId === user?.id &&
+      (routeState.selectedCounselorCampusId || '') === (user?.campusId || '')) {
+      setSelectedCounselor(routeState.selectedCounselor);
+    }
+  }, [location.state, user?.id, user?.campusId]);
 
   useEffect(() => {
     let isCancelled = false;

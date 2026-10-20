@@ -121,7 +121,6 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         subtitle: 'Lihat profil konselor kampus dan ajukan sesi pendampingan',
         category: 'Mode & Ruang',
         icon: HeartHandshake,
-        badge: 'Bebas Biaya',
         action: () => {
           navigate('/counselors');
           onClose();

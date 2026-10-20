@@ -7,11 +7,13 @@ node_modules/
 build/
 dist/
 dist-ssr/
+/tmp/
 *.local
 
 # Environment Variables & Secrets
 .env*
 !.env.example
+/secrets/
 
 # Logs
 *.log
@@ -55,6 +57,7 @@ playwright-report/
 blob-report/
 .nyc_output/
 .vitest/
+output/
 
 # Temporary Patch Scripts & Linter Reports
 eslint_*.json

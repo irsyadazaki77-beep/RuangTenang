@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { fetchWithTimeoutAndRetry, apiClient } from '../../lib/apiClient';
+import { AUTH_SESSION_INVALIDATED_EVENT, fetchWithTimeoutAndRetry, apiClient } from '../../lib/apiClient';
 
 describe('API Client Contract', () => {
   let originalFetch: typeof global.fetch;
@@ -12,6 +12,21 @@ describe('API Client Contract', () => {
   afterEach(() => {
     global.fetch = originalFetch;
     vi.useRealTimers();
+  });
+
+  it('signals AuthContext when a protected request reports an expired session', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      headers: { get: () => null },
+      json: async () => ({ error: 'Unauthorized' })
+    });
+    const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
+
+    await apiClient.get('/api/v1/chat/history');
+
+    expect(dispatchSpy).toHaveBeenCalledWith(expect.objectContaining({ type: AUTH_SESSION_INVALIDATED_EVENT }));
+    dispatchSpy.mockRestore();
   });
 
   it('preserves domain error payload for HTTP 200 + success:false', async () => {

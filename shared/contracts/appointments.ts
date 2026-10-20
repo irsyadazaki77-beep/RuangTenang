@@ -16,6 +16,20 @@ export function isValidAppointmentStatusTransition(from: string, to: string): bo
   return from === to || (APPOINTMENT_STATUS_TRANSITIONS[from as AppointmentStatus] || []).includes(to as AppointmentStatus);
 }
 
+export const SafeMeetingLinkSchema = z.string()
+  .max(255)
+  .refine(val => {
+    if (!val || val.trim() === '') return true;
+    try {
+      const parsed = new URL(val);
+      return parsed.protocol === 'https:';
+    } catch {
+      return false;
+    }
+  }, { message: 'Tautan video call wajib berupa URL valid dengan protokol HTTPS.' })
+  .optional()
+  .or(z.literal(''));
+
 export const CreateAppointmentSchema = z.object({
   counselorId: z.string().max(100).optional(),
   counselorName: z.string().min(2, 'Nama konselor minimal 2 karakter').max(100),
@@ -24,7 +38,7 @@ export const CreateAppointmentSchema = z.object({
   timezone: z.enum(['WIB', 'WITA', 'WIT']).optional(),
   mode: z.enum(['video_call', 'in_person', 'tele_counseling']).optional(),
   notes: z.string().max(500).optional(),
-  meetingLink: z.string().max(255).optional(),
+  meetingLink: SafeMeetingLinkSchema,
   userId: z.string().max(100).optional(),
   studentName: z.string().max(100).optional(),
   studentNIM: z.string().max(30).optional(),
@@ -43,7 +57,7 @@ export const UpdateAppointmentSchema = z.object({
   status: z.enum(APPOINTMENT_STATUSES).optional(),
   approvalStatus: z.enum(['PENDING_APPROVAL', 'APPROVED', 'REJECTED']).optional(),
   attendanceStatus: z.enum(['SCHEDULED', 'ATTENDED', 'NO_SHOW', 'CANCELLED', 'RESCHEDULED']).optional(),
-  meetingLink: z.string().max(255).optional(),
+  meetingLink: SafeMeetingLinkSchema,
   studentName: z.string().max(100).optional(),
   studentNIM: z.string().max(30).optional(),
   studentEmail: z.string().email().optional().or(z.literal('')).optional()

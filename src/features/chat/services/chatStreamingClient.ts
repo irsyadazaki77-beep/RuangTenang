@@ -1,5 +1,6 @@
 import { StoredAttachment } from '../types';
 import type { FileSourceReference } from '../../../../shared/contracts/files';
+import { AUTH_SESSION_INVALIDATED_EVENT } from '../../../lib/apiClient';
 
 export type StreamState = 'idle' | 'connecting' | 'streaming' | 'completed' | 'aborted' | 'failed';
 
@@ -11,18 +12,23 @@ export interface QuotaExceededData {
 
 export interface RoutingEventData {
   modelUsed: string;
+  modelName?: string;
   routingMode: 'manual' | 'auto';
   routingReason: string;
   presetId?: string;
   isFallback?: boolean;
   fallbackFrom?: string;
+  fallbackFromName?: string;
+  profileId?: string;
+  isDegraded?: boolean;
+  degradationNotice?: string;
 }
 
 export interface StreamCallbacks {
   onStateChange?: (state: StreamState) => void;
   onMessageStart?: (msgId: string) => void;
   onChunk?: (text: string) => void;
-  onPluginSwitch?: (pluginName: string) => void;
+  onPluginSwitch?: (pluginName: string, parameters?: Record<string, unknown>) => void;
   onMessageComplete?: (fullText: string) => void | Promise<void>;
   onError?: (error: string) => void | Promise<void>;
   onFollowUps?: (followUps: string[]) => void;
@@ -30,12 +36,16 @@ export interface StreamCallbacks {
   onQuotaExceeded?: (data: QuotaExceededData) => void;
   onRoutingMetadata?: (data: RoutingEventData) => void;
   onSources?: (sources: FileSourceReference[]) => void;
+  onConsentRequired?: () => void;
 }
 
 export interface StreamPayload {
   message: string;
   chatId?: string;
   isTemporary?: boolean;
+  workspaceMode?: boolean;
+  /** Session-only acknowledgement for anonymous AI processing; never account-persisted. */
+  guestAiConsent?: boolean;
   pluginResult?: string;
   chatMode?: string;
   responseStyle?: string;
@@ -43,11 +53,14 @@ export interface StreamPayload {
   attachments?: StoredAttachment[];
   includeWorkspaceFiles?: boolean;
   workspaceAttachmentIds?: string[];
+  /** Supplemental Canvas/workspace context; handled separately from the message saved in chat history. */
+  workspaceContext?: string;
   isolatedTaskExecution?: boolean;
   taskCategory?: string;
   latencyPreference?: string;
   qualityPreference?: string;
   presetId?: string;
+  history?: Array<{ role: 'user' | 'assistant' | 'model'; content: string }>;
 }
 
 function getCookie(name: string): string | null {
@@ -88,6 +101,8 @@ export class ChatStreamingClient {
     const assistantMsgId = `msg_${Date.now() + 1}`;
     let currentText = '';
     let pluginName = '';
+    let announcedChatId: string | undefined;
+    let consentRequiredAnnounced = false;
 
     this.changeState(token, 'connecting', callbacks.onStateChange);
 
@@ -142,6 +157,9 @@ export class ChatStreamingClient {
       }
 
       if (!response.ok) {
+        if (response.status === 401 && typeof window !== 'undefined') {
+          window.dispatchEvent(new Event(AUTH_SESSION_INVALIDATED_EVENT));
+        }
         let errorMsg = `HTTP Kesalahan ${response.status}`;
         try {
           const errData = await response.json();
@@ -158,6 +176,7 @@ export class ChatStreamingClient {
       const decoder = new TextDecoder();
       let buffer = '';
       let done = false;
+      let receivedDoneMarker = false;
       const readLoop = async () => {
         while (!done) {
           if (token !== this.activeToken) {
@@ -190,12 +209,36 @@ export class ChatStreamingClient {
                 if (trimmed.startsWith('data: ')) {
                   const dataStr = trimmed.substring(6).trim();
                   if (dataStr === '[DONE]') {
+                    receivedDoneMarker = true;
                     done = true;
                     break;
                   }
                   try {
                     const parsed = JSON.parse(dataStr);
-                    
+
+                    // A completion event may include both chatId and sources. Handle
+                    // the chat ID independently so source metadata cannot swallow it.
+                    if (parsed.chatId && parsed.chatId !== announcedChatId) {
+                      announcedChatId = parsed.chatId;
+                      if (token === this.activeToken && callbacks.onChatCreated) {
+                        callbacks.onChatCreated(parsed.chatId);
+                      }
+                    }
+                    if ((parsed.type === 'consent_required' || parsed.code === 'AI_CONSENT_REQUIRED') && !consentRequiredAnnounced) {
+                      consentRequiredAnnounced = true;
+                      if (token === this.activeToken) callbacks.onConsentRequired?.();
+                    }
+                    // Older/still-running servers may only return the local notice
+                    // text without the structured consent_required event.
+                    if (
+                      typeof parsed.text === 'string' &&
+                      /persetujuan pemrosesan ai belum aktif/i.test(parsed.text) &&
+                      !consentRequiredAnnounced
+                    ) {
+                      consentRequiredAnnounced = true;
+                      if (token === this.activeToken) callbacks.onConsentRequired?.();
+                    }
+
                     if (parsed.quotaExceeded || parsed.error === 'DAILY_LIMIT_EXCEEDED') {
                       if (token === this.activeToken && callbacks.onQuotaExceeded) {
                         callbacks.onQuotaExceeded({
@@ -208,20 +251,25 @@ export class ChatStreamingClient {
                         throw new Error(parsed.message || parsed.text || parsed.error || 'Gagal memproses respons');
                       }
                     } else if (parsed.error) {
-                      throw new Error(parsed.text || parsed.error || 'Gagal memproses respons');
+                      throw new Error(parsed.message || parsed.text || (typeof parsed.error === 'string' ? parsed.error : 'Gagal memproses respons'));
                     } else if (parsed.tool_call || (parsed.type === 'plugin' && parsed.plugin)) {
                       pluginName = parsed.tool_call || parsed.plugin;
                       if (token === this.activeToken && callbacks.onPluginSwitch) {
-                        callbacks.onPluginSwitch(pluginName);
+                        callbacks.onPluginSwitch(pluginName, parsed.parameters);
                       }
                     } else if (parsed.type === 'routing') {
                       if (token === this.activeToken && callbacks.onRoutingMetadata) {
                         callbacks.onRoutingMetadata({
                           modelUsed: parsed.modelUsed,
+                          modelName: parsed.modelName,
                           routingMode: parsed.routingMode,
                           routingReason: parsed.routingReason,
                           isFallback: Boolean(parsed.isFallback),
-                          fallbackFrom: parsed.fallbackFrom
+                          fallbackFrom: parsed.fallbackFrom,
+                          fallbackFromName: parsed.fallbackFromName,
+                          profileId: parsed.profileId,
+                          isDegraded: Boolean(parsed.isDegraded),
+                          degradationNotice: parsed.degradationNotice
                         });
                       }
                     } else if (Array.isArray(parsed.sources)) {
@@ -235,10 +283,6 @@ export class ChatStreamingClient {
                     } else if (parsed.type === 'followup' && parsed.questions) {
                       if (token === this.activeToken && callbacks.onFollowUps) {
                         callbacks.onFollowUps(parsed.questions);
-                      }
-                    } else if (parsed.chatId) {
-                      if (token === this.activeToken && callbacks.onChatCreated) {
-                        callbacks.onChatCreated(parsed.chatId);
                       }
                     }
                   } catch (e: any) {
@@ -256,7 +300,9 @@ export class ChatStreamingClient {
           const trimmed = buffer.trim();
           if (trimmed.startsWith('data: ')) {
             const dataStr = trimmed.substring(6).trim();
-            if (dataStr !== '[DONE]') {
+            if (dataStr === '[DONE]') {
+              receivedDoneMarker = true;
+            } else {
               try {
                 const parsed = JSON.parse(dataStr);
                 if (parsed.text || (parsed.type === 'text' && parsed.content)) {
@@ -273,9 +319,21 @@ export class ChatStreamingClient {
       };
 
       await readLoop();
-      
+
       if (token !== this.activeToken) {
         return;
+      }
+
+      if (!receivedDoneMarker) {
+        // A validated tool call is already a complete, actionable UI event.
+        // The server may disconnect before its trailing [DONE] marker arrives.
+        if (pluginName) {
+          this.changeState(token, 'completed', callbacks.onStateChange);
+          return;
+        }
+        throw new Error(currentText.trim()
+          ? 'Respons terputus sebelum selesai. Coba ulangi permintaan.'
+          : 'Koneksi ke provider AI terputus sebelum respons diterima. Coba ulangi permintaan.');
       }
 
       this.changeState(token, 'completed', callbacks.onStateChange);
@@ -292,15 +350,15 @@ export class ChatStreamingClient {
       if (err.name === 'AbortError' || (err.message && err.message.toLowerCase().includes('abort'))) {
         console.info('Stream aborted by client');
         this.changeState(token, 'aborted', callbacks.onStateChange);
-        // Only trigger completion with existing text if there was content streamed
-        if (callbacks.onMessageComplete && currentText.trim()) {
-          await callbacks.onMessageComplete(currentText);
-        }
       } else {
         console.error('Streaming client error:', err);
         this.changeState(token, 'failed', callbacks.onStateChange);
         if (callbacks.onError) {
-          await callbacks.onError(err.message || 'Koneksi terputus.');
+          const rawMessage = typeof err?.message === 'string' ? err.message : '';
+          const isNetworkFailure = err instanceof TypeError && /failed to fetch|networkerror|load failed/i.test(rawMessage);
+          await callbacks.onError(isNetworkFailure
+            ? 'Tidak dapat terhubung ke server. Periksa koneksi internet lalu coba lagi.'
+            : rawMessage || 'Koneksi terputus.');
         }
       }
     } finally {

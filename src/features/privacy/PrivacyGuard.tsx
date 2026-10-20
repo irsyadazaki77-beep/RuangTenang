@@ -12,14 +12,13 @@ interface PrivacyGuardProps {
 export const PrivacyGuard: React.FC<PrivacyGuardProps> = ({
   children,
   title = 'Bilik Pribadi Terkunci',
-  description = 'Data jurnal suasana hati, catatan emosional, dan riwayat skrining Anda dilindungi dengan PIN keamanan.'
+  description = 'PIN membatasi akses ke halaman ini pada sesi browser Anda. PIN ini tidak mengenkripsi data yang sudah tersimpan di perangkat.'
 }) => {
   const { isVaultConfigured, isVaultUnlocked } = usePrivacyVault();
   const [isPinModalOpen, setIsPinModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'unlock' | 'setup'>('unlock');
 
-  // If vault is not configured, or if already unlocked, render children directly
-  if (!isVaultConfigured || isVaultUnlocked) {
+  if (isVaultUnlocked) {
     return <>{children}</>;
   }
 
@@ -43,13 +42,13 @@ export const PrivacyGuard: React.FC<PrivacyGuardProps> = ({
         <div className="pt-2">
           <button
             onClick={() => {
-              setModalMode('unlock');
+              setModalMode(isVaultConfigured ? 'unlock' : 'setup');
               setIsPinModalOpen(true);
             }}
-            className="w-full py-3.5 px-6 rounded-2xl bg-teal-600 hover:bg-teal-700 active:scale-98 text-white font-bold text-sm shadow-md shadow-teal-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
+            className="w-full py-3.5 px-6 rounded-2xl bg-teal-700 hover:bg-teal-800 active:scale-98 text-white font-bold text-sm shadow-md shadow-teal-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
           >
             <Unlock className="w-4 h-4" />
-            <span>Buka Kunci dengan PIN</span>
+            <span>{isVaultConfigured ? 'Buka Kunci dengan PIN' : 'Atur PIN untuk Membuka'}</span>
           </button>
         </div>
       </div>

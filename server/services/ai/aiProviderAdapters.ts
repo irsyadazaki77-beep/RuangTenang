@@ -4,6 +4,7 @@ import { deepseekService } from './deepseekService.js';
 import { groqService } from './groqService.js';
 import { openrouterService } from './openrouterService.js';
 import { openaiService } from './openaiService.js';
+import { ollamaService } from './ollamaService.js';
 
 export interface AiProviderAdapter {
   readonly provider: Exclude<ProviderId, 'gemini'>;
@@ -16,6 +17,12 @@ export interface AiProviderAdapter {
 }
 
 export const AI_PROVIDER_ADAPTERS: Readonly<Record<Exclude<ProviderId, 'gemini'>, AiProviderAdapter>> = {
+  ollama: {
+    provider: 'ollama',
+    isAvailable: () => ollamaService.isAvailable(),
+    generate: (options, modelId) => ollamaService.generateResponse(options, modelId),
+    generateStream: (options, modelId) => ollamaService.generateStream(options, modelId)
+  },
   deepseek: {
     provider: 'deepseek',
     isAvailable: () => deepseekService.isAvailable(),

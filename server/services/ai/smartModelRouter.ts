@@ -1,26 +1,31 @@
-import { 
-  DEFAULT_AI_MODEL_ID, 
+import {
+  DEFAULT_AI_MODEL_ID,
   AUTO_ROUTING_MODEL_ID,
-
-  ModelTier, 
+  isAiProfile,
+  AiProfileId,
+  ModelTier,
   ModelCapability,
-
-  TaskCategory, 
-  LatencyPreference, 
-  QualityPreference, 
-  AiRoutingContext, 
-  RoutingDecision 
+  TaskCategory,
+  LatencyPreference,
+  QualityPreference,
+  AiRoutingContext,
+  RoutingDecision
 } from '../../../shared/aiModelContract.js';
-import { 
-  AI_MODEL_REGISTRY, 
-  AiModelDefinition, 
-  AiModelError, 
-  resolveAiModel, 
+import {
+  AI_MODEL_REGISTRY,
+  AiModelDefinition,
+  AiModelError,
+  resolveAiModel,
   getConfiguredDefaultAiModelId,
-  RESILIENT_FALLBACK_AI_MODEL_ID
+  RESILIENT_FALLBACK_AI_MODEL_ID,
+  getProfileDefinition,
+  validateProfileMode,
+  getModelDefinition
 } from './aiModelRegistry.js';
 import { aiProviderConfig } from '../../config/aiProviderConfig.js';
 import { getProviderHealth } from './aiReliabilityService.js';
+import { aiCostCalculator } from './aiCostCalculator.js';
+
 
 export interface ClassificationSignal {
   category: TaskCategory;
@@ -54,12 +59,12 @@ export function classifyRequest(context: AiRoutingContext, promptText?: string):
   }
 
   // 1. Attachment-based signals
-  const hasImage = attachments.some(a => 
-    a.mimeType?.startsWith('image/') || 
+  const hasImage = attachments.some(a =>
+    a.mimeType?.startsWith('image/') ||
     /\.(png|jpe?g|webp|gif|bmp|svg)$/i.test(a.filename || '')
   );
 
-  const hasCodeAttachment = attachments.some(a => 
+  const hasCodeAttachment = attachments.some(a =>
     /\.(py|js|ts|tsx|jsx|java|cpp|c|cs|go|rs|php|rb|sql|json|ya?ml|html|css|sh|bash)$/i.test(a.filename || '') ||
     a.mimeType?.includes('javascript') ||
     a.mimeType?.includes('python') ||
@@ -67,7 +72,7 @@ export function classifyRequest(context: AiRoutingContext, promptText?: string):
     a.mimeType?.includes('code')
   );
 
-  const hasDocAttachment = attachments.some(a => 
+  const hasDocAttachment = attachments.some(a =>
     /\.(pdf|docx?|pptx?|xlsx?|csv|txt|md)$/i.test(a.filename || '') ||
     a.mimeType?.includes('pdf') ||
     a.mimeType?.includes('word') ||
@@ -81,7 +86,7 @@ export function classifyRequest(context: AiRoutingContext, promptText?: string):
       category: 'general_chat',
       latencyPreference: 'balanced',
       qualityPreference: 'high',
-      requiredCapabilities: ['chat'],
+      requiredCapabilities: ['chat', 'vision', 'image_understanding'],
       reasonHint: 'Request membutuhkan kemampuan pemrosesan multimodal/visual'
     };
   }
@@ -215,7 +220,7 @@ export function classifyRequest(context: AiRoutingContext, promptText?: string):
  * Filter all registered models down to viable candidates.
  */
 export function filterCandidates(
-  context: AiRoutingContext, 
+  context: AiRoutingContext,
   classification: ClassificationSignal,
   availableModels: readonly AiModelDefinition[] = AI_MODEL_REGISTRY
 ): AiModelDefinition[] {
@@ -256,8 +261,8 @@ export function filterCandidates(
  * 2. Stable alphabetical model ID order
  */
 export function scoreCandidate(
-  model: AiModelDefinition, 
-  context: AiRoutingContext, 
+  model: AiModelDefinition,
+  context: AiRoutingContext,
   classification: ClassificationSignal
 ): number {
   let score = 0;
@@ -338,18 +343,153 @@ export function scoreCandidate(
 
 export class SmartModelRouter {
   /**
+   * Routes an official RuangTenang AI Profile to the best configured model
+   * using supported providers: Gemini, DeepSeek, Groq, OpenRouter, and OpenAI.
+   */
+  routeProfile(profileId: AiProfileId, context: AiRoutingContext, promptText?: string): RoutingDecision {
+    const isWorkspace = Boolean(context.workspaceMode ?? (context as any).isWorkspace);
+    validateProfileMode(profileId, isWorkspace);
+
+    const profile = getProfileDefinition(profileId);
+    if (!profile) throw new AiModelError('MODEL_NOT_FOUND');
+
+    const userTier = context.userTier || 'Free';
+    const normalizedTier = (userTier as string) === 'Developer' ? 'Pro' : userTier;
+    if (!profile.allowedTiers.includes(normalizedTier as ModelTier)) {
+      throw new AiModelError('MODEL_NOT_ALLOWED');
+    }
+
+    const classification = classifyRequest(context, promptText);
+    const excluded = new Set(context.excludedModelIds || []);
+    const hasImage = (context.attachments || []).some(a =>
+      a.mimeType?.startsWith('image/') || /\.(png|jpe?g|webp|gif|bmp|svg)$/i.test(a.filename || '')
+    );
+
+    // 1. Filter candidate models specified for this profile
+    const viableCandidates: AiModelDefinition[] = [];
+    for (const candidateId of profile.candidateModelIds) {
+      if (excluded.has(candidateId)) continue;
+      const model = getModelDefinition(candidateId);
+      if (!model) continue;
+      if (!model.allowedTiers.includes(normalizedTier as ModelTier)) continue;
+      if (!aiProviderConfig.isConfigured(model.provider)) continue;
+      if (getProviderHealth(model.provider) === 'unavailable') continue;
+      if (context.streamingRequired && !model.capabilities.includes('streaming')) continue;
+      if (hasImage && !model.capabilities.includes('vision')) continue;
+      if (context.requestedCapabilities && context.requestedCapabilities.some(cap => !model.capabilities.includes(cap))) continue;
+
+      viableCandidates.push(model);
+    }
+
+    if (viableCandidates.length === 0) {
+      throw new AiModelError('MODEL_UNAVAILABLE');
+    }
+
+    // 2. Deterministic scoring of viable candidates based on profile intent
+    const scored = viableCandidates.map(candidate => {
+      let score = 100;
+      // Index priority (earlier in candidate list has natural precedence)
+      const listIndex = profile.candidateModelIds.indexOf(candidate.id);
+      if (listIndex >= 0) {
+        score -= listIndex * 5;
+      }
+
+      // Profile Reasoning affinity
+      if (profile.reasoning === 'Sangat Tinggi') {
+        if (candidate.reasoning === 'Sangat Tinggi') score += 40;
+        else if (candidate.reasoning === 'Tinggi') score += 10;
+      } else if (profile.reasoning === 'Tinggi') {
+        if (candidate.reasoning === 'Tinggi') score += 30;
+        else if (candidate.reasoning === 'Sangat Tinggi') score += 15;
+      }
+
+      // Profile Speed affinity
+      if (profile.speed === 'Sangat Cepat') {
+        if (candidate.speed === 'Sangat Cepat') score += 35;
+        else if (candidate.speed === 'Cepat') score += 15;
+      } else if (profile.speed === 'Cepat') {
+        if (candidate.speed === 'Cepat' || candidate.speed === 'Sangat Cepat') score += 25;
+      }
+
+      // Only use explicit registered prices. Unknown prices are not assumed free.
+      const pricing = aiCostCalculator.getPricing(candidate.id);
+      if (pricing) {
+        const averagePerMillion = (pricing.inputPerMillionUsd + pricing.outputPerMillionUsd) / 2;
+        score += profile.goal === 'reasoning'
+          ? Math.max(-12, 3 - averagePerMillion * 2)
+          : Math.max(-20, 12 - averagePerMillion * 18);
+      }
+
+      // Task category affinity
+      const targetCategory = context.taskCategory || classification.category;
+      if (targetCategory === 'coding') {
+        if (candidate.id.includes('code') || candidate.id.includes('reasoner') || candidate.id.includes('qwen')) score += 25;
+      } else if (targetCategory === 'document_analysis') {
+        if (candidate.provider === 'gemini') score += 20; // superior document context
+      } else if (targetCategory === 'academic_writing' || targetCategory === 'research') {
+        if (candidate.reasoning === 'Sangat Tinggi') score += 25;
+      }
+
+      // Reliability & health check
+      if (getProviderHealth(candidate.provider) === 'degraded') {
+        score -= 40;
+      }
+
+      return { model: candidate, score };
+    });
+
+    scored.sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      if (a.model.isDefault) return -1;
+      if (b.model.isDefault) return 1;
+      return a.model.id.localeCompare(b.model.id);
+    });
+
+    const chosen = scored[0].model;
+    const rankedAlternatives = scored.slice(1);
+    const fallbackList = [
+      ...rankedAlternatives.filter(item => item.model.provider !== chosen.provider),
+      ...rankedAlternatives.filter(item => item.model.provider === chosen.provider)
+    ].slice(0, 2).map(item => item.model.id);
+
+    // Compare the actual candidate with the profile's promised quality level.
+    const reasoningRank = (value: string) => value === 'Sangat Tinggi' ? 2 : value === 'Tinggi' ? 1 : 0;
+    const isDegraded = reasoningRank(chosen.reasoning) < reasoningRank(profile.reasoning);
+
+    return {
+      selectedModelId: chosen.id,
+      selectedModel: chosen,
+      provider: chosen.provider,
+      routingMode: 'manual',
+      routingReason: `Profil ${profile.name}: model ${chosen.name} (${chosen.provider}) dipilih secara cerdas`,
+      fallbackCandidates: fallbackList,
+      profileId,
+      isDegraded,
+      degradationNotice: isDegraded ? `Profil ${profile.name}: model ${chosen.name} tersedia, tetapi tingkat penalarannya di bawah sasaran profil. Coba lagi nanti untuk alternatif yang lebih kuat.` : undefined
+    };
+  }
+
+  /**
    * Main entry point for routing an AI request.
    * Priority:
-   * 1. Manual model selection (explicit user choice always wins, validated against tier & availability).
-   * 2. Auto routing via classification, filtering, and deterministic scoring.
+   * 1. Official AI Profile routing (tenang-turbo, tenang-middle, tenang-low, kerja-fast, kerja-santai, kerja-hard).
+   * 2. Manual model selection (explicit user choice, validated against tier & availability).
+   * 3. Auto routing via classification, filtering, and deterministic scoring.
    */
   routeModel(context: AiRoutingContext, promptText?: string): RoutingDecision {
     const userTier = context.userTier || 'Free';
-    const isManual = context.manualModelId && context.manualModelId !== AUTO_ROUTING_MODEL_ID;
+    const targetModelId = context.profileId || context.manualModelId;
 
-    // 1. MANUAL MODE: Explicit user choice ALWAYS wins
+    // 1. OFFICIAL AI PROFILE ROUTING
+    if (targetModelId && isAiProfile(targetModelId)) {
+      return this.routeProfile(targetModelId, context, promptText);
+    }
+
+    const isManual = targetModelId && targetModelId !== AUTO_ROUTING_MODEL_ID;
+
+    // 2. MANUAL CANONICAL MODEL (developer/admin override or specific model test)
     if (isManual) {
-      const requestedId = context.manualModelId!;
+      const requestedId = targetModelId!;
       // Resolve against canonical registry and user tier
       const model = resolveAiModel(requestedId, userTier);
 
@@ -363,6 +503,19 @@ export class SmartModelRouter {
         throw new AiModelError('MODEL_UNAVAILABLE');
       }
 
+      // Check vision capability if image attachments are present
+      const hasImage = (context.attachments || []).some(a =>
+        a.mimeType?.startsWith('image/') || /\.(png|jpe?g|webp|gif|bmp|svg)$/i.test(a.filename || '')
+      );
+      if (hasImage && !model.capabilities.includes('vision')) {
+        throw new AiModelError('MODEL_UNAVAILABLE');
+      }
+
+      // Check requested capabilities explicitly requested by caller
+      if (context.requestedCapabilities && context.requestedCapabilities.some(cap => !model.capabilities.includes(cap))) {
+        throw new AiModelError('MODEL_UNAVAILABLE');
+      }
+
       return {
         selectedModelId: model.id,
         provider: model.provider,
@@ -371,6 +524,7 @@ export class SmartModelRouter {
         fallbackCandidates: this.getDeterministicFallbackCandidates(model.id, userTier, context.streamingRequired)
       };
     }
+
 
     // 2. AUTO MODE: Deterministic routing pipeline
     const classification = classifyRequest(context, promptText);
@@ -434,8 +588,8 @@ export class SmartModelRouter {
    * Build bounded fallback candidate list without duplicates or infinite loops.
    */
   private getDeterministicFallbackCandidates(
-    primaryModelId: string, 
-    userTier: string, 
+    primaryModelId: string,
+    userTier: string,
     streamingRequired?: boolean
   ): string[] {
     const visited = new Set<string>([primaryModelId]);
@@ -456,7 +610,7 @@ export class SmartModelRouter {
       if (visited.has(id)) continue;
       const model = AI_MODEL_REGISTRY.find(m => m.id === id);
       if (!model) continue;
-      
+
       const normalizedTier = userTier === 'Developer' ? 'Pro' : userTier;
       if (!model.allowedTiers.includes(normalizedTier as ModelTier)) continue;
       if (!aiProviderConfig.isConfigured(model.provider)) continue;

@@ -6,6 +6,8 @@ import { clientDb, createOfflineIdempotencyKey } from '../../lib/clientDb';
 import { useAuth } from '../../contexts/AuthContext';
 import { getStableStudentSession } from '../../lib/authSessionLifecycle';
 import { modalBackdropVariants, modalPanelVariants, reducedMotionVariants } from '../../lib/motionTokens';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
+import { getLocalIsoDateString } from '../../utils/streak';
 
 export interface MoodLog {
   id: string;
@@ -18,9 +20,12 @@ export interface MoodLog {
   sleepQuality: 'very_poor' | 'poor' | 'fair' | 'good' | 'excellent' | null;
 }
 
+type SleepQualityChoice = 'Nyenyak' | 'Kurang Nyenyak' | 'Insomnia' | 'Tidak Dicatat';
+
 interface DailyCheckinModalProps {
   isOpen: boolean;
   onClose: () => void;
+  initialLog?: MoodLog | null;
   onSaveSuccess: (savedLog: MoodLog) => void;
   showToast: (msg: string, type?: 'info' | 'success' | 'warning' | 'error', title?: string) => void;
 }
@@ -62,6 +67,7 @@ export const FACTOR_TAGS = [
 export const DailyCheckinModal: React.FC<DailyCheckinModalProps> = ({
   isOpen,
   onClose,
+  initialLog = null,
   onSaveSuccess,
   showToast
 }) => {
@@ -72,13 +78,48 @@ export const DailyCheckinModal: React.FC<DailyCheckinModalProps> = ({
   const [selectedFactors, setSelectedFactors] = useState<string[]>([]);
   const [journalNote, setJournalNote] = useState<string>('');
   const [sleepHours, setSleepHours] = useState<number>(7);
-  const [sleepQuality, setSleepQuality] = useState<'Nyenyak' | 'Kurang Nyenyak' | 'Insomnia'>('Nyenyak');
-  const [logDate, setLogDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [sleepQuality, setSleepQuality] = useState<SleepQualityChoice>('Nyenyak');
+  const [sleepHoursTouched, setSleepHoursTouched] = useState(false);
+  const [logDate, setLogDate] = useState<string>(() => getLocalIsoDateString());
 
   const [reflectionPrompts, setReflectionPrompts] = useState<string[]>([]);
   const [isLoadingPrompts, setIsLoadingPrompts] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const submitGuard = useRef(false);
+  const previousInitialLogIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    if (!initialLog) {
+      if (previousInitialLogIdRef.current) {
+        setSelectedMood(null);
+        setSelectedEmotions([]);
+        setSelectedFactors([]);
+        setJournalNote('');
+        setSleepHours(7);
+        setSleepHoursTouched(false);
+        setSleepQuality('Nyenyak');
+      }
+      previousInitialLogIdRef.current = null;
+      setLogDate(getLocalIsoDateString());
+      return;
+    }
+    previousInitialLogIdRef.current = initialLog.id;
+    setSelectedMood(initialLog.mood);
+    setSelectedEmotions(initialLog.emotions || []);
+    setSelectedFactors(initialLog.factors || []);
+    setJournalNote(initialLog.notes || '');
+    setSleepHours(initialLog.sleepHours ?? 7);
+    setSleepHoursTouched(initialLog.sleepHours !== null);
+    setSleepQuality(initialLog.sleepQuality === null
+      ? 'Tidak Dicatat'
+      : initialLog.sleepQuality === 'very_poor'
+        ? 'Insomnia'
+        : initialLog.sleepQuality === 'good' || initialLog.sleepQuality === 'excellent'
+          ? 'Nyenyak'
+          : 'Kurang Nyenyak');
+    setLogDate(initialLog.date);
+  }, [isOpen, initialLog]);
 
   // Lock body scroll and handle Escape key
   useEffect(() => {
@@ -156,35 +197,42 @@ export const DailyCheckinModal: React.FC<DailyCheckinModalProps> = ({
       showToast('Masuk ke akun mahasiswa sebelum menyimpan catatan mood.', 'error');
       return;
     }
-    let idempotencyKey: string;
-    try {
-      idempotencyKey = createOfflineIdempotencyKey();
-    } catch {
-      showToast('Browser tidak menyediakan generator aman. Catatan mood belum dikirim.', 'error');
-      return;
+    let idempotencyKey: string | undefined;
+    if (!initialLog) {
+      try {
+        idempotencyKey = createOfflineIdempotencyKey();
+      } catch {
+        showToast('Browser tidak menyediakan generator aman. Catatan mood belum dikirim.', 'error');
+        return;
+      }
     }
     submitGuard.current = true;
     setIsSubmitting(true);
-    const payload = { 
-      mood: selectedMood, 
-      notes: journalNote.trim(), 
-      sleepHours,
-      sleepQuality: sleepQuality === 'Nyenyak' ? 'good' : sleepQuality === 'Insomnia' ? 'very_poor' : 'poor',
+    const payload = {
+      mood: selectedMood,
+      date: logDate,
+      notes: journalNote.trim(),
+      sleepHours: initialLog && initialLog.sleepHours === null && !sleepHoursTouched ? null : sleepHours,
+      sleepQuality: sleepQuality === 'Tidak Dicatat' ? null : sleepQuality === 'Nyenyak' ? 'good' : sleepQuality === 'Insomnia' ? 'very_poor' : 'poor',
       factors: selectedFactors,
-      emotions: selectedEmotions 
+      emotions: selectedEmotions
     };
     const finishSaved = (log: MoodLog, message: string, type: 'success' | 'info' | 'warning') => {
       setSelectedMood(null);
       setSelectedEmotions([]);
       setSelectedFactors([]);
       setJournalNote('');
-      setLogDate(new Date().toISOString().split('T')[0]);
+      setSleepHours(7);
+      setSleepHoursTouched(false);
+      setSleepQuality('Nyenyak');
+      setLogDate(getLocalIsoDateString());
       onSaveSuccess(log);
       onClose();
       showToast(message, type);
     };
 
     const queueOffline = async (message: string, type: 'info' | 'warning') => {
+      if (!idempotencyKey) throw new Error('MOOD_IDEMPOTENCY_KEY_MISSING');
       await clientDb.enqueueOfflineAction({
         type: 'mood_log',
         payload,
@@ -198,15 +246,39 @@ export const DailyCheckinModal: React.FC<DailyCheckinModalProps> = ({
         emotions: selectedEmotions,
         notes: journalNote.trim() ? `${journalNote.trim()} (Offline)` : '(Disimpan Offline)',
         factors: selectedFactors,
-        sleepHours,
-        sleepQuality: sleepQuality === 'Nyenyak' ? 'good' : sleepQuality === 'Insomnia' ? 'very_poor' : 'poor',
+        sleepHours: payload.sleepHours,
+        sleepQuality: payload.sleepQuality,
       };
       finishSaved(offlineLog, message, type);
     };
 
     try {
       if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        if (initialLog) {
+          showToast('Perubahan catatan belum tersimpan. Sambungkan ke internet lalu coba lagi.', 'warning');
+          return;
+        }
         await queueOffline('Catatan mood tersimpan terenkripsi untuk akun ini dan akan dicoba saat online.', 'info');
+        return;
+      }
+
+      if (initialLog) {
+        const response = await apiClient.put<any>(`/api/v1/mood/${encodeURIComponent(initialLog.id)}`, payload);
+        if (!response.success || !response.data?.log?.id) {
+          showToast(response.error || 'Perubahan catatan mood belum tersimpan.', 'error');
+          return;
+        }
+        const saved = response.data.log;
+        finishSaved({
+          id: saved.id,
+          date: saved.timestamp ? new Date(saved.timestamp).toISOString().slice(0, 10) : logDate,
+          mood: typeof saved.mood === 'number' ? saved.mood : (parseInt(String(saved.mood || ''), 10) || selectedMood),
+          emotions: Array.isArray(saved.emotions) ? saved.emotions : selectedEmotions,
+          notes: saved.notes ?? journalNote.trim(),
+          factors: Array.isArray(saved.factors) ? saved.factors : selectedFactors,
+          sleepHours: typeof saved.sleepHours === 'number' ? saved.sleepHours : payload.sleepHours,
+          sleepQuality: saved.sleepQuality !== undefined ? saved.sleepQuality : payload.sleepQuality
+        }, 'Catatan mood berhasil diperbarui.', 'success');
         return;
       }
 
@@ -226,8 +298,8 @@ export const DailyCheckinModal: React.FC<DailyCheckinModalProps> = ({
           emotions: selectedEmotions,
           notes: journalNote.trim(),
           factors: selectedFactors,
-          sleepHours,
-          sleepQuality: sleepQuality === 'Nyenyak' ? 'good' : sleepQuality === 'Insomnia' ? 'very_poor' : 'poor',
+          sleepHours: payload.sleepHours,
+          sleepQuality: payload.sleepQuality,
         }, 'Catatan mood sebelumnya telah dikonfirmasi server.', 'success');
         return;
       }
@@ -254,12 +326,16 @@ export const DailyCheckinModal: React.FC<DailyCheckinModalProps> = ({
         emotions: Array.isArray(saved.emotions) ? saved.emotions : selectedEmotions,
         notes: saved.notes || journalNote.trim(),
         factors: Array.isArray(saved.factors) ? saved.factors : selectedFactors,
-        sleepHours: saved.sleepHours ?? sleepHours,
-        sleepQuality: saved.sleepQuality ?? (sleepQuality === 'Nyenyak' ? 'good' : sleepQuality === 'Insomnia' ? 'very_poor' : 'poor')
+        sleepHours: typeof saved.sleepHours === 'number' ? saved.sleepHours : payload.sleepHours,
+        sleepQuality: saved.sleepQuality !== undefined ? saved.sleepQuality : payload.sleepQuality
       };
 
       finishSaved(canonicalLog, 'Catatan mood harian berhasil disimpan.', 'success');
     } catch (error) {
+      if (initialLog) {
+        showToast('Perubahan catatan mood belum tersimpan. Periksa koneksi lalu coba lagi.', 'error');
+        return;
+      }
       if (typeof navigator !== 'undefined' && !navigator.onLine) {
         try {
           await queueOffline('Koneksi terputus. Catatan mood tersimpan terenkripsi untuk dicoba kembali.', 'warning');
@@ -283,10 +359,12 @@ export const DailyCheckinModal: React.FC<DailyCheckinModalProps> = ({
     }
   };
 
+  const modalRef = useFocusTrap<HTMLDivElement>({ isOpen, onClose });
+
   return (
     <AnimatePresence>
       {isOpen && (
-        <motion.div 
+        <motion.div
           className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 md:p-6 bg-slate-900/60 backdrop-blur-xs overflow-y-auto"
           initial="hidden"
           animate="visible"
@@ -295,12 +373,14 @@ export const DailyCheckinModal: React.FC<DailyCheckinModalProps> = ({
           onClick={(e) => {
             if (e.target === e.currentTarget) onClose();
           }}
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="daily-checkin-title"
         >
-          <motion.div 
-            className="relative w-full max-w-lg surface-card rounded-2xl sm:rounded-3xl border border-default shadow-2xl overflow-hidden flex flex-col max-h-[92vh] my-auto"
+          <motion.div
+            ref={modalRef}
+            tabIndex={-1}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="daily-checkin-title"
+            className="relative w-full max-w-lg surface-card rounded-2xl sm:rounded-3xl border border-default shadow-2xl overflow-hidden flex flex-col max-h-[92vh] my-auto focus:outline-none"
             initial="hidden"
             animate="visible"
             exit="exit"
@@ -315,7 +395,7 @@ export const DailyCheckinModal: React.FC<DailyCheckinModalProps> = ({
             </div>
             <div>
               <h2 id="daily-checkin-title" className="text-base sm:text-lg font-bold text-primary leading-tight">
-                Daily Check-in Mood
+                {initialLog ? 'Edit Catatan Mood' : 'Daily Check-in Mood'}
               </h2>
               <p className="text-xs text-secondary font-normal mt-0.5">
                 Bagaimana perasaan Anda hari ini?
@@ -335,14 +415,15 @@ export const DailyCheckinModal: React.FC<DailyCheckinModalProps> = ({
         <form onSubmit={handleSaveMoodLog} className="p-4 sm:p-6 space-y-5 sm:space-y-6 overflow-y-auto custom-scrollbar flex-1">
           {/* Date Picker */}
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-secondary uppercase tracking-wider block">
+            <label htmlFor="checkin-date" className="text-xs font-semibold text-secondary uppercase tracking-wider block">
               Tanggal Catatan
             </label>
             <input
+              id="checkin-date"
               type="date"
               value={logDate}
               onChange={(e) => setLogDate(e.target.value)}
-              max={new Date().toISOString().split('T')[0]}
+              max={getLocalIsoDateString()}
               className="w-full text-sm p-3 surface-muted border border-default rounded-xl text-primary focus:outline-none focus:ring-2 focus:ring-teal-500/20"
             />
           </div>
@@ -391,7 +472,7 @@ export const DailyCheckinModal: React.FC<DailyCheckinModalProps> = ({
                     onClick={() => handleToggleEmotion(tag.label)}
                     className={`px-3 py-1.5 text-xs rounded-xl border transition-all flex items-center gap-1.5 cursor-pointer chip-tactile ${
                       isSelected
-                        ? 'bg-teal-600 border-teal-600 text-white font-semibold shadow-xs'
+                        ? 'bg-teal-700 border-teal-600 text-white font-semibold shadow-xs'
                         : 'surface-muted border-default text-secondary hover:text-primary hover:border-slate-300 dark:hover:border-slate-700'
                     }`}
                   >
@@ -434,20 +515,26 @@ export const DailyCheckinModal: React.FC<DailyCheckinModalProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
             <div className="space-y-2 p-3.5 surface-muted rounded-xl border border-default">
               <div className="flex justify-between items-center">
-                <label className="text-xs font-semibold text-secondary uppercase tracking-wider block">
+                <label htmlFor="checkin-sleep-hours" className="text-xs font-semibold text-secondary uppercase tracking-wider block">
                   Durasi Tidur
                 </label>
                 <span className="text-xs font-bold text-teal-600 dark:text-teal-400">
-                  {sleepHours} Jam
+                  {initialLog && initialLog.sleepHours === null && !sleepHoursTouched ? 'Belum dicatat' : `${sleepHours} Jam`}
                 </span>
               </div>
               <input
+                id="checkin-sleep-hours"
+                aria-label="Durasi Tidur (Jam)"
                 type="range"
                 min="0"
                 max="12"
                 step="0.5"
                 value={sleepHours}
-                onChange={(e) => setSleepHours(parseFloat(e.target.value))}
+                aria-valuetext={initialLog && initialLog.sleepHours === null && !sleepHoursTouched ? 'Belum dicatat' : `${sleepHours} Jam`}
+                onChange={(e) => {
+                  setSleepHours(parseFloat(e.target.value));
+                  setSleepHoursTouched(true);
+                }}
                 className="w-full accent-teal-600 cursor-pointer"
               />
               <div className="flex justify-between text-[10px] text-muted">
@@ -458,10 +545,12 @@ export const DailyCheckinModal: React.FC<DailyCheckinModalProps> = ({
             </div>
 
             <div className="space-y-2 p-3.5 surface-muted rounded-xl border border-default">
-              <label className="text-xs font-semibold text-secondary uppercase tracking-wider block">
+              <label htmlFor="checkin-sleep-quality" className="text-xs font-semibold text-secondary uppercase tracking-wider block">
                 Kualitas Tidur
               </label>
               <select
+                id="checkin-sleep-quality"
+                aria-label="Kualitas Tidur"
                 value={sleepQuality}
                 onChange={(e) => setSleepQuality(e.target.value as any)}
                 className="w-full text-sm p-2 surface-card border border-default rounded-lg text-primary focus:outline-none focus:ring-2 focus:ring-teal-500/20"
@@ -469,6 +558,7 @@ export const DailyCheckinModal: React.FC<DailyCheckinModalProps> = ({
                 <option value="Nyenyak">😴 Nyenyak & Segar</option>
                 <option value="Kurang Nyenyak">🔄 Kurang Nyenyak / Sering Terbangun</option>
                 <option value="Insomnia">😳 Sulit Tidur / Insomnia</option>
+                <option value="Tidak Dicatat">Tidak ingin mencatat</option>
               </select>
             </div>
           </div>
@@ -476,7 +566,7 @@ export const DailyCheckinModal: React.FC<DailyCheckinModalProps> = ({
           {/* AI Reflection Prompt Guide */}
           <div className="space-y-2.5 pt-1">
             <div className="flex items-center justify-between">
-              <label className="text-xs font-semibold text-secondary uppercase tracking-wider block">
+              <label htmlFor="checkin-journal-note" className="text-xs font-semibold text-secondary uppercase tracking-wider block">
                 Catatan Jurnal Refleksi
               </label>
               <button
@@ -510,6 +600,8 @@ export const DailyCheckinModal: React.FC<DailyCheckinModalProps> = ({
 
             <div className="space-y-1">
               <textarea
+                id="checkin-journal-note"
+                aria-label="Catatan Jurnal Refleksi"
                 placeholder="Ceritakan kejadian, emosi, atau apa yang ada di pikiran Anda hari ini..."
                 value={journalNote}
                 onChange={(e) => setJournalNote(e.target.value.slice(0, 500))}
@@ -544,7 +636,7 @@ export const DailyCheckinModal: React.FC<DailyCheckinModalProps> = ({
               ) : (
                 <>
                   <Check className="w-4 h-4" />
-                  <span>Simpan Check-In Mood</span>
+                  <span>{initialLog ? 'Simpan Perubahan' : 'Simpan Check-In Mood'}</span>
                 </>
               )}
             </button>

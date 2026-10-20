@@ -45,12 +45,16 @@ export class DocxAdapter implements DocumentExtractorAdapter {
         const headingMatch = trimmed.match(/^#{1,3}\s+(.+)$/m);
         const heading = headingMatch ? headingMatch[1].trim() : undefined;
 
-        // Split section into manageable paragraphs if very long
-        const paras = trimmed.split(/\n\s*\n/).filter(p => p.trim().length > 0);
-        for (const p of paras) {
+        // Split section into manageable paragraphs while preserving markdown tables intact
+        // A markdown table starts with | and consists of multiple rows, which should not be broken
+        const parts = trimmed.split(/(?<=\n)\s*\n(?=(?:[^\n]*\|[^\n]*\n\|[-:\s|]+\|)|(?:[^\n]*\n\n))/g);
+
+        for (const p of parts) {
+          const partText = p.trim();
+          if (!partText) continue;
           blocks.push({
             blockId: `${input.documentId}_b${blockIdx}`,
-            text: p.trim(),
+            text: partText,
             section: heading
           });
           blockIdx++;

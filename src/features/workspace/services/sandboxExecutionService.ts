@@ -53,18 +53,68 @@ function createWorkerScript(userCode: string): string {
   const escapedCode = userCode.replace(/<\/script>/gi, '<\\/script>');
   return `
     (function() {
-      // 1. Matikan network dan dangerous APIs
+      // 1. Matikan network, persistent storage, and dangerous background channels
       const disabledMsg = function(name) {
         return function() {
-          throw new Error('Akses network (' + name + ') diblokir di sandbox ini demi keamanan.');
+          throw new Error('Akses (' + name + ') diblokir di sandbox ini demi keamanan data.');
         };
       };
 
-      if (typeof self.fetch !== 'undefined') self.fetch = disabledMsg('fetch');
-      if (typeof self.XMLHttpRequest !== 'undefined') self.XMLHttpRequest = disabledMsg('XMLHttpRequest');
-      if (typeof self.WebSocket !== 'undefined') self.WebSocket = disabledMsg('WebSocket');
-      if (typeof self.EventSource !== 'undefined') self.EventSource = disabledMsg('EventSource');
-      if (typeof self.importScripts !== 'undefined') self.importScripts = disabledMsg('importScripts');
+      const dangerousApis = [
+        'fetch', 'XMLHttpRequest', 'WebSocket', 'EventSource', 'importScripts',
+        'BroadcastChannel', 'Worker', 'SharedWorker', 'openDatabase'
+      ];
+      for (const api of dangerousApis) {
+        try {
+          if (typeof self[api] !== 'undefined') {
+            Object.defineProperty(self, api, {
+              value: disabledMsg(api),
+              writable: false,
+              configurable: false
+            });
+          }
+        } catch (_) {}
+      }
+
+      // Neutralize navigator sendBeacon
+      try {
+        if (typeof self.navigator !== 'undefined' && self.navigator.sendBeacon) {
+          Object.defineProperty(self.navigator, 'sendBeacon', {
+            value: disabledMsg('navigator.sendBeacon'),
+            writable: false,
+            configurable: false
+          });
+        }
+      } catch (_) {}
+
+      // Block origin storage access (IndexedDB and CacheStorage)
+      const storageApis = ['indexedDB', 'caches'];
+      for (const storage of storageApis) {
+        try {
+          if (typeof self[storage] !== 'undefined') {
+            Object.defineProperty(self, storage, {
+              get: disabledMsg(storage),
+              set: function() {},
+              configurable: false
+            });
+          }
+        } catch (_) {}
+      }
+
+      // Freeze global and Worker prototype to prevent prototype deletion/restoration attacks
+      try {
+        if (typeof WorkerGlobalScope !== 'undefined') {
+          for (const api of dangerousApis) {
+            if (WorkerGlobalScope.prototype && typeof WorkerGlobalScope.prototype[api] !== 'undefined') {
+              Object.defineProperty(WorkerGlobalScope.prototype, api, {
+                value: disabledMsg(api),
+                writable: false,
+                configurable: false
+              });
+            }
+          }
+        }
+      } catch (_) {}
 
       let logCount = 0;
       let totalChars = 0;

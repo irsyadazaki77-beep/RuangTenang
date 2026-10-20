@@ -1,5 +1,5 @@
 import { useEscapeKey } from '../../hooks/useEscapeKey';
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import {
@@ -33,6 +33,12 @@ import { SafetyCheckModal } from './components/SafetyCheckModal';
 import { useAuth } from '../../contexts/AuthContext';
 import { addNotification } from '../../lib/notificationStore';
 import { modalBackdropVariants, modalPanelVariants, reducedMotionVariants } from '../../lib/motionTokens';
+
+function createScreeningSubmissionId(): string {
+  const randomHex = (length: number) => Array.from({ length }, () => Math.floor(Math.random() * 16).toString(16)).join('');
+  const value = globalThis.crypto?.randomUUID?.() || `${randomHex(8)}-${randomHex(4)}-${randomHex(4)}-${randomHex(4)}-${randomHex(12)}`;
+  return `scr_${value}`;
+}
 
 interface ScreeningModalProps {
   isOpen: boolean;
@@ -129,7 +135,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
         }
       }
     };
-    
+
     const focusable = getFocusableElements();
     (focusable[0] || modalRef.current)?.focus();
 
@@ -169,16 +175,56 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
     planOrIntent: null,
     wantsTrustedContact: null,
   });
+  const screeningUserIdentityRef = useRef(`${user?.id || 'anonymous'}:${user?.role || 'none'}`);
+  const screeningIdentityEpochRef = useRef(0);
+  const screeningSubmissionIdRef = useRef<string | null>(null);
+
+  const resetAssessmentState = useCallback(() => {
+    screeningIdentityEpochRef.current += 1;
+    screeningSubmissionIdRef.current = null;
+    phq9AnswersRef.current = Array(9).fill(-1);
+    gad7AnswersRef.current = Array(7).fill(-1);
+    setPhq9Answers(Array(9).fill(-1));
+    setGad7Answers(Array(7).fill(-1));
+    setFinalResult(null);
+    setCurrentQuestionIndex(0);
+    setStep('intro');
+    setSlideDirection('next');
+    setShowSafetyCheckModal(false);
+    setSafetyAssessment({ immediateDanger: null, planOrIntent: null, wantsTrustedContact: null });
+    setPersistenceStatus('idle');
+    setPersistenceError(null);
+    setIsSubmitting(false);
+  }, []);
+
+  useEffect(() => {
+    const nextIdentity = `${user?.id || 'anonymous'}:${user?.role || 'none'}`;
+    if (screeningUserIdentityRef.current === nextIdentity) return;
+
+    screeningUserIdentityRef.current = nextIdentity;
+    resetAssessmentState();
+    setHistoryList([]);
+    setErrorHistory(null);
+    setLoadingHistory(false);
+  }, [user?.id, user?.role, resetAssessmentState]);
 
 
 
-  const fetchHistory = () => {
+  const fetchHistory = (signal?: AbortSignal) => {
     if (!isOpen && !isPageMode) return;
-    
+
+    if (!user || user.role === 'guest') {
+      setHistoryList([]);
+      setErrorHistory(null);
+      setLoadingHistory(false);
+      return;
+    }
+
     setLoadingHistory(true);
     setErrorHistory(null);
-    apiClient.get<any[]>('/api/v1/screenings')
+    apiClient.get<any[]>('/api/v1/screenings', { signal })
       .then(res => {
+        if (signal?.aborted) return;
         if (res.success && Array.isArray(res.data)) {
           const mapped: ScreeningResult[] = res.data.map((s: any) => ({
             phq9: {
@@ -202,18 +248,21 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
         }
       })
       .catch(e => {
+        if (signal?.aborted) return;
         console.warn('Failed to fetch screenings from server:', e);
         setErrorHistory(e.message || 'Gagal memuat riwayat skrining.');
       })
       .finally(() => {
-        setLoadingHistory(false);
+        if (!signal?.aborted) setLoadingHistory(false);
       });
   };
 
   useEffect(() => {
-    fetchHistory();
+    const controller = new AbortController();
+    fetchHistory(controller.signal);
+    return () => controller.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, isPageMode]);
+  }, [isOpen, isPageMode, user?.id, user?.role]);
 
   // Handle single question answer choice
   const handleSelectOption = (value: number) => {
@@ -249,8 +298,8 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
 
   const handleNextQuestion = () => {
     const currentQ = ALL_QUESTIONS[currentQuestionIndex];
-    const ansVal = currentQ?.section === 'phq9' 
-      ? phq9AnswersRef.current[currentQ.questionIndexInSection] 
+    const ansVal = currentQ?.section === 'phq9'
+      ? phq9AnswersRef.current[currentQ.questionIndexInSection]
       : gad7AnswersRef.current[currentQ.questionIndexInSection];
 
     if (ansVal === -1) {
@@ -316,7 +365,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
 
     const newHistory = [res, ...historyList];
     setHistoryList(newHistory);
-    
+
     setFinalResult(res);
     setStep('result');
 
@@ -335,6 +384,9 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
       return;
     }
 
+    const clientSubmissionId = screeningSubmissionIdRef.current || createScreeningSubmissionId();
+    screeningSubmissionIdRef.current = clientSubmissionId;
+
     if (!navigator.onLine) {
       setPersistenceStatus('failed');
       setPersistenceError('Perangkat sedang luring. Pengecekan selesai, tetapi penyimpanan ke server gagal.');
@@ -343,8 +395,10 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
     }
 
     setPersistenceStatus('pending');
+    const submissionIdentityEpoch = screeningIdentityEpochRef.current;
     try {
       const response = await apiClient.post<any>('/api/v1/screenings', {
+        clientSubmissionId,
         phq9Score: phqScore,
         gad7Score: gadScore,
         phq9Severity: getPhq9Severity(phqScore),
@@ -356,6 +410,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
         riskIndicators
       });
 
+      if (submissionIdentityEpoch !== screeningIdentityEpochRef.current) return;
       if (response && (response.success || response.data?.id || (response as any).id)) {
         setPersistenceStatus('saved');
         onPersisted?.(res);
@@ -364,12 +419,56 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
         setPersistenceError(response?.error || 'Pengecekan selesai, tetapi penyimpanan ke server gagal.');
       }
     } catch (err: any) {
+      if (submissionIdentityEpoch !== screeningIdentityEpochRef.current) return;
       console.warn('Backend screening save failed:', err);
       setPersistenceStatus('failed');
       const errorMessage = err instanceof Error ? err.message : 'Pengecekan selesai, tetapi penyimpanan ke server gagal.';
       setPersistenceError(errorMessage);
     } finally {
-      setIsSubmitting(false);
+      if (submissionIdentityEpoch === screeningIdentityEpochRef.current) setIsSubmitting(false);
+    }
+  };
+
+  const handleRetryPersistence = async () => {
+    if (!finalResult || !user || user.role === 'guest' || isSubmitting) return;
+    if (!navigator.onLine) {
+      setPersistenceError('Perangkat masih luring. Hasil tetap tersedia untuk diunduh; coba simpan ulang setelah tersambung.');
+      return;
+    }
+
+    const clientSubmissionId = screeningSubmissionIdRef.current || createScreeningSubmissionId();
+    screeningSubmissionIdRef.current = clientSubmissionId;
+    const submissionIdentityEpoch = screeningIdentityEpochRef.current;
+    setIsSubmitting(true);
+    setPersistenceStatus('pending');
+    setPersistenceError(null);
+
+    try {
+      const response = await apiClient.post<any>('/api/v1/screenings', {
+        clientSubmissionId,
+        phq9Score: finalResult.phq9.score,
+        gad7Score: finalResult.gad7.score,
+        phq9Answers: phq9AnswersRef.current,
+        gad7Answers: gad7AnswersRef.current,
+        item9Score: finalResult.phq9.item9Score,
+        hasSelfHarmRisk: finalResult.phq9.hasSelfHarmRisk,
+        riskIndicators: finalResult.riskIndicators
+      });
+
+      if (submissionIdentityEpoch !== screeningIdentityEpochRef.current) return;
+      if (response && (response.success || response.data?.id || (response as any).id)) {
+        setPersistenceStatus('saved');
+        onPersisted?.(finalResult);
+      } else {
+        setPersistenceStatus('failed');
+        setPersistenceError(response?.error || 'Pengecekan selesai, tetapi penyimpanan ke server gagal.');
+      }
+    } catch (err: any) {
+      if (submissionIdentityEpoch !== screeningIdentityEpochRef.current) return;
+      setPersistenceStatus('failed');
+      setPersistenceError(err instanceof Error ? err.message : 'Pengecekan selesai, tetapi penyimpanan ke server gagal.');
+    } finally {
+      if (submissionIdentityEpoch === screeningIdentityEpochRef.current) setIsSubmitting(false);
     }
   };
 
@@ -377,7 +476,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
   const handleOneClickReferral = () => {
     if (!finalResult) return;
 
-    const referralNote = `[Rujukan Skrining Mandiri]\nHasil Cek Kondisi Mental Mahasiswa:\n- Skor PHQ-9 (Depresi): ${finalResult.phq9.score}/27 (Tingkat ${finalResult.phq9.severity})\n- Skor GAD-7 (Kecemasan): ${finalResult.gad7.score}/21 (Tingkat ${finalResult.gad7.severity})\nCatatan: Diperlukan pendampingan profesional dari Konselor Kampus.`;
+    const referralNote = `[Ringkasan Skrining Mandiri]\n- Skor PHQ-9: ${finalResult.phq9.score}/27 (Tingkat ${finalResult.phq9.severity})\n- Skor GAD-7: ${finalResult.gad7.score}/21 (Tingkat ${finalResult.gad7.severity})\nCatatan: Hasil skrining ini bukan diagnosis. Pengguna ingin meninjau pilihan pendampingan konselor.`;
 
     try {
       if (typeof window !== 'undefined') {
@@ -390,7 +489,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
 
     addNotification(
       "Mengarahkan ke Konselor Kampus 🌿",
-      "Membuka form reservasi jadwal konseling dengan skor skrining awal Anda terlampir.",
+      "Membuka form reservasi. Ringkasan skrining hanya disertakan jika izin berbagi dengan konselor aktif.",
       "info"
     );
 
@@ -431,7 +530,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
     text += `   - Skor Total: ${res.gad7.score} / 21\n`;
     text += `   - Tingkat Keparahan: ${res.gad7.severity}\n\n`;
     text += `REKOMENDASI RUANGTENANG:\n`;
-    text += `- Bila skor Depresi / Kecemasan kategori Sedang atau Berat, sangat disarankan membuat jadwal konseling dengan Psikolog Perguruan Tinggi melalui menu Direktori RuangTenang.\n`;
+    text += `- Jika berguna bagi Anda, diskusikan hasil ini dengan konselor atau tenaga kesehatan; ketersediaan dan akses layanan kampus dapat berbeda.\n`;
 
     const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
@@ -444,7 +543,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
 
   const currentQ = ALL_QUESTIONS[currentQuestionIndex];
   const currentAnswerValue = currentQ
-    ? (currentQ.section === 'phq9' 
+    ? (currentQ.section === 'phq9'
         ? (phq9Answers[currentQ.questionIndexInSection] !== -1 ? phq9Answers[currentQ.questionIndexInSection] : phq9AnswersRef.current[currentQ.questionIndexInSection])
         : (gad7Answers[currentQ.questionIndexInSection] !== -1 ? gad7Answers[currentQ.questionIndexInSection] : gad7AnswersRef.current[currentQ.questionIndexInSection]))
     : -1;
@@ -477,7 +576,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
               Cek Kondisi Mental Mahasiswa
             </h2>
             <p className="text-xs text-secondary mt-0.5">
-              Evaluasi klinis singkat (PHQ-9 & GAD-7) untuk mengukur tingkat kelelahan emosional dan kecemasan.
+              Skrining mandiri singkat (PHQ-9 & GAD-7) untuk memantau gejala depresi dan kecemasan; hasilnya bukan diagnosis.
             </p>
           </div>
         </div>
@@ -495,8 +594,8 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
               <ul className="list-disc pl-4 space-y-1.5 leading-relaxed mt-1">
                 <li><strong className="text-primary font-medium">Pengalaman Card Swiper:</strong> Tampil 1 pertanyaan per layar agar kamu dapat menjawab tanpa beban berlebih.</li>
                 <li><strong className="text-primary font-medium">Estimasi Waktu:</strong> Cukup 2 menit (16 pertanyaan pilihan ganda).</li>
-                <li><strong className="text-primary font-medium">Kerahasiaan & Privasi:</strong> {user && user.role !== 'guest' ? 'Hasil akan tersimpan aman di akun Anda untuk pemantauan berkala.' : 'Mode Tamu: Hasil tidak disimpan permanen, hanya tersedia pada sesi ini.'}</li>
-                <li><strong className="text-primary font-medium">Bukan Diagnosis Medis:</strong> Alat ini adalah evaluasi mandiri awal untuk membantu merekomendasikan langkah terbaik (bukan pengganti diagnosis medis).</li>
+                <li><strong className="text-primary font-medium">Penyimpanan:</strong> {user && user.role !== 'guest' ? 'Jawaban dan skor dikirim ke server untuk disimpan pada akun sesuai masa retensi aplikasi.' : 'Mode tamu: jawaban tidak dikirim ke server dan hasil hanya tersedia selama layar ini terbuka.'}</li>
+                <li><strong className="text-primary font-medium">Bukan Diagnosis:</strong> Ini adalah skrining mandiri. Skor tidak menggantikan penilaian konselor atau tenaga kesehatan.</li>
               </ul>
             </div>
 
@@ -508,7 +607,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
                 </span>
                 <span className="text-[10px] text-secondary font-medium uppercase tracking-wider">Arsip Pribadi</span>
               </div>
-              
+
               {loadingHistory ? (
                 <div className="flex items-center justify-center p-4">
                   <div className="w-5 h-5 border-2 border-teal-500 border-t-transparent rounded-full animate-spin"></div>
@@ -516,7 +615,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
               ) : errorHistory ? (
                 <div className="p-3 text-center">
                   <p className="text-xs text-rose-600 dark:text-rose-400 mb-2">{errorHistory}</p>
-                  <button onClick={fetchHistory} className="text-[10px] font-medium text-teal-600 dark:text-teal-400 hover:underline">Coba Lagi</button>
+                  <button onClick={() => fetchHistory()} className="text-[10px] font-medium text-teal-600 dark:text-teal-400 hover:underline">Coba Lagi</button>
                 </div>
               ) : historyList.length > 0 ? (
                 <div className="space-y-2 max-h-36 overflow-y-auto pr-1 custom-scrollbar">
@@ -618,7 +717,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
                           aria-pressed={isSelected}
                           className={`p-3.5 sm:p-4 min-h-13 rounded-xl text-xs sm:text-sm font-medium border text-left transition-all focus:outline-none focus:ring-2 focus:ring-teal-500/30 cursor-pointer flex items-center justify-between group chip-tactile ${
                             isSelected
-                              ? 'bg-teal-600 text-white border-teal-600 shadow-md scale-[1.01]'
+                              ? 'bg-teal-700 text-white border-teal-700 shadow-md scale-[1.01]'
                               : 'surface-card border-default text-primary hover:bg-teal-50/60 dark:hover:bg-teal-950/30 hover:border-teal-300 dark:hover:border-teal-700 shadow-3xs'
                           }`}
                         >
@@ -660,7 +759,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
                   disabled={!hasCurrentAnswer || isSubmitting}
                   className={`flex items-center justify-center gap-1.5 px-5 py-2 min-h-11 sm:min-h-9 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer btn-tactile ${
                     hasCurrentAnswer && !isSubmitting
-                      ? 'bg-teal-600 text-white hover:bg-teal-700 shadow-3xs'
+                      ? 'bg-teal-700 text-white hover:bg-teal-800 shadow-3xs'
                       : 'bg-slate-100 dark:bg-slate-800 text-muted border border-default cursor-not-allowed opacity-60'
                   }`}
                 >
@@ -683,10 +782,10 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
           <div className="space-y-4 animate-fade-in">
             <div className="text-center py-2.5 surface-muted/60 rounded-xl border border-default">
               <h3 className="text-base sm:text-lg font-sans font-bold tracking-tight text-primary">
-                Hasil Evaluasi Kondisi Mental
+                Hasil Skrining Mandiri
               </h3>
               <p className="text-xs text-secondary mt-0.5">
-                Ringkasan instrumen klinis PHQ-9 & GAD-7.
+                Ringkasan skrining mandiri PHQ-9 & GAD-7.
               </p>
             </div>
 
@@ -700,7 +799,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
             {persistenceStatus === 'saved' && (
               <div className="p-3 bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 rounded-xl text-xs text-emerald-800 dark:text-emerald-200 flex items-center gap-2.5">
                 <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span>Hasil skrining tersimpan aman ke profil akun Anda.</span>
+                <span>Hasil skrining tersimpan di akun. Masa retensi dan penghapusan tersedia di Pusat Privasi.</span>
               </div>
             )}
             {persistenceStatus === 'local-only' && (
@@ -710,9 +809,19 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
               </div>
             )}
             {persistenceStatus === 'failed' && (
-              <div className="p-3 bg-rose-50/80 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-xl text-xs text-rose-800 dark:text-rose-200 flex items-center gap-2.5">
+              <div className="p-3 bg-rose-50/80 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-xl text-xs text-rose-800 dark:text-rose-200 flex flex-wrap items-center gap-2.5">
                 <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
-                <span>{persistenceError || 'Pengecekan selesai, tetapi penyimpanan ke server terhambat.'}</span>
+                <span className="flex-1">{persistenceError || 'Pengecekan selesai, tetapi penyimpanan ke server terhambat.'}</span>
+                {user && user.role !== 'guest' && (
+                  <button
+                    type="button"
+                    onClick={handleRetryPersistence}
+                    disabled={isSubmitting}
+                    className="min-h-9 rounded-lg border border-rose-300 dark:border-rose-800 px-2.5 font-semibold hover:bg-rose-100 dark:hover:bg-rose-950 disabled:opacity-60"
+                  >
+                    Coba simpan ulang
+                  </button>
+                )}
               </div>
             )}
 
@@ -747,7 +856,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
                       &quot;Hasil skrining menunjukkan kamu sedang memikul beban yang cukup berat. Kamu tidak harus menghadapinya sendirian.&quot;
                     </p>
                     <p className="text-[11px] text-amber-800/80 dark:text-amber-400/80 leading-relaxed">
-                      Psikolog & konselor kampus siap mendengarkan tanpa menghakimi. Sesi konsultasi bersifat rahasia dan gratis untuk seluruh mahasiswa.
+                      Tinjau profil konselor untuk mengetahui ketersediaan sesi, biaya, dan kebijakan privasi layanan kampus.
                     </p>
                   </div>
                 </div>
@@ -759,7 +868,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
                     className="w-full sm:w-auto px-5 py-3 min-h-12 bg-linear-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white text-xs sm:text-sm font-bold rounded-xl shadow-md hover:shadow-lg transition-all transform hover:-translate-y-0.5 active:translate-y-0 flex items-center justify-center gap-2 cursor-pointer"
                   >
                     <UserCheck className="w-4 h-4 text-emerald-100" />
-                    <span>Hubungkan ke Konselor Kampus Hari Ini</span>
+                    <span>Lihat Konselor dan Jadwal</span>
                     <ArrowRight className="w-4 h-4 ml-0.5" />
                   </button>
                 </div>
@@ -768,10 +877,10 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
               <div className="p-4 rounded-2xl bg-teal-50/60 dark:bg-teal-950/30 border border-teal-200/80 dark:border-teal-800/80 space-y-2">
                 <div className="flex items-center gap-2 font-bold text-xs text-teal-800 dark:text-teal-300">
                   <ShieldCheck className="w-4 h-4 text-teal-600 dark:text-teal-400" />
-                  <span>Kondisi Emosional Relatif Stabil</span>
+                  <span>Skor Skrining Berada di Rentang Rendah</span>
                 </div>
                 <p className="text-xs text-teal-700 dark:text-teal-400 leading-relaxed">
-                  Skor Anda berada dalam rentang wajar. Pertahankan kebiasaan baik, tidur cukup, dan olahraga teratur. Jika sewaktu-waktu membutuhkan teman cerita, konselor kampus dan asisten AI selalu tersedia untuk Anda.
+                  Skor skrining ini berada pada rentang rendah. Hasil tersebut bukan jaminan bahwa tidak ada masalah. Jika tetap merasa khawatir, Anda dapat menghubungi konselor atau tenaga kesehatan.
                 </p>
                 <div className="pt-1">
                   <button
@@ -793,8 +902,19 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
                   <span>Catatan Keselamatan Khusus (Pertanyaan #9 PHQ-9)</span>
                 </div>
                 <p className="leading-relaxed text-[11px]">
-                  Skor pertanyaan ke-9 menunjukkan adanya respon positif terkait pikiran menyakiti diri. Indikator risiko ini dicatat secara terpisah & aman untuk penanganan darurat. Jika kamu butuh teman bicara saat ini, kontak bantuan darurat selalu aktif.
+                  Jawaban ini perlu ditindaklanjuti bersama konselor atau tenaga kesehatan. Skrining tidak mengirim SOS atau memberi tahu konselor secara otomatis. Jika kamu membutuhkan bantuan sekarang, buka Pusat Bantuan Krisis.
                 </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    navigate('/emergency');
+                  }}
+                  className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-rose-300 bg-white px-3 text-[11px] font-semibold text-rose-800 hover:bg-rose-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-600 dark:border-rose-800 dark:bg-slate-900 dark:text-rose-200 dark:hover:bg-rose-950/60"
+                >
+                  <HeartPulse className="h-3.5 w-3.5" aria-hidden="true" />
+                  Buka Pusat Bantuan Krisis
+                </button>
               </div>
             )}
 
@@ -814,7 +934,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
                   <MessageSquare className="w-4 h-4 text-teal-600 dark:text-teal-400 mt-0.5 shrink-0 group-hover:scale-110 transition-transform" />
                   <div>
                     <span className="text-xs font-bold text-teal-800 dark:text-teal-300 block mb-0.5">Bahas Hasil Ini Bersama AI</span>
-                    <span className="text-[10.5px] text-teal-600 dark:text-teal-400/80 leading-snug block">Bimbing asisten AI untuk mengurai perasaan Anda secara aman dan personal.</span>
+                    <span className="text-[10.5px] text-teal-600 dark:text-teal-400/80 leading-snug block">Gunakan AI untuk refleksi; AI bukan pengganti konselor atau tenaga kesehatan.</span>
                   </div>
                 </button>
 
@@ -828,7 +948,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
                   <Calendar className="w-4 h-4 text-indigo-600 dark:text-indigo-400 mt-0.5 shrink-0 group-hover:scale-110 transition-transform" />
                   <div>
                     <span className="text-xs font-bold text-indigo-800 dark:text-indigo-300 block mb-0.5">Jadwal Sesi Konseling</span>
-                    <span className="text-[10.5px] text-indigo-600 dark:text-indigo-400/80 leading-snug block">Temui psikolog profesional kampus berlisensi untuk penanganan terarah.</span>
+                    <span className="text-[10.5px] text-indigo-600 dark:text-indigo-400/80 leading-snug block">Lihat konselor yang terdaftar; ketersediaan, layanan, dan kualifikasi dapat berbeda.</span>
                   </div>
                 </button>
               </div>
@@ -853,11 +973,8 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
               <div className="flex flex-col sm:flex-row w-full sm:w-auto items-center gap-2">
                 <button
                   onClick={() => {
+                    resetAssessmentState();
                     setStep('questionnaire');
-                    setCurrentQuestionIndex(0);
-                    setPhq9Answers(Array(9).fill(-1));
-                    setGad7Answers(Array(7).fill(-1));
-                    setSlideDirection('next');
                   }}
                   className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-3.5 py-2 min-h-11 sm:min-h-9 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-secondary text-xs font-semibold rounded-xl transition-all cursor-pointer btn-press"
                 >
@@ -866,7 +983,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
                 </button>
                 <button
                   onClick={onClose}
-                  className="w-full sm:w-auto px-5 py-2 min-h-11 sm:min-h-9 bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold rounded-xl shadow-3xs transition-all cursor-pointer flex items-center justify-center btn-tactile"
+                  className="w-full sm:w-auto px-5 py-2 min-h-11 sm:min-h-9 bg-teal-700 hover:bg-teal-800 text-white text-xs font-bold rounded-xl shadow-3xs transition-all cursor-pointer flex items-center justify-center btn-tactile"
                 >
                   Selesai
                 </button>

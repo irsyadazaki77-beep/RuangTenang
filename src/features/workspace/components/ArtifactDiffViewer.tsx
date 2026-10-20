@@ -1,7 +1,9 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { WorkspaceArtifact, ArtifactVersionRecord } from '../types';
 import { computeLineDiff, DiffChange } from '../utils/diffHelper';
 import { GitCompare, Plus, Minus, ArrowLeftRight, CheckCircle2 } from 'lucide-react';
+
+const DIFF_PAGE_SIZE = 250;
 
 interface ArtifactDiffViewerProps {
   currentArtifact: WorkspaceArtifact;
@@ -14,6 +16,9 @@ export const ArtifactDiffViewer: React.FC<ArtifactDiffViewerProps> = ({
   baseVersion,
   onCloseDiff
 }) => {
+  const [pageIndex, setPageIndex] = useState(0);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
   // Determine previous content to compare against
   const previousContent = useMemo(() => {
     if (baseVersion) return baseVersion.content;
@@ -29,20 +34,42 @@ export const ArtifactDiffViewer: React.FC<ArtifactDiffViewerProps> = ({
   const diffResult = useMemo(() => {
     return computeLineDiff(previousContent, currentArtifact.content);
   }, [previousContent, currentArtifact.content]);
+  const diffChanges = diffResult.changes;
+  const pageCount = Math.max(1, Math.ceil(diffChanges.length / DIFF_PAGE_SIZE));
+  const visiblePageIndex = Math.min(pageIndex, pageCount - 1);
+  const firstVisibleChange = visiblePageIndex * DIFF_PAGE_SIZE;
+  const visibleChanges = diffChanges.slice(firstVisibleChange, firstVisibleChange + DIFF_PAGE_SIZE);
+  const changedPages = useMemo(() => {
+    const pages = new Set<number>();
+    diffChanges.forEach((change, index) => {
+      if (change.type !== 'unchanged') pages.add(Math.floor(index / DIFF_PAGE_SIZE));
+    });
+    return [...pages];
+  }, [diffChanges]);
+  const previousChangedPage = [...changedPages].reverse().find(index => index < visiblePageIndex);
+  const nextChangedPage = changedPages.find(index => index > visiblePageIndex);
+
+  useEffect(() => {
+    setPageIndex(0);
+  }, [previousContent, currentArtifact.content]);
+
+  useEffect(() => {
+    if (scrollContainerRef.current) scrollContainerRef.current.scrollTop = 0;
+  }, [visiblePageIndex]);
 
   const stats = useMemo(() => {
     let added = 0;
     let removed = 0;
     let unchanged = 0;
 
-    diffResult.forEach(item => {
+    diffChanges.forEach(item => {
       if (item.type === 'added') added++;
       else if (item.type === 'removed') removed++;
       else unchanged++;
     });
 
     return { added, removed, unchanged };
-  }, [diffResult]);
+  }, [diffChanges]);
 
   return (
     <div className="flex flex-col h-full bg-slate-900 text-slate-100 font-mono text-xs overflow-hidden rounded-xl border border-slate-800">
@@ -76,18 +103,21 @@ export const ArtifactDiffViewer: React.FC<ArtifactDiffViewerProps> = ({
       </div>
 
       {/* Diff Content Viewport */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-0.5 custom-scrollbar bg-[#0d131f]">
-        {diffResult.length === 0 || (stats.added === 0 && stats.removed === 0) ? (
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-3 space-y-0.5 custom-scrollbar bg-[#0d131f]">
+        {!diffResult.exact && <p role="note" className="mb-3 rounded-lg border border-amber-700/70 bg-amber-950/40 px-3 py-2 font-sans text-[11px] leading-relaxed text-amber-200">
+          Beberapa bagian dokumen terlalu besar untuk dibandingkan secara rinci. Baris unik dan bagian yang sama di tepi tetap ditandai; bagian lainnya dapat ditampilkan sebagai penghapusan dan penambahan. Baris yang berulang mungkin dipasangkan secara berbeda.
+        </p>}
+        {diffChanges.length === 0 || (stats.added === 0 && stats.removed === 0) ? (
           <div className="flex flex-col items-center justify-center h-full text-slate-400 py-12 text-center font-sans">
             <ArrowLeftRight className="w-8 h-8 text-slate-600 mb-2" />
             <p className="font-medium">Tidak ada perbedaan isi antara versi ini dan versi sebelumnya.</p>
           </div>
         ) : (
-          diffResult.map((line: DiffChange, idx: number) => {
+          visibleChanges.map((line: DiffChange, idx: number) => {
             if (line.type === 'added') {
               return (
                 <div
-                  key={idx}
+                  key={firstVisibleChange + idx}
                   className="flex items-start gap-2 px-2 py-0.5 bg-emerald-950/40 text-emerald-200 border-l-2 border-emerald-500 rounded-xs select-text"
                 >
                   <span className="w-6 text-right text-slate-500 select-none font-mono text-[10px] shrink-0">
@@ -104,7 +134,7 @@ export const ArtifactDiffViewer: React.FC<ArtifactDiffViewerProps> = ({
             if (line.type === 'removed') {
               return (
                 <div
-                  key={idx}
+                  key={firstVisibleChange + idx}
                   className="flex items-start gap-2 px-2 py-0.5 bg-rose-950/40 text-rose-300 line-through opacity-80 border-l-2 border-rose-500 rounded-xs select-text"
                 >
                   <span className="w-6 text-right text-slate-500 select-none font-mono text-[10px] shrink-0">
@@ -120,7 +150,7 @@ export const ArtifactDiffViewer: React.FC<ArtifactDiffViewerProps> = ({
 
             return (
               <div
-                key={idx}
+                key={firstVisibleChange + idx}
                 className="flex items-start gap-2 px-2 py-0.5 text-slate-400 hover:bg-slate-800/30 rounded-xs select-text"
               >
                 <span className="w-6 text-right text-slate-600 select-none font-mono text-[10px] shrink-0">
@@ -134,6 +164,20 @@ export const ArtifactDiffViewer: React.FC<ArtifactDiffViewerProps> = ({
             );
           })
         )}
+        {pageCount > 1 && <nav aria-label="Navigasi halaman perbandingan" className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-2 border-t border-slate-700 bg-[#0d131f]/95 px-2 py-2 font-sans backdrop-blur">
+          <span aria-live="polite" className="text-[11px] text-slate-300">Baris {firstVisibleChange + 1}–{Math.min(firstVisibleChange + DIFF_PAGE_SIZE, diffChanges.length)} dari {diffChanges.length}</span>
+          <div className="flex items-center gap-2">
+            <button type="button" disabled={visiblePageIndex === 0} onClick={() => setPageIndex(visiblePageIndex - 1)} className="rounded-md border border-slate-600 px-2 py-1 text-[11px] text-slate-200 disabled:opacity-40">Sebelumnya</button>
+            <button type="button" disabled={previousChangedPage === undefined} onClick={() => previousChangedPage !== undefined && setPageIndex(previousChangedPage)} className="rounded-md border border-emerald-700 px-2 py-1 text-[11px] text-emerald-200 disabled:opacity-40">Perubahan sebelumnya</button>
+            <label className="flex items-center gap-1 text-[11px] text-slate-300">Halaman
+              <select aria-label="Halaman perbandingan" value={visiblePageIndex} onChange={event => setPageIndex(Number(event.target.value))} className="rounded-md border border-slate-600 bg-slate-900 px-1.5 py-1 text-slate-100">
+                {Array.from({ length: pageCount }, (_, index) => <option key={index} value={index}>{index + 1} dari {pageCount}</option>)}
+              </select>
+            </label>
+            <button type="button" disabled={nextChangedPage === undefined} onClick={() => nextChangedPage !== undefined && setPageIndex(nextChangedPage)} className="rounded-md border border-emerald-700 px-2 py-1 text-[11px] text-emerald-200 disabled:opacity-40">Perubahan berikutnya</button>
+            <button type="button" disabled={visiblePageIndex >= pageCount - 1} onClick={() => setPageIndex(visiblePageIndex + 1)} className="rounded-md border border-slate-600 px-2 py-1 text-[11px] text-slate-200 disabled:opacity-40">Berikutnya</button>
+          </div>
+        </nav>}
       </div>
     </div>
   );

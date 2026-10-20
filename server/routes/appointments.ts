@@ -6,8 +6,13 @@ import { verifyOfflineOwner } from '../middleware/offlineOwnership.js';
 import { sanitizeInput } from '../security';
 import { validatePagination, idempotencyMiddleware } from '../apiV1Helpers';
 import { EventEmitter } from 'events';
+import crypto from 'crypto';
+import { redisService } from '../services/redisService.js';
 import { getValidatedTurnConfig } from '../config/envValidation.js';
+import { canAccessAppointmentWithinCampus, campusesMatchForLegacyAccess } from '../services/campusTenantService.js';
+import { recordCampusProductEvent } from '../services/campusProductAnalyticsService.js';
 import { buildScheduledAppointmentTime, canJoinAppointmentRoom, isValidAppointmentStatusTransition } from '../services/appointmentRoomPolicy.js';
+import { consentService } from '../services/consentService.js';
 import {
   CreateAppointmentSchema as createAppointmentSchema,
   UpdateAppointmentSchema as updateAppointmentSchema,
@@ -17,9 +22,26 @@ import {
 export { createAppointmentSchema, updateAppointmentSchema, rescheduleAppointmentSchema };
 
 const router = Router();
+const SLOT_UNAVAILABLE_MESSAGE = 'Konselor tidak membuka jadwal pada hari atau jam ini. Pilih slot dari ketersediaan terbaru.';
 
 // EventEmitter for real-time appointment updates
 export const appointmentEvents = new EventEmitter();
+const serverInstanceId = crypto.randomUUID();
+
+export function broadcastAppointmentUpdate(data: any): void {
+  const payload = { ...data, _origin: serverInstanceId };
+  appointmentEvents.emit('update', payload);
+  redisService.publish('appointment:updates', JSON.stringify(payload)).catch(() => {});
+}
+
+// Synchronize appointment events across container/pod instances in production clusters
+redisService.subscribe('appointment:updates', (rawMessage: string) => {
+  try {
+    const data = JSON.parse(rawMessage);
+    if (data._origin === serverInstanceId) return; // Ignore local origin echo
+    appointmentEvents.emit('update', data);
+  } catch {}
+}).catch(() => {});
 
 // --- SSE Endpoint for Real-time Status Transitions ---
 router.get('/stream', requireAuth, (req: Request, res: Response) => {
@@ -30,14 +52,15 @@ router.get('/stream', requireAuth, (req: Request, res: Response) => {
 
   // Function to send event
   const sendEvent = (data: any) => {
-    // Only send if the update belongs to the user or if user is admin, etc.
-    // Basic filter: Check if user is involved (as counselor or student)
+    // Only send if the update belongs to the user or if user is authorized within campus
     const role = normalizeRole(req.user?.role);
+    const userCampusId = req.user?.campusId ?? null;
     const isStudentMatch = role === 'mahasiswa' && data.userId === req.user?.userId;
     const isCounselorMatch = role === 'konselor' && data.counselorUserId === req.user?.userId;
-    const isAdmin = role === 'admin';
+    const isCampusAdminMatch = role === 'campus_admin' && data.campusId === userCampusId;
+    const isSuperAdminMatch = role === 'admin';
 
-    if (isStudentMatch || isCounselorMatch || isAdmin) {
+    if (isStudentMatch || isCounselorMatch || isCampusAdminMatch || isSuperAdminMatch) {
       res.write(`data: ${JSON.stringify({
         id: data.id,
         status: data.status,
@@ -87,7 +110,12 @@ export function parseAppointmentToUtcDate(dateStr: string, timeStr: string, time
   }
 }
 
-export function mapAppointmentToResponse(appt: any, redactPrivateDetails = false): AppointmentResponseDTO {
+function getTodayInAppointmentTimezone(timezone: string = 'WIB') {
+  const offsetHours = timezone === 'WIT' ? 9 : timezone === 'WITA' ? 8 : 7;
+  return new Date(Date.now() + offsetHours * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+export function mapAppointmentToResponse(appt: any, redactPrivateDetails = false, includeCounselorNotes = true): AppointmentResponseDTO {
   return {
     id: appt.id,
     counselorId: appt.counselorId,
@@ -95,7 +123,7 @@ export function mapAppointmentToResponse(appt: any, redactPrivateDetails = false
     date: appt.date,
     time: appt.time,
     timezone: appt.timezone || 'WIB',
-    ...(!redactPrivateDetails ? { notes: appt.notes || '' } : {}),
+    ...(!redactPrivateDetails && includeCounselorNotes ? { notes: appt.notes || '' } : {}),
     status: appt.status,
     approvalStatus: appt.approvalStatus,
     attendanceStatus: appt.attendanceStatus,
@@ -108,13 +136,32 @@ export function mapAppointmentToResponse(appt: any, redactPrivateDetails = false
   };
 }
 
+async function mapAppointmentForViewer(appt: any, viewer: NonNullable<Request['user']>) {
+  const role = normalizeRole(viewer.role);
+  const isOwner = role === 'mahasiswa' && appt.userId === viewer.userId;
+  const isCounselor = role === 'konselor'; // callers that use this mapper already apply appointment access scoping
+  const isScreeningReferral = /^\s*\[Rujukan Skrining Mandiri\]/i.test(appt.notes || '');
+  const consent = isCounselor && appt.userId
+    ? await consentService.getUserConsents(appt.userId)
+    : null;
+  // Completed appointment notes may contain counselor-authored clinical details.
+  // Keep those out of the student's appointment payload until intake and clinical notes are separate fields.
+  const includeNotes = (isOwner && appt.status !== 'COMPLETED')
+    || (isCounselor && (!isScreeningReferral || consent?.consentForCounselorSharing === true));
+  return mapAppointmentToResponse(appt, role === 'admin', includeNotes);
+}
+
 const AvailabilityQuerySchema = z.object({
   counselorId: z.string({
     message: 'counselorId wajib diisi'
   }).min(1, 'counselorId tidak boleh kosong'),
   date: z.string({
     message: 'date wajib diisi'
-  }).regex(/^\d{4}-\d{2}-\d{2}$/, 'Format tanggal harus YYYY-MM-DD')
+  }).regex(/^\d{4}-\d{2}-\d{2}$/, 'Format tanggal harus YYYY-MM-DD').refine(value => {
+    const date = new Date(`${value}T00:00:00.000Z`);
+    return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
+  }, 'Tanggal kalender tidak valid.'),
+  timezone: z.enum(['WIB', 'WITA', 'WIT']).optional().default('WIB')
 });
 
 // Middleware for strict Appointment & Room Access Authorization
@@ -136,6 +183,14 @@ export const verifyAppointmentAccess = async (req: Request, res: Response, next:
 
     // Admin can manage records operationally, but room authorization is separately denied.
     const role = normalizeRole(user.role);
+    if (role !== 'admin' && !(await canAccessAppointmentWithinCampus(appointmentId, user.campusId))) {
+      console.warn('[APPOINTMENT_ROOM_ACCESS]', JSON.stringify({ appointmentId, userId: user.userId, role, allowed: false, reason: 'CAMPUS_SCOPE_MISMATCH', timestamp: new Date().toISOString() }));
+      return res.status(404).json({
+        success: false,
+        error: 'ACCESS_DENIED',
+        message: 'Akses ditolak. Jadwal tidak tersedia dalam ruang kampus Anda.'
+      });
+    }
     if (role === 'admin') {
       (req as any).appointment = appt;
       return next();
@@ -202,7 +257,7 @@ export const requireEligibleAppointmentRoom = (req: Request, res: Response, next
 };
 
 // Availability Check
-router.get(['/availability', '/appointments/availability'], async (req: Request, res: Response) => {
+router.get(['/availability', '/appointments/availability'], requireAuth, async (req: Request, res: Response) => {
   try {
     const parsed = AvailabilityQuerySchema.safeParse(req.query);
     if (!parsed.success) {
@@ -214,8 +269,15 @@ router.get(['/availability', '/appointments/availability'], async (req: Request,
       });
     }
 
-    const { counselorId, date } = parsed.data;
-    const availability = await serverDb.getAppointmentAvailability(counselorId, date);
+    const { counselorId, date, timezone } = parsed.data;
+    const counselor = await prisma.counselors.findUnique({ where: { id: counselorId }, select: { campusId: true } });
+    if (!counselor || (normalizeRole(req.user!.role) !== 'admin' && counselor.campusId !== (req.user!.campusId ?? null))) {
+      return res.status(404).json({ success: false, error: 'COUNSELOR_NOT_FOUND', message: 'Konselor tidak tersedia di kampus Anda.' });
+    }
+    if (date < getTodayInAppointmentTimezone(timezone)) {
+      return res.status(400).json({ success: false, code: 'DATE_IN_PAST', error: 'Tanggal sudah lewat pada zona waktu yang dipilih. Pilih tanggal lain.' });
+    }
+    const availability = await serverDb.getAppointmentAvailability(counselorId, date, timezone);
     res.json(availability);
   } catch (err: any) {
     console.error('Error checking availability:', err);
@@ -233,11 +295,12 @@ router.get(['/', '/db/appointments'], requireAuth, requireRole(['mahasiswa', 'ko
     );
 
     const { page, limit, offset } = validatePagination(req, 20);
-    
+
     const andConditions: any[] = [];
 
     // Role-based data isolation with canonical mapping
     const role = normalizeRole(req.user!.role);
+    if (role !== 'admin') andConditions.push({ campusId: req.user!.campusId ?? null });
     if (role === 'mahasiswa') {
       andConditions.push({ userId: req.user!.userId });
     } else if (role === 'konselor') {
@@ -258,7 +321,7 @@ router.get(['/', '/db/appointments'], requireAuth, requireRole(['mahasiswa', 'ko
           message: 'Konselor tidak memiliki izin untuk mengakses data janji temu konselor lain.'
         });
       }
-      
+
       andConditions.push({ counselorId: counselor.id });
     } else if (role === 'admin') {
       const counselorFilter = req.query.counselorId as string;
@@ -291,14 +354,17 @@ router.get(['/', '/db/appointments'], requireAuth, requireRole(['mahasiswa', 'ko
     // Filter by date
     const dateFilter = req.query.date as string;
     if (dateFilter) {
-      const startOfDay = new Date(`${dateFilter}T00:00:00+07:00`);
-      const endOfDay = new Date(`${dateFilter}T23:59:59.999+07:00`);
-      andConditions.push({
+      const nextDate = new Date(`${dateFilter}T00:00:00Z`);
+      nextDate.setUTCDate(nextDate.getUTCDate() + 1);
+      const nextDateString = nextDate.toISOString().slice(0, 10);
+      const timezoneRanges = (['WIB', 'WITA', 'WIT'] as const).map(timezone => ({
+        timezone,
         scheduledAt: {
-          gte: startOfDay,
-          lte: endOfDay
+          gte: buildScheduledAppointmentTime(dateFilter, '00:00', timezone),
+          lt: buildScheduledAppointmentTime(nextDateString, '00:00', timezone)
         }
-      });
+      }));
+      andConditions.push({ OR: timezoneRanges });
     }
 
     // Search query
@@ -316,7 +382,7 @@ router.get(['/', '/db/appointments'], requireAuth, requireRole(['mahasiswa', 'ko
     const where = andConditions.length > 0 ? { AND: andConditions } : {};
 
     const total = await prisma.appointments.count({ where });
-    
+
     const appointmentsData = await prisma.appointments.findMany({
       where,
       orderBy: { createdAt: 'desc' },
@@ -329,8 +395,17 @@ router.get(['/', '/db/appointments'], requireAuth, requireRole(['mahasiswa', 'ko
     res.setHeader('X-Limit', limit.toString());
     res.setHeader('X-Total-Pages', Math.ceil(total / Math.max(limit, 1)));
 
-    const redactPrivateDetails = normalizeRole(req.user!.role) === 'admin';
-    const responseData = appointmentsData.map(appointment => mapAppointmentToResponse(appointment, redactPrivateDetails));
+    const viewerRole = normalizeRole(req.user!.role);
+    const consentByUser = viewerRole === 'konselor'
+      ? await consentService.getBatchUserConsents(appointmentsData.map(appointment => appointment.userId).filter((userId): userId is string => Boolean(userId)))
+      : new Map();
+    const responseData = appointmentsData.map(appointment => mapAppointmentToResponse(
+      appointment,
+      viewerRole === 'admin',
+      viewerRole === 'mahasiswa' && appointment.userId === req.user!.userId
+        || !/^\s*\[Rujukan Skrining Mandiri\]/i.test(appointment.notes || '')
+        || consentByUser.get(appointment.userId || '')?.consentForCounselorSharing === true
+    ));
 
     if (req.query.format === 'object') {
       return res.json({
@@ -353,7 +428,7 @@ router.get(['/', '/db/appointments'], requireAuth, requireRole(['mahasiswa', 'ko
 router.get(['/:id', '/db/appointments/:id'], requireAuth, verifyAppointmentAccess, async (req: Request, res: Response) => {
   try {
     const appt = (req as any).appointment;
-    res.json({ success: true, record: mapAppointmentToResponse(appt, normalizeRole(req.user!.role) === 'admin') });
+    res.json({ success: true, record: await mapAppointmentForViewer(appt, req.user!) });
   } catch (err: any) {
     console.error('Error fetching appointment by ID:', err);
     res.status(500).json({ error: 'Gagal mengambil data janji temu.' });
@@ -364,7 +439,7 @@ router.get(['/:id', '/db/appointments/:id'], requireAuth, verifyAppointmentAcces
 router.get(['/:id/room-access', '/db/appointments/:id/room-access'], requireAuth, verifyAppointmentAccess, requireEligibleAppointmentRoom, async (req: Request, res: Response) => {
   try {
     const appt = (req as any).appointment;
-    
+
     const window = (req as any).roomWindow;
 
     res.json({
@@ -435,6 +510,10 @@ router.post(['/', '/db/appointments'], requireAuth, requireRole(['mahasiswa', 'k
 
     const validated = parsed.data;
     const role = normalizeRole(req.user!.role);
+    if (req.user!.campusId) {
+      const campus = await prisma.campuses.findUnique({ where: { id: req.user!.campusId }, select: { isActive: true } });
+      if (!campus?.isActive) return res.status(403).json({ success: false, error: 'CAMPUS_INACTIVE' });
+    }
     if (role === 'konselor') {
       return res.status(403).json({
         success: false,
@@ -448,14 +527,38 @@ router.post(['/', '/db/appointments'], requireAuth, requireRole(['mahasiswa', 'k
     const finalStudentEmail = isMahasiswa ? req.user!.email : (validated.studentEmail || '');
     const finalStudentNIM = isMahasiswa ? (req.body.studentNIM || '') : (validated.studentNIM || '');
 
+    const studentAccount = finalUserId
+      ? await prisma.users.findUnique({ where: { id: finalUserId }, select: { campusId: true } })
+      : null;
+    const counselorAccount = validated.counselorId
+      ? await prisma.counselors.findUnique({ where: { id: validated.counselorId }, select: { id: true, campusId: true, name: true } })
+      : await prisma.counselors.findFirst({
+          where: { name: validated.counselorName, campusId: studentAccount?.campusId ?? null },
+          select: { id: true, campusId: true, name: true }
+        });
+    if (!counselorAccount || (finalUserId && !studentAccount) || !campusesMatchForLegacyAccess(studentAccount?.campusId, counselorAccount.campusId)) {
+      return res.status(403).json({ success: false, error: 'CAMPUS_SCOPE_MISMATCH', message: 'Mahasiswa dan konselor harus berada pada kampus yang sama.' });
+    }
+    if (role === 'mahasiswa' && studentAccount?.campusId !== (req.user!.campusId ?? null)) {
+      return res.status(403).json({ success: false, error: 'CAMPUS_SCOPE_MISMATCH', message: 'Akun kampus tidak cocok dengan mahasiswa.' });
+    }
+    const appointmentCampusId = studentAccount?.campusId ?? counselorAccount.campusId ?? undefined;
+
+    const rawNotes = sanitizeInput(validated.notes || '', 300);
+    const isScreeningReferral = /^\s*\[Rujukan Skrining Mandiri\]/i.test(rawNotes);
+    const referralSharingAllowed = role === 'mahasiswa' && isScreeningReferral
+      ? (await consentService.getUserConsents(finalUserId)).consentForCounselorSharing
+      : true;
+
     const record = await serverDb.addAppointment({
-      counselorId: validated.counselorId,
-      counselorName: validated.counselorName,
+      counselorId: counselorAccount.id,
+      campusId: appointmentCampusId,
+      counselorName: counselorAccount.name,
       date: validated.date,
       time: validated.time,
       timezone: validated.timezone || 'WIB',
       mode: validated.mode || 'video_call',
-      notes: sanitizeInput(validated.notes || '', 300),
+      notes: referralSharingAllowed ? rawNotes : '',
       status: 'PENDING',
       approvalStatus: 'PENDING_APPROVAL',
       attendanceStatus: 'SCHEDULED',
@@ -465,13 +568,20 @@ router.post(['/', '/db/appointments'], requireAuth, requireRole(['mahasiswa', 'k
       studentNIM: sanitizeInput(finalStudentNIM, 30),
       studentEmail: sanitizeInput(finalStudentEmail, 100)
     });
+    await recordCampusProductEvent(record.userId, appointmentCampusId, 'referral_started');
 
-    res.json({ success: true, record: mapAppointmentToResponse(record, role === 'admin') });
+    res.json({ success: true, record: await mapAppointmentForViewer(record, req.user!) });
   } catch (err: any) {
     if (err.message === 'SLOT_ALREADY_BOOKED' || err.code === 'P2034') {
       return res.status(409).json({
         error: 'Jadwal bentrok! Slot pada tanggal dan jam tersebut sudah dipesan oleh mahasiswa lain. Silakan pilih waktu yang berbeda.'
       });
+    }
+    if (err.message === 'SLOT_EXPIRED') {
+      return res.status(400).json({ success: false, code: 'SLOT_EXPIRED', error: 'Slot sudah terlalu dekat atau telah lewat. Pilih slot lain yang masih tersedia.' });
+    }
+    if (err.message === 'SLOT_UNAVAILABLE') {
+      return res.status(409).json({ success: false, code: 'SLOT_UNAVAILABLE', error: SLOT_UNAVAILABLE_MESSAGE });
     }
     if (err.message === 'INVALID_APPOINTMENT_DATETIME') return res.status(400).json({ success: false, error: err.message });
     // Avoid logging request fields or ORM error details that may echo private notes.
@@ -518,6 +628,15 @@ router.put(['/:id', '/db/appointments/:id'], requireAuth, verifyAppointmentAcces
     }
 
     const validated = parsed.data;
+    if (validated.counselorId && validated.counselorId !== appt.counselorId) {
+      const [targetStudent, targetCounselor] = await Promise.all([
+        appt.userId ? prisma.users.findUnique({ where: { id: appt.userId }, select: { campusId: true } }) : Promise.resolve(null),
+        prisma.counselors.findUnique({ where: { id: validated.counselorId }, select: { campusId: true } })
+      ]);
+      if (!targetCounselor || !campusesMatchForLegacyAccess(targetStudent?.campusId, targetCounselor.campusId)) {
+        return res.status(403).json({ success: false, error: 'CAMPUS_SCOPE_MISMATCH' });
+      }
+    }
     if (validated.status && !isValidAppointmentStatusTransition(appt.status, validated.status)) {
       return res.status(409).json({ success: false, error: 'INVALID_APPOINTMENT_STATUS_TRANSITION' });
     }
@@ -555,7 +674,14 @@ router.put(['/:id', '/db/appointments/:id'], requireAuth, verifyAppointmentAcces
         }
       }
       if (appt.status === 'PENDING') {
-        if (validated.notes !== undefined) updates.notes = sanitizeInput(validated.notes, 300);
+        if (validated.notes !== undefined) {
+          const rawNotes = sanitizeInput(validated.notes, 300);
+          const isScreeningReferral = /^\s*\[Rujukan Skrining Mandiri\]/i.test(rawNotes);
+          const canShareReferral = appt.userId && isScreeningReferral
+            ? (await consentService.getUserConsents(appt.userId)).consentForCounselorSharing
+            : true;
+          updates.notes = canShareReferral ? rawNotes : '';
+        }
         if (validated.mode !== undefined) updates.mode = validated.mode;
       }
     } else if (role === 'konselor') {
@@ -602,10 +728,13 @@ router.put(['/:id', '/db/appointments/:id'], requireAuth, verifyAppointmentAcces
     if (!record) {
       return res.status(409).json({ success: false, error: 'APPOINTMENT_STATUS_CONFLICT' });
     }
+    if (record.status === 'COMPLETED' && appt.status !== 'COMPLETED') {
+      await recordCampusProductEvent(record.userId, record.campusId || req.user!.campusId, 'referral_completed');
+    }
     if (record.status !== appt.status || record.approvalStatus !== appt.approvalStatus || record.attendanceStatus !== appt.attendanceStatus) {
       clearAppointmentRoomState(id);
     }
-    
+
     // Emit event for SSE
     // Need to get counselor user ID to filter SSE properly
     let counselorUserId = '';
@@ -613,18 +742,19 @@ router.put(['/:id', '/db/appointments/:id'], requireAuth, verifyAppointmentAcces
     if (counselorProfile && counselorProfile.userId) {
       counselorUserId = counselorProfile.userId;
     }
-    appointmentEvents.emit('update', {
+    broadcastAppointmentUpdate({
       id: record.id,
       appointmentId: record.id,
       userId: record.userId,
       counselorUserId,
+      campusId: record.campusId ?? null,
       status: record.status,
       approvalStatus: record.approvalStatus,
       attendanceStatus: record.attendanceStatus,
       updatedAt: new Date().toISOString()
     });
 
-    res.json({ success: true, record: mapAppointmentToResponse(record) });
+    res.json({ success: true, record: await mapAppointmentForViewer(record, req.user!) });
   } catch (err: any) {
     if (err.message === 'APPOINTMENT_STATUS_CONFLICT') {
       return res.status(409).json({ success: false, error: 'APPOINTMENT_STATUS_CONFLICT' });
@@ -633,6 +763,12 @@ router.put(['/:id', '/db/appointments/:id'], requireAuth, verifyAppointmentAcces
       return res.status(409).json({
         error: 'Jadwal bentrok! Slot pada tanggal dan jam tersebut sudah terisi oleh jadwal lain.'
       });
+    }
+    if (err.message === 'SLOT_EXPIRED') {
+      return res.status(400).json({ success: false, code: 'SLOT_EXPIRED', error: 'Slot sudah terlalu dekat atau telah lewat. Pilih slot lain yang masih tersedia.' });
+    }
+    if (err.message === 'SLOT_UNAVAILABLE') {
+      return res.status(409).json({ success: false, code: 'SLOT_UNAVAILABLE', error: SLOT_UNAVAILABLE_MESSAGE });
     }
     if (err.code === 'P2034') {
       return res.status(409).json({ success: false, error: 'APPOINTMENT_CONCURRENT_UPDATE' });
@@ -728,7 +864,8 @@ router.post(['/:id/reschedule', '/db/appointments/:id/reschedule'], requireAuth,
     const { date, time, timezone, reason } = parsed.data;
 
     // Validate future/today date (reject past dates)
-    const today = new Date().toISOString().split('T')[0];
+    const targetTimezone = timezone || appt.timezone || 'WIB';
+    const today = getTodayInAppointmentTimezone(targetTimezone);
     if (date < today) {
       return res.status(400).json({
         success: false,
@@ -736,11 +873,20 @@ router.post(['/:id/reschedule', '/db/appointments/:id/reschedule'], requireAuth,
       });
     }
 
+    const rescheduledAt = parseAppointmentToUtcDate(date, time, targetTimezone);
+    if (Number.isNaN(rescheduledAt.getTime()) || rescheduledAt.getTime() <= Date.now() + 5 * 60_000) {
+      return res.status(400).json({
+        success: false,
+        code: 'SLOT_EXPIRED',
+        error: 'Slot sudah terlalu dekat atau telah lewat. Pilih slot lain yang masih tersedia.'
+      });
+    }
+
     let updatedNotes = appt.notes || '';
     if (reason) {
       const sanitizedReason = sanitizeInput(reason, 300);
-      updatedNotes = updatedNotes 
-        ? `${updatedNotes} | Rescheduled: ${sanitizedReason}` 
+      updatedNotes = updatedNotes
+        ? `${updatedNotes} | Rescheduled: ${sanitizedReason}`
         : `Rescheduled: ${sanitizedReason}`;
     }
 
@@ -765,18 +911,19 @@ router.post(['/:id/reschedule', '/db/appointments/:id/reschedule'], requireAuth,
     if (counselorProfile && counselorProfile.userId) {
       counselorUserId = counselorProfile.userId;
     }
-    appointmentEvents.emit('update', {
+    broadcastAppointmentUpdate({
       id: record.id,
       appointmentId: record.id,
       userId: record.userId,
       counselorUserId,
+      campusId: record.campusId ?? null,
       status: record.status,
       approvalStatus: record.approvalStatus,
       attendanceStatus: record.attendanceStatus,
       updatedAt: new Date().toISOString()
     });
 
-    res.json({ success: true, record: mapAppointmentToResponse(record, role === 'admin'), message: 'Jadwal janji temu berhasil dijadwalkan ulang.' });
+    res.json({ success: true, record: await mapAppointmentForViewer(record, req.user!), message: 'Jadwal janji temu berhasil dijadwalkan ulang.' });
   } catch (err: any) {
     if (err.message === 'APPOINTMENT_STATUS_CONFLICT') {
       return res.status(409).json({ success: false, error: 'APPOINTMENT_STATUS_CONFLICT' });
@@ -786,6 +933,12 @@ router.post(['/:id/reschedule', '/db/appointments/:id/reschedule'], requireAuth,
         success: false,
         error: 'Jadwal bentrok! Slot pada tanggal dan jam baru tersebut sudah terisi oleh jadwal lain.'
       });
+    }
+    if (err.message === 'SLOT_EXPIRED') {
+      return res.status(400).json({ success: false, code: 'SLOT_EXPIRED', error: 'Slot sudah terlalu dekat atau telah lewat. Pilih slot lain yang masih tersedia.' });
+    }
+    if (err.message === 'SLOT_UNAVAILABLE') {
+      return res.status(409).json({ success: false, code: 'SLOT_UNAVAILABLE', error: SLOT_UNAVAILABLE_MESSAGE });
     }
     if (err.code === 'P2034') {
       return res.status(409).json({ success: false, error: 'APPOINTMENT_CONCURRENT_UPDATE' });
@@ -868,7 +1021,7 @@ router.get(['/:id/room-presence', '/db/appointments/:id/room-presence'], require
     const appointmentId = req.params.id;
     const roomMap = activeRoomPresences.get(appointmentId) || new Map<string, RoomParticipant>();
     const participants = Array.from(roomMap.values());
-    
+
     // Check if counselor and student are connected
     const hasCounselor = participants.some(p => p.role === 'konselor');
     const hasStudent = participants.some(p => p.role === 'mahasiswa');

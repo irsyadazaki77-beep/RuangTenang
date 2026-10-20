@@ -118,7 +118,7 @@ export const MicroBreathingModal: React.FC<MicroBreathingModalProps> = ({
   return (
     <AnimatePresence>
       {isOpen && (
-        <motion.div 
+        <motion.div
           className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 select-none"
           variants={modalBackdropVariants}
           initial="hidden"
@@ -127,7 +127,7 @@ export const MicroBreathingModal: React.FC<MicroBreathingModalProps> = ({
           onClick={onClose}
           role="presentation"
         >
-          <motion.div 
+          <motion.div
             ref={dialogRef}
             role="dialog"
             aria-modal="true"
@@ -169,7 +169,7 @@ export const MicroBreathingModal: React.FC<MicroBreathingModalProps> = ({
                 {/* Visual Organic Breathing Chamber */}
                 <div className="relative w-52 h-52 sm:w-60 sm:h-60 flex items-center justify-center my-4">
                   {/* Organic Ethereal Glow Aura */}
-                  <motion.div 
+                  <motion.div
                     className="absolute inset-2 rounded-full bg-teal-500/15 filter blur-xl pointer-events-none"
                     animate={
                       shouldReduceMotion
@@ -186,7 +186,7 @@ export const MicroBreathingModal: React.FC<MicroBreathingModalProps> = ({
                   />
 
                   {/* Outer Pulsing Guideline Ring */}
-                  <motion.div 
+                  <motion.div
                     className="absolute inset-0 rounded-full border border-teal-500/30"
                     animate={
                       shouldReduceMotion
@@ -201,9 +201,9 @@ export const MicroBreathingModal: React.FC<MicroBreathingModalProps> = ({
                       ease: sinusEase
                     }}
                   />
-                  
+
                   {/* Inner Organic Breathing Orb with continuous sinusoidal scale */}
-                  <motion.div 
+                  <motion.div
                     className="w-32 h-32 sm:w-36 sm:h-36 rounded-full flex flex-col items-center justify-center shadow-2xl relative z-10"
                     animate={
                       shouldReduceMotion
@@ -249,7 +249,7 @@ export const MicroBreathingModal: React.FC<MicroBreathingModalProps> = ({
               </>
             ) : (
               /* Completion State */
-              <motion.div 
+              <motion.div
                 className="py-6 space-y-4"
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}

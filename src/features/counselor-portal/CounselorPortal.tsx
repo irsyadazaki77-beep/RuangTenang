@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Stethoscope, 
-  ListOrdered, 
-  FileText, 
-  BarChart3, 
-  ShieldCheck, 
-  AlertCircle, 
-  RefreshCw, 
-  Lock, 
-  Plus, 
+import {
+  Stethoscope,
+  ListOrdered,
+  FileText,
+  BarChart3,
+  ShieldCheck,
+  AlertCircle,
+  RefreshCw,
+  Lock,
+  Plus,
   CheckCircle2
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
@@ -34,6 +34,7 @@ export const CounselorPortal: React.FC = () => {
     averageResponseTimeHours: null,
   });
   const [loading, setLoading] = useState<boolean>(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedStudentForSoap, setSelectedStudentForSoap] = useState<TriageItem | null>(null);
   const [activeNoteForEdit, setActiveNoteForEdit] = useState<SoapNote | null>(null);
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -60,22 +61,31 @@ export const CounselorPortal: React.FC = () => {
 
       if (!isMountedRef.current || ac.signal.aborted) return;
 
+      const failedSections: string[] = [];
       if (queueRes.status === 'fulfilled' && queueRes.value.success && Array.isArray(queueRes.value.data)) {
         setTriageItems(queueRes.value.data);
       } else {
-        setTriageItems([]);
+        failedSections.push('antrean triase');
       }
 
       if (statsRes.status === 'fulfilled' && statsRes.value.success && statsRes.value.data) {
         setStats(statsRes.value.data);
+      } else {
+        failedSections.push('ringkasan analitik');
       }
 
       if (notesRes.status === 'fulfilled' && notesRes.value.success && notesRes.value.data) {
         setSoapNotes(notesRes.value.data);
+      } else {
+        failedSections.push('riwayat SOAP');
       }
+      setLoadError(failedSections.length
+        ? `Data ${failedSections.join(', ')} belum berhasil dimuat. Data sebelumnya tetap ditampilkan jika tersedia.`
+        : null);
     } catch (err: any) {
       if (err?.name !== 'AbortError') {
         console.error('Failed to load counselor portal data:', err);
+        setLoadError('Data portal belum berhasil dimuat. Periksa koneksi lalu coba lagi.');
       }
     } finally {
       if (isMountedRef.current && !ac.signal.aborted) {
@@ -146,12 +156,12 @@ export const CounselorPortal: React.FC = () => {
         </div>
         <h2 className="text-xl font-bold text-primary">Akses Dibatasi: Khusus Konselor & Tenaga Klinis</h2>
         <p className="text-sm text-secondary leading-relaxed">
-          Halaman Portal Konselor berisi antrean triase skrining dan catatan medis SOAP terenkripsi yang hanya dapat diakses oleh konselor kampus dan psikolog terverifikasi sesuai kebijakan privasi UU PDP.
+          Portal ini memuat antrean dan catatan SOAP. Akses catatan diperiksa berdasarkan akun konselor, penugasan kasus, dan izin berbagi yang berlaku.
         </p>
         <div className="pt-2">
           <a
             href="/"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-semibold shadow-xs transition-colors"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold shadow-xs transition-colors"
           >
             Kembali ke Beranda
           </a>
@@ -172,13 +182,13 @@ export const CounselorPortal: React.FC = () => {
               </div>
               <div>
                 <h1 className="text-lg sm:text-xl font-bold text-primary flex items-center gap-2">
-                  <span>Portal Konselor & Layanan Klinis Kampus</span>
+                  <span>Portal Konselor</span>
                   <span className="text-xs px-2.5 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 font-semibold border border-indigo-200 dark:border-indigo-900">
-                    Enterprise
+                    Konselor
                   </span>
                 </h1>
                 <p className="text-xs text-secondary mt-0.5">
-                  Sistem Triase Skrining, Dokumentasi SOAP Terenkripsi & Manajemen Kasus Kesehatan Mental.
+                  Antrean, catatan SOAP, dan tindak lanjut mahasiswa yang ditugaskan.
                 </p>
               </div>
             </div>
@@ -187,7 +197,7 @@ export const CounselorPortal: React.FC = () => {
           <div className="flex items-center gap-3">
             <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl surface-muted border border-default text-xs">
               <ShieldCheck className="w-4 h-4 text-emerald-600" />
-              <span className="text-secondary font-medium">Praktik Berlisensi & UU PDP</span>
+              <span className="text-secondary font-medium">Akses berbasis peran & persetujuan</span>
             </div>
 
             <button
@@ -219,65 +229,102 @@ export const CounselorPortal: React.FC = () => {
             <span>{notification.message}</span>
           </div>
         )}
+        {loadError && (
+          <div role="alert" className="mt-4 flex flex-col gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100 sm:flex-row sm:items-center sm:justify-between">
+            <span>{loadError}</span>
+            <button
+              type="button"
+              onClick={() => void fetchData()}
+              disabled={loading}
+              className="min-h-9 shrink-0 rounded-lg border border-amber-400 px-3 font-semibold hover:bg-amber-100 disabled:opacity-50 dark:border-amber-800 dark:hover:bg-amber-900/50"
+            >
+              Coba Muat Ulang
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* Main Tabs Navigation */}
-      <div className="flex border-b border-default space-x-1 overflow-x-auto no-scrollbar">
-        <button
-          type="button"
-          onClick={() => setActiveTab('triage')}
-          className={`flex items-center gap-2 py-3 px-4 text-xs sm:text-sm font-semibold border-b-2 transition whitespace-nowrap cursor-pointer ${
-            activeTab === 'triage'
-              ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400 font-bold'
-              : 'border-transparent text-secondary hover:text-primary'
-          }`}
+      {/* Main Tabs Navigation with Scroll Affordance */}
+      <div className="relative border-b border-default">
+        <div
+          role="tablist"
+          aria-label="Navigasi Fitur Portal Konselor"
+          className="flex space-x-1 overflow-x-auto no-scrollbar"
         >
-          <ListOrdered className="w-4 h-4" />
-          <span>Antrean Triage ({triageItems.filter((i) => i.status !== 'RESOLVED').length})</span>
-        </button>
+          <button
+            type="button"
+            role="tab"
+            id="tab-triage"
+            aria-controls="panel-triage"
+            aria-selected={activeTab === 'triage'}
+            onClick={() => setActiveTab('triage')}
+            className={`flex items-center gap-2 py-3 px-4 text-xs sm:text-sm font-semibold border-b-2 transition whitespace-nowrap cursor-pointer ${
+              activeTab === 'triage'
+                ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400 font-bold'
+                : 'border-transparent text-secondary hover:text-primary'
+            }`}
+          >
+            <ListOrdered className="w-4 h-4" />
+            <span>Antrean Triage ({triageItems.filter((i) => i.status !== 'RESOLVED').length})</span>
+          </button>
 
-        <button
-          type="button"
-          onClick={() => {
-            setSelectedStudentForSoap(null);
-            setActiveNoteForEdit(null);
-            setActiveTab('soap-editor');
-          }}
-          className={`flex items-center gap-2 py-3 px-4 text-xs sm:text-sm font-semibold border-b-2 transition whitespace-nowrap cursor-pointer ${
-            activeTab === 'soap-editor'
-              ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400 font-bold'
-              : 'border-transparent text-secondary hover:text-primary'
-          }`}
-        >
-          <Plus className="w-4 h-4" />
-          <span>Buat Catatan SOAP Baru</span>
-        </button>
+          <button
+            type="button"
+            role="tab"
+            id="tab-soap-editor"
+            aria-controls="panel-soap-editor"
+            aria-selected={activeTab === 'soap-editor'}
+            onClick={() => {
+              setSelectedStudentForSoap(null);
+              setActiveNoteForEdit(null);
+              setActiveTab('soap-editor');
+            }}
+            className={`flex items-center gap-2 py-3 px-4 text-xs sm:text-sm font-semibold border-b-2 transition whitespace-nowrap cursor-pointer ${
+              activeTab === 'soap-editor'
+                ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400 font-bold'
+                : 'border-transparent text-secondary hover:text-primary'
+            }`}
+          >
+            <Plus className="w-4 h-4" />
+            <span>Buat Catatan SOAP Baru</span>
+          </button>
 
-        <button
-          type="button"
-          onClick={() => setActiveTab('soap-history')}
-          className={`flex items-center gap-2 py-3 px-4 text-xs sm:text-sm font-semibold border-b-2 transition whitespace-nowrap cursor-pointer ${
-            activeTab === 'soap-history'
-              ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400 font-bold'
-              : 'border-transparent text-secondary hover:text-primary'
-          }`}
-        >
-          <FileText className="w-4 h-4" />
-          <span>Riwayat SOAP Terenkripsi ({soapNotes.length})</span>
-        </button>
+          <button
+            type="button"
+            role="tab"
+            id="tab-soap-history"
+            aria-controls="panel-soap-history"
+            aria-selected={activeTab === 'soap-history'}
+            onClick={() => setActiveTab('soap-history')}
+            className={`px-4 py-3 flex items-center gap-2 text-xs sm:text-sm font-semibold border-b-2 transition whitespace-nowrap cursor-pointer ${
+              activeTab === 'soap-history'
+                ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400 font-bold'
+                : 'border-transparent text-secondary hover:text-primary'
+            }`}
+          >
+            <FileText className="w-4 h-4" />
+            <span>Riwayat SOAP Terenkripsi ({soapNotes.length})</span>
+          </button>
 
-        <button
-          type="button"
-          onClick={() => setActiveTab('analytics')}
-          className={`flex items-center gap-2 py-3 px-4 text-xs sm:text-sm font-semibold border-b-2 transition whitespace-nowrap cursor-pointer ${
-            activeTab === 'analytics'
-              ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400 font-bold'
-              : 'border-transparent text-secondary hover:text-primary'
-          }`}
-        >
-          <BarChart3 className="w-4 h-4" />
-          <span>Telemetri & Analitik Kampus</span>
-        </button>
+          <button
+            type="button"
+            role="tab"
+            id="tab-analytics"
+            aria-controls="panel-analytics"
+            aria-selected={activeTab === 'analytics'}
+            onClick={() => setActiveTab('analytics')}
+            className={`flex items-center gap-2 py-3 px-4 text-xs sm:text-sm font-semibold border-b-2 transition whitespace-nowrap cursor-pointer ${
+              activeTab === 'analytics'
+                ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400 font-bold'
+                : 'border-transparent text-secondary hover:text-primary'
+            }`}
+          >
+            <BarChart3 className="w-4 h-4" />
+            <span>Telemetri & Analitik Kampus</span>
+          </button>
+        </div>
+        {/* Right gradient fade mask indicating more tabs on narrow viewports */}
+        <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-slate-50 dark:from-slate-900 to-transparent sm:hidden opacity-80" />
       </div>
 
       {/* Tab Panels */}

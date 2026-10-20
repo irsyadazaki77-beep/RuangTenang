@@ -82,6 +82,7 @@ describe('FASE 3: Production Secrets & Fail-Closed Security Tests', () => {
     process.env.JWT_SECRET = 'valid-production-jwt-secret-32-chars-long!!';
     process.env.ENCRYPTION_KEY = 'valid-production-encryption-key-32-chars!!';
     process.env.BLIND_INDEX_SECRET = 'valid-production-blind-index-key-32-chars!!';
+    process.env.BACKUP_ENCRYPTION_KEY = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
     process.env.DATABASE_URL = 'postgresql://user:pass@host:5432/db';
     process.env.TURN_URL = 'turn:turn.ruangtenang.ui.ac.id:3478';
     process.env.TURN_USERNAME = 'test-fixture-turn-user';
@@ -107,8 +108,24 @@ describe('FASE 3: Production Secrets & Fail-Closed Security Tests', () => {
     process.env.JWT_SECRET = 'prod-jwt-secret-key-that-is-at-least-32-characters-long!!';
     process.env.ENCRYPTION_KEY = 'prod-encryption-secret-key-that-is-32-characters!!';
     process.env.BLIND_INDEX_SECRET = 'prod-blind-index-secret-key-that-is-32-characters!!';
+    process.env.BACKUP_ENCRYPTION_KEY = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
     process.env.DATABASE_URL = 'postgresql://user:pass@host:5432/db';
+    process.env.APP_ORIGIN = 'https://ruangtenang.example.test';
+    process.env.CORS_ALLOWED_ORIGINS = 'https://ruangtenang.example.test';
 
     expect(() => validateEnvironment()).not.toThrow();
+  });
+
+  it('requires explicit secrets and database config in staging as well as production', () => {
+    process.env.NODE_ENV = 'staging';
+    delete process.env.JWT_SECRET;
+    delete process.env.ENCRYPTION_KEY;
+    delete process.env.ENCRYPTION_SECRET;
+    delete process.env.DATA_ENCRYPTION_KEY;
+    expect(() => validateEnvironment()).toThrow(/JWT_SECRET environment variable is missing/i);
+    expect(() => getValidatedJwtSecret()).toThrow(/JWT_SECRET/i);
+    expect(() => getValidatedEncryptionKey()).toThrow(/Encryption key/i);
+    process.env.DATABASE_URL = 'file:./prisma/ruangtenang_sqlite.db';
+    expect(() => resolveDatabaseConfiguration()).toThrow(/requires PostgreSQL/i);
   });
 });

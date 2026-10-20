@@ -53,7 +53,7 @@ export const AcademicDistressBanner: React.FC<AcademicDistressBannerProps> = ({
         <button
           type="button"
           onClick={onOpenBreathing}
-          className="px-2.5 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-semibold text-xs shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+          className="px-2.5 py-1.5 rounded-xl bg-teal-700 hover:bg-teal-500 text-white font-semibold text-xs shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
           title="Latihan pernapasan 1 menit di tempat"
         >
           <Wind className="w-3.5 h-3.5" />

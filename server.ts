@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import './server/config/loadFileSecrets.js';
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
@@ -21,17 +22,19 @@ import {
   renderSwaggerHtml,
   centralizedErrorHandler
 } from './server/apiV1Helpers.js';
-import { getAiClient } from './server/config/aiConfig.js';
+import { getAiClient, isAiAvailable } from './server/config/aiConfig.js';
 import { parsePort } from './server/config/port.js';
 
 import { validateEnvironment } from './server/config/envValidation.js';
 import { csrfProtection, csrfRouter } from './server/middleware/csrf.js';
-import { generalApiLimiter, diagnosticsLimiter, clientTelemetryLimiter } from './server/middleware/rateLimiters.js';
+import { generalApiLimiter, diagnosticsLimiter, clientTelemetryLimiter, getRateLimitStoreMetrics, getRateLimitStorePrometheus } from './server/middleware/rateLimiters.js';
 
 import { optionalAuth, requireAuth, requireRole } from './server/middleware/auth.js';
 import { clientTelemetryService, clientDebugSchema } from './server/services/clientTelemetryService.js';
 import { metricsService } from './server/services/metricsService.js';
 import { installProductionConsoleSanitizer } from './server/utils/logger.js';
+import { isLocalDevelopmentOrTest, isProductionLikeEnvironment } from './server/config/environment.js';
+import { buildContentSecurityPolicyDirectives } from './server/config/contentSecurityPolicy.js';
 
 // Modular Route Handlers
 import authRouter from './server/routes/auth.js';
@@ -51,9 +54,10 @@ import counselorPortalRouter from './server/routes/counselorPortal.js';
 import systemStatsRouter from './server/routes/systemStats.js';
 import workspaceArtifactsRouter from './server/routes/workspaceArtifacts.js';
 import workspaceRouter from './server/routes/workspace.js';
+import campusesRouter from './server/routes/campuses.js';
 
 async function startServer() {
-  const isProd = process.env.NODE_ENV === 'production';
+  const isProd = isProductionLikeEnvironment();
 
   // Strict Fail-Closed Startup: Environment & Database readiness must pass or process halts
   validateEnvironment();
@@ -94,9 +98,7 @@ async function startServer() {
     });
   }
 
-  if (!isProd) {
-    allowedOrigins.add('https://ruangtenang.ai.studio');
-    allowedOrigins.add('https://ruangtenang.ui.ac.id');
+  if (isLocalDevelopmentOrTest()) {
     allowedOrigins.add(`http://localhost:${PORT}`);
     allowedOrigins.add(`http://127.0.0.1:${PORT}`);
     allowedOrigins.add('http://localhost:3000');
@@ -106,7 +108,7 @@ async function startServer() {
   }
 
   // Preview environment detection
-  const isPreviewMode = !isProd;
+  const isPreviewMode = isLocalDevelopmentOrTest();
 
   app.use(cors({
     origin: (origin, callback) => {
@@ -117,29 +119,7 @@ async function startServer() {
       
       const lowerOrigin = origin.toLowerCase();
 
-      // Strict allowlist checking in production, with preview exception
-      if (isProd && !isPreviewMode) {
-        if (allowedOrigins.has(lowerOrigin)) {
-          return callback(null, true);
-        }
-        return callback(null, false);
-      }
-
-      // Development / staging / preview convenience
-      const isPlatformDomain = lowerOrigin.endsWith('.run.app') ||
-                               lowerOrigin.endsWith('.ai.studio') ||
-                               lowerOrigin === 'https://ai.studio' ||
-                               lowerOrigin.endsWith('.google.com') ||
-                               lowerOrigin.endsWith('.google.dev');
-
-      const isDevAllowed = lowerOrigin.includes('localhost') ||
-                           lowerOrigin.includes('127.0.0.1');
-
-      if (isPlatformDomain || isDevAllowed || allowedOrigins.has(lowerOrigin)) {
-        return callback(null, true);
-      }
-      
-      return callback(null, false);
+      return callback(null, allowedOrigins.has(lowerOrigin));
     },
     credentials: true,
   }));
@@ -149,64 +129,9 @@ async function startServer() {
     ...(process.env.CORS_ALLOWED_ORIGINS ? process.env.CORS_ALLOWED_ORIGINS.split(',').map(o => o.trim()).filter(Boolean) : []),
   ];
 
-  // Frame ancestors (Clickjacking Protection & AI Studio Iframe Preview Support)
-  const frameAncestorsList = isPreviewMode
-    ? [
-        "'self'",
-        "https://*.google.com",
-        "https://*.google.dev",
-        "https://*.run.app",
-        "https://*.ai.studio",
-        "https://ai.studio",
-        "https://aistudio.google.com",
-        ...trustedOriginsList
-      ]
-    : [
-        "'self'",
-        ...trustedOriginsList
-      ];
-
-  const connectSrcList = isPreviewMode
-    ? [
-        "'self'", 
-        "https://generativelanguage.googleapis.com", 
-        "https://*.google.com",
-        "https://*.google.dev",
-        "https://*.run.app", 
-        "https://*.ai.studio", 
-        "https://ai.studio", 
-        "ws:", 
-        "wss:",
-        "data:",
-        ...trustedOriginsList
-      ]
-    : [
-        "'self'",
-        "https://generativelanguage.googleapis.com",
-        ...trustedOriginsList
-      ];
-
-  // In production, Vite bundle runs without eval. Only allow unsafe-eval in development mode if needed.
-  const scriptSrcDirectives = isProd
-    ? ["'self'", "'unsafe-inline'", "blob:"]
-    : ["'self'", "'unsafe-inline'", "'unsafe-eval'", "blob:"];
-
   app.use(helmet({
     contentSecurityPolicy: {
-      directives: {
-        defaultSrc: ["'self'"],
-        objectSrc: ["'none'"],
-        baseUri: ["'self'"],
-        formAction: ["'self'"],
-        scriptSrc: scriptSrcDirectives,
-        scriptSrcAttr: ["'none'"],
-        styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
-        fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
-        imgSrc: ["'self'", "data:", "blob:", "https://images.unsplash.com", "https://api.dicebear.com", "https://*.google.com", "https://*.googleapis.com", "https://*.googleusercontent.com", "https://*.gstatic.com"],
-        connectSrc: connectSrcList,
-        frameAncestors: frameAncestorsList,
-        workerSrc: ["'self'", "blob:"]
-      }
+      directives: buildContentSecurityPolicyDirectives(trustedOriginsList, { production: isProd, preview: isPreviewMode })
     },
     // Frameguard disabled in favor of granular frameAncestors CSP to permit controlled preview iframe embedding
     frameguard: false,
@@ -245,6 +170,13 @@ async function startServer() {
   app.use(requestIdAndLoggerMiddleware);
   app.use(timeoutMiddleware(15000));
   app.use(csrfProtection);
+
+  app.post('/api/v1/security/csp-report', generalApiLimiter,
+    express.raw({ type: ['application/csp-report', 'application/reports+json'], limit: '16kb' }),
+    (_req, res) => {
+      metricsService.recordSecurityEvent('csp_violation');
+      res.status(204).end();
+    });
 
   // 3. OpenAPI & Swagger Documentation Protection
   app.get(['/api/v1/openapi.json', '/api/openapi.json'], (_req, res) => {
@@ -301,11 +233,12 @@ async function startServer() {
     const isPrometheus = req.headers.accept?.includes('text/plain');
     if (isPrometheus) {
       res.setHeader('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
-      return res.send(metricsService.toPrometheusText());
+      return res.send(`${metricsService.toPrometheusText()}\n${getRateLimitStorePrometheus()}\n`);
     }
     return res.json({
       success: true,
       data: metricsService.getSnapshot(),
+      rateLimiting: getRateLimitStoreMetrics(),
       requestId: req.requestId
     });
   });
@@ -341,14 +274,14 @@ async function startServer() {
       timestamp: new Date().toISOString(),
       services: {
         database: isHealthy ? 'UP' : 'DOWN',
-        ai: getAiClient() ? 'UP' : 'DEGRADED'
+        ai: isAiAvailable() ? 'UP' : 'DEGRADED'
       },
       environment: process.env.NODE_ENV || 'development'
     });
   });
 
   app.get(['/api/v1/verify-gemini', '/api/verify-gemini'], diagnosticsLimiter, optionalAuth, async (req, res) => {
-    const isProduction = process.env.NODE_ENV === 'production';
+    const isProduction = isProd;
     const isDiagnosticsEnabled = process.env.ENABLE_AI_DIAGNOSTICS === 'true';
     const isAuthenticated = Boolean(req.user);
     const isAdminUser = req.user?.role === 'admin';
@@ -432,6 +365,8 @@ async function startServer() {
 
   app.use('/api/v1/privacy', privacyRouter);
 
+  app.use('/api/v1', campusesRouter);
+
   app.use('/api/v1', adminRouter);
   app.use('/api', adminRouter);
 
@@ -482,7 +417,7 @@ async function startServer() {
   app.use(centralizedErrorHandler);
 
   // 7. Vite Integration & Static Assets
-  if (process.env.NODE_ENV !== 'production') {
+  if (isLocalDevelopmentOrTest()) {
     const vite = await createViteServer({
       server: { middlewareMode: true, hmr: false },
       appType: 'spa',

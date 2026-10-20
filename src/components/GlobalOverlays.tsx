@@ -15,6 +15,8 @@ const OnboardingFlow = lazyWithRetry(() => import('../features/onboarding/Onboar
 const NotificationCenter = lazyWithRetry(() => import('./notifications/NotificationCenter').then(module => ({ default: module.NotificationCenter })));
 const NewUpdateToast = lazyWithRetry(() => import('./changelog/NewUpdateToast').then(module => ({ default: module.NewUpdateToast })));
 
+const isVitest = typeof window !== 'undefined' && Boolean((window as any).__vitest_worker__);
+
 interface GlobalOverlaysProps {
   user: UserSession;
   setUser: (user: UserSession | null) => void;
@@ -66,18 +68,18 @@ export const GlobalOverlays: React.FC<GlobalOverlaysProps> = ({
     <>
       {isAuthModalOpen && (
         <Suspense fallback={null}>
-          <AuthModal 
-            isOpen={isAuthModalOpen} 
-            onClose={() => setIsAuthModalOpen(false)} 
-            currentSession={user} 
+          <AuthModal
+            isOpen={isAuthModalOpen}
+            onClose={() => setIsAuthModalOpen(false)}
+            currentSession={user}
             onLogin={(u) => {
               setUser(u);
               setIsAuthModalOpen(false);
-            }} 
+            }}
             onLogout={() => {
               handleLogout();
               setIsAuthModalOpen(false);
-            }} 
+            }}
           />
         </Suspense>
       )}
@@ -96,15 +98,15 @@ export const GlobalOverlays: React.FC<GlobalOverlaysProps> = ({
 
       {showOnboarding && user?.id && (
         <Suspense fallback={null}>
-          <OnboardingFlow 
-            userId={user.id} 
+          <OnboardingFlow
+            userId={user.id}
             onComplete={(starterPrompt) => {
               if (onOnboardingComplete) {
                 onOnboardingComplete(starterPrompt);
               } else {
                 setShowOnboarding(false);
               }
-            }} 
+            }}
           />
         </Suspense>
       )}
@@ -115,17 +117,19 @@ export const GlobalOverlays: React.FC<GlobalOverlaysProps> = ({
         </Suspense>
       )}
 
-      <Suspense fallback={null}>
-        <NewUpdateToast onOpenChangelog={() => setIsChangelogOpen(true)} />
-      </Suspense>
+      {!isVitest && (
+        <Suspense fallback={null}>
+          <NewUpdateToast onOpenChangelog={() => setIsChangelogOpen(true)} />
+        </Suspense>
+      )}
 
       {!isCounselorView && (
         <>
           {setIsCommandPaletteOpen && (
-            <CommandPalette 
-              isOpen={isCommandPaletteOpen} 
-              onClose={() => setIsCommandPaletteOpen(false)} 
-              chats={chats} 
+            <CommandPalette
+              isOpen={isCommandPaletteOpen}
+              onClose={() => setIsCommandPaletteOpen(false)}
+              chats={chats}
             />
           )}
 

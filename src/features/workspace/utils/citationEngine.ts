@@ -19,6 +19,7 @@ export interface AcademicPaper {
 }
 
 export type CitationFormat = 'APA7' | 'IEEE' | 'HARVARD' | 'BIBTEX';
+export interface AcademicPaperSearchResult { papers: AcademicPaper[]; unavailable: boolean }
 export const DOI_REGEX = /\b(10\.\d{4,9}\/[-._;()/A-Za-z0-9]+)\b/i;
 const CROSSREF_TIMEOUT_MS = 8_000;
 
@@ -66,25 +67,30 @@ function parseCrossrefItem(item: any, retrievedAt: string): AcademicPaper | null
   };
 }
 
-async function crossref(path: string): Promise<any> {
+async function crossref(path: string, signal?: AbortSignal): Promise<any> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), CROSSREF_TIMEOUT_MS);
+  const abortFromCaller = () => controller.abort();
+  if (signal?.aborted) controller.abort();
+  else signal?.addEventListener('abort', abortFromCaller, { once: true });
   try {
     const response = await fetch(`https://api.crossref.org/works/${path}`, {
       headers: { Accept: 'application/json' }, signal: controller.signal
     });
-    if (!response.ok) return null;
+    if (response.status === 404) return null;
+    if (!response.ok) throw new Error(`Crossref request failed (${response.status}).`);
     return await response.json();
   } finally {
     clearTimeout(timer);
+    signal?.removeEventListener('abort', abortFromCaller);
   }
 }
 
-export async function resolveDOI(doiString: string): Promise<AcademicPaper | null> {
+export async function resolveDOI(doiString: string, signal?: AbortSignal): Promise<AcademicPaper | null> {
   const doi = normalizeDoi(doiString);
   if (!/^10\.\d{4,9}\/[-._;()/A-Za-z0-9]+$/i.test(doi)) return null;
   try {
-    const payload = await crossref(encodeURIComponent(doi));
+    const payload = await crossref(encodeURIComponent(doi), signal);
     const item = payload?.message;
     const paper = parseCrossrefItem(item, new Date().toISOString());
     if (!paper || paper.doi?.toLowerCase() !== doi.toLowerCase()) return null;
@@ -94,16 +100,24 @@ export async function resolveDOI(doiString: string): Promise<AcademicPaper | nul
   }
 }
 
-export async function searchAcademicPapers(query: string): Promise<AcademicPaper[]> {
+export async function searchAcademicPapers(query: string, signal?: AbortSignal): Promise<AcademicPaper[]> {
+  return (await searchAcademicPapersWithStatus(query, signal)).papers;
+}
+
+export async function searchAcademicPapersWithStatus(query: string, signal?: AbortSignal): Promise<AcademicPaperSearchResult> {
   const normalized = query.trim();
-  if (!normalized) return [];
+  if (!normalized) return { papers: [], unavailable: false };
   const doiMatch = normalized.match(DOI_REGEX);
-  if (doiMatch) {
-    const paper = await resolveDOI(doiMatch[1]);
-    return paper ? [paper] : [];
-  }
   try {
-    const payload = await crossref(`?query=${encodeURIComponent(normalized)}&rows=10`);
+    if (doiMatch) {
+      const doi = normalizeDoi(doiMatch[1]);
+      if (!/^10\.\d{4,9}\/[-._;()/A-Za-z0-9]+$/i.test(doi)) return { papers: [], unavailable: false };
+      const payload = await crossref(encodeURIComponent(doi), signal);
+      const item = payload?.message;
+      const paper = parseCrossrefItem(item, new Date().toISOString());
+      return { papers: paper && paper.doi?.toLowerCase() === doi.toLowerCase() ? [paper] : [], unavailable: false };
+    }
+    const payload = await crossref(`?query=${encodeURIComponent(normalized)}&rows=10`, signal);
     const retrievedAt = new Date().toISOString();
     const items = Array.isArray(payload?.message?.items) ? payload.message.items : [];
     const unique = new Map<string, AcademicPaper>();
@@ -111,9 +125,9 @@ export async function searchAcademicPapers(query: string): Promise<AcademicPaper
       const paper = parseCrossrefItem(item, retrievedAt);
       if (paper) unique.set(paper.doi!.toLowerCase(), paper);
     }
-    return [...unique.values()];
+    return { papers: [...unique.values()], unavailable: false };
   } catch {
-    return [];
+    return { papers: [], unavailable: !signal?.aborted };
   }
 }
 

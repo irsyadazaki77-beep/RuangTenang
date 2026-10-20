@@ -1,5 +1,7 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { RefreshCw, Home, HeartHandshake } from 'lucide-react';
+import { trackProductEvent } from '../../lib/productAnalytics';
+import { BrandLogo } from '../ui/BrandLogo';
 
 export interface GlobalErrorBoundaryProps {
   children: ReactNode;
@@ -26,7 +28,8 @@ export class GlobalErrorBoundary extends Component<GlobalErrorBoundaryProps, Glo
   }
 
   public componentDidCatch(error: Error, _errorInfo: ErrorInfo): void {
-    console.error('[GlobalErrorBoundary] UI_RENDER_ERROR', { name: error.name });
+    console.error('[GlobalErrorBoundary] UI_RENDER_ERROR', { name: error.name, message: error.message, stack: error.stack });
+    trackProductEvent('workflow_failed');
   }
 
   public handleResetSession = (): void => {
@@ -58,9 +61,7 @@ export class GlobalErrorBoundary extends Component<GlobalErrorBoundaryProps, Glo
           <div className="rounded-3xl bg-white dark:bg-slate-800 p-6 sm:p-8 shadow-xl max-w-md w-full border border-teal-100/80 dark:border-slate-700 space-y-5">
             {/* Header Icon & Branding */}
             <div className="flex items-center justify-center gap-2">
-              <div className="w-8 h-8 rounded-xl bg-teal-50 dark:bg-teal-950/60 p-1 border border-teal-100 dark:border-teal-900/60 flex items-center justify-center shadow-xs">
-                <img src="/favicon.svg" alt="RuangTenang" className="w-full h-full object-contain" />
-              </div>
+              <BrandLogo size="sm" iconOnly />
               <span className="font-bold text-slate-800 dark:text-slate-100 text-sm tracking-tight">RuangTenang Kampus</span>
             </div>
 
@@ -84,7 +85,7 @@ export class GlobalErrorBoundary extends Component<GlobalErrorBoundaryProps, Glo
               <button
                 type="button"
                 onClick={this.handleResetSession}
-                className="w-full flex items-center justify-center gap-2 rounded-xl bg-teal-600 hover:bg-teal-700 active:scale-98 px-4 py-2.5 text-xs sm:text-sm font-semibold text-white transition-all shadow-xs cursor-pointer"
+                className="w-full flex items-center justify-center gap-2 rounded-xl bg-teal-700 hover:bg-teal-800 active:scale-98 px-4 py-2.5 text-xs sm:text-sm font-semibold text-white transition-all shadow-xs cursor-pointer"
               >
                 <RefreshCw className="w-4 h-4" />
                 <span>Muat Ulang Sesi</span>

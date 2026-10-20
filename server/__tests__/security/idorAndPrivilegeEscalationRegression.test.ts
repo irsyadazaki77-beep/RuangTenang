@@ -234,7 +234,7 @@ describe('Production Hardening: Strict IDOR & Privilege Escalation Regression Su
         .set('Authorization', `Bearer ${tokenB}`);
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
-      expect(res.body.data).toEqual([]);
+      expect(res.body.data.items || res.body.data).toEqual([]);
     });
   });
 
@@ -347,6 +347,14 @@ describe('Production Hardening: Strict IDOR & Privilege Escalation Regression Su
     it('User B cannot access dataset profile or cell preview without ownership (GET -> 404)', async () => {
       const res = await request(app)
         .get(`/api/v1/chat/attachments/fake_attachment_id/dataset`)
+        .set('Authorization', `Bearer ${tokenB}`);
+      expect(res.status).toBe(404);
+      expect(res.body.success).toBe(false);
+    });
+
+    it('User B cannot access the combined dataset overview without ownership (GET -> 404)', async () => {
+      const res = await request(app)
+        .get(`/api/v1/chat/attachments/fake_attachment_id/dataset/overview`)
         .set('Authorization', `Bearer ${tokenB}`);
       expect(res.status).toBe(404);
       expect(res.body.success).toBe(false);
