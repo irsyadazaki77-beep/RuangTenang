@@ -184,7 +184,7 @@ jobs:
       - name: Build production image
         run: docker build --pull --tag ruangtenang:${{ github.sha }} .
       - name: Scan production image
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ruangtenang:${{ github.sha }}
           format: table
