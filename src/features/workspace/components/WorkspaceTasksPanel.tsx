@@ -61,10 +61,8 @@ export const WorkspaceTasksPanel: React.FC<Props> = ({ plan, workspaceKey, isLoa
     const tasks = [...plan.tasks]; const target = index + delta;
     if (target < 0 || target >= tasks.length) return;
     [tasks[index], tasks[target]] = [tasks[target], tasks[index]];
-    // Preserve a valid order by making each reordered task depend only on earlier tasks.
-    const ids = tasks.map(task => task.id);
-    const normalized = tasks.map((task, i) => ({ ...task, dependsOn: task.dependsOn.filter(id => ids.indexOf(id) < i) }));
-    void persist({ ...plan, tasks: normalized });
+    // Reordering changes presentation only; dependencies remain the execution source of truth.
+    void persist({ ...plan, tasks });
   };
   const statusLabel: Record<WorkspaceTaskStatus, string> = { todo: 'Menunggu', running: 'Berjalan', waiting_review: 'Perlu ditinjau', done: 'Selesai', failed: 'Gagal', cancelled: 'Dibatalkan' };
   const taskTypeLabel: Record<WorkspacePlan['tasks'][number]['type'], string> = { analysis: 'Analisis', writing: 'Penulisan', research: 'Riset', coding: 'Pemrograman', review: 'Tinjauan', transform: 'Transformasi' };

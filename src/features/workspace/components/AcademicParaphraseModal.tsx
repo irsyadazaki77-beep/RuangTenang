@@ -13,7 +13,8 @@ import {
   ParaphraseStyle,
   ParaphraseResult,
   paraphraseAcademicText,
-  calculateTextSimilarity
+  calculateTextSimilarity,
+  calculateTextMetrics
 } from '../utils/paraphraseEngine';
 import { useFocusTrap } from '../../../hooks/useFocusTrap';
 
@@ -45,9 +46,7 @@ export const AcademicParaphraseModal: React.FC<AcademicParaphraseModalProps> = (
   const dialogRef = useFocusTrap<HTMLDivElement>({ isOpen, onClose, initialFocusRef: inputTextRef });
 
   useEffect(() => {
-    if (initialText) {
-      setInputText(initialText);
-    }
+    setInputText(initialText);
   }, [initialText]);
 
   useEffect(() => {
@@ -71,13 +70,15 @@ export const AcademicParaphraseModal: React.FC<AcademicParaphraseModalProps> = (
     if (!inputText.trim() || !editableOutput.trim()) return result?.similarity || null;
     return calculateTextSimilarity(inputText, editableOutput);
   }, [inputText, editableOutput, result]);
+  const inputMetrics = useMemo(() => calculateTextMetrics(inputText), [inputText]);
+  const outputMetrics = useMemo(() => calculateTextMetrics(editableOutput), [editableOutput]);
 
   if (!isOpen) return null;
 
   const activeOutputText = editableOutput;
 
   const handleCopy = async () => {
-    if (!activeOutputText) return;
+    if (!activeOutputText.trim()) return;
     try {
       if (!navigator.clipboard?.writeText) throw new Error('CLIPBOARD_UNAVAILABLE');
       await navigator.clipboard.writeText(activeOutputText);
@@ -91,7 +92,7 @@ export const AcademicParaphraseModal: React.FC<AcademicParaphraseModalProps> = (
   };
 
   const handleApply = () => {
-    if (!activeOutputText || !onApplyParaphrase) return;
+    if (!activeOutputText.trim() || !onApplyParaphrase) return;
     onApplyParaphrase(activeOutputText);
     onClose();
   };
@@ -213,7 +214,7 @@ export const AcademicParaphraseModal: React.FC<AcademicParaphraseModalProps> = (
                 Teks sumber / draf:
               </label>
               <span className="text-[11px] text-slate-400">
-                {inputText.split(/\s+/).filter(Boolean).length} kata
+                {inputMetrics.wordCount} kata
               </span>
             </div>
             <textarea
@@ -244,7 +245,7 @@ export const AcademicParaphraseModal: React.FC<AcademicParaphraseModalProps> = (
               </label>
               {result && (
                 <span className="text-[11px] text-slate-400">
-                  {activeOutputText.split(/\s+/).filter(Boolean).length} kata
+                  {outputMetrics.wordCount} kata
                 </span>
               )}
             </div>
@@ -305,7 +306,7 @@ export const AcademicParaphraseModal: React.FC<AcademicParaphraseModalProps> = (
 
                   {showSentenceBreakdown && liveSimilarity.sentenceComparisons.length > 0 && (
                     <div className="mt-2 max-h-36 overflow-y-auto space-y-1.5 border-t border-slate-100 dark:border-slate-800 pt-2 pr-1">
-                      <p className="text-[10px] text-slate-400">Rincian dibatasi hingga 40 kalimat pertama; skor ringkas memakai seluruh teks.</p>
+                      <p className="text-[10px] text-slate-400">Rincian dibatasi hingga 40 kalimat pertama. N-Gram memakai seluruh draf; edit distance memakai 350 token pertama.</p>
                       {liveSimilarity.sentenceComparisons.map((item, idx) => (
                         <div key={idx} className="rounded-lg bg-slate-50 dark:bg-slate-900 p-2 text-[10.5px] space-y-1 border border-slate-200/60 dark:border-slate-800">
                           <div className="flex items-center justify-between font-semibold">
@@ -328,7 +329,7 @@ export const AcademicParaphraseModal: React.FC<AcademicParaphraseModalProps> = (
                       Keragaman Kosakata
                     </div>
                     <div className="text-base font-extrabold text-indigo-600 dark:text-indigo-400">
-                      {result.lexicalDiversity}%
+                      {outputMetrics.lexicalDiversity}%
                     </div>
                     <div className="text-[9px] text-indigo-700/80 dark:text-indigo-300/80">kata unik dari total kata</div>
                   </div>
@@ -338,14 +339,14 @@ export const AcademicParaphraseModal: React.FC<AcademicParaphraseModalProps> = (
                       Keterbacaan (heuristik)
                     </div>
                     <div className="text-base font-extrabold text-teal-600 dark:text-teal-400">
-                      {result.readabilityScore}/100
+                      {outputMetrics.readabilityScore}/100
                     </div>
                     <div className="text-[9px] text-teal-700/80 dark:text-teal-300/80">berdasarkan kata per kalimat</div>
                   </div>
                   <div className="p-2.5 rounded-xl bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800/60 text-center">
                     <div className="text-[10px] font-semibold text-sky-700 dark:text-sky-300">Perubahan Jumlah Kata</div>
                     <div className="text-base font-extrabold text-sky-600 dark:text-sky-400">
-                      {result.wordCountChange > 0 ? '+' : ''}{result.wordCountChange}
+                      {outputMetrics.wordCount - inputMetrics.wordCount > 0 ? '+' : ''}{outputMetrics.wordCount - inputMetrics.wordCount}
                     </div>
                   </div>
                 </div>
@@ -363,7 +364,7 @@ export const AcademicParaphraseModal: React.FC<AcademicParaphraseModalProps> = (
             <button
               type="button"
               onClick={handleCopy}
-              disabled={!activeOutputText}
+              disabled={!activeOutputText.trim()}
               className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-750 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold transition-colors disabled:opacity-50 cursor-pointer shrink-0"
             >
               {copied ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
@@ -385,7 +386,7 @@ export const AcademicParaphraseModal: React.FC<AcademicParaphraseModalProps> = (
               <button
                 type="button"
                 onClick={handleApply}
-                disabled={!activeOutputText}
+                disabled={!activeOutputText.trim()}
                 className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-xs font-bold shadow-sm transition-all disabled:opacity-50 cursor-pointer"
               >
                 <FileCheck2 className="w-4 h-4" />

@@ -9,9 +9,12 @@ export class PdfAdapter implements DocumentExtractorAdapter {
   }
 
   async extract(input: ExtractionInput): Promise<ExtractedDocument> {
-    if (input.abortSignal?.aborted) {
-      throw new DocumentProcessingException('PROCESSING_ABORTED', 'Proses ekstraksi dibatalkan.');
-    }
+    const throwIfAborted = () => {
+      if (input.abortSignal?.aborted) {
+        throw new DocumentProcessingException('PROCESSING_ABORTED', 'Proses ekstraksi dibatalkan.');
+      }
+    };
+    throwIfAborted();
 
     try {
       const { PDFParse } = await import('pdf-parse');
@@ -21,6 +24,7 @@ export class PdfAdapter implements DocumentExtractorAdapter {
       let totalPages = 0;
       try {
         const documentInfo = await parser.getInfo();
+        throwIfAborted();
         totalPages = documentInfo.total || 0;
         if (totalPages > DEFAULT_FILE_LIMITS.maxPdfPages) {
           throw new DocumentProcessingException(
@@ -29,6 +33,7 @@ export class PdfAdapter implements DocumentExtractorAdapter {
           );
         }
         textResult = await parser.getText();
+        throwIfAborted();
       } finally {
         await parser.destroy();
       }
@@ -98,6 +103,7 @@ export class PdfAdapter implements DocumentExtractorAdapter {
       const MAX_OCR_PAGES = 5;
       let ocrApplied = false;
       const pagesToOcr = unextractedPageNums.slice(0, MAX_OCR_PAGES);
+      const ocrSucceededPages = new Set<number>();
 
       if (pagesToOcr.length > 0) {
         try {
@@ -111,28 +117,42 @@ export class PdfAdapter implements DocumentExtractorAdapter {
           } finally {
             await freshParser.destroy();
           }
+          throwIfAborted();
 
           if (screenshots?.pages && screenshots.pages.length > 0) {
-            for (const shot of screenshots.pages) {
-              if (input.abortSignal?.aborted) break;
-              const pageNum = shot.pageNumber;
-              const dataUrl = shot.dataUrl;
-              if (!dataUrl || !dataUrl.includes(',')) continue;
+            // OCR two pages at a time to reduce scan latency without flooding a vision provider.
+            for (let index = 0; index < screenshots.pages.length; index += 2) {
+              throwIfAborted();
+              const batch = screenshots.pages.slice(index, index + 2);
+              const results = await Promise.all(batch.map(async (shot: any) => {
+                const pageNum = Number.isInteger(shot.pageNumber) ? shot.pageNumber : undefined;
+                const dataUrl = shot.dataUrl;
+                if (!pageNum || !dataUrl || !dataUrl.includes(',')) return { pageNum, result: null };
+                const imageBuf = Buffer.from(dataUrl.split(',')[1], 'base64');
+                try {
+                  const result = await performVisualOcr({
+                    buffer: imageBuf,
+                    mimeType: 'image/png',
+                    filename: `${input.filename}_hal_${pageNum}.png`,
+                    purpose: 'document_ocr',
+                    abortSignal: input.abortSignal
+                  });
+                  return { pageNum, result };
+                } catch (error) {
+                  if (input.abortSignal?.aborted) throw error;
+                  // A provider failure on one page should not discard a successful sibling page.
+                  return { pageNum, result: null };
+                }
+              }));
 
-              const base64Data = dataUrl.split(',')[1];
-              const imageBuf = Buffer.from(base64Data, 'base64');
+              throwIfAborted();
 
-              const ocrRes = await performVisualOcr({
-                buffer: imageBuf,
-                mimeType: 'image/png',
-                filename: `${input.filename}_hal_${pageNum}.png`,
-                purpose: 'document_ocr',
-                abortSignal: input.abortSignal
-              });
-
-              if (ocrRes && ocrRes.text.trim()) {
+              // Apply results in page order so chunk ordering stays deterministic.
+              for (const { pageNum, result } of results) {
+                if (!pageNum || !result?.text.trim()) continue;
+                ocrSucceededPages.add(pageNum);
                 ocrApplied = true;
-                const ocrText = ocrRes.text.trim();
+                const ocrText = result.text.trim();
                 const ocrParas = ocrText.split(/\n\s*\n/).filter((p: string) => p.trim().length > 0);
                 ocrParas.forEach((p: string, pIdx: number) => {
                   blocks.push({
@@ -141,24 +161,29 @@ export class PdfAdapter implements DocumentExtractorAdapter {
                     pageNumber: pageNum,
                     section: `Halaman ${pageNum} (OCR)`,
                     isVisualExtraction: true,
-                    ocrConfidence: ocrRes.ocrConfidence,
-                    readingUncertainty: ocrRes.readingUncertainty
+                    ocrConfidence: result.ocrConfidence,
+                    readingUncertainty: result.readingUncertainty
                   });
                 });
-              } else {
-                extractionWarnings.push(`Halaman ${pageNum} berupa pindaian dan tidak berhasil dibaca oleh OCR.`);
               }
             }
           }
         } catch (ocrErr: any) {
+          if (input.abortSignal?.aborted) {
+            throw new DocumentProcessingException('PROCESSING_ABORTED', 'Proses ekstraksi dibatalkan.');
+          }
           console.warn('[PDF_ADAPTER] Tiered OCR failed or unavailable:', ocrErr.message);
         }
       }
 
-      // Step 6: Note pages that were not read
-      const remainingUnreadPages = unextractedPageNums.length - (ocrApplied ? pagesToOcr.length : 0);
-      if (remainingUnreadPages > 0) {
-        extractionWarnings.push(`${remainingUnreadPages} halaman PDF berupa pindaian/gambar dan belum menghasilkan teks OCR.`);
+      // Report the pages that actually remained unread; attempted OCR pages may still fail.
+      const unreadAfterOcr = unextractedPageNums.filter(pageNum => !ocrSucceededPages.has(pageNum));
+      for (const pageNum of unreadAfterOcr.filter(pageNum => pagesToOcr.includes(pageNum))) {
+        extractionWarnings.push(`Halaman ${pageNum} berupa pindaian dan belum berhasil dibaca oleh OCR.`);
+      }
+      const notAttemptedCount = unextractedPageNums.length - pagesToOcr.length;
+      if (notAttemptedCount > 0) {
+        extractionWarnings.push(`OCR dibatasi hingga ${MAX_OCR_PAGES} halaman; ${notAttemptedCount} halaman pindaian lainnya belum dibaca.`);
       }
 
       if (blocks.length === 0) {

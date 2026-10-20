@@ -44,6 +44,12 @@ export interface ParaphraseResult {
   similarity: TextSimilarityAnalysis;
 }
 
+export interface TextMetrics {
+  wordCount: number;
+  readabilityScore: number;
+  lexicalDiversity: number;
+}
+
 function splitSentences(text: string): string[] {
   const placeholder = '__ACADEMIC_PARAPHRASE_PERIOD__';
   const protectedPeriods = text
@@ -51,6 +57,21 @@ function splitSentences(text: string): string[] {
     .replace(/\b([A-Z])\.\s+(?=[A-Z][a-z])/g, `$1${placeholder} `);
   return protectedPeriods.split(/(?<=[.!?])\s+/)
     .map(sentence => sentence.replaceAll(placeholder, '.').trim()).filter(Boolean);
+}
+
+export function calculateTextMetrics(text: string): TextMetrics {
+  const cleanText = text.trim();
+  if (!cleanText) return { wordCount: 0, readabilityScore: 0, lexicalDiversity: 0 };
+
+  const words = cleanText.split(/\s+/).filter(Boolean);
+  const uniqueWords = new Set(words.map(word => word.toLocaleLowerCase()));
+  const averageWordsPerSentence = words.length / Math.max(1, splitSentences(cleanText).length);
+
+  return {
+    wordCount: words.length,
+    readabilityScore: Math.max(40, Math.min(95, Math.round(100 - averageWordsPerSentence * 1.8))),
+    lexicalDiversity: Math.min(100, Math.round((uniqueWords.size / Math.max(1, words.length)) * 100))
+  };
 }
 
 function tokenizeWords(text: string): string[] {
@@ -254,24 +275,20 @@ export function paraphraseAcademicText(text: string, style: ParaphraseStyle = 'K
     paraphrasedText = cleanInput;
   }
 
-  const originalWords = cleanInput.split(/\s+/).filter(Boolean);
-  const outputWords = paraphrasedText.split(/\s+/).filter(Boolean);
-  const uniqueWords = new Set(outputWords.map(word => word.toLocaleLowerCase()));
-  const lexicalDiversity = Math.min(100, Math.round((uniqueWords.size / Math.max(1, outputWords.length)) * 100));
-  const avgWordsPerSentence = outputWords.length / Math.max(1, splitSentences(paraphrasedText).length);
-  const readabilityScore = Math.max(40, Math.min(95, Math.round(100 - avgWordsPerSentence * 1.8)));
+  const originalMetrics = calculateTextMetrics(cleanInput);
+  const outputMetrics = calculateTextMetrics(paraphrasedText);
   const similarity = calculateTextSimilarity(cleanInput, paraphrasedText);
 
   return {
     originalText: cleanInput,
     paraphrasedText,
     style,
-    wordCountOriginal: originalWords.length,
-    wordCountParaphrased: outputWords.length,
-    readabilityScore,
-    lexicalDiversity,
+    wordCountOriginal: originalMetrics.wordCount,
+    wordCountParaphrased: outputMetrics.wordCount,
+    readabilityScore: outputMetrics.readabilityScore,
+    lexicalDiversity: outputMetrics.lexicalDiversity,
     changesCount: paraphrasedText === cleanInput ? 0 : 1,
-    wordCountChange: outputWords.length - originalWords.length,
+    wordCountChange: outputMetrics.wordCount - originalMetrics.wordCount,
     sentenceStructureChange: Math.abs(splitSentences(paraphrasedText).length - sourceSentences.length),
     similarity
   };
