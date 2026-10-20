@@ -24,6 +24,8 @@ interface AcademicParaphraseModalProps {
   onApplyParaphrase?: (newText: string) => void;
 }
 
+const MAX_ANALYSIS_CHARACTERS = 12_000;
+
 export const AcademicParaphraseModal: React.FC<AcademicParaphraseModalProps> = ({
   isOpen,
   initialText = '',
@@ -36,6 +38,7 @@ export const AcademicParaphraseModal: React.FC<AcademicParaphraseModalProps> = (
   const [editableOutput, setEditableOutput] = useState('');
   const [showSentenceBreakdown, setShowSentenceBreakdown] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [clipboardError, setClipboardError] = useState('');
   const dialogTitleId = useId();
   const dialogDescriptionId = useId();
   const inputTextRef = useRef<HTMLTextAreaElement>(null);
@@ -49,6 +52,11 @@ export const AcademicParaphraseModal: React.FC<AcademicParaphraseModalProps> = (
 
   useEffect(() => {
     if (!isOpen) return;
+    if (inputText.length > MAX_ANALYSIS_CHARACTERS) {
+      setResult(null);
+      setEditableOutput('');
+      return;
+    }
     if (inputText.trim()) {
       const res = paraphraseAcademicText(inputText, style);
       setResult(res);
@@ -66,13 +74,20 @@ export const AcademicParaphraseModal: React.FC<AcademicParaphraseModalProps> = (
 
   if (!isOpen) return null;
 
-  const activeOutputText = editableOutput || result?.paraphrasedText || '';
+  const activeOutputText = editableOutput;
 
-  const handleCopy = () => {
+  const handleCopy = async () => {
     if (!activeOutputText) return;
-    navigator.clipboard.writeText(activeOutputText);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('CLIPBOARD_UNAVAILABLE');
+      await navigator.clipboard.writeText(activeOutputText);
+      setClipboardError('');
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+      setClipboardError('Clipboard tidak dapat diakses. Pilih teks hasil lalu salin secara manual.');
+    }
   };
 
   const handleApply = () => {
@@ -114,13 +129,13 @@ export const AcademicParaphraseModal: React.FC<AcademicParaphraseModalProps> = (
             </div>
             <div>
               <h2 id={dialogTitleId} className="font-bold text-base sm:text-lg text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                <span>Academic Rewriting & Similarity Estimator</span>
+                <span>Penyunting Teks Akademik</span>
                 <span className="text-[10.5px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-200 border border-emerald-300 dark:border-emerald-800">
-                  Bantuan Penulisan
+                  Mode lokal
                 </span>
               </h2>
               <p id={dialogDescriptionId} className="text-xs text-slate-500 dark:text-slate-400">
-                Penyuntingan konservatif dengan indikator kemiripan kalimat (Levenshtein & N-Gram overlap) secara langsung
+                Pemrosesan dilakukan di browser. Konservatif mempertahankan draf; Sintesis memilih kalimat sumber tanpa menulis ulang.
               </p>
             </div>
           </div>
@@ -150,21 +165,22 @@ export const AcademicParaphraseModal: React.FC<AcademicParaphraseModalProps> = (
                     ? 'bg-indigo-600 text-white shadow-xs'
                     : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
                 }`}
-                title="Pertahankan kalimat dan klaim sumber"
+                title="Pertahankan teks sumber apa adanya"
               >
                 1. Konservatif
               </button>
               <button
                 type="button"
-                onClick={() => setStyle('RESTRUKTURISASI')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                disabled
+                aria-disabled="true"
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                   style === 'RESTRUKTURISASI'
                     ? 'bg-indigo-600 text-white shadow-xs'
-                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                    : 'text-slate-400 dark:text-slate-500 cursor-not-allowed'
                 }`}
-                title="Pertahankan urutan klaim dan kalimat sumber"
+                title="Restrukturisasi belum tersedia di mode lokal"
               >
-                2. Restrukturisasi
+                2. Restrukturisasi (nonaktif)
               </button>
               <button
                 type="button"
@@ -174,7 +190,7 @@ export const AcademicParaphraseModal: React.FC<AcademicParaphraseModalProps> = (
                     ? 'bg-indigo-600 text-white shadow-xs'
                     : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
                 }`}
-                title="Pilih kalimat klaim utama dan pendukung secara ekstraktif"
+                title="Memilih beberapa kalimat asli tanpa menulis ulang"
               >
                 3. Sintesis Ringkas
               </button>
@@ -182,9 +198,9 @@ export const AcademicParaphraseModal: React.FC<AcademicParaphraseModalProps> = (
           </div>
 
           <div className="text-xs text-slate-400">
-            {style === 'KONSERVATIF' && 'Klaim dipertahankan • Tanpa substitusi sinonim'}
-            {style === 'RESTRUKTURISASI' && 'Urutan klaim dipertahankan • Tanpa inversi relasi'}
-            {style === 'SINTESIS' && 'Ringkasan ekstraktif • Kalimat diambil dari sumber'}
+            {style === 'KONSERVATIF' && 'Teks sumber dipertahankan apa adanya'}
+            {style === 'RESTRUKTURISASI' && 'Restrukturisasi belum tersedia di mode lokal'}
+            {style === 'SINTESIS' && 'Memilih kalimat dari sumber tanpa menulis ulang'}
           </div>
         </div>
 
@@ -194,7 +210,7 @@ export const AcademicParaphraseModal: React.FC<AcademicParaphraseModalProps> = (
           <div className="flex flex-col p-4 space-y-2 overflow-y-auto">
             <div className="flex items-center justify-between">
               <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                Teks Asli / Draf Paragraf:
+                Teks sumber / draf:
               </label>
               <span className="text-[11px] text-slate-400">
                 {inputText.split(/\s+/).filter(Boolean).length} kata
@@ -204,11 +220,19 @@ export const AcademicParaphraseModal: React.FC<AcademicParaphraseModalProps> = (
               ref={inputTextRef}
               value={inputText}
               onChange={e => setInputText(e.target.value)}
+              maxLength={MAX_ANALYSIS_CHARACTERS}
               aria-label="Teks asli untuk disunting"
               placeholder="Ketik atau tempelkan draf kalimat/paragraf skripsi di sini..."
               rows={8}
               className="w-full flex-1 min-h-[160px] text-xs sm:text-sm bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl p-3.5 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-all placeholder:text-slate-400 resize-none font-sans leading-relaxed"
             />
+            {inputText.length > MAX_ANALYSIS_CHARACTERS ? (
+              <p role="alert" className="text-[10px] text-rose-600 dark:text-rose-400">
+                Draf ini {inputText.length.toLocaleString('id-ID')} karakter. Pangkas menjadi maksimal 12.000 karakter untuk menjalankan analisis.
+              </p>
+            ) : (
+              <p className="text-[10px] text-slate-400">Batas 12.000 karakter per kolom agar penyuntingan tetap responsif.</p>
+            )}
           </div>
 
           {/* Right Column: Paraphrased Output & Similarity Estimator */}
@@ -216,11 +240,11 @@ export const AcademicParaphraseModal: React.FC<AcademicParaphraseModalProps> = (
             <div className="flex items-center justify-between">
               <label className="text-xs font-bold text-indigo-700 dark:text-indigo-400 flex items-center gap-1.5">
                 <Sparkles className="w-3.5 h-3.5" />
-                <span>Hasil Parafrase Akademis (Dapat Diedit):</span>
+                <span>Teks hasil (dapat diedit):</span>
               </label>
               {result && (
                 <span className="text-[11px] text-slate-400">
-                  {activeOutputText.split(/\s+/).filter(Boolean).length} kata • {result.changesCount} perubahan
+                  {activeOutputText.split(/\s+/).filter(Boolean).length} kata
                 </span>
               )}
             </div>
@@ -228,8 +252,9 @@ export const AcademicParaphraseModal: React.FC<AcademicParaphraseModalProps> = (
             <textarea
               value={editableOutput}
               onChange={e => setEditableOutput(e.target.value)}
-              aria-label="Hasil Parafrase Akademis"
-              placeholder="Hasil parafrase akan muncul otomatis saat Anda mengetik atau menempelkan teks. Anda juga dapat menyunting ulang kalimat di sini untuk menurunkan tingkat kemiripan."
+              maxLength={MAX_ANALYSIS_CHARACTERS}
+              aria-label="Teks hasil penyuntingan"
+              placeholder="Teks hasil akan mengikuti mode yang dipilih. Anda dapat menyuntingnya di sini."
               rows={6}
               className="w-full flex-1 min-h-[140px] p-3.5 rounded-2xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs sm:text-sm text-slate-900 dark:text-slate-100 leading-relaxed font-sans focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 resize-none"
             />
@@ -245,10 +270,10 @@ export const AcademicParaphraseModal: React.FC<AcademicParaphraseModalProps> = (
                       ) : (
                         <ShieldCheck className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
                       )}
-                      <span>Estimasi Kemiripan Kalimat (Similarity): {simPercent}%</span>
+                      <span>Kemiripan dengan draf sumber: {simPercent}%</span>
                     </div>
                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${riskBadgeClass}`}>
-                      Risiko {riskLevel}
+                      Kategori {riskLevel.toLowerCase()}
                     </span>
                   </div>
 
@@ -274,8 +299,13 @@ export const AcademicParaphraseModal: React.FC<AcademicParaphraseModalProps> = (
                     )}
                   </div>
 
+                  <p className="text-[10px] leading-relaxed text-slate-500 dark:text-slate-400">
+                    Estimator ini membandingkan draf dengan teks hasil memakai N-Gram dan edit distance. Kategori adalah indikator internal, bukan penilaian plagiarisme atau pencarian pada basis data publik.
+                  </p>
+
                   {showSentenceBreakdown && liveSimilarity.sentenceComparisons.length > 0 && (
                     <div className="mt-2 max-h-36 overflow-y-auto space-y-1.5 border-t border-slate-100 dark:border-slate-800 pt-2 pr-1">
+                      <p className="text-[10px] text-slate-400">Rincian dibatasi hingga 40 kalimat pertama; skor ringkas memakai seluruh teks.</p>
                       {liveSimilarity.sentenceComparisons.map((item, idx) => (
                         <div key={idx} className="rounded-lg bg-slate-50 dark:bg-slate-900 p-2 text-[10.5px] space-y-1 border border-slate-200/60 dark:border-slate-800">
                           <div className="flex items-center justify-between font-semibold">
@@ -285,6 +315,7 @@ export const AcademicParaphraseModal: React.FC<AcademicParaphraseModalProps> = (
                             </span>
                           </div>
                           {item.original && <p className="text-slate-500 line-clamp-2">Asli: “{item.original}”</p>}
+                          {item.paraphrased && <p className="text-slate-500 line-clamp-2">Hasil: “{item.paraphrased}”</p>}
                         </div>
                       ))}
                     </div>
@@ -294,20 +325,22 @@ export const AcademicParaphraseModal: React.FC<AcademicParaphraseModalProps> = (
                 <div className="grid grid-cols-3 gap-2">
                   <div className="p-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800/60 text-center">
                     <div className="text-[10px] font-semibold text-indigo-700 dark:text-indigo-300">
-                      Variasi Kosakata
+                      Keragaman Kosakata
                     </div>
                     <div className="text-base font-extrabold text-indigo-600 dark:text-indigo-400">
                       {result.lexicalDiversity}%
                     </div>
+                    <div className="text-[9px] text-indigo-700/80 dark:text-indigo-300/80">kata unik dari total kata</div>
                   </div>
 
                   <div className="p-2.5 rounded-xl bg-teal-50 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800/60 text-center">
                     <div className="text-[10px] font-semibold text-teal-700 dark:text-teal-300">
-                      Keterbacaan Ilmiah
+                      Keterbacaan (heuristik)
                     </div>
                     <div className="text-base font-extrabold text-teal-600 dark:text-teal-400">
                       {result.readabilityScore}/100
                     </div>
+                    <div className="text-[9px] text-teal-700/80 dark:text-teal-300/80">berdasarkan kata per kalimat</div>
                   </div>
                   <div className="p-2.5 rounded-xl bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800/60 text-center">
                     <div className="text-[10px] font-semibold text-sky-700 dark:text-sky-300">Perubahan Jumlah Kata</div>
@@ -317,7 +350,7 @@ export const AcademicParaphraseModal: React.FC<AcademicParaphraseModalProps> = (
                   </div>
                 </div>
                 <p className="text-[10px] leading-relaxed text-slate-500 dark:text-slate-400">
-                  Hasil parafrase tidak menjamin lolos pemeriksaan similarity/plagiarisme. Verifikasi tetap diperlukan menggunakan alat pemeriksaan yang sesuai.
+                  Tinjau kembali ketepatan makna dan pertahankan atribusi serta sitasi sesuai panduan akademik institusi Anda.
                 </p>
               </div>
             )}
@@ -326,15 +359,18 @@ export const AcademicParaphraseModal: React.FC<AcademicParaphraseModalProps> = (
 
         {/* Footer Actions */}
         <div className="p-3.5 border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center justify-between">
-          <button
-            type="button"
-            onClick={handleCopy}
-            disabled={!activeOutputText}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-750 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold transition-colors disabled:opacity-50 cursor-pointer"
-          >
-            {copied ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
-            <span>{copied ? 'Tersalin ke Clipboard!' : 'Salin Hasil'}</span>
-          </button>
+          <div className="flex items-center gap-3 min-w-0">
+            <button
+              type="button"
+              onClick={handleCopy}
+              disabled={!activeOutputText}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-750 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold transition-colors disabled:opacity-50 cursor-pointer shrink-0"
+            >
+              {copied ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+              <span>{copied ? 'Tersalin ke Clipboard!' : 'Salin Hasil'}</span>
+            </button>
+            {clipboardError && <p role="status" aria-live="polite" className="text-[10px] text-rose-600 dark:text-rose-400">{clipboardError}</p>}
+          </div>
 
           <div className="flex items-center gap-2">
             <button

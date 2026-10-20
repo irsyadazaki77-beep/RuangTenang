@@ -4,7 +4,7 @@ export interface AcademicPaper {
   doi?: string;
   title: string;
   authors: string[];
-  year: number;
+  year?: number;
   journal: string;
   volume?: string;
   issue?: string;
@@ -13,7 +13,7 @@ export interface AcademicPaper {
   abstract?: string;
   url?: string;
   citationCount?: number;
-  source: 'crossref' | 'manual-doi';
+  source: 'crossref' | 'import';
   verified: boolean;
   retrievedAt?: string;
 }
@@ -133,10 +133,11 @@ export async function searchAcademicPapersWithStatus(query: string, signal?: Abo
 
 export function formatAPA7(paper: AcademicPaper): string {
   const authors = formatAuthorsAPA(paper.authors);
+  const year = paper.year ?? 'n.d.';
   const volIssue = paper.volume ? (paper.issue ? `${paper.volume}(${paper.issue})` : paper.volume) : '';
   const pages = paper.pages ? `, ${paper.pages}` : '';
   const doi = paper.doi ? ` https://doi.org/${paper.doi}` : '';
-  return `${authors} (${paper.year}). ${paper.title}. *${paper.journal}*${volIssue ? `, ${volIssue}` : ''}${pages}.${doi}`;
+  return `${authors} (${year}). ${paper.title}. *${paper.journal}*${volIssue ? `, ${volIssue}` : ''}${pages}.${doi}`;
 }
 
 export function formatIEEE(paper: AcademicPaper, index = 1): string {
@@ -144,19 +145,19 @@ export function formatIEEE(paper: AcademicPaper, index = 1): string {
   const issue = paper.issue ? `, no. ${paper.issue}` : '';
   const pages = paper.pages ? `, pp. ${paper.pages}` : '';
   const doi = paper.doi ? `, doi: ${paper.doi}` : '';
-  return `[${index}] ${paper.authors.join(', ')}, "${paper.title}," *${paper.journal}*${volume}${issue}${pages}, ${paper.year}${doi}.`;
+  return `[${index}] ${paper.authors.join(', ')}, "${paper.title}," *${paper.journal}*${volume}${issue}${pages}, ${paper.year ?? 'n.d.'}${doi}.`;
 }
 
 export function formatHarvard(paper: AcademicPaper): string {
   const volIssue = paper.volume ? `, ${paper.volume}${paper.issue ? `(${paper.issue})` : ''}` : '';
   const pages = paper.pages ? `, pp. ${paper.pages}` : '';
-  return `${paper.authors.join(' and ')} (${paper.year}) '${paper.title}', *${paper.journal}*${volIssue}${pages}.`;
+  return `${paper.authors.join(' and ')} (${paper.year ?? 'n.d.'}) '${paper.title}', *${paper.journal}*${volIssue}${pages}.`;
 }
 
 export function formatBibTeX(paper: AcademicPaper): string {
   const firstAuthor = (paper.authors[0] || '').split(',')[0].toLowerCase().replace(/[^a-z0-9]/g, '') || 'ref';
-  const citeKey = `${firstAuthor}${paper.year}${paper.title.slice(0, 6).toLowerCase().replace(/[^a-z0-9]/g, '')}`;
-  return `@article{${citeKey},\n  author = {${paper.authors.join(' and ')}},\n  title = {${paper.title}},\n  journal = {${paper.journal}},\n  year = {${paper.year}}${paper.doi ? `,\n  doi = {${paper.doi}}` : ''}\n}`;
+  const citeKey = `${firstAuthor}${paper.year ?? 'nd'}${paper.title.slice(0, 6).toLowerCase().replace(/[^a-z0-9]/g, '')}`;
+  return `@article{${citeKey},\n  author = {${paper.authors.join(' and ')}},\n  title = {${paper.title}},\n  journal = {${paper.journal}}${paper.year ? `,\n  year = {${paper.year}}` : ''}${paper.doi ? `,\n  doi = {${paper.doi}}` : ''}\n}`;
 }
 
 function formatAuthorsAPA(authors: string[]): string {

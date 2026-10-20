@@ -7,6 +7,9 @@
 export type ParaphraseStyle = 'KONSERVATIF' | 'RESTRUKTURISASI' | 'SINTESIS';
 export type SimilarityRiskLevel = 'RENDAH' | 'SEDANG' | 'TINGGI';
 
+const MAX_DETAILED_SIMILARITY_SENTENCES = 40;
+const MAX_SENTENCE_SIMILARITY_TOKENS = 100;
+
 export interface SentenceSimilarityItem {
   original: string;
   paraphrased: string;
@@ -21,7 +24,7 @@ export interface TextSimilarityAnalysis {
   ngramOverlapPercent: number;
   /** Character/token Levenshtein structural similarity percentage (0-100) */
   structuralSimilarityPercent: number;
-  /** Risk classification for academic similarity check */
+  /** Internal threshold band for this text-to-text estimate; not a plagiarism assessment. */
   riskLevel: SimilarityRiskLevel;
   /** Per-sentence comparison breakdown */
   sentenceComparisons: SentenceSimilarityItem[];
@@ -79,12 +82,12 @@ function computeJaccardPercent(setA: Set<string>, setB: Set<string>): number {
   return union === 0 ? 0 : Math.round((intersection / union) * 100);
 }
 
-function computeTokenLevenshteinSimilarity(tokensA: string[], tokensB: string[]): number {
+function computeTokenLevenshteinSimilarity(tokensA: string[], tokensB: string[], maxTokens = 350): number {
   if (tokensA.length === 0 && tokensB.length === 0) return 0;
   if (tokensA.length === 0 || tokensB.length === 0) return 0;
-  // Cap token array length to 350 words to keep DP O(N*M) instantaneous in UI
-  const a = tokensA.slice(0, 350);
-  const b = tokensB.slice(0, 350);
+  // Keep the dynamic-programming work bounded for interactive similarity estimates.
+  const a = tokensA.slice(0, maxTokens);
+  const b = tokensB.slice(0, maxTokens);
   const m = a.length;
   const n = b.length;
   let prev = new Array<number>(n + 1);
@@ -148,8 +151,9 @@ export function calculateTextSimilarity(originalText: string, candidateText: str
       ? 'SEDANG'
       : 'RENDAH';
 
-  const origSentences = splitSentences(cleanOrig);
-  const candSentences = splitSentences(cleanCand);
+  // Detailed sentence matching is bounded; aggregate scores above still use the full text.
+  const origSentences = splitSentences(cleanOrig).slice(0, MAX_DETAILED_SIMILARITY_SENTENCES);
+  const candSentences = splitSentences(cleanCand).slice(0, MAX_DETAILED_SIMILARITY_SENTENCES);
   const maxSentences = Math.max(origSentences.length, candSentences.length);
   const sentenceComparisons: SentenceSimilarityItem[] = [];
 
@@ -169,7 +173,7 @@ export function calculateTextSimilarity(originalText: string, candidateText: str
         const sCandBi = buildNGrams(sCandTokens, 2);
         const sCandUni = buildNGrams(sCandTokens, 1);
         const ng = Math.round(computeJaccardPercent(sOrigUni, sCandUni) * 0.4 + computeJaccardPercent(sOrigBi, sCandBi) * 0.6);
-        const lev = computeTokenLevenshteinSimilarity(sOrigTokens, sCandTokens);
+        const lev = computeTokenLevenshteinSimilarity(sOrigTokens, sCandTokens, MAX_SENTENCE_SIMILARITY_TOKENS);
         const sim = origSent.trim() === candCandidate.trim() ? 100 : Math.round(ng * 0.55 + lev * 0.45);
         if (sim > bestSim) {
           bestSim = sim;

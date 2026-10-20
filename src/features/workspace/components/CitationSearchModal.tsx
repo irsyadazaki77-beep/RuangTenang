@@ -94,17 +94,19 @@ export const CitationSearchModal: React.FC<CitationSearchModalProps> = ({
     setImportError(raw.trim() && parsedRefs.length === 0 ? 'Tidak ada entri .bib atau .ris yang dikenali. Periksa format berkas atau teks yang ditempel.' : '');
     const mapped: AcademicPaper[] = parsedRefs.map((ref, idx) => ({
       id: ref.id || `imported_${idx + 1}`,
-      title: ref.title || ref.raw || `Referensi Impor #${idx + 1}`,
+      title: ref.title || `Judul tidak tersedia (referensi impor #${idx + 1})`,
       authors: ref.authors.length ? ref.authors : ['Penulis Tidak Diketahui'],
-      year: Number(ref.year) || new Date().getFullYear(),
+      year: Number.isInteger(Number(ref.year)) && Number(ref.year) >= 1000 && Number(ref.year) <= new Date().getFullYear() + 1
+        ? Number(ref.year)
+        : undefined,
       journal: ref.journal || ref.publisher || ref.institution || 'Sumber Impor (.bib/.ris)',
       volume: ref.volume,
       issue: ref.issue,
       pages: ref.pages,
       doi: ref.doi || '',
       url: ref.url,
-      source: 'manual-doi',
-      verified: true
+      source: 'import',
+      verified: false
     }));
     setImportedPapers(mapped);
     setSelectedPaper(mapped[0] || null);
@@ -171,7 +173,7 @@ export const CitationSearchModal: React.FC<CitationSearchModalProps> = ({
   };
 
   const handleInsert = () => {
-    if (!selectedPaper?.verified || !onInsertCitation) return;
+    if (!selectedPaper || !onInsertCitation) return;
     onInsertCitation(currentCitationText, selectedPaper);
     onClose();
   };
@@ -379,17 +381,15 @@ export const CitationSearchModal: React.FC<CitationSearchModalProps> = ({
                       {paper.title}
                     </div>
                     <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 truncate">
-                      {paper.authors.slice(0, 2).join(', ')}{paper.authors.length > 2 ? ' et al.' : ''} ({paper.year})
+                      {paper.authors.slice(0, 2).join(', ')}{paper.authors.length > 2 ? ' et al.' : ''} ({paper.year ?? 'n.d.'})
                     </div>
                     <div className="flex items-center gap-2 mt-2">
                       <span className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 truncate max-w-[160px]">
                         {paper.journal}
                       </span>
-                      {paper.verified && (
-                        <span className="text-[9.5px] font-semibold text-emerald-700 dark:text-emerald-300">
-                          {activeMode === 'import' ? 'Impor .bib/.ris' : 'Metadata Crossref'}
-                        </span>
-                      )}
+                      <span className={`text-[9.5px] font-semibold ${paper.source === 'crossref' ? 'text-emerald-700 dark:text-emerald-300' : 'text-amber-700 dark:text-amber-300'}`}>
+                        {paper.source === 'crossref' ? 'Metadata Crossref' : 'Impor · belum diverifikasi'}
+                      </span>
                       {paper.doi && (
                         <span className="text-[9.5px] font-mono text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-1.5 py-0.5 rounded">
                           DOI
@@ -405,18 +405,18 @@ export const CitationSearchModal: React.FC<CitationSearchModalProps> = ({
           {/* Right Column: Selected Paper Details & Citation Generator (7 cols) */}
           <div className="md:col-span-7 flex flex-col justify-between overflow-y-auto p-4 sm:p-5 space-y-4 custom-scrollbar">
             {clipboardError && <p role="status" aria-live="polite" className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">{clipboardError}</p>}
-            {selectedPaper?.verified ? (
+            {selectedPaper ? (
               <div className="space-y-4">
                 {/* Selected Paper Meta */}
                 <div className="space-y-2">
                   <p className="text-[10px] text-slate-500">
-                    {activeMode === 'import'
-                      ? 'Metadata diekstrak dari berkas referensi (.bib / .ris) Anda.'
+                    {selectedPaper.source === 'import'
+                      ? 'Metadata dibaca dari berkas referensi (.bib / .ris); periksa kembali bidang yang kosong atau belum diverifikasi.'
                       : 'Metadata bibliografis ditemukan di Crossref; dukungan isi artikel terhadap klaim tidak diperiksa.'}
                   </p>
                   <div className="flex items-center gap-2">
                     <span className="px-2.5 py-0.5 rounded-full text-[10.5px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-200 border border-emerald-300 dark:border-emerald-800">
-                      Tahun {selectedPaper.year}
+                      Tahun {selectedPaper.year ?? 'tidak tercantum'}
                     </span>
                     {selectedPaper.citationCount !== undefined && selectedPaper.citationCount > 0 && (
                       <span className="text-[11px] text-slate-400">
