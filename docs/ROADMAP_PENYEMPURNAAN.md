@@ -159,6 +159,7 @@ Centang di bawah berarti perubahan kode pada butir tersebut sudah diterapkan; it
   - [x] Sediakan pemeriksaan ulang status ekstraksi yang masih tertunda atau gagal diperiksa, tanpa mengunggah ulang file.
   - [x] Bedakan kegagalan endpoint status (mis. sesi berakhir atau lampiran tak ditemukan) dari timeout ekstraksi dan pertahankan ID lampiran untuk pemeriksaan ulang.
   - [x] Buat penghapusan lampiran tahan klik ganda dan aman terhadap permintaan bersamaan atau referensi yang sudah terhapus.
+  - [x] Pertahankan hasil OCR halaman PDF yang berhasil saat halaman pasangan gagal, dan laporkan halaman yang belum terbaca.
 - [ ] Tinjau sitasi, penelusuran sumber, batas verifikasi, dan tampilan asal klaim.
   - [x] Labeli sumber web sebagai eksternal belum diverifikasi dan bedakan daftar rujukan dari bukti dukungan klaim.
   - [x] Lengkapi modal pencarian/import sitasi dengan nama dialog, perangkap fokus, fokus awal, pemulihan fokus, dan penutupan Escape.
@@ -170,8 +171,9 @@ Centang di bawah berarti perubahan kode pada butir tersebut sudah diterapkan; it
   - [x] Simpan baseline versi/timestamp pada draf Canvas dalam memori; deteksi konflik saat Canvas dibuka kembali dan tahan autosave sampai pengguna memilih versi.
   - [x] Selaraskan keterangan snapshot dengan perilaku server (autosave memperbarui versi aktif) dan jelaskan bahwa draf lokal belum tersimpan ke server serta pemulihannya bergantung pada penyimpanan sesi browser.
   - [x] Terapkan nama dialog, fokus awal, perangkap/pemulihan fokus, dan Escape pada modal sitasi, parafrase, dan galeri template.
-  - [x] Jelaskan batas editor akademik lokal: Konservatif mempertahankan draf, Sintesis memilih kalimat sumber, Restrukturisasi dinonaktifkan, dan estimator hanya membandingkan kedua teks; batasi rincian per kalimat agar kalkulasi tetap terukur.
+  - [x] Jelaskan batas editor akademik lokal: Konservatif mempertahankan draf, Sintesis memilih kalimat sumber, Restrukturisasi dinonaktifkan, metrik mengikuti hasil edit, dan estimator hanya membandingkan kedua teks dengan rincian terbatas.
 - [ ] Tinjau workflow agent, persetujuan sebelum eksekusi, pembatalan, retry, dan pemulihan task gagal.
+  - [x] Pertahankan dependency saat urutan tampilan task diubah agar tombol pindah tidak menghapus prasyarat eksekusi.
   - [x] Pisahkan tombol “Stop task” dari “Batalkan plan”; hentikan eksekusi aktif lewat endpoint task, pertahankan plan agar task dapat dicoba lagi, dan muat ulang status jika pembatalan gagal.
   - [x] Segarkan plan setelah kegagalan start, review, transisi, cancel, atau recovery supaya retry tidak memakai status lokal yang usang.
   - [x] Jelaskan bahwa “Jeda plan” menghentikan langkah lanjutan, sedangkan task aktif tetap berjalan sampai selesai; “Stop task” menghentikan task aktif.

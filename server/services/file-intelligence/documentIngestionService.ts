@@ -71,8 +71,7 @@ export const documentIngestionService = {
         checksum: verified.checksum,
         chatId: chatId || null,
         status: 'ready'
-      },
-      include: { chunks: true }
+      }
     });
 
     if (existing) {
