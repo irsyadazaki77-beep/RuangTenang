@@ -178,7 +178,7 @@ jobs:
       - name: Scan npm dependencies
         run: npm audit --audit-level=high
       - name: Scan Git history for secrets
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Build production image
