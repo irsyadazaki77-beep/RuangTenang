@@ -59,6 +59,8 @@ import {
 export interface ArtifactCanvasProps {
   artifact: WorkspaceArtifact;
   initialDraftContent?: string;
+  initialDraftBaseVersion?: number;
+  initialDraftBaseUpdatedAt?: string;
   scrollStorageKey?: string;
   onUpdateArtifact?: (updated: Partial<WorkspaceArtifact>) => void;
   onClose?: () => void;
@@ -73,7 +75,7 @@ export interface ArtifactCanvasProps {
   onRequestInlineEdit?: (selection: WorkspaceArtifactSelection, instruction: string, currentArtifact: WorkspaceArtifact) => void;
   inlineEditPatch?: ArtifactPatch | null;
   onDismissInlineEdit?: () => void;
-  onDraftContentChange?: (artifactId: string, content: string) => void;
+  onDraftContentChange?: (artifactId: string, content: string, baseVersion: number, baseUpdatedAt?: string) => void;
   revisionCommit?: { artifactId: string; content: string; version: number } | null;
   isStreaming?: boolean;
   isExpanded?: boolean;
@@ -87,9 +89,58 @@ function isPresentationContent(content: string): boolean {
   try { return (JSON.parse(content) as { format?: string }).format === 'ruangtenang-presentation-v1'; } catch { return false; }
 }
 
+interface CanvasDraftRecovery {
+  version: 1;
+  artifactId: string;
+  content: string;
+  baseVersion: number;
+  baseUpdatedAt?: string;
+}
+
+function readCanvasDraftRecovery(storageKey: string | undefined, artifactId: string): CanvasDraftRecovery | null {
+  if (!storageKey) return null;
+  try {
+    const raw = globalThis.sessionStorage?.getItem(`${storageKey}:draft-recovery`);
+    const value = raw ? JSON.parse(raw) as Partial<CanvasDraftRecovery> : null;
+    if (value?.version !== 1 || value.artifactId !== artifactId || typeof value.content !== 'string' || !Number.isSafeInteger(value.baseVersion) || (value.baseVersion ?? 0) < 1) return null;
+    return value as CanvasDraftRecovery;
+  } catch {
+    return null;
+  }
+}
+
+function writeCanvasDraftRecovery(storageKey: string | undefined, artifactId: string, content: string, artifact: WorkspaceArtifact) {
+  if (!storageKey) return;
+  try {
+    globalThis.sessionStorage?.setItem(`${storageKey}:draft-recovery`, JSON.stringify({
+      version: 1,
+      artifactId,
+      content,
+      baseVersion: artifact.version || 1,
+      ...(artifact.updatedAt ? { baseUpdatedAt: artifact.updatedAt } : {})
+    } satisfies CanvasDraftRecovery));
+  } catch { /* Keep editing available if tab storage is disabled or full. */ }
+}
+
+function clearCanvasDraftRecovery(storageKey: string | undefined, savedContent?: string) {
+  if (!storageKey) return;
+  try {
+    const key = `${storageKey}:draft-recovery`;
+    if (savedContent === undefined) {
+      globalThis.sessionStorage?.removeItem(key);
+      return;
+    }
+    const raw = globalThis.sessionStorage?.getItem(key);
+    const value = raw ? JSON.parse(raw) as Partial<CanvasDraftRecovery> : null;
+    if (value?.content === savedContent) globalThis.sessionStorage?.removeItem(key);
+  } catch { /* Recovery cleanup is best effort. */ }
+}
+
 export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
   artifact,
   initialDraftContent,
+  initialDraftBaseVersion,
+  initialDraftBaseUpdatedAt,
   scrollStorageKey,
   onUpdateArtifact,
   onClose,
@@ -111,17 +162,33 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
   onToggleExpand: controlledToggleExpand
 }) => {
   const { showToast } = useToast();
+  const showToastRef = useRef(showToast);
+  showToastRef.current = showToast;
+  const initialRecoveredDraft = readCanvasDraftRecovery(scrollStorageKey, artifact.id);
+  const recoveredContent = initialRecoveredDraft?.content !== artifact.content ? initialRecoveredDraft?.content : undefined;
+  const hasInitialParentDraft = initialDraftContent !== undefined && initialDraftContent !== artifact.content;
+  const initialCanvasDraft = recoveredContent ?? (hasInitialParentDraft ? initialDraftContent : undefined);
+  const initialDraftBaseVersionValue = recoveredContent !== undefined
+    ? initialRecoveredDraft!.baseVersion
+    : hasInitialParentDraft ? (initialDraftBaseVersion ?? artifact.version) || 1 : artifact.version || 1;
+  const initialDraftBaseUpdatedAtValue = recoveredContent !== undefined
+    ? initialRecoveredDraft?.baseUpdatedAt || artifact.updatedAt
+    : hasInitialParentDraft ? initialDraftBaseUpdatedAt || artifact.updatedAt : artifact.updatedAt;
+  const hasInitialDraftConflict = initialCanvasDraft !== undefined && (
+    initialDraftBaseVersionValue !== (artifact.version || 1) ||
+    Boolean(initialDraftBaseUpdatedAtValue && artifact.updatedAt && initialDraftBaseUpdatedAtValue !== artifact.updatedAt)
+  );
   const [isCopied, setIsCopied] = useState(false);
   const [internalExpanded, setInternalExpanded] = useState(false);
   const isExpanded = controlledExpanded !== undefined ? controlledExpanded : internalExpanded;
   const toggleInternalExpand = useCallback(() => setInternalExpanded(prev => !prev), []);
   const toggleExpand = controlledToggleExpand || toggleInternalExpand;
 
-  const [viewMode, setViewMode] = useState<CanvasViewMode>('preview');
+  const [viewMode, setViewMode] = useState<CanvasViewMode>(initialCanvasDraft !== undefined ? 'edit' : 'preview');
   const [isPresentationStudio, setIsPresentationStudio] = useState(artifact.language === 'presentation' || isPresentationContent(artifact.content));
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [titleInput, setTitleInput] = useState(artifact.title || '');
-  const [editableContent, setEditableContent] = useState(initialDraftContent ?? artifact.content);
+  const [editableContent, setEditableContent] = useState(initialCanvasDraft ?? artifact.content);
   const editableContentRef = useRef(editableContent);
   editableContentRef.current = editableContent;
   const contentScrollRef = useRef<HTMLDivElement>(null);
@@ -140,14 +207,14 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
       return value.type === 'table' && typeof value.title === 'string' && Array.isArray(value.columns) && Array.isArray(value.rows) && typeof value.sourceVersion === 'string' ? value as SavedTableSpec : null;
     } catch { return null; }
   }, [artifact.type, editableContent]);
-  const [isDirty, setIsDirty] = useState(initialDraftContent !== undefined && initialDraftContent !== artifact.content);
-  const [saveStatus, setSaveStatus] = useState<SaveState>(initialDraftContent !== undefined && initialDraftContent !== artifact.content ? 'unsaved' : artifact.persistenceStatus === 'persistent' || !artifact.persistenceStatus ? 'saved' : artifact.persistenceStatus === 'saving' ? 'saving' : artifact.persistenceStatus === 'failed' ? 'failed' : 'local');
+  const [isDirty, setIsDirty] = useState(initialCanvasDraft !== undefined);
+  const [saveStatus, setSaveStatus] = useState<SaveState>(initialCanvasDraft !== undefined ? 'unsaved' : artifact.persistenceStatus === 'persistent' || !artifact.persistenceStatus ? 'saved' : artifact.persistenceStatus === 'saving' ? 'saving' : artifact.persistenceStatus === 'failed' ? 'failed' : 'local');
   const [saveFailureMessage, setSaveFailureMessage] = useState('Gagal simpan');
 
   // Conflict handling states
-  const [hasExternalConflict, setHasExternalConflict] = useState(false);
-  const [conflictServerContent, setConflictServerContent] = useState<string | null>(null);
-  const [conflictServerArtifact, setConflictServerArtifact] = useState<WorkspaceArtifact | null>(null);
+  const [hasExternalConflict, setHasExternalConflict] = useState(hasInitialDraftConflict);
+  const [conflictServerContent, setConflictServerContent] = useState<string | null>(hasInitialDraftConflict ? artifact.content : null);
+  const [conflictServerArtifact, setConflictServerArtifact] = useState<WorkspaceArtifact | null>(hasInitialDraftConflict ? { ...artifact, persistenceStatus: artifact.persistenceStatus || 'persistent' } : null);
 
   // Simulation & validation states
   const [validationResult, setValidationResult] = useState<CodeValidationResult | null>(null);
@@ -180,9 +247,10 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
   const titleInputRef = useRef<HTMLInputElement>(null);
   const moreMenuRef = useRef<HTMLDivElement>(null);
   const draftSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingDraftSyncRef = useRef<{ artifactId: string; content: string } | null>(null);
+  const pendingDraftSyncRef = useRef<{ artifactId: string; content: string; baseVersion: number; baseUpdatedAt?: string } | null>(null);
   const lastSavedContentRef = useRef<string>(artifact.content);
-  const lastKnownVersionRef = useRef<number>(artifact.version || 1);
+  const lastKnownVersionRef = useRef<number>(initialDraftBaseVersionValue);
+  const lastKnownUpdatedAtRef = useRef<string | undefined>(initialDraftBaseUpdatedAtValue);
   const saveSeqRef = useRef<number>(0);
   const isApplyingInlinePatchRef = useRef(false);
   const activeSandboxHandleRef = useRef<SandboxExecutionHandle | null>(null);
@@ -193,11 +261,11 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
     draftSyncTimerRef.current = null;
     const pending = pendingDraftSyncRef.current;
     pendingDraftSyncRef.current = null;
-    if (pending) onDraftContentChange?.(pending.artifactId, pending.content);
+    if (pending) onDraftContentChange?.(pending.artifactId, pending.content, pending.baseVersion, pending.baseUpdatedAt);
   }, [onDraftContentChange]);
 
   const scheduleDraftSync = useCallback((artifactId: string, content: string, immediate = false) => {
-    pendingDraftSyncRef.current = { artifactId, content };
+    pendingDraftSyncRef.current = { artifactId, content, baseVersion: lastKnownVersionRef.current, baseUpdatedAt: lastKnownUpdatedAtRef.current };
     if (draftSyncTimerRef.current) clearTimeout(draftSyncTimerRef.current);
     if (immediate) {
       flushDraftSync();
@@ -255,34 +323,65 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
       // If switching to another artifact, reset all local session states
       setTitleInput(artifact.title || '');
       setIsPresentationStudio(artifact.language === 'presentation' || isPresentationContent(artifact.content));
-      setEditableContent(initialDraftContent ?? artifact.content);
+      const recovery = readCanvasDraftRecovery(scrollStorageKey, artifact.id);
+      const recoveryContent = recovery?.content !== artifact.content ? recovery?.content : undefined;
+      const hasParentDraft = initialDraftContent !== undefined && initialDraftContent !== artifact.content;
+      const nextContent = recoveryContent ?? (hasParentDraft ? initialDraftContent : artifact.content);
+      editableContentRef.current = nextContent;
+      setEditableContent(nextContent);
       lastSavedContentRef.current = artifact.content;
-      lastKnownVersionRef.current = artifact.version || 1;
-      setIsDirty(initialDraftContent !== undefined && initialDraftContent !== artifact.content);
-      setSaveStatus(initialDraftContent !== undefined && initialDraftContent !== artifact.content ? 'unsaved' : artifact.persistenceStatus === 'persistent' || !artifact.persistenceStatus ? 'saved' : artifact.persistenceStatus === 'saving' ? 'saving' : artifact.persistenceStatus === 'failed' ? 'failed' : 'local');
-      setHasExternalConflict(false);
-      setConflictServerContent(null);
-      setConflictServerArtifact(null);
+      const hasLocalDraft = nextContent !== artifact.content;
+      const baseVersion = recoveryContent !== undefined
+        ? recovery!.baseVersion
+        : hasParentDraft ? (initialDraftBaseVersion ?? artifact.version) || 1 : artifact.version || 1;
+      const baseUpdatedAt = recoveryContent !== undefined
+        ? recovery?.baseUpdatedAt || artifact.updatedAt
+        : hasParentDraft ? initialDraftBaseUpdatedAt || artifact.updatedAt : artifact.updatedAt;
+      lastKnownVersionRef.current = baseVersion;
+      lastKnownUpdatedAtRef.current = baseUpdatedAt;
+      const draftConflictsWithServer = hasLocalDraft && (
+        baseVersion !== (artifact.version || 1) ||
+        Boolean(baseUpdatedAt && artifact.updatedAt && baseUpdatedAt !== artifact.updatedAt)
+      );
+      setIsDirty(hasLocalDraft);
+      setSaveStatus(hasLocalDraft ? 'unsaved' : artifact.persistenceStatus === 'persistent' || !artifact.persistenceStatus ? 'saved' : artifact.persistenceStatus === 'saving' ? 'saving' : artifact.persistenceStatus === 'failed' ? 'failed' : 'local');
+      setHasExternalConflict(draftConflictsWithServer);
+      setConflictServerContent(draftConflictsWithServer ? artifact.content : null);
+      setConflictServerArtifact(draftConflictsWithServer ? { ...artifact, persistenceStatus: artifact.persistenceStatus || 'persistent' } : null);
+      if (recoveryContent !== undefined) {
+        setViewMode('edit');
+        showToastRef.current(draftConflictsWithServer
+          ? 'Draf Canvas dipulihkan dari sesi browser. Versi server berubah; pilih versi sebelum melanjutkan.'
+          : 'Draf Canvas dari sesi browser dipulihkan; penyimpanan otomatis akan dicoba lagi.', 'info');
+      }
+      if (recoveryContent === undefined && recovery) clearCanvasDraftRecovery(scrollStorageKey, recovery.content);
       setShowMoreMenu(false);
       setPreviewingVersion(null);
       setShowDeleteConfirm(false);
       return;
     }
 
-    // If external version changed while user is dirty with unsaved changes:
-    if (isDirty && artifact.content !== lastSavedContentRef.current && artifact.content !== editableContent) {
+    // If the current server revision changed while the local draft was based on an older revision, keep both versions available.
+    const serverRevisionChanged = (artifact.version || 1) !== lastKnownVersionRef.current || Boolean(
+      lastKnownUpdatedAtRef.current && artifact.updatedAt && lastKnownUpdatedAtRef.current !== artifact.updatedAt
+    );
+    if (isDirty && (serverRevisionChanged || (artifact.content !== lastSavedContentRef.current && artifact.content !== editableContent))) {
       setHasExternalConflict(true);
       setConflictServerContent(artifact.content);
+      setConflictServerArtifact({ ...artifact, persistenceStatus: artifact.persistenceStatus || 'persistent' });
     } else if (!isDirty) {
+      editableContentRef.current = artifact.content;
       setEditableContent(artifact.content);
       lastSavedContentRef.current = artifact.content;
       lastKnownVersionRef.current = artifact.version || 1;
+      lastKnownUpdatedAtRef.current = artifact.updatedAt;
       setSaveStatus(artifact.persistenceStatus === 'persistent' || !artifact.persistenceStatus ? 'saved' : artifact.persistenceStatus === 'saving' ? 'saving' : artifact.persistenceStatus === 'failed' ? 'failed' : 'local');
+      onDraftContentChange?.(artifact.id, artifact.content, lastKnownVersionRef.current, lastKnownUpdatedAtRef.current);
       setHasExternalConflict(false);
       setConflictServerContent(null);
       setConflictServerArtifact(null);
     }
-  }, [artifact.id, artifact.title, artifact.version, artifact.content, artifact.persistenceStatus, isDirty, editableContent]);
+  }, [artifact.id, artifact.title, artifact.version, artifact.content, artifact.updatedAt, artifact.persistenceStatus, isDirty, editableContent, onDraftContentChange, scrollStorageKey]);
   /* eslint-enable react-hooks/exhaustive-deps */
 
   useEffect(() => {
@@ -294,20 +393,29 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
   }, [artifact.id, onSelectedTextChange, onSelectionChange]);
 
   useEffect(() => {
-    scheduleDraftSync(artifact.id, initialDraftContent ?? artifact.content, true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- initialize the parent draft only when the artifact changes.
+    const recovery = readCanvasDraftRecovery(scrollStorageKey, artifact.id);
+    if (recovery?.content === artifact.content) clearCanvasDraftRecovery(scrollStorageKey, recovery.content);
+  }, [artifact.content, artifact.id, scrollStorageKey]);
+
+  useEffect(() => {
+    scheduleDraftSync(artifact.id, editableContentRef.current, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- initialize the parent draft once per artifact from the effective editor content.
   }, [artifact.id, scheduleDraftSync]);
 
   useEffect(() => {
     if (!revisionCommit || revisionCommit.artifactId !== artifact.id || revisionCommit.version !== artifact.version || revisionCommit.content !== artifact.content) return;
     setEditableContent(revisionCommit.content);
+    editableContentRef.current = revisionCommit.content;
     lastSavedContentRef.current = revisionCommit.content;
     lastKnownVersionRef.current = revisionCommit.version;
+    lastKnownUpdatedAtRef.current = artifact.updatedAt;
+    onDraftContentChange?.(artifact.id, revisionCommit.content, revisionCommit.version, artifact.updatedAt);
+    clearCanvasDraftRecovery(scrollStorageKey, revisionCommit.content);
     setIsDirty(false);
     setSaveStatus(artifact.persistenceStatus === 'local' ? 'local' : 'saved');
     setHasExternalConflict(false);
     setConflictServerContent(null);
-  }, [artifact.content, artifact.id, artifact.persistenceStatus, artifact.version, revisionCommit]);
+  }, [artifact.content, artifact.id, artifact.persistenceStatus, artifact.updatedAt, artifact.version, onDraftContentChange, revisionCommit, scrollStorageKey]);
 
   // Handle saving inline title
   const handleSaveTitle = async () => {
@@ -317,12 +425,21 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
       setIsEditingTitle(false);
       return;
     }
-    if (!onSaveArtifact || isSavingTitle || saveStatus === 'saving') return;
+    if (!onSaveArtifact || isSavingTitle || saveStatus === 'saving' || hasExternalConflict) return;
     setIsSavingTitle(true);
     setTitleSaveError('');
     try {
-      const saved = await onSaveArtifact(editableContent, trimmed);
+      const saved = await onSaveArtifact(editableContent, trimmed, false, lastKnownUpdatedAtRef.current, lastKnownVersionRef.current);
       if (!saved || typeof saved !== 'object') throw new Error('Judul belum berhasil disimpan.');
+      lastKnownVersionRef.current = (saved as WorkspaceArtifact).version || lastKnownVersionRef.current;
+      lastKnownUpdatedAtRef.current = (saved as WorkspaceArtifact).updatedAt || lastKnownUpdatedAtRef.current;
+      onDraftContentChange?.(artifact.id, editableContentRef.current, lastKnownVersionRef.current, lastKnownUpdatedAtRef.current);
+      if (editableContentRef.current === editableContent) clearCanvasDraftRecovery(scrollStorageKey, editableContent);
+      else writeCanvasDraftRecovery(scrollStorageKey, artifact.id, editableContentRef.current, {
+        ...artifact,
+        version: lastKnownVersionRef.current,
+        updatedAt: lastKnownUpdatedAtRef.current || artifact.updatedAt
+      });
       onUpdateArtifact?.({ ...saved as Partial<WorkspaceArtifact>, persistenceStatus: (saved as WorkspaceArtifact).persistenceStatus || 'persistent' });
       setTitleInput((saved as WorkspaceArtifact).title || trimmed);
       setIsEditingTitle(false);
@@ -349,17 +466,25 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
 
     try {
       if (!onSaveArtifact) throw new Error('Penyimpanan Canvas tidak tersedia.');
-      const saved = await onSaveArtifact(contentToSave, titleToSave || artifact.title);
+      const saved = await onSaveArtifact(contentToSave, titleToSave || artifact.title, false, lastKnownUpdatedAtRef.current, lastKnownVersionRef.current);
       if (!saved || typeof saved !== 'object') throw new Error('Perubahan belum berhasil disimpan.');
 
       // Concurrency guard: Only set 'saved' if this was the latest save request
       if (currentSeq === saveSeqRef.current) {
+        const contentChangedDuringSave = editableContentRef.current !== contentToSave;
         lastSavedContentRef.current = contentToSave;
         lastKnownVersionRef.current = (saved as WorkspaceArtifact).version || lastKnownVersionRef.current;
+        lastKnownUpdatedAtRef.current = (saved as WorkspaceArtifact).updatedAt || lastKnownUpdatedAtRef.current;
+        if (!contentChangedDuringSave) clearCanvasDraftRecovery(scrollStorageKey, contentToSave);
+        else writeCanvasDraftRecovery(scrollStorageKey, artifact.id, editableContentRef.current, {
+          ...artifact,
+          version: lastKnownVersionRef.current,
+          updatedAt: lastKnownUpdatedAtRef.current || artifact.updatedAt
+        });
         setSaveFailureMessage('Gagal simpan');
-        const contentChangedDuringSave = editableContentRef.current !== contentToSave;
         setIsDirty(contentChangedDuringSave);
         setSaveStatus(contentChangedDuringSave ? 'unsaved' : (saved as WorkspaceArtifact).persistenceStatus === 'local' ? 'local' : 'saved');
+        onDraftContentChange?.(artifact.id, contentChangedDuringSave ? editableContentRef.current : contentToSave, lastKnownVersionRef.current, lastKnownUpdatedAtRef.current);
         onUpdateArtifact?.({ ...saved as Partial<WorkspaceArtifact> });
         return !contentChangedDuringSave;
       }
@@ -378,7 +503,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
       }
       return false;
     }
-  }, [artifact.id, artifact.title, onSaveArtifact, onUpdateArtifact]);
+  }, [artifact.id, artifact.title, onDraftContentChange, onSaveArtifact, onUpdateArtifact, scrollStorageKey]);
 
   const markDraftDirty = useCallback(() => {
     setIsDirty(true);
@@ -390,6 +515,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
     viewMode,
     lastSavedContentRef,
     onDirty: markDraftDirty,
+    disabled: hasExternalConflict,
     save: performSave
   });
 
@@ -405,11 +531,11 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
 
   // Manual save trigger (e.g. Save button or Ctrl/Cmd + S)
   const handleManualSave = useCallback(() => {
-    if (saveStatus === 'saving') return;
+    if (saveStatus === 'saving' || hasExternalConflict) return;
     flushDraftSync();
     cancelScheduledSave();
     performSave(editableContent, artifact.title);
-  }, [editableContent, artifact.title, cancelScheduledSave, performSave, saveStatus, flushDraftSync]);
+  }, [editableContent, artifact.title, cancelScheduledSave, performSave, saveStatus, flushDraftSync, hasExternalConflict]);
 
   const captureSelection = (target: HTMLTextAreaElement) => {
     const start = target.selectionStart;
@@ -472,15 +598,21 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
     setInlinePatchError('');
     try {
       let expectedUpdatedAt = artifact.updatedAt;
+      let expectedVersion = lastKnownVersionRef.current;
       if (visibleInlineEditPatch.baseContent !== artifact.content) {
-        const savedBase = await onSaveArtifact(visibleInlineEditPatch.baseContent, artifact.title, true, expectedUpdatedAt);
+        const savedBase = await onSaveArtifact(visibleInlineEditPatch.baseContent, artifact.title, true, expectedUpdatedAt, expectedVersion);
         if (!savedBase || typeof savedBase !== 'object' || !('updatedAt' in savedBase) || typeof savedBase.updatedAt !== 'string') throw new Error('Dokumen dasar gagal disimpan');
         expectedUpdatedAt = savedBase.updatedAt;
+        expectedVersion = (savedBase as WorkspaceArtifact).version || expectedVersion;
       }
-      const saved = await onSaveArtifact(result.content, artifact.title, true, expectedUpdatedAt);
+      const saved = await onSaveArtifact(result.content, artifact.title, true, expectedUpdatedAt, expectedVersion);
       if (!saved) throw new Error('Revisi gagal disimpan');
       setEditableContent(result.content);
+      editableContentRef.current = result.content;
       lastSavedContentRef.current = result.content;
+      lastKnownVersionRef.current = (saved as WorkspaceArtifact).version || expectedVersion;
+      lastKnownUpdatedAtRef.current = (saved as WorkspaceArtifact).updatedAt || expectedUpdatedAt;
+      clearCanvasDraftRecovery(scrollStorageKey, result.content);
       setIsDirty(false);
       setSaveStatus('saved');
       setSaveFailureMessage('Gagal simpan');
@@ -491,7 +623,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
     } catch {
       setSaveStatus('failed');
       setSaveFailureMessage('Revisi gagal disimpan. Coba simpan lagi.');
-      setInlinePatchError('Revisi gagal disimpan. Draf Anda tetap aman; coba lagi.');
+      setInlinePatchError('Revisi gagal disimpan. Usulan masih terbuka; coba lagi.');
     } finally {
       isApplyingInlinePatchRef.current = false;
     }
@@ -701,7 +833,12 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
     saveSeqRef.current += 1;
     editableContentRef.current = newVal;
     setEditableContent(newVal);
-      scheduleDraftSync(artifact.id, newVal);
+    writeCanvasDraftRecovery(scrollStorageKey, artifact.id, newVal, {
+      ...artifact,
+      version: lastKnownVersionRef.current,
+      updatedAt: lastKnownUpdatedAtRef.current || artifact.updatedAt
+    });
+    scheduleDraftSync(artifact.id, newVal);
     if (newVal !== lastSavedContentRef.current) {
       setIsDirty(true);
       setSaveStatus('unsaved');
@@ -835,37 +972,57 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
   // Conflict Resolution Handlers
   const handleKeepLocalDraft = async () => {
     if (saveStatus === 'saving') return;
+    const contentToSave = editableContent;
     setSaveStatus('saving');
     try {
-      const saved = await onSaveArtifact?.(editableContent, artifact.title, false, conflictServerArtifact?.updatedAt, conflictServerArtifact?.version);
+      const saved = await onSaveArtifact?.(contentToSave, artifact.title, false, conflictServerArtifact?.updatedAt, conflictServerArtifact?.version);
       if (!saved) throw new Error('Penyimpanan tidak berhasil');
-      lastSavedContentRef.current = editableContent;
-      setIsDirty(false);
-      setSaveStatus((saved as WorkspaceArtifact).persistenceStatus === 'local' ? 'local' : 'saved');
+      const contentChangedDuringSave = editableContentRef.current !== contentToSave;
+      lastSavedContentRef.current = contentToSave;
+      lastKnownVersionRef.current = (saved as WorkspaceArtifact).version || conflictServerArtifact?.version || lastKnownVersionRef.current;
+      lastKnownUpdatedAtRef.current = (saved as WorkspaceArtifact).updatedAt || conflictServerArtifact?.updatedAt || lastKnownUpdatedAtRef.current;
+      if (!contentChangedDuringSave) clearCanvasDraftRecovery(scrollStorageKey, contentToSave);
+      else writeCanvasDraftRecovery(scrollStorageKey, artifact.id, editableContentRef.current, {
+        ...artifact,
+        version: lastKnownVersionRef.current,
+        updatedAt: lastKnownUpdatedAtRef.current || artifact.updatedAt
+      });
+      setIsDirty(contentChangedDuringSave);
+      setSaveStatus(contentChangedDuringSave ? 'unsaved' : (saved as WorkspaceArtifact).persistenceStatus === 'local' ? 'local' : 'saved');
+      onDraftContentChange?.(artifact.id, contentChangedDuringSave ? editableContentRef.current : contentToSave, lastKnownVersionRef.current, lastKnownUpdatedAtRef.current);
       setHasExternalConflict(false);
       setConflictServerArtifact(null);
       setConflictServerContent(null);
       onUpdateArtifact?.({ ...saved as Partial<WorkspaceArtifact> });
       showToast((saved as WorkspaceArtifact).persistenceStatus === 'local' ? 'Perubahan tetap berada di draf lokal.' : 'Draf lokal berhasil disimpan ke server.', (saved as WorkspaceArtifact).persistenceStatus === 'local' ? 'info' : 'success');
     } catch {
-      showToast('Perubahan belum tersimpan. Draf lokal tetap tersedia.', 'error');
+      showToast('Perubahan belum tersimpan. Draf saat ini tetap terbuka; coba lagi.', 'error');
       setSaveStatus('failed');
     }
   };
 
   const handleUseServerVersion = () => {
+    cancelScheduledSave();
     if (conflictServerContent !== null) {
+      editableContentRef.current = conflictServerContent;
       setEditableContent(conflictServerContent);
       if (conflictServerArtifact) setTitleInput(conflictServerArtifact.title);
       lastSavedContentRef.current = conflictServerContent;
+      lastKnownVersionRef.current = conflictServerArtifact?.version || artifact.version || 1;
+      lastKnownUpdatedAtRef.current = conflictServerArtifact?.updatedAt || artifact.updatedAt;
+      onDraftContentChange?.(artifact.id, conflictServerContent, lastKnownVersionRef.current, lastKnownUpdatedAtRef.current);
+      clearCanvasDraftRecovery(scrollStorageKey);
       setIsDirty(false);
-      setSaveStatus('saved');
+      setSaveStatus(conflictServerArtifact?.persistenceStatus === 'local' ? 'local' : 'saved');
+      setIsEditingTitle(false);
+      setTitleSaveError('');
       if (conflictServerArtifact) {
         lastKnownVersionRef.current = conflictServerArtifact.version;
-        onUpdateArtifact?.({ ...conflictServerArtifact, persistenceStatus: 'persistent' });
+        onUpdateArtifact?.({ ...conflictServerArtifact, persistenceStatus: conflictServerArtifact.persistenceStatus || 'persistent' });
       }
     }
     setHasExternalConflict(false);
+    setConflictServerContent(null);
     setConflictServerArtifact(null);
     showToast('Versi terbaru dari server diterapkan ke Canvas', 'info');
   };
@@ -885,7 +1042,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
         isEditingTitle={isEditingTitle} setIsEditingTitle={setIsEditingTitle}
         titleInput={titleInput} setTitleInput={setTitleInput} titleInputRef={titleInputRef}
         isSavingTitle={isSavingTitle} titleSaveError={titleSaveError} handleSaveTitle={handleSaveTitle}
-        saveStatus={saveStatus} saveFailureMessage={saveFailureMessage} handleManualSave={handleManualSave}
+        saveStatus={saveStatus} saveFailureMessage={saveFailureMessage} handleManualSave={handleManualSave} hasExternalConflict={hasExternalConflict}
         isDirty={isDirty} editorRef={editorRef} showMoreMenu={showMoreMenu} setShowMoreMenu={setShowMoreMenu}
         moreMenuRef={moreMenuRef} showHistory={() => setShowVersionHistoryModal(true)}
         showExport={() => setShowExportModal(true)} isExpanded={isExpanded} toggleExpand={toggleExpand} onClose={onClose}
@@ -914,7 +1071,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
           <div className="flex items-center gap-2">
             <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
             <span>
-              <strong>Perubahan Terdeteksi di Server:</strong> Dokumen ini telah diperbarui dari sesi lain saat Anda mengedit draf lokal.
+              <strong>Versi server berbeda:</strong> Dokumen ini berubah saat draf lokal masih terbuka.
             </span>
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -1210,7 +1367,12 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
           ) : (
             <span className="inline-flex items-center gap-1 text-slate-400 dark:text-slate-500">
               <Check className="w-3 h-3 text-emerald-500/70" />
-              <span>{saveStatus === 'local' ? 'Draf lokal (belum tersimpan ke server)' : 'Tersimpan otomatis'}</span>
+              <span
+                title={saveStatus === 'local' ? 'Draf ini belum tersimpan ke server. Pemulihan bergantung pada penyimpanan sesi browser.' : undefined}
+                aria-label={saveStatus === 'local' ? 'Draf lokal di tab ini; belum tersimpan ke server. Pemulihan bergantung pada penyimpanan sesi browser.' : undefined}
+              >
+                {saveStatus === 'local' ? 'Draf lokal tab ini (belum tersimpan ke server)' : 'Tersimpan otomatis'}
+              </span>
             </span>
           )}
 
@@ -1326,6 +1488,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
                     setDeleteError('');
                     try {
                       await onDeleteArtifact(artifact.id);
+                      clearCanvasDraftRecovery(scrollStorageKey);
                       setShowDeleteConfirm(false);
                     } catch {
                       setDeleteError('Dokumen belum berhasil dihapus. Coba lagi.');

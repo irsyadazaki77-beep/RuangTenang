@@ -276,7 +276,7 @@ export function ChatMemoryModal({
         <div className="p-3 rounded-xl bg-teal-50/40 dark:bg-teal-950/20 border border-teal-100 dark:border-teal-900/40 flex items-start gap-2 text-[11px] text-teal-800 dark:text-teal-300">
           <ShieldCheck className="w-4 h-4 shrink-0 mt-0.5 text-teal-600 dark:text-teal-400" />
           <span>
-            Data memori tersimpan aman, dibersihkan dari informasi sensitif (PII) secara otomatis, dan dapat kamu hapus kapan pun.
+            Memori tersimpan di aplikasi untuk digunakan sesuai pengaturan AI akunmu. Penyaringan informasi sensitif bisa keliru; tombol hapus menghapus catatan dari daftar memori aplikasi, bukan menjamin penghapusan salinan provider atau cadangan.
           </span>
         </div>
       </div>

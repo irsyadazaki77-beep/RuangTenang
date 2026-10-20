@@ -9,9 +9,9 @@ import type { FileSourceReference } from '../../../../shared/contracts/files';
 function getSourceCategoryBadge(source?: FileSourceReference) {
   if (!source) return { label: 'Inferensi AI', color: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300' };
   if (source.url || source.filename.toLowerCase().includes('web') || source.documentId?.startsWith('web_')) {
-    return { label: 'Sumber Eksternal Terverifikasi', color: 'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300' };
+    return { label: 'Web · belum diverifikasi', color: 'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300' };
   }
-  return { label: 'Ekstraksi Dokumen', color: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300' };
+  return { label: 'Rujukan dokumen', color: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300' };
 }
 
 function ResearchCitationContent({ content, sources, onOpenSource }: { content: string; sources: NonNullable<Message['sources']>; onOpenSource: (source: FileSourceReference) => void }) {
@@ -245,8 +245,9 @@ export const WorkspaceMessageRow = React.memo(function WorkspaceMessageRow({
             {msg.role === 'assistant' && msg.sources?.length ? (
               <details className="mt-2 rounded-lg border border-slate-200 bg-slate-50/70 px-2.5 py-2 text-[10px] dark:border-slate-800 dark:bg-slate-900/60">
                 <summary className="cursor-pointer font-semibold text-slate-600 dark:text-slate-300">
-                  Evidence Terverifikasi · {msg.sources.length} sumber
+                  Sumber yang dirujuk · {msg.sources.length}
                 </summary>
+                <p className="mt-1 text-slate-500 dark:text-slate-400">Daftar ini menunjukkan sumber yang dicantumkan. Dukungan sumber terhadap klaim belum diverifikasi otomatis.</p>
                 <ul className="mt-2 space-y-2">
                   {msg.sources.map((source, index) => {
                     const badge = getSourceCategoryBadge(source);

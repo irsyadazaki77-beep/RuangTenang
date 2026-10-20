@@ -8,6 +8,7 @@ interface UseArtifactAutosaveOptions {
   viewMode: CanvasViewMode;
   lastSavedContentRef: { current: string };
   onDirty: () => void;
+  disabled?: boolean;
   save: (content: string, title: string) => Promise<boolean>;
   delayMs?: number;
 }
@@ -18,6 +19,7 @@ export function useArtifactAutosave({
   viewMode,
   lastSavedContentRef,
   onDirty,
+  disabled = false,
   save,
   delayMs = 800
 }: UseArtifactAutosaveOptions) {
@@ -29,7 +31,10 @@ export function useArtifactAutosave({
   }, []);
 
   useEffect(() => {
-    if (viewMode !== 'edit' || content === lastSavedContentRef.current) return;
+    if (disabled || viewMode !== 'edit' || content === lastSavedContentRef.current) {
+      cancelScheduledSave();
+      return;
+    }
     onDirty();
     cancelScheduledSave();
     timerRef.current = setTimeout(() => {
@@ -37,7 +42,7 @@ export function useArtifactAutosave({
       void save(content, title);
     }, delayMs);
     return cancelScheduledSave;
-  }, [cancelScheduledSave, content, delayMs, lastSavedContentRef, onDirty, save, title, viewMode]);
+  }, [cancelScheduledSave, content, delayMs, disabled, lastSavedContentRef, onDirty, save, title, viewMode]);
 
   useEffect(() => cancelScheduledSave, [cancelScheduledSave]);
 

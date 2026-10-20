@@ -155,6 +155,8 @@ interface WorkspaceCanvasPaneProps {
   proposalPreview?: { taskId: string; title: string; type: ArtifactType; content: string; language?: string } | null;
   onDismissProposalPreview?: () => void;
   draftContent?: string;
+  draftBaseVersion?: number;
+  draftBaseUpdatedAt?: string;
   scrollStorageKey?: string;
   activeArtifactId: string;
   isCanvasOpen: boolean;
@@ -180,7 +182,7 @@ interface WorkspaceCanvasPaneProps {
   onRequestInlineEdit?: (selection: WorkspaceArtifactSelection, instruction: string, currentArtifact: WorkspaceArtifact) => void;
   inlineEditPatch?: ArtifactPatch | null;
   onDismissInlineEdit?: () => void;
-  onDraftContentChange?: (artifactId: string, content: string) => void;
+  onDraftContentChange?: (artifactId: string, content: string, baseVersion: number, baseUpdatedAt?: string) => void;
   revisionCommit?: { artifactId: string; content: string; version: number } | null;
   activeChapterScope?: WorkspaceChapterScope;
   onChangeChapterScope?: (scope: WorkspaceChapterScope) => void;
@@ -195,6 +197,8 @@ export const WorkspaceCanvasPane: React.FC<WorkspaceCanvasPaneProps> = React.mem
   proposalPreview = null,
   onDismissProposalPreview,
   draftContent,
+  draftBaseVersion,
+  draftBaseUpdatedAt,
   scrollStorageKey,
   activeArtifactId,
   isCanvasOpen,
@@ -280,7 +284,7 @@ export const WorkspaceCanvasPane: React.FC<WorkspaceCanvasPaneProps> = React.mem
           {isCreatingArtifact && <div role="status" className="flex h-8 shrink-0 items-center gap-2 border-b border-indigo-100 bg-indigo-50/70 px-3 text-xs font-medium text-indigo-800 dark:border-indigo-900/50 dark:bg-indigo-950/30 dark:text-indigo-300"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-indigo-500" />Membuat dokumen di Canvas…</div>}
           {activeArtifact?.persistenceStatus && activeArtifact.persistenceStatus !== 'persistent' && <div className="flex min-h-8 shrink-0 items-center justify-between gap-2 border-b border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200" role="status">
             <span>{activeArtifact.persistenceStatus === 'failed' ? 'Draf masih tersimpan lokal. Penyimpanan ke Ruang Kerja belum berhasil.' : activeArtifact.persistenceStatus === 'saving' ? 'Menyimpan draf ke Ruang Kerja…' : 'Draf tersimpan lokal dan akan dipindahkan setelah chat dibuat.'}</span>
-            {activeArtifact.persistenceStatus === 'failed' && hasWorkspaceChat && <button type="button" className="font-semibold underline underline-offset-2" onClick={() => { void Promise.resolve(onSaveArtifact(activeArtifact.content, activeArtifact.title)).catch(() => undefined); }}>Coba simpan</button>}
+            {activeArtifact.persistenceStatus === 'failed' && hasWorkspaceChat && <button type="button" className="font-semibold underline underline-offset-2" onClick={() => { void Promise.resolve(onSaveArtifact(draftContent ?? activeArtifact.content, activeArtifact.title, false, activeArtifact.updatedAt, activeArtifact.version)).catch(() => undefined); }}>Coba simpan</button>}
           </div>}
           {/* Sub-Document / Chapter Context Selector Strip (Multi-turn Context Memory Per-Bab) */}
           {onChangeChapterScope && (
@@ -413,6 +417,8 @@ export const WorkspaceCanvasPane: React.FC<WorkspaceCanvasPaneProps> = React.mem
             <ArtifactCanvas
               artifact={activeArtifact}
               initialDraftContent={draftContent}
+              initialDraftBaseVersion={draftBaseVersion}
+              initialDraftBaseUpdatedAt={draftBaseUpdatedAt}
               scrollStorageKey={scrollStorageKey}
               onUpdateArtifact={onUpdateActiveArtifact}
               onSaveArtifact={onSaveArtifact}
@@ -515,7 +521,7 @@ export const WorkspaceCanvasPane: React.FC<WorkspaceCanvasPaneProps> = React.mem
               <div className="flex min-h-8 shrink-0 items-center justify-between gap-2 border-b border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200" role="status">
                 <span className="truncate">{activeArtifact.persistenceStatus === 'failed' ? 'Draf masih tersimpan lokal.' : activeArtifact.persistenceStatus === 'saving' ? 'Menyimpan draf ke Ruang Kerja…' : 'Draf tersimpan lokal.'}</span>
                 {activeArtifact.persistenceStatus === 'failed' && hasWorkspaceChat && (
-                  <button type="button" className="font-semibold underline underline-offset-2 shrink-0" onClick={() => { void Promise.resolve(onSaveArtifact(activeArtifact.content, activeArtifact.title)).catch(() => undefined); }}>Coba simpan</button>
+                  <button type="button" className="font-semibold underline underline-offset-2 shrink-0" onClick={() => { void Promise.resolve(onSaveArtifact(draftContent ?? activeArtifact.content, activeArtifact.title, false, activeArtifact.updatedAt, activeArtifact.version)).catch(() => undefined); }}>Coba simpan</button>
                 )}
               </div>
             )}
@@ -527,6 +533,8 @@ export const WorkspaceCanvasPane: React.FC<WorkspaceCanvasPaneProps> = React.mem
                 <ArtifactCanvas
                   artifact={activeArtifact}
                   initialDraftContent={draftContent}
+                  initialDraftBaseVersion={draftBaseVersion}
+                  initialDraftBaseUpdatedAt={draftBaseUpdatedAt}
                   scrollStorageKey={scrollStorageKey}
                   onUpdateArtifact={onUpdateActiveArtifact}
                   onSaveArtifact={onSaveArtifact}

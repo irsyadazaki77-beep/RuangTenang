@@ -24,7 +24,6 @@ import { apiClient } from '../../../lib/apiClient';
 import { ChatSearchBar } from './ChatSearchBar';
 import { RhythmicTypingIndicator } from '../../../components/ui/RhythmicTypingIndicator';
 import { detectAcademicDistress } from '../../workspace/utils/distressDetector';
-import { usePrivacyVault } from '../../../contexts/PrivacyVaultContext';
 import { dispatchAuroraActivity } from '../../../lib/auroraEvents';
 import { readGuestAiConsent } from '../../../lib/guestAiConsent';
 import {
@@ -49,18 +48,18 @@ interface MainChatProps {
   chats?: Chat[];
   onOpenSidebar?: () => void;
   onOpenSettings?: () => void;
+  onOpenPrivacyCenter?: () => void;
   onOpenChangelog?: () => void;
   aiConsentAllowed?: boolean | null;
   aiConsentPromptOpen?: boolean;
   onRequestAiConsent?: (cancelPendingSend?: () => void) => void;
 }
 
-export default function MainChat({ user, setChats, chats = [], onOpenSidebar, onOpenSettings, onOpenChangelog, aiConsentAllowed = true, aiConsentPromptOpen = false, onRequestAiConsent }: MainChatProps) {
+export default function MainChat({ user, setChats, chats = [], onOpenSidebar, onOpenSettings, onOpenPrivacyCenter, onOpenChangelog, aiConsentAllowed = true, aiConsentPromptOpen = false, onRequestAiConsent }: MainChatProps) {
   const { chatId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
   const { showToast } = useToast();
-  const { isIncognitoMode } = usePrivacyVault();
 
   const currentChat = chats.find(c => c.id === chatId);
   const isBranch = Boolean(currentChat?.parentChatId);
@@ -99,6 +98,8 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
     attachments?: Attachment[];
     preserveUserMessage?: boolean;
   } | null>(null);
+  const streamedTextRef = React.useRef('');
+  const activeRequestRetryableRef = React.useRef(false);
 
   useEffect(() => {
     pendingConsentSendRef.current = null;
@@ -170,9 +171,57 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
     resetAt?: string;
   } | null>(null);
 
+  const handleStopResponse = useCallback(() => {
+    if (!isTyping) return;
+
+    const lastStreamingMessage = streamingMessage;
+    // abortStream flushes any text still waiting in the animation-frame buffer.
+    // Read the ref after that flush so the interruption record keeps the latest token.
+    abortStream();
+    const partialText = streamedTextRef.current || lastStreamingMessage?.content || '';
+    if (!streamingMessage && !partialText && !activeRequestRetryableRef.current) {
+      // A tool call has already produced its feature card. Stop only the trailing
+      // SSE cleanup if the user presses Escape before the final marker arrives.
+      activeRequestRetryableRef.current = false;
+      setFollowUps([]);
+      setQuotaExceededInfo(null);
+      dispatchAuroraActivity({ mode: 'RUANG_TENANG', phase: 'idle', chatId: chatId || loadedChatIdRef.current || undefined });
+      return;
+    }
+    const interruptedMessage: Message = {
+      id: streamingMessage?.id || `assistant_interrupted_${Date.now()}`,
+      role: 'assistant',
+      content: partialText || 'Jawaban dihentikan sebelum respons diterima.',
+      incomplete: true,
+      retryable: activeRequestRetryableRef.current,
+      createdAt: new Date().toISOString()
+    };
+    const activeChatId = chatId || loadedChatIdRef.current || undefined;
+
+    streamedTextRef.current = '';
+    activeRequestRetryableRef.current = false;
+    setStreamingMessage(null);
+    setFollowUps([]);
+    setQuotaExceededInfo(null);
+    setMessages(previous => [...previous, interruptedMessage]);
+    dispatchAuroraActivity({ mode: 'RUANG_TENANG', phase: 'idle', chatId: activeChatId });
+
+    if ((!user || user.role === 'guest') && !isTemporary && activeChatId?.startsWith('guest_')) {
+      appendGuestMessage(activeChatId, interruptedMessage);
+      setChats(getGuestChats());
+    }
+
+    showToast('Jawaban dihentikan sebelum selesai. Bagian yang tampil ditandai belum lengkap.', 'info');
+  }, [isTyping, streamingMessage, chatId, loadedChatIdRef, abortStream, setMessages, user, isTemporary, setChats, showToast]);
+
   useEffect(() => {
     if (chatId !== loadedChatIdRef.current) {
       abortStream();
+      streamedTextRef.current = '';
+      activeRequestRetryableRef.current = false;
+      setStreamingMessage(null);
+      setFollowUps([]);
+      setQuotaExceededInfo(null);
       if (chatId) {
         fetchMessages();
       } else {
@@ -193,7 +242,7 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
       if (e.key === 'Escape') {
         if (isSearchOpen) setIsSearchOpen(false);
         else if (activePlugin) handleClosePlugin();
-        else if (isTyping) abortStream();
+        else if (isTyping) handleStopResponse();
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
         if (messages.length > 0) {
           e.preventDefault();
@@ -203,7 +252,7 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
     };
     window.addEventListener('keydown', handleGlobalKeydown);
     return () => window.removeEventListener('keydown', handleGlobalKeydown);
-  }, [activePlugin, isTyping, abortStream, isSearchOpen, messages.length, handleClosePlugin, setIsSearchOpen]);
+  }, [activePlugin, isTyping, handleStopResponse, isSearchOpen, messages.length, handleClosePlugin, setIsSearchOpen]);
 
   // Branch conversation trigger
   const handleOpenBranch = useCallback((messageId: string, contentSnippet: string) => {
@@ -256,6 +305,8 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
     }
 
     setFollowUps([]);
+    streamedTextRef.current = '';
+    activeRequestRetryableRef.current = Boolean(content.trim()) && !pluginResult && (!attachments || attachments.length === 0);
     let assistantMsgId = `assistant_${Date.now()}`;
     let routingMeta: { modelUsed?: string; modelName?: string; routingMode?: 'manual' | 'auto'; routingReason?: string; fallbackFrom?: string; fallbackFromName?: string } = {};
     dispatchAuroraActivity({
@@ -297,10 +348,39 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
           setStreamingMessage(prev => ({ id: msgId, role: 'assistant', content: prev?.content || '' }));
         },
         onChunk: (text) => {
+          streamedTextRef.current += text;
           setStreamingMessage(prev => prev ? { ...prev, content: prev.content + text } : { id: assistantMsgId, role: 'assistant', content: text });
         },
-        onPluginSwitch: (pluginName) => {
-          setStreamingMessage(prev => prev ? { ...prev, content: `Memuat fitur ${pluginName}...`, plugin: pluginName } : null);
+        onPluginSwitch: (pluginName, parameters) => {
+          const pluginMessages: Record<string, string> = {
+            screening: 'Berikut akses skrining mandiri. Hasilnya bukan diagnosis klinis.',
+            mood: 'Kamu bisa mencatat suasana hati melalui fitur berikut.',
+            counselors: 'Berikut akses untuk melihat pilihan pendampingan konselor.',
+            emergency: 'Pusat bantuan darurat tersedia di bawah. Jika ada bahaya langsung, hubungi layanan darurat setempat.',
+            articles: 'Berikut bahan bacaan yang mungkin relevan untukmu.',
+            ai_memory: 'Permintaan konteks personalisasi diterima.'
+          };
+          const pluginMessage: Message = {
+            id: assistantMsgId,
+            role: 'assistant',
+            content: pluginMessages[pluginName] || 'Fitur bantuan terkait tersedia di bawah.',
+            plugin: pluginName,
+            pluginResult: parameters,
+            createdAt: new Date().toISOString(),
+            ...routingMeta
+          };
+          streamedTextRef.current = '';
+          activeRequestRetryableRef.current = false;
+          setStreamingMessage(null);
+          setFollowUps([]);
+          setMessages(previous => previous.some(message => message.id === assistantMsgId)
+            ? previous.map(message => message.id === assistantMsgId ? pluginMessage : message)
+            : [...previous, pluginMessage]);
+          if (shouldPersistLocally && activeChatId) {
+            appendGuestMessage(activeChatId, pluginMessage);
+            setChats(getGuestChats());
+          }
+          dispatchAuroraActivity({ mode: 'RUANG_TENANG', phase: 'finishing', chatId: activeChatId });
         },
         onMessageComplete: (text) => {
           if (/persetujuan pemrosesan ai belum aktif/i.test(text)) onRequestAiConsent?.();
@@ -326,6 +406,8 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
               setChats(getGuestChats());
             }
           }
+          streamedTextRef.current = '';
+          activeRequestRetryableRef.current = false;
           dispatchAuroraActivity({
             mode: 'RUANG_TENANG',
             phase: 'finishing',
@@ -334,6 +416,8 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
           setStreamingMessage(null);
         },
         onQuotaExceeded: (data) => {
+          streamedTextRef.current = '';
+          activeRequestRetryableRef.current = false;
           setStreamingMessage(null);
           setQuotaExceededInfo({
             isExceeded: true,
@@ -345,6 +429,11 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
           onRequestAiConsent?.();
         },
         onError: (err) => {
+          const partialText = streamedTextRef.current;
+          const hasPartialText = Boolean(partialText.trim());
+          const retryable = activeRequestRetryableRef.current;
+          streamedTextRef.current = '';
+          activeRequestRetryableRef.current = false;
           dispatchAuroraActivity({
             mode: 'RUANG_TENANG',
             phase: 'error',
@@ -361,13 +450,17 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
             });
             return;
           }
-          showToast(err || 'Gagal mengirim pesan', 'error');
-          setMessages(prev => {
-            if (prev.some(m => m.id === assistantMsgId)) {
-               return prev.map(m => m.id === assistantMsgId ? { ...m, content: err || 'Koneksi terputus.', error: true } : m);
-            }
-            return [...prev, { id: assistantMsgId, role: 'assistant', content: err || 'Koneksi terputus.', error: true }];
-          });
+          const failedMessage: Message = hasPartialText
+            ? { id: assistantMsgId, role: 'assistant', content: partialText, incomplete: true, retryable, createdAt: new Date().toISOString() }
+            : { id: assistantMsgId, role: 'assistant', content: err || 'Koneksi terputus.', error: true, retryable, createdAt: new Date().toISOString() };
+          showToast(hasPartialText ? 'Respons terputus sebelum selesai. Bagian yang tampil ditandai belum lengkap.' : (err || 'Gagal mengirim pesan'), hasPartialText ? 'warning' : 'error');
+          setMessages(prev => prev.some(message => message.id === assistantMsgId)
+            ? prev.map(message => message.id === assistantMsgId ? failedMessage : message)
+            : [...prev, failedMessage]);
+          if (hasPartialText && shouldPersistLocally && activeChatId) {
+            appendGuestMessage(activeChatId, failedMessage);
+            setChats(getGuestChats());
+          }
         },
         onFollowUps: (qs) => setFollowUps(qs),
         onChatCreated: (newChatId) => {
@@ -637,8 +730,11 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
   return (
     <>
       <ChatModalContainer
+        userId={user.id}
+        userCampusId={user.campusId}
         activePlugin={activePlugin}
         onClosePlugin={handleClosePlugin}
+        onOpenPrivacyCenter={onOpenPrivacyCenter}
         onScreeningComplete={(score: any) => {
           handleClosePlugin();
           showToast('Skrining berhasil diselesaikan.', 'success');
@@ -781,6 +877,12 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
               }`}
               ref={scrollContainerRef}
             >
+              {isTemporary && (
+                <div className="mx-auto mb-3 w-full max-w-3xl rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-3 text-xs text-amber-950 dark:border-amber-900/70 dark:bg-amber-950/30 dark:text-amber-100">
+                  <p className="font-semibold">Mode sementara aktif.</p>
+                  <p className="mt-0.5 leading-relaxed">Pesan baru tidak ditambahkan ke riwayat RuangTenang. Pemrosesan AI tetap berlangsung melalui endpoint yang dipilih; lampiran tetap diunggah dan diproses server sesuai konfigurasi.</p>
+                </div>
+              )}
               {isLoadingMessages ? (
                 <div className="flex-1 flex items-start justify-center pt-4">
                   <ChatSkeleton />
@@ -804,20 +906,6 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
                 </div>
               ) : (
                 <div key={chatId || 'empty'} className="max-w-3xl mx-auto space-y-4 sm:space-y-5 pb-6 w-full animate-fade-in">
-                  {isIncognitoMode && (
-                    <div className="p-3 rounded-2xl bg-purple-50/90 dark:bg-purple-950/50 border border-purple-200/80 dark:border-purple-800 text-purple-900 dark:text-purple-200 text-xs flex items-center justify-between shadow-xs">
-                      <div className="flex items-center gap-2">
-                        <Shield className="w-4 h-4 text-purple-600 dark:text-purple-400 shrink-0 animate-pulse" />
-                        <div>
-                          <span className="font-bold">Mode Anonim Aktif (Zero-Log)</span>
-                          <span className="text-purple-700/80 dark:text-purple-300/80 ml-1.5 hidden sm:inline">
-                            • Pesan percakapan ini tidak disimpan di riwayat atau server.
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
                   {nextCursor && (
                     <div className="flex justify-center mb-4">
                       <button
@@ -948,7 +1036,7 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
                       Layar disamarkan untuk privasi Anda. Klik untuk membuka kembali
                     </p>
                     <p className="text-[11px] text-stone-400 dark:text-stone-500">
-                      Isi obrolan Anda aman dan terlindungi dari pandangan orang di sekitar kampus.
+                      Penyamaran ini hanya mengubah tampilan di layar perangkat; pengaturan penyimpanan dan pemrosesan obrolan tidak berubah.
                     </p>
                   </div>
                   <button
@@ -982,9 +1070,12 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
           <ChatComposer
             onSend={handleSend}
             isTyping={isTyping}
+            isTemporary={isTemporary}
+            draftOwnerId={user?.id || 'guest'}
             aiConsentAllowed={aiConsentAllowed}
             aiConsentPromptOpen={aiConsentPromptOpen}
-            onStop={abortStream}
+            onRequestAiConsent={() => onRequestAiConsent?.()}
+            onStop={handleStopResponse}
             chatId={chatId}
             onCommand={handleCommand}
             onOpenPlugin={handleOpenPlugin}

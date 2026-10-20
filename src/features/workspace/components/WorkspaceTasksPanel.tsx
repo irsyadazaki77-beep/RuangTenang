@@ -22,6 +22,9 @@ interface Props {
   canPersist: boolean;
   isGenerating: boolean;
   isExecuting: boolean;
+  allowExternalSearch: boolean;
+  onAllowExternalSearchChange: (allowed: boolean) => void;
+  isStoppingTask?: boolean;
   isContinuousRunning?: boolean;
   onStartContinuous?: () => void;
   onStopContinuous?: () => void;
@@ -32,6 +35,7 @@ interface Props {
   onModelChange: (taskId: string, modelId: string | null) => void;
   onRun: (taskId: string, feedback?: string) => void;
   onCancel: () => void;
+  onStopTask: () => void;
   onComplete: () => void;
   onOpenArtifact: (artifactId: string) => void;
   onPreviewProposal?: (taskId: string, proposal: NonNullable<WorkspacePlan['tasks'][number]['artifactProposal']>) => void;
@@ -42,7 +46,7 @@ interface Props {
   focusedTaskId?: string;
 }
 
-export const WorkspaceTasksPanel: React.FC<Props> = ({ plan, workspaceKey, isLoading = false, canPersist, isGenerating, isExecuting, isContinuousRunning = false, onStartContinuous, onStopContinuous, onGenerate, onUpdate, onTransition, onRecover, onModelChange, onRun, onCancel, onComplete, onOpenArtifact, onPreviewProposal, onOpenSource, onAcceptReview, onRejectReview, hideHeader = false, focusedTaskId }) => {
+export const WorkspaceTasksPanel: React.FC<Props> = ({ plan, workspaceKey, isLoading = false, canPersist, isGenerating, isExecuting, allowExternalSearch, onAllowExternalSearchChange, isStoppingTask = false, isContinuousRunning = false, onStartContinuous, onStopContinuous, onGenerate, onUpdate, onTransition, onRecover, onModelChange, onRun, onCancel, onStopTask, onComplete, onOpenArtifact, onPreviewProposal, onOpenSource, onAcceptReview, onRejectReview, hideHeader = false, focusedTaskId }) => {
   const [expanded, setExpanded] = useState(() => Boolean(plan));
   const [goal, setGoal] = useState('');
   const [titleEdits, setTitleEdits] = useState<Record<string, string>>({});
@@ -63,6 +67,7 @@ export const WorkspaceTasksPanel: React.FC<Props> = ({ plan, workspaceKey, isLoa
     void persist({ ...plan, tasks: normalized });
   };
   const statusLabel: Record<WorkspaceTaskStatus, string> = { todo: 'Menunggu', running: 'Berjalan', waiting_review: 'Perlu ditinjau', done: 'Selesai', failed: 'Gagal', cancelled: 'Dibatalkan' };
+  const taskTypeLabel: Record<WorkspacePlan['tasks'][number]['type'], string> = { analysis: 'Analisis', writing: 'Penulisan', research: 'Riset', coding: 'Pemrograman', review: 'Tinjauan', transform: 'Transformasi' };
 
   useEffect(() => { if (plan) setExpanded(true); }, [plan?.id]); // eslint-disable-line react-hooks/exhaustive-deps -- expand only when a different plan is loaded.
   useLayoutEffect(() => {
@@ -100,6 +105,14 @@ export const WorkspaceTasksPanel: React.FC<Props> = ({ plan, workspaceKey, isLoa
         </form>
       </> : <>
         <div className="flex items-start justify-between gap-3"><div className="min-w-0"><h3 className="text-xs font-semibold text-slate-800 dark:text-slate-100">{plan.title}</h3><p className="mt-1 text-[11px] text-slate-500">Tujuan: {plan.goal}</p></div><span className="shrink-0 rounded-full bg-slate-100 px-2 py-1 text-[10px] capitalize text-slate-600 dark:bg-slate-800 dark:text-slate-300">{plan.status}</span></div>
+        {plan.tasks.some(task => task.type === 'research') && plan.status !== 'completed' && plan.status !== 'cancelled' && <div role="note" className="mt-3 rounded-lg border border-amber-200 bg-amber-50/80 p-2.5 text-[10.5px] leading-relaxed text-amber-950 dark:border-amber-900/70 dark:bg-amber-950/30 dark:text-amber-100">
+          <p><span className="font-semibold">Privasi riset web.</span> Jika Tavily dikonfigurasi, task berjenis Riset dapat mengirim kueri yang disusun Agent ke layanan eksternal tersebut. Filter pola data pribadi tidak menjamin anonimisasi. Mode <code>LOCAL_AI_ONLY</code> membatasi provider model, tetapi tidak mematikan Tavily.</p>
+          <label className="mt-2 flex min-h-8 items-center gap-2 font-semibold">
+            <input type="checkbox" checked={allowExternalSearch} disabled={isExecuting} onChange={event => onAllowExternalSearchChange(event.target.checked)} className="accent-amber-700" />
+            Izinkan pencarian web untuk eksekusi task Riset
+          </label>
+          <p className="text-amber-800/90 dark:text-amber-200/90">Nonaktif secara default. Jika dimatikan, tool pencarian web tidak tersedia; Agent tetap dapat memakai dokumen Workspace yang dipilih. Perubahan berlaku untuk eksekusi baru.</p>
+        </div>}
         <ol className="mt-3 space-y-1.5">
           {plan.tasks.map((task, index) => {
             const ready = task.dependsOn.every(id => plan.tasks.find(candidate => candidate.id === id)?.status === 'done');
@@ -108,7 +121,7 @@ export const WorkspaceTasksPanel: React.FC<Props> = ({ plan, workspaceKey, isLoa
               {task.status === 'done' ? <Check className="h-4 w-4 shrink-0 text-emerald-600" /> : task.status === 'running' ? <span className="h-3 w-3 shrink-0 animate-pulse rounded-full bg-amber-500" /> : <Circle className="h-4 w-4 shrink-0 text-slate-300" />}
               <div className="min-w-0 flex-1">
                 {plan.status === 'draft' ? <input aria-label={`Nama task ${index + 1}`} value={titleEdits[task.id] ?? task.title} onChange={event => setTitleEdits(current => ({ ...current, [task.id]: event.target.value.slice(0, 240) }))} className="w-full bg-transparent text-xs font-medium outline-none" /> : <p className="truncate text-xs font-medium text-slate-700 dark:text-slate-200">{task.title}</p>}
-                <p className="text-[10px] text-slate-500">{statusLabel[task.status]}{task.status === 'running' && isExecuting ? ' · Agent sedang menjalankan task' : ''}{task.dependsOn.length ? ` · setelah ${task.dependsOn.map(id => plan.tasks.find(candidate => candidate.id === id)?.title).filter(Boolean).join(', ')}` : ''}</p>
+                <p className="text-[10px] text-slate-500">{statusLabel[task.status]} · {taskTypeLabel[task.type]}{task.status === 'running' && isExecuting ? ' · Agent sedang menjalankan task' : ''}{task.dependsOn.length ? ` · setelah ${task.dependsOn.map(id => plan.tasks.find(candidate => candidate.id === id)?.title).filter(Boolean).join(', ')}` : ''}</p>
                 {task.output && <details className="mt-1"><summary className="cursor-pointer text-[10px] font-semibold text-emerald-700 dark:text-emerald-300">Tinjau hasil</summary><p className="mt-1 whitespace-pre-wrap text-[10px] leading-relaxed text-slate-600 dark:text-slate-300">{task.output.slice(0, 1200)}{task.output.length > 1200 ? '…' : ''}</p>{task.sources?.map(source => <button type="button" key={`${source.documentId}:${source.citationId}`} onClick={() => onOpenSource(source)} className="mr-2 mt-1 text-[10px] text-emerald-700 hover:underline dark:text-emerald-300">{source.filename}{source.sourceRef !== source.filename ? ` · ${source.sourceRef}` : ''}</button>)}{task.outputArtifactId && <button type="button" onClick={() => onOpenArtifact(task.outputArtifactId!)} className="mt-1 block text-[10px] font-semibold text-emerald-700 hover:underline dark:text-emerald-300">Output → buka Canvas</button>}</details>}
                 {task.artifactProposal && <div className="mt-1 rounded border border-amber-200 bg-amber-50/60 p-2 dark:border-amber-900 dark:bg-amber-950/20"><p className="text-[10px] font-semibold text-amber-800 dark:text-amber-200">Proposal belum disimpan · {task.artifactProposal.title} ({task.artifactProposal.type})</p>{onPreviewProposal && <button type="button" onClick={() => onPreviewProposal(task.id, task.artifactProposal!)} className="mt-1 text-[10px] font-semibold text-emerald-700 underline underline-offset-2 dark:text-emerald-300">Tinjau di Canvas</button>}<p className="mt-1 text-[9px] text-slate-500">Proposal baru dibuat menjadi artefak setelah Anda menerima hasil ini.</p></div>}
                 {task.executionEvents?.length ? <details className="mt-1"><summary className="cursor-pointer text-[10px] text-slate-500">Detail eksekusi ({task.executionEvents.length} langkah tercatat)</summary><ol className="mt-1 space-y-0.5 text-[10px] text-slate-500">{task.executionEvents.map((event, eventIndex) => <li key={`${event.step}:${event.kind}:${event.toolCallId || eventIndex}`}>{event.step}. {event.kind === 'model_decision' ? 'Penalaran model' : agentToolLabels[event.toolId || ''] || 'Tool'} · {event.status === 'completed' ? 'selesai' : event.status === 'cancelled' ? 'dibatalkan' : 'gagal'} · {event.durationMs} ms{event.errorCode ? ` · ${event.errorCode}` : ''}</li>)}</ol></details> : null}
@@ -200,12 +213,16 @@ export const WorkspaceTasksPanel: React.FC<Props> = ({ plan, workspaceKey, isLoa
               </button>
             )}
             {nextTask && !isContinuousRunning && <button type="button" disabled={isExecuting} onClick={() => onRun(nextTask.id)} className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-200 px-3 text-[11px] font-semibold text-slate-700 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200"><Play className="h-3 w-3" />Jalankan berikutnya</button>}
-            {isExecuting && <button type="button" onClick={onCancel} className="inline-flex h-8 items-center gap-1 rounded-lg border border-rose-200 px-3 text-[11px] font-semibold text-rose-700"><X className="h-3 w-3" />Stop task</button>}
+            {isExecuting && <button type="button" disabled={isStoppingTask} onClick={onStopTask} className="inline-flex h-8 items-center gap-1 rounded-lg border border-rose-200 px-3 text-[11px] font-semibold text-rose-700 disabled:opacity-50">{isStoppingTask ? 'Menghentikan…' : <><X className="h-3 w-3" />Stop task</>}</button>}
             {doneCount === plan.tasks.length && <button type="button" onClick={onComplete} className="ml-auto h-8 rounded-lg bg-slate-800 px-3 text-[11px] font-semibold text-white">Konfirmasi selesai</button>}
-            {doneCount < plan.tasks.length && <button type="button" onClick={() => onTransition('pause')} className="ml-auto inline-flex h-8 items-center gap-1 rounded-lg px-2.5 text-[11px] font-semibold text-slate-600"><Pause className="h-3 w-3" />Jeda</button>}
+            {doneCount < plan.tasks.length && <button type="button" aria-label="Jeda plan. Jika ada task yang sedang berjalan, task itu tetap berjalan sampai selesai." title="Jeda plan berikutnya. Gunakan Stop task untuk menghentikan task yang sedang berjalan." onClick={() => onTransition('pause')} className="ml-auto inline-flex h-8 items-center gap-1 rounded-lg px-2.5 text-[11px] font-semibold text-slate-600"><Pause className="h-3 w-3" />Jeda plan</button>}
             <button type="button" onClick={onCancel} className="h-8 rounded-lg px-2 text-[11px] text-slate-500">Batalkan plan</button>
           </>}
-          {plan.status === 'paused' && <button type="button" onClick={() => onTransition('resume')} className="h-8 rounded-lg bg-emerald-700 px-3 text-[11px] font-semibold text-white">Lanjutkan plan</button>}
+          {plan.status === 'paused' && <>
+            <button type="button" onClick={() => onTransition('resume')} className="h-8 rounded-lg bg-emerald-700 px-3 text-[11px] font-semibold text-white">Lanjutkan plan</button>
+            {isExecuting && <button type="button" disabled={isStoppingTask} onClick={onStopTask} className="inline-flex h-8 items-center gap-1 rounded-lg border border-rose-200 px-3 text-[11px] font-semibold text-rose-700 disabled:opacity-50">{isStoppingTask ? 'Menghentikan…' : <><X className="h-3 w-3" />Stop task</>}</button>}
+            <button type="button" onClick={onCancel} className="h-8 rounded-lg px-2 text-[11px] text-slate-500">Batalkan plan</button>
+          </>}
           {plan.status === 'completed' && <p className="text-[11px] text-emerald-700">Hasil akhir dikonfirmasi.</p>}
         </div>
       </>}

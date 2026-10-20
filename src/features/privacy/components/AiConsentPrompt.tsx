@@ -1,6 +1,7 @@
 import React from 'react';
 import { ShieldCheck, X } from 'lucide-react';
 import { useFocusTrap } from '../../../hooks/useFocusTrap';
+import { isOllamaOnlyCatalog, useAiModelCatalog } from '../../../lib/aiModelCatalog';
 
 interface AiConsentPromptProps {
   isOpen: boolean;
@@ -19,6 +20,9 @@ export const AiConsentPrompt: React.FC<AiConsentPromptProps> = ({
   onApprove,
   onClose
 }) => {
+  const { models, loading } = useAiModelCatalog();
+  const isOllamaOnly = !loading && isOllamaOnlyCatalog(models);
+
   const dialogRef = useFocusTrap<HTMLElement>({
     isOpen,
     onClose: isSaving ? undefined : onClose,
@@ -37,7 +41,7 @@ export const AiConsentPrompt: React.FC<AiConsentPromptProps> = ({
         aria-modal="true"
         aria-labelledby="ai-consent-title"
         aria-describedby="ai-consent-description"
-        className="w-full max-w-md rounded-2xl border border-emerald-100 bg-white p-5 shadow-2xl dark:border-emerald-900/70 dark:bg-slate-900 sm:p-6"
+        className="max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-2xl border border-emerald-100 bg-white p-5 shadow-2xl dark:border-emerald-900/70 dark:bg-slate-900 sm:p-6"
       >
         <div className="flex items-start gap-3">
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
@@ -48,16 +52,25 @@ export const AiConsentPrompt: React.FC<AiConsentPromptProps> = ({
               Persetujuan Pemrosesan AI
             </h2>
             <p id="ai-consent-description" className="mt-1.5 text-sm leading-relaxed text-slate-600 dark:text-slate-300">
-              Pesan{isGuest ? '' : ' dan lampiran'} yang kamu kirim akan diproses oleh model AI yang kamu pilih. Data sesi dilindungi dan tidak dibagikan ke pihak luar untuk pelatihan model.
+              {isOllamaOnly
+                ? `Pesan chat diproses melalui endpoint Ollama yang dikonfigurasi server. Berkas${isGuest ? '' : ' yang kamu unggah'} diproses server dan OCR gambar atau hasil pindai dapat memakai provider cloud terpisah jika dikonfigurasi. Percakapan dapat disimpan aplikasi sesuai kebijakan retensi.`
+                : `Pesan chat diproses oleh provider sesuai model dan perutean yang aktif; provider dapat berada di luar server yang kamu kelola. Berkas${isGuest ? '' : ' yang kamu unggah'} diproses server dan OCR gambar atau hasil pindai dapat memakai provider cloud terpisah jika dikonfigurasi. Percakapan dapat disimpan aplikasi sesuai kebijakan retensi.`}
             </p>
             <details className="mt-2 text-xs text-slate-500 dark:text-slate-400">
               <summary className="cursor-pointer font-medium text-emerald-700 dark:text-emerald-400 hover:underline">
                 Pelajari apa yang diproses & privasi
               </summary>
               <div className="mt-1.5 space-y-1 rounded-lg bg-slate-50 p-2.5 text-[11px] leading-relaxed text-slate-600 dark:bg-slate-800/60 dark:text-slate-300">
-                <p>• <strong>Cakupan:</strong> Teks obrolan, ringkasan konteks aktif, dan dokumen yang Anda unggah secara eksplisit.</p>
-                <p>• <strong>Model:</strong> Diproses melalui penyedia model AI yang aktif sesuai pilihan Anda.</p>
-                <p>• <strong>Akses:</strong> Hanya Anda yang dapat melihat hasil Workspace. Percakapan tidak dipantau oleh konselor tanpa persetujuan Anda.</p>
+                <p>• <strong>Cakupan:</strong> Teks obrolan, konteks percakapan, dan lampiran yang kamu kirim untuk diproses.</p>
+                <p>• <strong>OCR berkas:</strong> Unggahan disimpan dan diekstrak di server aplikasi. Jika provider OCR visual Gemini/OpenAI aktif, gambar atau halaman pindai dapat dikirim ke provider itu, terpisah dari model chat pilihan. Memakai Ollama tidak otomatis menonaktifkan jalur OCR cloud.</p>
+                {isOllamaOnly ? (
+                  <p>• <strong>Model:</strong> Katalog saat ini hanya menyediakan Ollama. Pesan dikirim ke endpoint Ollama yang dikonfigurasi; aplikasi tidak dapat memastikan endpoint itu berada di perangkatmu.</p>
+                ) : (
+                  <p>• <strong>Model:</strong> Provider mengikuti model dan perutean yang aktif. Jika provider berada di luar perangkat/server yang kamu kelola, pesan dapat diproses oleh layanan pihak ketiga sesuai kebijakannya.</p>
+                )}
+                <p>• <strong>Penyimpanan:</strong> Data percakapan juga dapat disimpan oleh aplikasi. Masa simpan bergantung pada jenis akun dan kebijakan retensi; akun terdaftar dapat melihat pilihannya di Pusat Privasi.</p>
+                <p>• <strong>Berbagi:</strong> Percakapan tidak otomatis dikirim kepada konselor. Jangan kirim informasi yang tidak diperlukan.</p>
+                <p>• <strong>Tool eksternal:</strong> Jika pencarian web diaktifkan dan digunakan, kueri yang telah disaring dapat dikirim ke layanan pencarian. Penyaringan pola bukan jaminan anonimisasi.</p>
               </div>
             </details>
             {isGuest && <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">Izin ini hanya berlaku selama sesi browser ini.</p>}

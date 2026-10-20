@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { apiClient } from "../../lib/apiClient";
 import { safeLocalStorage } from "../../lib/storage";
 import { useAuth } from "../../contexts/AuthContext";
-import { calculateStreak } from "../../utils/streak";
+import { calculateStreak, getLocalIsoDateString } from "../../utils/streak";
 import {
   TrendingUp,
   Activity,
@@ -32,6 +32,7 @@ import { ErrorState } from '../../components/common/ErrorState';
 interface UserProgressTrackerProps {
   onNavigateToPrograms?: () => void;
   onNavigateToSchedule?: () => void;
+  onOpenPrivacyCenter?: () => void;
 }
 
 interface HistoricalScore {
@@ -46,6 +47,7 @@ interface HistoricalScore {
 export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
   onNavigateToPrograms,
   onNavigateToSchedule,
+  onOpenPrivacyCenter,
 }) => {
   const [screenHistory, setScreenHistory] = useState<HistoricalScore[]>([]);
   const [moodLogs, setMoodLogs] = useState<MoodLog[]>([]);
@@ -55,8 +57,8 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
 
   // Daily Checkin Modal
   const [isCheckinModalOpen, setIsCheckinModalOpen] = useState<boolean>(false);
+  const [editingMoodLog, setEditingMoodLog] = useState<MoodLog | null>(null);
 
-  const [shareConsent, setShareConsent] = useState<boolean>(true);
   const [loadingUsage, setLoadingUsage] = useState<boolean>(false);
   const [usageStats, setUsageStats] = useState<any>(null);
 
@@ -86,7 +88,7 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
     }
 
     // Fetch from backend for authenticated users
-    const dateStr = new Date().toISOString().split('T')[0];
+    const dateStr = getLocalIsoDateString();
     apiClient.get<any>(`/api/v1/user/selfcare?date=${dateStr}`).then(res => {
       if (res.success && res.data && res.data.tasks) {
         const backendTasks = res.data.tasks;
@@ -127,7 +129,7 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
 
       if (moodRes.success && Array.isArray(moodRes.data) && moodRes.data.length > 0) {
         const parsedLogs: MoodLog[] = moodRes.data.map(d => {
-          let dateStr = new Date().toISOString().split('T')[0];
+          let dateStr = getLocalIsoDateString();
           try {
             if (d.timestamp) {
               const parsed = new Date(d.timestamp);
@@ -268,9 +270,9 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
       return { bg: 'bg-slate-50 dark:bg-slate-900 text-secondary border-default', dot: 'bg-slate-400', desc: 'Belum ada hasil skrining' };
     }
     switch(triage) {
-      case 'Krisis': return { bg: 'bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800', dot: 'bg-rose-500', desc: 'Jawaban menunjukkan bahaya langsung; cari bantuan sekarang' };
-      case 'Prioritas': return { bg: 'bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800', dot: 'bg-amber-500', desc: 'Skrining positif atau skor tinggi; perlu tindak lanjut profesional' };
-      default: return { bg: 'bg-teal-50 dark:bg-teal-950/50 text-teal-700 dark:text-teal-300 border-teal-200 dark:border-teal-800', dot: 'bg-teal-500', desc: 'Kondisi relatif stabil' };
+      case 'Krisis': return { bg: 'bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800', dot: 'bg-rose-500', desc: 'Jawaban skrining memerlukan perhatian segera; gunakan layanan bantuan langsung jika Anda sedang dalam bahaya' };
+      case 'Prioritas': return { bg: 'bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800', dot: 'bg-amber-500', desc: 'Skrining menandai pertimbangan untuk tindak lanjut; bukan diagnosis' };
+      default: return { bg: 'bg-teal-50 dark:bg-teal-950/50 text-teal-700 dark:text-teal-300 border-teal-200 dark:border-teal-800', dot: 'bg-teal-500', desc: 'Skor skrining tidak memicu penanda prioritas; hasil ini tidak meniadakan kebutuhan bantuan' };
     }
   };
 
@@ -280,7 +282,7 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
   };
 
   const handleToggleSelfCare = async (id: string) => {
-    const dateStr = new Date().toISOString().split('T')[0];
+    const dateStr = getLocalIsoDateString();
     const itemToToggle = selfCareChecklist.find(i => i.id === id);
     if (!itemToToggle) return;
     const newStatus = !itemToToggle.done;
@@ -313,9 +315,25 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
     }
   };
 
+  const handleOpenMoodCheckin = () => {
+    setEditingMoodLog(null);
+    setIsCheckinModalOpen(true);
+  };
+
+  const handleEditMoodLog = (log: MoodLog) => {
+    if (log.id.startsWith('offline-')) return;
+    setEditingMoodLog(log);
+    setIsCheckinModalOpen(true);
+  };
+
+  const handleCloseMoodCheckin = () => {
+    setIsCheckinModalOpen(false);
+    setEditingMoodLog(null);
+  };
+
   const handleCheckinSaved = (canonicalLog: MoodLog) => {
     setMoodLogs(prev => {
-      const filtered = prev.filter(log => log.id !== canonicalLog.id && log.date !== canonicalLog.date);
+      const filtered = prev.filter(log => log.id !== canonicalLog.id);
       return [canonicalLog, ...filtered].sort(
         (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
       );
@@ -610,7 +628,8 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
                   moodLogs={moodLogs}
                   setMoodLogs={setMoodLogs as any}
                   showToast={showToast}
-                  onRequestOpenCheckin={() => setIsCheckinModalOpen(true)}
+                  onRequestOpenCheckin={handleOpenMoodCheckin}
+                  onRequestEditCheckin={handleEditMoodLog}
                 />
               </motion.div>
             )}
@@ -687,12 +706,12 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
                             ) : (
                               <div>
                                 <h4 className="text-sm sm:text-base font-bold text-primary mb-1">
-                                  {latestMood >= 3 ? 'Perkembangan Positif Terpantau!' : 'Tetap Semangat & Luangkan Waktu Rehat'}
+                                  Catatan Terbaru Tersimpan
                                 </h4>
                                 <p className="text-secondary text-xs sm:text-sm leading-relaxed">
                                   {moodLogs.length >= 3
-                                    ? `Tercatat ${totalActiveDays} hari aktif dengan ${moodLogs.length} entri mood. Keteraturan Anda membantu mengenali pola stres dan keseimbangan aktivitas perkuliahan.`
-                                    : `Data awal Anda telah tercatat (${moodLogs.length} log). Terus catat secara berkala untuk analisis pola emosi yang lebih mendalam.`}
+                                    ? `Tercatat ${totalActiveDays} hari aktif dengan ${moodLogs.length} entri mood. Catatan berkala dapat membantu Anda meninjau pengalaman sehari-hari, tetapi bukan penilaian klinis.`
+                                    : `Data awal Anda telah tercatat (${moodLogs.length} log). Catatan tambahan dapat membantu melihat ringkasan pengalaman dari waktu ke waktu.`}
                                 </p>
 
                                 {isExpandedInsight && (
@@ -700,7 +719,7 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
                                     <div className="flex gap-2.5 items-start">
                                       <CheckCircle2 className="w-4 h-4 text-teal-500 shrink-0 mt-0.5" />
                                       <p className="text-xs sm:text-sm text-secondary">
-                                        Log data tersimpan secara aman dan terenkripsi pada akun Anda.
+                                        Catatan ini terkait dengan akun Anda. Atur retensi dan penghapusan melalui Pusat Privasi.
                                       </p>
                                     </div>
                                     {currentPhq9 !== null && currentPhq9 > 9 && (
@@ -750,11 +769,7 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
                         <span>Akses Konselor</span>
                         <span className="text-[11px] font-medium text-muted">Izin Data</span>
                       </h3>
-                      <CounselorConsent
-                        shareConsent={shareConsent}
-                        setShareConsent={setShareConsent}
-                        showToast={showToast}
-                      />
+                      <CounselorConsent onOpenPrivacyCenter={onOpenPrivacyCenter} />
                     </div>
                   </div>
                 </div>
@@ -768,7 +783,8 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
       {/* GLOBAL DAILY CHECKIN MODAL */}
       <DailyCheckinModal
         isOpen={isCheckinModalOpen}
-        onClose={() => setIsCheckinModalOpen(false)}
+        onClose={handleCloseMoodCheckin}
+        initialLog={editingMoodLog}
         onSaveSuccess={handleCheckinSaved}
         showToast={showToast}
       />

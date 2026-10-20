@@ -20,6 +20,7 @@ import { WorkspaceArtifact } from '../types';
 import { createAcademicStylePreset, exportToAcademicDocx, validateAcademicCompleteness, type AcademicStyleProfile } from '../utils/exportDocx';
 import type { PresentationTheme, PresentationOutlineSlide } from '../utils/exportPptx';
 import { parseCitations } from '../utils/citationExport';
+import { useFocusTrap } from '../../../hooks/useFocusTrap';
 
 export type ExportFormatType = 
   | 'docx_skripsi' 
@@ -32,6 +33,17 @@ export type ExportFormatType =
   | 'text' 
   | 'bibtex' 
   | 'ris';
+
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
 
 interface ExportModalProps {
   isOpen: boolean;
@@ -93,6 +105,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({
     });
     return () => { active = false; };
   }, [selectedFormat, artifact.title, artifact.type, content, presentationTheme]);
+
+  const dialogRef = useFocusTrap<HTMLDivElement>({ isOpen, onClose });
 
   const selectFormat = (format: ExportFormatType) => {
     setSelectedFormat(format);
@@ -162,52 +176,24 @@ export const ExportModal: React.FC<ExportModalProps> = ({
         }, 300);
       } else if (formatToUse === 'markdown') {
         const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `${safeTitle}.md`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
+        downloadBlob(blob, `${safeTitle}.md`);
         showToast('Berkas Markdown (.md) bersih berhasil diunduh.', 'success');
         onClose();
       } else if (formatToUse === 'text') {
         const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `${safeTitle}.txt`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
+        downloadBlob(blob, `${safeTitle}.txt`);
         showToast('Berkas Teks Polos (.txt) berhasil diunduh.', 'success');
         onClose();
       } else if (formatToUse === 'bibtex') {
         const bibContent = onGenerateBibTeX ? onGenerateBibTeX(content, artifact.title) : content;
         const blob = new Blob([bibContent], { type: 'application/x-bibtex;charset=utf-8' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `${safeTitle}_citations.bib`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
+        downloadBlob(blob, `${safeTitle}_citations.bib`);
         showToast('Berkas BibTeX (.bib) berhasil diunduh untuk Mendeley/Zotero/LaTeX.', 'success');
         onClose();
       } else if (formatToUse === 'ris') {
         const risContent = onGenerateRIS ? onGenerateRIS(content, artifact.title) : content;
         const blob = new Blob([risContent], { type: 'application/x-research-info-systems;charset=utf-8' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `${safeTitle}_citations.ris`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
+        downloadBlob(blob, `${safeTitle}_citations.ris`);
         showToast('Berkas RIS (.ris) berhasil diunduh untuk Mendeley/Zotero.', 'success');
         onClose();
       }
@@ -221,6 +207,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({
 
   return (
     <div
+      ref={dialogRef}
+      tabIndex={-1}
       role="dialog"
       aria-modal="true"
       aria-labelledby="export-modal-title"

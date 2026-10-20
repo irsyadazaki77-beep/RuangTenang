@@ -1,7 +1,8 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { Sparkles, BookOpen, Quote, Code2, FileText, Pencil, Search, X, ChevronRight } from 'lucide-react';
 import { AcademicTaskTemplate } from '../types';
 import { ACADEMIC_TEMPLATES } from './AcademicToolsBar';
+import { useFocusTrap } from '../../../hooks/useFocusTrap';
 
 interface WorkspaceTemplateModalProps {
   template: AcademicTaskTemplate | null;
@@ -18,8 +19,8 @@ export const WorkspaceTemplateModal: React.FC<WorkspaceTemplateModalProps> = ({
   onClose,
   onSubmit
 }) => {
-  const dialogRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const dialogRef = useFocusTrap<HTMLDivElement>({ isOpen: Boolean(template), onClose, initialFocusRef: searchRef });
   const [selectedTemplate, setSelectedTemplate] = useState<AcademicTaskTemplate | null>(template);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState<string>('ALL');
@@ -38,37 +39,6 @@ export const WorkspaceTemplateModal: React.FC<WorkspaceTemplateModalProps> = ({
       setSelectedTemplate(template);
     }
   }, [template]);
-
-  useEffect(() => {
-    if (!template) return;
-    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    searchRef.current?.focus();
-    const handleDialogKeys = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.stopPropagation();
-        onClose();
-      }
-      if (event.key !== 'Tab' || !dialogRef.current) return;
-      const focusable = Array.from(dialogRef.current.querySelectorAll<HTMLElement>(
-        'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
-      ));
-      if (focusable.length === 0) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-    document.addEventListener('keydown', handleDialogKeys);
-    return () => {
-      document.removeEventListener('keydown', handleDialogKeys);
-      previousFocus?.focus();
-    };
-  }, [template, onClose]);
 
   const filteredTemplates = useMemo(() => {
     return ACADEMIC_TEMPLATES.filter(tpl => {

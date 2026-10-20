@@ -168,7 +168,7 @@ describe('SmartModelRouter unit tests', () => {
   });
 
   it('routes auto mode to the guarded local fallback when no provider is configured', () => {
-    for (const key of ['GEMINI_API_KEY', 'DEEPSEEK_API_KEY', 'GROQ_API_KEY', 'OPENROUTER_API_KEY', 'OPENAI_API_KEY']) {
+    for (const key of ['GEMINI_API_KEY', 'DEEPSEEK_API_KEY', 'GROQ_API_KEY', 'OPENROUTER_API_KEY', 'OPENAI_API_KEY', 'OLLAMA_BASE_URL', 'LOCAL_AI_ONLY']) {
       delete process.env[key];
     }
 
@@ -178,8 +178,8 @@ describe('SmartModelRouter unit tests', () => {
     }, 'Aku sedang merasa kewalahan.');
 
     expect(decision).toMatchObject({
-      selectedModelId: 'gemini-3.5-flash-lite',
-      provider: 'gemini',
+      selectedModelId: 'ollama-qwen3-1.7b',
+      provider: 'ollama',
       routingMode: 'auto',
       routingReason: expect.stringContaining('respons lokal')
     });

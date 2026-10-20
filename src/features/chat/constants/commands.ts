@@ -31,18 +31,18 @@ export interface ChatPluginOption {
 }
 
 export const CHAT_COMMANDS: ChatCommand[] = [
-  { cmd: '/grounding', label: 'Grounding 5-4-3-2-1', desc: 'Latihan sensorik meredakan serangan panik', icon: HeartPulse, actionType: 'plugin', pluginId: 'grounding' },
+  { cmd: '/grounding', label: 'Grounding 5-4-3-2-1', desc: 'Latihan indra saat merasa cemas; bukan bantuan darurat', icon: HeartPulse, actionType: 'plugin', pluginId: 'grounding' },
   { cmd: '/mood', label: 'Catat Suasana Hati', desc: 'Buka modal mood tracker & grafik emosi', icon: Heart, actionType: 'plugin', pluginId: 'mood' },
   { cmd: '/jeda', label: 'Jeda Hening 1-Menit', desc: 'Latihan relaksasi pernapasan terpandu', icon: Wind, actionType: 'plugin', pluginId: 'breathing' },
-  { cmd: '/skrining', label: 'Skrining Mandiri', desc: 'Tes psikometri klinis PHQ-9 & GAD-7', icon: Stethoscope, actionType: 'plugin', pluginId: 'screening' },
+  { cmd: '/skrining', label: 'Skrining Mandiri', desc: 'Skrining gejala depresi dan kecemasan (PHQ-9 & GAD-7)', icon: Stethoscope, actionType: 'plugin', pluginId: 'screening' },
   { cmd: '/konselor', label: 'Cari Konselor Kampus', desc: 'Buka direktori & jadwalkan konseling', icon: Users, actionType: 'plugin', pluginId: 'counselors' },
   { cmd: '/clear', label: 'Bersihkan Percakapan', desc: 'Reset & bersihkan riwayat obrolan sesi saat ini', icon: Trash2, actionType: 'system' },
   { cmd: '/new', label: 'Chat Baru', desc: 'Mulai sesi percakapan segar', icon: PlusCircle, actionType: 'system' },
   { cmd: '/counselor', label: 'Direktori Konselor', desc: 'Jadwalkan pendampingan konselor', icon: Users, actionType: 'plugin', pluginId: 'counselors' },
-  { cmd: '/emergency', label: 'Bantuan Darurat SOS', desc: 'Healing119, bantuan medis darurat, dan kontak darurat pribadi', icon: AlertCircle, actionType: 'plugin', pluginId: 'emergency' },
+  { cmd: '/emergency', label: 'Bantuan Darurat', desc: 'Healing119, bantuan medis, dan kontak darurat pribadi', icon: AlertCircle, actionType: 'plugin', pluginId: 'emergency' },
   { cmd: '/summary', label: 'Ringkas Percakapan', desc: 'Rangkum obrolan sesi saat ini', icon: Sparkles, actionType: 'system' },
   { cmd: '/export', label: 'Ekspor Chat', desc: 'Unduh riwayat percakapan (.md)', icon: Download, actionType: 'system' },
-  { cmd: '/articles', label: 'Artikel Edukasi', desc: 'Baca panduan & tips psikologis', icon: BookOpen, actionType: 'plugin', pluginId: 'articles' },
+  { cmd: '/articles', label: 'Artikel Edukasi', desc: 'Baca materi umum dan latihan mandiri', icon: BookOpen, actionType: 'plugin', pluginId: 'articles' },
 ];
 
 export const CHAT_PLUGINS: ChatPluginOption[] = [
@@ -50,7 +50,7 @@ export const CHAT_PLUGINS: ChatPluginOption[] = [
     id: 'grounding',
     icon: HeartPulse,
     label: 'Grounding 5-4-3-2-1',
-    desc: 'Teknik redakan panik & cemas akut',
+    desc: 'Latihan indra saat merasa cemas; bukan bantuan darurat',
     color: 'text-rose-500 bg-rose-50 dark:bg-rose-950/60'
   },
   {

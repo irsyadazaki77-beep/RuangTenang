@@ -40,6 +40,7 @@ import { smartModelRouter } from '../services/ai/smartModelRouter.js';
 import { optionalAttachmentOwner } from '../middleware/guestAttachmentSession.js';
 
 const router = Router();
+const MAX_WORKSPACE_CONTEXT_CHARS = 72_000;
 
 // Endpoint for inspecting non-sensitive AI performance metrics
 router.get('/ai/metrics', requireAuth, requireRole(['admin']), (req: Request, res: Response) => {
@@ -401,14 +402,25 @@ router.post('/chat/stream', authenticateChatStream, optionalAttachmentOwner, aiC
       presetId,
       includeWorkspaceFiles,
       workspaceAttachmentIds,
+      workspaceContext,
       isolatedTaskExecution,
       history: clientHistory
     } = req.body;
 
     const isAnonymous = !req.user || req.user.userId === 'guest';
+    const isWorkspace = Boolean(workspaceMode) || (mode || '').toLowerCase().includes('ruang_kerja') || (chatMode || '').toLowerCase().includes('ruangkerja');
     const maxLength = isAnonymous ? 500 : 2000;
     let cleanMessage = sanitizeInput(message || '', maxLength);
     cleanMessage = scanAndSanitizePII(cleanMessage).sanitizedText;
+    if (isWorkspace && typeof workspaceContext === 'string' && workspaceContext.length > MAX_WORKSPACE_CONTEXT_CHARS) {
+      return sendError(res, 'WORKSPACE_CONTEXT_TOO_LARGE', 'Konteks Workspace terlalu besar. Pilih teks yang lebih pendek atau nonaktifkan konteks Canvas.', 413);
+    }
+    const safeWorkspaceContext = isWorkspace && typeof workspaceContext === 'string'
+      ? scanAndSanitizePII(workspaceContext.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '')).sanitizedText
+      : undefined;
+    if (safeWorkspaceContext && safeWorkspaceContext.length > MAX_WORKSPACE_CONTEXT_CHARS) {
+      return sendError(res, 'WORKSPACE_CONTEXT_TOO_LARGE', 'Konteks Workspace terlalu besar setelah pemeriksaan privasi. Pilih bagian yang lebih pendek.', 413);
+    }
 
     const userId = req.user?.userId;
     const clientIp = req.ip || req.socket.remoteAddress || '127.0.0.1';
@@ -423,7 +435,6 @@ router.post('/chat/stream', authenticateChatStream, optionalAttachmentOwner, aiC
       }
     }
 
-    const isWorkspace = Boolean(workspaceMode) || (mode || '').toLowerCase().includes('ruang_kerja') || (chatMode || '').toLowerCase().includes('ruangkerja');
     const hasAiConsent = userId && userId !== 'guest'
       ? await consentService.canUseAI(userId)
       : guestAiConsent === true;
@@ -1033,7 +1044,8 @@ router.post('/chat/stream', authenticateChatStream, optionalAttachmentOwner, aiC
         guestAiConsent: guestAiConsent === true,
         abortSignal: reqAbortController.signal,
         routingDecision,
-        routingContext
+        routingContext,
+        workspaceContext: safeWorkspaceContext
       });
     } catch (err: any) {
       console.warn('[CHAT_STREAM] Unified safety pipeline threw error, switching to fallback:', err?.message || err);
@@ -1188,13 +1200,14 @@ router.post('/chat/stream', authenticateChatStream, optionalAttachmentOwner, aiC
       // Record performance & usage metrics
       const requestEndTime = Date.now();
       const ttfb = firstTokenTime ? (firstTokenTime - requestStartTime) : (requestEndTime - requestStartTime);
+      const metricInput = [cleanMessage, safeWorkspaceContext].filter(Boolean).join('\n');
 
       aiMetricsService.recordRequestMetric({
         requestId: pipelineRes.requestId || `req_${Date.now()}`,
         ttfbMs: ttfb,
         totalLatencyMs: requestEndTime - requestStartTime,
-        inputChars: (cleanMessage || pluginResult || '').length,
-        estimatedInputTokens: aiMetricsService.estimateTokens(cleanMessage || pluginResult || ''),
+        inputChars: (metricInput || pluginResult || '').length,
+        estimatedInputTokens: aiMetricsService.estimateTokens(metricInput || pluginResult || ''),
         outputChars: fullResponseText.length,
         estimatedOutputTokens: aiMetricsService.estimateTokens(fullResponseText),
         contextSavedTokens: 0,

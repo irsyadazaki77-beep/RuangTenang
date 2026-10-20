@@ -77,7 +77,7 @@ const NEEDS: NeedOption[] = [
     id: 'listen',
     icon: '🛋️',
     label: 'Sekadar didengarkan',
-    desc: 'Bercerita bebas tanpa dinasihati atau dihakimi'
+    desc: 'Tentukan apakah kamu ingin didengarkan, diberi ide, atau keduanya'
   },
   {
     id: 'unclutter',
@@ -88,14 +88,14 @@ const NEEDS: NeedOption[] = [
   {
     id: 'calm',
     icon: '🌬️',
-    label: 'Meredakan panik & cemas',
-    desc: 'Latihan pernapasan dan grounding singkat'
+    label: 'Mencoba latihan saat merasa cemas',
+    desc: 'Latihan napas atau grounding yang bisa dilewati kapan saja'
   },
   {
     id: 'academic',
     icon: '📚',
     label: 'Menghadapi beban tugas/skripsi',
-    desc: 'Langkah kecil mengatasi prokrastinasi & burnout'
+    desc: 'Pecah tugas besar menjadi langkah yang lebih kecil'
   }
 ];
 
@@ -281,6 +281,17 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ userId, onComple
                       </label>
                     )}
                   </div>
+
+                  <details className="text-[10.5px] leading-relaxed text-stone-600 dark:text-stone-300">
+                    <summary className="min-h-8 w-fit cursor-pointer rounded font-medium text-teal-800 underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 dark:text-teal-300">
+                      Detail pemrosesan dan penyimpanan
+                    </summary>
+                    <div className="space-y-1 pl-1">
+                      <p>Model dapat berjalan melalui Ollama pada endpoint yang dikonfigurasi atau provider AI lain. Endpoint Ollama tidak selalu berada di perangkatmu.</p>
+                      <p>Percakapan dapat disimpan aplikasi sesuai kebijakan retensi. Mode model Ollama tidak otomatis membuat penyimpanan aplikasi hanya lokal.</p>
+                      <p>Jika pencarian web diaktifkan dan digunakan, kueri yang disaring dapat dikirim ke layanan pencarian eksternal. Penyaringan pola bukan anonimisasi yang terjamin.</p>
+                    </div>
+                  </details>
                 </div>
               </motion.div>
             )}

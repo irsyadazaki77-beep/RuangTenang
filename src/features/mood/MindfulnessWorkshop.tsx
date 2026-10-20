@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { useMindfulnessAudio } from './hooks/useMindfulnessAudio';
 import { apiClient } from '../../lib/apiClient';
 import {
@@ -60,7 +60,15 @@ type WorkshopTab = 'soundscape' | 'grounding' | 'gratitude' | 'compassion';
 // ============================================================================
 export const MindfulnessWorkshop: React.FC<{ userId: string }> = ({ userId }) => {
   const [activeTab, setActiveTab] = useState<WorkshopTab>('soundscape');
-  const { isPlayingTheta, isPlayingWaves, isPlayingChimes, volume, toggleTheta, toggleWaves, toggleChimes, handleVolumeChange } = useMindfulnessAudio();
+  const shouldReduceMotion = useReducedMotion();
+  const { isPlayingTheta, isPlayingWaves, isPlayingChimes, volume, toggleTheta, toggleWaves, toggleChimes, stopAllAudio, handleVolumeChange } = useMindfulnessAudio();
+  const hasActiveAudio = isPlayingTheta || isPlayingWaves || isPlayingChimes;
+  const panelInitial = shouldReduceMotion ? false : { opacity: 0, y: 8 };
+  const panelAnimate = shouldReduceMotion ? { opacity: 1, y: 0, transition: { duration: 0 } } : { opacity: 1, y: 0 };
+  const panelExit = shouldReduceMotion ? { opacity: 1, y: 0, transition: { duration: 0 } } : { opacity: 0, y: -8 };
+  const stepInitial = shouldReduceMotion ? false : { opacity: 0, x: 10 };
+  const stepAnimate = shouldReduceMotion ? { opacity: 1, x: 0, transition: { duration: 0 } } : { opacity: 1, x: 0 };
+  const stepExit = shouldReduceMotion ? { opacity: 1, x: 0, transition: { duration: 0 } } : { opacity: 0, x: -10 };
 
   // Gratitude Jurnal state
   const [gratitudeLogs, setGratitudeLogs] = useState<GratitudeEntry[]>([]);
@@ -310,7 +318,7 @@ export const MindfulnessWorkshop: React.FC<{ userId: string }> = ({ userId }) =>
   );
 
   return (
-    <div id="mindfulness-workshop-root" className="max-w-4xl mx-auto p-4 sm:p-6 space-y-6 animate-fade-in text-slate-800 dark:text-slate-100">
+    <div id="mindfulness-workshop-root" className={`max-w-4xl mx-auto p-4 sm:p-6 space-y-6 text-slate-800 dark:text-slate-100 ${shouldReduceMotion ? '' : 'animate-fade-in'}`}>
       {showLegacyMigration && (
         <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
           <p className="font-semibold">Ada jurnal lama yang belum terkait ke akun ini.</p>
@@ -331,12 +339,23 @@ export const MindfulnessWorkshop: React.FC<{ userId: string }> = ({ userId }) =>
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/60 dark:border-slate-850 pb-4">
         <div>
           <h2 className="text-xl sm:text-2xl font-semibold tracking-tight text-slate-900 dark:text-slate-50 flex items-center gap-2">
-            <Compass className="w-6 h-6 text-teal-600 dark:text-teal-400 animate-spin-slow" />
+            <Compass className={`w-6 h-6 text-teal-600 dark:text-teal-400 ${shouldReduceMotion ? '' : 'animate-spin-slow'}`} />
             <span>Lokakarya Tenang Mandiri</span>
           </h2>
           <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Latih ketenangan, kelola rasa cemas, dan rawat kesejahteraan batin secara mandiri.
+            Pilih latihan audio, grounding, atau refleksi jurnal sesuai kondisi dan kenyamananmu.
           </p>
+          {hasActiveAudio && (
+            <button
+              type="button"
+              onClick={stopAllAudio}
+              aria-label="Matikan semua suara mindfulness"
+              className="mt-2 inline-flex min-h-10 items-center gap-2 rounded-lg border border-teal-300 bg-teal-50 px-3 text-xs font-semibold text-teal-800 hover:bg-teal-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 dark:border-teal-800 dark:bg-teal-950/40 dark:text-teal-200 dark:hover:bg-teal-950"
+            >
+              <VolumeX className="h-4 w-4" />
+              Matikan semua suara
+            </button>
+          )}
         </div>
 
         <div className="relative max-w-full">
@@ -424,9 +443,9 @@ export const MindfulnessWorkshop: React.FC<{ userId: string }> = ({ userId }) =>
           {activeTab === 'soundscape' && (
             <motion.div
               key="soundscape"
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
+              initial={panelInitial}
+              animate={panelAnimate}
+              exit={panelExit}
               className="space-y-6"
             >
               <div className="bg-slate-50 dark:bg-slate-900/40 border border-slate-200/50 dark:border-slate-800 p-5 rounded-2xl space-y-4">
@@ -435,7 +454,7 @@ export const MindfulnessWorkshop: React.FC<{ userId: string }> = ({ userId }) =>
                     <Music className="w-5 h-5" />
                   </div>
                   <div>
-                    <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Generator Suara Tenang Mandiri</h3>
+                    <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Pemutar Suara Ambient</h3>
                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 leading-normal">
                       Suara dibuat langsung di browser dengan Web Audio API; aplikasi tidak mengunduh file audio untuk fitur ini. Ketersediaan tetap bergantung pada browser dan perangkat Anda.
                     </p>
@@ -477,7 +496,7 @@ export const MindfulnessWorkshop: React.FC<{ userId: string }> = ({ userId }) =>
                         <span className="px-1.5 py-0.5 rounded-md bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400 font-mono text-[9px] uppercase font-bold tracking-wider">LFO Filter Sweep</span>
                       </div>
                       <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-normal">
-                        Membasuh pikiran cemas dengan pola desau angin dan ombak laut yang berirama statis konstan.
+                        Audio latar dengan pola desau berulang yang terinspirasi angin dan ombak. Hentikan jika terasa tidak nyaman.
                       </p>
                     </div>
                     <button
@@ -502,7 +521,7 @@ export const MindfulnessWorkshop: React.FC<{ userId: string }> = ({ userId }) =>
                         <span className="px-1.5 py-0.5 rounded-md bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 font-mono text-[9px] uppercase font-bold tracking-wider">Pentatonic Scale</span>
                       </div>
                       <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-normal">
-                        Suara lonceng angin tembaga acak yang harmonis, membawa perasaan tenang layaknya di taman zen.
+                        Audio latar dari nada acak yang menyerupai lonceng angin. Hentikan jika terasa tidak nyaman.
                       </p>
                     </div>
                     <button
@@ -538,6 +557,8 @@ export const MindfulnessWorkshop: React.FC<{ userId: string }> = ({ userId }) =>
                       min="0"
                       max="100"
                       value={volume}
+                      aria-label="Volume suara utama"
+                      aria-valuetext={`${volume}%`}
                       onChange={event => handleVolumeChange(Number(event.target.value))}
                       className="flex-1 accent-teal-600 cursor-pointer h-1.5 bg-slate-200 dark:bg-slate-700 rounded-lg outline-none"
                     />
@@ -545,23 +566,23 @@ export const MindfulnessWorkshop: React.FC<{ userId: string }> = ({ userId }) =>
                   </div>
                 </div>
 
-                {/* Ambient Breathing Circle synchronized with LFO if waves or theta are on */}
+                {/* Optional breathing visual while any sound is active */}
                 {(isPlayingTheta || isPlayingWaves || isPlayingChimes) && (
                   <div className="flex flex-col items-center justify-center py-6 border-t border-slate-100 dark:border-slate-800/50">
                     <motion.div
-                      animate={{ scale: [1, 1.45, 1] }}
-                      transition={{ duration: 7, repeat: Infinity, ease: 'easeInOut' }}
+                      animate={shouldReduceMotion ? { scale: 1 } : { scale: [1, 1.45, 1] }}
+                      transition={shouldReduceMotion ? { duration: 0 } : { duration: 7, repeat: Infinity, ease: 'easeInOut' }}
                       className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-teal-500/10 border-2 border-teal-500/30 flex items-center justify-center"
                     >
                       <motion.div
-                        animate={{ scale: [1, 1.35, 1] }}
-                        transition={{ duration: 7, repeat: Infinity, ease: 'easeInOut' }}
+                        animate={shouldReduceMotion ? { scale: 1 } : { scale: [1, 1.35, 1] }}
+                        transition={shouldReduceMotion ? { duration: 0 } : { duration: 7, repeat: Infinity, ease: 'easeInOut' }}
                         className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-teal-500/20 flex items-center justify-center"
                       >
-                        <Wind className="w-5 h-5 text-teal-600 dark:text-teal-400 animate-pulse" />
+                        <Wind className={`w-5 h-5 text-teal-600 dark:text-teal-400 ${shouldReduceMotion ? '' : 'animate-pulse'}`} />
                       </motion.div>
                     </motion.div>
-                    <span className="text-[11px] font-semibold text-teal-600 dark:text-teal-400 mt-4 tracking-wider uppercase">Tarik Napas ... Hembuskan</span>
+                    <span className="text-[11px] font-semibold text-teal-600 dark:text-teal-400 mt-4 tracking-wider uppercase">{shouldReduceMotion ? 'Suara sedang aktif' : 'Ikuti visual bila terasa nyaman'}</span>
                   </div>
                 )}
               </div>
@@ -572,9 +593,9 @@ export const MindfulnessWorkshop: React.FC<{ userId: string }> = ({ userId }) =>
           {activeTab === 'grounding' && (
             <motion.div
               key="grounding"
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
+              initial={panelInitial}
+              animate={panelAnimate}
+              exit={panelExit}
               className="space-y-6"
             >
               <div className="bg-slate-50 dark:bg-slate-900/40 border border-slate-200/50 dark:border-slate-800 p-5 rounded-2xl">
@@ -588,25 +609,28 @@ export const MindfulnessWorkshop: React.FC<{ userId: string }> = ({ userId }) =>
                         </div>
                         <div>
                           <span className="text-xs font-semibold block text-slate-800 dark:text-slate-100">Teknik Grounding 5-4-3-2-1</span>
-                          <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Latihan Atasi Kepanikan</span>
+                          <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Latihan Grounding 5-4-3-2-1</span>
                         </div>
                       </div>
                       <span className="text-xs font-mono font-bold text-slate-400">Langkah {groundingStep} dari 5</span>
                     </div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Tidak perlu memaksakan diri. Anda boleh melewati indera atau langkah yang tidak nyaman atau tidak sesuai.
+                    </p>
 
                     {/* Step wizard content switcher */}
                     <AnimatePresence mode="wait">
                       {groundingStep === 1 && (
                         <motion.div
                           key="step1"
-                          initial={{ opacity: 0, x: 10 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          exit={{ opacity: 0, x: -10 }}
+                          initial={stepInitial}
+                          animate={stepAnimate}
+                          exit={stepExit}
                           className="space-y-4"
                         >
                           <div className="space-y-1">
                             <h4 className="text-sm font-semibold text-teal-700 dark:text-teal-400 flex items-center gap-1.5">
-                              <Sparkles className="w-4 h-4 animate-pulse" />
+                              <Sparkles className={`w-4 h-4 ${shouldReduceMotion ? '' : 'animate-pulse'}`} />
                               5 Hal yang Dapat Anda Lihat
                             </h4>
                             <p className="text-xs text-slate-500 dark:text-slate-400">
@@ -636,14 +660,14 @@ export const MindfulnessWorkshop: React.FC<{ userId: string }> = ({ userId }) =>
                       {groundingStep === 2 && (
                         <motion.div
                           key="step2"
-                          initial={{ opacity: 0, x: 10 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          exit={{ opacity: 0, x: -10 }}
+                          initial={stepInitial}
+                          animate={stepAnimate}
+                          exit={stepExit}
                           className="space-y-4"
                         >
                           <div className="space-y-1">
                             <h4 className="text-sm font-semibold text-teal-700 dark:text-teal-400 flex items-center gap-1.5">
-                              <Sparkles className="w-4 h-4 animate-pulse" />
+                              <Sparkles className={`w-4 h-4 ${shouldReduceMotion ? '' : 'animate-pulse'}`} />
                               4 Hal yang Dapat Anda Sentuh
                             </h4>
                             <p className="text-xs text-slate-500 dark:text-slate-400">
@@ -673,14 +697,14 @@ export const MindfulnessWorkshop: React.FC<{ userId: string }> = ({ userId }) =>
                       {groundingStep === 3 && (
                         <motion.div
                           key="step3"
-                          initial={{ opacity: 0, x: 10 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          exit={{ opacity: 0, x: -10 }}
+                          initial={stepInitial}
+                          animate={stepAnimate}
+                          exit={stepExit}
                           className="space-y-4"
                         >
                           <div className="space-y-1">
                             <h4 className="text-sm font-semibold text-teal-700 dark:text-teal-400 flex items-center gap-1.5">
-                              <Sparkles className="w-4 h-4 animate-pulse" />
+                              <Sparkles className={`w-4 h-4 ${shouldReduceMotion ? '' : 'animate-pulse'}`} />
                               3 Suara yang Dapat Anda Dengar
                             </h4>
                             <p className="text-xs text-slate-500 dark:text-slate-400">
@@ -710,18 +734,18 @@ export const MindfulnessWorkshop: React.FC<{ userId: string }> = ({ userId }) =>
                       {groundingStep === 4 && (
                         <motion.div
                           key="step4"
-                          initial={{ opacity: 0, x: 10 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          exit={{ opacity: 0, x: -10 }}
+                          initial={stepInitial}
+                          animate={stepAnimate}
+                          exit={stepExit}
                           className="space-y-4"
                         >
                           <div className="space-y-1">
                             <h4 className="text-sm font-semibold text-teal-700 dark:text-teal-400 flex items-center gap-1.5">
-                              <Sparkles className="w-4 h-4 animate-pulse" />
+                              <Sparkles className={`w-4 h-4 ${shouldReduceMotion ? '' : 'animate-pulse'}`} />
                               2 Aroma yang Dapat Anda Cium
                             </h4>
                             <p className="text-xs text-slate-500 dark:text-slate-400">
-                              Tarik napas dalam-dalam. Apakah Anda mendeteksi bau wangi sabun, kopi, udara segar, atau buku tua? Tuliskan di bawah ini.
+                              Jika nyaman, perhatikan aroma di sekitar dan tuliskan. Anda boleh melewati langkah ini.
                             </p>
                           </div>
 
@@ -747,18 +771,18 @@ export const MindfulnessWorkshop: React.FC<{ userId: string }> = ({ userId }) =>
                       {groundingStep === 5 && (
                         <motion.div
                           key="step5"
-                          initial={{ opacity: 0, x: 10 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          exit={{ opacity: 0, x: -10 }}
+                          initial={stepInitial}
+                          animate={stepAnimate}
+                          exit={stepExit}
                           className="space-y-4"
                         >
                           <div className="space-y-1">
                             <h4 className="text-sm font-semibold text-teal-700 dark:text-teal-400 flex items-center gap-1.5">
-                              <Sparkles className="w-4 h-4 animate-pulse" />
+                              <Sparkles className={`w-4 h-4 ${shouldReduceMotion ? '' : 'animate-pulse'}`} />
                               1 Hal yang Dapat Anda Rasakan (Mengecap)
                             </h4>
                             <p className="text-xs text-slate-500 dark:text-slate-400">
-                              Apakah ada rasa tersisa di dalam mulut Anda? Seperti rasa manis air minum, pasta gigi, mint harian, atau rasa netral.
+                              Jika nyaman, perhatikan rasa yang sudah ada di mulut Anda. Tidak perlu mencoba makanan atau minuman baru.
                             </p>
                           </div>
 
@@ -812,9 +836,9 @@ export const MindfulnessWorkshop: React.FC<{ userId: string }> = ({ userId }) =>
                     </div>
 
                     <div className="space-y-1">
-                      <h4 className="text-base font-bold text-slate-900 dark:text-slate-100">Selamat! Pikiran Anda Telah Tergrounding</h4>
+                      <h4 className="text-base font-bold text-slate-900 dark:text-slate-100">Latihan selesai</h4>
                       <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto leading-normal">
-                        Fokus Anda telah ditarik kembali secara sadar ke momen nyata di sini saat ini, meredakan lonjakan cemas berlebih. Pertahankan ritme napas yang tenang.
+                        Respons setiap orang berbeda. Jika latihan ini tidak membantu atau terasa kurang nyaman, berhenti dan pilih cara lain yang terasa aman.
                       </p>
                     </div>
 
@@ -837,9 +861,9 @@ export const MindfulnessWorkshop: React.FC<{ userId: string }> = ({ userId }) =>
           {activeTab === 'gratitude' && (
             <motion.div
               key="gratitude"
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
+              initial={panelInitial}
+              animate={panelAnimate}
+              exit={panelExit}
               className="space-y-6"
             >
               {/* Gratitude Form */}
@@ -859,8 +883,8 @@ export const MindfulnessWorkshop: React.FC<{ userId: string }> = ({ userId }) =>
 
                   {showGSuccessMessage && (
                     <motion.div
-                      initial={{ opacity: 0, y: -4 }}
-                      animate={{ opacity: 1, y: 0 }}
+                      initial={shouldReduceMotion ? false : { opacity: 0, y: -4 }}
+                      animate={shouldReduceMotion ? { opacity: 1, y: 0, transition: { duration: 0 } } : { opacity: 1, y: 0 }}
                       className="p-3 bg-teal-50 dark:bg-teal-950/40 text-teal-800 dark:text-teal-300 rounded-xl text-xs flex items-center gap-2 border border-teal-200"
                     >
                       <Sparkles className="w-4 h-4 shrink-0" />
@@ -1045,9 +1069,9 @@ export const MindfulnessWorkshop: React.FC<{ userId: string }> = ({ userId }) =>
           {activeTab === 'compassion' && (
             <motion.div
               key="compassion"
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
+              initial={panelInitial}
+              animate={panelAnimate}
+              exit={panelExit}
               className="space-y-6"
             >
               {/* Write a Compassion Letter Form */}
@@ -1067,8 +1091,8 @@ export const MindfulnessWorkshop: React.FC<{ userId: string }> = ({ userId }) =>
 
                   {showCompassionSuccess && (
                     <motion.div
-                      initial={{ opacity: 0, y: -4 }}
-                      animate={{ opacity: 1, y: 0 }}
+                      initial={shouldReduceMotion ? false : { opacity: 0, y: -4 }}
+                      animate={shouldReduceMotion ? { opacity: 1, y: 0, transition: { duration: 0 } } : { opacity: 1, y: 0 }}
                       className="p-3 bg-teal-50 dark:bg-teal-950/40 text-teal-800 dark:text-teal-300 rounded-xl text-xs flex items-center gap-2 border border-teal-200"
                     >
                       <Lock className="w-4 h-4 text-teal-600 shrink-0" />

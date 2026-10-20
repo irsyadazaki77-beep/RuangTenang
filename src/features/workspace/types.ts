@@ -123,6 +123,14 @@ export interface WorkspaceArtifact {
   chapterScope?: WorkspaceChapterScope;
 }
 
+/** Unsaved Canvas content paired with the exact server revision it was based on. */
+export interface WorkspaceCanvasDraft {
+  artifactId: string;
+  content: string;
+  baseVersion: number;
+  baseUpdatedAt?: string;
+}
+
 /** A text selection captured from the active Canvas editor. Offsets are UTF-16, matching textarea selection APIs. */
 export interface WorkspaceArtifactSelection {
   artifactId: string;

@@ -232,7 +232,7 @@ export const ConsentTab: React.FC<ConsentTabProps> = ({
             <span>Alternatif Non-AI Tersedia:</span>
           </div>
           <p className="text-[11px] text-amber-800 dark:text-amber-300/90 leading-relaxed">
-            Jika Anda tidak memberikan persetujuan AI, Anda dapat menggunakan modul <strong>Refleksi Mandiri Terstruktur (Non-AI Journaling)</strong>, latihan pernapasan guided, serta menjadwalkan konseling langsung dengan psikolog kampus.
+            Jika Anda tidak memberikan persetujuan AI, Anda dapat menggunakan modul <strong>Refleksi Mandiri Terstruktur (Non-AI Journaling)</strong> dan latihan pernapasan. Untuk layanan konselor, lihat direktori kampus dan periksa ketersediaannya.
           </p>
         </div>
       )}

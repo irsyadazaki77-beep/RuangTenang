@@ -5,7 +5,7 @@ import { counselorAiLimiter } from '../middleware/rateLimiters.js';
 import { checkRateLimit } from '../security.js';
 
 import { checkUserAiUsageLimit } from '../services/aiUsageLimiter.js';
-import { getLocalCounselorResponse } from './fallbackAi.js';
+import { getLocalCounselorResponse, isCounselorSimulationCrisisMessage } from './fallbackAi.js';
 import { consentService } from '../services/consentService.js';
 import { aiGateway } from '../services/ai/aiGateway.js';
 
@@ -48,7 +48,6 @@ router.post(['/counselor-chat', '/api/counselor-chat'], counselorAiLimiter, opti
       messages,
       counselorName,
       counselorTitle,
-      counselorUniversity,
       counselorSpecialties,
       studentName,
       concern
@@ -66,6 +65,11 @@ router.post(['/counselor-chat', '/api/counselor-chat'], counselorAiLimiter, opti
         concern
       );
     };
+
+    // Keep crisis disclosures on the deterministic local path; this simulation does not dispatch help.
+    if (isCounselorSimulationCrisisMessage(messages)) {
+      return res.json({ reply: runLocalCounselor() });
+    }
 
     const userId = req.user?.userId;
 
@@ -88,12 +92,6 @@ router.post(['/counselor-chat', '/api/counselor-chat'], counselorAiLimiter, opti
       const result = await aiGateway.counselorSimulationChat({
         userId,
         userTier: (req.user as any)?.tier || 'Free',
-        studentName,
-        counselorName,
-        counselorTitle,
-        counselorUniversity,
-        counselorSpecialties,
-        concern,
         messages
       });
 

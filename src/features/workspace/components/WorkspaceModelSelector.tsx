@@ -7,7 +7,7 @@ import {
   KERJA_PROFILES
 } from '../../../lib/aiModels';
 import { migrateLegacyWorkspaceModelToProfile } from '../utils/workspaceModelPreference';
-import { useAiModelCatalog } from '../../../lib/aiModelCatalog';
+import { isOllamaOnlyCatalog, useAiModelCatalog } from '../../../lib/aiModelCatalog';
 
 interface WorkspaceModelSelectorProps {
   value: string;
@@ -28,13 +28,24 @@ export const WorkspaceModelSelector = React.memo(function WorkspaceModelSelector
   disabled = false,
   overlayPlacement = 'anchored'
 }: WorkspaceModelSelectorProps) {
-  const { models } = useAiModelCatalog();
+  const { models, profiles, loading: catalogLoading, error: catalogError, refresh: refreshCatalog } = useAiModelCatalog();
+  const isOllamaOnly = isOllamaOnlyCatalog(models);
+  const kerjaProfiles = KERJA_PROFILES.map(profile => {
+    const catalogProfile = profiles.find(item => item.id === profile.id && item.scope === 'kerja');
+    return catalogProfile ? { ...profile, ...catalogProfile, id: profile.id } : profile;
+  });
+  const serverProfile = (id: KerjaProfileId) => profiles.find(profile => profile.id === id && profile.scope === 'kerja');
+  const canSelectProfile = (id: KerjaProfileId) => Boolean(serverProfile(id)?.selectable && !catalogLoading && !catalogError);
+  const isWorkspaceChatModel = (model: (typeof models)[number]) => model.capabilities.includes('chat') && model.capabilities.includes('streaming');
   // Check if incoming value is an active profile or a recognized manual model
   const isProfile = isKerjaProfile(value);
   const isRecognizedModel = Boolean(models.some(m => m.id === value));
   const activeProfileId: KerjaProfileId = isProfile
     ? value
     : migrateLegacyWorkspaceModelToProfile(value);
+  const activeProfile = kerjaProfiles.find(profile => profile.id === activeProfileId) ?? KERJA_PROFILES[1];
+  const selectedManualModel = models.find(model => model.id === value);
+  const selectedManualModelUsable = Boolean(selectedManualModel && selectedManualModel.selectable && selectedManualModel.available && isWorkspaceChatModel(selectedManualModel));
 
   // If incoming value is unknown legacy model, migrate to default profile
   useEffect(() => {
@@ -43,7 +54,6 @@ export const WorkspaceModelSelector = React.memo(function WorkspaceModelSelector
     }
   }, [value, isProfile, isRecognizedModel, models.length, activeProfileId, onChange]);
 
-  const activeProfile = KERJA_PROFILES.find(p => p.id === activeProfileId) ?? KERJA_PROFILES[1];
   const [open, setOpen] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(() => !isProfile && isRecognizedModel);
   const [activeIndex, setActiveIndex] = useState(() =>
@@ -68,11 +78,21 @@ export const WorkspaceModelSelector = React.memo(function WorkspaceModelSelector
   };
 
   const selectIndex = (index: number) => {
-    const profile = KERJA_PROFILES[index];
-    if (profile) {
+    const profile = kerjaProfiles[index];
+    if (profile && canSelectProfile(profile.id)) {
       onChange(profile.id);
       close();
     }
+  };
+
+  const moveActiveIndex = (direction: 1 | -1) => {
+    setActiveIndex(current => {
+      for (let offset = 1; offset <= kerjaProfiles.length; offset += 1) {
+        const next = (current + direction * offset + kerjaProfiles.length) % kerjaProfiles.length;
+        if (canSelectProfile(kerjaProfiles[next].id)) return next;
+      }
+      return current;
+    });
   };
 
   const ActiveIcon = PROFILE_ICONS[activeProfile.id] || Sparkles;
@@ -90,7 +110,11 @@ export const WorkspaceModelSelector = React.memo(function WorkspaceModelSelector
         aria-expanded={open}
         aria-controls={listId}
         aria-label={`Pilih model, ${displayName}`}
-        onClick={() => setOpen(prev => !prev)}
+        onClick={() => {
+          const next = !open;
+          setOpen(next);
+          if (next) void refreshCatalog();
+        }}
         onKeyDown={event => {
           if (event.key === 'Escape' && open) {
             event.preventDefault();
@@ -125,10 +149,10 @@ export const WorkspaceModelSelector = React.memo(function WorkspaceModelSelector
                 close();
               } else if (event.key === 'ArrowDown') {
                 event.preventDefault();
-                setActiveIndex(i => (i + 1) % KERJA_PROFILES.length);
+                moveActiveIndex(1);
               } else if (event.key === 'ArrowUp') {
                 event.preventDefault();
-                setActiveIndex(i => (i - 1 + KERJA_PROFILES.length) % KERJA_PROFILES.length);
+                moveActiveIndex(-1);
               } else if (event.key === 'Enter' || event.key === ' ') {
                 event.preventDefault();
                 selectIndex(activeIndex);
@@ -140,7 +164,9 @@ export const WorkspaceModelSelector = React.memo(function WorkspaceModelSelector
                 Tingkat Kemampuan AI
               </div>
               <p className="text-[10.5px] text-slate-500 dark:text-slate-400 mt-0.5">
-                RuangKerja memilih model dan provider terbaik secara otomatis sesuai profil.
+                {isOllamaOnly
+                  ? 'Provider yang dikonfigurasi: Ollama. Permintaan diproses di endpoint server yang dapat berada di host lain; konfigurasi tidak memastikan endpoint sedang merespons.'
+                  : 'RuangKerja memilih model dan provider terbaik secara otomatis sesuai profil.'}
               </p>
             </div>
 
@@ -152,11 +178,18 @@ export const WorkspaceModelSelector = React.memo(function WorkspaceModelSelector
               tabIndex={0}
               className="space-y-1 outline-none"
             >
-              {KERJA_PROFILES.map((profile, index) => {
+              {catalogLoading && <p role="status" className="px-2.5 py-1 text-[10px] text-slate-500">Memuat ketersediaan profil…</p>}
+              {catalogError && <p role="alert" className="px-2.5 py-1 text-[10px] text-amber-700 dark:text-amber-300">Status profil tidak dapat dimuat. Coba tutup lalu buka pemilih ini lagi.</p>}
+              {!profiles.some(profile => profile.scope === 'kerja') && !catalogLoading && !catalogError && <p role="alert" className="px-2.5 py-1 text-[10px] text-amber-700 dark:text-amber-300">Status profil RuangKerja tidak tersedia dari katalog server. Profil dinonaktifkan sampai status dapat dimuat.</p>}
+              {selectedManualModel && !catalogLoading && !catalogError && !selectedManualModelUsable && <p role="status" className="px-2.5 py-1 text-[10px] text-amber-700 dark:text-amber-300">{!isWorkspaceChatModel(selectedManualModel) ? 'Model manual ini tidak mendukung chat streaming di RuangKerja.' : 'Model manual yang tersimpan kini tidak tersedia.'} Pilih profil atau model lain.</p>}
+              {kerjaProfiles.map((profile, index) => {
                 const isSelected = profile.id === activeProfileId;
                 const isFocused = index === activeIndex;
                 const IconComponent = PROFILE_ICONS[profile.id] || Sparkles;
                 const isDefault = profile.id === DEFAULT_KERJA_PROFILE_ID;
+                const selectable = canSelectProfile(profile.id);
+                const serverStatus = serverProfile(profile.id);
+                const unavailableReason = !serverStatus ? 'Status ketersediaan tidak tersedia.' : serverStatus.available ? 'Tidak tersedia untuk paket akun ini.' : 'Tidak ada model yang tersedia untuk profil ini saat ini.';
 
                 return (
                   <button
@@ -165,9 +198,12 @@ export const WorkspaceModelSelector = React.memo(function WorkspaceModelSelector
                     role="option"
                     id={`workspace-profile-${profile.id}`}
                     aria-selected={isSelected}
+                    aria-disabled={!selectable}
+                    disabled={!selectable}
                     onMouseEnter={() => setActiveIndex(index)}
                     onClick={() => selectIndex(index)}
-                    className={`flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
+                    title={!selectable ? unavailableReason : undefined}
+                    className={`flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-50 ${
                       isSelected
                         ? 'bg-indigo-50 dark:bg-indigo-950/50 text-slate-900 dark:text-slate-100'
                         : isFocused
@@ -195,7 +231,7 @@ export const WorkspaceModelSelector = React.memo(function WorkspaceModelSelector
                         )}
                       </div>
                       <p className="mt-0.5 text-[10.5px] text-slate-500 dark:text-slate-400 leading-snug">
-                        {profile.description}
+                        {selectable ? profile.description : unavailableReason}
                       </p>
                     </div>
 
@@ -239,7 +275,7 @@ export const WorkspaceModelSelector = React.memo(function WorkspaceModelSelector
                       Pilih model spesifik untuk instruksi teknis langsung (tanpa fallback tersembunyi):
                     </p>
                     {models
-                      .filter(m => m.selectable && m.available)
+                      .filter(m => m.selectable && m.available && isWorkspaceChatModel(m) && !catalogLoading && !catalogError)
                       .map(m => {
                         const isManualSelected = value === m.id;
                         return (
@@ -266,6 +302,7 @@ export const WorkspaceModelSelector = React.memo(function WorkspaceModelSelector
                           </button>
                         );
                       })}
+                    {!catalogLoading && !catalogError && models.every(model => !model.selectable || !model.available || !isWorkspaceChatModel(model)) && <p role="status" className="px-1.5 py-1 text-[10px] text-slate-500">Tidak ada model manual chat streaming yang tersedia saat ini.</p>}
                   </div>
                 )}
               </div>

@@ -26,7 +26,7 @@ export const WorkspaceCompareModelSelector = React.memo(function WorkspaceCompar
   disabled = false,
   hasAttachment = false
 }: Props) {
-  const { models } = useAiModelCatalog();
+  const { models, profiles, loading: isCatalogLoading, error: catalogError } = useAiModelCatalog();
   const [open, setOpen] = useState(false);
   const [notice, setNotice] = useState('');
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -36,6 +36,7 @@ export const WorkspaceCompareModelSelector = React.memo(function WorkspaceCompar
     () => models.filter(model => model.selectable && model.capabilities.includes('chat') && model.capabilities.includes('streaming')),
     [models]
   );
+  const kerjaProfiles = useMemo(() => profiles.filter(profile => profile.scope === 'kerja'), [profiles]);
 
   // Check if caller is comparing official profiles or canonical models
   const isProfileMode = useMemo(() => {
@@ -45,12 +46,12 @@ export const WorkspaceCompareModelSelector = React.memo(function WorkspaceCompar
   const selectedNames = useMemo(() => {
     return selectedModelIds.map(id => {
       if (isKerjaProfile(id)) {
-        const p = KERJA_PROFILES.find(item => item.id === id);
+        const p = kerjaProfiles.find(item => item.id === id) || KERJA_PROFILES.find(item => item.id === id);
         return p ? p.name : id;
       }
       return models.find(m => m.id === id)?.name || id;
     });
-  }, [models, selectedModelIds]);
+  }, [kerjaProfiles, models, selectedModelIds]);
 
   const close = () => {
     setOpen(false);
@@ -114,8 +115,11 @@ export const WorkspaceCompareModelSelector = React.memo(function WorkspaceCompar
               Model yang dibandingkan
             </div>
             <p className="mt-0.5 text-[10.5px] text-slate-500 dark:text-slate-400">
-              Pilih 2–3 {isProfileMode ? 'profil AI RuangKerja' : 'model AI'}. Semua kandidat akan menerima konteks dan dokumen yang identik.
+              Pilih 2–3 {isProfileMode ? 'profil AI RuangKerja' : 'model AI'}. Prompt, konteks, dan lampiran yang dipilih dikirim ke semua kandidat. Profil memakai model/provider yang tersedia di server; provider aktual tampil pada hasil.
             </p>
+
+            {isProfileMode && isCatalogLoading && <p role="status" className="mt-2 text-[10.5px] text-slate-500">Memuat ketersediaan profil…</p>}
+            {isProfileMode && catalogError && <p role="alert" className="mt-2 text-[10.5px] text-amber-700 dark:text-amber-300">Ketersediaan profil belum dapat dimuat. Muat ulang halaman sebelum menjalankan perbandingan.</p>}
 
             {hasAttachment && (
               <p
@@ -137,18 +141,20 @@ export const WorkspaceCompareModelSelector = React.memo(function WorkspaceCompar
 
             <div className="mt-2.5 space-y-1.5" role="group" aria-label="Model tersedia untuk comparison">
               {isProfileMode ? (
-                KERJA_PROFILES.map(profile => {
+                kerjaProfiles.length ? kerjaProfiles.map(profile => {
                   const checked = selectedModelIds.includes(profile.id);
-                  const IconComponent = PROFILE_ICONS[profile.id] || Sparkles;
+                  const IconComponent = PROFILE_ICONS[profile.id as KerjaProfileId] || Sparkles;
+                  const unavailableReason = profile.available ? 'Tidak tersedia untuk paket akun ini.' : 'Tidak ada model yang tersedia untuk profil ini saat ini.';
 
                   return (
                     <button
                       key={profile.id}
                       type="button"
                       aria-pressed={checked}
-                      aria-label={profile.name}
+                      aria-label={`${profile.name}${profile.selectable ? '' : ` · ${unavailableReason}`}`}
+                      disabled={!profile.selectable && !checked}
                       onClick={() => toggle(profile.id)}
-                      className={`flex w-full items-start gap-2.5 rounded-lg p-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
+                      className={`flex w-full items-start gap-2.5 rounded-lg p-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:cursor-not-allowed disabled:opacity-50 ${
                         checked
                           ? 'bg-emerald-50 dark:bg-emerald-950/40'
                           : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'
@@ -173,12 +179,12 @@ export const WorkspaceCompareModelSelector = React.memo(function WorkspaceCompar
                           </span>
                         </div>
                         <span className="block mt-0.5 text-[10.5px] text-slate-500 dark:text-slate-400 leading-snug">
-                          {profile.description}
+                          {profile.selectable ? profile.description : unavailableReason}
                         </span>
                       </div>
                     </button>
                   );
-                })
+                }) : <p role="status" className="rounded bg-slate-50 px-2 py-2 text-[10.5px] text-slate-500 dark:bg-slate-950">Profil RuangKerja belum tersedia dari katalog server.</p>
               ) : (
                 compatible.map(model => {
                   const checked = selectedModelIds.includes(model.id);

@@ -32,6 +32,7 @@ describe('FASE 4: Advanced AI Intelligence & Multimodal Engine Verification', ()
     });
 
     it('fails closed when manual model selection lacks requestedCapabilities', () => {
+      process.env.GROQ_API_KEY = 'gsk_mock_valid_groq_key_32chars_test';
       expect(() => {
         smartModelRouter.routeModel({
           manualModelId: 'groq-gpt-20b',

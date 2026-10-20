@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect, useLayoutEffect, useMemo } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Paperclip, Sparkles } from 'lucide-react';
-import { WorkspaceMode, WorkspaceArtifact, WorkspaceTab, WorkspaceComposerConfig, WorkspaceComparisonCandidate, WorkspaceComparisonRun, WorkspaceRequestSnapshot, WorkspaceArtifactSelection, ArtifactPatch, WorkspaceChapterScope } from './types';
+import { WorkspaceMode, WorkspaceArtifact, WorkspaceCanvasDraft, WorkspaceTab, WorkspaceComposerConfig, WorkspaceComparisonCandidate, WorkspaceComparisonRun, WorkspaceRequestSnapshot, WorkspaceArtifactSelection, ArtifactPatch, WorkspaceChapterScope } from './types';
 import { UserSession } from '../../types';
 import { Chat, Message } from '../chat/types';
 import { STARTER_TASKS, ACADEMIC_PROMPT_PILLS } from './constants/workspaceConstants';
@@ -243,6 +243,7 @@ function StudentWorkspaceSession({
   const [includeFilesInContext, setIncludeFilesInContext] = useState(true);
   const [selectedWorkspaceFileIds, setSelectedWorkspaceFileIds] = useState<string[]>([]);
   const [includeCanvasInContext, setIncludeCanvasInContext] = useState(true);
+  const [allowExternalSearch, setAllowExternalSearch] = useState(false);
   const [focusedMessageId, setFocusedMessageId] = useState<string | null>(null);
   const promptDraftIdentity = `${user?.id || 'guest'}:${logicalWorkspaceIdentity}`;
   const [inputText, setInputText] = useState<string>(() => readWorkspacePromptDraft(getWorkspaceSessionStorage(), promptDraftIdentity));
@@ -262,7 +263,7 @@ function StudentWorkspaceSession({
   const [comparisonRun, setComparisonRun] = useState<WorkspaceComparisonRun | null>(null);
   const [selectedText, setSelectedText] = useState('');
   const [canvasSelection, setCanvasSelection] = useState<WorkspaceArtifactSelection | null>(null);
-  const [canvasDraft, setCanvasDraft] = useState<{ artifactId: string; content: string } | null>(null);
+  const [canvasDraft, setCanvasDraft] = useState<WorkspaceCanvasDraft | null>(null);
   const [agentProposalPreview, setAgentProposalPreview] = useState<{ taskId: string; proposal: NonNullable<WorkspacePlan['tasks'][number]['artifactProposal']> } | null>(null);
   const [pendingRevision, setPendingRevision] = useState<{ artifactId: string; title: string; baseContent: string; baseVersion: number; proposedContent: string } | null>(null);
   const [inlineEditPatch, setInlineEditPatch] = useState<ArtifactPatch | null>(null);
@@ -336,6 +337,7 @@ function StudentWorkspaceSession({
     const createdFromCurrentStream = !previousRouteChatId && Boolean(activeRouteChatId && effectiveChatIdRef.current === activeRouteChatId);
     lastRouteChatIdRef.current = activeRouteChatId;
     setComparisonRun(null);
+    setAllowExternalSearch(false);
     if (createdFromCurrentStream) return;
     if (previousRouteChatId !== activeRouteChatId) {
       dispatchWorkspaceView({ type: 'reset-workspace-view' });
@@ -369,7 +371,7 @@ function StudentWorkspaceSession({
     setPendingCanvasTransfer(null);
     requestSnapshotsRef.current.clear();
     activeSendOperationRef.current = null;
-  }, [activeRouteChatId, dispatchWorkspaceView, promptDraftIdentity, user?.id]);
+  }, [activeRouteChatId, dispatchWorkspaceView, logicalWorkspaceIdentity, promptDraftIdentity, user?.id]);
 
   useEffect(() => {
     if (activeRouteChatId && streamCreatedChatId === activeRouteChatId) setStreamCreatedChatId(undefined);
@@ -412,8 +414,9 @@ function StudentWorkspaceSession({
     handleDragLeave,
     handleDrop,
     removeAttachment,
-    retryAttachment
-  } = useWorkspaceFileIngestion(effectiveChatId, workspaceLoadAttemptId);
+    retryAttachment,
+    recheckAttachment
+  } = useWorkspaceFileIngestion(effectiveChatId, workspaceLoadAttemptId, aiConsentAllowed, onRequestAiConsent);
   const selectedReadyWorkspaceFileCount = includeFilesInContext
     ? selectedWorkspaceFileIds.filter(id => workspaceAttachments.some(file => file.id === id && file.status === 'ready')).length
     : 0;
@@ -652,6 +655,31 @@ function StudentWorkspaceSession({
       if (config.comparisonModelIds.length < 2 || config.comparisonModelIds.length > 3) return false;
       const compId = crypto.randomUUID();
       const snapId = crypto.randomUUID();
+      const comparisonArtifactContent = includeCanvasInContext && activeArtifact && activeArtifact.id !== DEFAULT_WELCOME_ARTIFACT_ID
+        ? canvasDraft?.artifactId === activeArtifact.id ? canvasDraft.content : activeArtifact.content
+        : undefined;
+      const comparisonSelection = scopedSelection || canvasSelection;
+      const hasCurrentComparisonSelection = Boolean(
+        comparisonArtifactContent && activeArtifact && comparisonSelection && comparisonSelection.artifactId === activeArtifact.id &&
+        Number.isInteger(comparisonSelection.start) && Number.isInteger(comparisonSelection.end) &&
+        comparisonSelection.start >= 0 && comparisonSelection.end > comparisonSelection.start && comparisonSelection.end <= comparisonArtifactContent.length &&
+        comparisonArtifactContent.slice(comparisonSelection.start, comparisonSelection.end) === comparisonSelection.text
+      );
+      const chapterScopeInstruction = activeChapterScope !== 'ALL'
+        ? `${CHAPTER_SCOPE_LABELS[activeChapterScope].fullLabel}\n${CHAPTER_SCOPE_LABELS[activeChapterScope].boundaryInstruction}`
+        : '';
+      const comparisonSelectionEnd = hasCurrentComparisonSelection && comparisonSelection
+        ? Math.min(comparisonSelection.end, comparisonSelection.start + 12000)
+        : undefined;
+      const comparisonSelectedText = hasCurrentComparisonSelection && comparisonSelection
+        ? comparisonSelection.text.length > 12000
+          ? `${comparisonSelection.text.slice(0, 11980)}\n[Seleksi dipotong.]`
+          : comparisonSelection.text
+        : undefined;
+      const comparisonWorkspaceInstructions = [chapterScopeInstruction, workspaceData?.instructions?.trim()]
+        .filter(Boolean)
+        .join('\n\n')
+        .slice(0, 4000);
       setComparisonRun({
         comparisonId: compId,
         snapshotId: snapId,
@@ -664,12 +692,19 @@ function StudentWorkspaceSession({
         taskCategory: config.taskCategory,
         latencyPreference: config.latencyPreference,
         qualityPreference: config.qualityPreference,
-        activeContext: includeCanvasInContext && activeArtifact && activeArtifact.id !== DEFAULT_WELCOME_ARTIFACT_ID
-          ? { artifactId: activeArtifact.id, title: activeArtifact.title, version: activeArtifact.version, content: (canvasDraft?.artifactId === activeArtifact.id ? canvasDraft.content : activeArtifact.content).slice(0, 50000) }
+        activeContext: comparisonArtifactContent && activeArtifact
+          ? {
+              artifactId: activeArtifact.id,
+              title: activeArtifact.title,
+              version: activeArtifact.version,
+              content: (hasCurrentComparisonSelection && comparisonSelection && comparisonSelectionEnd !== undefined
+                ? getArtifactSelectionContext(comparisonArtifactContent, comparisonSelection.start, comparisonSelectionEnd)
+                : comparisonArtifactContent).slice(0, 50000)
+            }
           : undefined,
-        selectedText: includeCanvasInContext ? scopedSelection?.text || selectedText || undefined : undefined,
+        selectedText: comparisonSelectedText,
         attachments: includeFilesInContext ? workspaceAttachments.filter(file => file.status === 'ready' && file.id && selectedWorkspaceFileIds.includes(file.id)).map(file => ({ id: file.id!, filename: file.name, mimeType: file.mimeType, size: file.size })) : undefined,
-        workspaceInstructions: workspaceData?.instructions || undefined,
+        workspaceInstructions: comparisonWorkspaceInstructions || undefined,
         includeWorkspaceFiles: includeFilesInContext && selectedWorkspaceFileIds.length > 0,
         createdAt: new Date().toISOString()
       });
@@ -716,7 +751,7 @@ function StudentWorkspaceSession({
       const oldestRequestId = requestSnapshotsRef.current.keys().next().value;
       if (oldestRequestId) requestSnapshotsRef.current.delete(oldestRequestId);
     }
-    const contextualNote = [customSystemNote, buildWorkspaceContextNote(snapshot)].filter(Boolean).join('\n\n');
+    const workspaceContextNote = buildWorkspaceContextNote(snapshot);
     if (!isRetry) {
       setMessages(prev => [...prev, {
         id: `user_${snapshot.requestId}`, role: 'user', content: promptText.trim(), createdAt: new Date(snapshot.createdAt),
@@ -724,12 +759,12 @@ function StudentWorkspaceSession({
       }]);
     }
     setSelectedText('');
-    void sendMessageStream(promptText.trim(), contextualNote || undefined, sendAttachments, resolvedConfig, snapshot.requestId, includeWorkspaceFilesForRequest, requestWorkspaceFileIds)
+    void sendMessageStream(promptText.trim(), customSystemNote, sendAttachments, resolvedConfig, snapshot.requestId, includeWorkspaceFilesForRequest, requestWorkspaceFileIds, workspaceContextNote)
       .finally(() => {
         if (activeSendOperationRef.current === snapshot.requestId) activeSendOperationRef.current = null;
       });
     return true;
-  }, [activeArtifact, activeChapterScope, aiConsentAllowed, canvasDraft, effectiveChatId, includeCanvasInContext, includeFilesInContext, onRequestAiConsent, selectedWorkspaceFileIds, isStreaming, selectedModel, selectedText, setMessages, sendMessageStream, workspaceAttachments, logicalWorkspaceIdentity, workspaceData?.instructions]);
+  }, [activeArtifact, activeChapterScope, aiConsentAllowed, canvasDraft, canvasSelection, effectiveChatId, includeCanvasInContext, includeFilesInContext, onRequestAiConsent, selectedWorkspaceFileIds, isStreaming, selectedModel, selectedText, setMessages, sendMessageStream, workspaceAttachments, logicalWorkspaceIdentity, workspaceData?.instructions]);
 
   useEffect(() => {
     if (aiConsentAllowed !== true || !pendingConsentSendRef.current) return;
@@ -910,7 +945,7 @@ function StudentWorkspaceSession({
       const saved = await saveArtifact(pendingRevision.proposedContent, pendingRevision.title, true, expectedUpdatedAt);
       if (!saved) throw new Error('Revisi gagal disimpan');
       setRevisionCommit({ artifactId: saved.id, content: saved.content, version: saved.version });
-      setCanvasDraft({ artifactId: saved.id, content: saved.content });
+      setCanvasDraft({ artifactId: saved.id, content: saved.content, baseVersion: saved.version, baseUpdatedAt: saved.updatedAt });
       setPendingRevision(null);
       showToast(saved.persistenceStatus === 'local' ? 'Revisi diterapkan ke draf lokal.' : 'Revisi diterapkan dan versi baru tersimpan.', saved.persistenceStatus === 'local' ? 'info' : 'success');
     } catch (error) {
@@ -1006,8 +1041,10 @@ function StudentWorkspaceSession({
     visibleActiveArtifact.version !== pendingRevision.baseVersion ||
     (canvasDraft?.artifactId === pendingRevision.artifactId ? canvasDraft.content : visibleActiveArtifact.content) !== pendingRevision.baseContent
   ));
-  const handleCanvasDraftChange = useCallback((artifactId: string, content: string) => {
-    setCanvasDraft(current => current?.artifactId === artifactId && current.content === content ? current : { artifactId, content });
+  const handleCanvasDraftChange = useCallback((artifactId: string, content: string, baseVersion: number, baseUpdatedAt?: string) => {
+    setCanvasDraft(current => current?.artifactId === artifactId && current.content === content && current.baseVersion === baseVersion && current.baseUpdatedAt === baseUpdatedAt
+      ? current
+      : { artifactId, content, baseVersion, baseUpdatedAt });
   }, []);
   const handleOpenCanvas = useCallback(() => {
     openWorkspaceInspector('canvas');
@@ -1051,6 +1088,8 @@ function StudentWorkspaceSession({
     runTask: handleRunWorkspaceTask,
     startContinuousWorkflow: handleStartContinuousWorkflow,
     stopContinuousWorkflow: handleStopContinuousWorkflow,
+    stopTaskExecution: handleStopWorkspaceTask,
+    isStoppingTask,
     isContinuousRunning,
     acceptTaskReview: handleAcceptTaskReview,
     rejectTaskReview: handleRejectTaskReview,
@@ -1067,7 +1106,9 @@ function StudentWorkspaceSession({
     executeAgentTask: workspaceMetadata.executeAgentTask,
     reviewTask: workspaceMetadata.reviewTask,
     transitionPlan: workspaceMetadata.transitionPlan,
+    cancelTaskExecution: workspaceMetadata.cancelTaskExecution,
     recoverTaskExecution: workspaceMetadata.recoverTaskExecution,
+    refreshWorkspace: workspaceMetadata.refresh,
     isStreaming,
     includeFilesInContext,
     selectedFileIds: selectedWorkspaceFileIds,
@@ -1075,6 +1116,7 @@ function StudentWorkspaceSession({
     activeArtifact: visibleActiveArtifact,
     workspaceInstructions: workspaceData?.instructions,
     selectedModel,
+    allowExternalSearch,
     workspaceId: logicalWorkspaceIdentity,
     activeSendOperationRef,
     taskGenerationRequestsRef,
@@ -1388,6 +1430,7 @@ function StudentWorkspaceSession({
             onRemoveAttachedFile={handleRemoveFirstAttachment}
             onRemoveAttachment={handleRemoveOneAttachment}
             onRetryAttachment={retryAttachment}
+            onRecheckAttachment={recheckAttachment}
             onFileUploadChange={handleFileUploadChange}
             onOpenBreathing={openBreathingModal}
             onSwitchToRuangTenang={handleSwitchToQuietMode}
@@ -1445,7 +1488,10 @@ function StudentWorkspaceSession({
           isPlanLoading={workspaceMetadata.isLoading}
           canPersistPlan={Boolean(workspaceData)}
           isTaskGenerating={taskGenerationRequestsRef.current.size > 0 && isStreaming}
-          isPlanExecuting={Boolean(workspacePlan?.tasks.some(task => task.status === 'running')) && (isStreaming || isAgentExecuting)}
+          isPlanExecuting={Boolean(workspacePlan?.tasks.some(task => task.status === 'running')) && (isStreaming || isAgentExecuting || isStoppingTask)}
+          allowExternalSearch={allowExternalSearch}
+          onAllowExternalSearchChange={setAllowExternalSearch}
+          isStoppingTask={isStoppingTask}
           isContinuousRunning={isContinuousRunning}
           onStartContinuous={handleStartContinuousWorkflow}
           onStopContinuous={handleStopContinuousWorkflow}
@@ -1462,6 +1508,7 @@ function StudentWorkspaceSession({
           onRunTask={(taskId, feedback) => void handleRunWorkspaceTask(taskId, feedback)}
           onGenerateTasks={handleGenerateWorkspaceTasks}
           onCancelWorkflow={handleCancelWorkflow}
+          onStopTask={handleStopWorkspaceTask}
           onCompleteWorkflow={handleCompleteWorkflow}
           focusedTaskId={focusedTaskId || undefined}
           canPersistMemory={Boolean(workspaceData) && workspaceRightTab === 'memory'}
@@ -1476,6 +1523,8 @@ function StudentWorkspaceSession({
           proposalPreview={agentProposalPreview ? { ...agentProposalPreview.proposal, taskId: agentProposalPreview.taskId } : null}
           onDismissProposalPreview={() => setAgentProposalPreview(null)}
           draftContent={visibleActiveArtifact && canvasDraft?.artifactId === visibleActiveArtifact.id ? canvasDraft?.content : undefined}
+          draftBaseVersion={visibleActiveArtifact && canvasDraft?.artifactId === visibleActiveArtifact.id ? canvasDraft.baseVersion : undefined}
+          draftBaseUpdatedAt={visibleActiveArtifact && canvasDraft?.artifactId === visibleActiveArtifact.id ? canvasDraft.baseUpdatedAt : undefined}
           scrollStorageKey={canvasScrollStorageKey}
           activeArtifactId={activeArtifactId}
           isCanvasOpen={isCanvasOpen && !isContextPanelOpen}

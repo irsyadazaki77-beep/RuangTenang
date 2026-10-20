@@ -9,13 +9,17 @@ export function useChatStreaming() {
   const currentTokenRef = useRef(0);
   const rafRef = useRef<number | null>(null);
   const chunkBufferRef = useRef<string>('');
+  const flushChunkRef = useRef<(() => void) | null>(null);
 
   const abortStream = useCallback(() => {
-    currentTokenRef.current++;
+    const flushPendingChunks = flushChunkRef.current;
     if (rafRef.current) {
       cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
     }
+    flushPendingChunks?.();
+    flushChunkRef.current = null;
+    currentTokenRef.current++;
     chunkBufferRef.current = '';
     if (clientRef.current) {
       clientRef.current.abort();
@@ -33,6 +37,7 @@ export function useChatStreaming() {
         clientRef.current.abort();
         clientRef.current = null;
       }
+      flushChunkRef.current = null;
     };
   }, []);
 
@@ -41,7 +46,7 @@ export function useChatStreaming() {
     callbacks: {
       onMessageStart: (msgId: string) => void;
       onChunk: (text: string) => void;
-      onPluginSwitch: (pluginName: string) => void;
+      onPluginSwitch: (pluginName: string, parameters?: Record<string, unknown>) => void;
       onMessageComplete: (fullText: string) => void;
       onError: (error: string) => void;
       onFollowUps?: (followUps: string[]) => void;
@@ -59,6 +64,7 @@ export function useChatStreaming() {
       cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
     }
+    flushChunkRef.current = null;
     chunkBufferRef.current = '';
 
 
@@ -78,6 +84,7 @@ export function useChatStreaming() {
       }
       rafRef.current = null;
     };
+    flushChunkRef.current = flushChunkBuffer;
 
     try {
       await client.stream(payload, {
@@ -103,10 +110,10 @@ export function useChatStreaming() {
             }
           }
         },
-        onPluginSwitch: (pluginName) => {
+        onPluginSwitch: (pluginName, parameters) => {
           if (token !== currentTokenRef.current) return;
           flushChunkBuffer();
-          callbacks.onPluginSwitch(pluginName);
+          callbacks.onPluginSwitch(pluginName, parameters);
         },
         onMessageComplete: (text) => {
           if (token !== currentTokenRef.current) return;
@@ -115,6 +122,7 @@ export function useChatStreaming() {
             rafRef.current = null;
           }
           flushChunkBuffer();
+          flushChunkRef.current = null;
           setIsTyping(false);
           setStreamingError(null);
           if (text && text.length > 150) {
@@ -128,7 +136,9 @@ export function useChatStreaming() {
             cancelAnimationFrame(rafRef.current);
             rafRef.current = null;
           }
+          flushChunkBuffer();
           chunkBufferRef.current = '';
+          flushChunkRef.current = null;
           setIsTyping(false);
           setStreamingError(err);
           callbacks.onError(err);

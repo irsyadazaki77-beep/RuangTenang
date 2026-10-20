@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { Wind, RotateCcw, Check, Sparkles, Volume2, VolumeX } from 'lucide-react';
 import { ModalShell } from '../../../components/ui/ModalShell';
 import { playTibetanBowlSound } from '../../../lib/soundEffects';
@@ -18,6 +18,7 @@ const EXHALE_DURATION = 6;
 const CYCLE_DURATION = INHALE_DURATION + HOLD_DURATION + EXHALE_DURATION; // 14s
 
 export function BreathingModal({ isOpen, onClose }: BreathingModalProps) {
+  const shouldReduceMotion = useReducedMotion();
   const [timeLeft, setTimeLeft] = useState(TOTAL_DURATION_SECONDS);
   const [isActive, setIsActive] = useState(false);
   const [isCompleted, setIsCompleted] = useState(false);
@@ -96,17 +97,17 @@ export function BreathingModal({ isOpen, onClose }: BreathingModalProps) {
     currentPhase = 'inhale';
     phaseSecondsLeft = INHALE_DURATION - cycleTime;
     phaseText = 'Tarik napas perlahan...';
-    phaseSubtext = 'Tarik napas melalui hidung dengan tenang dan lembut.';
+    phaseSubtext = 'Jika nyaman, tarik napas perlahan; bernapaslah seperti biasa jika tidak nyaman.';
   } else if (cycleTime < INHALE_DURATION + HOLD_DURATION) {
     currentPhase = 'hold';
     phaseSecondsLeft = INHALE_DURATION + HOLD_DURATION - cycleTime;
-    phaseText = 'Tahan sejenak...';
-    phaseSubtext = 'Biarkan tubuhmu merasakan keheningan dan kenyamanan.';
+    phaseText = 'Jeda sebentar, jika nyaman...';
+    phaseSubtext = 'Kamu boleh melewati jeda ini dan bernapas seperti biasa.';
   } else {
     currentPhase = 'exhale';
     phaseSecondsLeft = CYCLE_DURATION - cycleTime;
     phaseText = 'Hembuskan perlahan lewat mulut...';
-    phaseSubtext = 'Lepaskan semua ketegangan, biarkan bahumu rileks.';
+    phaseSubtext = 'Hembuskan perlahan jika nyaman; biarkan bahu rileks bila kamu menginginkannya.';
   }
 
   // Haptic Sensory & Audio Bell Feedback for breathing phase transitions
@@ -131,7 +132,7 @@ export function BreathingModal({ isOpen, onClose }: BreathingModalProps) {
       }
 
       // Tactile Haptic Vibration
-      if (typeof window !== 'undefined' && 'vibrate' in navigator) {
+      if (!shouldReduceMotion && typeof window !== 'undefined' && 'vibrate' in navigator) {
         try {
           if (currentPhase === 'inhale') {
             // Gentle rising tactile cue: [30, 40, 30]
@@ -148,11 +149,11 @@ export function BreathingModal({ isOpen, onClose }: BreathingModalProps) {
         }
       }
     }
-  }, [currentPhase, isOpen, isActive, isCompleted, isSoundEnabled]);
+  }, [currentPhase, isOpen, isActive, isCompleted, isSoundEnabled, shouldReduceMotion]);
 
   // Haptic feedback on session completion
   useEffect(() => {
-    if (isCompleted && isOpen) {
+    if (isCompleted && isOpen && !shouldReduceMotion) {
       if (typeof window !== 'undefined' && 'vibrate' in navigator) {
         try {
           navigator.vibrate([60, 50, 100]);
@@ -161,10 +162,10 @@ export function BreathingModal({ isOpen, onClose }: BreathingModalProps) {
         }
       }
     }
-  }, [isCompleted, isOpen]);
+  }, [isCompleted, isOpen, shouldReduceMotion]);
 
   const handleRestart = () => {
-    if (typeof window !== 'undefined' && 'vibrate' in navigator) {
+    if (!shouldReduceMotion && typeof window !== 'undefined' && 'vibrate' in navigator) {
       try {
         navigator.vibrate(30);
       } catch {
@@ -189,7 +190,7 @@ export function BreathingModal({ isOpen, onClose }: BreathingModalProps) {
       isOpen={isOpen}
       onClose={onClose}
       title="Jeda Hening 1-Menit"
-      subtitle="Latihan pernapasan terarah untuk menstabilkan detak jantung & sistem saraf"
+      subtitle="Panduan napas satu menit. Kamu bisa bernapas seperti biasa atau berhenti kapan saja."
       maxWidth="md"
       headerRight={
         <button
@@ -229,9 +230,9 @@ export function BreathingModal({ isOpen, onClose }: BreathingModalProps) {
           {!isCompleted ? (
             <motion.div
               key="breathing-active"
-              initial={{ opacity: 0, scale: 0.95 }}
+              initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
+              exit={shouldReduceMotion ? undefined : { opacity: 0, scale: 0.95 }}
               className="flex flex-col items-center justify-center w-full"
             >
               {/* Dynamic Breathing Visual Spheres */}
@@ -239,13 +240,13 @@ export function BreathingModal({ isOpen, onClose }: BreathingModalProps) {
                 
                 {/* Outer Glow Halo */}
                 <motion.div
-                  animate={{
+                  animate={shouldReduceMotion ? { scale: 1, opacity: 0.2 } : {
                     scale: currentPhase === 'inhale' ? 1.3 : currentPhase === 'hold' ? 1.32 : 0.85,
                     opacity: currentPhase === 'hold' ? [0.4, 0.7, 0.4] : currentPhase === 'inhale' ? 0.5 : 0.2,
                   }}
                   transition={{
-                    duration: currentPhase === 'hold' ? 2 : currentPhase === 'inhale' ? INHALE_DURATION : EXHALE_DURATION,
-                    repeat: currentPhase === 'hold' ? Infinity : 0,
+                    duration: shouldReduceMotion ? 0 : currentPhase === 'hold' ? 2 : currentPhase === 'inhale' ? INHALE_DURATION : EXHALE_DURATION,
+                    repeat: !shouldReduceMotion && currentPhase === 'hold' ? Infinity : 0,
                     ease: 'easeInOut',
                   }}
                   className="absolute inset-0 rounded-full bg-gradient-to-tr from-teal-400/30 via-emerald-300/25 to-cyan-400/20 dark:from-teal-500/20 dark:via-emerald-500/15 dark:to-cyan-500/10 blur-xl pointer-events-none"
@@ -253,11 +254,11 @@ export function BreathingModal({ isOpen, onClose }: BreathingModalProps) {
 
                 {/* Secondary Ripple Layer */}
                 <motion.div
-                  animate={{
+                  animate={shouldReduceMotion ? { scale: 1 } : {
                     scale: currentPhase === 'inhale' ? 1.18 : currentPhase === 'hold' ? 1.2 : 0.9,
                   }}
                   transition={{
-                    duration: currentPhase === 'inhale' ? INHALE_DURATION : currentPhase === 'hold' ? 0.3 : EXHALE_DURATION,
+                    duration: shouldReduceMotion ? 0 : currentPhase === 'inhale' ? INHALE_DURATION : currentPhase === 'hold' ? 0.3 : EXHALE_DURATION,
                     ease: 'easeInOut',
                   }}
                   className="absolute w-44 h-44 sm:w-52 sm:h-52 rounded-full border border-teal-300/60 dark:border-teal-700/50 bg-teal-50/40 dark:bg-teal-950/20"
@@ -265,7 +266,7 @@ export function BreathingModal({ isOpen, onClose }: BreathingModalProps) {
 
                 {/* Core Breathing Orb */}
                 <motion.div
-                  animate={{
+                  animate={shouldReduceMotion ? { scale: 1, boxShadow: '0 0 20px rgba(20, 184, 166, 0.25)' } : {
                     scale: currentPhase === 'inhale' ? 1.25 : currentPhase === 'hold' ? 1.25 : 0.75,
                     boxShadow:
                       currentPhase === 'hold'
@@ -273,7 +274,7 @@ export function BreathingModal({ isOpen, onClose }: BreathingModalProps) {
                         : '0 0 20px rgba(20, 184, 166, 0.25)',
                   }}
                   transition={{
-                    duration: currentPhase === 'inhale' ? INHALE_DURATION : currentPhase === 'hold' ? 0.4 : EXHALE_DURATION,
+                    duration: shouldReduceMotion ? 0 : currentPhase === 'inhale' ? INHALE_DURATION : currentPhase === 'hold' ? 0.4 : EXHALE_DURATION,
                     ease: 'easeInOut',
                   }}
                   className="relative w-36 h-36 sm:w-40 sm:h-40 rounded-full bg-gradient-to-br from-teal-500 via-teal-600 to-emerald-600 text-white flex flex-col items-center justify-center shadow-lg cursor-pointer"
@@ -291,7 +292,7 @@ export function BreathingModal({ isOpen, onClose }: BreathingModalProps) {
               <div className="space-y-1.5 max-w-sm mt-2">
                 <motion.h3
                   key={phaseText}
-                  initial={{ opacity: 0, y: 3 }}
+                  initial={shouldReduceMotion ? false : { opacity: 0, y: 3 }}
                   animate={{ opacity: 1, y: 0 }}
                   className="text-base sm:text-lg font-serif font-medium text-stone-800 dark:text-stone-100"
                 >
@@ -299,7 +300,7 @@ export function BreathingModal({ isOpen, onClose }: BreathingModalProps) {
                 </motion.h3>
                 <motion.p
                   key={phaseSubtext}
-                  initial={{ opacity: 0 }}
+                  initial={shouldReduceMotion ? false : { opacity: 0 }}
                   animate={{ opacity: 1 }}
                   className="text-xs sm:text-[13px] text-stone-500 dark:text-stone-400 leading-relaxed"
                 >
@@ -330,13 +331,13 @@ export function BreathingModal({ isOpen, onClose }: BreathingModalProps) {
           ) : (
             <motion.div
               key="breathing-completed"
-              initial={{ opacity: 0, scale: 0.95 }}
+              initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
+              exit={shouldReduceMotion ? undefined : { opacity: 0, scale: 0.95 }}
               className="flex flex-col items-center justify-center py-6 space-y-4 max-w-sm"
             >
               <div className="w-16 h-16 rounded-2xl bg-teal-100 dark:bg-teal-900/60 text-teal-700 dark:text-teal-300 flex items-center justify-center shadow-inner">
-                <Sparkles className="w-8 h-8 animate-bounce" />
+                <Sparkles className={`w-8 h-8 ${shouldReduceMotion ? '' : 'animate-bounce'}`} />
               </div>
 
               <div className="space-y-1.5 text-center">
@@ -344,7 +345,7 @@ export function BreathingModal({ isOpen, onClose }: BreathingModalProps) {
                   Latihan Selesai
                 </h3>
                 <p className="text-xs sm:text-sm text-stone-600 dark:text-stone-400 leading-relaxed">
-                  Bagus sekali! Kamu telah meluangkan 1 menit berharga untuk menenangkan pikiranmu. Bagaimana perasaanmu sekarang?
+                  Satu menit sudah berlalu. Apa pun yang kamu rasakan setelah latihan, respons tiap orang bisa berbeda.
                 </p>
               </div>
 

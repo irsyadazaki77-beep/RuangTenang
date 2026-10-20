@@ -33,6 +33,7 @@ import {
 } from '../../../lib/aiModels';
 import { BrandLogo } from '../../../components/ui/BrandLogo';
 import { useFocusTrap } from '../../../hooks/useFocusTrap';
+import { isOllamaOnlyCatalog, useAiModelCatalog } from '../../../lib/aiModelCatalog';
 
 interface ChatHeaderProps {
   user: UserSession | null;
@@ -72,15 +73,25 @@ export function ChatHeader({
 }: ChatHeaderProps) {
   const navigate = useNavigate();
   const { actualTheme, toggleTheme } = useTheme();
-  const { isIncognitoMode, toggleIncognito, triggerPanicScreen } = usePrivacyVault();
+  const { triggerPanicScreen } = usePrivacyVault();
+  const { models: aiModels, profiles: catalogProfiles, loading: aiModelCatalogLoading, error: aiModelCatalogError, refresh: refreshAiModelCatalog } = useAiModelCatalog();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const isSettingsOpen = activePlugin === 'chat_settings';
+  const isOllamaOnly = isOllamaOnlyCatalog(aiModels);
+  const ollamaModels = aiModels.filter(model => model.provider === 'ollama' && model.availability !== 'provider_not_configured');
+  const ollamaTemporarilyUnavailable = ollamaModels.length > 0 && ollamaModels.every(model => model.availability === 'temporarily_unavailable');
 
   const activeProfileId: TenangProfileId = isTenangProfile(aiModel)
     ? aiModel
     : migrateLegacyTenangModelToProfile(aiModel);
 
-  const activeProfile = TENANG_PROFILES.find(p => p.id === activeProfileId) ?? TENANG_PROFILES[1];
+  const catalogTenangProfiles = catalogProfiles.filter(profile => profile.scope === 'tenang');
+  const tenangProfiles = catalogTenangProfiles.length > 0 ? catalogTenangProfiles : TENANG_PROFILES;
+  const activeProfile = tenangProfiles.find(profile => profile.id === activeProfileId) ?? tenangProfiles[1] ?? TENANG_PROFILES[1];
+
+  useEffect(() => {
+    if (isSettingsOpen) void refreshAiModelCatalog();
+  }, [isSettingsOpen, refreshAiModelCatalog]);
 
   useEffect(() => {
     if (aiModel && !isTenangProfile(aiModel)) {
@@ -147,6 +158,27 @@ export function ChatHeader({
                   </span>
                 </div>
 
+                {isOllamaOnly && (
+                  <div className={`rounded-lg border px-2.5 py-2 text-[10px] leading-relaxed ${ollamaTemporarilyUnavailable
+                    ? 'border-amber-200 bg-amber-50/70 text-amber-950 dark:border-amber-900/70 dark:bg-amber-950/30 dark:text-amber-200'
+                    : 'border-emerald-200 bg-emerald-50/70 text-emerald-900 dark:border-emerald-900/70 dark:bg-emerald-950/30 dark:text-emerald-200'}`}>
+                    {ollamaTemporarilyUnavailable ? (
+                      <>
+                        <strong className="font-semibold">Ollama sementara ditandai tidak tersedia.</strong> Ada kegagalan berulang pada permintaan terakhir. Periksa koneksi server dan pastikan model yang dipilih terpasang.
+                      </>
+                    ) : (
+                      <>
+                        <strong className="font-semibold">Provider yang dikonfigurasi: Ollama.</strong> Pesan diproses di endpoint server; endpoint dapat berada di komputer lain. Status konfigurasi ini tidak memastikan Ollama sedang merespons.
+                      </>
+                    )}
+                  </div>
+                )}
+                {aiModelCatalogError && (
+                  <p role="status" className="rounded-lg border border-amber-200 bg-amber-50/70 px-2.5 py-2 text-[10px] leading-relaxed text-amber-950 dark:border-amber-900/70 dark:bg-amber-950/30 dark:text-amber-200">
+                    Status provider terbaru tidak dapat dimuat. Informasi yang terlihat mungkin berasal dari katalog tersimpan; tutup lalu buka pengaturan untuk mencoba lagi.
+                  </p>
+                )}
+
                 {/* Model Selection -> 3 Official Ruang Tenang Profiles */}
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
@@ -158,10 +190,11 @@ export function ChatHeader({
                     </span>
                   </div>
                   <div role="radiogroup" aria-label="Profil AI RuangTenang" className="space-y-1">
-                    {TENANG_PROFILES.map(profile => {
+                    {tenangProfiles.map(profile => {
                       const isSelected = profile.id === activeProfileId;
                       const IconComp = profile.id === 'tenang-turbo' ? Brain : profile.id === 'tenang-low' ? Zap : Sparkles;
                       const isDefault = profile.id === DEFAULT_TENANG_PROFILE_ID;
+                      const isSelectable = profile.selectable && !aiModelCatalogLoading;
 
                       return (
                         <button
@@ -169,8 +202,11 @@ export function ChatHeader({
                           type="button"
                           role="radio"
                           aria-checked={isSelected}
-                          onClick={() => setAiModel(profile.id)}
-                          className={`flex w-full items-start gap-2 rounded-lg p-2 text-left transition-colors cursor-pointer ${
+                          aria-disabled={!isSelectable}
+                          disabled={!isSelectable}
+                          title={!isSelectable ? (aiModelCatalogLoading ? 'Memuat status ketersediaan provider…' : 'Tidak ada model yang tersedia untuk profil ini saat ini.') : undefined}
+                          onClick={() => { if (isSelectable) setAiModel(profile.id); }}
+                          className={`flex w-full items-start gap-2 rounded-lg p-2 text-left transition-colors ${isSelectable ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'} ${
                             isSelected
                               ? 'bg-teal-50 dark:bg-teal-950/50 ring-1 ring-teal-500/50'
                               : 'hover:bg-stone-100 dark:hover:bg-slate-800'
@@ -208,22 +244,22 @@ export function ChatHeader({
                 </div>
 
                 {/* Temporary Chat Toggle inside Popover */}
-                {user?.role !== 'guest' && (
-                  <div className="pt-2 border-t border-stone-100 dark:border-slate-800 flex items-center justify-between">
-                    <div>
-                      <div className="text-[11px] font-medium text-stone-800 dark:text-slate-200">Mode Sementara</div>
-                      <div className="text-[9.5px] text-stone-600 dark:text-stone-400">Pesan tidak disimpan ke riwayat</div>
-                    </div>
-                    <button
-                      type="button"
-                      aria-label="Toggle mode sementara"
-                      onClick={() => setIsTemporary(!isTemporary)}
-                      className={`w-8 h-4.5 rounded-full p-0.5 transition-colors cursor-pointer ${isTemporary ? 'bg-amber-500' : 'bg-stone-200 dark:bg-slate-700'}`}
-                    >
-                      <div className={`w-3.5 h-3.5 rounded-full bg-white shadow-xs transform transition-transform ${isTemporary ? 'translate-x-3.5' : 'translate-x-0'}`} />
-                    </button>
+                <div className="pt-2 border-t border-stone-100 dark:border-slate-800 flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-[11px] font-medium text-stone-800 dark:text-slate-200">Mode Sementara</div>
+                    <div className="text-[9.5px] leading-relaxed text-stone-600 dark:text-stone-400">Pesan baru tidak masuk ke riwayat. AI tetap memproses pesan; lampiran tetap diunggah ke server.</div>
                   </div>
-                )}
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={isTemporary}
+                    aria-label="Aktifkan mode sementara"
+                    onClick={() => setIsTemporary(!isTemporary)}
+                    className={`h-5 w-9 shrink-0 rounded-full p-0.5 transition-colors cursor-pointer ${isTemporary ? 'bg-amber-500' : 'bg-stone-200 dark:bg-slate-700'}`}
+                  >
+                    <div className={`h-4 w-4 rounded-full bg-white shadow-xs transition-transform ${isTemporary ? 'translate-x-4' : 'translate-x-0'}`} />
+                  </button>
+                </div>
               </div>
             </>
           )}
@@ -238,17 +274,6 @@ export function ChatHeader({
             <GitBranch className="w-3 h-3" />
             <span>Cabang</span>
           </span>
-        )}
-
-        {isIncognitoMode && (
-          <button
-            onClick={toggleIncognito}
-            className="hidden sm:inline-flex items-center gap-1 text-[11px] text-purple-700 dark:text-purple-400 font-medium cursor-pointer"
-            title="Mode Anonim Aktif. Klik untuk nonaktifkan."
-          >
-            <Shield className="w-3 h-3 text-purple-600 dark:text-purple-400" />
-            <span>Anonim</span>
-          </button>
         )}
 
         {user?.role === 'guest' ? (

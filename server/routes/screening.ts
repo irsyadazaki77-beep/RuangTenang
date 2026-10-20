@@ -164,8 +164,12 @@ router.post(['/', '/db/screenings'], requireAuth, async (req: Request, res: Resp
       hasSelfHarmRisk: authoritative.hasSelfHarmRisk,
       riskIndicators: authoritative.riskIndicators as any,
       userId: req.user!.userId
-    });    res.json({ success: true, record: mapScreeningToResponse(record) });
+    }, parsed.data.clientSubmissionId);
+    res.json({ success: true, record: mapScreeningToResponse(record) });
   } catch (err: any) {
+    if (err?.message === 'SCREENING_IDEMPOTENCY_CONFLICT') {
+      return res.status(409).json({ error: 'Kunci simpan ulang sudah dipakai untuk hasil skrining yang berbeda.' });
+    }
     console.error('Error creating screening:', err);
     res.status(500).json({ error: 'Gagal menyimpan riwayat skrining.' });
   }

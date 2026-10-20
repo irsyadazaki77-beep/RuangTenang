@@ -288,7 +288,7 @@ export function getAgentToolDefinition(toolId: string): AgentToolDefinition | un
   return AGENT_TOOL_REGISTRY.find(tool => tool.id === toolId);
 }
 
-export function getAllowedAgentToolIds(taskType: AgentTaskType, context: { attachmentIds: string[]; artifactId?: string; hasDependencyArtifacts?: boolean }): Set<string> {
+export function getAllowedAgentToolIds(taskType: AgentTaskType, context: { attachmentIds: string[]; artifactId?: string; hasDependencyArtifacts?: boolean; allowExternalSearch?: boolean }): Set<string> {
   const ids = new Set<string>();
   const canReadArtifact = Boolean(context.artifactId || context.hasDependencyArtifacts);
   for (const tool of AGENT_TOOL_REGISTRY) {
@@ -299,7 +299,7 @@ export function getAllowedAgentToolIds(taskType: AgentTaskType, context: { attac
     if ((tool.id === 'inspect_workspace_dataset' || tool.id === 'analyze_workspace_dataset') && context.attachmentIds.length === 0) continue;
     if (tool.id === 'read_workspace_artifact' && !canReadArtifact) continue;
     if (tool.id === 'revise_workspace_artifact' && !canReadArtifact) continue;
-    if (tool.id === 'search_web' && !isWebSearchConfigured()) continue;
+    if (tool.id === 'search_web' && (context.allowExternalSearch === false || !isWebSearchConfigured())) continue;
     ids.add(tool.id);
   }
   return ids;

@@ -7,6 +7,7 @@ export interface Attachment {
   status: 'uploading' | 'processing' | 'ready' | 'visual_ready' | 'success' | 'error';
   visualAnalysisAvailable?: boolean;
   ocrApplied?: boolean;
+  previewOnly?: boolean;
   errorMessage?: string;
   serverAttachmentId?: string;
   filename?: string;
@@ -25,6 +26,7 @@ export interface StoredAttachment {
   data?: string;
   visualAnalysisAvailable?: boolean;
   ocrApplied?: boolean;
+  previewOnly?: boolean;
 }
 
 export interface Message {
@@ -37,6 +39,8 @@ export interface Message {
   plugin?: string;
   pluginResult?: Record<string, unknown>;
   error?: boolean;
+  incomplete?: boolean;
+  retryable?: boolean;
   createdAt?: string | Date;
   attachments?: StoredAttachment[];
   modelUsed?: string;

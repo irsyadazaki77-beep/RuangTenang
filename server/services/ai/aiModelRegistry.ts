@@ -54,6 +54,42 @@ export interface AiModelDefinition extends AiModelMetadata {
 
 const MODEL_METADATA: AiModelMetadata[] = [
   {
+    id: 'ollama-qwen3-1.7b',
+    name: 'Qwen 3 1.7B via Ollama',
+    category: 'Model Utama & Seimbang',
+    tag: 'Ollama • Ringan',
+    description: 'Qwen 3 1.7B melalui endpoint Ollama yang dikonfigurasi. Lokasi pemrosesan mengikuti host endpoint; kebutuhan memori dan latensi bergantung pada perangkat serta konfigurasi model.',
+    isDefault: true,
+    speed: 'Sangat Cepat',
+    reasoning: 'Standar',
+    recommendedFor: 'Pertanyaan singkat dan percakapan ringan; kemampuan bergantung pada konfigurasi host.',
+    allowedTiers: ['Free', 'Pro', 'Premium']
+  },
+  {
+    id: 'ollama-qwen3-8b',
+    name: 'Qwen 3 8B via Ollama',
+    category: 'Model Utama & Seimbang',
+    tag: 'Ollama • 8B',
+    description: 'Qwen 3 8B melalui endpoint Ollama yang dikonfigurasi. Lokasi pemrosesan mengikuti host endpoint; kecepatan dan kebutuhan memori bergantung pada perangkat serta konfigurasi model.',
+    isDefault: false,
+    speed: 'Sangat Cepat',
+    reasoning: 'Tinggi',
+    recommendedFor: 'Percakapan dan asistensi tugas; kemampuan bergantung pada konfigurasi host.',
+    allowedTiers: ['Free', 'Pro', 'Premium']
+  },
+  {
+    id: 'ollama-bonsai-27b',
+    name: 'Bonsai 27B via Ollama',
+    category: 'Model Utama & Seimbang',
+    tag: 'Ollama • 27B',
+    description: 'Bonsai 27B melalui endpoint Ollama yang dikonfigurasi. Lokasi pemrosesan mengikuti host endpoint; pastikan model terpasang dan sumber modelnya sesuai kebutuhan deployment.',
+    isDefault: false,
+    speed: 'Cepat',
+    reasoning: 'Sangat Tinggi',
+    recommendedFor: 'Analisis percakapan dan tugas; kualitas serta kebutuhan komputasi bergantung pada model dan host.',
+    allowedTiers: ['Free', 'Pro', 'Premium']
+  },
+  {
     id: 'gemini-4-argon',
     name: 'Gemini 4 Argon',
     category: 'Penalaran Mendalam & Analisis',
@@ -325,9 +361,12 @@ const MODEL_METADATA: AiModelMetadata[] = [
   }
 ];
 
-export const RESILIENT_FALLBACK_AI_MODEL_ID = 'gemini-3.5-flash-lite';
+export const RESILIENT_FALLBACK_AI_MODEL_ID = 'ollama-qwen3-1.7b';
 
 const providerModels: Record<string, { provider: ProviderId; providerModelId: string }> = {
+  'ollama-qwen3-1.7b': { provider: 'ollama', providerModelId: 'qwen3:1.7b' },
+  'ollama-qwen3-8b': { provider: 'ollama', providerModelId: 'qwen3:8b' },
+  'ollama-bonsai-27b': { provider: 'ollama', providerModelId: 'bonsai-27b:latest' },
   'deepseek-reasoner': { provider: 'deepseek', providerModelId: 'deepseek-v4-pro' },
   'deepseek-chat': { provider: 'deepseek', providerModelId: 'deepseek-flash' },
   'gemini-3.5-pro': { provider: 'gemini', providerModelId: 'gemini-3.1-pro-preview' },
@@ -454,6 +493,9 @@ export const AI_PROFILE_DEFINITIONS: readonly AiProfileMetadata[] = [
     isDefault: false,
     allowedTiers: ['Free', 'Pro', 'Premium'],
     candidateModelIds: [
+      'ollama-qwen3-1.7b',
+      'ollama-qwen3-8b',
+      'ollama-bonsai-27b',
       'gemini-3.5-pro',
       'gemini-3.1-pro-preview',
       'deepseek-reasoner',
@@ -476,6 +518,9 @@ export const AI_PROFILE_DEFINITIONS: readonly AiProfileMetadata[] = [
     isDefault: true,
     allowedTiers: ['Free', 'Pro', 'Premium'],
     candidateModelIds: [
+      'ollama-qwen3-1.7b',
+      'ollama-qwen3-8b',
+      'ollama-bonsai-27b',
       'gemini-3.8-flash',
       'deepseek-chat',
       'gemini-3.7-flash',
@@ -498,6 +543,9 @@ export const AI_PROFILE_DEFINITIONS: readonly AiProfileMetadata[] = [
     isDefault: false,
     allowedTiers: ['Free', 'Pro', 'Premium'],
     candidateModelIds: [
+      'ollama-qwen3-1.7b',
+      'ollama-qwen3-8b',
+      'ollama-bonsai-27b',
       'gemini-3.5-flash-lite',
       'gemini-3.1-flash-lite',
       'groq-gpt-20b',
@@ -521,6 +569,9 @@ export const AI_PROFILE_DEFINITIONS: readonly AiProfileMetadata[] = [
     isDefault: false,
     allowedTiers: ['Free', 'Pro', 'Premium'],
     candidateModelIds: [
+      'ollama-qwen3-1.7b',
+      'ollama-qwen3-8b',
+      'ollama-bonsai-27b',
       'gemini-3.5-flash-lite',
       'groq-gpt-20b',
       'openrouter-ling-flash',
@@ -541,6 +592,9 @@ export const AI_PROFILE_DEFINITIONS: readonly AiProfileMetadata[] = [
     isDefault: true,
     allowedTiers: ['Free', 'Pro', 'Premium'],
     candidateModelIds: [
+      'ollama-qwen3-1.7b',
+      'ollama-qwen3-8b',
+      'ollama-bonsai-27b',
       'gemini-3.8-flash',
       'deepseek-chat',
       'openrouter-cohere-code',
@@ -563,6 +617,9 @@ export const AI_PROFILE_DEFINITIONS: readonly AiProfileMetadata[] = [
     isDefault: false,
     allowedTiers: ['Free', 'Pro', 'Premium'],
     candidateModelIds: [
+      'ollama-qwen3-1.7b',
+      'ollama-qwen3-8b',
+      'ollama-bonsai-27b',
       'gemini-3.5-pro',
       'gemini-3.1-pro-preview',
       'deepseek-reasoner',
@@ -695,6 +752,10 @@ export function getPublicModelCatalog(tier = 'Free') {
   });
 }
 
+
+export function isOllamaModel(modelId: string): boolean {
+  return getModelDefinition(modelId)?.provider === 'ollama';
+}
 
 function isProviderConfigured(provider: ProviderId): boolean {
   return aiProviderConfig.isConfigured(provider);

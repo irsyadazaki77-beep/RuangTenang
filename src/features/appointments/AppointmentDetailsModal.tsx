@@ -17,6 +17,15 @@ export const AppointmentDetailsModal: React.FC<AppointmentDetailsModalProps> = (
 
   if (!appointment) return null;
 
+  const appointmentStatusLabels: Record<Appointment['status'], string> = {
+    PENDING: 'Menunggu konfirmasi',
+    CONFIRMED: 'Terkonfirmasi',
+    IN_PROGRESS: 'Sedang berlangsung',
+    COMPLETED: 'Selesai',
+    CANCELLED: 'Dibatalkan',
+    REJECTED: 'Ditolak',
+  };
+
   const handleDownload = () => {
     const blob = new Blob([appointment.notes || ""], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -38,7 +47,7 @@ export const AppointmentDetailsModal: React.FC<AppointmentDetailsModalProps> = (
             </div>
             <div>
               <h3 className="font-bold text-primary text-sm sm:text-base leading-tight">
-                Laporan Ringkasan Hasil Konseling
+                Detail Janji Konseling
               </h3>
               <p className="text-xs text-secondary font-medium mt-0.5">
                 ID Sesi: {appointment.id} | Tanggal: {appointment.date}
@@ -48,7 +57,7 @@ export const AppointmentDetailsModal: React.FC<AppointmentDetailsModalProps> = (
           <button
             onClick={onClose}
             className="p-1.5 text-secondary hover:text-primary hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer min-h-[40px] min-w-[40px] flex items-center justify-center"
-            aria-label="Tutup Dokumen"
+                aria-label="Tutup detail janji"
           >
             <XCircle className="w-5 h-5" />
           </button>
@@ -71,11 +80,11 @@ export const AppointmentDetailsModal: React.FC<AppointmentDetailsModalProps> = (
               <div>
                 <h4 className="font-bold text-primary text-sm sm:text-base">{appointment.counselorName}</h4>
                 <p className="text-xs text-secondary font-medium">{appointment.counselorTitle}</p>
-                <p className="text-[11px] text-secondary font-medium">Status: Selesai</p>
+                <p className="text-[11px] text-secondary font-medium">Status: {appointmentStatusLabels[appointment.status]}</p>
               </div>
             </div>
             <div className="px-2.5 py-1 bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-400 border border-teal-200 dark:border-teal-900/50 rounded-lg text-xs font-semibold shrink-0">
-              Sesi Selesai (Hadir)
+              {appointment.attendanceStatus === 'ATTENDED' ? 'Kehadiran tercatat' : appointmentStatusLabels[appointment.status]}
             </div>
           </div>
 
@@ -99,16 +108,16 @@ export const AppointmentDetailsModal: React.FC<AppointmentDetailsModalProps> = (
           <div className="space-y-2.5 text-sm text-primary leading-relaxed">
             <h4 className="font-bold text-xs sm:text-sm text-primary border-b border-default pb-1.5 flex items-center gap-2">
               <GraduationCap className="w-4 h-4 text-teal-600 dark:text-teal-400" />
-              <span>Catatan Ringkasan & Tindakan Psikologis</span>
+              <span>Catatan sesi konseling</span>
             </h4>
             <div className="p-3.5 surface-muted border border-default rounded-xl whitespace-pre-wrap font-sans text-secondary text-xs sm:text-sm leading-relaxed max-h-[250px] overflow-y-auto">
-              {appointment.notes || "Belum ada ringkasan yang ditulis untuk sesi ini."}
+              {appointment.notes || "Tidak ada catatan janji temu yang dapat ditampilkan di sini. Catatan SOAP disimpan melalui Portal Konselor."}
             </div>
           </div>
 
-          {/* Professional Legal Disclaimer */}
+          {/* Data access and clinical scope notice */}
           <div className="p-3 surface-muted border border-default rounded-xl text-[10.5px] text-secondary leading-relaxed">
-            <strong>Kerahasiaan &amp; Etika Klinis:</strong> Dokumen ringkasan konseling ini bersifat rahasia di bawah regulasi UU Perlindungan Data Pribadi (UU PDP). Digunakan khusus untuk pendampingan bimbingan konseling mahasiswa dan bukan merupakan resep farmakologis atau tindakan medis darurat rumah sakit.
+            <strong>Privasi dan batas penggunaan:</strong> Catatan ini dapat memuat informasi sensitif. Akses, penyimpanan, dan penghapusannya mengikuti kebijakan layanan atau kampus yang berlaku; tanyakan kepada pengelola layanan untuk mengetahui rinciannya. Catatan ini bukan diagnosis atau pengganti bantuan darurat.
           </div>
         </div>
 
@@ -134,14 +143,16 @@ export const AppointmentDetailsModal: React.FC<AppointmentDetailsModalProps> = (
             </button>
           </div>
           <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-            <button
-              type="button"
-              onClick={handleDownload}
-              className="px-3.5 py-2 min-h-[40px] surface-card hover:bg-slate-100 dark:hover:bg-slate-800 text-secondary text-xs font-semibold rounded-xl border border-default transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span>Unduh (.txt)</span>
-            </button>
+            {appointment.notes && (
+              <button
+                type="button"
+                onClick={handleDownload}
+                className="px-3.5 py-2 min-h-[40px] surface-card hover:bg-slate-100 dark:hover:bg-slate-800 text-secondary text-xs font-semibold rounded-xl border border-default transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Unduh catatan (.txt)</span>
+              </button>
+            )}
             <button
               type="button"
               onClick={onClose}

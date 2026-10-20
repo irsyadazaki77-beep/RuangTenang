@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { Eye, Hand, Volume2, VolumeX, Wind, Heart, ChevronRight, ChevronLeft, CheckCircle2, Sparkles, RefreshCw, ShieldCheck } from 'lucide-react';
 import { ModalShell } from '../../../components/ui/ModalShell';
 import { playTibetanBowlSound } from '../../../lib/soundEffects';
+import { Link } from 'react-router-dom';
 
 interface GroundingModalProps {
   isOpen: boolean;
@@ -52,7 +53,7 @@ const STEPS: StepInfo[] = [
     number: 3,
     count: 3,
     title: '3 Suara yang Kamu Dengarkan',
-    subtitle: 'Dengarkan suara di sekelilingmu dengan tenang. Kenali 3 suara terdekat maupun jauh.',
+    subtitle: 'Perhatikan tiga suara di sekitarmu, baik yang dekat maupun yang jauh. Lewati langkah ini jika tidak nyaman.',
     icon: Volume2,
     color: 'text-indigo-600 dark:text-indigo-400',
     bgColor: 'bg-indigo-50 dark:bg-indigo-950/50',
@@ -63,8 +64,8 @@ const STEPS: StepInfo[] = [
   {
     number: 4,
     count: 2,
-    title: '2 Aroma yang Kamu Hirup',
-    subtitle: 'Hirup udara perlahan lewat hidung. Sadari 2 aroma atau bau yang tercium saat ini.',
+    title: '2 Aroma yang Kamu Cium (Opsional)',
+    subtitle: 'Jika nyaman, perhatikan dua aroma yang sudah tercium di sekitarmu. Kamu boleh melewati langkah ini; jangan hirup benda secara sengaja.',
     icon: Wind,
     color: 'text-amber-600 dark:text-amber-400',
     bgColor: 'bg-amber-50 dark:bg-amber-950/50',
@@ -75,8 +76,8 @@ const STEPS: StepInfo[] = [
   {
     number: 5,
     count: 1,
-    title: '1 Rasa atau 1 Napas Dalam',
-    subtitle: 'Fokuskan pada 1 rasa di lidahmu atau tarik satu napas panjang yang sangat tenang.',
+    title: '1 Rasa atau 1 Napas',
+    subtitle: 'Perhatikan satu rasa di mulut atau satu napas yang datang dan pergi, jika nyaman. Kamu juga boleh melewati langkah ini.',
     icon: Heart,
     color: 'text-rose-600 dark:text-rose-400',
     bgColor: 'bg-rose-50 dark:bg-rose-950/50',
@@ -87,6 +88,7 @@ const STEPS: StepInfo[] = [
 ];
 
 export function GroundingModal({ isOpen, onClose, onOpenBreathing }: GroundingModalProps) {
+  const shouldReduceMotion = useReducedMotion();
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [notes, setNotes] = useState<Record<number, string>>({});
   const [isTimerRunning, setIsTimerRunning] = useState(false);
@@ -184,7 +186,7 @@ export function GroundingModal({ isOpen, onClose, onOpenBreathing }: GroundingMo
       isOpen={isOpen}
       onClose={onClose}
       title="Latihan Grounding Sensorik 5-4-3-2-1"
-      subtitle="Teknik psikologi terbukti untuk meredakan serangan panik, kecemasan akut, dan overthinking"
+      subtitle="Latihan mandiri untuk mengarahkan perhatian ke sekitar; pengalaman tiap orang berbeda dan latihan ini bukan pengganti bantuan profesional"
       maxWidth="xl"
       headerRight={
         <button
@@ -214,9 +216,9 @@ export function GroundingModal({ isOpen, onClose, onOpenBreathing }: GroundingMo
               <div className="w-full h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
                 <motion.div
                   className="h-full bg-teal-500 rounded-full"
-                  initial={{ width: 0 }}
+                  initial={shouldReduceMotion ? false : { width: 0 }}
                   animate={{ width: `${progressPercent}%` }}
-                  transition={{ duration: 0.3 }}
+                  transition={{ duration: shouldReduceMotion ? 0 : 0.3 }}
                 />
               </div>
             </div>
@@ -225,10 +227,10 @@ export function GroundingModal({ isOpen, onClose, onOpenBreathing }: GroundingMo
             <AnimatePresence mode="wait">
               <motion.div
                 key={step.number}
-                initial={{ opacity: 0, x: 20 }}
+                initial={shouldReduceMotion ? false : { opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -20 }}
-                transition={{ duration: 0.25 }}
+                exit={shouldReduceMotion ? undefined : { opacity: 0, x: -20 }}
+                transition={{ duration: shouldReduceMotion ? 0 : 0.25 }}
                 className={`p-5 rounded-2xl border ${step.borderColor} ${step.bgColor} space-y-4 shadow-xs`}
               >
                 <div className="flex items-start gap-3.5">
@@ -292,12 +294,12 @@ export function GroundingModal({ isOpen, onClose, onOpenBreathing }: GroundingMo
                   >
                     {isTimerRunning && (
                       <div
-                        className="absolute inset-0 bg-teal-500/20 transition-all duration-75"
+                        className={`absolute inset-0 bg-teal-500/20 ${shouldReduceMotion ? 'transition-none' : 'transition-all duration-75'}`}
                         style={{ width: `${timerProgress}%` }}
                       />
                     )}
                     <span className="relative z-10">
-                      {isTimerRunning ? 'Hela Napas Tenang... (5d)' : 'Jeda Napas 5 Detik'}
+                      {isTimerRunning ? 'Jeda bernapas… (5 detik)' : 'Jeda Napas 5 Detik'}
                     </span>
                   </button>
                 </div>
@@ -327,7 +329,7 @@ export function GroundingModal({ isOpen, onClose, onOpenBreathing }: GroundingMo
         ) : (
           /* Completion State */
           <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
+            initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             className="p-6 rounded-2xl bg-teal-50/80 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800/80 text-center space-y-4"
           >
@@ -337,19 +339,26 @@ export function GroundingModal({ isOpen, onClose, onOpenBreathing }: GroundingMo
 
             <div className="space-y-1.5">
               <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">
-                Kamu Aman & Memegang Kendali
+                Latihan Selesai
               </h3>
               <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 max-w-md mx-auto leading-relaxed">
-                Latihan grounding 5-4-3-2-1 telah selesai. Tubuh dan pikiranmu perlahan terhubung kembali dengan momen saat ini. Selalu ingat bahwa kepanikan bersifat sementara dan akan berlalu.
+                Latihan grounding 5-4-3-2-1 telah selesai. Perhatikan apa yang kamu rasakan dan pilih langkah berikutnya yang kamu butuhkan. Latihan ini tidak dapat memastikan keselamatan di sekitarmu atau menggantikan bantuan langsung.
               </p>
             </div>
 
             <div className="p-3 bg-white/80 dark:bg-slate-900/80 rounded-xl border border-teal-100 dark:border-teal-900/60 text-xs text-slate-600 dark:text-slate-300 flex items-center gap-2 justify-center">
               <ShieldCheck className="w-4 h-4 text-teal-600 shrink-0" />
-              <span>Napasmu tenang, ruangan sekitarmu aman.</span>
+              <span>Apakah kamu merasa aman saat ini? Jika tidak, hubungi orang tepercaya atau buka Pusat Bantuan Krisis.</span>
             </div>
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-2.5 pt-2">
+              <Link
+                to="/emergency"
+                onClick={onClose}
+                className="w-full sm:w-auto px-4 py-2 border border-rose-300 dark:border-rose-800 bg-white dark:bg-slate-900 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-rose-800 dark:text-rose-200 rounded-xl text-xs font-semibold transition-colors flex items-center justify-center"
+              >
+                Buka Pusat Bantuan Krisis
+              </Link>
               <button
                 onClick={handleReset}
                 className="w-full sm:w-auto px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 cursor-pointer"

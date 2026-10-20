@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useEscapeKey } from '../../hooks/useEscapeKey';
-import { calculateStreak } from '../../utils/streak';
+import { calculateStreak, getLocalIsoDateString, parseLocalIsoDateString } from '../../utils/streak';
 import {
   Smile,
   Moon,
@@ -14,6 +14,7 @@ import {
   RefreshCw,
   CheckCircle2,
   Plus,
+  Pencil,
   ChevronRight,
   Brain,
   MessageSquare
@@ -30,13 +31,15 @@ interface MoodTrackerProps {
   setMoodLogs: React.Dispatch<React.SetStateAction<MoodLog[]>>;
   showToast: (msg: string, type?: 'info' | 'success' | 'warning' | 'error', title?: string) => void;
   onRequestOpenCheckin?: () => void;
+  onRequestEditCheckin?: (log: MoodLog) => void;
 }
 
 export const MoodTracker: React.FC<MoodTrackerProps> = ({
   moodLogs,
   setMoodLogs,
   showToast,
-  onRequestOpenCheckin
+  onRequestOpenCheckin,
+  onRequestEditCheckin
 }) => {
   const navigate = useNavigate();
   const [isCheckinModalOpen, setIsCheckinModalOpen] = useState<boolean>(false);
@@ -69,7 +72,7 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
 
   const handleCheckinSaved = (canonicalLog: MoodLog) => {
     setMoodLogs(prev => {
-      const filtered = prev.filter(log => log.id !== canonicalLog.id && log.date !== canonicalLog.date);
+      const filtered = prev.filter(log => log.id !== canonicalLog.id);
       return [canonicalLog, ...filtered].sort(
         (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
       );
@@ -145,7 +148,7 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
     for (let i = daysCount - 1; i >= 0; i--) {
       const date = new Date(today);
       date.setDate(today.getDate() - i);
-      const dateString = date.toISOString().split('T')[0];
+      const dateString = getLocalIsoDateString(date);
       const matchLog = moodLogs.find(log => log.date === dateString);
       grid.push({
         date: dateString,
@@ -604,8 +607,8 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
             {filteredLogs.map((log) => {
               const moodOpt = MOOD_OPTIONS.find(o => o.value === log.mood) || MOOD_OPTIONS[2];
-              const dateObj = new Date(log.date);
-              const isToday = log.date === new Date().toISOString().split('T')[0];
+              const dateObj = parseLocalIsoDateString(log.date);
+              const isToday = log.date === getLocalIsoDateString();
               const formattedDate = isToday
                 ? 'Hari Ini'
                 : dateObj.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'short' });
@@ -629,14 +632,28 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
                       </div>
                     </div>
 
-                    <button
-                      onClick={() => handleDeleteMoodLog(log.id)}
-                      className="text-muted hover:text-rose-600 p-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors opacity-70 group-hover:opacity-100 cursor-pointer"
-                      title="Hapus Catatan"
-                      aria-label="Hapus catatan mood"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center gap-1">
+                      {onRequestEditCheckin && !log.id.startsWith('offline-') && (
+                        <button
+                          type="button"
+                          onClick={() => onRequestEditCheckin(log)}
+                          className="text-muted hover:text-teal-700 dark:hover:text-teal-300 p-1.5 rounded-lg hover:bg-teal-50 dark:hover:bg-teal-950/40 transition-colors opacity-70 group-hover:opacity-100 cursor-pointer"
+                          title="Edit catatan mood"
+                          aria-label={`Edit catatan mood ${formattedDate}`}
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteMoodLog(log.id)}
+                        className="text-muted hover:text-rose-600 p-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors opacity-70 group-hover:opacity-100 cursor-pointer"
+                        title="Hapus Catatan"
+                        aria-label="Hapus catatan mood"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
 
                   {log.notes && (

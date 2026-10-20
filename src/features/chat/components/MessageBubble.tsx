@@ -8,7 +8,7 @@ import MoodCard from '../../plugins/MoodCard';
 import ScreeningCard from '../../plugins/ScreeningCard';
 import ArticlesCard from '../../plugins/ArticlesCard';
 import { BurnoutInterventionCard } from './BurnoutInterventionCard';
-import { Copy, RefreshCw, ThumbsUp, ThumbsDown, Edit2, Check, Bookmark, GitBranch, FileText, Image as ImageIcon, Volume2, VolumeX } from 'lucide-react';
+import { AlertCircle, Copy, RefreshCw, ThumbsUp, ThumbsDown, Edit2, Check, Bookmark, GitBranch, FileText, Image as ImageIcon, Volume2, VolumeX } from 'lucide-react';
 import { useToast } from '../../../components/Toast';
 import { motion, useReducedMotion } from 'motion/react';
 import { RhythmicTypingIndicator } from '../../../components/ui/RhythmicTypingIndicator';
@@ -255,9 +255,13 @@ export const MessageBubble = memo(function MessageBubble({
             {msg.error ? (
               <div className="p-3.5 rounded-xl bg-rose-50/90 dark:bg-rose-950/40 border border-rose-200/80 dark:border-rose-900/60 text-[13.5px]">
                 <p className="text-rose-800 dark:text-rose-300 mb-2 font-medium leading-relaxed">{msg.content}</p>
-                <button aria-label="Coba Lagi" onClick={() => onRegenerate?.(msg.id)} className="min-h-[40px] min-w-[40px] px-3.5 py-1.5 bg-rose-100 dark:bg-rose-900 text-rose-800 dark:text-rose-200 rounded-lg font-medium hover:bg-rose-200 transition-colors cursor-pointer text-xs sm:text-sm">
-                  Coba lagi
-                </button>
+                {msg.retryable === false ? (
+                  <p className="text-xs text-rose-700 dark:text-rose-300">Kirim ulang pesan beserta lampiran atau konteks fiturnya untuk mencoba lagi.</p>
+                ) : (
+                  <button aria-label="Coba Lagi" onClick={() => onRegenerate?.(msg.id)} className="min-h-[40px] min-w-[40px] px-3.5 py-1.5 bg-rose-100 dark:bg-rose-900 text-rose-800 dark:text-rose-200 rounded-lg font-medium hover:bg-rose-200 transition-colors cursor-pointer text-xs sm:text-sm">
+                    Coba lagi
+                  </button>
+                )}
               </div>
             ) : isTyping && !msg.content ? (
               <div className="py-1">
@@ -334,6 +338,17 @@ export const MessageBubble = memo(function MessageBubble({
               </div>
             )}
 
+            {msg.incomplete && (
+              <div role="status" className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+                <span className="inline-flex items-center gap-1.5"><AlertCircle className="h-3.5 w-3.5 shrink-0" />Respons ini terputus sebelum selesai.</span>
+                {msg.retryable === false ? (
+                  <span className="text-[11px]">Kirim ulang pesan beserta lampiran atau konteks fiturnya.</span>
+                ) : onRegenerate && (
+                  <button type="button" onClick={() => onRegenerate(msg.id)} className="min-h-9 rounded-md border border-amber-400 px-2.5 font-semibold hover:bg-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 dark:border-amber-800 dark:hover:bg-amber-950">Ulangi jawaban</button>
+                )}
+              </div>
+            )}
+
             {/* Plugins / Cards */}
             {(msg.plugin === 'burnout' || msg.plugin === 'distress') && (
               <BurnoutInterventionCard
@@ -351,7 +366,7 @@ export const MessageBubble = memo(function MessageBubble({
             {msg.plugin === 'ai_memory' && (
               <div className="mt-3 p-3 bg-teal-50/60 dark:bg-teal-950/30 border border-teal-100 dark:border-teal-900/60 rounded-xl text-xs sm:text-[13px] text-teal-800 dark:text-teal-300 flex items-center gap-2">
                 <Brain className="w-4 h-4 text-teal-600 dark:text-teal-400 shrink-0" />
-                <span className="leading-relaxed">Konteks personalisasi disimpan ke memori jangka panjang untuk sesi mendatang.</span>
+                <span className="leading-relaxed">Permintaan konteks personalisasi diterima untuk membantu percakapan ini.</span>
               </div>
             )}
 
@@ -447,6 +462,8 @@ export const MessageBubble = memo(function MessageBubble({
   if (prevProps.msg.content !== nextProps.msg.content) return false;
   if (prevProps.isTyping !== nextProps.isTyping) return false;
   if (prevProps.msg.error !== nextProps.msg.error) return false;
+  if (prevProps.msg.incomplete !== nextProps.msg.incomplete) return false;
+  if (prevProps.msg.retryable !== nextProps.msg.retryable) return false;
   if (prevProps.msg.plugin !== nextProps.msg.plugin) return false;
   if (prevProps.isBookmarked !== nextProps.isBookmarked) return false;
   if (prevProps.isSearchTarget !== nextProps.isSearchTarget) return false;

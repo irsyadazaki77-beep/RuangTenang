@@ -19,6 +19,7 @@ interface ArtifactCanvasToolbarProps {
   saveStatus: SaveState;
   saveFailureMessage: string;
   handleManualSave: () => void;
+  hasExternalConflict?: boolean;
   isDirty: boolean;
   editorRef: React.RefObject<HTMLTextAreaElement | null>;
   showMoreMenu: boolean;
@@ -34,7 +35,7 @@ interface ArtifactCanvasToolbarProps {
 
 export const ArtifactCanvasToolbar: React.FC<ArtifactCanvasToolbarProps> = ({
   artifact, viewMode, setViewMode, isEditingTitle, setIsEditingTitle, titleInput, setTitleInput, titleInputRef,
-  isSavingTitle, titleSaveError, handleSaveTitle, saveStatus, saveFailureMessage, handleManualSave,
+  isSavingTitle, titleSaveError, handleSaveTitle, saveStatus, saveFailureMessage, handleManualSave, hasExternalConflict = false,
   isDirty, editorRef, showMoreMenu, setShowMoreMenu, moreMenuRef, showHistory, showExport,
   isExpanded, toggleExpand, onClose, children
 }) => {
@@ -51,7 +52,7 @@ export const ArtifactCanvasToolbar: React.FC<ArtifactCanvasToolbarProps> = ({
     }
   };
   const switchToEdit = () => { setViewMode('edit'); requestAnimationFrame(() => editorRef.current?.focus()); };
-  const saveStatusLabel = saveStatus === 'saving' ? 'Menyimpan…' : saveStatus === 'unsaved' ? 'Belum disimpan' : saveStatus === 'failed' ? saveFailureMessage : saveStatus === 'local' ? 'Draf lokal' : 'Tersimpan';
+  const saveStatusLabel = saveStatus === 'saving' ? 'Menyimpan…' : saveStatus === 'unsaved' ? 'Belum disimpan' : saveStatus === 'failed' ? saveFailureMessage : saveStatus === 'local' ? 'Draf lokal tab ini' : 'Tersimpan';
 
   return <header className="relative z-20 flex h-12 shrink-0 items-center justify-between gap-2 border-b border-slate-200/70 bg-white/95 px-3 py-1.5 dark:border-slate-800/80 dark:bg-[#0b101b]/95 backdrop-blur-md sm:px-4">
     <div className="flex min-w-0 flex-1 items-center gap-2 sm:max-w-[34%]">
@@ -59,10 +60,10 @@ export const ArtifactCanvasToolbar: React.FC<ArtifactCanvasToolbarProps> = ({
       {isEditingTitle ? <div className="min-w-0 flex-1">
       <input ref={titleInputRef} value={titleInput} onChange={event => setTitleInput(event.target.value)} onBlur={() => { if (!isSavingTitle) void handleSaveTitle(); }} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); void handleSaveTitle(); } if (event.key === 'Escape') { setTitleInput(artifact.title || ''); setIsEditingTitle(false); } }} disabled={isSavingTitle} autoFocus aria-label="Judul artifact" className="h-7 w-full rounded-lg border border-emerald-500 bg-white px-2 text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:bg-slate-900 dark:text-slate-100" />
         {titleSaveError && <span role="alert" className="text-[10px] text-rose-600">{titleSaveError}</span>}
-      </div> : <button type="button" onClick={() => setIsEditingTitle(true)} className="group flex min-w-0 items-center gap-1.5 truncate text-left" title="Klik untuk mengubah judul dokumen">
+      </div> : <button type="button" disabled={hasExternalConflict} onClick={() => setIsEditingTitle(true)} className="group flex min-w-0 items-center gap-1.5 truncate text-left disabled:cursor-not-allowed disabled:opacity-60" title={hasExternalConflict ? 'Selesaikan konflik draf sebelum mengubah judul.' : 'Klik untuk mengubah judul dokumen'}>
         <span className="truncate text-xs font-semibold text-slate-900 group-hover:text-emerald-700 dark:text-slate-100">{artifact.title || 'Artefak RuangKerja'}</span><Pencil className="h-3 w-3 shrink-0 text-slate-400" />
       </button>}
-      <span className={`hidden shrink-0 items-center text-[11px] sm:inline-flex ${saveStatus === 'failed' ? 'text-rose-600' : saveStatus === 'unsaved' || saveStatus === 'saving' ? 'text-amber-600' : 'text-emerald-600'}`} role="status" aria-live="polite">{saveStatusLabel}</span>
+      <span title={saveStatus === 'local' ? 'Belum tersimpan ke server; pemulihan bergantung pada penyimpanan sesi browser.' : undefined} className={`hidden shrink-0 items-center text-[11px] sm:inline-flex ${saveStatus === 'failed' ? 'text-rose-600' : saveStatus === 'unsaved' || saveStatus === 'saving' ? 'text-amber-600' : 'text-emerald-600'}`} role="status" aria-live="polite">{saveStatusLabel}</span>
     </div>
     <div className="flex h-8 shrink-0 items-center rounded-xl border border-slate-200/80 bg-slate-100 p-0.5 dark:border-slate-700/80 dark:bg-slate-800/90" role="group" aria-label="Mode artifact">
       {(['preview', 'edit'] as const).map(mode => <button key={mode} type="button" onClick={() => mode === 'edit' ? switchToEdit() : setViewMode('preview')} aria-pressed={viewMode === mode} title={mode === 'edit' ? 'Edit Dokumen Langsung (Autosave)' : 'Preview'} className={`relative z-10 inline-flex h-full items-center gap-1.5 rounded-lg px-2.5 text-[11px] ${viewMode === mode ? 'font-semibold text-emerald-800 dark:text-emerald-300' : 'text-slate-600 hover:text-slate-900 dark:text-slate-400'}`}>
@@ -71,7 +72,7 @@ export const ArtifactCanvasToolbar: React.FC<ArtifactCanvasToolbarProps> = ({
       </button>)}
     </div>
     <div className="flex shrink-0 items-center gap-1.5">
-      {viewMode === 'edit' && isDirty && <button type="button" onClick={handleManualSave} disabled={saveStatus === 'saving'} title="Simpan Versi Dokumen (Ctrl+S)" className="inline-flex min-h-[36px] items-center gap-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-3 text-xs font-semibold text-white disabled:opacity-50 cursor-pointer"><Save className="h-3.5 w-3.5" /><span className="hidden sm:inline">Simpan</span></button>}
+      {viewMode === 'edit' && isDirty && <button type="button" onClick={handleManualSave} disabled={saveStatus === 'saving' || hasExternalConflict} title={hasExternalConflict ? 'Pilih versi server atau pertahankan draf lokal sebelum menyimpan.' : 'Simpan Versi Dokumen (Ctrl+S)'} className="inline-flex min-h-[36px] items-center gap-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-3 text-xs font-semibold text-white disabled:opacity-50 cursor-pointer"><Save className="h-3.5 w-3.5" /><span className="hidden sm:inline">Simpan</span></button>}
       {viewMode === 'preview' && <button type="button" onClick={switchToEdit} className="inline-flex min-h-[36px] items-center gap-1 rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-xs font-semibold text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300 cursor-pointer" title="Mulai Edit Dokumen Ini"><Edit3 className="h-3.5 w-3.5" /><span className="hidden 2xl:inline">Edit Dokumen</span></button>}
       <button type="button" onClick={showHistory} className="inline-flex min-h-[36px] min-w-[36px] items-center justify-center rounded-xl border border-slate-200/80 bg-white text-slate-600 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-300 sm:w-auto sm:px-2.5 cursor-pointer" aria-label="Riwayat versi" title="Riwayat versi"><History className="h-3.5 w-3.5" /><span className="hidden text-[11px] xl:inline">Riwayat</span></button>
       <button type="button" onClick={showExport} className="inline-flex min-h-[36px] min-w-[36px] items-center justify-center rounded-xl border border-slate-200/80 bg-white text-slate-600 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-300 sm:w-auto sm:px-2.5 cursor-pointer" aria-label="Ekspor artifact" title="Ekspor artifact (Ctrl+E)"><Download className="h-3.5 w-3.5" /><span className="hidden text-[11px] xl:inline">Ekspor</span></button>

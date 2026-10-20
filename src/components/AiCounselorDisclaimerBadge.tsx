@@ -19,7 +19,7 @@ export const CounselorBadge: React.FC<DisclaimerProps> = ({ type, className = ''
         </div>
         {showDetails && (
           <span className="text-slate-600 text-[12px] leading-[1.4]">
-            Pendamping reflektif & suportif mahasiswa (non-klinis). Mendengarkan untuk memahami, bukan terburu-buru memperbaiki 🔐✨
+            Pendamping reflektif & suportif mahasiswa (non-klinis). Mendengarkan untuk memahami, bukan terburu-buru memperbaiki.
           </span>
         )}
       </div>
@@ -30,15 +30,15 @@ export const CounselorBadge: React.FC<DisclaimerProps> = ({ type, className = ''
     <div className={`space-y-2 ${className}`}>
       <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-800 border border-blue-200 shadow-xs">
         <UserCheck size={13} className="text-blue-600 shrink-0" />
-        <span>👨‍⚕️ Konselor Profesional Kampus (Tenaga Manusia)</span>
+        <span>Konselor Kampus (Tenaga Manusia)</span>
       </div>
       {showDetails && (
         <div className="p-3 bg-blue-50/50 border border-blue-200 rounded-lg text-xs text-blue-900 flex items-start gap-2">
           <Sparkles size={16} className="text-blue-600 shrink-0 mt-0.5" />
           <div>
-            <p className="font-semibold text-blue-950">Layanan Konseling Tatap Muka / Tele-Konseling Resmi:</p>
+            <p className="font-semibold text-blue-950">Konseling dengan konselor kampus:</p>
             <p>
-              Konseling langsung bersama konselor kampus. Kerahasiaan data dan identitas Anda dilindungi secara profesional.
+              Sebelum berbagi informasi sensitif, tanyakan cakupan akses data, aturan privasi, biaya, dan tindak lanjut kepada layanan kampus.
             </p>
           </div>
         </div>

@@ -18,6 +18,7 @@ import { CHAT_COMMANDS, CHAT_PLUGINS } from '../constants/commands';
 import { Attachment } from '../types';
 import { useToast } from '../../../components/Toast';
 import { useComposerVoiceInput } from '../hooks/useComposerVoiceInput';
+import { readGuestAiConsent } from '../../../lib/guestAiConsent';
 
 interface Props {
   onSend: (msg: string, plugin?: string, attachments?: Attachment[]) => void | boolean;
@@ -25,7 +26,10 @@ interface Props {
   onStop: () => void;
   aiConsentAllowed?: boolean | null;
   aiConsentPromptOpen?: boolean;
+  onRequestAiConsent?: () => void;
+  isTemporary?: boolean;
   chatId?: string;
+  draftOwnerId?: string;
   onCommand?: (cmd: string) => void;
   onOpenPlugin?: (pluginId: string) => void;
   quotaExceeded?: boolean;
@@ -37,7 +41,10 @@ export function ChatComposer({
   onStop,
   aiConsentAllowed = true,
   aiConsentPromptOpen = false,
+  onRequestAiConsent,
+  isTemporary = false,
   chatId,
+  draftOwnerId = 'guest',
   onCommand,
   onOpenPlugin,
   quotaExceeded = false
@@ -49,17 +56,35 @@ export function ChatComposer({
   const [showCommands, setShowCommands] = useState(false);
   const [selectedCmdIndex, setSelectedCmdIndex] = useState(0);
   const waitingForConsentRef = useRef(false);
+  const draftWasJustLoadedRef = useRef(false);
+  const wasTemporaryRef = useRef(isTemporary);
+  const isTemporaryRef = useRef(isTemporary);
+  isTemporaryRef.current = isTemporary;
   const { isListening, toggleListening } = useComposerVoiceInput(input, setInput);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const composerContainerRef = useRef<HTMLDivElement>(null);
+  const attachmentsRef = useRef<Attachment[]>([]);
+  attachmentsRef.current = attachments;
+  const draftStorageKey = `ruangtenang:chat-draft:${encodeURIComponent(draftOwnerId)}:${encodeURIComponent(chatId || 'new')}`;
+  useEffect(() => () => {
+    attachmentsRef.current.forEach(attachment => {
+      if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
+    });
+  }, []);
   // Load and persist draft per chat session
   useEffect(() => {
-    const draft = safeLocalStorage.getItem(`draft_${chatId || 'new'}`);
-    if (draft) setInput(draft);
+    const draft = isTemporaryRef.current ? null : safeLocalStorage.getItem(draftStorageKey);
+    draftWasJustLoadedRef.current = true;
+    wasTemporaryRef.current = isTemporaryRef.current;
+    if (isTemporaryRef.current) safeLocalStorage.removeItem(draftStorageKey);
+    setInput(draft || '');
+    attachmentsRef.current.forEach(attachment => {
+      if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
+    });
     setAttachments([]);
-  }, [chatId]);
+  }, [draftStorageKey]);
 
   useEffect(() => {
     if (!waitingForConsentRef.current) return;
@@ -76,17 +101,24 @@ export function ChatComposer({
       });
       return [];
     });
-    safeLocalStorage.removeItem(`draft_${chatId || 'new'}`);
+    safeLocalStorage.removeItem(draftStorageKey);
     setShowActionMenu(false);
     setShowCommands(false);
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
-  }, [aiConsentAllowed, aiConsentPromptOpen, chatId]);
+  }, [aiConsentAllowed, aiConsentPromptOpen, draftStorageKey]);
 
   useEffect(() => {
-    if (input.trim()) {
-      safeLocalStorage.setItem(`draft_${chatId || 'new'}`, input);
+    if (draftWasJustLoadedRef.current) {
+      draftWasJustLoadedRef.current = false;
+      return;
+    }
+    if (isTemporary || wasTemporaryRef.current) {
+      safeLocalStorage.removeItem(draftStorageKey);
+      wasTemporaryRef.current = isTemporary;
+    } else if (input.trim()) {
+      safeLocalStorage.setItem(draftStorageKey, input);
     } else {
-      safeLocalStorage.removeItem(`draft_${chatId || 'new'}`);
+      safeLocalStorage.removeItem(draftStorageKey);
     }
 
     // Auto-grow textarea smoothly from 40px up to 120px without layout jump
@@ -104,7 +136,7 @@ export function ChatComposer({
     const isSlash = input.startsWith('/');
     setShowCommands(isSlash);
     if (isSlash) setSelectedCmdIndex(0);
-  }, [input, chatId]);
+  }, [input, draftStorageKey, isTemporary]);
 
   // Click outside to dismiss open menus
   useEffect(() => {
@@ -138,8 +170,15 @@ export function ChatComposer({
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
+    if (aiConsentAllowed !== true) {
+      e.target.value = '';
+      onRequestAiConsent?.();
+      showToast('Setujui pemrosesan AI terlebih dahulu. Setelah itu, pilih ulang berkas yang ingin diunggah.', 'info');
+      return;
+    }
 
     if (attachments.length + files.length > 3) {
+      e.target.value = '';
       showToast('Maksimal 3 lampiran diperbolehkan dalam satu pesan.', 'warning');
       return;
     }
@@ -176,7 +215,10 @@ export function ChatComposer({
       const formData = new FormData();
       formData.append('files', file);
       const csrfCookie = document.cookie.match(/(?:^|; )XSRF-TOKEN=([^;]+)/)?.[1];
-      const uploadHeaders: Record<string, string> = { 'X-Requested-With': 'XMLHttpRequest' };
+      const uploadHeaders: Record<string, string> = {
+        'X-Requested-With': 'XMLHttpRequest',
+        'X-Guest-AI-Consent': String(readGuestAiConsent())
+      };
       if (csrfCookie) uploadHeaders['X-CSRF-Token'] = decodeURIComponent(csrfCookie);
 
       fetch('/api/v1/chat/attachments/upload', {
@@ -193,8 +235,12 @@ export function ChatComposer({
           return;
         }
         const uploadedAtt = data.attachment || (data.attachments && data.attachments[0]);
-        const isImage = file.type.startsWith('image/');
-        const status = isImage ? 'visual_ready' : (uploadedAtt?.ocrApplied ? 'visual_ready' : 'ready');
+        if (!uploadedAtt || typeof uploadedAtt.id !== 'string' || !uploadedAtt.id) {
+          setAttachments(prev => prev.map(a => a.id === id ? { ...a, status: 'error', errorMessage: 'Metadata berkas dari server tidak lengkap' } : a));
+          return;
+        }
+        const visualAnalysisAvailable = uploadedAtt.visualAnalysisAvailable === true;
+        const status = visualAnalysisAvailable ? 'visual_ready' : 'ready';
         setAttachments(prev => prev.map(a => a.id === id ? {
           ...a,
           status,
@@ -203,8 +249,9 @@ export function ChatComposer({
           mimeType: uploadedAtt.mimeType,
           size: uploadedAtt.size,
           url: uploadedAtt.url,
-          visualAnalysisAvailable: Boolean(uploadedAtt?.visualAnalysisAvailable || isImage),
-          ocrApplied: Boolean(uploadedAtt?.ocrApplied)
+          visualAnalysisAvailable,
+          ocrApplied: Boolean(uploadedAtt.ocrApplied),
+          previewOnly: Boolean(uploadedAtt.previewOnly)
         } : a));
       })
       .catch(() => {
@@ -228,7 +275,7 @@ export function ChatComposer({
 
   const handleExecuteCommand = (cmdStr: string) => {
     setInput('');
-    safeLocalStorage.removeItem(`draft_${chatId || 'new'}`);
+    safeLocalStorage.removeItem(draftStorageKey);
     setShowCommands(false);
     setShowActionMenu(false);
     if (textareaRef.current) {
@@ -253,6 +300,15 @@ export function ChatComposer({
     }
     if ((!input.trim() && attachments.length === 0) || isTyping) return;
 
+    if (attachments.some(attachment => attachment.status === 'uploading' || attachment.status === 'processing')) {
+      showToast('Tunggu sampai semua berkas selesai diunggah sebelum mengirim pesan.', 'info');
+      return;
+    }
+    if (attachments.some(attachment => attachment.status === 'error')) {
+      showToast('Hapus berkas yang gagal diunggah sebelum mengirim. Pesan belum dikirim.', 'warning');
+      return;
+    }
+
     if (input.startsWith('/')) {
       handleExecuteCommand(input.trim());
       return;
@@ -271,9 +327,12 @@ export function ChatComposer({
       return;
     }
 
+    attachments.forEach(attachment => {
+      if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
+    });
     setInput('');
     setAttachments([]);
-    safeLocalStorage.removeItem(`draft_${chatId || 'new'}`);
+    safeLocalStorage.removeItem(draftStorageKey);
     setShowActionMenu(false);
     setShowCommands(false);
 
@@ -403,7 +462,7 @@ export function ChatComposer({
               <div className="px-2 pb-1.5 mb-1 border-b border-stone-100 dark:border-slate-800 flex items-center justify-between">
                 <span className="text-xs font-semibold text-stone-700 dark:text-stone-300">Layanan & Fitur</span>
                 <span className="text-[10px] font-medium text-teal-700 dark:text-teal-300 bg-teal-50 dark:bg-teal-950/80 px-2 py-0.5 rounded-full border border-teal-200/60 dark:border-teal-800/60">
-                  Rahasia & Aman
+                  Proses berkas
                 </span>
               </div>
 
@@ -411,6 +470,12 @@ export function ChatComposer({
               <button
                 type="button"
                 onClick={() => {
+                  if (aiConsentAllowed !== true) {
+                    onRequestAiConsent?.();
+                    showToast('Setujui pemrosesan AI terlebih dahulu. Setelah itu, pilih ulang berkas yang ingin diunggah.', 'info');
+                    setShowActionMenu(false);
+                    return;
+                  }
                   fileInputRef.current?.click();
                   setShowActionMenu(false);
                 }}
@@ -456,7 +521,7 @@ export function ChatComposer({
               {/* Privacy Footer Reassurance */}
               <div className="mt-1.5 pt-1.5 border-t border-stone-100 dark:border-slate-800/80 flex items-center gap-1.5 px-2 text-[10.5px] text-stone-500 dark:text-slate-400">
                 <ShieldCheck className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 shrink-0" />
-                <span>Percakapan dilindungi dengan kontrol keamanan dan enkripsi penyimpanan.</span>
+                <span>Persetujuan AI diperlukan sebelum unggah. Berkas diproses server; OCR gambar atau hasil pindai dapat memakai provider cloud yang dikonfigurasi.</span>
               </div>
             </motion.div>
           )}
@@ -493,8 +558,8 @@ export function ChatComposer({
                   <div className="font-medium text-[11.5px] text-stone-800 dark:text-stone-200 truncate">{att.file.name}</div>
                   {att.status === 'uploading' && <div className="text-[10px] text-teal-600 dark:text-teal-400">Mengunggah...</div>}
                   {att.status === 'processing' && <div className="text-[10px] text-amber-500 dark:text-amber-400">Memproses...</div>}
-                  {att.status === 'visual_ready' && <div className="text-[10px] text-teal-600 dark:text-teal-400 font-medium">Analisis visual siap</div>}
-                  {att.status === 'ready' && <div className="text-[10px] text-emerald-600">Siap untuk pratinjau</div>}
+                  {att.status === 'visual_ready' && <div className="text-[10px] text-teal-600 dark:text-teal-400 font-medium">OCR visual tersedia</div>}
+                  {att.status === 'ready' && <div className="text-[10px] text-emerald-600">{att.previewOnly ? 'Pratinjau saja' : att.ocrApplied ? 'Teks OCR siap' : 'Berkas siap dikirim'}</div>}
                   {att.status === 'success' && <div className="text-[10px] text-emerald-600">Siap dikirim</div>}
                   {att.status === 'error' && <div className="text-[10px] text-rose-500 truncate">{att.errorMessage || 'Gagal diproses'}</div>}
                 </div>

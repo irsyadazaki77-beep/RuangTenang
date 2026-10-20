@@ -174,10 +174,9 @@ export const LegalDocsModal: React.FC<LegalDocsModalProps> = ({
                 <p>
                   RuangTenang adalah ekosistem kesehatan mental dan pendampingan
                   kesejahteraan psikologis terpadu yang dirancang khusus untuk
-                  sivitas akademika kampus. Platform ini memadukan teknologi
-                  kecerdasan buatan (AI) pendamping reflektif, alat skrining
-                  mandiri tervalidasi (PHQ-9 & GAD-7), serta sistem rujukan
-                  langsung ke konselor profesional kampus.
+                  sivitas akademika kampus. Platform ini menyediakan fitur
+                  refleksi dengan AI, skrining mandiri PHQ-9 dan GAD-7, catatan
+                  kesejahteraan, serta akses ke direktori konselor kampus.
                 </p>
                 <div className="p-4 bg-slate-50 rounded-xl text-slate-600 space-y-2">
                   <p className="font-medium text-slate-900">
@@ -185,15 +184,13 @@ export const LegalDocsModal: React.FC<LegalDocsModalProps> = ({
                   </p>
                   <ul className="list-disc list-inside space-y-1.5 ml-1">
                     <li>
-                      Menyediakan ruang aman tanpa stigma bagi mahasiswa untuk
-                      mengekspresikan emosi.
+                      Menyediakan fitur untuk mencatat atau merefleksikan pengalaman sehari-hari.
                     </li>
                     <li>
-                      Memfasilitasi deteksi dini kecemasan dan depresi akademis.
+                      Menampilkan hasil skrining mandiri sebagai bahan pertimbangan, bukan diagnosis.
                     </li>
                     <li>
-                      Menghubungkan mahasiswa dengan konselor manusia
-                      dengan sistem penjadwalan transparan.
+                      Membantu pengguna menemukan informasi konselor dan mengajukan janji sesuai layanan kampus yang tersedia.
                     </li>
                   </ul>
                 </div>
@@ -203,20 +200,17 @@ export const LegalDocsModal: React.FC<LegalDocsModalProps> = ({
             {activeTab === "privacy" && (
               <section className="space-y-4">
                 <h3 className="text-base font-medium text-slate-900 flex items-center gap-2">
-                  <Lock className="w-5 h-5 text-slate-800" /> Kebijakan Privasi
-                  & Enkripsi Data
+                  <Lock className="w-5 h-5 text-slate-800" /> Privasi dan Pemrosesan Data
                 </h3>
                 <p>
-                  Kami menerapkan prinsip <strong>Privacy by Design</strong>.
-                  Data pribadi Anda terlindungi dengan standar enkripsi tinggi
-                  dan asas minimisasi data.
+                  Informasi ini merangkum perilaku aplikasi yang dikonfigurasi. Ini bukan jaminan bahwa data tidak dapat diakses di server, cadangan, atau log infrastruktur.
                 </p>
                 <div className="space-y-3">
                   <div className="p-4 bg-slate-50 rounded-xl">
                     <strong className="text-slate-900 block mb-1">
                       Pemrosesan dan Penyimpanan:
                     </strong>
-                    Percakapan akun, skrining, mood, dan data layanan tertentu disimpan di server RuangTenang. Sebagian preferensi disimpan di perangkat. Data AI dikirim ke provider sesuai model yang dipakai.
+                    Percakapan akun, skrining, mood, janji temu, dan file unggahan dapat diproses atau disimpan di server aplikasi. Pesan chat dikirim ke endpoint model yang dipilih. File perlu persetujuan AI sebelum diunggah; OCR gambar/hasil pindai dapat memakai Gemini/OpenAI terpisah dari model chat. Memilih Ollama tidak otomatis memindahkan file atau mematikan OCR cloud.
                   </div>
                   <div className="p-4 bg-slate-50 rounded-xl">
                     <strong className="text-slate-900 block mb-1">
@@ -248,9 +242,7 @@ export const LegalDocsModal: React.FC<LegalDocsModalProps> = ({
                     identitas, atau penyalahgunaan sistem.
                   </li>
                   <li>
-                    Segala bentuk ancaman terhadap diri sendiri atau orang lain
-                    akan memicu protokol krisis internal untuk keselamatan
-                    pengguna.
+                    Skrining atau pemeriksaan keselamatan otomatis tidak selalu mengenali situasi berbahaya dan tidak otomatis menghubungi konselor atau layanan darurat. Jika ada bahaya langsung, gunakan Pusat Bantuan Krisis atau hubungi layanan darurat.
                   </li>
                 </ol>
               </section>
@@ -262,11 +254,11 @@ export const LegalDocsModal: React.FC<LegalDocsModalProps> = ({
                   <ShieldCheck className="w-5 h-5 text-slate-800" /> Persetujuan
                   Pemrosesan Data (Data Consent)
                 </h3>
-                <p>Sesuai Undang-Undang Perlindungan Data Pribadi (UU PDP):</p>
+                <p>Periksa pilihan persetujuan pada Pusat Privasi sebelum memakai fitur yang memproses data.</p>
                 <div className="p-4 bg-slate-50 rounded-xl space-y-2">
                   <div className="flex items-center gap-2 font-medium text-slate-900">
                     <CheckCircle2 className="w-5 h-5 text-teal-600" />{" "}
-                    Anonimisasi Otomatis
+                    Penyaringan teks terbatas
                   </div>
                   <p className="text-slate-600">
                     Pesan teks diperiksa dengan penyaring pola untuk beberapa jenis identitas. Penyaring ini tidak menjamin anonimisasi; nama, detail yang tidak dikenali, dan identitas dalam gambar/lampiran dapat tetap terkirim ke provider AI. Tinjau dan samarkan lampiran sebelum mengirim.
@@ -318,16 +310,13 @@ export const LegalDocsModal: React.FC<LegalDocsModalProps> = ({
                 </p>
                 <ul className="list-disc list-inside space-y-1.5 pl-1">
                   <li>
-                    Menggunakan deteksi kata kunci berbasis emosi untuk
-                    merespons dengan empati.
+                    Dapat menggunakan pola teks untuk membantu memilih respons; hasilnya bisa keliru.
                   </li>
                   <li>
-                    Dilengkapi sistem proteksi prompt injection dan penyaringan
-                    materi berbahaya.
+                    Memiliki pemeriksaan keamanan, tetapi pemeriksaan otomatis dapat melewatkan atau salah menandai konten.
                   </li>
                   <li>
-                    Dibatasi secara ketat dari memberikan tindakan atau
-                    pertimbangan medis klinis.
+                    Tidak dirancang untuk memberi diagnosis atau resep; jawaban AI tetap dapat keliru.
                   </li>
                 </ul>
               </section>
@@ -340,29 +329,12 @@ export const LegalDocsModal: React.FC<LegalDocsModalProps> = ({
                   Pusat Konseling Kampus
                 </h3>
                 <div className="bg-slate-50 p-5 rounded-xl space-y-2">
-                  <p className="font-medium text-slate-900">
-                    Layanan Bimbingan & Konseling Virtual Kampus (Layanan
-                    Portals Resmi BK Digital 24/7)
-                  </p>
-                  <p>
-                    Akses Platform:{" "}
-                    <a
-                      href="#"
-                      className="text-slate-800 underline font-medium hover:text-slate-900"
-                    >
-                      portal-bk.virtual.kampus.ac.id
-                    </a>
-                  </p>
-                  <p>
-                    Email Pengelola:{" "}
-                    <a
-                      href="mailto:konseling@kampus.ac.id"
-                      className="text-slate-800 underline font-medium hover:text-slate-900"
-                    >
-                      konseling@kampus.ac.id
-                    </a>
-                  </p>
-                  <p>Telepon Office: (021) 786-3333 ext. 401</p>
+                  <p className="font-medium text-slate-900">Informasi layanan kampus</p>
+                  <p>Kontak, biaya, jam layanan, dan ketersediaan bergantung pada kampus Anda; aplikasi ini belum memiliki satu kontak kampus yang berlaku untuk semua pengguna.</p>
+                  <div className="flex flex-wrap gap-3 pt-1">
+                    <a href="/counselors" className="text-slate-800 underline font-medium hover:text-slate-900">Buka Direktori Konselor</a>
+                    <a href="/emergency" className="text-slate-800 underline font-medium hover:text-slate-900">Buka Pusat Bantuan Krisis</a>
+                  </div>
                 </div>
               </section>
             )}
@@ -373,24 +345,7 @@ export const LegalDocsModal: React.FC<LegalDocsModalProps> = ({
                   <AlertTriangle className="w-5 h-5 text-rose-600" /> Pelaporan
                   Masalah & Kerentanan Keamanan
                 </h3>
-                <p>
-                  Kami berkomitmen menjaga keamanan data seluruh pengguna.
-                  Apabila Anda menemukan celah keamanan, bug, atau potensi
-                  kebocoran data, silakan laporkan ke Tim Keamanan Informasi
-                  Kampus:
-                </p>
-                <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl text-rose-600 space-y-1.5">
-                  <p className="font-medium text-slate-900">
-                    Email Laporan Keamanan & Bug Bounty:
-                  </p>
-                  <p className="font-mono text-sm font-medium">
-                    security-response@kampus.ac.id
-                  </p>
-                  <p className="text-xs text-rose-600 mt-1">
-                    Setiap laporan yang terverifikasi akan ditindaklanjuti dalam
-                    waktu maksimal 1x24 jam.
-                  </p>
-                </div>
+                <p>Kontak pelaporan keamanan belum dikonfigurasi di aplikasi ini. Jika menemukan masalah, hubungi pengelola aplikasi atau kampus melalui kanal resmi yang Anda ketahui.</p>
               </section>
             )}
           </main>
@@ -399,7 +354,7 @@ export const LegalDocsModal: React.FC<LegalDocsModalProps> = ({
         {/* Modal Footer */}
         <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between">
           <span className="text-xs text-slate-600">
-            Versi Layanan 2.4.0 • Terakhir Diperbarui: Agustus 2026
+            Ringkasan perilaku aplikasi saat ini
           </span>
           <button
             onClick={onClose}

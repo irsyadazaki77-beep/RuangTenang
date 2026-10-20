@@ -17,10 +17,13 @@ const MentalHealthArticles = lazyWithRetry(() => import('../../../components/Men
 const EmergencyCenter = lazyWithRetry(() => import('../../../components/EmergencyCenter').then(m => ({ default: m.EmergencyCenter })));
 
 export interface ChatModalContainerProps {
+  userId: string;
+  userCampusId?: string;
   activePlugin: string | null;
   onClosePlugin: () => void;
   onScreeningComplete: (score: any) => void;
   onTriggerSOS?: () => void;
+  onOpenPrivacyCenter?: () => void;
   // Summary modal
   isSummaryModalOpen: boolean;
   onCloseSummaryModal: () => void;
@@ -50,10 +53,13 @@ export interface ChatModalContainerProps {
 }
 
 export const ChatModalContainer: React.FC<ChatModalContainerProps> = ({
+  userId,
+  userCampusId,
   activePlugin,
   onClosePlugin,
   onScreeningComplete,
   onTriggerSOS,
+  onOpenPrivacyCenter,
   isSummaryModalOpen,
   onCloseSummaryModal,
   isBookmarksModalOpen,
@@ -88,8 +94,8 @@ export const ChatModalContainer: React.FC<ChatModalContainerProps> = ({
     switch (renderedPlugin) {
       case 'screening':
         return {
-          title: 'Skrining Mandiri Psikometri',
-          subtitle: 'Instrumen PHQ-9 & GAD-7 untuk deteksi dini',
+          title: 'Skrining Mandiri',
+          subtitle: 'PHQ-9 & GAD-7 untuk meninjau gejala; hasilnya bukan diagnosis',
           component: (
             <ScreeningModal
               isOpen={Boolean(activePlugin === 'screening')}
@@ -101,13 +107,13 @@ export const ChatModalContainer: React.FC<ChatModalContainerProps> = ({
         };
       case 'counselors':
         return {
-          title: 'Direktori Konselor & Psikolog Kampus',
-          subtitle: 'Jadwalkan sesi pendampingan psikologis terpercaya',
+          title: 'Direktori Konselor Kampus',
+          subtitle: 'Lihat profil dan jadwal yang tersedia; kebijakan layanan dapat berbeda.',
           component: (
             <CounselorDirectory
               onSelectCounselorForBooking={(counselor: any) => {
                 onClosePlugin();
-                navigate('/counselors', { state: { selectedCounselor: counselor } });
+                navigate('/counselors', { state: { selectedCounselor: counselor, selectedCounselorUserId: userId, selectedCounselorCampusId: userCampusId } });
               }}
             />
           ),
@@ -115,20 +121,20 @@ export const ChatModalContainer: React.FC<ChatModalContainerProps> = ({
       case 'mood':
         return {
           title: 'Progress & Mood Tracker',
-          subtitle: 'Pantau grafik emosi dan capaian harian Anda',
+          subtitle: 'Tinjau catatan suasana hati dan jurnal dari waktu ke waktu',
           component: <UserProgressTracker />,
         };
       case 'articles':
         return {
           title: 'Perpustakaan & Artikel Edukasi',
-          subtitle: 'Panduan psikologi praktis & manajemen stres',
+          subtitle: 'Materi edukasi umum dan latihan mandiri',
           component: <MentalHealthArticles />,
         };
       case 'emergency':
         return {
-          title: 'Pusat Bantuan Darurat SOS',
+          title: 'Pusat Bantuan Darurat',
           subtitle: 'Healing119, bantuan medis darurat, dan kontak darurat pribadi',
-          component: <EmergencyCenter onTriggerSOS={onTriggerSOS} />,
+          component: <EmergencyCenter onTriggerSOS={onTriggerSOS} onOpenPrivacyCenter={onOpenPrivacyCenter} />,
         };
       default:
         return null;

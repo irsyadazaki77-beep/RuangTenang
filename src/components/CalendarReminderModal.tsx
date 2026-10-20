@@ -83,32 +83,39 @@ export const CalendarReminderModal: React.FC<CalendarReminderModalProps> = ({
   };
 
   const handleRequestPermission = async () => {
-    if ('Notification' in window) {
+    if (!('Notification' in window)) {
+      onShowToast?.('Browser ini tidak mendukung notifikasi desktop.', 'error');
+      return;
+    }
+    try {
       const result = await Notification.requestPermission();
       setNotificationPermission(result);
       if (result === 'granted') {
-        if (onShowToast) {
-          onShowToast('Izin notifikasi browser berhasil diaktifkan!', 'success');
-        }
+        onShowToast?.('Izin notifikasi browser berhasil diaktifkan.', 'success');
         playNotificationChime();
       } else {
-        if (onShowToast) {
-          onShowToast('Izin notifikasi ditolak oleh browser. Anda tetap mendapatkan notifikasi in-app.', 'warning');
-        }
+        onShowToast?.('Izin notifikasi desktop ditolak. Pengingat in-app hanya dapat muncul saat halaman RuangTenang terbuka.', 'warning');
       }
+    } catch {
+      onShowToast?.('Browser gagal mengubah izin notifikasi. Periksa pengaturan situs di browser.', 'error');
     }
   };
 
   const handleTestNotification = () => {
-    setTestSent(true);
-    playNotificationChime();
-    triggerNativeNotification(
-      '🔔 Pengingat Sesi Konseling (Uji Coba)',
-      `Sesi konseling Anda dengan ${currentApt.counselorName} dijadwalkan pada ${timeData.formattedLocal}.`
-    );
-    if (onShowToast) {
-      onShowToast(`📢 Notifikasi Uji Coba Terkirim! (Suara Chime & Web Alert)`, 'info');
+    if (!('Notification' in window) || Notification.permission !== 'granted') {
+      onShowToast?.('Notifikasi desktop belum diizinkan. Aktifkan izin browser lalu coba lagi.', 'warning');
+      return;
     }
+    const displayed = triggerNativeNotification(
+      'Uji coba notifikasi RuangTenang',
+      'Notifikasi browser dapat ditampilkan di perangkat ini.',
+      'ruangtenang-reminder-test'
+    );
+    setTestSent(displayed);
+    onShowToast?.(
+      displayed ? 'Uji coba notifikasi ditampilkan oleh browser.' : 'Browser gagal menampilkan notifikasi uji coba.',
+      displayed ? 'success' : 'warning'
+    );
     setTimeout(() => setTestSent(false), 3000);
   };
 
@@ -134,10 +141,14 @@ export const CalendarReminderModal: React.FC<CalendarReminderModalProps> = ({
             <div>
               <h2 className="text-lg font-bold text-slate-900">Integrasi Kalender & Sistem Pengingat</h2>
               <p className="text-xs text-slate-500">
-                Ekspor acara dinamis ke kalender & atur jadwal notifikasi otomatis.
+                Ekspor acara ke kalender dan atur pengingat selama browser ini aktif.
               </p>
             </div>
           </div>
+        </div>
+
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-900" role="note">
+          Ekspor Google Calendar atau Outlook mengirim judul, waktu, lokasi, dan tautan sesi (jika tersedia) ke penyedia kalender tersebut. Topik pribadi tidak disertakan otomatis. Unduhan .ICS dibuat di perangkat ini; jika Anda membagikannya, penerima dapat melihat detail acara.
         </div>
 
         {/* APPOINTMENT SUMMARY CARD */}
@@ -202,7 +213,7 @@ export const CalendarReminderModal: React.FC<CalendarReminderModalProps> = ({
           <div className="flex items-center justify-between">
             <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
               <Bell className="w-3.5 h-3.5 text-slate-600" />
-              <span>Pengingat Otomatis (Scheduler)</span>
+              <span>Pengingat di Browser Ini</span>
             </h3>
             <span className="text-[10px] text-teal-700 font-semibold bg-teal-50 px-2 py-0.5 rounded border border-teal-200">
               H-24, H-1, H-30m, H-10m
@@ -285,7 +296,7 @@ export const CalendarReminderModal: React.FC<CalendarReminderModalProps> = ({
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <ShieldCheck className="w-4 h-4 text-slate-700" />
-              <span className="font-semibold text-slate-800">Notifikasi Push Browser:</span>
+              <span className="font-semibold text-slate-800">Izin notifikasi browser:</span>
             </div>
             <span className={`px-2 py-0.5 text-[10px] font-bold rounded ${
               notificationPermission === 'granted'
@@ -301,12 +312,16 @@ export const CalendarReminderModal: React.FC<CalendarReminderModalProps> = ({
               onClick={handleRequestPermission}
               className="w-full py-2.5 min-h-[44px] bg-amber-500 hover:bg-amber-600 active:scale-95 text-white font-semibold rounded-lg transition-all text-xs"
             >
-              Izinkan Notifikasi Push Browser
+              Izinkan Notifikasi Desktop
             </button>
           )}
 
+          <p className="text-[11px] leading-relaxed text-slate-600">
+            Pengingat dijalankan oleh browser saat halaman RuangTenang terbuka. Tab yang tidur atau browser tertutup dapat menunda atau melewatkannya; fitur ini bukan push terjadwal dari server.
+          </p>
+
           <div className="flex items-center justify-between pt-1 border-t border-slate-200">
-            <span className="text-slate-600">Uji coba pengingat suara & alert:</span>
+            <span className="text-slate-600">Uji coba notifikasi di perangkat ini:</span>
             <button
               onClick={handleTestNotification}
               disabled={testSent}

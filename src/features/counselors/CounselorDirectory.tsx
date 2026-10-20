@@ -70,9 +70,10 @@ export const CounselorDirectory: React.FC<CounselorDirectoryProps> = ({
       selectedConcernCategory.specialtyIds.some(id => cSpecialtyIds.includes(id));
 
     const matchesMethod = methodFilter === "Semua" || c.consultationType.includes(methodFilter as any);
-    const matchesCost = costFilter === "Semua" || (costFilter === "Gratis" ? c.isFreeForStudents : !c.isFreeForStudents);
-    const matchesCampus = campusFilter === "Semua" || c.university.includes(campusFilter);
-        const matchesAvailability = availabilityFilter === "Semua" || (availabilityFilter === "Hari Ini" ? c.availableToday : true);
+    const isFreeForStudents = c.isFreeForStudents || c.price === 0;
+    const matchesCost = costFilter === "Semua" || (costFilter === "Gratis" ? isFreeForStudents : !isFreeForStudents);
+    const matchesCampus = campusFilter === "Semua" || c.university.trim() === campusFilter;
+    const matchesAvailability = availabilityFilter === "Semua" || (availabilityFilter === "Hari Ini" ? c.availableToday : true);
 
     return matchesSearch && matchesConcern && matchesMethod && matchesCost && matchesCampus && matchesAvailability;
   });
@@ -90,8 +91,9 @@ export const CounselorDirectory: React.FC<CounselorDirectoryProps> = ({
           Temui Konselor & Psikolog
         </h2>
         <p className="text-xs sm:text-sm text-secondary leading-relaxed max-w-2xl">
-          Konseling profesional & rahasia untuk masalah skripsi, adaptasi
-          perkuliahan, kecemasan, atau masalah pribadi.
+          Lihat profil, fokus layanan, dan informasi akses untuk masalah skripsi,
+          adaptasi perkuliahan, kecemasan, atau hal pribadi. Kebijakan privasi
+          mengikuti layanan konselor atau kampus terkait.
         </p>
       </div>
 
@@ -168,20 +170,19 @@ export const CounselorDirectory: React.FC<CounselorDirectoryProps> = ({
               className="w-full sm:w-auto surface-card border border-default text-primary text-xs rounded-lg px-2.5 py-2 focus:outline-none focus:border-teal-500 min-h-[44px] sm:min-h-[38px]"
             >
               <option value="Semua">Semua Kampus</option>
-              <option value="UI">UI</option>
-              <option value="ITB">ITB</option>
-              <option value="UGM">UGM</option>
-              <option value="UNAIR">UNAIR</option>
+              {Array.from(new Set(counselors.map(counselor => counselor.university.trim()).filter(Boolean)))
+                .sort((a, b) => a.localeCompare(b, 'id'))
+                .map(university => <option key={university} value={university}>{university}</option>)}
             </select>
 
             <select
               value={availabilityFilter}
               onChange={(e) => setAvailabilityFilter(e.target.value)}
-              aria-label="Ketersediaan jadwal"
+              aria-label="Filter jadwal layanan rutin"
               className="w-full sm:w-auto surface-card border border-default text-primary text-xs rounded-lg px-2.5 py-2 focus:outline-none focus:border-teal-500 min-h-[44px] sm:min-h-[38px]"
             >
               <option value="Semua">Semua Ketersediaan</option>
-              <option value="Hari Ini">Tersedia Hari Ini</option>
+              <option value="Hari Ini">Jadwal rutin hari ini</option>
             </select>
 
             <div className="hidden sm:flex sm:flex-1" />
@@ -201,6 +202,7 @@ export const CounselorDirectory: React.FC<CounselorDirectoryProps> = ({
             </button>
           </div>
         )}
+        <p className="text-[11px] text-muted">Hari layanan mengikuti jadwal rutin konselor; slot yang masih kosong dikonfirmasi saat memilih tanggal.</p>
       </div>
 
       {/* Directory Grid */}
@@ -269,10 +271,10 @@ export const CounselorDirectory: React.FC<CounselorDirectoryProps> = ({
               {/* Essential Details: Available schedule, method, and 1 primary CTA */}
               <div className="pt-3 border-t border-default space-y-3">
                 <div className="flex items-center justify-between text-xs sm:text-sm">
-                  <span className="text-secondary text-xs">Sesi Terdekat</span>
+                  <span className="text-secondary text-xs">Hari layanan rutin</span>
                   <span className="font-medium text-primary text-xs flex items-center gap-1.5 surface-muted px-2 py-0.5 rounded-md">
                     <Calendar className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
-                    {counselor.nextAvailableSlot}
+                    {counselor.availableDays?.filter(Boolean).join(', ') || 'Jadwal belum diatur'}
                   </span>
                 </div>
 

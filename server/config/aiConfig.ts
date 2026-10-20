@@ -57,6 +57,6 @@ export function getGenAIClient(): GoogleGenAI | null {
 export const getAiClient = getGenAIClient;
 
 export function isAiAvailable(): boolean {
-  return (['openai', 'gemini', 'deepseek', 'groq', 'openrouter'] as const)
+  return (['openai', 'gemini', 'deepseek', 'groq', 'openrouter', 'ollama'] as const)
     .some(provider => aiProviderConfig.isConfigured(provider));
 }

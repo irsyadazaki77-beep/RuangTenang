@@ -22,6 +22,7 @@ import {
 export { createAppointmentSchema, updateAppointmentSchema, rescheduleAppointmentSchema };
 
 const router = Router();
+const SLOT_UNAVAILABLE_MESSAGE = 'Konselor tidak membuka jadwal pada hari atau jam ini. Pilih slot dari ketersediaan terbaru.';
 
 // EventEmitter for real-time appointment updates
 export const appointmentEvents = new EventEmitter();
@@ -143,7 +144,10 @@ async function mapAppointmentForViewer(appt: any, viewer: NonNullable<Request['u
   const consent = isCounselor && appt.userId
     ? await consentService.getUserConsents(appt.userId)
     : null;
-  const includeNotes = isOwner || (isCounselor && (!isScreeningReferral || consent?.consentForCounselorSharing === true));
+  // Completed appointment notes may contain counselor-authored clinical details.
+  // Keep those out of the student's appointment payload until intake and clinical notes are separate fields.
+  const includeNotes = (isOwner && appt.status !== 'COMPLETED')
+    || (isCounselor && (!isScreeningReferral || consent?.consentForCounselorSharing === true));
   return mapAppointmentToResponse(appt, role === 'admin', includeNotes);
 }
 
@@ -153,7 +157,11 @@ const AvailabilityQuerySchema = z.object({
   }).min(1, 'counselorId tidak boleh kosong'),
   date: z.string({
     message: 'date wajib diisi'
-  }).regex(/^\d{4}-\d{2}-\d{2}$/, 'Format tanggal harus YYYY-MM-DD')
+  }).regex(/^\d{4}-\d{2}-\d{2}$/, 'Format tanggal harus YYYY-MM-DD').refine(value => {
+    const date = new Date(`${value}T00:00:00.000Z`);
+    return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
+  }, 'Tanggal kalender tidak valid.'),
+  timezone: z.enum(['WIB', 'WITA', 'WIT']).optional().default('WIB')
 });
 
 // Middleware for strict Appointment & Room Access Authorization
@@ -261,12 +269,15 @@ router.get(['/availability', '/appointments/availability'], requireAuth, async (
       });
     }
 
-    const { counselorId, date } = parsed.data;
+    const { counselorId, date, timezone } = parsed.data;
     const counselor = await prisma.counselors.findUnique({ where: { id: counselorId }, select: { campusId: true } });
     if (!counselor || (normalizeRole(req.user!.role) !== 'admin' && counselor.campusId !== (req.user!.campusId ?? null))) {
       return res.status(404).json({ success: false, error: 'COUNSELOR_NOT_FOUND', message: 'Konselor tidak tersedia di kampus Anda.' });
     }
-    const availability = await serverDb.getAppointmentAvailability(counselorId, date);
+    if (date < getTodayInAppointmentTimezone(timezone)) {
+      return res.status(400).json({ success: false, code: 'DATE_IN_PAST', error: 'Tanggal sudah lewat pada zona waktu yang dipilih. Pilih tanggal lain.' });
+    }
+    const availability = await serverDb.getAppointmentAvailability(counselorId, date, timezone);
     res.json(availability);
   } catch (err: any) {
     console.error('Error checking availability:', err);
@@ -566,6 +577,12 @@ router.post(['/', '/db/appointments'], requireAuth, requireRole(['mahasiswa', 'k
         error: 'Jadwal bentrok! Slot pada tanggal dan jam tersebut sudah dipesan oleh mahasiswa lain. Silakan pilih waktu yang berbeda.'
       });
     }
+    if (err.message === 'SLOT_EXPIRED') {
+      return res.status(400).json({ success: false, code: 'SLOT_EXPIRED', error: 'Slot sudah terlalu dekat atau telah lewat. Pilih slot lain yang masih tersedia.' });
+    }
+    if (err.message === 'SLOT_UNAVAILABLE') {
+      return res.status(409).json({ success: false, code: 'SLOT_UNAVAILABLE', error: SLOT_UNAVAILABLE_MESSAGE });
+    }
     if (err.message === 'INVALID_APPOINTMENT_DATETIME') return res.status(400).json({ success: false, error: err.message });
     // Avoid logging request fields or ORM error details that may echo private notes.
     console.error('[APPOINTMENT] CREATE_APPOINTMENT_FAILED');
@@ -747,6 +764,12 @@ router.put(['/:id', '/db/appointments/:id'], requireAuth, verifyAppointmentAcces
         error: 'Jadwal bentrok! Slot pada tanggal dan jam tersebut sudah terisi oleh jadwal lain.'
       });
     }
+    if (err.message === 'SLOT_EXPIRED') {
+      return res.status(400).json({ success: false, code: 'SLOT_EXPIRED', error: 'Slot sudah terlalu dekat atau telah lewat. Pilih slot lain yang masih tersedia.' });
+    }
+    if (err.message === 'SLOT_UNAVAILABLE') {
+      return res.status(409).json({ success: false, code: 'SLOT_UNAVAILABLE', error: SLOT_UNAVAILABLE_MESSAGE });
+    }
     if (err.code === 'P2034') {
       return res.status(409).json({ success: false, error: 'APPOINTMENT_CONCURRENT_UPDATE' });
     }
@@ -841,11 +864,21 @@ router.post(['/:id/reschedule', '/db/appointments/:id/reschedule'], requireAuth,
     const { date, time, timezone, reason } = parsed.data;
 
     // Validate future/today date (reject past dates)
-    const today = getTodayInAppointmentTimezone(timezone || 'WIB');
+    const targetTimezone = timezone || appt.timezone || 'WIB';
+    const today = getTodayInAppointmentTimezone(targetTimezone);
     if (date < today) {
       return res.status(400).json({
         success: false,
         error: 'Tanggal jadwal baru tidak boleh di masa lalu.'
+      });
+    }
+
+    const rescheduledAt = parseAppointmentToUtcDate(date, time, targetTimezone);
+    if (Number.isNaN(rescheduledAt.getTime()) || rescheduledAt.getTime() <= Date.now() + 5 * 60_000) {
+      return res.status(400).json({
+        success: false,
+        code: 'SLOT_EXPIRED',
+        error: 'Slot sudah terlalu dekat atau telah lewat. Pilih slot lain yang masih tersedia.'
       });
     }
 
@@ -900,6 +933,12 @@ router.post(['/:id/reschedule', '/db/appointments/:id/reschedule'], requireAuth,
         success: false,
         error: 'Jadwal bentrok! Slot pada tanggal dan jam baru tersebut sudah terisi oleh jadwal lain.'
       });
+    }
+    if (err.message === 'SLOT_EXPIRED') {
+      return res.status(400).json({ success: false, code: 'SLOT_EXPIRED', error: 'Slot sudah terlalu dekat atau telah lewat. Pilih slot lain yang masih tersedia.' });
+    }
+    if (err.message === 'SLOT_UNAVAILABLE') {
+      return res.status(409).json({ success: false, code: 'SLOT_UNAVAILABLE', error: SLOT_UNAVAILABLE_MESSAGE });
     }
     if (err.code === 'P2034') {
       return res.status(409).json({ success: false, error: 'APPOINTMENT_CONCURRENT_UPDATE' });

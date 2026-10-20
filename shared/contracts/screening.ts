@@ -2,6 +2,8 @@ import { z } from 'zod';
 import type { PhqSeverity, GadSeverity } from '../clinical/scoring.js';
 
 export const ScreeningSubmissionSchema = z.object({
+  /** Stable per-result key so retrying an uncertain save cannot create duplicate history rows. */
+  clientSubmissionId: z.string().regex(/^scr_[a-f0-9-]{36}$/i).optional(),
   phq9Score: z.number().int().min(0).max(27),
   gad7Score: z.number().int().min(0).max(21),
   // DEPRECATED + IGNORED: severity is always recomputed on the server from the shared engine.

@@ -205,6 +205,17 @@ export function useWorkspaceArtifacts({
     try {
       const previouslyConfirmed = confirmedArtifactsRef.current.get(savingArtifact.id);
       const isServerBacked = !!previouslyConfirmed || savingArtifact.persistenceStatus === 'persistent' || (!savingArtifact.persistenceStatus && !!savingArtifact.chatId);
+      // A queued autosave may have captured the same old version before the prior save
+      // completed. Rebase it on the latest confirmed version from this tab to avoid a
+      // false conflict; keep an explicitly newer base when resolving a server conflict.
+      const useExplicitBase = expectedVersion !== undefined
+        && (!previouslyConfirmed || expectedVersion > (previouslyConfirmed.version || 1));
+      const saveBaseVersion = useExplicitBase
+        ? expectedVersion
+        : previouslyConfirmed?.version ?? expectedVersion ?? savingArtifact.version ?? 1;
+      const saveBaseUpdatedAt = useExplicitBase
+        ? expectedUpdatedAt || savingArtifact.updatedAt
+        : previouslyConfirmed?.updatedAt || expectedUpdatedAt || savingArtifact.updatedAt;
       if (!isServerBacked) setArtifacts(prev => prev.map(a => a.id === savingArtifact.id ? { ...a, persistenceStatus: 'saving' } : a));
       const saved = !isServerBacked
         ? await persistArtifact({ ...savingArtifact, title: title || savingArtifact.title, content }, chatId)
@@ -215,8 +226,8 @@ export function useWorkspaceArtifacts({
             type: savingArtifact.type,
             chatId,
             createNewVersion: createVersionSnapshot,
-            expectedVersion: expectedVersion ?? previouslyConfirmed?.version ?? savingArtifact.version ?? 1,
-            expectedUpdatedAt: expectedUpdatedAt || previouslyConfirmed?.updatedAt || savingArtifact.updatedAt
+            expectedVersion: saveBaseVersion,
+            expectedUpdatedAt: saveBaseUpdatedAt
           });
 
       if (saved) {
@@ -245,7 +256,7 @@ export function useWorkspaceArtifacts({
           console.warn('[useWorkspaceArtifacts] Could not refresh conflicting artifact:', refreshError);
         }
       }
-      showToast('Draf masih tersimpan lokal. Penyimpanan ke Ruang Kerja belum berhasil.', 'error');
+      showToast('Penyimpanan ke server belum berhasil. Coba lagi sebelum meninggalkan Workspace.', 'error');
       throw err;
     } finally {
       release();

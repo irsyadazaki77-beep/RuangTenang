@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useId, useRef } from 'react';
 import {
   Sparkles,
   Pencil,
@@ -15,6 +15,7 @@ import {
   paraphraseAcademicText,
   calculateTextSimilarity
 } from '../utils/paraphraseEngine';
+import { useFocusTrap } from '../../../hooks/useFocusTrap';
 
 interface AcademicParaphraseModalProps {
   isOpen: boolean;
@@ -35,6 +36,10 @@ export const AcademicParaphraseModal: React.FC<AcademicParaphraseModalProps> = (
   const [editableOutput, setEditableOutput] = useState('');
   const [showSentenceBreakdown, setShowSentenceBreakdown] = useState(false);
   const [copied, setCopied] = useState(false);
+  const dialogTitleId = useId();
+  const dialogDescriptionId = useId();
+  const inputTextRef = useRef<HTMLTextAreaElement>(null);
+  const dialogRef = useFocusTrap<HTMLDivElement>({ isOpen, onClose, initialFocusRef: inputTextRef });
 
   useEffect(() => {
     if (initialText) {
@@ -92,8 +97,14 @@ export const AcademicParaphraseModal: React.FC<AcademicParaphraseModalProps> = (
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-xs animate-fade-in">
       <div
+        ref={dialogRef}
         className="w-full max-w-4xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-scale-up"
         onClick={e => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={dialogTitleId}
+        aria-describedby={dialogDescriptionId}
+        tabIndex={-1}
       >
         {/* Header */}
         <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
@@ -102,20 +113,22 @@ export const AcademicParaphraseModal: React.FC<AcademicParaphraseModalProps> = (
               <Pencil className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="font-bold text-base sm:text-lg text-slate-900 dark:text-slate-100 flex items-center gap-2">
+              <h2 id={dialogTitleId} className="font-bold text-base sm:text-lg text-slate-900 dark:text-slate-100 flex items-center gap-2">
                 <span>Academic Rewriting & Similarity Estimator</span>
                 <span className="text-[10.5px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-200 border border-emerald-300 dark:border-emerald-800">
                   Bantuan Penulisan
                 </span>
               </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
+              <p id={dialogDescriptionId} className="text-xs text-slate-500 dark:text-slate-400">
                 Penyuntingan konservatif dengan indikator kemiripan kalimat (Levenshtein & N-Gram overlap) secara langsung
               </p>
             </div>
           </div>
 
           <button
+            type="button"
             onClick={onClose}
+            aria-label="Tutup bantuan penulisan akademik"
             className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
           >
             <X className="w-5 h-5" />
@@ -188,8 +201,10 @@ export const AcademicParaphraseModal: React.FC<AcademicParaphraseModalProps> = (
               </span>
             </div>
             <textarea
+              ref={inputTextRef}
               value={inputText}
               onChange={e => setInputText(e.target.value)}
+              aria-label="Teks asli untuk disunting"
               placeholder="Ketik atau tempelkan draf kalimat/paragraf skripsi di sini..."
               rows={8}
               className="w-full flex-1 min-h-[160px] text-xs sm:text-sm bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl p-3.5 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-all placeholder:text-slate-400 resize-none font-sans leading-relaxed"

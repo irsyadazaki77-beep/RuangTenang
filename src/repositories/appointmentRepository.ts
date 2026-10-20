@@ -11,19 +11,24 @@ const SERIALIZABLE_TX_OPTIONS = process.env.DATABASE_URL?.startsWith('postgres')
   ? { isolationLevel: 'Serializable' as const }
   : undefined;
 const INDONESIAN_WEEKDAYS = ['minggu', 'senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu'];
+const APPOINTMENT_SLOT_TIMES = ['09:00', '10:30', '14:00', '16:00'] as const;
+
+function parseCounselorAvailability(availability: string): string[] {
+  try {
+    const parsed: unknown = JSON.parse(availability);
+    if (Array.isArray(parsed)) return parsed.filter((entry): entry is string => typeof entry === 'string').map(entry => entry.trim()).filter(Boolean);
+    if (typeof parsed === 'string' && parsed.trim()) return parsed.split(/[;,]/).map(entry => entry.trim()).filter(Boolean);
+    return [];
+  } catch {
+    return availability.split(/[;,]/).map(entry => entry.trim()).filter(Boolean);
+  }
+}
 
 function getConfiguredCounselorWeekdays(availability: string): Set<string> {
-  try {
-    const entries: unknown = JSON.parse(availability);
-    if (!Array.isArray(entries)) return new Set();
-    const weekdays = entries
-      .filter((entry): entry is string => typeof entry === 'string')
-      .map(entry => entry.trim().toLocaleLowerCase('id-ID'))
-      .filter(entry => INDONESIAN_WEEKDAYS.includes(entry));
-    return new Set(weekdays);
-  } catch {
-    return new Set();
-  }
+  const weekdays = parseCounselorAvailability(availability)
+    .map(entry => entry.toLocaleLowerCase('id-ID'))
+    .filter(entry => INDONESIAN_WEEKDAYS.includes(entry));
+  return new Set(weekdays);
 }
 
 function getIndonesianWeekday(date: string): string | null {
@@ -35,9 +40,17 @@ function getIndonesianWeekday(date: string): string | null {
 
 export function isCounselorScheduledOnDate(availability: string, date: string): boolean {
   const configuredWeekdays = getConfiguredCounselorWeekdays(availability);
-  if (configuredWeekdays.size === 0) return true;
   const requestedWeekday = getIndonesianWeekday(date);
-  return requestedWeekday !== null && configuredWeekdays.has(requestedWeekday);
+  if (!requestedWeekday) return false;
+  if (configuredWeekdays.size > 0) return configuredWeekdays.has(requestedWeekday);
+
+  // Keep older profiles that stored daily clock hours usable, while treating an empty or invalid schedule as unavailable.
+  const legacyDailyHours = parseCounselorAvailability(availability);
+  return legacyDailyHours.length > 0 && legacyDailyHours.every(entry => /^([01]\d|2[0-3]):[0-5]\d$/.test(entry));
+}
+
+function isOfferedAppointmentTime(time: string): boolean {
+  return APPOINTMENT_SLOT_TIMES.some(slot => slot === time);
 }
 
 /**
@@ -65,6 +78,15 @@ export function utcToLocalAppointmentFields(scheduledAt: Date, tz: string = 'WIB
   const timeMatch = isoString.split('T')[1].match(/^(\d{2}):(\d{2})/);
   const time = timeMatch ? `${timeMatch[1]}:${timeMatch[2]}` : '09:00';
   return { date, time, timezone: tz as "WIB" | "WITA" | "WIT" };
+}
+
+async function clearAppointmentAvailabilityCache(counselorId: string, date: string): Promise<void> {
+  await Promise.all([
+    redisService.del(`availability:${counselorId}:${date}`),
+    ...(['WIB', 'WITA', 'WIT'] as const).map(timezone =>
+      redisService.del(`availability:${counselorId}:${date}:${timezone}`)
+    )
+  ]);
 }
 
 /**
@@ -235,8 +257,8 @@ export class AppointmentRepository {
    * @param counselorId - ID of the target counselor.
    * @param date - Date string in YYYY-MM-DD format.
    */
-  async getAppointmentAvailability(counselorId: string, date: string) {
-    const cacheKey = `availability:${counselorId}:${date}`;
+  async getAppointmentAvailability(counselorId: string, date: string, timezone: 'WIB' | 'WITA' | 'WIT' = 'WIB') {
+    const cacheKey = `availability:${counselorId}:${date}:${timezone}`;
     const cached = await redisService.get<any>(cacheKey);
     if (cached) {
       return cached;
@@ -246,37 +268,46 @@ export class AppointmentRepository {
       where: { id: counselorId },
       select: { availability: true },
     });
-    const isScheduledDay = counselor ? isCounselorScheduledOnDate(counselor.availability, date) : true;
-    const standardSlots = isScheduledDay ? ["09:00", "10:30", "14:00", "16:00"] : [];
-    const tz = 'WIB';
-    const slotTimes = standardSlots.map(time => calculateScheduledAtUtc(date, time, tz));
-
-    const activeSlots = await prisma.appointmentSlot.findMany({
+    const isScheduledDay = counselor ? isCounselorScheduledOnDate(counselor.availability, date) : false;
+    const standardSlots = isScheduledDay ? [...APPOINTMENT_SLOT_TIMES] : [];
+    const slotTimes = standardSlots.map(time => calculateScheduledAtUtc(date, time, timezone));
+    const sessionWindowMs = DEFAULT_SESSION_DURATION_MINUTES * 60_000;
+    const minimumStartTime = Date.now() + 5 * 60_000;
+    const candidateSlots = standardSlots
+      .map((time, index) => ({ time, scheduledAt: slotTimes[index] }))
+      .filter(slot => slot.scheduledAt.getTime() > minimumStartTime);
+    const activeAppointments = candidateSlots.length ? await prisma.appointments.findMany({
       where: {
         counselorId,
-        scheduledAt: { in: slotTimes },
+        scheduledAt: {
+          gt: new Date(Math.min(...candidateSlots.map(slot => slot.scheduledAt.getTime())) - sessionWindowMs),
+          lt: new Date(Math.max(...candidateSlots.map(slot => slot.scheduledAt.getTime())) + sessionWindowMs),
+        },
+        status: { notIn: ['CANCELLED', 'REJECTED'] },
       },
-    });
+      select: { scheduledAt: true },
+    }) : [];
 
-    const bookedSlots = activeSlots.map((s) => {
-      const fields = utcToLocalAppointmentFields(new Date(s.scheduledAt), tz);
-      return fields.time;
-    });
-
-    const availableSlots = standardSlots.filter(
-      (slot) => !bookedSlots.includes(slot),
-    );
+    const bookedSlots = candidateSlots.filter(slot => {
+      const candidateTime = slot.scheduledAt.getTime();
+      return activeAppointments.some(appointment => {
+        const existingTime = new Date(appointment.scheduledAt).getTime();
+        return existingTime > candidateTime - sessionWindowMs && existingTime < candidateTime + sessionWindowMs;
+      });
+    }).map(slot => slot.time);
+    const availableSlots = candidateSlots.map(slot => slot.time).filter(slot => !bookedSlots.includes(slot));
 
     const result = {
       counselorId,
       date,
+      timezone,
       allSlots: standardSlots,
       bookedSlots,
       availableSlots,
       fullyBooked: availableSlots.length === 0,
     };
 
-    await redisService.set(cacheKey, result, 60);
+    await redisService.set(cacheKey, result, 15);
 
     return result;
   }
@@ -350,9 +381,13 @@ export class AppointmentRepository {
       const scheduledAt = calculateScheduledAtUtc(appt.date, appt.time, appt.timezone || "WIB");
 
       // Validate slot timing: expired/past slots cannot be booked in production
-      const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
-      if (process.env.NODE_ENV !== 'test' && process.env.VITEST !== 'true' && scheduledAt.getTime() < fiveMinutesAgo) {
+      const minimumStartTime = Date.now() + 5 * 60 * 1000;
+      if (process.env.NODE_ENV !== 'test' && process.env.VITEST !== 'true' && scheduledAt.getTime() <= minimumStartTime) {
         throw new Error("SLOT_EXPIRED");
+      }
+
+      if (!isCancelledOrRejected && (!isCounselorScheduledOnDate(counselorRecord.availability, appt.date) || !isOfferedAppointmentTime(appt.time))) {
+        throw new Error('SLOT_UNAVAILABLE');
       }
 
       // Check slot availability
@@ -432,7 +467,7 @@ export class AppointmentRepository {
         console.warn("Non-fatal audit log failure in transaction:", logErr);
       }
 
-      await redisService.del(`availability:${resolvedCounselorId}:${appt.date}`);
+      await clearAppointmentAvailabilityCache(resolvedCounselorId, appt.date);
 
       return mapDbAppointmentToRecord(created);
     }, SERIALIZABLE_TX_OPTIONS);
@@ -465,18 +500,30 @@ export class AppointmentRepository {
       const isChangingSlot =
         (updates.date && updates.date !== currentFields.date) ||
         (updates.time && updates.time !== currentFields.time) ||
+        (updates.timezone !== undefined && updates.timezone !== currentTimezone) ||
         (updates.counselorId && updates.counselorId !== current.counselorId);
 
       const wasCancelledOrRejected = ["CANCELLED", "REJECTED"].includes(current.status);
 
       const targetTimezone = updates.timezone || currentTimezone || "WIB";
       const scheduledAt = calculateScheduledAtUtc(targetDate, targetTime, targetTimezone);
+      const confirmingAppointment = updates.status === 'CONFIRMED' && current.status !== 'CONFIRMED';
+      if (!isCancelledOrRejected && (isChangingSlot || confirmingAppointment) && process.env.NODE_ENV !== 'test' && process.env.VITEST !== 'true' && scheduledAt.getTime() <= Date.now() + 5 * 60_000) {
+        throw new Error('SLOT_EXPIRED');
+      }
+      const shouldReserveSlot = !isCancelledOrRejected && (isChangingSlot || wasCancelledOrRejected || confirmingAppointment);
+      if (shouldReserveSlot) {
+        const targetCounselor = await tx.counselors.findUnique({ where: { id: targetCounselorId }, select: { availability: true } });
+        if (!targetCounselor || !isCounselorScheduledOnDate(targetCounselor.availability, targetDate) || !isOfferedAppointmentTime(targetTime)) {
+          throw new Error('SLOT_UNAVAILABLE');
+        }
+      }
 
       if (isCancelledOrRejected) {
         await tx.appointmentSlot.deleteMany({
           where: { appointmentId: id },
         });
-      } else if (isChangingSlot || wasCancelledOrRejected) {
+      } else if (isChangingSlot || wasCancelledOrRejected || confirmingAppointment) {
         await tx.appointmentSlot.deleteMany({
           where: { appointmentId: id },
         });
@@ -579,9 +626,9 @@ export class AppointmentRepository {
         console.warn("Non-fatal audit log failure in transaction:", logErr);
       }
 
-      await redisService.del(`availability:${current.counselorId}:${currentFields.date}`);
+      await clearAppointmentAvailabilityCache(current.counselorId, currentFields.date);
       if (targetCounselorId !== current.counselorId || targetDate !== currentFields.date) {
-        await redisService.del(`availability:${targetCounselorId}:${targetDate}`);
+        await clearAppointmentAvailabilityCache(targetCounselorId, targetDate);
       }
 
       return mapDbAppointmentToRecord(updated);
@@ -618,8 +665,8 @@ export class AppointmentRepository {
         });
 
         if (appt) {
-          const apptFields = utcToLocalAppointmentFields(new Date(appt.scheduledAt), 'WIB');
-          await redisService.del(`availability:${appt.counselorId}:${apptFields.date}`);
+          const apptFields = utcToLocalAppointmentFields(new Date(appt.scheduledAt), appt.timezone || 'WIB');
+          await clearAppointmentAvailabilityCache(appt.counselorId, apptFields.date);
         }
       });
 

@@ -3,6 +3,8 @@ import React, { useState, useEffect } from 'react';
 import { XCircle, AlertCircle, Clock } from 'lucide-react';
 import { Appointment } from '../../types';
 import { apiClient } from '../../lib/apiClient';
+import { getAppointmentDateInputValue } from '../../lib/appointmentTime';
+import { parseAppointmentDateTime } from '../../lib/calendarAndReminders';
 
 interface RescheduleModalProps {
   appointment: Appointment | null;
@@ -20,15 +22,18 @@ export const RescheduleModal: React.FC<RescheduleModalProps> = ({
   const [rescheduleDate, setRescheduleDate] = useState('');
   const [rescheduleTime, setRescheduleTime] = useState('14:00');
   const [rescheduleTimezone, setRescheduleTimezone] = useState<'WIB' | 'WITA' | 'WIT'>('WIB');
-  const [availableSlots, setAvailableSlots] = useState<string[]>(['09:00', '10:30', '14:00', '16:00']);
+  const [availableSlots, setAvailableSlots] = useState<string[]>([]);
   const [isFullyBooked, setIsFullyBooked] = useState(false);
   const [isLoadingSlots, setIsLoadingSlots] = useState(false);
+  const [availabilityError, setAvailabilityError] = useState<string | null>(null);
+  const [availabilityRetry, setAvailabilityRetry] = useState(0);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     if (appointment) {
-      setRescheduleDate(appointment.date);
+      const minimumDate = getAppointmentDateInputValue(new Date(), appointment.timezone || 'WIB');
+      setRescheduleDate(appointment.date < minimumDate ? minimumDate : appointment.date);
       setRescheduleTime(appointment.timeSlot.split(' ')[0] || '14:00');
       setRescheduleTimezone(appointment.timezone || 'WIB');
       setErrorMsg(null);
@@ -36,47 +41,72 @@ export const RescheduleModal: React.FC<RescheduleModalProps> = ({
   }, [appointment]);
 
   useEffect(() => {
-    if (!appointment || !rescheduleDate) return;
+    if (!appointment || !rescheduleDate) {
+      setAvailableSlots([]);
+      setIsFullyBooked(false);
+      setIsLoadingSlots(false);
+      setAvailabilityError(null);
+      return;
+    }
     let isMounted = true;
     setIsLoadingSlots(true);
-    apiClient.get<{ availableSlots: string[] }>(`/api/v1/appointments/availability?counselorId=${appointment.counselorId}&date=${rescheduleDate}`)
+    setAvailableSlots([]);
+    setIsFullyBooked(false);
+    setAvailabilityError(null);
+    const query = new URLSearchParams({ counselorId: appointment.counselorId, date: rescheduleDate, timezone: rescheduleTimezone });
+    apiClient.get<{ availableSlots: string[] }>(`/api/v1/appointments/availability?${query.toString()}`)
       .then(res => {
         if (!isMounted) return;
-        setIsLoadingSlots(false);
         const data = res.data;
-        if (data && Array.isArray(data.availableSlots)) {
-          // If rescheduling to the same date, include the current booked time slot as available
-          const slots = [...data.availableSlots];
-          const currentTime = appointment.timeSlot.split(' ')[0];
-          if (rescheduleDate === appointment.date && !slots.includes(currentTime)) {
-            slots.push(currentTime);
-            slots.sort();
-          }
-          setAvailableSlots(slots);
-          setIsFullyBooked(slots.length === 0);
-          if (slots.length > 0) {
-            setRescheduleTime(current => slots.includes(current) ? current : slots[0]);
-          }
+        if (!res.success || !data || !Array.isArray(data.availableSlots)) {
+          throw new Error(res.error || 'Ketersediaan slot tidak dapat dimuat.');
         }
+        // Keep the current reservation selectable when the student keeps the same date.
+        const slots = [...data.availableSlots];
+        const currentTime = appointment.timeSlot.split(' ')[0];
+        const currentReservationIsFuture = parseAppointmentDateTime(rescheduleDate, currentTime, rescheduleTimezone).startDate.getTime() > Date.now() + 5 * 60_000;
+        if (rescheduleDate === appointment.date && rescheduleTimezone === (appointment.timezone || 'WIB') && currentReservationIsFuture && !slots.includes(currentTime)) {
+          slots.push(currentTime);
+          slots.sort();
+        }
+        setAvailableSlots(slots);
+        setIsFullyBooked(slots.length === 0);
+        setIsLoadingSlots(false);
+        if (slots.length > 0) setRescheduleTime(current => slots.includes(current) ? current : slots[0]);
       })
       .catch(err => {
         if (!isMounted) return;
         setIsLoadingSlots(false);
+        setAvailableSlots([]);
+        setIsFullyBooked(false);
+        setAvailabilityError(err instanceof Error ? err.message : 'Ketersediaan slot gagal dimuat. Muat ulang slot sebelum menyimpan jadwal.');
         console.warn('Failed to fetch availability for reschedule:', err);
       });
 
     return () => {
       isMounted = false;
     };
-  }, [appointment, rescheduleDate]);
+  }, [appointment, rescheduleDate, rescheduleTimezone, availabilityRetry]);
 
   if (!appointment) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
+    if (isLoadingSlots) {
+      setErrorMsg('Tunggu sampai pemeriksaan ketersediaan slot selesai.');
+      return;
+    }
+    if (availabilityError) {
+      setErrorMsg(availabilityError);
+      return;
+    }
     if (isFullyBooked || availableSlots.length === 0) {
-      setErrorMsg('Semua slot jadwal pada tanggal ini telah penuh terisi.');
+      setErrorMsg('Tidak ada slot waktu yang dapat dipilih pada tanggal ini. Pilih tanggal lain.');
+      return;
+    }
+    if (!availableSlots.includes(rescheduleTime)) {
+      setErrorMsg('Pilih slot yang tersedia untuk tanggal tersebut.');
       return;
     }
 
@@ -126,7 +156,7 @@ export const RescheduleModal: React.FC<RescheduleModalProps> = ({
             <input
               type="date"
               required
-              min={new Date().toISOString().split('T')[0]}
+              min={getAppointmentDateInputValue(new Date(), rescheduleTimezone)}
               value={rescheduleDate}
               onChange={(e) => setRescheduleDate(e.target.value)}
               className="w-full surface-muted border border-default rounded-xl px-3.5 py-2 text-base sm:text-sm text-primary focus:outline-none focus:border-teal-600 focus:ring-1 focus:ring-teal-600 min-h-[44px]"
@@ -139,15 +169,19 @@ export const RescheduleModal: React.FC<RescheduleModalProps> = ({
               <select
                 value={rescheduleTime}
                 onChange={(e) => setRescheduleTime(e.target.value)}
-                disabled={isFullyBooked || availableSlots.length === 0}
+                disabled={isLoadingSlots || !!availabilityError || isFullyBooked || availableSlots.length === 0}
                 className="w-full surface-muted border border-default rounded-xl px-3.5 py-2 text-base sm:text-sm text-primary focus:outline-none focus:border-teal-600 focus:ring-1 focus:ring-teal-600 font-mono disabled:opacity-50 min-h-[44px]"
               >
-                {availableSlots.length > 0 ? (
+                {isLoadingSlots ? (
+                  <option value="">Memeriksa slot…</option>
+                ) : availabilityError ? (
+                  <option value="">Slot gagal dimuat</option>
+                ) : availableSlots.length > 0 ? (
                   availableSlots.map(slot => (
                     <option key={slot} value={slot}>{slot}</option>
                   ))
                 ) : (
-                  <option value="">(Penuh)</option>
+                  <option value="">Tidak tersedia</option>
                 )}
               </select>
             </div>
@@ -155,7 +189,12 @@ export const RescheduleModal: React.FC<RescheduleModalProps> = ({
               <label className="block font-semibold text-xs text-secondary">Zona Waktu:</label>
               <select
                 value={rescheduleTimezone}
-                onChange={(e) => setRescheduleTimezone(e.target.value as any)}
+                onChange={(e) => {
+                  const nextTimezone = e.target.value as 'WIB' | 'WITA' | 'WIT';
+                  const minimumDate = getAppointmentDateInputValue(new Date(), nextTimezone);
+                  setRescheduleTimezone(nextTimezone);
+                  setRescheduleDate(currentDate => currentDate < minimumDate ? minimumDate : currentDate);
+                }}
                 className="w-full surface-muted border border-default rounded-xl px-3.5 py-2 text-base sm:text-sm text-primary focus:outline-none focus:border-teal-600 focus:ring-1 focus:ring-teal-600 font-medium min-h-[44px]"
               >
                 <option value="WIB">WIB</option>
@@ -172,9 +211,17 @@ export const RescheduleModal: React.FC<RescheduleModalProps> = ({
               Slot tersedia ({rescheduleDate}):
             </span>
             <span className="font-semibold text-primary font-mono">
-              {isLoadingSlots ? '...' : isFullyBooked ? '0 Slot (Penuh)' : `${availableSlots.length} Slot`}
+              {isLoadingSlots ? 'Memeriksa…' : availabilityError ? 'Gagal dimuat' : isFullyBooked ? '0 Slot' : `${availableSlots.length} Slot`}
             </span>
           </div>
+          {availabilityError && (
+            <div className="flex items-center justify-between gap-3 text-xs text-rose-700 dark:text-rose-300" role="status" aria-live="polite">
+              <span>{availabilityError}</span>
+              <button type="button" onClick={() => setAvailabilityRetry(value => value + 1)} className="shrink-0 underline font-semibold" disabled={isLoadingSlots}>
+                Coba lagi
+              </button>
+            </div>
+          )}
 
           <div className="pt-3 border-t border-default flex justify-end gap-2.5 mt-5">
             <button
@@ -188,7 +235,7 @@ export const RescheduleModal: React.FC<RescheduleModalProps> = ({
             </button>
             <button
               type="submit"
-              disabled={isSaving || isFullyBooked || availableSlots.length === 0}
+              disabled={isSaving || isLoadingSlots || !!availabilityError || isFullyBooked || availableSlots.length === 0}
               className="px-5 py-2 min-h-[44px] bg-teal-700 hover:bg-teal-800 text-white text-xs sm:text-sm font-semibold rounded-xl shadow-3xs transition-all disabled:opacity-50 cursor-pointer active:scale-[0.98]"
             >
               {isSaving ? 'Menyimpan...' : 'Simpan Jadwal Baru'}

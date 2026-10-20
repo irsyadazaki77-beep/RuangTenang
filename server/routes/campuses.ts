@@ -9,6 +9,16 @@ import { CAMPUS_PRODUCT_EVENT_TYPES, recordCampusProductEvent, toSuppressedCampu
 const router = Router();
 const MINIMUM_ANALYTICS_COHORT = 10;
 const clientEventTypes = ['activation_completed', 'repeat_visit', 'referral_started', 'workflow_failed'] as const;
+const INDONESIAN_WEEKDAY_NAMES = ['minggu', 'senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu'] as const;
+const CANONICAL_WEEKDAY_NAME: Record<typeof INDONESIAN_WEEKDAY_NAMES[number], string> = {
+  minggu: 'Minggu',
+  senin: 'Senin',
+  selasa: 'Selasa',
+  rabu: 'Rabu',
+  kamis: 'Kamis',
+  jumat: 'Jumat',
+  sabtu: 'Sabtu'
+};
 
 const validTimeZone = (value: string) => {
   try {
@@ -58,7 +68,10 @@ const campusAdminSettingsSchema = z.object({
 const assignUserSchema = z.object({ campusId: z.string().min(1) }).strict();
 const clientEventSchema = z.object({ eventType: z.enum(clientEventTypes) }).strict();
 const updateCounselorSchema = z.object({
-  availability: z.array(z.string().trim().min(1).max(80)).max(14).optional(),
+  availability: z.array(z.string().trim().min(1).max(80))
+    .max(7)
+    .refine(values => values.every(value => INDONESIAN_WEEKDAY_NAMES.includes(value.toLocaleLowerCase('id-ID') as typeof INDONESIAN_WEEKDAY_NAMES[number])), 'Jadwal harus menggunakan nama hari Indonesia (Minggu sampai Sabtu).')
+    .optional(),
   specialties: z.array(z.string().trim().min(1).max(80)).max(12).optional(),
   isFreeForStudents: z.boolean().optional(),
   price: z.number().int().min(0).max(100000000).optional()
@@ -264,7 +277,10 @@ router.patch('/campus-admin/counselors/:counselorId', requireAuth, requireCampus
   if (!existing) return res.status(404).json({ success: false, error: 'COUNSELOR_NOT_FOUND' });
   const input = parsed.data;
   const data: Record<string, unknown> = {};
-  if (input.availability !== undefined) data.availability = JSON.stringify([...new Set(input.availability)]);
+  if (input.availability !== undefined) {
+    const canonicalDays = input.availability.map(value => CANONICAL_WEEKDAY_NAME[value.toLocaleLowerCase('id-ID') as typeof INDONESIAN_WEEKDAY_NAMES[number]]);
+    data.availability = JSON.stringify([...new Set(canonicalDays)]);
+  }
   if (input.specialties !== undefined) data.specialties = JSON.stringify([...new Set(input.specialties)]);
   if (input.isFreeForStudents !== undefined) data.isFreeForStudents = input.isFreeForStudents;
   if (input.price !== undefined) data.price = input.isFreeForStudents ? 0 : input.price;

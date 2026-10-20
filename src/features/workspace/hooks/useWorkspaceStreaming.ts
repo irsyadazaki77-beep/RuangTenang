@@ -164,7 +164,8 @@ export function useWorkspaceStreaming({
     config?: WorkspaceComposerConfig,
     requestSnapshotId?: string,
     includeWorkspaceFiles = true,
-    workspaceAttachmentIds?: string[]
+    workspaceAttachmentIds?: string[],
+    workspaceContext?: string
   ) => {
     if (!userPrompt.trim() || ['preparing', 'connecting', 'streaming', 'finalizing'].includes(statusRef.current)) return;
 
@@ -264,6 +265,7 @@ export function useWorkspaceStreaming({
         : userPrompt;
       await client.stream({
         message: formattedPrompt,
+        workspaceContext,
         chatId: chatId || undefined,
         isTemporary,
         workspaceMode: true,

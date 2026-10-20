@@ -36,9 +36,11 @@ export const GuestAiConsentNotice: React.FC<GuestAiConsentNoticeProps> = ({ chec
             <summary className="min-h-7 w-fit cursor-pointer rounded font-medium text-teal-900 underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 dark:text-teal-100">
               Pelajari cakupan dan privasi
             </summary>
-            <p className="pt-1">
-              Model mengikuti profil yang dipilih. Percakapan tidak dipantau langsung oleh konselor. Izin berlaku selama sesi browser ini; tanpa izin, pesan tidak dikirim ke penyedia AI.
-            </p>
+            <div className="space-y-1 pt-1">
+              <p>Model mengikuti profil dan konfigurasi server. Jika memakai Ollama, pesan dikirim ke endpoint yang dikonfigurasi; endpoint itu belum tentu berada di perangkatmu.</p>
+              <p>Percakapan tamu dapat disimpan sementara oleh aplikasi sesuai retensinya. Izin berlaku selama sesi browser ini; tanpa izin, pesan tidak dikirim ke penyedia AI.</p>
+              <p>Percakapan tidak dipantau langsung oleh konselor. Jika pencarian web diaktifkan dan digunakan, kueri yang disaring dapat dikirim ke layanan eksternal; penyaringan pola bukan anonimisasi yang terjamin.</p>
+            </div>
           </details>
         </div>
       </div>

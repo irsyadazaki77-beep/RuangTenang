@@ -84,7 +84,7 @@ export const ScreeningTrend: React.FC<ScreeningTrendProps> = ({
   const renderDelta = (delta: number) => {
     if (delta === 0) return (
       <span className="text-[11px] font-semibold text-teal-700 dark:text-teal-300 bg-teal-50 dark:bg-teal-950/50 px-2 py-0.5 rounded-md border border-teal-200 dark:border-teal-800 flex items-center gap-1">
-        <Minus className="w-3 h-3" /> Stabil
+        <Minus className="w-3 h-3" /> Tidak berubah
       </span>
     );
 
@@ -110,10 +110,10 @@ export const ScreeningTrend: React.FC<ScreeningTrendProps> = ({
         <div>
           <h2 className="text-lg sm:text-xl font-bold text-primary flex items-center gap-2">
             <Activity className="w-5 h-5 text-teal-600 dark:text-teal-400" />
-            <span>Tren Skrining Klinis (PHQ-9 & GAD-7)</span>
+            <span>Riwayat Skrining Mandiri (PHQ-9 & GAD-7)</span>
           </h2>
           <p className="text-xs sm:text-sm text-secondary mt-0.5">
-            Pantau trajektori tingkat gejala depresi dan kecemasan dari riwayat skrining mandiri.
+            Skor kedua instrumen ditampilkan sebagai catatan dari waktu ke waktu; hasilnya bukan diagnosis dan skala keduanya berbeda.
           </p>
         </div>
         <button
@@ -217,16 +217,16 @@ export const ScreeningTrend: React.FC<ScreeningTrendProps> = ({
               <Activity className="w-4 h-4" />
             </div>
             <span className="text-sm sm:text-base font-bold text-primary">
-              Trajektori Skor Skrining Berkala
+              Riwayat Skor Skrining
             </span>
           </div>
 
           <div className="flex flex-wrap items-center gap-4 text-xs font-medium">
             <span className="flex items-center gap-1.5 text-primary">
-              <span className="w-2.5 h-2.5 bg-rose-500 rounded-full" /> PHQ-9 (Depresi)
+              <span className="w-2.5 h-2.5 bg-rose-500 rounded-full" /> PHQ-9 (maks. 27)
             </span>
             <span className="flex items-center gap-1.5 text-primary">
-              <span className="w-2.5 h-2.5 bg-amber-500 rounded-full" /> GAD-7 (Kecemasan)
+              <span className="w-2.5 h-2.5 bg-amber-500 rounded-full" /> GAD-7 (maks. 21)
             </span>
 
             <div className="flex surface-muted rounded-lg p-0.5 border border-default">
@@ -262,7 +262,7 @@ export const ScreeningTrend: React.FC<ScreeningTrendProps> = ({
             <div>
               <p className="text-sm sm:text-base font-bold text-primary">Belum Ada Riwayat Tes Skrining</p>
               <p className="text-xs sm:text-sm text-secondary max-w-md mx-auto mt-1">
-                Lakukan tes skrining PHQ-9 & GAD-7 untuk memetakan grafik tingkat depresi dan kecemasan Anda secara berkala.
+                Lakukan skrining mandiri bila ingin mencatat skor dari waktu ke waktu. Hasilnya bukan diagnosis.
               </p>
             </div>
             <button
@@ -278,21 +278,10 @@ export const ScreeningTrend: React.FC<ScreeningTrendProps> = ({
             <div className="relative h-60 sm:h-72 min-w-[480px] w-full bg-slate-900 rounded-xl p-4 text-white overflow-hidden shadow-inner">
               {/* Horizontal reference lines */}
               <div className="absolute inset-0 flex flex-col justify-between text-[10px] text-slate-400 pointer-events-none pb-8 pt-4 px-4">
-                <div className="border-b border-slate-800 pb-1 flex justify-between">
-                  <span>20 (Parah / Krisis)</span>
-                  <span className="text-rose-400 font-medium">Ambang Krisis</span>
-                </div>
-                <div className="border-b border-slate-800 pb-1 flex justify-between">
-                  <span>10 (Sedang / Prioritas)</span>
-                  <span className="text-amber-400 font-medium">Ambang Prioritas</span>
-                </div>
-                <div className="border-b border-slate-800 pb-1 flex justify-between">
-                  <span>4 (Minimal / Stabil)</span>
-                  <span className="text-teal-400 font-medium">Ambang Stabil</span>
-                </div>
-                <div className="border-b border-slate-800 pb-1 flex justify-between">
-                  <span>0</span>
-                </div>
+                <div className="border-b border-slate-800 pb-1 flex justify-between"><span>Rentang maksimum tiap instrumen</span></div>
+                <div className="border-b border-slate-800 pb-1 flex justify-between"><span>Bagian atas rentang</span></div>
+                <div className="border-b border-slate-800 pb-1 flex justify-between"><span>Bagian bawah rentang</span></div>
+                <div className="border-b border-slate-800 pb-1 flex justify-between"><span>0</span></div>
               </div>
 
               {/* SVG Line Graph */}
@@ -380,8 +369,8 @@ export const ScreeningTrend: React.FC<ScreeningTrendProps> = ({
           <div className="w-full overflow-x-auto custom-scrollbar">
             <div className="relative h-60 sm:h-72 min-w-[480px] w-full bg-slate-900 rounded-xl p-4 text-white overflow-hidden shadow-inner">
               <div className="absolute inset-0 flex flex-col justify-between text-[10px] text-slate-400 pointer-events-none pb-8 pt-4 px-4">
-                <div className="border-b border-slate-800 pb-1 flex justify-between"><span>20 (Parah)</span></div>
-                <div className="border-b border-slate-800 pb-1 flex justify-between"><span>10 (Sedang)</span></div>
+                <div className="border-b border-slate-800 pb-1 flex justify-between"><span>100% rentang skor masing-masing</span></div>
+                <div className="border-b border-slate-800 pb-1 flex justify-between"><span>50% rentang skor masing-masing</span></div>
                 <div className="border-b border-slate-800 pb-1 flex justify-between"><span>0</span></div>
               </div>
 
@@ -433,7 +422,7 @@ export const ScreeningTrend: React.FC<ScreeningTrendProps> = ({
               <Moon className="w-4 h-4" />
             </div>
             <h3 className="font-bold text-primary text-sm sm:text-base">
-              Korelasi Durasi Tidur & Mood
+              Catatan Tidur & Mood
             </h3>
           </div>
 
@@ -444,8 +433,8 @@ export const ScreeningTrend: React.FC<ScreeningTrendProps> = ({
           ) : (
             <div className="relative h-44 sm:h-48 w-full flex items-end justify-between px-2 sm:px-4 pt-4 pb-6 surface-muted rounded-xl border border-default">
               <div className="absolute inset-0 flex flex-col justify-between text-[10px] text-muted pointer-events-none pb-6 pt-3 px-3">
-                <div className="border-b border-default pb-1 flex justify-between"><span>Tidur Cukup (8+ Jam) / Mood 5</span></div>
-                <div className="border-b border-default pb-1 flex justify-between"><span>Kurang Tidur (&lt;5 Jam) / Mood 1</span></div>
+                <div className="border-b border-default pb-1 flex justify-between"><span>Batang: tidur (jam) · Titik: mood (1–5)</span></div>
+                <div className="border-b border-default pb-1 flex justify-between"><span>Catatan pada tanggal yang sama; bukan analisis sebab-akibat</span></div>
               </div>
 
               <div className="relative h-full w-full flex items-end justify-between z-10">
@@ -487,7 +476,7 @@ export const ScreeningTrend: React.FC<ScreeningTrendProps> = ({
               <Heart className="w-4 h-4" />
             </div>
             <h3 className="font-bold text-primary text-sm sm:text-base">
-              Milestone Pemulihan Emosional
+              Perkembangan Pemantauan Emosi
             </h3>
           </div>
 
@@ -497,14 +486,14 @@ export const ScreeningTrend: React.FC<ScreeningTrendProps> = ({
             </div>
             <div>
               <h4 className="text-sm font-bold text-emerald-900 dark:text-emerald-300 mb-1">
-                Perjalanan Kesejahteraan Mental
+              Catatan dari Waktu ke Waktu
               </h4>
               <p className="text-xs sm:text-sm text-emerald-800/90 dark:text-emerald-400/90 leading-relaxed">
                 {hasImproved
-                  ? `Luar Biasa! Terdapat penurunan skor depresi sebesar ${scoreDiff} poin dibandingkan tes awal Anda. Tetap pertahankan rutinitas self-care dan konseling.`
+                  ? `Skor PHQ-9 Anda turun ${scoreDiff} poin dibandingkan skrining sebelumnya. Tren ini dapat membantu refleksi, tetapi bukan diagnosis atau pengganti percakapan dengan tenaga kesehatan.`
                   : moodLogs.length > 5
-                  ? 'Konsistensi Anda dalam melacak mood sangat baik. Pemahaman diri adalah langkah pertama menuju ketahanan emosional.'
-                  : 'Perjalanan pemulihan Anda baru dimulai. Rutin melakukan check-in harian akan membantu mengidentifikasi pola pemicu stres.'
+                  ? 'Anda telah mencatat suasana hati beberapa kali. Catatan berkala dapat membantu melihat pola dari waktu ke waktu.'
+                  : 'Catatan suasana hati dapat membantu Anda melihat pola dari waktu ke waktu. Gunakan hanya jika terasa bermanfaat.'
                 }
               </p>
             </div>
@@ -521,11 +510,11 @@ export const ScreeningTrend: React.FC<ScreeningTrendProps> = ({
           </h4>
           <p className="text-xs sm:text-sm text-secondary leading-relaxed">
             {!currentTriage
-              ? 'Belum ada hasil skrining tercatat. Lakukan skrining mandiri pertama Anda (PHQ-9 & GAD-7) untuk memperoleh rekomendasi langkah penanganan klinis.'
+              ? 'Belum ada hasil skrining tercatat. Anda dapat mengisi PHQ-9 dan GAD-7 untuk melihat ringkasan skrining mandiri.'
               : currentTriage === 'Krisis'
               ? 'Jawaban Anda menunjukkan kemungkinan bahaya langsung. Jika ini masih terjadi, hubungi 119 atau pergi ke IGD/fasilitas kesehatan terdekat. Untuk dukungan psikologis awal, gunakan Healing119 di 119 ekstensi 8 atau healing119.id; antrean dapat penuh.'
               : currentTriage === 'Prioritas'
-              ? 'Hasil skrining menunjukkan perlunya tindak lanjut profesional, tetapi bukan diagnosis. Pertimbangkan untuk berbicara dengan konselor atau tenaga kesehatan.'
+              ? 'Hasil skrining menandai pertimbangan untuk tindak lanjut; ini bukan diagnosis. Anda dapat berbicara dengan konselor atau tenaga kesehatan.'
               : 'Skor skrining berada pada rentang rendah. Ini bukan jaminan bahwa tidak ada masalah; hubungi konselor atau tenaga kesehatan bila Anda tetap merasa khawatir.'}
           </p>
         </div>

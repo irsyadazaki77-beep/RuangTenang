@@ -104,7 +104,8 @@ export async function runWorkspaceAgent(input: WorkspaceAgentRunInput): Promise<
   const allowedToolIds = getAllowedAgentToolIds(task.type, {
     attachmentIds: task.snapshot.contextSourceIds,
     artifactId: task.snapshot.artifactId,
-    hasDependencyArtifacts: dependencyArtifactIds.size > 0
+    hasDependencyArtifacts: dependencyArtifactIds.size > 0,
+    allowExternalSearch: task.snapshot.allowExternalSearch === true
   });
   const sourceNamespace = `AGENT_${input.executionId.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 24) || 'RUN'}`;
   let sourceIndex = 0;

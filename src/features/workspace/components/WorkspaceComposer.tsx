@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useMemo, useState } from 'react';
 import {
   Paperclip,
   Files,
@@ -12,7 +12,7 @@ import {
 import { useComposerVoiceInput } from '../../chat/hooks/useComposerVoiceInput';
 import { WorkspaceFileAttachment, AcademicPromptPill, WorkspaceComposerConfig, WorkspaceResponseMode, WorkspaceResponseStyle } from '../types';
 import { WorkspaceAttachmentList } from './WorkspaceAttachmentList';
-import { MAX_WORKSPACE_ACTIVE_ATTACHMENTS, SUPPORTED_WORKSPACE_FILE_EXTENSIONS } from '../../../../shared/contracts/files';
+import { MAX_UPLOAD_FILE_SIZE_BYTES, MAX_WORKSPACE_ACTIVE_ATTACHMENTS, SUPPORTED_WORKSPACE_FILE_EXTENSIONS } from '../../../../shared/contracts/files';
 import { DistressDetectionResult } from '../utils/distressDetector';
 import { AcademicDistressBanner } from './AcademicDistressBanner';
 import { WorkspaceModelSelector } from './WorkspaceModelSelector';
@@ -23,6 +23,8 @@ import { WorkspaceCompareModelSelector } from './WorkspaceCompareModelSelector';
 import { StoredAttachment } from '../../chat/types';
 import { WorkspaceAiPreset, PresetId } from '../../../lib/aiPresets';
 import { ArtifactType } from '../types';
+import { useAiModelCatalog } from '../../../lib/aiModelCatalog';
+import { isKerjaProfile } from '../../../lib/aiModels';
 
 interface WorkspaceComposerProps {
   activeArtifactType?: ArtifactType | null;
@@ -56,6 +58,7 @@ interface WorkspaceComposerProps {
   onRemoveAttachedFile: () => void;
   onRemoveAttachment?: (attachment: WorkspaceFileAttachment) => void;
   onRetryAttachment?: (attachment: WorkspaceFileAttachment) => void;
+  onRecheckAttachment?: (attachment: WorkspaceFileAttachment) => void;
   onFileUploadChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onOpenBreathing: () => void;
   onSwitchToRuangTenang: () => void;
@@ -105,6 +108,7 @@ export const WorkspaceComposer: React.FC<WorkspaceComposerProps> = React.memo(({
   onRemoveAttachedFile,
   onRemoveAttachment,
   onRetryAttachment = () => undefined,
+  onRecheckAttachment = () => undefined,
   onFileUploadChange,
   onOpenBreathing,
   onSwitchToRuangTenang,
@@ -121,6 +125,7 @@ export const WorkspaceComposer: React.FC<WorkspaceComposerProps> = React.memo(({
   onDeletePreset,
   onResetPersonalization
 }) => {
+  const { models: catalogModels, profiles: catalogProfiles, loading: isModelCatalogLoading } = useAiModelCatalog();
   const [localInputText, setLocalInputText] = useState('');
   const inputText = controlledInputText ?? localInputText;
   const inputNotificationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -149,6 +154,12 @@ export const WorkspaceComposer: React.FC<WorkspaceComposerProps> = React.memo(({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [responseMode, setResponseMode] = useState<WorkspaceResponseMode>(activePreset?.responseMode || 'Seimbang');
   const [responseStyle, setResponseStyle] = useState<WorkspaceResponseStyle>(activePreset?.responseStyle || 'Default');
+  const isComparisonSelectionValid = useMemo(() => {
+    if (selectedCompareModels.length < 2 || selectedCompareModels.length > 3) return false;
+    return selectedCompareModels.every(modelId => isKerjaProfile(modelId)
+      ? catalogProfiles.some(profile => profile.scope === 'kerja' && profile.id === modelId && profile.selectable)
+      : catalogModels.some(model => model.id === modelId && model.selectable && model.capabilities.includes('chat') && model.capabilities.includes('streaming')));
+  }, [catalogModels, catalogProfiles, selectedCompareModels]);
 
   // Sync mode and style when active preset changes
   useEffect(() => {
@@ -187,7 +198,7 @@ export const WorkspaceComposer: React.FC<WorkspaceComposerProps> = React.memo(({
       url: attachment.url
     })) : undefined;
 
-    if (compareMode && selectedCompareModels.length < 2) return;
+    if (compareMode && !isComparisonSelectionValid) return;
 
     const accepted = onSendMessage(prompt, attachmentsToSend, {
       aiModel: selectedModel,
@@ -234,6 +245,7 @@ export const WorkspaceComposer: React.FC<WorkspaceComposerProps> = React.memo(({
           disabled={isStreaming || isDisabled}
           onRemove={attachment => onRemoveAttachment ? onRemoveAttachment(attachment) : onRemoveAttachedFile()}
           onRetry={onRetryAttachment}
+          onRecheck={onRecheckAttachment}
         />
 
         {/* Textarea */}
@@ -278,8 +290,8 @@ export const WorkspaceComposer: React.FC<WorkspaceComposerProps> = React.memo(({
               onClick={() => fileInputRef.current?.click()}
               disabled={isStreaming || isDisabled}
               className="h-9 w-9 shrink-0 rounded-lg text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-800 transition-colors cursor-pointer flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
-              title={`Lampirkan dokumen atau kode (maksimal ${MAX_WORKSPACE_ACTIVE_ATTACHMENTS})`}
-              aria-label="Lampirkan dokumen atau kode"
+              title={`Lampirkan teks, kode, sitasi, PDF/Office, atau gambar (maks. ${Math.floor(MAX_UPLOAD_FILE_SIZE_BYTES / (1024 * 1024))} MB per berkas; ${MAX_WORKSPACE_ACTIVE_ATTACHMENTS} dokumen aktif)`}
+              aria-label={`Lampirkan berkas; maksimal ${Math.floor(MAX_UPLOAD_FILE_SIZE_BYTES / (1024 * 1024))} MB per berkas`}
             >
               <Paperclip className="w-4 h-4" />
             </button>
@@ -299,6 +311,7 @@ export const WorkspaceComposer: React.FC<WorkspaceComposerProps> = React.memo(({
                       <button type="button" disabled={isStreaming} aria-pressed={compareMode} onClick={() => onCompareModeChange(!compareMode)} className={`h-8 shrink-0 rounded-lg px-2.5 text-xs font-medium transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${compareMode ? 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300' : 'border border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800'}`}>{compareMode ? 'Bandingkan aktif' : 'Bandingkan'}</button>
                     </div>
                     {compareMode && <div className="rounded-lg border border-indigo-200/70 bg-indigo-50/50 p-2 dark:border-indigo-900/60 dark:bg-indigo-950/20"><p className="mb-1.5 text-[11px] font-medium text-indigo-900 dark:text-indigo-200">Pilih model untuk dibandingkan</p><WorkspaceCompareModelSelector selectedModelIds={selectedCompareModels} onChange={onCompareModelsChange} disabled={isStreaming} hasAttachment={hasAttachments} /></div>}
+                    {compareMode && !isModelCatalogLoading && !isComparisonSelectionValid && <p role="status" className="text-[10.5px] text-amber-700 dark:text-amber-300">Pilih setidaknya dua model atau profil yang tersedia sebelum mengirim.</p>}
                     <div className="grid gap-2 sm:grid-cols-2">
                       <label className="text-[11px] font-medium text-slate-600 dark:text-slate-300">Respons<select aria-label="Mode respons" value={responseMode} onChange={event => setResponseMode(event.target.value as WorkspaceResponseMode)} className="mt-1 h-9 w-full rounded-lg border border-slate-200 bg-white px-2 text-xs dark:border-slate-700 dark:bg-slate-950"><option>Ringkas</option><option>Seimbang</option><option>Mendalam</option></select></label>
                       <label className="text-[11px] font-medium text-slate-600 dark:text-slate-300">Gaya<select aria-label="Gaya (opsional)" value={responseStyle} onChange={event => setResponseStyle(event.target.value as WorkspaceResponseStyle)} className="mt-1 h-9 w-full rounded-lg border border-slate-200 bg-white px-2 text-xs dark:border-slate-700 dark:bg-slate-950"><option value="Default">Default</option><option>Akademik</option><option>Langkah demi langkah</option><option>Formal</option></select></label>
@@ -359,7 +372,7 @@ export const WorkspaceComposer: React.FC<WorkspaceComposerProps> = React.memo(({
                   (!inputText.trim() && !hasAttachments) ||
                   hasPendingAttachment || hasFailedAttachment ||
                   (hasAttachments && readyAttachments.length !== activeAttachments.length) ||
-                  (compareMode && selectedCompareModels.length < 2)
+                  (compareMode && !isComparisonSelectionValid)
                 }
                 className={`h-9 w-9 rounded-lg flex items-center justify-center transition-all cursor-pointer ${
                   (inputText.trim() || readyAttachments.length > 0) &&
@@ -376,6 +389,12 @@ export const WorkspaceComposer: React.FC<WorkspaceComposerProps> = React.memo(({
             )}
           </div>
         </div>
+        <details className="mt-2 px-1 text-[10px] leading-relaxed text-slate-500 dark:text-slate-400">
+          <summary className="w-fit cursor-pointer font-medium underline underline-offset-2">Pemrosesan berkas dan layanan eksternal</summary>
+          <p className="mt-1">
+            Berkas yang dilampirkan diunggah ke server RuangKerja untuk ekstraksi; konteks yang dipakai kemudian dikirim ke endpoint model terpilih. Endpoint Ollama dapat berada di host lain. Jika provider cloud aktif, OCR gambar/PDF pindai dapat memakai Gemini atau OpenAI secara terpisah dari model chat yang dipilih; LOCAL_AI_ONLY memblokir provider model cloud dan membuat gambar tanpa teks hasil OCR hanya tersedia untuk pratinjau. Workflow riset dapat memakai Tavily dan pencarian sitasi memakai Crossref; keduanya layanan eksternal terpisah dari model AI. Kueri Tavily melewati filter pola, tetapi filter itu tidak menjamin anonimisasi. Hindari mengirim data pribadi atau sensitif jika tidak diperlukan.
+          </p>
+        </details>
       </div>
     </div>
   );

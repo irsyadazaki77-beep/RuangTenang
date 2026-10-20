@@ -293,7 +293,7 @@ export const APP_CHANGELOG: ReleaseNote[] = [
         category: 'security',
         title: 'Penguatan Validasi Sesi & Proteksi Enkripsi',
         description: 'Pengkinian token validasi keamanan dan penguatan enkripsi AES-256 pada penyimpanan riwayat lokal.',
-        impact: 'Kerahasiaan data kesehatan mental dan privasi pengguna terjaga secara lebih menyeluruh.'
+        impact: 'Riwayat lokal pada jalur yang didukung memakai enkripsi; ini tidak menjamin salinan atau akses pihak lain di luar cakupan tersebut.'
       }
     ],
     buildNumber: 'build.20260903.01'
@@ -435,7 +435,7 @@ export const APP_CHANGELOG: ReleaseNote[] = [
         category: 'security',
         title: 'Penyempurnaan Proteksi Kunci Kriptografi & Token Sesi',
         description: 'Peningkatan algoritma derivasi kunci SHA-256 dan validasi sesi terenkripsi untuk mencegah kebocoran sesi di lingkungan produksi.',
-        impact: 'Keamanan data dan kerahasiaan percakapan konseling mahasiswa semakin kokoh dan teruji.'
+        impact: 'Mengubah pengelolaan token dan sesi; tidak menyatakan bahwa semua risiko akses data telah dihilangkan.'
       },
       {
         id: 'ch-270-4',
@@ -503,8 +503,8 @@ export const APP_CHANGELOG: ReleaseNote[] = [
         id: 'ch-260-1',
         category: 'feature',
         title: 'Modul Skrining Mandiri PHQ-9 & GAD-7',
-        description: 'Integrasi kuesioner psikologis standar internasional dengan penghitungan skor otomatis dan kategori keparahan.',
-        impact: 'Mahasiswa dapat melakukan deteksi dini terhadap kondisi stres atau kecemasan akademik secara mandiri dan aman.'
+        description: 'Menampilkan kuesioner PHQ-9 dan GAD-7 serta menghitung skor skrining mandiri; hasilnya bukan diagnosis.',
+        impact: 'Memberi sarana untuk mencatat skor dan membahasnya dengan konselor atau tenaga kesehatan bila diinginkan.'
       },
       {
         id: 'ch-260-2',
@@ -517,8 +517,8 @@ export const APP_CHANGELOG: ReleaseNote[] = [
         id: 'ch-260-3',
         category: 'ai',
         title: 'Safety Guardrail & Deteksi Krisis Darurat',
-        description: 'Sistem otomatis mendeteksi kata kunci berisiko tinggi dan langsung memunculkan tombol panggilan darurat SOS serta hotline 24 jam.',
-        impact: 'Respons darurat terfasilitasi secepat mungkin ketika mahasiswa membutuhkan bantuan krisis segera.'
+        description: 'Pemeriksaan otomatis dapat menampilkan pintasan menuju Pusat Bantuan Krisis saat pola tertentu muncul. Pemeriksaan ini dapat keliru, tidak mendeteksi semua keadaan, dan tidak otomatis menghubungi layanan darurat.',
+        impact: 'Memberi akses ke informasi bantuan saat diperlukan, tanpa menjamin deteksi atau pengiriman sinyal darurat.'
       }
     ],
     buildNumber: 'build.20260828.02'
@@ -529,7 +529,7 @@ export const APP_CHANGELOG: ReleaseNote[] = [
     releaseTime: '24 Agustus 2026, 11:00 WIB',
     periodLabel: 'Minggu Lalu',
     title: 'Sistem Penjadwalan Konselor Kampus & Konsultasi Video',
-    tagline: 'Jadwal tatap muka atau daring dengan psikolog kampus berlisensi tanpa antrean fisik.',
+    tagline: 'Lihat jadwal tatap muka atau daring dari konselor yang tersedia; kualifikasi dan akses layanan dapat berbeda.',
     badge: 'Fitur Mayor',
     highlights: [
       'Direktori konselor kampus dengan spesialisasi & ulasan',

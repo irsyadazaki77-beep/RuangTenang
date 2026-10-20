@@ -239,7 +239,7 @@ export const StudentShell: React.FC<StudentShellProps> = ({
         {isOffline && (
           <div role="status" aria-live="polite" className="shrink-0 z-30 bg-amber-600 dark:bg-amber-700 text-white px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium flex items-center justify-center gap-2 shadow-sm text-center">
             <WifiOff className="w-4 h-4 shrink-0 animate-pulse" />
-            <span>Mode Offline: Anda tetap dapat beraktivitas, data tersimpan di perangkat dan akan disinkronkan otomatis saat terhubung kembali.</span>
+            <span>Mode Offline: sebagian fitur memerlukan koneksi. Hanya data yang terkonfirmasi masuk antrean offline yang akan dicoba sinkron saat online.</span>
           </div>
         )}
         {isSettingsOpen ? (
@@ -305,6 +305,7 @@ export const StudentShell: React.FC<StudentShellProps> = ({
                       onSwitchMode: handleSwitchMode,
                       onOpenSidebar: () => setIsSidebarOpen(true),
                       onOpenSettings: () => setIsSettingsOpen(true),
+                      onOpenPrivacyCenter: openPrivacyCenter,
                       onOpenChangelog: () => setIsChangelogOpen(true),
                       aiConsentAllowed,
                       aiConsentPromptOpen: isAiConsentPromptOpen,

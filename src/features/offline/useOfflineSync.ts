@@ -19,7 +19,7 @@ export function useOfflineSync(
     let running = false;
     let retryTimer: number | undefined;
 
-    const notifyOffline = () => showToast('Koneksi terputus. Data offline tetap tersimpan pada akun ini.', 'warning', 'Mode Offline');
+    const notifyOffline = () => showToast('Koneksi terputus. Data yang sudah masuk antrean offline akan dicoba lagi saat online.', 'warning', 'Mode Offline');
     const syncOutbox = async () => {
       if (!active || running || controller.signal.aborted) return;
       if (retryTimer !== undefined) window.clearTimeout(retryTimer);

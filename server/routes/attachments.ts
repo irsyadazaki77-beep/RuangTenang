@@ -10,6 +10,7 @@ import { documentIngestionService } from '../services/file-intelligence/document
 import { DocumentProcessingException } from '../services/file-intelligence/fileTypes.js';
 import { attachmentUploadLimiter } from '../middleware/rateLimiters.js';
 import { guestAttachmentSession } from '../middleware/guestAttachmentSession.js';
+import { consentService } from '../services/consentService.js';
 import { MAX_ATTACHMENT_UPLOAD_BATCH, MAX_WORKSPACE_ACTIVE_ATTACHMENTS } from '../../shared/contracts/files.js';
 import { TabularAnalysisRequestSchema, TabularTransformRequestSchema } from '../../shared/contracts/tabular.js';
 import { createTabularDataset, parseTabularWorkbook, runTabularAnalysis, toSafeCsv, toSafeXlsx, previewTabularTransform } from '../services/tabularDatasetService.js';
@@ -32,6 +33,37 @@ const upload = multer({
     headerPairs: 100
   }
 });
+
+async function hasAttachmentProcessingConsent(req: Request): Promise<boolean> {
+  const authenticatedUserId = req.user?.userId;
+  if (authenticatedUserId && authenticatedUserId !== 'guest') {
+    return consentService.canUseAI(authenticatedUserId);
+  }
+  return req.get('X-Guest-AI-Consent') === 'true'
+    || req.body?.guestAiConsent === true
+    || req.body?.guestAiConsent === 'true';
+}
+
+async function requireAttachmentProcessingConsent(req: Request, res: Response): Promise<boolean> {
+  try {
+    if (await hasAttachmentProcessingConsent(req)) return true;
+  } catch (error) {
+    console.error('[ATTACHMENT_CONSENT_CHECK_FAILED]', error);
+    sendAttachmentError(res, 'CONSENT_CHECK_UNAVAILABLE', 'Status persetujuan belum dapat diverifikasi. Coba lagi sebentar.', 503);
+    return false;
+  }
+  sendAttachmentError(res, 'AI_CONSENT_REQUIRED', 'Setujui pemrosesan AI sebelum mengunggah atau memproses berkas.', 403);
+  return false;
+}
+
+function attachmentProcessingConsentGate(req: Request, res: Response, next: NextFunction): void {
+  void requireAttachmentProcessingConsent(req, res).then(allowed => {
+    if (allowed) next();
+  }).catch(error => {
+    console.error('[ATTACHMENT_CONSENT_CHECK_FAILED]', error);
+    sendAttachmentError(res, 'CONSENT_CHECK_UNAVAILABLE', 'Status persetujuan belum dapat diverifikasi. Coba lagi sebentar.', 503);
+  });
+}
 
 // Helper for sending structured error without leaking stack traces
 const sendAttachmentError = (res: Response, code: string, message: string, status = 400) => {
@@ -236,6 +268,8 @@ const limitConcurrentAttachmentUploads = (_req: Request, res: Response, next: Ne
 router.post(
   '/chat/attachments/upload',
   optionalAuth,
+  // Verify consent before multer receives the file body into server memory.
+  attachmentProcessingConsentGate,
   guestAttachmentSession({ issueIfMissing: true }),
   attachmentUploadLimiter,
   limitConcurrentAttachmentUploads,
@@ -450,7 +484,7 @@ router.get('/chat/:chatId/attachments', optionalAuth, guestAttachmentSession(), 
           slideCount: metadata.slideCount,
           sheetCount: metadata.sheetCount,
           extractionWarnings: Array.isArray(metadata.extractionWarnings) ? metadata.extractionWarnings : undefined,
-          visualAnalysisAvailable: Boolean(metadata.visualAnalysisAvailable || attachment.fileKind === 'image'),
+          visualAnalysisAvailable: Boolean(metadata.visualAnalysisAvailable),
           previewOnly: Boolean(metadata.previewOnly),
           ocrApplied: Boolean(metadata.ocrApplied),
           ocrConfidence: typeof metadata.ocrConfidence === 'number' ? metadata.ocrConfidence : undefined,
@@ -496,7 +530,7 @@ router.get('/chat/attachments/:id/preview', optionalAuth, guestAttachmentSession
         chunkCount: metadata.chunkCount,
         ocrApplied: Boolean(metadata.ocrApplied),
         previewOnly: Boolean(metadata.previewOnly),
-        visualAnalysisAvailable: Boolean(metadata.visualAnalysisAvailable || attachment.fileKind === 'image'),
+        visualAnalysisAvailable: Boolean(metadata.visualAnalysisAvailable),
         ocrConfidence: typeof metadata.ocrConfidence === 'number' ? metadata.ocrConfidence : undefined,
         readingUncertainty: typeof metadata.readingUncertainty === 'string' ? metadata.readingUncertainty : undefined,
         extractionWarnings: Array.isArray(metadata.extractionWarnings) ? metadata.extractionWarnings : undefined,
@@ -542,7 +576,7 @@ router.get('/chat/attachments/:id/status', optionalAuth, guestAttachmentSession(
 /**
  * Retry processing endpoint for failed documents
  */
-router.post('/chat/attachments/:id/retry', optionalAuth, guestAttachmentSession(), async (req: Request, res: Response) => {
+router.post('/chat/attachments/:id/retry', optionalAuth, guestAttachmentSession(), attachmentProcessingConsentGate, async (req: Request, res: Response) => {
   try {
     const userId = req.attachmentOwnerId!;
     const attachmentId = req.params.id;

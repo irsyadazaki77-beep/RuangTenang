@@ -159,7 +159,19 @@ router.post('/mood', requireAuth, verifyOfflineOwner, idempotencyMiddleware({
       return res.status(400).json({ success: false, error: 'Validasi gagal', details: parsed.error.issues });
     }
 
-    const { mood, notes, emotions, factors, sleepHours, sleepQuality } = parsed.data;
+    const { mood, date, notes, emotions, factors, sleepHours, sleepQuality } = parsed.data;
+    let timestamp: Date | undefined;
+    if (date) {
+      const requestedDate = new Date(`${date}T00:00:00.000Z`);
+      const latestAllowedDate = new Date();
+      latestAllowedDate.setUTCHours(0, 0, 0, 0);
+      latestAllowedDate.setUTCDate(latestAllowedDate.getUTCDate() + 1);
+      if (requestedDate > latestAllowedDate) {
+        return res.status(400).json({ success: false, error: 'Tanggal catatan mood tidak boleh di masa depan.' });
+      }
+      // Store date-only entries at UTC noon so charts keep the selected calendar day across timezones.
+      timestamp = new Date(`${date}T12:00:00.000Z`);
+    }
     const moodStr = String(mood);
 
     let encryptedNotes: string | null = null;
@@ -194,7 +206,8 @@ router.post('/mood', requireAuth, verifyOfflineOwner, idempotencyMiddleware({
         factors: encryptedFactors,
         emotions: encryptedEmotions,
         sleepHours: sleepHours ?? null,
-        sleepQuality: sleepQuality ?? null
+        sleepQuality: sleepQuality ?? null,
+        timestamp
       }
     });
 
@@ -225,6 +238,16 @@ router.put('/mood/:id', requireAuth, async (req: Request, res: Response) => {
 
     const updates: any = {};
     if (parsed.data.mood !== undefined) updates.mood = String(parsed.data.mood);
+    if (parsed.data.date !== undefined) {
+      const requestedDate = new Date(`${parsed.data.date}T00:00:00.000Z`);
+      const latestAllowedDate = new Date();
+      latestAllowedDate.setUTCHours(0, 0, 0, 0);
+      latestAllowedDate.setUTCDate(latestAllowedDate.getUTCDate() + 1);
+      if (requestedDate > latestAllowedDate) {
+        return res.status(400).json({ success: false, error: 'Tanggal catatan mood tidak boleh di masa depan.' });
+      }
+      updates.timestamp = new Date(`${parsed.data.date}T12:00:00.000Z`);
+    }
     if (parsed.data.notes !== undefined) {
       if (parsed.data.notes) {
         const enc = encryptionService.encryptSensitive(parsed.data.notes);

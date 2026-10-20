@@ -2,7 +2,7 @@
 import { scanAndSanitizePII } from '../piiService.js';
 import { analyzeMultiTurnSentiment, CrisisAnalysisResult } from '../../../src/lib/crisisDetector.js';
 import { consentService } from '../consentService.js';
-import { aiContextBuilder } from './aiContextBuilder.js';
+import { aiContextBuilder, WORKSPACE_CONTEXT_BOUNDARY_INSTRUCTION } from './aiContextBuilder.js';
 
 export type CrisisRiskLevel = 'LOW' | 'ELEVATED' | 'HIGH' | 'IMMEDIATE';
 
@@ -21,6 +21,8 @@ import { DEFAULT_FILE_LIMITS } from '../file-intelligence/fileTypes.js';
 import { ResponseQualityValidator } from './responseQualityValidator.js';
 import type { AiRoutingContext, RoutingDecision } from '../../../shared/aiModelContract.js';
 
+const CRISIS_SAFE_RESPONSE = 'Saya mendengar betapa beratnya ini untukmu, dan nyawamu sangat berharga. Tolong jangan hadapi ini sendirian. Untuk dukungan psikologis awal, hubungi Healing119 melalui 119 ekstensi 8 atau buka healing119.id; periksa situs resmi untuk jam layanan terbaru karena antrean dapat penuh. Jika ada bahaya langsung, hubungi 119 atau minta orang tepercaya menemanimu ke IGD/fasilitas kesehatan terdekat.';
+
 export interface UnifiedPipelineInput {
   userId?: string;
   attachmentOwnerId?: string;
@@ -33,6 +35,7 @@ export interface UnifiedPipelineInput {
   userTier?: string;
   userRole?: string;
   history?: Array<{ role: 'user' | 'model'; parts: { text: string }[] }>;
+  workspaceContext?: string;
   pluginResult?: string;
   isStreaming: boolean;
   onStreamToken?: (token: string) => void;
@@ -292,7 +295,7 @@ export const aiSafetyService = {
   },
 
   getCrisisSafeResponse(): string {
-    return "Saya mendengar betapa beratnya ini untukmu, dan nyawamu sangat berharga. Tolong jangan lewati ini sendirian. Bantuan profesional selalu tersedia 24 jam untuk mendengarkanmu. Segera hubungi Hotline Kemenkes 119 (ekstensi 8) atau layanan darurat kampus sekarang juga. (Layanan darurat tambahan: LISA Helpline 0811-3855-472)";
+    return CRISIS_SAFE_RESPONSE;
   },
 
   validateOutput(output: string): { isValid: boolean; reason?: string } {
@@ -542,7 +545,7 @@ export const aiSafetyService = {
     let systemInstruction: string;
 
     if (isRuangKerja) {
-      systemInstruction = `Kamu adalah Asisten Metodologi & Penulisan Skripsi Akademik di RuangKerja.
+      systemInstruction = `${WORKSPACE_CONTEXT_BOUNDARY_INSTRUCTION}\n\nKamu adalah Asisten Metodologi & Penulisan Skripsi Akademik di RuangKerja.
 Tugasmu adalah menyusun artefak akademik yang metodologis, berbobot ilmiah tinggi, dan mematuhi format standar perguruan tinggi di Indonesia.
 
 Aturan Pembuatan Artefak Bab 1 (Latar Belakang):
@@ -645,7 +648,7 @@ PENANGANAN KRISIS (EMERGENCY PROTOCOL):
 Jika pengguna menunjukkan indikasi eksplisit maupun implisit terkait melukai diri sendiri (self-harm), kekerasan fisik, putus asa yang ekstrem, atau niat bunuh diri:
 1. Hentikan semua intervensi standar dan jangan menceramahi.
 2. WAJIB prioritaskan keselamatan dengan tenang dan hangat menggunakan pernyataan ini:
-"Saya mendengar betapa beratnya ini untukmu, dan nyawamu sangat berharga. Tolong jangan lewati ini sendirian. Bantuan profesional selalu tersedia 24 jam untuk mendengarkanmu. Segera hubungi Hotline Kemenkes 119 (ekstensi 8) atau layanan darurat kampus sekarang juga."
+"${CRISIS_SAFE_RESPONSE}"
 
 SISTEM DETEKSI PLUGINS & ACTIONS:
 - Jika pengguna meminta plugin atau tindakan terarah, BALAS DENGAN STRUKTUR JSON INI SAJA:
@@ -689,7 +692,7 @@ PENANGANAN KRISIS (EMERGENCY PROTOCOL):
 Jika pengguna menunjukkan indikasi eksplisit maupun implisit terkait melukai diri sendiri (self-harm), kekerasan fisik, putus asa yang ekstrem, atau niat bunuh diri:
 1. Hentikan semua intervensi standar dan jangan menceramahi.
 2. WAJIB prioritaskan keselamatan dengan tenang dan hangat menggunakan pernyataan ini:
-"Saya mendengar betapa beratnya ini untukmu, dan nyawamu sangat berharga. Tolong jangan lewati ini sendirian. Bantuan profesional selalu tersedia 24 jam untuk mendengarkanmu. Segera hubungi Hotline Kemenkes 119 (ekstensi 8) atau layanan darurat kampus sekarang juga."
+"${CRISIS_SAFE_RESPONSE}"
 
 SISTEM DETEKSI PLUGINS & ACTIONS:
 - Jika pengguna meminta plugin atau tindakan terarah, BALAS DENGAN STRUKTUR JSON INI SAJA:
@@ -703,10 +706,13 @@ Konteks Pengguna:
 - Gaya Respons: ${input.responseStyle || 'Seimbang'}`;
     }
 
-    let activeHistory = (input.history || []).slice(-10).map(h => ({
+    const recentInputHistory = (input.history || []).slice(-10);
+    const latestUserInputIndex = recentInputHistory.reduce((latest, turn, index) => turn.role === 'user' ? index : latest, -1);
+    let activeHistory = recentInputHistory.map((h, index) => ({
       ...h,
       parts: (h.parts || []).map(p => {
-        let text = (p.text || '').substring(0, 1000);
+        const maxHistoryChars = isRuangKerja && index === latestUserInputIndex ? 2000 : 1000;
+        let text = (p.text || '').substring(0, maxHistoryChars);
         text = scanAndSanitizePII(text).sanitizedText;
         if (this.detectPromptInjection(text)) {
           text = '[REDACTED_UNTRUSTED_HISTORY_INJECTION]';
@@ -769,6 +775,16 @@ Konteks Pengguna:
         } catch (error) {
           console.warn('[AI_CONTEXT_GUEST_DOC_WARN] Guest document retrieval failed:', error);
         }
+      }
+    }
+
+    if (isRuangKerja && input.workspaceContext?.trim() && input.workspaceContext.length <= 72_000) {
+      const contextJson = scanAndSanitizePII(input.workspaceContext).sanitizedText;
+      if (contextJson) {
+        const contextPart = `Konteks tambahan RuangKerja dalam JSON; gunakan hanya sebagai konteks pendamping dan ikuti batas konteks pada instruksi sistem:\n${contextJson}`;
+        const currentUserTurn = [...activeHistory].reverse().find(turn => turn.role === 'user');
+        if (currentUserTurn) currentUserTurn.parts.push({ text: contextPart });
+        else activeHistory.push({ role: 'user', parts: [{ text: contextPart }] });
       }
     }
 

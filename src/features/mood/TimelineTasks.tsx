@@ -58,7 +58,7 @@ export const TimelineTasks: React.FC<TimelineTasksProps> = ({
               <div>
                 <h4 className="text-sm font-semibold text-primary">Belum Ada Sesi Konseling</h4>
                 <p className="text-xs text-secondary mt-0.5 max-w-sm mx-auto">
-                  Jadwalkan sesi konsultasi 1-on-1 dengan psikolog kampus untuk pendampingan mental terarah.
+                  Lihat profil konselor yang tersedia dan informasi layanan sebelum mengajukan sesi.
                 </p>
               </div>
               {onNavigateToSchedule && (
@@ -87,7 +87,7 @@ export const TimelineTasks: React.FC<TimelineTasksProps> = ({
                       </span>
                     </div>
                     <h4 className="text-xs sm:text-sm font-semibold text-primary">
-                      Konseling - {apt.counselorName || 'Psikolog Kampus'}
+                      Konseling - {apt.counselorName || 'Konselor Kampus'}
                     </h4>
                     {apt.notes && <p className="text-xs text-secondary leading-normal">{apt.notes}</p>}
                     {(() => {
@@ -122,7 +122,7 @@ export const TimelineTasks: React.FC<TimelineTasksProps> = ({
             <span className="text-xs sm:text-sm font-bold text-primary">Latihan Mandiri Harian</span>
           </div>
           <p className="text-[11px] text-secondary leading-normal">
-            Selesaikan kebiasaan mikro harian untuk mendukung stabilitas emosi dan fokus studi.
+            Pilih kebiasaan mikro yang ingin dicoba hari ini, lalu tandai setelah selesai.
           </p>
 
           <div className="space-y-2">

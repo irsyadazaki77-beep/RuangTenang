@@ -324,7 +324,9 @@ export class WorkspaceApiService {
     const res = await apiClient.delete<{ message?: string }>(
       `/api/v1/chat/attachments/${encodeURIComponent(attachmentId)}${query}`, { signal }
     );
-    if (!res.success) throw new Error(res.message || 'Gagal menghapus dokumen');
+    // A stale client can still hold an attachment that was removed in another tab.
+    // Treat that already-absent state as the desired outcome of this delete action.
+    if (!res.success && res.status !== 404) throw new Error(res.message || 'Gagal menghapus dokumen');
   }
 
   static async retryAttachment(attachmentId: string, chatId?: string, signal?: AbortSignal): Promise<WorkspaceAttachmentDto> {

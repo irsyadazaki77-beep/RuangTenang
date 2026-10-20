@@ -13,7 +13,7 @@ export const WorkspacePlanTaskSchema = z.object({
   dependsOn: z.array(z.string().min(1).max(100)).max(12).default([]),
   status: WorkspaceTaskStatusSchema.default('todo'),
   executionId: z.string().max(100).optional(),
-  snapshot: z.object({ inputPrompt: z.string().max(8000), contextSourceIds: z.array(z.string().max(100)).max(50), artifactContext: z.string().max(20000).optional(), artifactId: z.string().max(100).optional(), workspaceInstructions: z.string().max(4000).optional(), modelId: z.string().max(100), createdAt: z.string() }).strict().optional(),
+  snapshot: z.object({ inputPrompt: z.string().max(8000), contextSourceIds: z.array(z.string().max(100)).max(50), artifactContext: z.string().max(20000).optional(), artifactId: z.string().max(100).optional(), workspaceInstructions: z.string().max(4000).optional(), allowExternalSearch: z.boolean().optional(), modelId: z.string().max(100), createdAt: z.string() }).strict().optional(),
   output: z.string().max(20000).optional(),
   artifactProposal: z.object({ title: z.string().trim().min(1).max(200), type: z.enum(['DOCUMENT', 'OUTLINE', 'CODE', 'CITATION', 'TABLE']), language: z.string().trim().max(80).optional(), content: z.string().min(1).max(20000) }).strict().optional(),
   outputArtifactId: z.string().max(100).optional(),
@@ -55,7 +55,7 @@ export const WorkspacePlanSchema = z.object({
 });
 export const WorkspaceTaskExecutionRequestSchema = z.object({
   executionId: z.string().min(1).max(100),
-  snapshot: z.object({ inputPrompt: z.string().max(8000), contextSourceIds: z.array(z.string().max(100)).max(50), artifactContext: z.string().max(20000).optional(), artifactId: z.string().max(100).optional(), workspaceInstructions: z.string().max(4000).optional(), modelId: z.string().max(100), createdAt: z.string() }).strict()
+  snapshot: z.object({ inputPrompt: z.string().max(8000), contextSourceIds: z.array(z.string().max(100)).max(50), artifactContext: z.string().max(20000).optional(), artifactId: z.string().max(100).optional(), workspaceInstructions: z.string().max(4000).optional(), allowExternalSearch: z.boolean().default(false), modelId: z.string().max(100), createdAt: z.string() }).strict()
 }).strict();
 export const WorkspaceAgentExecutionRequestSchema = z.object({ executionId: z.string().min(1).max(100) }).strict();
 

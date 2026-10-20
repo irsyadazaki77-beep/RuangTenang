@@ -307,9 +307,6 @@ export const SidebarNavLinks: React.FC<SidebarNavLinksProps> = ({
                       <Stethoscope className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
                       <span>Portal Konselor</span>
                     </div>
-                    <span className="text-[9px] bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 px-1 rounded font-bold">
-                      Klinis
-                    </span>
                   </button>
                 )}
               </>

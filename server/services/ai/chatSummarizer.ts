@@ -1,7 +1,4 @@
-import { getGenAIClient } from '../../config/aiConfig.js';
-import { getActualGeminiModel } from './aiModelRegistry.js';
-import { geminiAdapter } from './geminiAdapter.js';
-import { executeWithReliability } from './aiReliabilityService.js';
+import { DEFAULT_AI_MODEL_ID } from './aiModelRegistry.js';
 import { scanAndSanitizePII } from '../piiService.js';
 import { aiMetricsService } from './aiMetricsService.js';
 import { getLocalFallbackSummary } from '../../routes/fallbackAi.js';
@@ -97,25 +94,26 @@ export const chatSummarizer = {
     // Sanitize input to summarizer
     const sanitizedInput = scanAndSanitizePII(textToSummarize.substring(0, 3000)).sanitizedText;
 
-    const aiClient = getGenAIClient();
-    if (aiClient) {
-      try {
-        const prompt = previousSummaryContext
-          ? `${previousSummaryContext}\n${sanitizedInput}\n\nBuat ringkasan gabungan yang sangat ringkas (maksimal 3 poin singkat dalam Bahasa Indonesia) mencakup poin penting dan emosi utama.`
-          : `Buat ringkasan percakapan berikut secara sangat ringkas (maksimal 3 poin singkat dalam Bahasa Indonesia):\n${sanitizedInput}`;
+    try {
+      const prompt = previousSummaryContext
+        ? `${previousSummaryContext}\n${sanitizedInput}\n\nBuat ringkasan gabungan yang sangat ringkas (maksimal 3 poin singkat dalam Bahasa Indonesia) mencakup poin penting dan emosi utama.`
+        : `Buat ringkasan percakapan berikut secara sangat ringkas (maksimal 3 poin singkat dalam Bahasa Indonesia):\n${sanitizedInput}`;
+      const { aiRequestService } = await import('./aiRequestService.js');
+      const response = await aiRequestService.generateChatResponse({
+        userId: _options?.userId,
+        userTier: 'Free',
+        requestedModelId: DEFAULT_AI_MODEL_ID,
+        prompt,
+        systemInstruction: '[CONTEXT_BOUNDARIES]\nRingkas hanya isi percakapan yang diberikan. Jangan mendiagnosis atau menambahkan informasi dari percakapan lain.',
+        maxOutputTokens: 250,
+        abortSignal: _options?.abortSignal
+      });
 
-        const response = await executeWithReliability('gemini', signal => geminiAdapter.generate(aiClient, {
-          model: getActualGeminiModel('gemini-3.5-flash-lite'),
-          contents: [{ role: 'user', parts: [{ text: prompt }] }],
-          config: { temperature: 0.3, maxOutputTokens: 250, abortSignal: signal }
-        }));
-
-        if (response.text) {
-          generatedSummary = response.text.trim();
-        }
-      } catch (err: any) {
-        console.warn(`[CHAT_SUMMARIZER] AI summarization failed, using local fallback summary:`, err?.message || err);
+      if (response.text && !response.isFallback) {
+        generatedSummary = response.text.trim();
       }
+    } catch (err: any) {
+      console.warn(`[CHAT_SUMMARIZER] Configured-model summary failed, using local fallback summary:`, err?.message || err);
     }
 
     if (!generatedSummary) {

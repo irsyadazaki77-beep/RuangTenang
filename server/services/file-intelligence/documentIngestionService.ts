@@ -93,7 +93,7 @@ export const documentIngestionService = {
         slideCount: meta.slideCount,
         sheetCount: meta.sheetCount,
         ocrApplied: Boolean(meta.ocrApplied),
-        visualAnalysisAvailable: Boolean(meta.visualAnalysisAvailable || existing.fileKind === 'image'),
+        visualAnalysisAvailable: Boolean(meta.visualAnalysisAvailable),
         previewOnly: Boolean(meta.previewOnly),
         extractionWarnings: Array.isArray(meta.extractionWarnings) ? meta.extractionWarnings : undefined,
         createdAt: existing.createdAt.toISOString(),
@@ -189,7 +189,7 @@ export const documentIngestionService = {
       }
 
       const metadataObj = {
-        visualAnalysisAvailable: Boolean(extraction.metadata?.visualAnalysisAvailable || verified.fileKind === 'image'),
+        visualAnalysisAvailable: Boolean(extraction.metadata?.visualAnalysisAvailable),
         previewOnly: Boolean(extraction.metadata?.previewOnly),
         ocrApplied: Boolean(extraction.metadata?.ocrApplied),
         pageCount: extraction.pageCount,
@@ -225,7 +225,7 @@ export const documentIngestionService = {
         slideCount: extraction.slideCount,
         sheetCount: extraction.sheetCount,
         extractionWarnings,
-        visualAnalysisAvailable: Boolean(extraction.metadata?.visualAnalysisAvailable || verified.fileKind === 'image'),
+        visualAnalysisAvailable: Boolean(extraction.metadata?.visualAnalysisAvailable),
         previewOnly: Boolean(extraction.metadata?.previewOnly),
         ocrApplied: Boolean(extraction.metadata?.ocrApplied),
         createdAt: updated.createdAt.toISOString(),
@@ -433,7 +433,7 @@ export const documentIngestionService = {
         slideCount: extraction.slideCount,
         sheetCount: extraction.sheetCount,
         ocrApplied: Boolean(extraction.metadata?.ocrApplied),
-        visualAnalysisAvailable: Boolean(extraction.metadata?.visualAnalysisAvailable || updated.fileKind === 'image'),
+        visualAnalysisAvailable: Boolean(extraction.metadata?.visualAnalysisAvailable),
         previewOnly: Boolean(extraction.metadata?.previewOnly),
         extractionWarnings,
         createdAt: updated.createdAt.toISOString(),
@@ -480,13 +480,17 @@ export const documentIngestionService = {
       throw new DocumentProcessingException('STORAGE_ERROR', 'Berkas fisik tidak dapat dihapus dengan aman.');
     }
 
-    // Cascade delete in Prisma deletes chunks and attachment record
+    // Delete chunks and attachment record. deleteMany makes concurrent deletes idempotent.
     await prisma.documentChunks.deleteMany({
       where: { attachmentId }
     });
 
-    await prisma.attachments.delete({
-      where: { id: attachmentId }
+    await prisma.attachments.deleteMany({
+      where: {
+        id: attachmentId,
+        userId,
+        ...(chatId ? { chatId } : {})
+      }
     });
 
     return true;
@@ -523,7 +527,7 @@ export const documentIngestionService = {
       slideCount: meta.slideCount,
       sheetCount: meta.sheetCount,
       ocrApplied: Boolean(meta.ocrApplied),
-      visualAnalysisAvailable: Boolean(meta.visualAnalysisAvailable || attachment.fileKind === 'image'),
+      visualAnalysisAvailable: Boolean(meta.visualAnalysisAvailable),
       previewOnly: Boolean(meta.previewOnly),
       extractionWarnings: Array.isArray(meta.extractionWarnings) ? meta.extractionWarnings : undefined,
       errorMessage: attachment.processingError || undefined,

@@ -1,6 +1,6 @@
 import { SupportedFileKind, ExtractedDocument, DocumentBlock } from '../../../../shared/contracts/files.js';
 import { DocumentExtractorAdapter, ExtractionInput } from './types.js';
-import { performVisualOcr } from '../visualIntelligenceService.js';
+import { isVisualOcrAvailable, performVisualOcr } from '../visualIntelligenceService.js';
 
 export class ImageAdapter implements DocumentExtractorAdapter {
   supports(kind: SupportedFileKind): boolean {
@@ -69,9 +69,11 @@ export class ImageAdapter implements DocumentExtractorAdapter {
       normalizedText: '',
       metadata: {
         previewOnly: true,
-        visualAnalysisAvailable: true,
+        visualAnalysisAvailable: isVisualOcrAvailable(),
         extractionStatus: 'preview_only',
-        note: 'Berkas gambar disiapkan untuk analisis multimodal langsung atau pratinjau visual.'
+        note: isVisualOcrAvailable()
+          ? 'Teks gambar belum berhasil diekstrak; berkas tersedia untuk pratinjau dan percobaan analisis visual.'
+          : 'Berkas hanya tersedia untuk pratinjau; tidak ada provider OCR visual yang diizinkan dalam konfigurasi saat ini.'
       }
     };
   }

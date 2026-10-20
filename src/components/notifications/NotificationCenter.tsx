@@ -240,7 +240,7 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ isOpen, 
         {/* Footer info lock */}
         <div className="p-3 surface-muted border-t border-default text-center shrink-0">
           <p className="text-[10px] text-secondary leading-snug font-medium">
-            Notifikasi Anda disimpan secara lokal & privat.
+            Notifikasi disimpan di browser ini per akun; orang lain yang memakai browser ini mungkin dapat melihatnya.
           </p>
         </div>
       </div>

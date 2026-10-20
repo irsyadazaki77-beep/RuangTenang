@@ -56,6 +56,9 @@ export interface WorkspaceInspectorPanelProps {
   canPersistPlan: boolean;
   isTaskGenerating: boolean;
   isPlanExecuting: boolean;
+  allowExternalSearch: boolean;
+  onAllowExternalSearchChange: (allowed: boolean) => void;
+  isStoppingTask?: boolean;
   isContinuousRunning: boolean;
   onStartContinuous: () => void;
   onStopContinuous: () => void;
@@ -72,6 +75,7 @@ export interface WorkspaceInspectorPanelProps {
   onRunTask: (taskId: string, feedback?: string) => void;
   onGenerateTasks: (goal: string) => void;
   onCancelWorkflow: () => void;
+  onStopTask: () => void;
   onCompleteWorkflow: () => void;
   focusedTaskId?: string;
   // Memory & Chapter Scope state
@@ -117,6 +121,9 @@ export const WorkspaceInspectorPanel: React.FC<WorkspaceInspectorPanelProps> = R
   canPersistPlan,
   isTaskGenerating,
   isPlanExecuting,
+  allowExternalSearch,
+  onAllowExternalSearchChange,
+  isStoppingTask = false,
   isContinuousRunning,
   onStartContinuous,
   onStopContinuous,
@@ -133,6 +140,7 @@ export const WorkspaceInspectorPanel: React.FC<WorkspaceInspectorPanelProps> = R
   onRunTask,
   onGenerateTasks,
   onCancelWorkflow,
+  onStopTask,
   onCompleteWorkflow,
   focusedTaskId,
   canPersistMemory,
@@ -234,7 +242,7 @@ export const WorkspaceInspectorPanel: React.FC<WorkspaceInspectorPanelProps> = R
 
       {activeInspectorTab === 'context' ? (
         <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3" role="tabpanel" aria-label="Konteks Workspace">
-          <p className="mb-3 text-[11px] text-slate-500">Konteks untuk respons berikutnya. File dan Canvas hanya dikirim jika siap dan diaktifkan.</p>
+          <p className="mb-3 text-[11px] text-slate-500">Instruksi Workspace, fokus bab, dan konteks terpilih dikirim bersama permintaan ke model aktif; pola data pribadi yang dikenali aplikasi disamarkan. Konteks ini tidak ditambahkan sebagai isi pesan di riwayat chat. File dan Canvas hanya dikirim jika siap dan diaktifkan.</p>
           <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
             <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">Konteks aktif</p>
             <p className="mt-1 text-[11px] text-slate-500">
@@ -435,6 +443,9 @@ export const WorkspaceInspectorPanel: React.FC<WorkspaceInspectorPanelProps> = R
             canPersist={canPersistPlan}
             isGenerating={isTaskGenerating}
             isExecuting={isPlanExecuting}
+            allowExternalSearch={allowExternalSearch}
+            onAllowExternalSearchChange={onAllowExternalSearchChange}
+            isStoppingTask={isStoppingTask}
             isContinuousRunning={isContinuousRunning}
             onStartContinuous={onStartContinuous}
             onStopContinuous={onStopContinuous}
@@ -450,6 +461,7 @@ export const WorkspaceInspectorPanel: React.FC<WorkspaceInspectorPanelProps> = R
             onRun={onRunTask}
             onGenerate={onGenerateTasks}
             onCancel={onCancelWorkflow}
+            onStopTask={onStopTask}
             onComplete={onCompleteWorkflow}
             focusedTaskId={focusedTaskId}
             hideHeader

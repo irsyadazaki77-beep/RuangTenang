@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { apiClient } from '../../../lib/apiClient';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, ClipboardCheck, LifeBuoy, Users, Wind } from 'lucide-react';
 import { BreathingModal } from './BreathingModal';
 import { BrandLogo } from '../../../components/ui/BrandLogo';
+import { Link } from 'react-router-dom';
 
 interface EmptyChatStateProps {
   userName?: string;
@@ -49,7 +50,7 @@ const EMOTIONAL_MOODS: MoodItem[] = [
     id: 'neutral',
     value: 4,
     label: 'Tenang',
-    feeling: 'relatif stabil dan ingin berefleksi',
+    feeling: 'merasa tenang dan ingin berefleksi',
     emoji: '🌿',
     prompt: 'Hari ini terasa cukup tenang, tapi aku ingin meluangkan waktu sejenak untuk refleksi diri.'
   },
@@ -88,8 +89,8 @@ const QUICK_STARTERS = [
   {
     id: 'vent',
     title: 'Teman Berbagi Cerita',
-    desc: 'Ruang aman untuk menuangkan isi hati tanpa dihakimi',
-    prompt: 'Hari ini rasanya campur aduk. Aku hanya butuh ruang tenang untuk menumpahkan apa yang sedang aku rasakan tanpa dihakimi.',
+    desc: 'Ceritakan sesuai batas nyamanmu, atau pilih langkah lain',
+    prompt: 'Hari ini rasanya campur aduk. Bantu aku mengurai apa yang sedang kurasakan dengan pelan-pelan dan tanpa memberi label.',
     featured: false
   }
 ];
@@ -169,7 +170,7 @@ export function EmptyChatState({ userName, onSelectPrompt, onOpenBreathing }: Em
 
       {/* 3. Supporting Subtitle & Breathing Shortcut */}
       <div className="flex items-center justify-center gap-1.5 mt-1 text-[11px] sm:text-[12px] text-stone-600 dark:text-stone-300">
-        <span>Ruang aman tanpa penghakiman</span>
+        <span>Kamu bisa bercerita sesuai batas nyamanmu</span>
         <span aria-hidden="true" className="opacity-40">·</span>
         <button
           type="button"
@@ -276,6 +277,30 @@ export function EmptyChatState({ userName, onSelectPrompt, onOpenBreathing }: Em
           </button>
         ))}
       </div>
+
+      <nav aria-label="Pilihan bantuan lain" className="w-full max-w-md mt-3 sm:mt-4">
+        <p className="text-[10px] font-semibold uppercase tracking-wide text-stone-400 dark:text-slate-500 mb-1.5">
+          Atau pilih langkah lain
+        </p>
+        <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
+          <Link to="/mindfulness" className="flex min-h-11 items-center justify-center gap-1 rounded-lg border border-stone-200/70 bg-white/60 px-1.5 text-[10.5px] font-medium text-stone-700 transition-colors hover:border-teal-300 hover:bg-teal-50/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 dark:border-slate-800 dark:bg-slate-900/50 dark:text-slate-300 dark:hover:border-teal-800 dark:hover:bg-teal-950/40 sm:gap-1.5 sm:px-2 sm:text-xs">
+            <Wind className="h-3.5 w-3.5 shrink-0 text-teal-600 dark:text-teal-400" aria-hidden="true" />
+            <span>Latihan tenang</span>
+          </Link>
+          <Link to="/screening" className="flex min-h-11 items-center justify-center gap-1 rounded-lg border border-stone-200/70 bg-white/60 px-1.5 text-[10.5px] font-medium text-stone-700 transition-colors hover:border-teal-300 hover:bg-teal-50/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 dark:border-slate-800 dark:bg-slate-900/50 dark:text-slate-300 dark:hover:border-teal-800 dark:hover:bg-teal-950/40 sm:gap-1.5 sm:px-2 sm:text-xs">
+            <ClipboardCheck className="h-3.5 w-3.5 shrink-0 text-teal-600 dark:text-teal-400" aria-hidden="true" />
+            <span>Cek kondisi</span>
+          </Link>
+          <Link to="/counselors" className="flex min-h-11 items-center justify-center gap-1 rounded-lg border border-stone-200/70 bg-white/60 px-1.5 text-[10.5px] font-medium text-stone-700 transition-colors hover:border-teal-300 hover:bg-teal-50/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 dark:border-slate-800 dark:bg-slate-900/50 dark:text-slate-300 dark:hover:border-teal-800 dark:hover:bg-teal-950/40 sm:gap-1.5 sm:px-2 sm:text-xs">
+            <Users className="h-3.5 w-3.5 shrink-0 text-teal-600 dark:text-teal-400" aria-hidden="true" />
+            <span>Cari konselor</span>
+          </Link>
+        </div>
+        <Link to="/emergency" className="mt-2 inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg px-2 text-[11px] font-medium text-rose-700 underline decoration-rose-300 underline-offset-2 hover:text-rose-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-600 dark:text-rose-300 dark:decoration-rose-800 dark:hover:text-rose-200">
+          <LifeBuoy className="h-3.5 w-3.5" aria-hidden="true" />
+          Butuh bantuan segera? Buka Pusat Bantuan Krisis
+        </Link>
+      </nav>
 
     </div>
   );

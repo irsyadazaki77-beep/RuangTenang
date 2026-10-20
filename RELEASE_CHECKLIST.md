@@ -117,7 +117,7 @@
    - `npm run start`
 
 ## 10. Post-Deployment Verification
-- [ ] Check Liveness endpoint `/api/v1/health` returns `{ "status": "healthy" }` (HTTP 200).
+- [ ] Check Liveness endpoint `/api/v1/health` returns `{ "status": "ok" }` (HTTP 200).
 - [ ] Check Readiness endpoint `/api/v1/readiness` returns `{ "status": "ready", "database": "connected" }` (HTTP 200).
 - [ ] Verify HTTPS & CSP headers (`Cache-Control: no-store` on API responses).
 - [ ] Verify `/manifest.json` loads and the configured production origin is correct.

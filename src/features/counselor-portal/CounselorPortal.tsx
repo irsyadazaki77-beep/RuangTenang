@@ -156,7 +156,7 @@ export const CounselorPortal: React.FC = () => {
         </div>
         <h2 className="text-xl font-bold text-primary">Akses Dibatasi: Khusus Konselor & Tenaga Klinis</h2>
         <p className="text-sm text-secondary leading-relaxed">
-          Halaman Portal Konselor berisi antrean triase skrining dan catatan medis SOAP terenkripsi yang hanya dapat diakses oleh konselor kampus dan psikolog terverifikasi sesuai kebijakan privasi UU PDP.
+          Portal ini memuat antrean dan catatan SOAP. Akses catatan diperiksa berdasarkan akun konselor, penugasan kasus, dan izin berbagi yang berlaku.
         </p>
         <div className="pt-2">
           <a
@@ -182,13 +182,13 @@ export const CounselorPortal: React.FC = () => {
               </div>
               <div>
                 <h1 className="text-lg sm:text-xl font-bold text-primary flex items-center gap-2">
-                  <span>Portal Konselor & Layanan Klinis Kampus</span>
+                  <span>Portal Konselor</span>
                   <span className="text-xs px-2.5 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 font-semibold border border-indigo-200 dark:border-indigo-900">
-                    Portal Klinis
+                    Konselor
                   </span>
                 </h1>
                 <p className="text-xs text-secondary mt-0.5">
-                  Sistem Triase Skrining, Dokumentasi SOAP Terenkripsi & Manajemen Kasus Kesehatan Mental.
+                  Antrean, catatan SOAP, dan tindak lanjut mahasiswa yang ditugaskan.
                 </p>
               </div>
             </div>

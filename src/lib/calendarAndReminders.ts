@@ -98,19 +98,16 @@ export function generateIcsFileContent(apt: Appointment): string {
     apt.timezone
   );
 
-  const counselorName = apt.counselorName || 'Psikolog RuangTenang';
   const meetingLocation = apt.mode === 'video_call'
-    ? (apt.meetingLink || 'Ruang Video Call Virtual (Jitsi Meet)')
-    : 'Pusat Bimbingan & Konseling UPT Kampus';
-
+    ? (isHttpsUrl(apt.meetingLink) ? apt.meetingLink : 'Video call; tautan diberikan setelah konfirmasi')
+    : 'Pusat layanan kampus';
   const descriptionText = [
-    `Sesi Konseling Mental Mahasiswa dengan ${counselorName}`,
-    `Mode: ${apt.mode}`,
-    `Topik/Keluhan: ${apt.primaryConcern || 'Konseling Mental'}`,
-    `Link Meeting: ${apt.meetingLink || 'https://meet.jit.si/ruangtenang-session'}`,
-    `Waktu Sesi: ${formattedLocal}`,
-    `Kerahasiaan data dan isi konseling terjamin sesuai norma etika psikologi.`
-  ].join('\\n');
+    'Pengingat janji sesi RuangTenang.',
+    `Format: ${apt.mode === 'video_call' ? 'Video call' : 'Tatap muka'}`,
+    `Waktu: ${formattedLocal}`
+  ].join('\n');
+  const safeUid = String(apt.id || 'appointment').replace(/[^a-zA-Z0-9._-]/g, '');
+  const icsStatus = apt.status === 'CONFIRMED' ? 'CONFIRMED' : ['CANCELLED', 'REJECTED'].includes(apt.status) ? 'CANCELLED' : 'TENTATIVE';
 
   return `BEGIN:VCALENDAR
 VERSION:2.0
@@ -118,36 +115,44 @@ PRODID:-//RuangTenang//Konseling Mahasiswa Kampus//ID
 CALSCALE:GREGORIAN
 METHOD:PUBLISH
 BEGIN:VEVENT
-UID:appt-${apt.id}@ruangtenang.ac.id
+UID:appt-${safeUid}@ruangtenang.ac.id
 DTSTAMP:${dtStampIcs}
 DTSTART:${startIcsStr}
 DTEND:${endIcsStr}
-SUMMARY:Sesi Konseling Psikolog - ${counselorName}
-DESCRIPTION:${descriptionText}
-LOCATION:${meetingLocation}
-STATUS:CONFIRMED
+SUMMARY:${escapeIcsText('Janji RuangTenang')}
+DESCRIPTION:${escapeIcsText(descriptionText)}
+LOCATION:${escapeIcsText(meetingLocation)}
+STATUS:${icsStatus}
 BEGIN:VALARM
 TRIGGER:-P1D
 ACTION:DISPLAY
-DESCRIPTION:Pengingat H-24 Jam: Sesi Konseling Psikolog dengan ${counselorName} besok.
+DESCRIPTION:${escapeIcsText('Pengingat janji RuangTenang besok.')}
 END:VALARM
 BEGIN:VALARM
 TRIGGER:-PT1H
 ACTION:DISPLAY
-DESCRIPTION:Pengingat H-1 Jam: Sesi Konseling Psikolog dengan ${counselorName} akan dimulai dalam 1 jam.
+DESCRIPTION:${escapeIcsText('Pengingat janji RuangTenang dalam 1 jam.')}
 END:VALARM
 BEGIN:VALARM
 TRIGGER:-PT30M
 ACTION:DISPLAY
-DESCRIPTION:Pengingat H-30 Menit: Sesi Konseling Psikolog dengan ${counselorName} akan dimulai dalam 30 menit.
+DESCRIPTION:${escapeIcsText('Pengingat janji RuangTenang dalam 30 menit.')}
 END:VALARM
 BEGIN:VALARM
 TRIGGER:-PT10M
 ACTION:DISPLAY
-DESCRIPTION:Pengingat H-10 Menit: Sesi Konseling Psikolog dengan ${counselorName} dimulai dalam 10 menit!
+DESCRIPTION:${escapeIcsText('Pengingat janji RuangTenang dalam 10 menit.')}
 END:VALARM
 END:VEVENT
 END:VCALENDAR`;
+}
+
+function escapeIcsText(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/\r\n|\r|\n/g, '\\n').replace(/,/g, '\\,').replace(/;/g, '\\;');
+}
+
+function isHttpsUrl(value?: string | null): value is string {
+  return typeof value === 'string' && /^https:\/\//i.test(value);
 }
 
 /**
@@ -159,11 +164,11 @@ export function downloadIcsCalendarFile(apt: Appointment): void {
   const url = window.URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.setAttribute('download', `Jadwal_Konseling_${(apt.counselorName || 'Konselor').replace(/\s+/g, '_')}_${apt.date}.ics`);
+  link.setAttribute('download', `Janji_RuangTenang_${apt.date}.ics`);
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
-  window.URL.revokeObjectURL(url);
+  window.setTimeout(() => window.URL.revokeObjectURL(url), 1000);
 }
 
 export const downloadIcsFile = downloadIcsCalendarFile;
@@ -178,13 +183,11 @@ export function generateGoogleCalendarUrl(apt: Appointment): string {
     apt.timezone
   );
 
-  const title = encodeURIComponent(`Sesi Konseling Psikolog: ${apt.counselorName}`);
-  const details = encodeURIComponent(
-    `Sesi Konseling Mahasiswa (${apt.mode})\nTopik: ${apt.primaryConcern}\nLink Video Call: ${apt.meetingLink || 'Akan dikonfirmasi oleh konselor'}\nPenanganan data mengikuti kebijakan layanan kampus dan RuangTenang.`
-  );
-  const location = encodeURIComponent(
-    apt.mode === 'video_call' ? (apt.meetingLink || 'Sesi Video Daring RuangTenang') : 'Pusat Bimbingan & Konseling Kampus'
-  );
+  const title = encodeURIComponent('Janji RuangTenang');
+  const details = encodeURIComponent(`Pengingat janji sesi RuangTenang.\nFormat: ${apt.mode === 'video_call' ? 'Video call' : 'Tatap muka'}`);
+  const location = encodeURIComponent(apt.mode === 'video_call'
+    ? (isHttpsUrl(apt.meetingLink) ? apt.meetingLink : 'Video call; tautan diberikan setelah konfirmasi')
+    : 'Pusat layanan kampus');
 
   return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&details=${details}&location=${location}&dates=${startIcsStr}/${endIcsStr}`;
 }
@@ -199,13 +202,11 @@ export function generateOutlookCalendarUrl(apt: Appointment): string {
     apt.timezone
   );
 
-  const title = encodeURIComponent(`Sesi Konseling Psikolog: ${apt.counselorName}`);
-  const details = encodeURIComponent(
-    `Sesi Konseling Mental Mahasiswa (${apt.mode})\nTopik: ${apt.primaryConcern}\nLink Video Call: ${apt.meetingLink || 'https://meet.jit.si/ruangtenang'}`
-  );
-  const location = encodeURIComponent(
-    apt.mode === 'video_call' ? (apt.meetingLink || 'Online Video Call Jitsi') : 'Pusat Bimbingan & Konseling Kampus'
-  );
+  const title = encodeURIComponent('Janji RuangTenang');
+  const details = encodeURIComponent(`Pengingat janji sesi RuangTenang.\nFormat: ${apt.mode === 'video_call' ? 'Video call' : 'Tatap muka'}`);
+  const location = encodeURIComponent(apt.mode === 'video_call'
+    ? (isHttpsUrl(apt.meetingLink) ? apt.meetingLink : 'Video call; tautan diberikan setelah konfirmasi')
+    : 'Pusat layanan kampus');
 
   return `https://outlook.live.com/calendar/0/deeplink/compose?path=/calendar/action/compose&rru=addevent&subject=${title}&body=${details}&location=${location}&startdt=${startUtcIso}&enddt=${endUtcIso}`;
 }
@@ -252,19 +253,21 @@ export function playNotificationChime(): void {
 /**
  * Trigger native browser web notification
  */
-export function triggerNativeNotification(title: string, body: string): void {
+export function triggerNativeNotification(title: string, body: string, tag?: string): boolean {
   playNotificationChime();
   if ('Notification' in window && Notification.permission === 'granted') {
     try {
       new Notification(title, {
         body,
         icon: '/favicon.ico',
-        tag: 'ruangtenang-reminder'
+        tag: tag || `ruangtenang-${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
       });
+      return true;
     } catch (e) {
       console.warn('Browser notification display error:', e);
     }
   }
+  return false;
 }
 
 /**
@@ -274,7 +277,17 @@ export function getAppointmentReminderPrefs(apptId: string): ReminderPreferences
   try {
     const stored = safeLocalStorage.getItem(`${STORAGE_REMINDER_PREFS_KEY}_${apptId}`);
     if (stored) {
-      return JSON.parse(stored);
+      const parsed = JSON.parse(stored) as Partial<ReminderPreferences>;
+      return {
+        h24: parsed.h24 !== false,
+        h1: parsed.h1 !== false,
+        h30m: parsed.h30m !== false,
+        h10m: parsed.h10m !== false,
+        h24Sent: parsed.h24Sent === true,
+        h1Sent: parsed.h1Sent === true,
+        h30mSent: parsed.h30mSent === true,
+        h10mSent: parsed.h10mSent === true
+      };
     }
   } catch (e) {
     console.warn('Failed to parse stored reminder prefs:', e);
@@ -288,4 +301,15 @@ export function saveAppointmentReminderPrefs(apptId: string, prefs: ReminderPref
   } catch (e) {
     console.warn('Failed to save reminder prefs:', e);
   }
+}
+
+export function resetAppointmentReminderDelivery(apptId: string): void {
+  const prefs = getAppointmentReminderPrefs(apptId);
+  saveAppointmentReminderPrefs(apptId, {
+    ...prefs,
+    h24Sent: false,
+    h1Sent: false,
+    h30mSent: false,
+    h10mSent: false
+  });
 }

@@ -28,7 +28,7 @@ export interface StreamCallbacks {
   onStateChange?: (state: StreamState) => void;
   onMessageStart?: (msgId: string) => void;
   onChunk?: (text: string) => void;
-  onPluginSwitch?: (pluginName: string) => void;
+  onPluginSwitch?: (pluginName: string, parameters?: Record<string, unknown>) => void;
   onMessageComplete?: (fullText: string) => void | Promise<void>;
   onError?: (error: string) => void | Promise<void>;
   onFollowUps?: (followUps: string[]) => void;
@@ -53,6 +53,8 @@ export interface StreamPayload {
   attachments?: StoredAttachment[];
   includeWorkspaceFiles?: boolean;
   workspaceAttachmentIds?: string[];
+  /** Supplemental Canvas/workspace context; handled separately from the message saved in chat history. */
+  workspaceContext?: string;
   isolatedTaskExecution?: boolean;
   taskCategory?: string;
   latencyPreference?: string;
@@ -253,7 +255,7 @@ export class ChatStreamingClient {
                     } else if (parsed.tool_call || (parsed.type === 'plugin' && parsed.plugin)) {
                       pluginName = parsed.tool_call || parsed.plugin;
                       if (token === this.activeToken && callbacks.onPluginSwitch) {
-                        callbacks.onPluginSwitch(pluginName);
+                        callbacks.onPluginSwitch(pluginName, parsed.parameters);
                       }
                     } else if (parsed.type === 'routing') {
                       if (token === this.activeToken && callbacks.onRoutingMetadata) {
@@ -323,6 +325,12 @@ export class ChatStreamingClient {
       }
 
       if (!receivedDoneMarker) {
+        // A validated tool call is already a complete, actionable UI event.
+        // The server may disconnect before its trailing [DONE] marker arrives.
+        if (pluginName) {
+          this.changeState(token, 'completed', callbacks.onStateChange);
+          return;
+        }
         throw new Error(currentText.trim()
           ? 'Respons terputus sebelum selesai. Coba ulangi permintaan.'
           : 'Koneksi ke provider AI terputus sebelum respons diterima. Coba ulangi permintaan.');

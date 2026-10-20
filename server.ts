@@ -22,7 +22,7 @@ import {
   renderSwaggerHtml,
   centralizedErrorHandler
 } from './server/apiV1Helpers.js';
-import { getAiClient } from './server/config/aiConfig.js';
+import { getAiClient, isAiAvailable } from './server/config/aiConfig.js';
 import { parsePort } from './server/config/port.js';
 
 import { validateEnvironment } from './server/config/envValidation.js';
@@ -274,7 +274,7 @@ async function startServer() {
       timestamp: new Date().toISOString(),
       services: {
         database: isHealthy ? 'UP' : 'DOWN',
-        ai: getAiClient() ? 'UP' : 'DEGRADED'
+        ai: isAiAvailable() ? 'UP' : 'DEGRADED'
       },
       environment: process.env.NODE_ENV || 'development'
     });

@@ -7,7 +7,6 @@ import {
   MicOff,
   PhoneOff,
   AlertCircle,
-  Lock,
   Users,
   Network,
   ScreenShare,
@@ -22,7 +21,7 @@ import { apiClient } from '../../lib/apiClient';
 interface VideoConsultationRoomProps {
   appointment: Appointment | null;
   onClose: () => void;
-  onEndCall: (appointmentId: string, notes: string) => void;
+  onEndCall: (appointmentId: string) => void;
   userRole: 'mahasiswa' | 'konselor' | 'admin' | 'guest';
 }
 
@@ -104,7 +103,7 @@ export const VideoConsultationRoom: React.FC<VideoConsultationRoomProps> = ({
           setRoomAccessGranted(false);
         } else {
           setApiAccessDeniedMsg(null);
-          setRoomPresenceText('Menginisialisasi koneksi terenkripsi...');
+          setRoomPresenceText('Menyiapkan koneksi video...');
 
           const loadIceServers = () => apiClient.get<any>(`/api/v1/appointments/${appointment.id}/ice-servers`)
             .then(iceRes => {
@@ -317,7 +316,7 @@ export const VideoConsultationRoom: React.FC<VideoConsultationRoomProps> = ({
         setIsReconnecting(false);
         setRoomPresenceText('Konsultasi Video Terhubung');
       } else if (state === 'connecting') {
-        setRoomPresenceText('Menghubungkan sesi peer-to-peer...');
+        setRoomPresenceText('Menghubungkan peserta...');
       } else if (state === 'disconnected') {
         setRoomPresenceText('Koneksi terputus. Mencoba menghubungkan kembali...');
         setIsReconnecting(true);
@@ -833,7 +832,10 @@ export const VideoConsultationRoom: React.FC<VideoConsultationRoomProps> = ({
   }
 
   const handleEndCall = () => {
-    if (window.confirm('Apakah Anda yakin ingin mengakhiri sesi konsultasi video ini?')) {
+    const confirmation = counselorNotes.trim()
+      ? 'Draft catatan di panel ini tidak otomatis disimpan. Pindahkan ke Catatan SOAP di Portal Konselor jika perlu menyimpannya. Akhiri sesi video sekarang?'
+      : 'Apakah Anda yakin ingin mengakhiri sesi konsultasi video ini?';
+    if (window.confirm(confirmation)) {
       if (localStreamRef.current) {
         localStreamRef.current.getTracks().forEach(t => t.stop());
       }
@@ -844,7 +846,7 @@ export const VideoConsultationRoom: React.FC<VideoConsultationRoomProps> = ({
         peerConnectionRef.current.close();
       }
       sendSignal('hangup', {});
-      onEndCall(appointment.id, counselorNotes);
+      if (userRole === 'konselor') onEndCall(appointment.id);
       onClose();
     }
   };
@@ -862,8 +864,8 @@ export const VideoConsultationRoom: React.FC<VideoConsultationRoomProps> = ({
           <div className="flex items-center justify-between">
             <div className="flex flex-col">
               <span className="text-white font-semibold flex items-center gap-2 pointer-events-auto text-xs sm:text-sm">
-                <Lock className="w-4 h-4 text-emerald-400" />
-                Tele-Konseling Terenkripsi
+                <Video className="w-4 h-4 text-emerald-400" />
+                Ruang Konsultasi Video
                 {iceServers.length > 0 ? (
                   <span className="text-[10px] text-emerald-400 font-normal bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20 hidden sm:inline">
                     WebRTC ICE ({connectionState})
@@ -954,7 +956,7 @@ export const VideoConsultationRoom: React.FC<VideoConsultationRoomProps> = ({
               <div className="flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
                 <p className="leading-relaxed text-[11px] sm:text-xs">
-                  <strong className="text-emerald-400 font-semibold">Ruang Tele-Konseling WebRTC:</strong> Sesi video peer-to-peer terenkripsi, mendukung presentasi layar skripsi & catatan kolaboratif real-time.
+                <strong className="text-emerald-400 font-semibold">Ruang konsultasi video WebRTC:</strong> Koneksi dapat memakai server relay (TURN) sesuai jaringan. Fitur ini mendukung berbagi layar dan catatan bersama selama sesi.
                 </p>
               </div>
               <button
@@ -1010,7 +1012,7 @@ export const VideoConsultationRoom: React.FC<VideoConsultationRoomProps> = ({
                         {userRole === 'mahasiswa' ? appointment.counselorName : appointment.studentName}
                       </p>
                       <p className="text-xs text-slate-400">
-                        {isWebRtcConnected ? 'Mempersiapkan video rekan...' : (hasCounselorJoined || hasStudentJoined) ? 'Menunggu koneksi video peer-to-peer...' : 'Menunggu peserta bergabung...'}
+                        {isWebRtcConnected ? 'Mempersiapkan video peserta...' : (hasCounselorJoined || hasStudentJoined) ? 'Menunggu koneksi video peserta...' : 'Menunggu peserta bergabung...'}
                       </p>
                     </div>
                   </div>
@@ -1117,7 +1119,7 @@ export const VideoConsultationRoom: React.FC<VideoConsultationRoomProps> = ({
             type="button"
             onClick={handleEndCall}
             className="w-14 sm:w-16 h-11 sm:h-12 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center shadow-lg shadow-rose-600/30 transition-all cursor-pointer"
-            title="Akhiri Panggilan Konsultasi"
+            title={userRole === 'konselor' ? 'Akhiri sesi konsultasi' : 'Keluar dari sesi konsultasi'}
           >
             <PhoneOff className="w-5 h-5 sm:w-6 sm:h-6" />
           </button>
@@ -1145,7 +1147,7 @@ export const VideoConsultationRoom: React.FC<VideoConsultationRoomProps> = ({
           </div>
           <div className="p-3 flex-1 flex flex-col">
             <p className="text-[11px] text-slate-400 mb-2">
-              Catatan dua arah terenkripsi. Anda dan {userRole === 'mahasiswa' ? 'konselor' : 'mahasiswa'} dapat menulis ringkasan solusi akademik & emosi bersama-sama.
+              Catatan sementara di memori server dan terlihat oleh kedua peserta sesi. Isinya dapat hilang saat server dimulai ulang; hindari menulis rincian sensitif yang tidak diperlukan.
             </p>
             <textarea
               value={sharedInCallNotes}
@@ -1170,8 +1172,8 @@ export const VideoConsultationRoom: React.FC<VideoConsultationRoomProps> = ({
               <AlertCircle className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="font-semibold text-white text-sm">Catatan Klinis Privat</h3>
-              <p className="text-[10px] text-slate-400">Tersimpan aman & terenkripsi AES-256</p>
+              <h3 className="font-semibold text-white text-sm">Draft catatan konselor</h3>
+              <p className="text-[10px] text-slate-400">Hanya tersimpan di halaman ini; tidak otomatis masuk rekam sesi.</p>
             </div>
           </div>
 
@@ -1183,10 +1185,10 @@ export const VideoConsultationRoom: React.FC<VideoConsultationRoomProps> = ({
               </div>
             </div>
             <div className="flex-1 flex flex-col space-y-1.5">
-              <label className="text-xs font-semibold text-slate-300">Observasi & Catatan Diagnosis Klinis:</label>
+              <label className="text-xs font-semibold text-slate-300">Catatan kerja konselor:</label>
               <textarea
                 className="flex-1 w-full p-3 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 resize-none transition-all placeholder:text-slate-500 font-sans"
-                placeholder="Ketik catatan medis, observasi emosional, dan saran coping selama sesi berlangsung di sini..."
+                placeholder="Tulis draft yang nanti dapat dipindahkan ke Catatan SOAP di Portal Konselor..."
                 value={counselorNotes}
                 onChange={(e) => setCounselorNotes(e.target.value)}
               />

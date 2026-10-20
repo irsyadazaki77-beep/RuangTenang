@@ -1,5 +1,6 @@
 import { aiRequestService } from './ai/aiRequestService.js';
 import { consentService } from './consentService.js';
+import { DEFAULT_AI_MODEL_ID } from './ai/aiModelRegistry.js';
 
 export interface StructuredSessionSummary {
   masalahUtama: string;
@@ -124,7 +125,8 @@ export const sessionSummaryService = {
 
     const budgetedChat = budgetChatHistory(messages);
 
-    const systemPrompt = `Anda adalah asisten refleksi kesehatan mental RuangTenang. Tugas Anda merangkum percakapan sesi konseling/curhat ke dalam format JSON yang terstruktur, ringkas, dan empatik.
+    const systemPrompt = `[CONTEXT_BOUNDARIES]
+Anda adalah asisten refleksi kesehatan mental RuangTenang. Gunakan hanya pesan dalam sesi yang diberikan, tanpa menambahkan ingatan dari chat atau aktivitas lain. Tugas Anda merangkum percakapan sesi konseling/curhat ke dalam format JSON yang terstruktur, ringkas, dan empatik.
 ATURAN KETAT:
 1. DILARANG KERAS membuat diagnosis medis, psikiatris, atau klinis (misalnya jangan menulis "depresi klinis", "gangguan bipolar", "skizofrenia").
 2. Fokus pada masalah nyata pengguna, emosi yang dirasakan, pola pemicu, poin diskusi, hal yang sudah dicoba, dan rekomendasi langkah mikro yang realistis.
@@ -145,7 +147,7 @@ ATURAN KETAT:
         userId,
         prompt,
         systemInstruction: systemPrompt,
-        requestedModelId: 'gemini-3.1-flash-lite',
+        requestedModelId: DEFAULT_AI_MODEL_ID,
         userTier: 'Free'
       });
 

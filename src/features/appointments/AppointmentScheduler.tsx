@@ -35,6 +35,7 @@ import {
   downloadIcsCalendarFile,
   generateGoogleCalendarUrl,
   getAppointmentReminderPrefs,
+  resetAppointmentReminderDelivery,
   saveAppointmentReminderPrefs,
   triggerNativeNotification,
   parseAppointmentDateTime
@@ -138,7 +139,7 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
     const checkScheduledReminders = () => {
       const now = Date.now();
       appointments.forEach(apt => {
-        if (apt.status === 'CANCELLED' || apt.status === 'REJECTED') return;
+        if (apt.status !== 'CONFIRMED' || apt.approvalStatus !== 'APPROVED') return;
 
         const prefs = getAppointmentReminderPrefs(apt.id);
         const timeData = parseAppointmentDateTime(apt.date, apt.timeSlot, apt.timezone);
@@ -150,8 +151,9 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
           prefs.h24Sent = true;
           saveAppointmentReminderPrefs(apt.id, prefs);
           triggerNativeNotification(
-            '🔔 Pengingat H-24 Jam Konseling',
-            `Besok Anda memiliki jadwal konseling dengan ${apt.counselorName} pukul ${apt.timeSlot}.`
+            'Pengingat RuangTenang — besok',
+            `Anda memiliki janji besok pukul ${apt.timeSlot}.`,
+            `appointment-${apt.id}-h24`
           );
           showToast(`🔔 Pengingat H-24 Jam: Konseling dengan ${apt.counselorName} besok pukul ${apt.timeSlot}.`, 'info');
         }
@@ -161,8 +163,9 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
           prefs.h1Sent = true;
           saveAppointmentReminderPrefs(apt.id, prefs);
           triggerNativeNotification(
-            '🔔 Pengingat H-1 Jam Konseling',
-            `Sesi konseling Anda dengan ${apt.counselorName} akan dimulai dalam 1 jam!`
+            'Pengingat RuangTenang — 1 jam lagi',
+            `Janji Anda dimulai dalam 1 jam (${apt.timeSlot}).`,
+            `appointment-${apt.id}-h1`
           );
           showToast(`🔔 Pengingat H-1 Jam: Sesi konseling dengan ${apt.counselorName} dimulai 1 jam lagi.`, 'warning');
         }
@@ -172,8 +175,9 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
           prefs.h30mSent = true;
           saveAppointmentReminderPrefs(apt.id, prefs);
           triggerNativeNotification(
-            '🔔 Pengingat H-30 Menit Konseling',
-            `Sesi konseling Anda dengan ${apt.counselorName} akan dimulai dalam 30 menit.`
+            'Pengingat RuangTenang — 30 menit lagi',
+            `Janji Anda dimulai dalam 30 menit (${apt.timeSlot}).`,
+            `appointment-${apt.id}-h30m`
           );
           showToast(`🔔 Pengingat H-30m: Sesi dengan ${apt.counselorName} dimulai 30 menit lagi.`, 'warning');
         }
@@ -183,8 +187,9 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
           prefs.h10mSent = true;
           saveAppointmentReminderPrefs(apt.id, prefs);
           triggerNativeNotification(
-            '🚨 Pengingat H-10 Menit Konseling!',
-            `Sesi konseling Anda dengan ${apt.counselorName} akan dimulai dalam 10 menit. Bersiaplah!`
+            'Pengingat RuangTenang — 10 menit lagi',
+            `Janji Anda dimulai dalam 10 menit (${apt.timeSlot}).`,
+            `appointment-${apt.id}-h10m`
           );
           showToast(`🚨 Pengingat H-10m: Sesi dengan ${apt.counselorName} dimulai 10 menit lagi!`, 'warning');
         }
@@ -276,27 +281,26 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
 
   const requestNotificationPermission = async () => {
     if (!('Notification' in window)) {
-      showToast('Browser Anda tidak mendukung Web Push Notification.', 'error');
+      showToast('Browser Anda tidak mendukung notifikasi desktop.', 'error');
       return;
     }
-    const perm = await Notification.requestPermission();
-    setNotificationPermission(perm);
-    if (perm === 'granted') {
-      new Notification('Pengingat Sesi RuangTenang Aktif', {
-        body: 'Sistem notifikasi pengingat sesi konseling psikolog berhasil diaktifkan.',
-        icon: '/favicon.ico'
-      });
+    try {
+      const perm = await Notification.requestPermission();
+      setNotificationPermission(perm);
+      if (perm === 'granted') {
+        triggerNativeNotification('Notifikasi RuangTenang aktif', 'Browser ini diizinkan menampilkan notifikasi saat pengingat dijalankan.', 'ruangtenang-permission-enabled');
+      }
+    } catch {
+      showToast('Browser gagal mengubah izin notifikasi. Periksa pengaturan situs di browser.', 'error');
     }
   };
 
   const triggerTestNotification = () => {
     if ('Notification' in window && Notification.permission === 'granted') {
-      new Notification('🔔 Pengingat Sesi Konseling Psikolog', {
-        body: 'Sesi konseling Anda bersama Dr. Anita Rahmawati akan dimulai dalam 30 menit.',
-        icon: '/favicon.ico'
-      });
+      const displayed = triggerNativeNotification('Uji coba notifikasi RuangTenang', 'Notifikasi browser dapat ditampilkan di perangkat ini.', 'ruangtenang-reminder-test');
+      showToast(displayed ? 'Uji coba notifikasi ditampilkan oleh browser.' : 'Browser gagal menampilkan notifikasi uji coba.', displayed ? 'success' : 'warning');
     } else {
-      showToast('Peringatan: Sesi konseling Anda akan dimulai dalam 30 menit! (Notifikasi Browser aktif)', 'warning');
+      showToast('Notifikasi desktop belum diizinkan. Ini hanya uji coba; tidak ada janji temu yang diubah.', 'info');
     }
   };
 
@@ -381,6 +385,7 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
         return a;
       }));
 
+      resetAppointmentReminderDelivery(appointmentId);
       showToast(`Jadwal Berhasil Diubah ke Tanggal ${newDate} Pukul ${newTimeSlot}! (Menunggu konfirmasi ulang)`, 'success');
     } catch (e: any) {
       console.warn('Backend reschedule failed:', e);
@@ -389,12 +394,10 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
     }
   };
 
-  const handleCompleteSession = async (appointmentId: string, summaryNotes: string) => {
+  const handleCompleteSession = async (appointmentId: string) => {
     try {
       const res = await apiClient.put(`/api/v1/appointments/${appointmentId}`, {
-        status: 'COMPLETED',
-        attendanceStatus: 'ATTENDED',
-        notes: summaryNotes
+        status: 'COMPLETED'
       });
 
       if (!res.success) {
@@ -410,12 +413,12 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
             status: (rec?.status || a.status) as any,
             approvalStatus: (rec?.approvalStatus || a.approvalStatus) as any,
             attendanceStatus: (rec?.attendanceStatus || a.attendanceStatus) as any,
-            notes: rec?.notes || summaryNotes
+            notes: typeof rec?.notes === 'string' ? rec.notes : undefined
           };
         }
         return a;
       }));
-      showToast('Sesi konseling telah ditandai selesai.', 'success');
+      showToast('Sesi ditandai selesai. Draft panel video tidak disimpan; gunakan Catatan SOAP di Portal Konselor untuk menyimpan catatan.', 'success');
     } catch (err) {
       console.warn('Sync complete session with backend failed:', err);
       showToast('Terjadi kesalahan saat memperbarui status sesi.', 'error');
@@ -469,10 +472,13 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
           <div>
             <h3 className="font-semibold text-primary text-xs">Sistem Notifikasi Pengingat Pertemuan</h3>
             <p className="text-[11px] text-secondary mt-0.5">
-              Status Browser:{' '}
+              Status izin notifikasi browser:{' '}
               <span className={`font-semibold ${notificationPermission === 'granted' ? 'text-teal-600 dark:text-teal-400' : 'text-amber-600 dark:text-amber-400'}`}>
                 {notificationPermission === 'granted' ? 'Aktif' : 'Belum Diizinkan'}
               </span>
+            </p>
+            <p className="text-[11px] text-secondary mt-1 max-w-2xl">
+              Pengingat dijalankan oleh browser ini saat halaman RuangTenang terbuka; tab tidur atau browser tertutup dapat menunda atau melewatkan pengingat. Ini bukan layanan push server.
             </p>
           </div>
         </div>
@@ -678,7 +684,7 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
                         className="w-full py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-all shadow-sm cursor-pointer"
                       >
                         <FileText className="w-4 h-4" />
-                        <span>Lihat Ringkasan Hasil Konseling</span>
+                        <span>Lihat Detail Sesi</span>
                       </button>
                     ) : (
                       <>
@@ -735,7 +741,6 @@ export const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
       <CounselorChatSimulation
         appointment={activeChatApt}
         onClose={() => setActiveChatApt(null)}
-        onCompleteSession={handleCompleteSession}
         showToast={showToast}
       />
 

@@ -26,6 +26,10 @@ Pedoman penting:
 3. Jika terdapat bagian yang tidak terbaca, tandai dengan: [BAGIAN_TIDAK_TERBACA].
 4. Berikan hasil ekstraksi teks yang bersih tanpa pembuka atau penutup basa-basi.`;
 
+export function isVisualOcrAvailable(): boolean {
+  return Boolean(getGenAIClient() || (openaiService.isAvailable() && aiProviderConfig.isConfigured('openai')));
+}
+
 /**
  * Executes tiered visual document / image OCR and understanding using configured vision providers.
  * Returns null if no vision provider is configured, preserving honest preview-only behavior without hallucinations.

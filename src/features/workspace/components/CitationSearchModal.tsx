@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useId, useRef } from 'react';
 import {
   Search,
   Quote,
@@ -13,13 +13,14 @@ import {
 import {
   AcademicPaper,
   CitationFormat,
-  searchAcademicPapers,
+  searchAcademicPapersWithStatus,
   formatAPA7,
   formatIEEE,
   formatHarvard,
   formatBibTeX,
 } from '../utils/citationEngine';
 import { parseCitations, generateRIS } from '../utils/citationExport';
+import { useFocusTrap } from '../../../hooks/useFocusTrap';
 
 interface CitationSearchModalProps {
   isOpen: boolean;
@@ -40,11 +41,18 @@ export const CitationSearchModal: React.FC<CitationSearchModalProps> = ({
   const [format, setFormat] = useState<CitationFormat>('APA7');
   const [copied, setCopied] = useState(false);
   const [copiedRefManager, setCopiedRefManager] = useState<'BIB' | 'RIS' | null>(null);
+  const [clipboardError, setClipboardError] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState(false);
+  const [searchRetryCount, setSearchRetryCount] = useState(0);
   const [importRawText, setImportRawText] = useState('');
+  const [importError, setImportError] = useState('');
   const [isDraggingBib, setIsDraggingBib] = useState(false);
   const bibFileInputRef = useRef<HTMLInputElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const titleId = useId();
+  const descriptionId = useId();
+  const dialogRef = useFocusTrap<HTMLDivElement>({ isOpen, onClose, initialFocusRef: searchInputRef });
 
   useEffect(() => {
     if (!isOpen || activeMode !== 'search') return;
@@ -61,11 +69,11 @@ export const CitationSearchModal: React.FC<CitationSearchModalProps> = ({
 
     const timer = setTimeout(async () => {
       try {
-        const results = await searchAcademicPapers(normalizedQuery, controller.signal);
+        const result = await searchAcademicPapersWithStatus(normalizedQuery, controller.signal);
         if (!active || controller.signal.aborted) return;
-        setPapers(results);
-        setSearchError(results.length === 0);
-        setSelectedPaper(previous => results.find(paper => paper.id === previous?.id) || results[0] || null);
+        setPapers(result.papers);
+        setSearchError(result.unavailable);
+        setSelectedPaper(previous => result.papers.find(paper => paper.id === previous?.id) || result.papers[0] || null);
       } catch {
         if (!active || controller.signal.aborted) return;
         setPapers([]);
@@ -77,12 +85,13 @@ export const CitationSearchModal: React.FC<CitationSearchModalProps> = ({
     }, 300);
 
     return () => { active = false; clearTimeout(timer); controller.abort(); };
-  }, [query, isOpen, activeMode]);
+  }, [query, isOpen, activeMode, searchRetryCount]);
 
   if (!isOpen) return null;
 
   const parseBibOrRisIntoPapers = (raw: string) => {
     const parsedRefs = parseCitations(raw);
+    setImportError(raw.trim() && parsedRefs.length === 0 ? 'Tidak ada entri .bib atau .ris yang dikenali. Periksa format berkas atau teks yang ditempel.' : '');
     const mapped: AcademicPaper[] = parsedRefs.map((ref, idx) => ({
       id: ref.id || `imported_${idx + 1}`,
       title: ref.title || ref.raw || `Referensi Impor #${idx + 1}`,
@@ -102,12 +111,20 @@ export const CitationSearchModal: React.FC<CitationSearchModalProps> = ({
   };
 
   const handleBibFileUpload = async (file: File) => {
+    setImportError('');
+    setImportRawText('');
+    setImportedPapers([]);
+    setSelectedPaper(null);
+    if (file.size > 2 * 1024 * 1024) {
+      setImportError('Berkas referensi terlalu besar. Batas impor adalah 2 MB.');
+      return;
+    }
     try {
       const content = await file.text();
       setImportRawText(content);
       parseBibOrRisIntoPapers(content);
     } catch {
-      // ignore read failure
+      setImportError('Berkas referensi tidak dapat dibaca. Coba berkas .bib atau .ris lain.');
     }
   };
 
@@ -123,20 +140,34 @@ export const CitationSearchModal: React.FC<CitationSearchModalProps> = ({
   const displayedPapers = activeMode === 'search' ? papers : importedPapers;
   const currentCitationText = selectedPaper ? getFormattedCitation(selectedPaper, format) : '';
 
-  const handleCopy = () => {
+  const handleCopy = async () => {
     if (!currentCitationText) return;
-    navigator.clipboard.writeText(currentCitationText);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('CLIPBOARD_UNAVAILABLE');
+      await navigator.clipboard.writeText(currentCitationText);
+      setClipboardError('');
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+      setClipboardError('Clipboard tidak dapat diakses. Pilih teks sitasi lalu salin secara manual.');
+    }
   };
 
-  const handleCopyToReferenceManager = (targetFormat: 'BIB' | 'RIS') => {
+  const handleCopyToReferenceManager = async (targetFormat: 'BIB' | 'RIS') => {
     if (!selectedPaper) return;
     const bibText = formatBibTeX(selectedPaper);
     const payload = targetFormat === 'BIB' ? bibText : (generateRIS(bibText, selectedPaper.title) || bibText);
-    navigator.clipboard.writeText(payload);
-    setCopiedRefManager(targetFormat);
-    setTimeout(() => setCopiedRefManager(null), 2000);
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('CLIPBOARD_UNAVAILABLE');
+      await navigator.clipboard.writeText(payload);
+      setClipboardError('');
+      setCopiedRefManager(targetFormat);
+      setTimeout(() => setCopiedRefManager(null), 2000);
+    } catch {
+      setCopiedRefManager(null);
+      setClipboardError('Clipboard tidak dapat diakses. Salin sitasi dari kotak teks secara manual.');
+    }
   };
 
   const handleInsert = () => {
@@ -155,8 +186,14 @@ export const CitationSearchModal: React.FC<CitationSearchModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-xs animate-fade-in">
       <div
+        ref={dialogRef}
         className="w-full max-w-4xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-scale-up"
         onClick={e => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={descriptionId}
+        tabIndex={-1}
       >
         {/* Header */}
         <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
@@ -165,10 +202,10 @@ export const CitationSearchModal: React.FC<CitationSearchModalProps> = ({
               <Quote className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="font-bold text-base sm:text-lg text-slate-900 dark:text-slate-100">
+              <h2 id={titleId} className="font-bold text-base sm:text-lg text-slate-900 dark:text-slate-100">
                 Pencari & Generator Sitasi DOI Ilmiah
               </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
+              <p id={descriptionId} className="text-xs text-slate-500 dark:text-slate-400">
                 Format otomatis APA 7th, IEEE, Harvard, BibTeX & sinkronisasi Zotero / Mendeley (.bib / .ris)
               </p>
             </div>
@@ -208,7 +245,9 @@ export const CitationSearchModal: React.FC<CitationSearchModalProps> = ({
             </div>
 
             <button
+              type="button"
               onClick={onClose}
+              aria-label="Tutup pencarian sitasi"
               className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
             >
               <X className="w-5 h-5" />
@@ -222,12 +261,12 @@ export const CitationSearchModal: React.FC<CitationSearchModalProps> = ({
             <div className="relative">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <input
+                ref={searchInputRef}
                 type="text"
                 value={query}
                 onChange={e => setQuery(e.target.value)}
                 placeholder="Cari judul paper, penulis, kata kunci riset, atau tempelkan DOI (cth: 10.1016/j.chb.2021.106821)..."
                 className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-750 rounded-xl text-xs sm:text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 transition-all placeholder:text-slate-400"
-                autoFocus
               />
               {isSearching && (
                 <div className="absolute right-3.5 top-1/2 -translate-y-1/2">
@@ -235,6 +274,9 @@ export const CitationSearchModal: React.FC<CitationSearchModalProps> = ({
                 </div>
               )}
             </div>
+            <p className="mt-2 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+              Kueri dikirim langsung ke Crossref untuk mencari metadata bibliografi. Hindari memasukkan informasi pribadi; mode AI lokal tidak mengubah pencarian eksternal ini.
+            </p>
           </div>
         ) : (
           <div
@@ -277,6 +319,7 @@ export const CitationSearchModal: React.FC<CitationSearchModalProps> = ({
                   setImportRawText(e.target.value);
                   parseBibOrRisIntoPapers(e.target.value);
                 }}
+                maxLength={500000}
                 placeholder="Atau tempelkan entri @article{...} BibTeX / TY  - JOUR format RIS langsung di sini..."
                 aria-label="Tempel teks BibTeX atau RIS"
                 className="flex-1 px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-750 rounded-xl text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 font-mono"
@@ -284,6 +327,8 @@ export const CitationSearchModal: React.FC<CitationSearchModalProps> = ({
             </div>
           </div>
         )}
+
+        {activeMode === 'import' && importError && <p role="alert" className="px-4 py-2 text-xs text-rose-700 dark:text-rose-300">{importError}</p>}
 
         {/* Main 2-Column Split View */}
         <div className="flex-1 overflow-hidden grid grid-cols-1 md:grid-cols-12 min-h-0">
@@ -305,14 +350,17 @@ export const CitationSearchModal: React.FC<CitationSearchModalProps> = ({
             </div>
 
             {displayedPapers.length === 0 ? (
-              <div className="text-center py-8 px-4 text-slate-400 text-xs">
-                {activeMode === 'import'
+              <div className="flex flex-col items-center gap-2 px-4 py-8 text-center text-xs text-slate-400">
+                <p>{activeMode === 'import'
                   ? 'Unggah/drop file .bib atau .ris dari Zotero/Mendeley, atau tempelkan teks BibTeX/RIS di atas.'
                   : !query.trim()
                   ? 'Masukkan judul, penulis, kata kunci, atau DOI untuk mencari metadata Crossref.'
+                  : isSearching
+                  ? 'Mencari metadata di Crossref…'
                   : searchError
-                  ? 'Referensi tidak dapat diverifikasi. Periksa kembali DOI atau coba pencarian lain.'
-                  : 'Tidak ada metadata terverifikasi yang cocok. Coba kata kunci lain.'}
+                  ? 'Layanan Crossref belum merespons. Coba lagi atau gunakan tautan DOI penerbit.'
+                  : 'Crossref tidak menemukan metadata yang cocok. Coba kata kunci atau DOI lain.'}</p>
+                {activeMode === 'search' && searchError && !isSearching && <button type="button" onClick={() => setSearchRetryCount(count => count + 1)} className="min-h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:border-slate-700 dark:bg-slate-900 dark:text-emerald-300 dark:hover:bg-slate-800">Coba lagi</button>}
               </div>
             ) : (
               displayedPapers.map(paper => {
@@ -356,6 +404,7 @@ export const CitationSearchModal: React.FC<CitationSearchModalProps> = ({
 
           {/* Right Column: Selected Paper Details & Citation Generator (7 cols) */}
           <div className="md:col-span-7 flex flex-col justify-between overflow-y-auto p-4 sm:p-5 space-y-4 custom-scrollbar">
+            {clipboardError && <p role="status" aria-live="polite" className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">{clipboardError}</p>}
             {selectedPaper?.verified ? (
               <div className="space-y-4">
                 {/* Selected Paper Meta */}

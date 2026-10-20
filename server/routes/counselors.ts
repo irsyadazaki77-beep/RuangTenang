@@ -9,6 +9,23 @@ import { redisService } from '../services/redisService.js';
 
 const router = Router();
 
+function resolveTimeZone(candidate: unknown, fallback = 'Asia/Jakarta'): string {
+  const values = [candidate, fallback, 'Asia/Jakarta'];
+  for (const value of values) {
+    if (typeof value !== 'string' || !value.trim() || value.length > 100) continue;
+    try {
+      new Intl.DateTimeFormat('id-ID', { timeZone: value }).format();
+      return value;
+    } catch { /* Ignore invalid IANA timezone names. */ }
+  }
+  return 'Asia/Jakarta';
+}
+
+function getTodayName(timeZone: string): string {
+  const day = new Intl.DateTimeFormat('id-ID', { timeZone, weekday: 'long' }).format(new Date());
+  return day.charAt(0).toLocaleUpperCase('id-ID') + day.slice(1);
+}
+
 const MOCK_COUNSELORS = [
   {
     id: 'c-1',
@@ -178,8 +195,12 @@ const INITIAL_RISK_ALERTS = [
 
 router.get(['/', '/counselors', '/api/counselors', '/api/v1/counselors'], optionalAuth, async (req: Request, res: Response) => {
   if (process.env.SERVER_DEMO_MODE === 'true') {
+    const timeZone = resolveTimeZone(req.query.timeZone);
+    const todayName = getTodayName(timeZone);
     return res.json(MOCK_COUNSELORS.map(m => ({
       ...m,
+      nextAvailableSlot: `Jadwal rutin: ${m.availableDays.join(', ')}`,
+      availableToday: m.availableDays.includes(todayName),
       isDemoData: true,
       isVerified: false
     })));
@@ -191,12 +212,16 @@ router.get(['/', '/counselors', '/api/counselors', '/api/v1/counselors'], option
     const format = (req.query.format as string) || 'array';
     const offset = (page - 1) * limit;
     const campusId = req.user?.campusId ?? null;
+    let campusTimeZone = 'Asia/Jakarta';
     if (campusId) {
-      const campus = await prisma.campuses.findUnique({ where: { id: campusId }, select: { isActive: true } });
+      const campus = await prisma.campuses.findUnique({ where: { id: campusId }, select: { isActive: true, timeZone: true } });
       if (!campus?.isActive) return res.json([]);
+      campusTimeZone = campus.timeZone || campusTimeZone;
     }
+    const timeZone = resolveTimeZone(req.query.timeZone, campusTimeZone);
+    const todayName = getTodayName(timeZone);
 
-    const cacheKey = `counselors:list:c${campusId || 'unassigned'}:p${page}:l${limit}:f${format}`;
+    const cacheKey = `counselors:list:c${campusId || 'unassigned'}:tz${encodeURIComponent(timeZone)}:d${todayName}:p${page}:l${limit}:f${format}`;
     const cached = await redisService.get<{ data: any; headers: Record<string, any> }>(cacheKey);
 
     if (cached) {
@@ -243,9 +268,7 @@ router.get(['/', '/counselors', '/api/counselors', '/api/v1/counselors'], option
         try { languages = JSON.parse(c.languages); } catch (e) {}
       }
 
-      // Authoritative day calculation: check whether today is in counselor's schedule
-      const daysMap = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
-      const todayName = daysMap[new Date().getDay()];
+      // Match the visitor's local calendar day, supplied by the client and validated above.
       const isAvailableToday = Array.isArray(availability) && availability.includes(todayName);
 
       return {
@@ -264,7 +287,7 @@ router.get(['/', '/counselors', '/api/counselors', '/api/v1/counselors'], option
         contactPhone: c.contactPhone || '',
         contactWhatsapp: c.contactWhatsapp || '',
         availableDays: availability,
-        nextAvailableSlot: Array.isArray(availability) && availability.length > 0 ? `Tersedia: ${availability.join(', ')}` : 'Sesuai Jadwal',
+        nextAvailableSlot: Array.isArray(availability) && availability.some(Boolean) ? `Jadwal rutin: ${availability.filter(Boolean).join(', ')}` : 'Jadwal belum diatur',
         availableToday: isAvailableToday,
         languages,
         bio: c.bio || '',

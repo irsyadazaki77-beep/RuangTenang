@@ -52,6 +52,7 @@ export const WorkspaceHome: React.FC<WorkspaceHomeProps> = ({ chats, isLoading =
   const [hasMoreSearchResults, setHasMoreSearchResults] = useState(false);
   const [nextSearchCursor, setNextSearchCursor] = useState<string | null>(null);
   const [searchError, setSearchError] = useState(false);
+  const [searchRetryCount, setSearchRetryCount] = useState(0);
   const [search, setSearch] = useState('');
   const [searchKind, setSearchKind] = useState<'all' | WorkspaceSearchResult['kind']>('all');
   const [visibleSearchCount, setVisibleSearchCount] = useState(20);
@@ -179,7 +180,7 @@ export const WorkspaceHome: React.FC<WorkspaceHomeProps> = ({ chats, isLoading =
       controller.abort();
       searchMoreControllerRef.current?.abort();
     };
-  }, [isGuest, legacyChats, search, searchKind]);
+  }, [isGuest, legacyChats, search, searchKind, searchRetryCount]);
 
   const loadMoreSearchResults = async () => {
     if (!hasMoreSearchResults || !nextSearchCursor || searchLoading || searchLoadingMore) return;
@@ -288,7 +289,10 @@ export const WorkspaceHome: React.FC<WorkspaceHomeProps> = ({ chats, isLoading =
             {searchResults.length > 0 ? <>
               <div className="divide-y divide-slate-200 rounded-xl border border-slate-200 bg-white dark:divide-slate-800 dark:border-slate-800 dark:bg-slate-900">{searchResults.slice(0, visibleSearchCount).map((result, index) => <SearchResultRow key={`${result.kind}:${result.itemId || result.chatId}:${index}`} result={result} onClick={() => openSearchResult(result)} />)}</div>
               {searchResults.length > visibleSearchCount && <button type="button" onClick={() => setVisibleSearchCount(count => count + 20)} className="mt-2.5 inline-flex min-h-9 items-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800">Tampilkan hasil berikutnya ({searchResults.length - visibleSearchCount})</button>}
-            </> : !searchLoading && <p className="rounded-xl border border-dashed border-slate-300 px-4 py-6 text-center text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">{searchError ? 'Coba lagi sebentar.' : hasMoreSearchResults ? 'Belum ada hasil pada bagian data ini. Lanjutkan pencarian untuk memeriksa data lainnya.' : 'Tidak ada hasil yang cocok.'}</p>}
+            </> : !searchLoading && <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-slate-300 px-4 py-6 text-center dark:border-slate-700">
+              <p className="text-xs text-slate-500 dark:text-slate-400">{searchError ? 'Pencarian belum berhasil. Coba lagi.' : hasMoreSearchResults ? 'Belum ada hasil pada bagian data ini. Lanjutkan pencarian untuk memeriksa data lainnya.' : 'Tidak ada hasil yang cocok.'}</p>
+              {searchError && <button type="button" onClick={() => setSearchRetryCount(count => count + 1)} className="inline-flex min-h-9 items-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800">Coba lagi</button>}
+            </div>}
             {hasMoreSearchResults && <button type="button" disabled={searchLoading || searchLoadingMore} onClick={() => void loadMoreSearchResults()} className="mt-2.5 inline-flex min-h-9 items-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-wait disabled:opacity-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800">{searchLoadingMore ? 'Melanjutkan pencarian…' : 'Telusuri data berikutnya'}</button>}
           </section>
         ) : <>

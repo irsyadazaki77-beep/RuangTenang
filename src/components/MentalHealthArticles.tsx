@@ -32,48 +32,46 @@ const ARTICLES: Article[] = [
     title: 'Mengenal Burnout Akademik: Tanda dan Cara Mengatasinya',
     category: 'Stres Akademik',
     readTime: '5 Min',
-    summary: 'Kelelahan ekstrem akibat beban tugas kampus yang berlebihan. Kenali tanda-tanda awalnya dan langkah konkret untuk memulihkan energi emosional Anda.',
-    source: 'Psikologi Kampus',
+    summary: 'Kenali beberapa pengalaman yang dapat muncul saat tuntutan akademik terasa berat dan pilihan langkah kecil yang bisa dicoba.',
+    source: 'Materi RuangTenang',
     imageUrl: 'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?auto=format&fit=crop&q=80&w=800',
     tips: [
       'Batasi waktu belajar harian secara tegas dengan metode Time-Boxing.',
       'Sediakan waktu minimal 30 menit setiap hari tanpa layar gawai (digital detox).',
       'Ceritakan beban tugas Anda ke teman dekat atau konselor untuk mengurangi isolasi emosional.'
     ],
-    content: `Burnout akademik adalah kondisi kelelahan fisik, emosional, dan mental kronis yang disebabkan oleh stres jangka panjang yang terkait dengan kegiatan studi Anda. Kondisi ini bukan sekadar rasa malas atau kelelahan biasa sehabis begadang semalam, melainkan pengurasan energi yang mendalam dan berkepanjangan.
+    content: `Istilah burnout akademik sering digunakan untuk menggambarkan rasa lelah atau jenuh yang berkaitan dengan studi. Pengalaman ini berbeda-beda dan tidak dapat digunakan sebagai diagnosis.
 
 Di kalangan mahasiswa, tuntutan untuk mempertahankan IPK tinggi, menyelesaikan tugas kelompok, mempersiapkan ujian, serta aktif di organisasi kemahasiswaan sering kali menjadi pemicu utama.
 
-### Tanda-Tanda Utama Burnout Akademik
+### Pengalaman yang Mungkin Muncul saat Merasa Kewalahan
 1. **Kelelahan Emosional & Fisik**: Merasa benar-benar terkuras tenaganya terus-menerus. Bangun pagi terasa sangat berat dan Anda merasa kekurangan energi bahkan setelah tidur yang lama.
-2. **Sinisme & Sikap Apatis**: Mulai kehilangan minat pada perkuliahan, merasa muak dengan tugas-tugas, mengisolasi diri dari diskusi kelompok, serta skeptis terhadap masa depan akademik.
-3. **Penurunan Performa & Efikasi Diri**: Kesulitan konsentrasi saat belajar, sering menunda-nunda tugas (prokrastinasi ekstrem), dan merasa diri tidak cukup pintar atau tidak kompeten untuk menyelesaikan perkuliahan.
+2. **Jenuh atau Menjauh**: Sebagian orang merasa kehilangan minat pada perkuliahan atau ingin mengurangi keterlibatan.
+3. **Kesulitan Fokus**: Beban yang terasa berat dapat membuat sebagian orang lebih sulit menentukan langkah berikutnya.
 
-### Strategi Pemulihan yang Terbukti Efektif
+### Beberapa Langkah yang Bisa Dicoba
 * **Restrukturisasi Jadwal (Time Boxing)**: Alih-alih belajar tanpa batas waktu, tetapkan jam belajar yang spesifik (misal: pukul 09.00 - 17.00). Setelah lewat jam tersebut, berikan diri Anda izin penuh untuk beristirahat tanpa memikirkan tugas akademis.
 * **Latih Istirahat Mikro (Micro-Breaks)**: Cobalah teknik Pomodoro (25 menit fokus, 5 menit istirahat). Pada jeda 5 menit tersebut, menjauhlah dari layar gawai, regangkan tubuh, atau minumlah segelas air.
 * **Praktikkan Self-Compassion**: Sadarilah bahwa Anda adalah manusia biasa yang memiliki keterbatasan. Nilai akademis yang kurang memuaskan bukanlah representasi nilai kemanusiaan atau masa depan Anda secara keseluruhan.`
   },
   {
     id: '2',
-    title: 'Teknik Grounding 5-4-3-2-1 untuk Meredakan Serangan Panik',
+    title: 'Latihan Grounding 5-4-3-2-1 saat Merasa Cemas',
     category: 'Kecemasan',
     readTime: '3 Min',
-    summary: 'Sebuah panduan taktis untuk membawa kesadaran Anda kembali ke masa kini dan meredakan kepanikan atau kecemasan luar biasa yang menyerang tiba-tiba.',
-    source: 'Asosiasi Psikologi',
+    summary: 'Panduan latihan indra untuk mengalihkan perhatian ke lingkungan sekitar. Latihan ini bukan penanganan keadaan darurat atau pengganti bantuan profesional.',
+    source: 'Materi RuangTenang',
     imageUrl: 'https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?auto=format&fit=crop&q=80&w=800',
     tips: [
       'Lakukan teknik ini secara perlahan, berikan waktu 5-10 detik untuk setiap indra.',
-      'Kombinasikan dengan teknik pernapasan perut (diaphragmatic breathing).',
-      'Praktikkan di lingkungan yang tenang terlebih dahulu sebelum mencobanya saat cemas melanda.'
+      'Bernapaslah senyaman mungkin; tidak perlu menahan napas. Berhenti dan kembali ke napas biasa jika terasa tidak nyaman.',
+      'Anda boleh melewati indra atau langkah apa pun yang terasa tidak nyaman.'
     ],
-    content: `Serangan panik atau kecemasan yang tiba-tiba dapat membuat seseorang merasa terputus dari dunia nyata, pusing, hingga sesak napas. Tubuh merespons dengan mode "fight or flight" (melawan atau lari) walaupun tidak ada bahaya fisik yang nyata di sekitar Anda.
-
-Teknik grounding 5-4-3-2-1 adalah latihan kognitif sederhana berbasis terapi perilaku kognitif (CBT) yang dirancang untuk meredakan kecemasan dengan mengalihkan fokus pikiran Anda dari kecemasan internal ke lingkungan eksternal menggunakan panca indra.
+    content: `Latihan grounding 5-4-3-2-1 mengajak Anda menyebutkan hal yang terlihat, terasa, terdengar, tercium, dan terasa di mulut. Ini adalah latihan mandiri sederhana; pengalaman tiap orang berbeda dan latihan ini tidak selalu terasa membantu.
 
 ### Cara Mempraktikkan Metode 5-4-3-2-1
 
-Mulailah dengan menarik napas dalam-dalam dari perut (hirup selama 4 detik, tahan 4 detik, embuskan selama 4 detik). Kemudian, cari dan sebutkan hal-hal berikut secara perlahan:
+Bernapaslah seperti biasa dan cari hal-hal berikut secara perlahan. Anda tidak perlu menarik atau menahan napas dengan hitungan tertentu:
 
 1. **5 Hal yang Dapat Anda LIHAT**: Perhatikan sekeliling Anda secara saksama. Sebutkan lima benda kecil yang biasanya Anda abaikan, seperti retakan di dinding, pola serat kayu di meja, gantungan kunci, atau bayangan lampu.
 2. **4 Hal yang Dapat Anda SENTUH**: Rasakan sensasi fisik di sekitar Anda. Sentuh tekstur pakaian Anda, rasakan dinginnya permukaan lantai di telapak kaki, rasakan kasarnya permukaan kayu meja, atau rasakan embusan angin di kulit Anda.
@@ -81,7 +79,7 @@ Mulailah dengan menarik napas dalam-dalam dari perut (hirup selama 4 detik, taha
 4. **2 Hal yang Dapat Anda CIUM**: Hirup udara di sekitar Anda. Cari bau yang tercium, seperti aroma kopi yang baru diseduh, wangi parfum di baju Anda, bau buku tua, atau segarnya wangi lantai yang baru dipel.
 5. **1 Hal yang Dapat Anda RASAKAN**: Fokuskan pada indra pengecap Anda. Rasakan sisa rasa makanan atau pasta gigi di mulut Anda, atau minum seteguk air dingin dan rasakan sensasinya saat melewati lidah dan tenggorokan.
 
-Latihan ini akan membantu mengirimkan sinyal ke otak Anda bahwa situasi saat ini aman, menenangkan sistem saraf parasimpatis, dan membawa Anda kembali ke momen masa kini.`
+Latihan ini tidak dapat memastikan apakah situasi di sekitar Anda aman. Jika Anda berada dalam bahaya atau membutuhkan bantuan segera, hubungi layanan darurat atau orang tepercaya. Hentikan latihan bila terasa tidak nyaman.`
   },
   {
     id: '3',
@@ -89,25 +87,25 @@ Latihan ini akan membantu mengirimkan sinyal ke otak Anda bahwa situasi saat ini
     category: 'Tips Belajar',
     readTime: '7 Min',
     summary: 'Menyusun jadwal pengerjaan yang realistis, memecah tugas besar menjadi bagian-bagian kecil, dan cara efektif menghindari prokrastinasi.',
-    source: 'Bimbingan Konseling',
+    source: 'Materi RuangTenang',
     imageUrl: 'https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?auto=format&fit=crop&q=80&w=800',
     tips: [
       'Pecah penulisan skripsi menjadi target paragraf harian, bukan bab mingguan.',
       'Buat janji menulis bersama teman (writing buddy) untuk menjaga akuntabilitas harian.',
       'Selesaikan draf kasar terlebih dahulu tanpa langsung menyuntingnya (Done is better than perfect).'
     ],
-    content: `Mengerjakan tugas akhir atau skripsi sering kali dipandang sebagai momok paling menakutkan bagi mahasiswa tingkat akhir. Kurangnya struktur harian yang jelas, tekanan dari orang tua, serta kebingungan mengenai arah penelitian kerap memicu stres berat hingga depresi ringan.
+    content: `Mengerjakan tugas akhir atau skripsi dapat terasa berat, terutama ketika langkah berikutnya belum jelas atau tenggat terasa dekat. Artikel ini menawarkan cara mengatur tugas; artikel ini tidak menilai atau menjelaskan penyebab kondisi kesehatan mental.
 
-Kunci utama menyelesaikan skripsi tanpa mengorbankan kesehatan mental Anda bukanlah bekerja keras 12 jam sehari, melainkan manajemen waktu yang cerdas dan konsisten.
+Tidak ada satu jadwal yang cocok untuk semua orang. Coba pilih beban kerja yang realistis untuk keadaan Anda dan sesuaikan bila perlu.
 
-### Mengapa Kita Sering Menunda Skripsi?
-Sebagian besar mahasiswa menunda skripsi bukan karena malas, melainkan karena **ketakutan kognitif**. Pikiran kita melihat "Menyelesaikan Bab 3" sebagai tugas raksasa yang membingungkan, sehingga otak memilih melarikan diri ke aktivitas yang memberikan kepuasan instan (seperti bermain media sosial).
+### Jika Sulit Memulai
+Jika sulit memulai, coba periksa apakah tugasnya masih terlalu besar atau langkah pertamanya belum jelas. Tidak semua penundaan memiliki penyebab yang sama.
 
 ### Langkah Praktis Mengelola Waktu Skripsi
 
 * **Gunakan Strategi De-konstruksi Tugas**: Jangan menulis agenda harian "Kerjakan Bab II". Ini terlalu luas dan mengintimidasi. Pecah menjadi unit yang sangat kecil dan spesifik, misalnya: "Membaca 2 jurnal tentang kepuasan kerja" atau "Menulis 3 paragraf latar belakang penelitian".
-* **Terapkan Batas Waktu Minat (The 5-Minute Rule)**: Katakan pada diri Anda, "Saya hanya akan membuka laptop dan mengetik draf skripsi selama 5 menit saja harian." Sering kali, tantangan terbesar adalah memulai. Begitu Anda melewati 5 menit pertama, Anda akan cenderung melanjutkan pengerjaan tersebut.
-* **Tetapkan Jadwal Bimbingan yang Proaktif**: Jangan menunggu skripsi Anda sempurna baru berkonsultasi dengan dosen pembimbing. Konsultasikan draf kasar atau sekadar kerangka berpikir Anda. Masukan yang cepat akan mencegah Anda tersesat terlalu jauh dalam penulisan.`
+* **Mulai dari Langkah Kecil**: Jika sesuai untuk Anda, atur timer lima menit dan kerjakan satu bagian kecil. Anda boleh berhenti setelahnya.
+* **Minta Masukan**: Bila membantu, diskusikan kerangka atau draf dengan dosen pembimbing sesuai jadwal dan kebutuhan Anda.`
   },
   {
     id: '4',
@@ -115,7 +113,7 @@ Sebagian besar mahasiswa menunda skripsi bukan karena malas, melainkan karena **
     category: 'Pengembangan Diri',
     readTime: '4 Min',
     summary: 'Belajar untuk bersikap ramah dan tidak terlalu keras pada diri sendiri ketika mendapatkan nilai buruk atau menghadapi penolakan akademis.',
-    source: 'Kesehatan Mental',
+    source: 'Materi RuangTenang',
     imageUrl: 'https://images.unsplash.com/photo-1499209974431-9dddcece7f88?auto=format&fit=crop&q=80&w=800',
     tips: [
       'Ganti kritikus internal Anda dengan kalimat penyemangat seperti yang biasa Anda katakan ke sahabat terdekat.',
@@ -139,29 +137,27 @@ Bila Anda mendapati nilai ujian Anda mengecewakan, jangan langsung melabeli diri
   },
   {
     id: '5',
-    title: 'Mengatasi Quarter Life Crisis di Masa Kuliah',
+    title: 'Menghadapi Ketidakpastian saat Masa Kuliah',
     category: 'Kesehatan Mental',
     readTime: '6 Min',
-    summary: 'Merasa tertinggal dari teman sebaya? Pahami fase krisis identitas mahasiswa tingkat akhir dan temukan panduan sehat untuk mengatasinya.',
-    source: 'Pusat Karir',
+    summary: 'Jika arah studi, pekerjaan, atau masa depan terasa belum jelas, gunakan pertanyaan refleksi sederhana untuk menentukan langkah berikutnya.',
+    source: 'Materi RuangTenang',
     imageUrl: 'https://images.unsplash.com/photo-1517486808906-6ca8b3f04846?auto=format&fit=crop&q=80&w=800',
     tips: [
       'Batasi konsumsi media sosial (seperti LinkedIn atau Instagram) jika mulai memicu rasa rendah diri.',
       'Fokuslah pada pencapaian mikro Anda sendiri harian daripada membandingkan babak tengah orang lain.',
       'Definisikan ulang apa arti "sukses" yang sesuai dengan nilai-nilai hidup pribadi Anda.'
     ],
-    content: `Quarter Life Crisis (QLC) adalah periode ketidakpastian, kecemasan, dan kebingungan mendalam yang biasanya terjadi pada rentang usia 18 hingga 30 tahun. Di masa kuliah, krisis ini sering kali memuncak pada mahasiswa semester akhir atau lulusan baru.
+    content: `Masa kuliah dapat membawa keputusan tentang studi lanjutan, pekerjaan, tempat tinggal, dan hubungan. Tidak ada satu jadwal hidup yang berlaku untuk semua orang. Istilah "quarter life crisis" digunakan dalam percakapan sehari-hari, tetapi bukan diagnosis.
 
-Gejalanya meliputi kecemasan konstan tentang masa depan karir, kebingungan akan arah hidup, ketakutan tidak bisa mandiri secara finansial, serta kebiasaan membandingkan diri secara destruktif dengan pencapaian teman seangkatan yang tampak lebih "sukses".
+### Memilah Hal yang Bisa Dilakukan
+Tuliskan pertanyaan yang sedang mengganggu, pisahkan fakta dari perkiraan, lalu pilih satu langkah kecil yang dapat Anda lakukan atau satu orang yang bisa diajak berdiskusi. Jika kekhawatiran terus mengganggu aktivitas atau terasa berat, pertimbangkan berbicara dengan konselor atau tenaga kesehatan.
 
-### Mengapa QLC Terjadi di Bangku Kuliah?
-Selama belasan tahun, hidup kita terstruktur rapi oleh sistem persekolahan: lulus SD masuk SMP, lulus SMP masuk SMA, lalu masuk kuliah. Namun menjelang kelulusan kuliah, "peta jalan" tersebut tiba-tiba hilang. Anda dihadapkan pada jutaan pilihan arah hidup tanpa ada satu pun jawaban yang mutlak benar. Ketidakpastian inilah yang memicu rasa panik.
+### Beberapa Ide untuk Melangkah
 
-### Cara Menghadapi Quarter Life Crisis Secara Sehat
-
-* **Sadari Adanya Efek "Selected Highlights"**: Apa yang Anda lihat di LinkedIn atau Instagram teman Anda adalah rangkuman momen terbaik dan pencapaian termanis mereka. Mereka tidak mempublikasikan malam-malam penuh air mata, ratusan surat penolakan kerja, atau kebingungan yang mereka rasakan sendiri.
+* **Atur Paparan Media Sosial**: Jika melihat unggahan tertentu membuat Anda merasa tertinggal, coba jeda atau kurangi paparan dan perhatikan apakah itu terasa lebih nyaman.
 * **Fokus pada "Circle of Control" (Lingkaran Kendali)**: Anda tidak bisa mengontrol keadaan ekonomi negara, panggilan wawancara kerja, atau keberuntungan orang lain. Pusatkan energi Anda pada apa yang bisa Anda kendalikan: memperbaiki CV, mempelajari keterampilan baru, menjaga rutinitas tidur, dan menjaga kesehatan mental Anda.
-* **Jalani Eksplorasi, Bukan Tekanan**: Usia 20-an awal adalah waktu untuk mencoba, melakukan kesalahan, dan belajar kembali. Tidak apa-apa jika pekerjaan pertama Anda tidak langsung sesuai dengan impian masa kecil Anda. Setiap langkah adalah proses akumulasi pengalaman hidup.`
+* **Pilih Satu Hal untuk Dieksplorasi**: Anda dapat mencari informasi, berbicara dengan orang tepercaya, atau mencoba satu langkah kecil sebelum mengambil keputusan besar.`
   },
   {
     id: '6',
@@ -169,7 +165,7 @@ Selama belasan tahun, hidup kita terstruktur rapi oleh sistem persekolahan: lulu
     category: 'Pengembangan Diri',
     readTime: '6 Min',
     summary: 'Merasa tidak pantas berada di kampus Anda atau takut dianggap sebagai penipu? Kenali fenomena Impostor Syndrome dan langkah untuk mengatasinya.',
-    source: 'Psikologi Kampus',
+    source: 'Materi RuangTenang',
     imageUrl: 'https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&q=80&w=800',
     tips: [
       'Tulis daftar pencapaian konkret Anda (prestasi, tugas sukses, rintangan yang berhasil dilewati) dalam jurnal.',
@@ -192,27 +188,27 @@ Di lingkungan universitas yang kompetitif, banyak mahasiswa berprestasi diam-dia
   },
   {
     id: '7',
-    title: 'Pola Tidur Sehat (Sleep Hygiene) bagi Mahasiswa Pejuang Tugas',
+    title: 'Pilihan untuk Menyusun Rutinitas Tidur',
     category: 'Kesehatan Mental',
     readTime: '5 Min',
-    summary: 'Sering begadang demi tugas kuliah? Temukan panduan sleep hygiene yang taktis untuk memulihkan fungsi otak, fokus, dan stabilitas emosional Anda.',
-    source: 'Klinik Kesehatan',
+    summary: 'Beberapa kebiasaan sederhana yang dapat dicoba untuk membentuk rutinitas tidur sesuai kebutuhan dan keadaan Anda.',
+    source: 'Materi RuangTenang',
     imageUrl: 'https://images.unsplash.com/photo-1511295742364-92b9345f6853?auto=format&fit=crop&q=80&w=800',
     tips: [
-      'Matikan semua layar perangkat (HP, laptop, tablet) minimal 30-45 menit sebelum tidur.',
-      'Pertahankan jadwal tidur dan bangun yang konsisten, bahkan di hari libur akhir pekan.',
-      'Hindari konsumsi kafein atau minuman energi setelah jam 3 sore.'
+      'Jika layar membuat Anda sulit bersiap tidur, coba letakkan perangkat sejenak sebelum waktu istirahat.',
+      'Coba rutinitas tidur dan bangun yang terasa realistis untuk kegiatan Anda.',
+      'Perhatikan apakah waktu minum kopi atau minuman berkafein memengaruhi istirahat Anda.'
     ],
-    content: `Bagi mahasiswa, tidur sering kali menjadi hal pertama yang dikorbankan demi mengejar tenggat waktu tugas, ujian, atau kegiatan organisasi. Padahal, kurang tidur kronis berdampak destruktif pada kesehatan mental, memperburuk gejala kecemasan, memicu depresi, dan merusak fungsi kognitif otak Anda.
+    content: `Tuntutan tugas, ujian, kerja, dan kegiatan lain dapat membuat jadwal tidur sulit diatur. Kebiasaan tidur dan kebutuhan istirahat tiap orang berbeda; saran berikut adalah pilihan umum yang boleh disesuaikan.
 
-Sleep Hygiene (higienitas tidur) adalah serangkaian kebiasaan dan praktik lingkungan yang dirancang untuk meningkatkan kualitas dan kuantitas tidur malam Anda agar otak dapat berfungsi optimal keesokan harinya.
+Sleep hygiene adalah istilah untuk kebiasaan dan kondisi lingkungan yang berkaitan dengan rutinitas tidur. Saran ini tidak menggantikan penilaian tenaga kesehatan bila masalah tidur menetap atau mengganggu kegiatan sehari-hari.
 
-### Mengapa Otak Mahasiswa Membutuhkan Tidur Berkualitas?
-Saat tidur, otak melakukan proses pembersihan racun metabolik serta melakukan konsolidasi memori. Informasi yang Anda pelajari seharian di ruang kuliah dipindahkan dari memori jangka pendek ke memori jangka panjang saat Anda memasuki fase deep sleep. Begadang semalaman untuk ujian justru menurunkan kapasitas daya ingat otak Anda secara drastis saat lembar soal dibagikan.
+### Menyesuaikan Rutinitas dengan Keadaan Anda
+Tidak ada satu rutinitas yang cocok untuk semua orang. Jika satu perubahan kecil membantu Anda merasa lebih siap beristirahat, Anda dapat melanjutkannya; bila tidak, coba pilihan lain atau cari saran profesional.
 
 ### Langkah Membangun Sleep Hygiene di Kamar Kos
 * **Kondisikan Kamar Tidur**: Pastikan area tidur Anda gelap, sunyi, dan sejuk. Gunakan tirai tebal atau penutup mata jika cahaya luar mengganggu.
-* **Lakukan Ritual Relaksasi Sebelum Tidur**: Alih-alih scrolling media sosial yang memancarkan cahaya biru (blue-light) yang menghambat produksi hormon melatonin (hormon tidur), bacalah buku fisik, lakukan meditasi pernapasan lambat, atau dengarkan musik instrumen yang menenangkan.
+* **Pilih Kegiatan yang Nyaman**: Jika membantu, ganti scrolling dengan membaca, mendengarkan musik, atau melakukan aktivitas ringan yang Anda sukai.
 * **Gunakan Tempat Tidur Hanya untuk Tidur**: Jangan mengerjakan tugas kuliah atau belajar di atas kasur. Hal ini membuat otak Anda mengasosiasikan tempat tidur dengan stres dan kerja aktif, sehingga menyulitkan Anda untuk rileks saat ingin tidur.`
   },
   {
@@ -221,7 +217,7 @@ Saat tidur, otak melakukan proses pembersihan racun metabolik serta melakukan ko
     category: 'Pengembangan Diri',
     readTime: '5 Min',
     summary: 'Menjadi people pleaser di kampus bisa merusak kesehatan mental Anda. Pelajari cara asertif menjaga batasan waktu, tenaga, dan kesehatan emosional Anda.',
-    source: 'Bimbingan Konseling',
+    source: 'Materi RuangTenang',
     imageUrl: 'https://images.unsplash.com/photo-1484807352052-23338990c6c6?auto=format&fit=crop&q=80&w=800',
     tips: [
       'Gunakan teknik tunda respon: "Saya periksa jadwal saya dulu dan akan memberi kabar sejam lagi."',
@@ -243,29 +239,29 @@ Keinginan untuk diterima dalam kelompok sosial adalah kebutuhan dasar manusia. D
   },
   {
     id: '9',
-    title: 'Mengatasi Kecemasan Sosial (Social Anxiety) saat Presentasi di Kelas',
+    title: 'Menghadapi Rasa Gugup saat Presentasi di Kelas',
     category: 'Kecemasan',
     readTime: '6 Min',
-    summary: 'Jantung berdebar kencang, tangan gemetar, dan pikiran mendadak kosong saat maju ke depan kelas? Simak panduan mengatasi demam panggung secara psikologis.',
-    source: 'Asosiasi Psikologi',
+    summary: 'Beberapa cara persiapan dan pilihan yang bisa dicoba saat berbicara di depan kelas terasa menegangkan.',
+    source: 'Materi RuangTenang',
     imageUrl: 'https://images.unsplash.com/photo-1475721027785-f74eccf877e2?auto=format&fit=crop&q=80&w=800',
     tips: [
-      'Gunakan teknik pernapasan kotak (Box Breathing) 4 detik sebelum Anda dipanggil maju.',
+      'Jika terasa nyaman, coba bernapas perlahan; kembali ke napas biasa jika menahan napas terasa tidak nyaman.',
       'Fokuskan pandangan Anda pada dahi audiens atau objek di dinding belakang ruang kelas, bukan langsung ke mata mereka.',
       'Pahami Spotlight Effect: Audiens tidak memperhatikan kesalahan kecil Anda sedetail yang Anda bayangkan.'
     ],
-    content: `Ketakutan berbicara di depan umum (*glossophobia*) adalah salah satu kecemasan sosial paling umum di kalangan mahasiswa. Banyak orang yang sangat menguasai materi perkuliahan tiba-tiba kehilangan kata-kata, berkeringat dingin, dan gemetar hebat saat harus melakukan presentasi di hadapan dosen dan teman sekelas.
+    content: `Berbicara di depan kelas dapat terasa menegangkan bagi sebagian orang. Pengalaman ini berbeda-beda dan artikel ini tidak digunakan untuk menilai atau mendiagnosis kecemasan sosial.
 
-Kecemasan ini dipicu oleh ketakutan mendasar akan penilaian negatif dari orang lain, penolakan sosial, atau rasa malu yang intens di depan publik.
+Jika rasa gugup mengganggu kegiatan atau membuat Anda kesulitan, pertimbangkan untuk membicarakannya dengan orang tepercaya atau tenaga kesehatan.
 
-### Memahami 'Spotlight Effect'
-Salah satu distorsi kognitif yang memperburuk kecemasan sosial adalah *Spotlight Effect*—keyakinan bahwa semua mata tertuju pada Anda dan semua orang sedang menganalisis setiap detail penampilan, intonasi suara, hingga kesalahan kecil Anda. Realitasnya, audiens biasanya jauh lebih santai dan fokus pada materi Anda, atau bahkan sedang memikirkan tugas mereka sendiri.
+### Jika Khawatir Dinilai Orang Lain
+Saat gugup, kita bisa merasa semua orang memperhatikan setiap detail. Coba alihkan perhatian ke materi yang ingin disampaikan atau ke satu orang yang terasa nyaman untuk diajak bicara.
 
-### Langkah Praktis Meredakan Kecemasan Sebelum Presentasi
+### Persiapan yang Bisa Dicoba
 
-* **Lakukan Persiapan Berbasis "Bicara Aktif"**: Jangan hanya menghafal teks slide presentasi di dalam hati. Latihlah berbicara dengan suara lantang di kamar kos Anda, atau lakukan simulasi presentasi di depan cermin atau 2 orang teman dekat Anda.
-* **Ubah "Energi Cemas" Menjadi "Energi Antusias"**: Secara fisiologis, cemas dan antusias memiliki sinyal tubuh yang sama (jantung berdetak cepat, adrenalin meningkat). Alih-alih berkata "Saya sangat cemas," katakanlah pada diri sendiri secara berulang: "Tubuh saya sedang bersiap-siap dan saya sangat bersemangat untuk membagikan materi ini."
-* **Gunakan Jangkar Fisik**: Jika tangan Anda gemetar, peganglah spidol, remote presentasi, atau letakkan kedua tangan Anda secara mantap di atas podium untuk menyalurkan energi berlebih tersebut secara tenang.`
+* **Latihan Singkat**: Jika membantu, coba sampaikan poin utama dengan suara lantang sendiri atau di depan orang tepercaya.
+* **Pilih Kalimat Pengingat**: Siapkan kalimat yang terasa masuk akal bagi Anda, misalnya "Saya akan menyampaikan satu poin pada satu waktu."
+* **Gunakan Benda sebagai Pengingat**: Jika terasa nyaman, pegang spidol atau kartu catatan sebagai pengingat untuk melihat materi.`
   }
 ];
 
@@ -393,11 +389,11 @@ export const MentalHealthArticles: React.FC = () => {
               <BookOpen className="w-3 h-3 text-slate-700" />
               Pusat Edukasi Mental
             </span>
-            <span className="text-[11px] text-slate-600 font-medium">Artikel & Panduan Terapis</span>
+            <span className="text-[11px] text-slate-600 font-medium">Artikel & Panduan Mandiri</span>
           </div>
           <h1 className="font-sans font-semibold tracking-tight text-xl sm:text-2xl font-medium text-slate-900 tracking-tight">Pusat Psikoedukasi Mahasiswa</h1>
           <p className="text-xs sm:text-sm text-slate-600 max-w-2xl leading-relaxed">
-            Kumpulan artikel interaktif, panduan taktis, dan tips manajemen kecemasan yang disusun oleh psikolog profesional untuk membantu Anda menavigasi dunia perkuliahan dengan tenang.
+            Materi edukasi umum untuk mahasiswa. Sumber klinis dan status tinjauan tenaga klinis belum dicantumkan; materi ini bukan diagnosis, terapi, atau pengganti konsultasi profesional.
           </p>
         </div>
         <div className="flex items-center gap-3 bg-white/80 backdrop-blur-xs border border-slate-200 rounded-lg p-3 shrink-0 shadow-2xs">
@@ -689,7 +685,7 @@ export const MentalHealthArticles: React.FC = () => {
                 <div className="bg-slate-50 rounded-lg p-3 sm:p-4 space-y-2.5">
                   <div className="flex items-center gap-1.5 text-slate-900 font-semibold text-xs sm:text-sm">
                     <Sparkles className="w-4 h-4 text-amber-500 shrink-0" />
-                    <span>Latihan Praktis Mandiri (Saran Psikolog)</span>
+                    <span>Latihan Praktis Mandiri</span>
                   </div>
                   <div className="space-y-1.5">
                     {activeArticle.tips.map((tip, idx) => (
@@ -705,8 +701,8 @@ export const MentalHealthArticles: React.FC = () => {
 
             {/* Modal Footer bar */}
             <div className="px-4 sm:px-6 py-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50/50 rounded-b-xl shrink-0">
-              <span className="text-[10px] sm:text-xs text-slate-600 italic">
-                Telah ditinjau & diverifikasi oleh Virtual Psychologist RuangTenang Kampus
+                <span className="text-[10px] sm:text-xs text-slate-600 italic">
+                Materi edukasi umum; status tinjauan klinis belum dicantumkan.
               </span>
               <div className="flex items-center gap-2 self-end sm:self-auto">
                 <button

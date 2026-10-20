@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useCallback, useMemo, useLayoutEffect } from 'react';
 import type {
   WorkspaceAiPreset,
   PresetId,
@@ -37,7 +37,7 @@ export function useWorkspacePresets({
   const [activePresetId, setActivePresetIdState] = useState<PresetId>(() => loadActivePresetId(userId));
 
   // Reload preferences when active user changes
-  useEffect(() => {
+  useLayoutEffect(() => {
     const loadedCustom = loadUserCustomPresets(userId);
     const loadedPersonalization = loadUserPersonalization(userId);
     const loadedActiveId = loadActivePresetId(userId);

@@ -1,7 +1,7 @@
 import { SupportedFileKind, ExtractedDocument, DocumentBlock } from '../../../../shared/contracts/files.js';
 import { DocumentExtractorAdapter, ExtractionInput } from './types.js';
 import { DEFAULT_FILE_LIMITS, DocumentProcessingException } from '../fileTypes.js';
-import { performVisualOcr } from '../visualIntelligenceService.js';
+import { isVisualOcrAvailable, performVisualOcr } from '../visualIntelligenceService.js';
 
 export class PdfAdapter implements DocumentExtractorAdapter {
   supports(kind: SupportedFileKind): boolean {
@@ -178,7 +178,7 @@ export class PdfAdapter implements DocumentExtractorAdapter {
           metadata: {
             ocrApplied: false,
             previewOnly: true,
-            visualAnalysisAvailable: true,
+            visualAnalysisAvailable: isVisualOcrAvailable(),
             unextractedPageCount: unextractedPageNums.length || totalPages || 1
           }
         };
@@ -215,7 +215,7 @@ export class PdfAdapter implements DocumentExtractorAdapter {
         normalizedText,
         metadata: {
           ocrApplied,
-          visualAnalysisAvailable: true,
+          visualAnalysisAvailable: isVisualOcrAvailable(),
           unextractedPageCount: unextractedPageNums.length
         },
         ...(extractionWarnings.length ? { extractionWarnings } : {})

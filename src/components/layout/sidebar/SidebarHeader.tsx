@@ -111,7 +111,7 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
                   ? 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30'
                   : 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
               }`}
-              aria-label={isRuangKerja ? 'RuangKerja' : 'RuangTenang'}
+              aria-label={isRuangKerja ? 'Beralih ke RuangTenang' : 'Beralih ke RuangKerja'}
             >
               <ArrowLeftRight className="w-4 h-4" />
             </button>
@@ -195,7 +195,7 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
                     <img src="/favicon.svg" alt="" className="w-5 h-5 rounded object-contain shrink-0" />
                     <div className="min-w-0">
                       <div className="text-xs font-semibold truncate text-slate-900 dark:text-slate-100">RuangTenang</div>
-                      <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate">Konseling & Relaksasi Emosional</div>
+                      <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate">Refleksi, skrining & dukungan emosional</div>
                     </div>
                   </div>
                   {!isRuangKerja && <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />}
@@ -219,7 +219,7 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
                     <img src="/ruangkerja.svg" alt="" className="w-5 h-5 rounded object-contain shrink-0" />
                     <div className="min-w-0">
                       <div className="text-xs font-semibold truncate text-slate-900 dark:text-slate-100">RuangKerja</div>
-                      <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate">Asisten Akademik & Live Canvas</div>
+                      <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate">Asisten akademik & workspace dokumen</div>
                     </div>
                   </div>
                   {isRuangKerja && <Check className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />}

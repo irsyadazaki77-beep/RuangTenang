@@ -2,17 +2,17 @@
 
 **Ekosistem Kesehatan Mental, Pendamping AI Reflektif & Rujukan Konseling Mahasiswa**
 
-RuangTenang Kampus adalah platform digital kesehatan emosional dan pendampingan psikologis berstandar produksi yang dirancang khusus untuk sivitas akademika perguruan tinggi. Platform ini menggabungkan AI pendamping reflektif berstandar keselamatan tinggi, instrumen skrining mandiri tervalidasi (PHQ-9 & GAD-7), rujukan langsung ke konselor kampus, serta manajemen jadwal konseling real-time.
+RuangTenang Kampus adalah platform digital kesehatan emosional dan pendampingan psikologis untuk sivitas akademika perguruan tinggi. Platform ini menggabungkan AI pendamping reflektif, skrining mandiri, rujukan ke konselor kampus, dan manajemen jadwal konseling. Skrining bukan diagnosis, dan kesiapan pilot/produksi tetap memerlukan persetujuan klinis, kampus, privasi, dan operasional.
 
 ---
 
 ## 🚀 Fitur Utama
 
 1. **Teman RuangTenang (Asisten AI Reflektif & Server Proxy)**
-   - Pendampingan emosional awal berbasis pendekatan *Reflective Listening* & CBT via server-side Gemini proxy.
-   - **PII Scrubbing** otomatis (menghapus nama, NIM, email, nomor HP sebelum diproses AI).
-   - **Deteksi Krisis Multi-Lapis** dengan penanganan negasi (*negation handling*) untuk mencegah false alarm.
-   - Pintu darurat (*Emergency SOS*) langsung ke kontak terdaftar.
+   - Pendampingan emosional awal berbasis pendekatan *Reflective Listening* dan CBT melalui provider AI server-side yang dikonfigurasi (termasuk Ollama).
+   - Penyaringan pola untuk beberapa jenis informasi pribadi sebelum pemrosesan AI; mekanisme ini bukan anonimisasi yang terjamin.
+   - Pemeriksaan bahasa berlapis untuk membantu mengenali pesan berisiko; hasilnya bukan penilaian klinis dan tidak menjamin deteksi semua keadaan darurat.
+   - Akses ke Pusat Bantuan Krisis dan kontak bantuan yang dikonfigurasi kampus.
 
 2. **Sistem Penjadwalan Konseling Real-Time**
    - Pemilihan konselor, tanggal, jam, dan zona waktu (WIB / WITA / WIT).
@@ -20,13 +20,13 @@ RuangTenang Kampus adalah platform digital kesehatan emosional dan pendampingan 
    - Siklus persetujuan konselor (`PENDING` -> `CONFIRMED` -> `COMPLETED`) dan integrasi kalender.
 
 3. **Skrining Mandiri & Pelacak Tren Emosi**
-   - Kuesioner tervalidasi klinis PHQ-9 (Depresi) & GAD-7 (Kecemasan).
-   - Penyimpanan riwayat terenkripsi dan indikator krisis item-9 otomatis.
+   - Instrumen skrining mandiri PHQ-9 (gejala depresi) & GAD-7 (gejala kecemasan), bukan alat diagnosis.
+   - Penyimpanan riwayat terenkripsi dan arahan tindak lanjut profesional untuk jawaban tertentu.
 
 4. **Keamanan Data & Enkripsi (Privacy by Design)**
    - **Enkripsi AES-256-GCM** pada field sensitif (catatan konseling & log jurnal) menggunakan kunci terderivasi server.
    - Akses berbasis peran (`mahasiswa`, `konselor`, `admin`) dengan isolasi data yang ketat.
-   - Audit trail transaksi backend dan dukungan Hak Penghapusan Permanen (*Right to be Forgotten*).
+   - Audit trail transaksi backend dan alur penghapusan akun/data sesuai cakupan aplikasi dan kebijakan retensi.
 
 5. **Fondasi Multi-Kampus**
    - Tenant kampus dengan pemetaan akun yang dikendalikan admin platform; data lama tidak diberi tenant secara otomatis.
@@ -40,7 +40,7 @@ RuangTenang Kampus adalah platform digital kesehatan emosional dan pendampingan 
 - **Frontend:** React 19, TypeScript, Tailwind CSS, Lucide Icons, Motion Animation, Code Splitting (React Lazy).
 - **Backend Service:** Express.js 4, Node.js TypeScript Runtime.
 - **Database Engine:** SQLite / PostgreSQL didukung **Prisma ORM** (Singleton Client, Server-Side Pagination, Database Indexing).
-- **AI Integration:** `@google/genai` (Gemini API - Server-Side Proxying, Rate-Limiting, SSE Streaming dengan Client Abort Handling).
+- **AI Integration:** Gemini, OpenAI, DeepSeek, Groq, OpenRouter, dan Ollama melalui adapter server-side, dengan rate limiting dan SSE streaming.
 - **Validation & Security:** Zod Schema Validation, Helmet CSP/HSTS, Rate Limiters, `no-store` No-Cache Header Rules untuk data sensitif.
 - **PWA Status:** Aplikasi web murni berkinerja tinggi (Non-PWA / Tidak ada Service Worker offline yang menyimpan data mental health sensitif di browser).
 
@@ -73,6 +73,17 @@ RuangTenang Kampus adalah platform digital kesehatan emosional dan pendampingan 
    ```bash
    npm run dev
    ```
+
+### Mode model Ollama
+
+Untuk membatasi katalog model ke provider Ollama, set nilai berikut di `.env`:
+
+```env
+LOCAL_AI_ONLY=true
+OLLAMA_BASE_URL=http://127.0.0.1:11434
+```
+
+`127.0.0.1` menunjuk ke mesin tempat server RuangTenang berjalan. Jika Ollama ada di host lain, isi alamat host tersebut dan pastikan jaringan serta aksesnya memang dikelola. Mode ini membatasi provider model AI; database, unggahan, dan analitik aplikasi tetap mengikuti konfigurasi deployment. Pencarian web Tavily untuk task riset kini nonaktif secara default dan hanya tersedia setelah pengguna mengaktifkannya di panel plan. Pencarian metadata sitasi Crossref tetap merupakan layanan eksternal terpisah saat pengguna memilih fitur tersebut. Gunakan label “lokal” hanya jika endpoint Ollama benar-benar berjalan pada perangkat yang dimaksud.
 
 4. **Menjalankan Quality Gate (CI Stages):**
    ```bash

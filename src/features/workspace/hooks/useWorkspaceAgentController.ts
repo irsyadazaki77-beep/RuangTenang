@@ -13,7 +13,9 @@ interface UseWorkspaceAgentControllerOptions {
   executeAgentTask: (planId: string, taskId: string, executionId: string, signal?: AbortSignal) => Promise<{ execution: AgentExecutionResult; plan: WorkspacePlan }>;
   reviewTask: (planId: string, taskId: string, decision: 'accept' | 'reject') => Promise<WorkspacePlan>;
   transitionPlan: (planId: string, action: 'approve' | 'pause' | 'resume' | 'cancel' | 'complete') => Promise<WorkspacePlan>;
+  cancelTaskExecution?: (planId: string, taskId: string, executionId: string) => Promise<WorkspacePlan>;
   recoverTaskExecution: (planId: string, taskId: string, executionId: string) => Promise<WorkspacePlan>;
+  refreshWorkspace?: () => Promise<unknown>;
   isStreaming: boolean;
   includeFilesInContext: boolean;
   selectedFileIds: string[];
@@ -21,6 +23,7 @@ interface UseWorkspaceAgentControllerOptions {
   activeArtifact: WorkspaceArtifact | null;
   workspaceInstructions?: string;
   selectedModel: string;
+  allowExternalSearch: boolean;
   workspaceId: string;
   activeSendOperationRef: MutableRefObject<string | null>;
   taskGenerationRequestsRef: MutableRefObject<Map<string, string>>;
@@ -33,16 +36,23 @@ interface UseWorkspaceAgentControllerOptions {
 
 export function useWorkspaceAgentController(options: UseWorkspaceAgentControllerOptions) {
   const {
-    plan, startTaskExecution, executeAgentTask, reviewTask, transitionPlan, recoverTaskExecution,
+    plan, startTaskExecution, executeAgentTask, reviewTask, transitionPlan, cancelTaskExecution, recoverTaskExecution, refreshWorkspace,
     isStreaming, includeFilesInContext, selectedFileIds, includeCanvasInContext, activeArtifact,
-    workspaceInstructions, selectedModel, workspaceId, activeSendOperationRef, taskGenerationRequestsRef,
+    workspaceInstructions, selectedModel, allowExternalSearch, workspaceId, activeSendOperationRef, taskGenerationRequestsRef,
     sendMessage, abortStream, onAgentTaskCompleted, onTaskAccepted, showToast
   } = options;
   const [isAgentExecuting, setIsAgentExecuting] = useState(false);
+  const [isStoppingTask, setIsStoppingTask] = useState(false);
+  const stoppingExecutionRef = useRef<string | null>(null);
   const activeAgentExecutionRef = useRef<{ executionId: string; planId: string; taskId: string; workspaceId: string; controller: AbortController } | null>(null);
   useEffect(() => () => {
     activeAgentExecutionRef.current?.controller.abort();
   }, [workspaceId]);
+
+  const reportWorkflowFailure = useCallback(async (error: unknown, fallback: string) => {
+    try { await refreshWorkspace?.(); } catch { /* Keep the original action error visible. */ }
+    showToast(error instanceof Error ? error.message : fallback, 'error');
+  }, [refreshWorkspace, showToast]);
 
   const [isContinuousRunning, setIsContinuousRunning] = useState(false);
   const isContinuousRunningRef = useRef(false);
@@ -53,7 +63,9 @@ export function useWorkspaceAgentController(options: UseWorkspaceAgentController
     const task = currentPlan?.tasks.find(item => item.id === taskId);
     if (!currentPlan || currentPlan.status !== 'approved' || !task || !['todo', 'failed', 'waiting_review', 'cancelled'].includes(task.status) || !task.dependsOn.every(id => currentPlan.tasks.find(dependency => dependency.id === id)?.status === 'done') || currentPlan.tasks.some(item => item.status === 'running') || isStreaming) return false;
     if (activeAgentExecutionRef.current) return false;
-    const researchInstructions = task.type === 'research' ? '\nGunakan evidence dari dokumen yang dipilih dan web search jika relevan. Ikuti workflow riset bukti: Plan → Search → Read → Analyze → Cross-Check → Synthesize. Kutip hanya marker sumber [cite:...] yang benar-benar diberikan oleh tool. Sertakan URL atau nomor halaman/bagian sumber yang nyata. Jangan mengarang author, tahun, DOI, nomor halaman, atau bibliografi fiktif. Jika bukti tidak cukup, secara eksplisit nyatakan bukti belum mencukupi. Buat artifact proposal terstruktur (misal DOCUMENT atau TABLE) untuk hasil riset komprehensif.' : '';
+    const researchInstructions = task.type === 'research'
+      ? '\nGunakan bukti dari dokumen yang dipilih dan hanya tool yang tersedia dalam konteks task. Ikuti workflow riset bukti: Plan → Search → Read → Analyze → Cross-Check → Synthesize. Kutip hanya marker sumber [cite:...] yang benar-benar diberikan oleh tool. Sertakan URL atau nomor halaman/bagian sumber yang nyata. Jangan mengarang author, tahun, DOI, nomor halaman, atau bibliografi fiktif. Jika bukti tidak cukup, nyatakan bukti belum mencukupi. Buat artifact proposal terstruktur (misal DOCUMENT atau TABLE) untuk hasil riset komprehensif.'
+      : '';
     const basePrompt = task.snapshot?.inputPrompt || `Kerjakan hanya langkah yang disetujui ini untuk tujuan “${currentPlan.goal}”.\nTask: ${task.title}\n${task.description || ''}${researchInstructions}\n\nBerikan hasil yang bisa ditinjau. Jangan menandai task lain selesai atau mengubah artifact yang ada. Jika membuat artifact, kembalikan sebagai proposal baru.`;
     const prompt = feedback ? `${basePrompt}\n\nMasukan user untuk revisi hasil: ${feedback}` : basePrompt;
     const executionId = crypto.randomUUID();
@@ -63,12 +75,13 @@ export function useWorkspaceAgentController(options: UseWorkspaceAgentController
       ? 'auto'
       : isKerjaProfile(chosenModel) ? chosenModel : migrateLegacyWorkspaceModelToProfile(chosenModel);
     const snapshot = task.snapshot
-      ? { inputPrompt: prompt.slice(0, 8000), contextSourceIds: task.snapshot.contextSourceIds, ...(task.snapshot.artifactId ? { artifactId: task.snapshot.artifactId } : {}), ...(task.snapshot.workspaceInstructions ? { workspaceInstructions: task.snapshot.workspaceInstructions } : {}), modelId: modelProfile, createdAt: new Date().toISOString() }
+      ? { inputPrompt: prompt.slice(0, 8000), contextSourceIds: task.snapshot.contextSourceIds, ...(task.snapshot.artifactId ? { artifactId: task.snapshot.artifactId } : {}), ...(task.snapshot.workspaceInstructions ? { workspaceInstructions: task.snapshot.workspaceInstructions } : {}), allowExternalSearch: task.type === 'research' && allowExternalSearch, modelId: modelProfile, createdAt: new Date().toISOString() }
       : {
         inputPrompt: prompt.slice(0, 8000),
         contextSourceIds: (includeFilesInContext ? selectedFileIds : []).slice(0, 50),
         ...(includeCanvasInContext && activeArtifact ? { artifactId: activeArtifact.id } : {}),
         ...(workspaceInstructions ? { workspaceInstructions } : {}),
+        allowExternalSearch: task.type === 'research' && allowExternalSearch,
         modelId: modelProfile,
         createdAt: new Date().toISOString()
       };
@@ -93,8 +106,8 @@ export function useWorkspaceAgentController(options: UseWorkspaceAgentController
       }
       return false;
     } catch (error) {
-      if (activeAgentExecutionRef.current?.executionId === executionId && !controller?.signal.aborted && !(error instanceof Error && error.name === 'AbortError')) {
-        showToast(error instanceof Error ? error.message : 'Task gagal dimulai. Muat ulang status sebelum mencoba lagi.', 'error');
+      if (!controller?.signal.aborted && !(error instanceof Error && error.name === 'AbortError')) {
+        await reportWorkflowFailure(error, 'Task gagal dimulai. Muat ulang status sebelum mencoba lagi.');
       }
       setIsContinuousRunning(false);
       return false;
@@ -104,7 +117,7 @@ export function useWorkspaceAgentController(options: UseWorkspaceAgentController
         setIsAgentExecuting(false);
       }
     }
-  }, [activeArtifact, executeAgentTask, includeCanvasInContext, includeFilesInContext, isStreaming, onAgentTaskCompleted, plan, selectedFileIds, selectedModel, showToast, startTaskExecution, workspaceId, workspaceInstructions]);
+  }, [activeArtifact, allowExternalSearch, executeAgentTask, includeCanvasInContext, includeFilesInContext, isStreaming, onAgentTaskCompleted, plan, refreshWorkspace, reportWorkflowFailure, selectedFileIds, selectedModel, showToast, startTaskExecution, workspaceId, workspaceInstructions]);
 
   // Check and run next ready task if in continuous auto mode and not waiting for review
   useEffect(() => {
@@ -160,6 +173,47 @@ export function useWorkspaceAgentController(options: UseWorkspaceAgentController
     setIsContinuousRunning(false);
   }, []);
 
+  const stopTaskExecution = useCallback(() => {
+    setIsContinuousRunning(false);
+    const activeExecution = activeAgentExecutionRef.current;
+    const matchingActiveExecution = activeExecution && activeExecution.workspaceId === workspaceId && activeExecution.planId === plan?.id
+      ? activeExecution
+      : null;
+    const task = matchingActiveExecution
+      ? plan?.tasks.find(item => item.id === matchingActiveExecution.taskId)
+      : plan?.tasks.find(item => item.status === 'running' && item.executionId);
+    const executionId = matchingActiveExecution?.executionId || task?.executionId;
+    const planId = matchingActiveExecution?.planId || plan?.id;
+    const taskId = matchingActiveExecution?.taskId || task?.id;
+
+    if (!planId || !taskId || !executionId) {
+      if (isStreaming) abortStream();
+      matchingActiveExecution?.controller.abort();
+      showToast('Tidak ada task aktif yang bisa dihentikan.', 'info');
+      return;
+    }
+    if (!cancelTaskExecution) {
+      if (isStreaming) abortStream();
+      matchingActiveExecution?.controller.abort();
+      showToast('Permintaan berhenti dikirim ke sesi ini, tetapi status task server belum dapat diperbarui.', 'warning');
+      return;
+    }
+    if (stoppingExecutionRef.current === executionId) return;
+    stoppingExecutionRef.current = executionId;
+    setIsStoppingTask(true);
+    void cancelTaskExecution(planId, taskId, executionId)
+      .then(() => {
+        if (isStreaming) abortStream();
+        matchingActiveExecution?.controller.abort();
+        showToast('Task dihentikan. Kamu bisa menjalankannya lagi.', 'info');
+      })
+      .catch(error => { void reportWorkflowFailure(error, 'Task belum dapat dihentikan.'); })
+      .finally(() => {
+        stoppingExecutionRef.current = null;
+        setIsStoppingTask(false);
+      });
+  }, [abortStream, cancelTaskExecution, isStreaming, plan, reportWorkflowFailure, showToast, workspaceId]);
+
   const acceptTaskReview = useCallback((taskId: string) => {
     if (!plan) return;
     void reviewTask(plan.id, taskId, 'accept')
@@ -168,8 +222,8 @@ export function useWorkspaceAgentController(options: UseWorkspaceAgentController
         if (acceptedTask) onTaskAccepted?.(acceptedTask);
         showToast('Hasil task diterima.', 'success');
       })
-      .catch(error => showToast(error instanceof Error ? error.message : 'Hasil belum dapat diterima.', 'error'));
-  }, [onTaskAccepted, plan, reviewTask, showToast]);
+      .catch(error => { void reportWorkflowFailure(error, 'Hasil belum dapat diterima.'); });
+  }, [onTaskAccepted, plan, reportWorkflowFailure, reviewTask, showToast]);
 
   const rejectTaskReview = useCallback((taskId: string) => {
     if (!plan) return;
@@ -178,8 +232,8 @@ export function useWorkspaceAgentController(options: UseWorkspaceAgentController
       .then(() => {
         showToast('Hasil task ditolak dan siap direvisi.', 'info');
       })
-      .catch(error => showToast(error instanceof Error ? error.message : 'Hasil belum dapat ditolak.', 'error'));
-  }, [plan, reviewTask, showToast]);
+      .catch(error => { void reportWorkflowFailure(error, 'Hasil belum dapat ditolak.'); });
+  }, [plan, reportWorkflowFailure, reviewTask, showToast]);
 
   const generateTasks = useCallback((goal: string) => {
     const sent = sendMessage(`Rencanakan workflow untuk tujuan berikut berdasarkan konteks Workspace yang relevan. Buat 3 sampai 8 task yang actionable (maksimal 12), dengan urutan dependency yang aman. Jangan menjalankan task. Balas hanya JSON valid dengan bentuk: {"title":"judul plan","tasks":[{"title":"...","description":"...","type":"analysis|writing|research|coding|review|transform","dependsOn":[]}]} . Nilai dependsOn adalah array nomor task 1-based yang harus selesai lebih dulu. Tujuan: ${goal}`, undefined, undefined, { aiModel: selectedModel, responseMode: 'Seimbang', responseStyle: 'Langkah demi langkah', taskCategory: 'structured_reasoning' });
@@ -192,32 +246,34 @@ export function useWorkspaceAgentController(options: UseWorkspaceAgentController
     if (!plan) return;
     if (activeAgentExecutionRef.current) activeAgentExecutionRef.current.controller.abort();
     if (plan.tasks.some(task => task.status === 'running') && isStreaming) abortStream();
-    void transitionPlan(plan.id, 'cancel').catch(error => showToast(error instanceof Error ? error.message : 'Plan gagal dibatalkan.', 'error'));
-  }, [abortStream, isStreaming, plan, showToast, transitionPlan]);
+    void transitionPlan(plan.id, 'cancel').catch(error => { void reportWorkflowFailure(error, 'Plan gagal dibatalkan.'); });
+  }, [abortStream, isStreaming, plan, reportWorkflowFailure, transitionPlan]);
 
   const completeWorkflow = useCallback(() => {
     setIsContinuousRunning(false);
-    if (plan && plan.tasks.length > 0 && plan.tasks.every(task => task.status === 'done')) void transitionPlan(plan.id, 'complete').catch(error => showToast(error instanceof Error ? error.message : 'Plan gagal diselesaikan.', 'error'));
-  }, [plan, showToast, transitionPlan]);
+    if (plan && plan.tasks.length > 0 && plan.tasks.every(task => task.status === 'done')) void transitionPlan(plan.id, 'complete').catch(error => { void reportWorkflowFailure(error, 'Plan gagal diselesaikan.'); });
+  }, [plan, reportWorkflowFailure, transitionPlan]);
 
   const pauseWorkflow = useCallback(() => {
     setIsContinuousRunning(false);
-    if (plan) void transitionPlan(plan.id, 'pause').catch(error => showToast(error instanceof Error ? error.message : 'Plan gagal dijeda.', 'error'));
-  }, [plan, showToast, transitionPlan]);
+    if (plan) void transitionPlan(plan.id, 'pause').catch(error => { void reportWorkflowFailure(error, 'Plan gagal dijeda.'); });
+  }, [plan, reportWorkflowFailure, transitionPlan]);
 
   const resumeWorkflow = useCallback(() => {
-    if (plan) void transitionPlan(plan.id, 'resume').catch(error => showToast(error instanceof Error ? error.message : 'Plan gagal dilanjutkan.', 'error'));
-  }, [plan, showToast, transitionPlan]);
+    if (plan) void transitionPlan(plan.id, 'resume').catch(error => { void reportWorkflowFailure(error, 'Plan gagal dilanjutkan.'); });
+  }, [plan, reportWorkflowFailure, transitionPlan]);
 
   const recoverTask = useCallback((taskId: string, executionId: string) => {
     setIsContinuousRunning(false);
-    if (plan) void recoverTaskExecution(plan.id, taskId, executionId).then(() => showToast('Eksekusi ditandai terputus. Task dapat dicoba ulang.', 'info')).catch(error => showToast(error instanceof Error ? error.message : 'Eksekusi belum dapat dipulihkan.', 'error'));
-  }, [plan, recoverTaskExecution, showToast]);
+    if (plan) void recoverTaskExecution(plan.id, taskId, executionId).then(() => showToast('Eksekusi ditandai terputus. Task dapat dicoba ulang.', 'info')).catch(error => { void reportWorkflowFailure(error, 'Eksekusi belum dapat dipulihkan.'); });
+  }, [plan, recoverTaskExecution, reportWorkflowFailure, showToast]);
 
   return {
     runTask,
     startContinuousWorkflow,
     stopContinuousWorkflow,
+    stopTaskExecution,
+    isStoppingTask,
     isContinuousRunning,
     acceptTaskReview,
     rejectTaskReview,

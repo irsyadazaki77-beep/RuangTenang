@@ -13,6 +13,7 @@ import { apiClient } from "../../lib/apiClient";
 import { clientDb, createOfflineIdempotencyKey } from "../../lib/clientDb";
 import { addNotification } from "../../lib/notificationStore";
 import { Avatar } from "../../components/ui/primitives/Surfaces";
+import { getAppointmentDateInputValue } from "../../lib/appointmentTime";
 
 interface BookingFormProps {
   isOpen: boolean;
@@ -76,22 +77,16 @@ export const BookingForm: React.FC<BookingFormProps> = ({
     }
   };
 
-  const toLocalDateInputValue = (value: Date) => {
-    const year = value.getFullYear();
-    const month = String(value.getMonth() + 1).padStart(2, '0');
-    const day = String(value.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
+  const initialTimezone = getLocalTimezone();
+  const getInitialBookingDate = (appointmentTimezone: "WIB" | "WITA" | "WIT") => {
+    const tomorrow = new Date(`${getAppointmentDateInputValue(new Date(), appointmentTimezone)}T00:00:00.000Z`);
+    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+    return tomorrow.toISOString().slice(0, 10);
   };
 
-  const getInitialBookingDate = () => {
-    const d = new Date();
-    d.setDate(d.getDate() + 1);
-    return toLocalDateInputValue(d);
-  };
-
-  const [date, setDate] = useState<string>(getInitialBookingDate);
+  const [timezone, setTimezone] = useState<"WIB" | "WITA" | "WIT">(initialTimezone);
+  const [date, setDate] = useState<string>(() => getInitialBookingDate(initialTimezone));
   const [timeSlot, setTimeSlot] = useState("");
-  const [timezone, setTimezone] = useState<"WIB" | "WITA" | "WIT">(getLocalTimezone());
   const [mode] = useState<"video_call">("video_call");
   const [reminderMinutes] = useState<number>(30);
   const [formError, setFormError] = useState<string | null>(null);
@@ -100,6 +95,15 @@ export const BookingForm: React.FC<BookingFormProps> = ({
 
   const [availableSlots, setAvailableSlots] = useState<string[]>([]);
   const [isFullyBooked, setIsFullyBooked] = useState(false);
+  const [availabilityStatus, setAvailabilityStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
+  const [availabilityErrorMessage, setAvailabilityErrorMessage] = useState<string | null>(null);
+  const [availabilityRetryCount, setAvailabilityRetryCount] = useState(0);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const minimumDate = getAppointmentDateInputValue(new Date(), timezone);
+    setDate(currentDate => currentDate < minimumDate ? minimumDate : currentDate);
+  }, [isOpen, timezone]);
 
   useEffect(() => {
     if (!isOpen || userSession.role !== 'mahasiswa') return;
@@ -123,46 +127,62 @@ export const BookingForm: React.FC<BookingFormProps> = ({
   }, [selectedCounselorFromDir]);
 
   useEffect(() => {
-    if (!selectedCounselorId || !date) return;
+    if (!selectedCounselorId || !date) {
+      setAvailableSlots([]);
+      setIsFullyBooked(false);
+      setAvailabilityStatus('idle');
+      setAvailabilityErrorMessage(null);
+      return;
+    }
     let isMounted = true;
+    setAvailabilityStatus('loading');
+    setAvailabilityErrorMessage(null);
+    setAvailableSlots([]);
+    setIsFullyBooked(false);
+    setTimeSlot('');
+
+    const query = new URLSearchParams({ counselorId: selectedCounselorId, date, timezone });
 
     apiClient.get<{ availableSlots: string[]; fullyBooked?: boolean }>(
-      `/api/v1/appointments/availability?counselorId=${selectedCounselorId}&date=${date}`,
+      `/api/v1/appointments/availability?${query.toString()}`,
     )
       .then((res) => {
         if (!isMounted) return;
-
+        if (!res.success || !res.data || !Array.isArray(res.data.availableSlots)) {
+          throw new Error(res.error || 'Ketersediaan slot tidak dapat dimuat.');
+        }
         const data = res.data;
-        if (data && Array.isArray(data.availableSlots)) {
-          setAvailableSlots(data.availableSlots);
-          setIsFullyBooked(
-            data.fullyBooked || data.availableSlots.length === 0,
-          );
-          if (data.availableSlots.length > 0) {
-            setTimeSlot(current => data.availableSlots.includes(current) ? current : data.availableSlots[0]);
-          } else {
-            setTimeSlot("");
-          }
+        setAvailableSlots(data.availableSlots);
+        setIsFullyBooked(data.fullyBooked || data.availableSlots.length === 0);
+        setAvailabilityStatus('ready');
+        if (data.availableSlots.length > 0) {
+          setTimeSlot(data.availableSlots[0]);
         }
       })
       .catch((err) => {
         if (!isMounted) return;
-
         setAvailableSlots([]);
+        setIsFullyBooked(false);
+        setAvailabilityStatus('error');
+        setAvailabilityErrorMessage(err instanceof Error ? err.message : 'Ketersediaan slot gagal dimuat. Coba lagi.');
         console.warn("Failed to check server availability:", err);
       });
 
     return () => {
       isMounted = false;
     };
-  }, [selectedCounselorId, date]);
+  }, [selectedCounselorId, date, timezone, availabilityRetryCount]);
 
   const handleNextStep = () => {
     setFormError(null);
     if (currentStep === 1) {
       if (!selectedCounselorId) return setFormError("Pilih konselor terlebih dahulu untuk melanjutkan.");
     } else if (currentStep === 2) {
-      if (!date || !timeSlot) return setFormError("Pilih tanggal dan waktu sesi.");
+      if (availabilityStatus === 'loading') return setFormError('Sedang memeriksa slot. Tunggu sebentar.');
+      if (availabilityStatus === 'error') return setFormError(availabilityErrorMessage || 'Ketersediaan slot gagal dimuat. Coba pilih tanggal lagi atau muat ulang halaman.');
+      if (availabilityStatus !== 'ready' || isFullyBooked || !date || !timeSlot || !availableSlots.includes(timeSlot)) {
+        return setFormError(isFullyBooked ? 'Tidak ada slot waktu yang dapat dipilih pada tanggal ini. Pilih tanggal lain.' : 'Pilih slot waktu yang tersedia.');
+      }
     } else if (currentStep === 3) {
       if (!studentName.trim() || !studentNIM.trim() || !studentEmail.trim()) {
         return setFormError("Mohon lengkapi Nama, NIM, dan Email Anda.");
@@ -264,7 +284,7 @@ export const BookingForm: React.FC<BookingFormProps> = ({
           timeSlot: fullTimeSlot,
           timezone,
           mode,
-          primaryConcern: `${selectedConcern} (Offline)`,
+          primaryConcern: canShareReferralNotes ? `${selectedConcern} (Offline)` : 'Konseling Mental (Offline)',
           status: "PENDING",
           approvalStatus: "PENDING_APPROVAL",
           attendanceStatus: "SCHEDULED",
@@ -328,7 +348,7 @@ export const BookingForm: React.FC<BookingFormProps> = ({
               timeSlot: fullTimeSlot,
               timezone,
               mode,
-              primaryConcern: `${selectedConcern} (Offline)`,
+              primaryConcern: canShareReferralNotes ? `${selectedConcern} (Offline)` : 'Konseling Mental (Offline)',
               status: 'PENDING',
               approvalStatus: 'PENDING_APPROVAL',
               attendanceStatus: 'SCHEDULED',
@@ -378,7 +398,7 @@ export const BookingForm: React.FC<BookingFormProps> = ({
         timeSlot: `${record.time} ${record.timezone || timezone}`,
         timezone: record.timezone || timezone,
         mode: record.mode || mode,
-        primaryConcern: record.notes || selectedConcern,
+        primaryConcern: canShareReferralNotes ? (record.notes || selectedConcern) : 'Konseling Mental',
         status:
           record.status || "PENDING",
         approvalStatus: record.approvalStatus || "PENDING_APPROVAL",
@@ -424,7 +444,7 @@ export const BookingForm: React.FC<BookingFormProps> = ({
             timeSlot: fullTimeSlot,
             timezone,
             mode,
-            primaryConcern: `${selectedConcern} (Offline)`,
+            primaryConcern: canShareReferralNotes ? `${selectedConcern} (Offline)` : 'Konseling Mental (Offline)',
             status: "PENDING",
             approvalStatus: "PENDING_APPROVAL",
             attendanceStatus: "SCHEDULED",
@@ -700,7 +720,7 @@ export const BookingForm: React.FC<BookingFormProps> = ({
                     id="session-date-input"
                     type="date"
                     required
-                    min={toLocalDateInputValue(new Date())}
+                    min={getAppointmentDateInputValue(new Date(), timezone)}
                     value={date}
                     onChange={(e) => setDate(e.target.value)}
                     className="w-full surface-muted border border-default rounded-xl px-3.5 py-2 text-base sm:text-sm text-primary focus:outline-none focus:border-teal-600 focus:ring-1 focus:ring-teal-600 transition-all min-h-11"
@@ -718,10 +738,14 @@ export const BookingForm: React.FC<BookingFormProps> = ({
                     id="session-time-input"
                     value={timeSlot}
                     onChange={(e) => setTimeSlot(e.target.value)}
-                    disabled={isFullyBooked || availableSlots.length === 0}
+                    disabled={availabilityStatus !== 'ready' || isFullyBooked || availableSlots.length === 0}
                     className="w-full surface-muted border border-default rounded-xl px-3.5 py-2 text-base sm:text-sm text-primary focus:outline-none focus:border-teal-600 focus:ring-1 focus:ring-teal-600 transition-all disabled:opacity-50 min-h-11"
                   >
-                    {availableSlots.length > 0 ? (
+                    {availabilityStatus === 'loading' ? (
+                      <option value="">Memeriksa slot…</option>
+                    ) : availabilityStatus === 'error' ? (
+                      <option value="">Slot gagal dimuat</option>
+                    ) : availableSlots.length > 0 ? (
                       availableSlots.map((slot) => (
                         <option key={slot} value={slot}>
                           {slot}
@@ -734,6 +758,16 @@ export const BookingForm: React.FC<BookingFormProps> = ({
                 </div>
               </div>
 
+              <p role="status" aria-live="polite" className={`text-xs ${availabilityStatus === 'error' ? 'text-rose-600 dark:text-rose-400' : 'text-secondary'}`}>
+                {availabilityStatus === 'loading' && 'Memeriksa ketersediaan jadwal…'}
+                {availabilityStatus === 'error' && <>
+                  <span>{availabilityErrorMessage || 'Ketersediaan tidak bisa dimuat. Coba lagi sebelum melanjutkan.'}</span>{' '}
+                  <button type="button" onClick={() => setAvailabilityRetryCount(count => count + 1)} className="font-semibold underline">Coba lagi</button>
+                </>}
+                {availabilityStatus === 'ready' && isFullyBooked && 'Tidak ada slot waktu yang dapat dipilih pada tanggal ini. Silakan pilih tanggal lain.'}
+                {availabilityStatus === 'ready' && !isFullyBooked && `${availableSlots.length} slot tersedia. Slot dikonfirmasi kembali saat jadwal dikirim.`}
+              </p>
+
               <div className="space-y-1">
                 <label
                   htmlFor="session-timezone"
@@ -744,7 +778,12 @@ export const BookingForm: React.FC<BookingFormProps> = ({
                 <select
                   id="session-timezone"
                   value={timezone}
-                  onChange={(e) => setTimezone(e.target.value as any)}
+                    onChange={(e) => {
+                      const nextTimezone = e.target.value as "WIB" | "WITA" | "WIT";
+                      const minimumDate = getAppointmentDateInputValue(new Date(), nextTimezone);
+                      setTimezone(nextTimezone);
+                      setDate((currentDate) => currentDate < minimumDate ? minimumDate : currentDate);
+                    }}
                   className="w-full surface-muted border border-default rounded-xl px-3.5 py-2 text-base sm:text-sm text-primary focus:outline-none focus:border-teal-600 focus:ring-1 focus:ring-teal-600 transition-all min-h-11"
                 >
                   <option value="WIB">WIB (Jakarta / Jawa / Sumatra)</option>
@@ -830,7 +869,7 @@ export const BookingForm: React.FC<BookingFormProps> = ({
 
               <div className="p-3 surface-card border border-default rounded-xl">
                 <p className="text-[11px] text-secondary leading-relaxed">
-                  Dengan mengonfirmasi jadwal ini, Anda menyetujui bahwa pembatalan atau perubahan jadwal wajib dilakukan maksimal 24 jam sebelum sesi dimulai.
+                  Ketentuan pembatalan atau perubahan dapat berbeda menurut layanan kampus. Aplikasi ini tidak menetapkan batas waktu khusus di sini; tanyakan kepada konselor atau kampus jika perlu mengubah jadwal.
                 </p>
               </div>
             </div>

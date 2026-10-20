@@ -345,11 +345,15 @@ export interface SOSDispatchStatus {
     | "SENT_TO_SERVER"
     | "DELIVERED_SIMULATED"
     | "DIRECT_CALL_ONLY"
-    | "GUEST_DIRECT_CALL_ONLY";
+    | "GUEST_DIRECT_CALL_ONLY"
+    | "CONTACT_MISSING"
+    | "CONSENT_REQUIRED"
+    | "COOLDOWN_ACTIVE"
+    | "RATE_LIMIT_EXCEEDED";
   timestamp: string;
   recipientName?: string;
   recipientPhone?: string;
-  hasUserConsent: boolean;
+  hasUserConsent?: boolean;
   message: string;
 }
 

@@ -525,7 +525,7 @@ export const PrivacyCenterModal: React.FC<PrivacyCenterModalProps> = ({
                         1. Temporary / Incognito
                       </div>
                       <p className="text-secondary text-[10.5px] leading-tight">
-                        Obrolan sementara efemeral. Teks diproses transient di RAM tanpa disimpan ke basis data atau cache browser.
+                        Pesan baru tidak ditambahkan ke riwayat akun. Pesan tetap dikirim ke provider AI; lampiran tetap diunggah ke server dan mengikuti retensi aplikasi. RuangTenang tidak menghapus salinan provider atau cadangan dari fitur ini. Mode ini bukan penyamaran browser.
                       </p>
                     </div>
 
@@ -549,6 +549,9 @@ export const PrivacyCenterModal: React.FC<PrivacyCenterModalProps> = ({
                       </p>
                     </div>
                   </div>
+                  <p className="text-secondary text-[10.5px] leading-relaxed">
+                    Draf Canvas RuangKerja dapat disimpan sementara di session storage browser agar pulih setelah halaman dimuat ulang. Isinya tidak dienkripsi oleh penyimpanan ini; gunakan dengan hati-hati pada perangkat atau profil browser bersama.
+                  </p>
                 </div>
 
                 {activeTab === 'consent' && (

@@ -7,6 +7,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { getStableStudentSession } from '../../lib/authSessionLifecycle';
 import { modalBackdropVariants, modalPanelVariants, reducedMotionVariants } from '../../lib/motionTokens';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
+import { getLocalIsoDateString } from '../../utils/streak';
 
 export interface MoodLog {
   id: string;
@@ -19,9 +20,12 @@ export interface MoodLog {
   sleepQuality: 'very_poor' | 'poor' | 'fair' | 'good' | 'excellent' | null;
 }
 
+type SleepQualityChoice = 'Nyenyak' | 'Kurang Nyenyak' | 'Insomnia' | 'Tidak Dicatat';
+
 interface DailyCheckinModalProps {
   isOpen: boolean;
   onClose: () => void;
+  initialLog?: MoodLog | null;
   onSaveSuccess: (savedLog: MoodLog) => void;
   showToast: (msg: string, type?: 'info' | 'success' | 'warning' | 'error', title?: string) => void;
 }
@@ -63,6 +67,7 @@ export const FACTOR_TAGS = [
 export const DailyCheckinModal: React.FC<DailyCheckinModalProps> = ({
   isOpen,
   onClose,
+  initialLog = null,
   onSaveSuccess,
   showToast
 }) => {
@@ -73,13 +78,48 @@ export const DailyCheckinModal: React.FC<DailyCheckinModalProps> = ({
   const [selectedFactors, setSelectedFactors] = useState<string[]>([]);
   const [journalNote, setJournalNote] = useState<string>('');
   const [sleepHours, setSleepHours] = useState<number>(7);
-  const [sleepQuality, setSleepQuality] = useState<'Nyenyak' | 'Kurang Nyenyak' | 'Insomnia'>('Nyenyak');
-  const [logDate, setLogDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [sleepQuality, setSleepQuality] = useState<SleepQualityChoice>('Nyenyak');
+  const [sleepHoursTouched, setSleepHoursTouched] = useState(false);
+  const [logDate, setLogDate] = useState<string>(() => getLocalIsoDateString());
 
   const [reflectionPrompts, setReflectionPrompts] = useState<string[]>([]);
   const [isLoadingPrompts, setIsLoadingPrompts] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const submitGuard = useRef(false);
+  const previousInitialLogIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    if (!initialLog) {
+      if (previousInitialLogIdRef.current) {
+        setSelectedMood(null);
+        setSelectedEmotions([]);
+        setSelectedFactors([]);
+        setJournalNote('');
+        setSleepHours(7);
+        setSleepHoursTouched(false);
+        setSleepQuality('Nyenyak');
+      }
+      previousInitialLogIdRef.current = null;
+      setLogDate(getLocalIsoDateString());
+      return;
+    }
+    previousInitialLogIdRef.current = initialLog.id;
+    setSelectedMood(initialLog.mood);
+    setSelectedEmotions(initialLog.emotions || []);
+    setSelectedFactors(initialLog.factors || []);
+    setJournalNote(initialLog.notes || '');
+    setSleepHours(initialLog.sleepHours ?? 7);
+    setSleepHoursTouched(initialLog.sleepHours !== null);
+    setSleepQuality(initialLog.sleepQuality === null
+      ? 'Tidak Dicatat'
+      : initialLog.sleepQuality === 'very_poor'
+        ? 'Insomnia'
+        : initialLog.sleepQuality === 'good' || initialLog.sleepQuality === 'excellent'
+          ? 'Nyenyak'
+          : 'Kurang Nyenyak');
+    setLogDate(initialLog.date);
+  }, [isOpen, initialLog]);
 
   // Lock body scroll and handle Escape key
   useEffect(() => {
@@ -157,20 +197,23 @@ export const DailyCheckinModal: React.FC<DailyCheckinModalProps> = ({
       showToast('Masuk ke akun mahasiswa sebelum menyimpan catatan mood.', 'error');
       return;
     }
-    let idempotencyKey: string;
-    try {
-      idempotencyKey = createOfflineIdempotencyKey();
-    } catch {
-      showToast('Browser tidak menyediakan generator aman. Catatan mood belum dikirim.', 'error');
-      return;
+    let idempotencyKey: string | undefined;
+    if (!initialLog) {
+      try {
+        idempotencyKey = createOfflineIdempotencyKey();
+      } catch {
+        showToast('Browser tidak menyediakan generator aman. Catatan mood belum dikirim.', 'error');
+        return;
+      }
     }
     submitGuard.current = true;
     setIsSubmitting(true);
     const payload = {
       mood: selectedMood,
+      date: logDate,
       notes: journalNote.trim(),
-      sleepHours,
-      sleepQuality: sleepQuality === 'Nyenyak' ? 'good' : sleepQuality === 'Insomnia' ? 'very_poor' : 'poor',
+      sleepHours: initialLog && initialLog.sleepHours === null && !sleepHoursTouched ? null : sleepHours,
+      sleepQuality: sleepQuality === 'Tidak Dicatat' ? null : sleepQuality === 'Nyenyak' ? 'good' : sleepQuality === 'Insomnia' ? 'very_poor' : 'poor',
       factors: selectedFactors,
       emotions: selectedEmotions
     };
@@ -179,13 +222,17 @@ export const DailyCheckinModal: React.FC<DailyCheckinModalProps> = ({
       setSelectedEmotions([]);
       setSelectedFactors([]);
       setJournalNote('');
-      setLogDate(new Date().toISOString().split('T')[0]);
+      setSleepHours(7);
+      setSleepHoursTouched(false);
+      setSleepQuality('Nyenyak');
+      setLogDate(getLocalIsoDateString());
       onSaveSuccess(log);
       onClose();
       showToast(message, type);
     };
 
     const queueOffline = async (message: string, type: 'info' | 'warning') => {
+      if (!idempotencyKey) throw new Error('MOOD_IDEMPOTENCY_KEY_MISSING');
       await clientDb.enqueueOfflineAction({
         type: 'mood_log',
         payload,
@@ -199,15 +246,39 @@ export const DailyCheckinModal: React.FC<DailyCheckinModalProps> = ({
         emotions: selectedEmotions,
         notes: journalNote.trim() ? `${journalNote.trim()} (Offline)` : '(Disimpan Offline)',
         factors: selectedFactors,
-        sleepHours,
-        sleepQuality: sleepQuality === 'Nyenyak' ? 'good' : sleepQuality === 'Insomnia' ? 'very_poor' : 'poor',
+        sleepHours: payload.sleepHours,
+        sleepQuality: payload.sleepQuality,
       };
       finishSaved(offlineLog, message, type);
     };
 
     try {
       if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        if (initialLog) {
+          showToast('Perubahan catatan belum tersimpan. Sambungkan ke internet lalu coba lagi.', 'warning');
+          return;
+        }
         await queueOffline('Catatan mood tersimpan terenkripsi untuk akun ini dan akan dicoba saat online.', 'info');
+        return;
+      }
+
+      if (initialLog) {
+        const response = await apiClient.put<any>(`/api/v1/mood/${encodeURIComponent(initialLog.id)}`, payload);
+        if (!response.success || !response.data?.log?.id) {
+          showToast(response.error || 'Perubahan catatan mood belum tersimpan.', 'error');
+          return;
+        }
+        const saved = response.data.log;
+        finishSaved({
+          id: saved.id,
+          date: saved.timestamp ? new Date(saved.timestamp).toISOString().slice(0, 10) : logDate,
+          mood: typeof saved.mood === 'number' ? saved.mood : (parseInt(String(saved.mood || ''), 10) || selectedMood),
+          emotions: Array.isArray(saved.emotions) ? saved.emotions : selectedEmotions,
+          notes: saved.notes ?? journalNote.trim(),
+          factors: Array.isArray(saved.factors) ? saved.factors : selectedFactors,
+          sleepHours: typeof saved.sleepHours === 'number' ? saved.sleepHours : payload.sleepHours,
+          sleepQuality: saved.sleepQuality !== undefined ? saved.sleepQuality : payload.sleepQuality
+        }, 'Catatan mood berhasil diperbarui.', 'success');
         return;
       }
 
@@ -227,8 +298,8 @@ export const DailyCheckinModal: React.FC<DailyCheckinModalProps> = ({
           emotions: selectedEmotions,
           notes: journalNote.trim(),
           factors: selectedFactors,
-          sleepHours,
-          sleepQuality: sleepQuality === 'Nyenyak' ? 'good' : sleepQuality === 'Insomnia' ? 'very_poor' : 'poor',
+          sleepHours: payload.sleepHours,
+          sleepQuality: payload.sleepQuality,
         }, 'Catatan mood sebelumnya telah dikonfirmasi server.', 'success');
         return;
       }
@@ -255,12 +326,16 @@ export const DailyCheckinModal: React.FC<DailyCheckinModalProps> = ({
         emotions: Array.isArray(saved.emotions) ? saved.emotions : selectedEmotions,
         notes: saved.notes || journalNote.trim(),
         factors: Array.isArray(saved.factors) ? saved.factors : selectedFactors,
-        sleepHours: saved.sleepHours ?? sleepHours,
-        sleepQuality: saved.sleepQuality ?? (sleepQuality === 'Nyenyak' ? 'good' : sleepQuality === 'Insomnia' ? 'very_poor' : 'poor')
+        sleepHours: typeof saved.sleepHours === 'number' ? saved.sleepHours : payload.sleepHours,
+        sleepQuality: saved.sleepQuality !== undefined ? saved.sleepQuality : payload.sleepQuality
       };
 
       finishSaved(canonicalLog, 'Catatan mood harian berhasil disimpan.', 'success');
     } catch (error) {
+      if (initialLog) {
+        showToast('Perubahan catatan mood belum tersimpan. Periksa koneksi lalu coba lagi.', 'error');
+        return;
+      }
       if (typeof navigator !== 'undefined' && !navigator.onLine) {
         try {
           await queueOffline('Koneksi terputus. Catatan mood tersimpan terenkripsi untuk dicoba kembali.', 'warning');
@@ -320,7 +395,7 @@ export const DailyCheckinModal: React.FC<DailyCheckinModalProps> = ({
             </div>
             <div>
               <h2 id="daily-checkin-title" className="text-base sm:text-lg font-bold text-primary leading-tight">
-                Daily Check-in Mood
+                {initialLog ? 'Edit Catatan Mood' : 'Daily Check-in Mood'}
               </h2>
               <p className="text-xs text-secondary font-normal mt-0.5">
                 Bagaimana perasaan Anda hari ini?
@@ -348,7 +423,7 @@ export const DailyCheckinModal: React.FC<DailyCheckinModalProps> = ({
               type="date"
               value={logDate}
               onChange={(e) => setLogDate(e.target.value)}
-              max={new Date().toISOString().split('T')[0]}
+              max={getLocalIsoDateString()}
               className="w-full text-sm p-3 surface-muted border border-default rounded-xl text-primary focus:outline-none focus:ring-2 focus:ring-teal-500/20"
             />
           </div>
@@ -444,7 +519,7 @@ export const DailyCheckinModal: React.FC<DailyCheckinModalProps> = ({
                   Durasi Tidur
                 </label>
                 <span className="text-xs font-bold text-teal-600 dark:text-teal-400">
-                  {sleepHours} Jam
+                  {initialLog && initialLog.sleepHours === null && !sleepHoursTouched ? 'Belum dicatat' : `${sleepHours} Jam`}
                 </span>
               </div>
               <input
@@ -455,7 +530,11 @@ export const DailyCheckinModal: React.FC<DailyCheckinModalProps> = ({
                 max="12"
                 step="0.5"
                 value={sleepHours}
-                onChange={(e) => setSleepHours(parseFloat(e.target.value))}
+                aria-valuetext={initialLog && initialLog.sleepHours === null && !sleepHoursTouched ? 'Belum dicatat' : `${sleepHours} Jam`}
+                onChange={(e) => {
+                  setSleepHours(parseFloat(e.target.value));
+                  setSleepHoursTouched(true);
+                }}
                 className="w-full accent-teal-600 cursor-pointer"
               />
               <div className="flex justify-between text-[10px] text-muted">
@@ -479,6 +558,7 @@ export const DailyCheckinModal: React.FC<DailyCheckinModalProps> = ({
                 <option value="Nyenyak">😴 Nyenyak & Segar</option>
                 <option value="Kurang Nyenyak">🔄 Kurang Nyenyak / Sering Terbangun</option>
                 <option value="Insomnia">😳 Sulit Tidur / Insomnia</option>
+                <option value="Tidak Dicatat">Tidak ingin mencatat</option>
               </select>
             </div>
           </div>
@@ -556,7 +636,7 @@ export const DailyCheckinModal: React.FC<DailyCheckinModalProps> = ({
               ) : (
                 <>
                   <Check className="w-4 h-4" />
-                  <span>Simpan Check-In Mood</span>
+                  <span>{initialLog ? 'Simpan Perubahan' : 'Simpan Check-In Mood'}</span>
                 </>
               )}
             </button>

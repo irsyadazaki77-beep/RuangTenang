@@ -51,6 +51,13 @@ function writeEvent(res: Response, event: Record<string, unknown>) {
   if (!res.writableEnded) res.write(`data: ${JSON.stringify(event)}\n\n`);
 }
 
+function writeOutputChunks(res: Response, identity: Record<string, unknown>, output: string) {
+  const chunkSize = 2048;
+  for (let offset = 0; offset < output.length; offset += chunkSize) {
+    writeEvent(res, { type: 'candidate_chunk', ...identity, text: output.slice(offset, offset + chunkSize) });
+  }
+}
+
 router.post('/chat/compare/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (req: Request, res: Response) => {
   const parsed = comparisonSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ success: false, code: 'INVALID_COMPARISON', message: 'Pilih model unik dan kirim prompt yang valid.' });
@@ -228,7 +235,6 @@ router.post('/chat/compare/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter,
           const text = typeof chunk?.text === 'string' ? chunk.text : chunk?.candidates?.[0]?.content?.parts?.map((part: { text?: string }) => part.text || '').join('') || '';
           if (text) {
             fullOutput += text;
-            writeEvent(res, { type: 'candidate_chunk', comparisonId: request.comparisonId, snapshotId: snapshot.snapshotId, contextFingerprint: snapshot.contextFingerprint, candidateId, attemptId, text });
           }
         }
         if (controller.signal.aborted) {
@@ -236,11 +242,12 @@ router.post('/chat/compare/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter,
         } else if (!aiSafetyService.validateOutput(fullOutput).isValid) {
           writeEvent(res, { type: 'candidate_failed', comparisonId: request.comparisonId, snapshotId: snapshot.snapshotId, candidateId, attemptId, errorCode: 'OUTPUT_REJECTED', latencyMs: Date.now() - startedAt });
         } else {
-            recordCandidateOutput(snapshot.snapshotId, candidateId, attemptId, userId, fullOutput);
+          recordCandidateOutput(snapshot.snapshotId, candidateId, attemptId, userId, fullOutput);
+          writeOutputChunks(res, { comparisonId: request.comparisonId, snapshotId: snapshot.snapshotId, contextFingerprint: snapshot.contextFingerprint, candidateId, attemptId }, fullOutput);
           writeEvent(res, { type: 'candidate_completed', comparisonId: request.comparisonId, snapshotId: snapshot.snapshotId, candidateId, attemptId, latencyMs: Date.now() - startedAt });
         }
       } catch (error) {
-        const errorCode = controller.signal.aborted ? 'CANCELLED' : (error as Error).message === 'PROVIDER_NOT_CONFIGURED' ? 'PROVIDER_NOT_CONFIGURED' : 'CANDIDATE_FAILED';
+        const errorCode = controller.signal.aborted ? 'CANCELLED' : (error as Error).message === 'PROVIDER_NOT_CONFIGURED' ? 'PROVIDER_NOT_CONFIGURED' : (error as Error).message === 'MODEL_IDENTITY_MISMATCH' ? 'MODEL_IDENTITY_MISMATCH' : 'CANDIDATE_FAILED';
         writeEvent(res, { type: controller.signal.aborted ? 'candidate_cancelled' : 'candidate_failed', comparisonId: request.comparisonId, snapshotId: snapshot.snapshotId, candidateId, attemptId, errorCode, latencyMs: Date.now() - startedAt });
       } finally {
         attempts.delete(attemptId);
@@ -305,30 +312,35 @@ router.post('/chat/compare/:comparisonId/retry/:candidateId', optionalAuth, aiCh
   const identity = { comparisonId: snapshot.comparisonId, snapshotId: snapshot.snapshotId, contextFingerprint: snapshot.contextFingerprint, candidateId: req.params.candidateId, attemptId: body.data.attemptId, modelId: model.id, ...(candidate?.profileId ? { profileId: candidate.profileId } : {}) };
   const startedAt = Date.now();
   let output = '';
+  let execution: Promise<void> | undefined;
   writeEvent(res, { type: 'candidate_started', ...identity, modelName: model.name });
   try {
     const priorExecution = providerTails.get(model.provider) || Promise.resolve();
-    const execution = priorExecution.catch(() => undefined).then(async () => {
+    execution = priorExecution.catch(() => undefined).then(async () => {
       if (controller.signal.aborted) { await rollbackUserAiQuota(userId, ip).catch(() => undefined); return; }
       const { stream, modelUsed } = await aiRequestService.generateStreamResponse({ userId, userTier: tier, requestedModelId: model.id, prompt: snapshot.prompt, history: snapshot.recentHistory.map(item => ({ role: item.role, parts: [{ text: item.content }] })), systemInstruction: snapshot.systemInstruction, abortSignal: controller.signal, comparisonMode: true });
       if (modelUsed !== model.id) throw new Error('MODEL_IDENTITY_MISMATCH');
       for await (const chunk of stream) {
         if (controller.signal.aborted) break;
         const text = typeof chunk?.text === 'string' ? chunk.text : chunk?.candidates?.[0]?.content?.parts?.map((part: { text?: string }) => part.text || '').join('') || '';
-        if (text) { output += text; writeEvent(res, { type: 'candidate_chunk', ...identity, text }); }
+        if (text) output += text;
       }
     });
     providerTails.set(model.provider, execution);
     await execution;
-    if (providerTails.get(model.provider) === execution) providerTails.delete(model.provider);
     if (controller.signal.aborted) writeEvent(res, { type: 'candidate_cancelled', ...identity, latencyMs: Date.now() - startedAt });
+    else if (!aiSafetyService.validateOutput(output).isValid) writeEvent(res, { type: 'candidate_failed', ...identity, errorCode: 'OUTPUT_REJECTED', latencyMs: Date.now() - startedAt });
     else {
       recordCandidateOutput(snapshot.snapshotId, req.params.candidateId, body.data.attemptId, userId, output);
+      writeOutputChunks(res, identity, output);
       writeEvent(res, { type: 'candidate_completed', ...identity, latencyMs: Date.now() - startedAt });
     }
   } catch (error) {
-    writeEvent(res, { type: controller.signal.aborted ? 'candidate_cancelled' : 'candidate_failed', ...identity, errorCode: (error as Error).message === 'PROVIDER_NOT_CONFIGURED' ? 'PROVIDER_NOT_CONFIGURED' : 'CANDIDATE_FAILED', latencyMs: Date.now() - startedAt });
+    const errorMessage = (error as Error).message;
+    const errorCode = errorMessage === 'PROVIDER_NOT_CONFIGURED' ? 'PROVIDER_NOT_CONFIGURED' : errorMessage === 'MODEL_IDENTITY_MISMATCH' ? 'MODEL_IDENTITY_MISMATCH' : 'CANDIDATE_FAILED';
+    writeEvent(res, { type: controller.signal.aborted ? 'candidate_cancelled' : 'candidate_failed', ...identity, errorCode, latencyMs: Date.now() - startedAt });
   } finally {
+    if (execution && providerTails.get(model.provider) === execution) providerTails.delete(model.provider);
     active.controllers.delete(body.data.attemptId);
     if (!active.controllers.size) candidateControllers.delete(snapshot.comparisonId);
     writeEvent(res, { type: 'comparison_completed', comparisonId: snapshot.comparisonId, snapshotId: snapshot.snapshotId, contextFingerprint: snapshot.contextFingerprint });

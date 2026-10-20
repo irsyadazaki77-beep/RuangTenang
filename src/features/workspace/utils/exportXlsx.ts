@@ -120,7 +120,7 @@ export async function createXlsxBuffer(input: ExportXlsxOptions): Promise<Uint8A
   const used = new Set<string>();
   for (const table of tables) {
     const sheet = workbook.addWorksheet(sheetName(table.name, used));
-    sheet.addRow(table.headers);
+    sheet.addRow(table.headers.map(header => safeCell(header) ?? ''));
     sheet.getRow(1).font = { bold: true };
     table.rows.forEach(row => sheet.addRow(row));
     sheet.views = [{ state: 'frozen', ySplit: 1 }];
