@@ -28,6 +28,8 @@ import { checkUserAiUsageLimit } from '../services/aiUsageLimiter.js';
 import { consentService } from '../services/consentService.js';
 import { aiSafetyService } from '../services/ai/aiSafetyService.js';
 import { WorkspaceMemoryService } from '../services/workspaceMemoryService.js';
+import { z } from 'zod';
+import { workspaceMemorySuggestionService } from '../services/workspaceMemorySuggestionService.js';
 import {
   backfillLegacyPlan,
   cancelWorkspaceTaskExecution,
@@ -838,6 +840,30 @@ router.get('/:chatId/memories', async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error('[WORKSPACE_MEMORY_LIST_ERROR]', error);
     return res.status(500).json({ success: false, code: 'WORKSPACE_MEMORY_LIST_FAILED', message: 'Gagal memuat memori workspace.' });
+  }
+});
+
+router.post('/:chatId/memories/suggest', async (req: Request, res: Response) => {
+  const parsed = z.object({
+    userMessage: z.string().min(1).max(4000),
+    assistantReply: z.string().max(8000).default('')
+  }).safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ success: false, code: 'INVALID_PAYLOAD', message: 'Format permintaan tidak valid.' });
+  }
+  try {
+    const workspace = await ownedWorkspace(req.params.chatId, req.user!.userId, false);
+    if (!workspace) return res.status(404).json({ success: false, code: 'WORKSPACE_NOT_FOUND', message: 'Workspace tidak ditemukan.' });
+    const suggestions = await workspaceMemorySuggestionService.suggest({
+      userId: req.user!.userId,
+      workspaceId: req.params.chatId,
+      userMessage: parsed.data.userMessage,
+      assistantReply: parsed.data.assistantReply
+    });
+    return res.json({ success: true, data: suggestions });
+  } catch (error) {
+    console.warn('[WORKSPACE_MEMORY_SUGGEST_ERROR]', error instanceof Error ? error.message : error);
+    return res.json({ success: true, data: [] });
   }
 });
 

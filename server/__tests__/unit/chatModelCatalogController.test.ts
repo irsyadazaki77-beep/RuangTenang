@@ -2,9 +2,9 @@ import { describe, expect, it, vi } from 'vitest';
 import { ChatController } from '../../controllers/chatController.js';
 
 describe('GET /chat/models controller contract', () => {
-  it('returns a safe, unique, tier-aware public catalog', () => {
+  it('returns a safe, unique, tier-aware public catalog', async () => {
     const json = vi.fn();
-    ChatController.getModels({ user: { tier: 'Free' } } as never, { json } as never);
+    await ChatController.getModels({ user: { tier: 'Free' } } as never, { json } as never);
     const payload = json.mock.calls[0][0] as { defaultModel: string; models: Array<Record<string, unknown>> };
     const ids = payload.models.map(model => model.id);
 

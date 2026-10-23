@@ -1,5 +1,5 @@
 import { getPhq9Severity, getGad7Severity } from '../../lib/clinicalScoring';
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useLayoutEffect, useRef } from 'react';
 import { apiClient } from "../../lib/apiClient";
 import { safeLocalStorage } from "../../lib/storage";
 import { useAuth } from "../../contexts/AuthContext";
@@ -24,6 +24,7 @@ import { TimelineTasks } from './TimelineTasks';
 import { CounselorConsent } from './CounselorConsent';
 import { AiLimits } from './AiLimits';
 import { DailyCheckinModal, MoodLog } from './DailyCheckinModal';
+import { isMoodLogPendingSync } from './moodLogUtils';
 import { Toast } from '../../components/Toast';
 import { motion } from 'motion/react';
 import { DashboardSkeleton } from '../../components/common/Skeleton';
@@ -44,11 +45,20 @@ interface HistoricalScore {
   triage: TriageCategory;
 }
 
+const DEFAULT_SELF_CARE_TASKS = [
+  { id: 'sc1', task: 'Lakukan Teknik Grounding 5-4-3-2-1 sekali hari ini', done: false },
+  { id: 'sc2', task: 'Terapkan rehat sejenak 25 menit saat mengerjakan tugas/skripsi', done: false },
+  { id: 'sc3', task: 'Jalan santai di luar ruangan selama 15 menit tanpa HP', done: false },
+  { id: 'sc4', task: 'Sediakan waktu 30 menit bebas layar sebelum tidur malam', done: false }
+];
+
 export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
   onNavigateToPrograms,
   onNavigateToSchedule,
   onOpenPrivacyCenter,
 }) => {
+  const { user } = useAuth();
+  const dashboardIdentity = `${user?.id || 'anonymous'}:${user?.role || 'none'}`;
   const [screenHistory, setScreenHistory] = useState<HistoricalScore[]>([]);
   const [moodLogs, setMoodLogs] = useState<MoodLog[]>([]);
   const [isExpandedInsight, setIsExpandedInsight] = useState(false);
@@ -65,67 +75,143 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
   const [isLoadingPage, setIsLoadingPage] = useState<boolean>(true);
   const [pageError, setPageError] = useState<string | null>(null);
 
-  const { user } = useAuth();
   const CHECKLIST_KEY = `rt_self_care_${user?.id || "guest"}`;
-  const defaultTasks = [
-    { id: 'sc1', task: 'Lakukan Teknik Grounding 5-4-3-2-1 sekali hari ini', done: false },
-    { id: 'sc2', task: 'Terapkan rehat sejenak 25 menit saat mengerjakan tugas/skripsi', done: false },
-    { id: 'sc3', task: 'Jalan santai di luar ruangan selama 15 menit tanpa HP', done: false },
-    { id: 'sc4', task: 'Sediakan waktu 30 menit bebas layar sebelum tidur malam', done: false }
-  ];
-  const [selfCareChecklist, setSelfCareChecklist] = useState<{ id: string; task: string; done: boolean }[]>(defaultTasks);
+  const [selfCareChecklist, setSelfCareChecklist] = useState<{ id: string; task: string; done: boolean }[]>(DEFAULT_SELF_CARE_TASKS);
 
-  useEffect(() => {
-    if (!user || user.role === 'guest') {
+  const dashboardIdentityRef = useRef(dashboardIdentity);
+  dashboardIdentityRef.current = dashboardIdentity;
+  const setMoodLogsForIdentity = useCallback((update: React.SetStateAction<MoodLog[]>) => {
+    if (dashboardIdentityRef.current !== dashboardIdentity) return;
+    setMoodLogs(previous => {
+      if (dashboardIdentityRef.current !== dashboardIdentity) return previous;
+      return typeof update === 'function' ? update(previous) : update;
+    });
+  }, [dashboardIdentity]);
+  const setScreenHistoryForIdentity = useCallback((update: React.SetStateAction<HistoricalScore[]>) => {
+    if (dashboardIdentityRef.current !== dashboardIdentity) return;
+    setScreenHistory(previous => {
+      if (dashboardIdentityRef.current !== dashboardIdentity) return previous;
+      return typeof update === 'function' ? update(previous) : update;
+    });
+  }, [dashboardIdentity]);
+  const dashboardRequestRef = useRef(0);
+  const dashboardAbortRef = useRef<AbortController | null>(null);
+  const usageRequestRef = useRef(0);
+  const usageAbortRef = useRef<AbortController | null>(null);
+  const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useLayoutEffect(() => {
+    dashboardRequestRef.current += 1;
+    dashboardAbortRef.current?.abort();
+    dashboardAbortRef.current = null;
+    usageRequestRef.current += 1;
+    usageAbortRef.current?.abort();
+    usageAbortRef.current = null;
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    toastTimeoutRef.current = null;
+
+    setScreenHistory([]);
+    setMoodLogs([]);
+    setUsageStats(null);
+    setIsExpandedInsight(false);
+    setEditingMoodLog(null);
+    setIsCheckinModalOpen(false);
+    setToastMessage(null);
+    setPageError(null);
+    setIsLoadingPage(true);
+    setLoadingUsage(false);
+    setActiveSection('all');
+
+    let nextChecklist = DEFAULT_SELF_CARE_TASKS;
+    if (!user?.id || user.role === 'guest') {
       const saved = safeLocalStorage.getItem(CHECKLIST_KEY);
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
-          setSelfCareChecklist(parsed);
-        } catch {}
+          if (Array.isArray(parsed)) {
+            nextChecklist = DEFAULT_SELF_CARE_TASKS.map(task => ({
+              ...task,
+              done: parsed.find((item: any) => item?.id === task.id)?.done === true
+            }));
+          }
+        } catch {
+          nextChecklist = DEFAULT_SELF_CARE_TASKS;
+        }
       }
+    }
+    setSelfCareChecklist(nextChecklist.map(task => ({ ...task })));
+  }, [dashboardIdentity, CHECKLIST_KEY]);
+
+  useEffect(() => {
+    if (!user?.id || user.role === 'guest') {
       return;
     }
 
     // Fetch from backend for authenticated users
     const dateStr = getLocalIsoDateString();
-    apiClient.get<any>(`/api/v1/user/selfcare?date=${dateStr}`).then(res => {
+    const identity = dashboardIdentity;
+    const controller = new AbortController();
+    apiClient.get<any>(`/api/v1/user/selfcare?date=${dateStr}`, { signal: controller.signal }).then(res => {
+      if (controller.signal.aborted || dashboardIdentityRef.current !== identity) return;
       if (res.success && res.data && res.data.tasks) {
         const backendTasks = res.data.tasks;
         setSelfCareChecklist(prev => {
           return prev.map(t => {
             const bt = backendTasks.find((b: any) => b.taskId === t.id);
+            if (dashboardIdentityRef.current !== identity) return t;
             return bt ? { ...t, done: bt.isDone } : { ...t, done: false };
           });
         });
       }
-    }).catch(console.error);
-  }, [user, CHECKLIST_KEY]);
+    }).catch(error => {
+      if (!controller.signal.aborted && dashboardIdentityRef.current === identity) console.error(error);
+    });
+    return () => controller.abort();
+  }, [dashboardIdentity, user?.id, user?.role]);
 
-  const fetchUsageStats = async () => {
-    setLoadingUsage(true);
+  const fetchUsageStats = useCallback(async () => {
+    const identity = dashboardIdentity;
+    if (dashboardIdentityRef.current !== identity) return;
+    const requestId = ++usageRequestRef.current;
+    usageAbortRef.current?.abort();
+    const controller = new AbortController();
+    usageAbortRef.current = controller;
+    setLoadingUsage(previous => dashboardIdentityRef.current === identity && usageRequestRef.current === requestId ? true : previous);
     try {
-      const res = await apiClient.get<any>('/api/v1/user/usage-stats');
+      const res = await apiClient.get<any>('/api/v1/user/usage-stats', { signal: controller.signal });
+      if (controller.signal.aborted || dashboardIdentityRef.current !== identity || usageRequestRef.current !== requestId) return;
       if (res.success && res.data) {
-        setUsageStats(res.data);
+        setUsageStats(previous => dashboardIdentityRef.current === identity && usageRequestRef.current === requestId ? res.data : previous);
       }
     } catch (err) {
-      console.error('Error fetching usage stats:', err);
+      if (!controller.signal.aborted && dashboardIdentityRef.current === identity && usageRequestRef.current === requestId) {
+        console.error('Error fetching usage stats:', err);
+      }
     } finally {
-      setLoadingUsage(false);
+      if (!controller.signal.aborted && dashboardIdentityRef.current === identity && usageRequestRef.current === requestId) {
+        setLoadingUsage(previous => dashboardIdentityRef.current === identity && usageRequestRef.current === requestId ? false : previous);
+      }
     }
-  };
+  }, [dashboardIdentity]);
 
-  const fetchDashboardData = async () => {
-    setIsLoadingPage(true);
-    setPageError(null);
+  const fetchDashboardData = useCallback(async () => {
+    const identity = dashboardIdentity;
+    if (dashboardIdentityRef.current !== identity) return;
+    const requestId = ++dashboardRequestRef.current;
+    dashboardAbortRef.current?.abort();
+    const controller = new AbortController();
+    dashboardAbortRef.current = controller;
+    setIsLoadingPage(previous => dashboardIdentityRef.current === identity && dashboardRequestRef.current === requestId ? true : previous);
+    setPageError(previous => dashboardIdentityRef.current === identity && dashboardRequestRef.current === requestId ? null : previous);
     try {
       await fetchUsageStats();
+      if (controller.signal.aborted || dashboardIdentityRef.current !== identity || dashboardRequestRef.current !== requestId) return;
 
       const [moodRes, screenRes] = await Promise.all([
-        apiClient.get<any>('/api/v1/mood'),
-        apiClient.get<any>('/api/v1/screenings')
+        apiClient.get<any>('/api/v1/mood', { signal: controller.signal }),
+        apiClient.get<any>('/api/v1/screenings', { signal: controller.signal })
       ]);
+      if (controller.signal.aborted || dashboardIdentityRef.current !== identity || dashboardRequestRef.current !== requestId) return;
 
       if (moodRes.success && Array.isArray(moodRes.data) && moodRes.data.length > 0) {
         const parsedLogs: MoodLog[] = moodRes.data.map(d => {
@@ -164,9 +250,9 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
             sleepQuality: d.sleepQuality || null
           };
         });
-        setMoodLogs(parsedLogs);
+        setMoodLogsForIdentity(parsedLogs);
       } else {
-        setMoodLogs([]);
+        setMoodLogsForIdentity([]);
       }
 
       const screenData = screenRes.data;
@@ -196,24 +282,35 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
                 : 'Ringan'
           };
         });
-        setScreenHistory(parsedScreenings);
+        setScreenHistoryForIdentity(parsedScreenings);
       } else {
-        setScreenHistory([]);
+        setScreenHistoryForIdentity([]);
       }
     } catch (err: any) {
+      if (controller.signal.aborted || dashboardIdentityRef.current !== identity || dashboardRequestRef.current !== requestId) return;
       console.warn('Failed to fetch dashboard data:', err);
-      setPageError(err.message || 'Terjadi kesalahan memuat data dashboard.');
+      setPageError(previous => dashboardIdentityRef.current === identity && dashboardRequestRef.current === requestId
+        ? (err.message || 'Terjadi kesalahan memuat data dashboard.')
+        : previous);
     } finally {
-      setIsLoadingPage(false);
+      if (!controller.signal.aborted && dashboardIdentityRef.current === identity && dashboardRequestRef.current === requestId) {
+        setIsLoadingPage(previous => dashboardIdentityRef.current === identity && dashboardRequestRef.current === requestId ? false : previous);
+      }
     }
-  };
+  }, [dashboardIdentity, fetchUsageStats, setMoodLogsForIdentity, setScreenHistoryForIdentity]);
 
   useEffect(() => {
-    fetchDashboardData();
+    void fetchDashboardData();
     window.addEventListener('ruangtenang:offline-synced', fetchDashboardData);
-    return () => window.removeEventListener('ruangtenang:offline-synced', fetchDashboardData);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
+    return () => {
+      window.removeEventListener('ruangtenang:offline-synced', fetchDashboardData);
+      dashboardRequestRef.current += 1;
+      dashboardAbortRef.current?.abort();
+      usageRequestRef.current += 1;
+      usageAbortRef.current?.abort();
+      if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    };
+  }, [fetchDashboardData]);
 
   const getMoodColor = (mood: number) => {
     switch (mood) {
@@ -277,11 +374,18 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
   };
 
   const showToast = (msg: string) => {
+    const identity = dashboardIdentity;
+    if (dashboardIdentityRef.current !== identity) return;
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
     setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3000);
+    toastTimeoutRef.current = setTimeout(() => {
+      if (dashboardIdentityRef.current === identity) setToastMessage(null);
+    }, 3000);
   };
 
   const handleToggleSelfCare = async (id: string) => {
+    const identity = dashboardIdentity;
+    if (dashboardIdentityRef.current !== identity) return;
     const dateStr = getLocalIsoDateString();
     const itemToToggle = selfCareChecklist.find(i => i.id === id);
     if (!itemToToggle) return;
@@ -289,6 +393,7 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
 
     // Optimistic UI
     setSelfCareChecklist(prev => {
+      if (dashboardIdentityRef.current !== identity) return prev;
       const next = prev.map(item => item.id === id ? { ...item, done: newStatus } : item);
       if (!user || user.role === 'guest') {
         safeLocalStorage.setItem(CHECKLIST_KEY, JSON.stringify(next));
@@ -304,10 +409,14 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
           isDone: newStatus
         });
         if (!res.success) throw new Error(res.error);
+        if (dashboardIdentityRef.current !== identity) return;
         showToast('Tugas perawatan mandiri diperbarui!');
       } catch {
+        if (dashboardIdentityRef.current !== identity) return;
         // Rollback on failure
-        setSelfCareChecklist(prev => prev.map(item => item.id === id ? { ...item, done: !newStatus } : item));
+        setSelfCareChecklist(prev => dashboardIdentityRef.current === identity
+          ? prev.map(item => item.id === id ? { ...item, done: !newStatus } : item)
+          : prev);
         showToast('Gagal menyimpan tugas');
       }
     } else {
@@ -321,7 +430,8 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
   };
 
   const handleEditMoodLog = (log: MoodLog) => {
-    if (log.id.startsWith('offline-')) return;
+    if (dashboardIdentityRef.current !== dashboardIdentity) return;
+    if (isMoodLogPendingSync(log.id)) return;
     setEditingMoodLog(log);
     setIsCheckinModalOpen(true);
   };
@@ -332,7 +442,8 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
   };
 
   const handleCheckinSaved = (canonicalLog: MoodLog) => {
-    setMoodLogs(prev => {
+    if (dashboardIdentityRef.current !== dashboardIdentity) return;
+    setMoodLogsForIdentity(prev => {
       const filtered = prev.filter(log => log.id !== canonicalLog.id);
       return [canonicalLog, ...filtered].sort(
         (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
@@ -625,9 +736,11 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
             {(activeSection === 'all' || activeSection === 'mood') && (
               <motion.div variants={itemVariants} className="space-y-6">
                 <MoodTracker
+                  key={dashboardIdentity}
                   moodLogs={moodLogs}
-                  setMoodLogs={setMoodLogs as any}
+                  setMoodLogs={setMoodLogsForIdentity}
                   showToast={showToast}
+                  onRefreshData={fetchDashboardData}
                   onRequestOpenCheckin={handleOpenMoodCheckin}
                   onRequestEditCheckin={handleEditMoodLog}
                 />
@@ -638,6 +751,7 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
             {(activeSection === 'all' || activeSection === 'screening') && (
               <motion.div variants={itemVariants} className="space-y-6">
                 <ScreeningTrend
+                  key={dashboardIdentity}
                   screenHistory={screenHistory as any}
                   moodLogs={moodLogs}
                   currentPhq9={currentPhq9}
@@ -646,7 +760,7 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
                   triageStyle={getTriageBadge(currentTriage)}
                   onNavigateToPrograms={onNavigateToPrograms || (() => {})}
                   onNavigateToSchedule={onNavigateToSchedule || (() => {})}
-                  onClearHistory={() => setScreenHistory([])}
+                  onClearHistory={() => setScreenHistoryForIdentity([])}
                   getTriageBadge={getTriageBadge}
                 />
               </motion.div>
@@ -745,6 +859,7 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
                         Perawatan Diri Hari Ini
                       </h3>
                       <TimelineTasks
+                        key={dashboardIdentity}
                         selfCareChecklist={selfCareChecklist}
                         onToggleSelfCare={handleToggleSelfCare}
                         onNavigateToSchedule={onNavigateToSchedule}
@@ -760,7 +875,7 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
                         <span>Penggunaan AI</span>
                         <span className="text-[11px] font-medium text-muted">Bulan ini</span>
                       </h3>
-                      <AiLimits usageStats={usageStats} loadingUsage={loadingUsage} onRefreshUsage={fetchUsageStats} />
+                      <AiLimits key={dashboardIdentity} usageStats={usageStats} loadingUsage={loadingUsage} onRefreshUsage={fetchUsageStats} />
                     </div>
 
                     {/* Counselor Consent */}
@@ -769,7 +884,7 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
                         <span>Akses Konselor</span>
                         <span className="text-[11px] font-medium text-muted">Izin Data</span>
                       </h3>
-                      <CounselorConsent onOpenPrivacyCenter={onOpenPrivacyCenter} />
+                      <CounselorConsent key={dashboardIdentity} onOpenPrivacyCenter={onOpenPrivacyCenter} />
                     </div>
                   </div>
                 </div>
@@ -782,6 +897,7 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
 
       {/* GLOBAL DAILY CHECKIN MODAL */}
       <DailyCheckinModal
+        key={dashboardIdentity}
         isOpen={isCheckinModalOpen}
         onClose={handleCloseMoodCheckin}
         initialLog={editingMoodLog}

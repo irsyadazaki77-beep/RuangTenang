@@ -393,6 +393,32 @@ class ClientIndexedDB {
     this.publishOutboxUpdate();
   }
 
+  async removePendingOfflineAction(type: OfflineActionType, idempotencyKey: string, expectedUserId?: string): Promise<'deleted' | 'not_found' | 'syncing' | 'uncertain'> {
+    if (!/^[A-Za-z0-9._:-]{1,100}$/.test(idempotencyKey)) throw new Error('OFFLINE_IDEMPOTENCY_KEY_INVALID');
+    const session = getStableStudentSession(expectedUserId);
+    const table = this.requireOutbox();
+    const outcome = await this.db!.transaction('rw', table, async () => {
+      const currentSession = getStableStudentSession(session.userId!);
+      if (currentSession.generation !== session.generation || !isCurrentAuthenticatedSession(session)) {
+        throw new Error('OFFLINE_ACCOUNT_CHANGED');
+      }
+
+      const item = await table.where('[ownerUserId+idempotencyKey]').equals([session.userId!, idempotencyKey]).first();
+      const latestSession = getStableStudentSession(session.userId!);
+      if (latestSession.generation !== session.generation || !isCurrentAuthenticatedSession(session)) {
+        throw new Error('OFFLINE_ACCOUNT_CHANGED');
+      }
+      if (!item || item.ownerUserId !== session.userId || item.type !== type || item.operation !== 'create' || !item.id) return 'not_found' as const;
+      if (item.status === 'syncing') return 'syncing' as const;
+      if (item.status === 'failed' && item.failureKind === 'transient') return 'uncertain' as const;
+
+      await table.delete(item.id);
+      return 'deleted' as const;
+    });
+    if (outcome === 'deleted') this.publishOutboxUpdate();
+    return outcome;
+  }
+
   async clearUserPersistentData(expectedUserId: string): Promise<void> {
     const session = getStableAuthenticatedSession(expectedUserId);
     const table = this.requireOutbox();

@@ -126,6 +126,7 @@ describe('FASE 26 — Multimodal Intelligence & Visual Document Understanding Te
 
     it('falls back honestly to preview_only when vision provider is unavailable', async () => {
       vi.spyOn(visualIntel, 'performVisualOcr').mockResolvedValueOnce(null);
+      vi.spyOn(visualIntel, 'isVisualOcrAvailable').mockReturnValue(false);
 
       const adapter = new ImageAdapter();
       const extracted = await adapter.extract({
@@ -138,7 +139,7 @@ describe('FASE 26 — Multimodal Intelligence & Visual Document Understanding Te
       });
 
       expect(extracted.metadata?.previewOnly).toBe(true);
-      expect(extracted.metadata?.visualAnalysisAvailable).toBe(true);
+      expect(extracted.metadata?.visualAnalysisAvailable).toBe(false);
       expect(extracted.blocks.length).toBe(0);
       expect(extracted.normalizedText).toBe('');
     });

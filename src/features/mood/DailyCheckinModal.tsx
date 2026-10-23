@@ -208,7 +208,7 @@ export const DailyCheckinModal: React.FC<DailyCheckinModalProps> = ({
     }
     submitGuard.current = true;
     setIsSubmitting(true);
-    const payload = {
+    const payload: Omit<MoodLog, 'id'> = {
       mood: selectedMood,
       date: logDate,
       notes: journalNote.trim(),
@@ -231,7 +231,7 @@ export const DailyCheckinModal: React.FC<DailyCheckinModalProps> = ({
       showToast(message, type);
     };
 
-    const queueOffline = async (message: string, type: 'info' | 'warning') => {
+    const queueOffline = async (message: string, type: 'info' | 'warning', requestWasNeverSent = false) => {
       if (!idempotencyKey) throw new Error('MOOD_IDEMPOTENCY_KEY_MISSING');
       await clientDb.enqueueOfflineAction({
         type: 'mood_log',
@@ -240,7 +240,7 @@ export const DailyCheckinModal: React.FC<DailyCheckinModalProps> = ({
         idempotencyKey,
       });
       const offlineLog: MoodLog = {
-        id: `offline-${Date.now()}`,
+        id: `${requestWasNeverSent ? 'offline' : 'pending'}-${idempotencyKey}`,
         date: logDate,
         mood: selectedMood,
         emotions: selectedEmotions,
@@ -258,7 +258,7 @@ export const DailyCheckinModal: React.FC<DailyCheckinModalProps> = ({
           showToast('Perubahan catatan belum tersimpan. Sambungkan ke internet lalu coba lagi.', 'warning');
           return;
         }
-        await queueOffline('Catatan mood tersimpan terenkripsi untuk akun ini dan akan dicoba saat online.', 'info');
+        await queueOffline('Catatan mood tersimpan terenkripsi untuk akun ini dan akan dicoba saat online.', 'info', true);
         return;
       }
 

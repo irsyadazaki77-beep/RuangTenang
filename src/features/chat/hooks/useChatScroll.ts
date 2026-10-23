@@ -56,7 +56,7 @@ export function useChatScroll(messages: Message[], isTyping: boolean, streamingC
 
   useEffect(() => {
     const element = scrollContainerRef.current;
-    if (!isAtBottom || !element) return;
+    if (!isAtBottom || !element || (messages.length === 0 && !isTyping && !streamingContent)) return;
     if (scrollRafRef.current !== null) cancelAnimationFrame(scrollRafRef.current);
 
     scrollRafRef.current = requestAnimationFrame(() => {

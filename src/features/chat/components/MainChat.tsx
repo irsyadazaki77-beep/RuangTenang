@@ -70,7 +70,9 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
   const [responseStyle, _setResponseStyle] = useState<ResponseStyle>(() => safeLocalStorage.getItem('responseStyle') as ResponseStyle || 'Seimbang');
   const [aiModel, setAiModel] = useState<string>(() => {
     const saved = safeLocalStorage.getItem('aiModel');
-    return migrateLegacyTenangModelToProfile(saved);
+    return saved?.startsWith('ollama-') || saved === 'auto'
+      ? saved
+      : migrateLegacyTenangModelToProfile(saved);
   });
   const [isTemporary, setIsTemporary] = useState(false);
 
@@ -85,7 +87,7 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
   useEffect(() => { safeLocalStorage.setItem('responseStyle', responseStyle); }, [responseStyle]);
   useEffect(() => { if (aiModel) safeLocalStorage.setItem('aiModel', aiModel); }, [aiModel]);
   useEffect(() => {
-    if (!isTenangProfile(aiModel)) {
+    if (!isTenangProfile(aiModel) && aiModel !== 'auto' && !aiModel.startsWith('ollama-')) {
       setAiModel(migrateLegacyTenangModelToProfile(aiModel));
     }
   }, [aiModel]);
@@ -121,6 +123,7 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
     messages, setMessages, isLoadingMessages, fetchMessagesError,
     nextCursor, isLoadingMore, fetchMessages, loadedChatIdRef
   } = useChatHistory(chatId);
+  const isEmptyConversation = !isLoadingMessages && !fetchMessagesError && messages.length === 0;
 
   const { isTyping, streamMessage, abortStream } = useChatStreaming();
 
@@ -727,6 +730,24 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
     handleSend(command);
   };
 
+  const renderChatComposer = (isEmptyState = false) => (
+    <ChatComposer
+      onSend={handleSend}
+      isTyping={isTyping}
+      isTemporary={isTemporary}
+      draftOwnerId={user?.id || 'guest'}
+      aiConsentAllowed={aiConsentAllowed}
+      aiConsentPromptOpen={aiConsentPromptOpen}
+      onRequestAiConsent={() => onRequestAiConsent?.()}
+      onStop={handleStopResponse}
+      chatId={chatId}
+      onCommand={handleCommand}
+      onOpenPlugin={handleOpenPlugin}
+      quotaExceeded={quotaExceededInfo?.isExceeded}
+      isEmptyState={isEmptyState}
+    />
+  );
+
   return (
     <>
       <ChatModalContainer
@@ -872,7 +893,10 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
             )}
 
             <div
-              className={`flex-1 overflow-y-auto chat-scroll-container w-full min-w-0 flex flex-col px-3 sm:px-4 pt-3 sm:pt-4 pb-40 sm:pb-36 transition-all duration-300 bg-transparent ${
+              className={`flex-1 overflow-y-auto chat-scroll-container w-full min-w-0 flex flex-col transition-all duration-300 ${isEmptyConversation
+                ? 'px-0 py-0'
+                : 'bg-transparent px-3 sm:px-4 pt-3 sm:pt-4 pb-40 sm:pb-36'
+              } ${
                 isPrivacyMode ? 'backdrop-blur-md filter blur-md select-none pointer-events-none' : ''
               }`}
               ref={scrollContainerRef}
@@ -897,11 +921,12 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
                   />
                 </div>
               ) : messages.length === 0 ? (
-                <div className="min-h-0 flex-1 flex flex-col justify-start md:justify-center py-2 sm:py-4 w-full">
+                <div className="flex min-h-full w-full flex-1 flex-col">
                   <EmptyChatState
                     userName={user?.name?.split(' ')[0]}
                     onSelectPrompt={(prompt) => handleSend(prompt)}
                     onOpenBreathing={() => setIsBreathingOpen(true)}
+                    composer={renderChatComposer(true)}
                   />
                 </div>
               ) : (
@@ -1067,20 +1092,7 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
             </button>
           )}
 
-          <ChatComposer
-            onSend={handleSend}
-            isTyping={isTyping}
-            isTemporary={isTemporary}
-            draftOwnerId={user?.id || 'guest'}
-            aiConsentAllowed={aiConsentAllowed}
-            aiConsentPromptOpen={aiConsentPromptOpen}
-            onRequestAiConsent={() => onRequestAiConsent?.()}
-            onStop={handleStopResponse}
-            chatId={chatId}
-            onCommand={handleCommand}
-            onOpenPlugin={handleOpenPlugin}
-            quotaExceeded={quotaExceededInfo?.isExceeded}
-          />
+          {!isEmptyConversation && renderChatComposer()}
         </div>
       </div>
     </>

@@ -3,6 +3,7 @@ import { Bookmark, FileText, Sparkles, X } from 'lucide-react';
 import type { WorkspaceInspector } from '../hooks/workspaceViewState';
 import type { WorkspaceChapterScope, WorkspaceFileAttachment } from '../types';
 import { CHAPTER_SCOPE_LABELS } from '../utils/workspaceContext';
+import { isWorkspaceAttachmentAnalyzable } from '../utils/workspaceAttachments';
 import type { WorkspacePlan } from '../../../../shared/contracts/workspace';
 import type { FileSourceReference } from '../../../../shared/contracts/files';
 import { WorkspaceSourcePreview } from './WorkspaceSourcePreview';
@@ -365,19 +366,22 @@ export const WorkspaceInspectorPanel: React.FC<WorkspaceInspectorPanelProps> = R
             <ul className="divide-y divide-slate-100 dark:divide-slate-800">
               {workspaceAttachments.map(file => {
                 const ready = file.status === 'ready' && Boolean(file.id);
-                const status = file.status === 'ready' ? 'Siap' : file.status === 'uploading' ? 'Mengunggah…' : file.status === 'processing' ? 'Memproses…' : file.status === 'unsupported' ? 'Tidak didukung' : 'Gagal';
+                const analyzable = isWorkspaceAttachmentAnalyzable(file);
+                const status = file.status === 'ready'
+                  ? analyzable ? file.extractionWarnings?.length ? 'Siap sebagian' : 'Siap dianalisis' : 'Pratinjau saja'
+                  : file.status === 'uploading' ? 'Mengunggah…' : file.status === 'processing' ? 'Memproses…' : file.status === 'unsupported' ? 'Tidak didukung' : 'Gagal';
                 return (
                   <li key={file.id || file.clientId || file.name} className="flex min-w-0 items-center gap-2 py-2.5">
                     <input
                       type="checkbox"
                       aria-label={`Gunakan ${file.name} sebagai konteks`}
-                      disabled={!ready}
-                      checked={ready && selectedWorkspaceFileIds.includes(file.id!)}
+                      disabled={!analyzable}
+                      checked={analyzable && selectedWorkspaceFileIds.includes(file.id!)}
                       onChange={event => onSelectFileCheckbox(file.id!, event.target.checked)}
                       className="accent-indigo-600 disabled:opacity-40"
                     />
                     <FileText className="h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />
-                    <span className="min-w-0 flex-1">
+                    <div className="min-w-0 flex-1">
                       <span className="flex items-center gap-1.5 text-xs text-slate-700 dark:text-slate-200">
                         <span className="truncate">{file.name}</span>
                         {file.ocrApplied && (
@@ -385,19 +389,31 @@ export const WorkspaceInspectorPanel: React.FC<WorkspaceInspectorPanelProps> = R
                             OCR
                           </span>
                         )}
-                        {file.visualAnalysisAvailable && !file.ocrApplied && (
+                        {(file.fileKind === 'image' || file.mimeType?.startsWith('image/')) && file.visualAnalysisAvailable && !file.ocrApplied && (
                           <span className="shrink-0 rounded bg-sky-100 px-1 py-0.2 text-[9px] font-semibold text-sky-800 dark:bg-sky-950 dark:text-sky-300">
                             Visual
                           </span>
                         )}
                       </span>
-                      <span className={`text-[10px] ${ready ? 'text-indigo-700 dark:text-indigo-300' : 'text-slate-500'}`}>
+                      <span className={`text-[10px] ${analyzable ? 'text-indigo-700 dark:text-indigo-300' : 'text-slate-500'}`}>
                         {status}
-                        {file.status === 'ready' && includeFilesInContext ? (selectedWorkspaceFileIds.includes(file.id!) ? ' · Disertakan' : ' · Tidak disertakan') : ''}
-                        {file.status === 'ready' && !includeFilesInContext ? ' · Konteks dinonaktifkan' : ''}
+                        {analyzable && includeFilesInContext ? (selectedWorkspaceFileIds.includes(file.id!) ? ' · Disertakan' : ' · Tidak disertakan') : ''}
+                        {analyzable && !includeFilesInContext ? ' · Konteks dinonaktifkan' : ''}
+                        {ready && !analyzable ? ' · Tidak dikirim ke AI' : ''}
                         {file.errorMessage ? ` · ${file.errorMessage}` : ''}
                       </span>
-                    </span>
+                      {file.extractionWarnings?.length ? (
+                        <details className="mt-1 text-[10px] text-amber-700 dark:text-amber-300">
+                          <summary className="w-fit cursor-pointer underline underline-offset-2">Peringatan ekstraksi ({file.extractionWarnings.length})</summary>
+                          <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                            {file.extractionWarnings.map((warning, index) => <li key={`${file.id || file.name}-warning-${index}`}>{warning}</li>)}
+                          </ul>
+                        </details>
+                      ) : null}
+                      {ready && !analyzable && (
+                        <span className="mt-0.5 block text-[10px] text-amber-700 dark:text-amber-300">File hanya dapat dipratinjau; AI tidak menerima isi yang bisa dianalisis.</span>
+                      )}
+                    </div>
                     {ready && (
                       <button
                         type="button"

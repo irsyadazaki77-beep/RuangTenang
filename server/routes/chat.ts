@@ -1,3 +1,4 @@
+import { refreshOllamaInventory } from '../services/ai/ollamaRuntime.js';
 import { prisma } from '../database.js';
 import { MAX_CHAT_ATTACHMENTS_PER_MESSAGE, MAX_WORKSPACE_ACTIVE_ATTACHMENTS } from '../../shared/contracts/files.js';
 import { Router, Request, Response, NextFunction } from 'express';
@@ -21,6 +22,7 @@ import { ChatController } from '../controllers/chatController.js';
 import { aiMetricsService } from '../services/ai/aiMetricsService.js';
 import { attachmentStorageService } from '../services/attachmentStorageService.js';
 import { documentIngestionService } from '../services/file-intelligence/documentIngestionService.js';
+import { DocumentExtractor } from '../services/file-intelligence/documentExtractor.js';
 import { DocumentProcessingException } from '../services/file-intelligence/fileTypes.js';
 import { getVerifiedEmergencyContacts } from '../config/emergencyRegistry.js';
 import {
@@ -29,7 +31,6 @@ import {
   getModelDefinition,
   resolveAiModel,
   validateProfileMode,
-  mapLegacyModelToProfile,
   getProfileDefinition
 } from '../services/ai/aiModelRegistry.js';
 import {
@@ -94,6 +95,92 @@ function getProfileDegradation(profileId: string | undefined, modelId: string | 
     isDegraded,
     degradationNotice: isDegraded ? `Profil ${profile!.name}: ${model!.name} berada di bawah sasaran penalaran profil.` : undefined
   };
+}
+
+async function formatAttachmentForModelPart(fileData: {
+  filename: string;
+  mimeType: string;
+  buffer?: Buffer;
+  base64?: string;
+  attachmentRecord?: any;
+}): Promise<any | null> {
+  const { filename, mimeType, buffer, base64, attachmentRecord } = fileData;
+  const isImage = mimeType?.startsWith('image/') || /\.(png|jpe?g|webp|gif|bmp|svg)$/i.test(filename || '');
+
+  if (isImage) {
+    const rawBase64 = base64 || (buffer ? buffer.toString('base64') : '');
+    if (!rawBase64) return null;
+    return {
+      inlineData: {
+        data: rawBase64.includes(',') ? rawBase64.split(',')[1] : rawBase64,
+        mimeType: mimeType || 'image/png'
+      }
+    };
+  }
+
+  // 1. Plain text / Markdown
+  if (mimeType === 'text/plain' || mimeType === 'text/markdown' || /\.(txt|md)$/i.test(filename || '')) {
+    let text = buffer
+      ? buffer.toString('utf8')
+      : (base64 ? Buffer.from(base64.includes(',') ? base64.split(',')[1] : base64, 'base64').toString('utf8') : '');
+    text = scanAndSanitizePII(text).sanitizedText;
+    if (aiSafetyService.detectPromptInjection(text)) {
+      text = '[REDACTED_UNTRUSTED_ATTACHMENT_INJECTION]';
+    }
+    return { text: `[LAMPIRAN TEKS: ${filename}]\n${text}` };
+  }
+
+  // 2. Documents (PDF, DOCX, XLSX, PPTX, CSV, etc.)
+  let docText: string | null = null;
+  if (attachmentRecord?.extractedText) {
+    try {
+      const rawExtracted = attachmentRecord.isEncrypted
+        ? (encryptionService.decryptSensitive(attachmentRecord.extractedText) || attachmentRecord.extractedText)
+        : attachmentRecord.extractedText;
+      if (rawExtracted && typeof rawExtracted === 'string' && rawExtracted.trim().length > 0) {
+        docText = rawExtracted;
+      }
+    } catch (e: any) {
+      console.warn('[ATTACHMENT_DECRYPT_WARN]', e?.message);
+    }
+  }
+
+  // If not pre-extracted, extract on-the-fly via DocumentExtractor
+  if (!docText && buffer && buffer.length > 0) {
+    try {
+      const extraction = await DocumentExtractor.extractDocument({
+        buffer,
+        filename,
+        mimeType
+      });
+      if (extraction?.text && extraction.text.trim().length > 0) {
+        docText = extraction.text;
+      }
+    } catch (e: any) {
+      console.warn('[DOC_EXTRACT_ON_THE_FLY_WARN]', e?.message);
+    }
+  }
+
+  if (docText && docText.trim().length > 0) {
+    let sanitized = scanAndSanitizePII(docText).sanitizedText;
+    if (aiSafetyService.detectPromptInjection(sanitized)) {
+      sanitized = '[REDACTED_UNTRUSTED_ATTACHMENT_INJECTION]';
+    }
+    return { text: `[LAMPIRAN DOKUMEN: ${filename}]\n${sanitized}` };
+  }
+
+  // Fallback to inlineData if available (e.g. for multimodal models that can process scanned PDF)
+  const rawBase64 = base64 || (buffer ? buffer.toString('base64') : '');
+  if (rawBase64) {
+    return {
+      inlineData: {
+        data: rawBase64.includes(',') ? rawBase64.split(',')[1] : rawBase64,
+        mimeType: mimeType || 'application/octet-stream'
+      }
+    };
+  }
+
+  return null;
 }
 
 
@@ -277,7 +364,7 @@ router.post(['/chat', '/api/chat'], optionalAuth, optionalAttachmentOwner, aiCha
         crisisDetected: true,
         message: emergencyResponse,
         response: emergencyResponse,
-        hotlines: ['119 ext 8', '0811-3855-472'],
+        hotlines: ['119 ext 8', '118 / 119'],
         contacts: verifiedContacts
       });
     }
@@ -291,20 +378,18 @@ router.post(['/chat', '/api/chat'], optionalAuth, optionalAttachmentOwner, aiCha
       try { validateProfileMode(requestedAiModel, isWorkspace); }
       catch (error) { if (sendModelSelectionError(res, error)) return; throw error; }
     } else if (!isAutoRouting) {
-      if (!canSelectInternalModel) {
+      if (!canSelectInternalModel && getModelDefinition(requestedAiModel)?.provider !== 'ollama') {
         return sendError(res, 'MODEL_NOT_ALLOWED', 'Pemilihan model internal hanya tersedia untuk admin dan akun Developer.', 403);
       }
       try { resolveAiModel(requestedAiModel, userTier); }
       catch (error) { if (sendModelSelectionError(res, error)) return; throw error; }
     }
 
-    const effectiveProfileId = isProfile
-      ? (requestedAiModel as any)
-      : mapLegacyModelToProfile(requestedAiModel, isWorkspace);
+    const effectiveProfileId = isProfile ? requestedAiModel : undefined;
 
     const routingContext = {
       manualModelId: isAutoRouting ? AUTO_ROUTING_MODEL_ID : requestedAiModel,
-      profileId: effectiveProfileId,
+      profileId: isProfile ? effectiveProfileId : undefined,
       workspaceMode: isWorkspace,
       chatMode,
       responseStyle,
@@ -312,6 +397,7 @@ router.post(['/chat', '/api/chat'], optionalAuth, optionalAttachmentOwner, aiCha
       userTier: userTier as any
     };
 
+    await refreshOllamaInventory();
     const routingDecision = smartModelRouter.routeModel(routingContext, cleanMessage);
 
     const pipelineRes = await aiSafetyService.runUnifiedPipeline({
@@ -329,7 +415,8 @@ router.post(['/chat', '/api/chat'], optionalAuth, optionalAttachmentOwner, aiCha
       isTemporary,
       routingDecision,
       routingContext,
-      guestAiConsent: guestAiConsent === true
+      guestAiConsent: guestAiConsent === true,
+      abortSignal: (req as any).abortSignal
     });
 
     const actualDegradation = getProfileDegradation(routingDecision.profileId || effectiveProfileId, pipelineRes.modelUsed);
@@ -404,11 +491,18 @@ router.post('/chat/stream', authenticateChatStream, optionalAttachmentOwner, aiC
       workspaceAttachmentIds,
       workspaceContext,
       isolatedTaskExecution,
+      idempotencyKey,
       history: clientHistory
     } = req.body;
 
     const isAnonymous = !req.user || req.user.userId === 'guest';
     const isWorkspace = Boolean(workspaceMode) || (mode || '').toLowerCase().includes('ruang_kerja') || (chatMode || '').toLowerCase().includes('ruangkerja');
+    if (isWorkspace && idempotencyKey !== undefined && idempotencyKey !== null && (typeof idempotencyKey !== 'string' || !/^[A-Za-z0-9_-]{16,100}$/.test(idempotencyKey))) {
+      return sendError(res, 'INVALID_IDEMPOTENCY_KEY', 'ID permintaan Workspace tidak valid.', 400);
+    }
+    const workspaceRequestKey = isWorkspace && typeof idempotencyKey === 'string' ? idempotencyKey : undefined;
+    const workspaceUserMessageId = workspaceRequestKey ? `workspace_user_${workspaceRequestKey}` : undefined;
+    const workspaceAssistantMessageId = workspaceRequestKey ? `workspace_assistant_${workspaceRequestKey}` : undefined;
     const maxLength = isAnonymous ? 500 : 2000;
     let cleanMessage = sanitizeInput(message || '', maxLength);
     cleanMessage = scanAndSanitizePII(cleanMessage).sanitizedText;
@@ -484,6 +578,71 @@ router.post('/chat/stream', authenticateChatStream, optionalAttachmentOwner, aiC
       return;
     }
 
+    // A Workspace retry reuses the original submission key. Validate its stored
+    // prompt and owner before either replaying a completed answer or continuing
+    // a turn whose response was interrupted after the prompt was saved.
+    let existingWorkspaceUserMessage: any = null;
+    let existingWorkspaceAssistantMessage: any = null;
+    if (workspaceRequestKey && !isTemporary && userId && userId !== 'guest') {
+      existingWorkspaceUserMessage = await prisma.chatMessages.findUnique({
+        where: { id: workspaceUserMessageId! }
+      });
+      existingWorkspaceAssistantMessage = await prisma.chatMessages.findUnique({ where: { id: workspaceAssistantMessageId! } });
+
+      if (existingWorkspaceUserMessage) {
+        const storedPrompt = encryptionService.decryptSensitive(existingWorkspaceUserMessage.content) || existingWorkspaceUserMessage.content;
+        const ownedChat = await prisma.chats.findFirst({
+          where: { id: existingWorkspaceUserMessage.chatId, userId },
+          select: { id: true }
+        });
+        if (
+          existingWorkspaceUserMessage.role !== 'user' ||
+          storedPrompt !== cleanMessage ||
+          !ownedChat ||
+          (chatId && chatId !== existingWorkspaceUserMessage.chatId)
+        ) {
+          return sendError(res, 'IDEMPOTENCY_KEY_CONFLICT', 'ID permintaan ini sudah digunakan untuk pesan atau percakapan lain.', 409);
+        }
+      }
+
+      if (existingWorkspaceAssistantMessage) {
+        if (
+          !existingWorkspaceUserMessage ||
+          existingWorkspaceAssistantMessage.role !== 'assistant' ||
+          existingWorkspaceAssistantMessage.chatId !== existingWorkspaceUserMessage.chatId ||
+          existingWorkspaceAssistantMessage.plugin
+        ) {
+          return sendError(res, 'IDEMPOTENCY_KEY_CONFLICT', 'Riwayat permintaan Workspace tidak konsisten.', 409);
+        }
+        const savedAnswer = encryptionService.decryptSensitive(existingWorkspaceAssistantMessage.content) || existingWorkspaceAssistantMessage.content;
+        const interruptedMarker = '*(Respons terputus sebelum selesai. Kamu bisa mencoba ulang.)*';
+        if (!savedAnswer.includes(interruptedMarker)) {
+          res.setHeader('Content-Type', 'text/event-stream');
+          res.setHeader('Cache-Control', 'no-cache, no-transform');
+          res.setHeader('Connection', 'keep-alive');
+          res.setHeader('X-Accel-Buffering', 'no');
+          res.write(`data: ${JSON.stringify({ chatId: existingWorkspaceUserMessage.chatId })}\n\n`);
+          res.write(`data: ${JSON.stringify({ text: savedAnswer })}\n\n`);
+          res.write(`data: ${JSON.stringify({ done: true, chatId: existingWorkspaceUserMessage.chatId })}\n\n`);
+          res.write('data: [DONE]\n\n');
+          res.end();
+          return;
+        }
+      }
+    }
+
+    const persistAssistantMessage = ({ data }: { data: any }) => {
+      if (workspaceAssistantMessageId && data.id === workspaceAssistantMessageId) {
+        const { id, content, role, chatId: assistantChatId } = data;
+        return prisma.chatMessages.upsert({
+          where: { id },
+          create: data,
+          update: { content, role, chatId: assistantChatId, plugin: null }
+        });
+      }
+      return prisma.chatMessages.create({ data });
+    };
+
     const isAutoRouting = !requestedAiModel || requestedAiModel === AUTO_ROUTING_MODEL_ID;
     const isProfile = Boolean(requestedAiModel && isAiProfile(requestedAiModel));
     const canSelectInternalModel = userRole === 'admin' || userTier === 'Developer';
@@ -493,16 +652,14 @@ router.post('/chat/stream', authenticateChatStream, optionalAttachmentOwner, aiC
       try { validateProfileMode(requestedAiModel, isWorkspace); }
       catch (error) { if (sendModelSelectionError(res, error)) return; throw error; }
     } else if (!isAutoRouting) {
-      if (!canSelectInternalModel) {
+      if (!canSelectInternalModel && getModelDefinition(requestedAiModel)?.provider !== 'ollama') {
         return sendError(res, 'MODEL_NOT_ALLOWED', 'Pemilihan model internal hanya tersedia untuk admin dan akun Developer.', 403);
       }
       try { resolveAiModel(requestedAiModel, userTier || 'Free'); }
       catch (error) { if (sendModelSelectionError(res, error)) return; throw error; }
     }
 
-    const effectiveProfileId = isProfile
-      ? (requestedAiModel as any)
-      : mapLegacyModelToProfile(requestedAiModel, isWorkspace);
+    const effectiveProfileId = isProfile ? requestedAiModel : undefined;
 
     const attachmentLimit = isWorkspace ? MAX_WORKSPACE_ACTIVE_ATTACHMENTS : MAX_CHAT_ATTACHMENTS_PER_MESSAGE;
     if (Array.isArray(attachments) && attachments.length > attachmentLimit) {
@@ -515,7 +672,7 @@ router.post('/chat/stream', authenticateChatStream, optionalAttachmentOwner, aiC
 
     const routingContext = {
       manualModelId: isAutoRouting ? AUTO_ROUTING_MODEL_ID : requestedAiModel,
-      profileId: effectiveProfileId,
+      profileId: isProfile ? effectiveProfileId : undefined,
       workspaceMode: isWorkspace,
       chatMode,
       responseStyle,
@@ -533,6 +690,7 @@ router.post('/chat/stream', authenticateChatStream, optionalAttachmentOwner, aiC
     };
 
 
+    await refreshOllamaInventory();
     const routingDecision = smartModelRouter.routeModel(routingContext, cleanMessage);
     const aiModel = routingDecision.selectedModelId;
 
@@ -562,7 +720,7 @@ router.post('/chat/stream', authenticateChatStream, optionalAttachmentOwner, aiC
 
     const isGuestChat = Boolean(isTemporary || !userId || (typeof chatId === 'string' && chatId.startsWith('guest_')));
     const activeIsTemporary = isGuestChat;
-    let currentChatId = chatId;
+    let currentChatId = chatId || existingWorkspaceUserMessage?.chatId;
     let isNewChat = false;
 
     if (!activeIsTemporary && userId) {
@@ -632,10 +790,9 @@ router.post('/chat/stream', authenticateChatStream, optionalAttachmentOwner, aiC
         }
 
         if (!pluginResult) {
-          const msgResult = await prisma.chatMessages.create({
-
+          const msgResult = existingWorkspaceUserMessage || await prisma.chatMessages.create({
             data: {
-              id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+              id: workspaceUserMessageId || `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
               chatId: currentChatId,
               role: 'user',
               content: encryptionService.encryptSensitive(cleanMessage) || cleanMessage
@@ -743,6 +900,8 @@ router.post('/chat/stream', authenticateChatStream, optionalAttachmentOwner, aiC
           else history.splice(0, latestUserIndex);
         }
         for (const msg of history) {
+           if (workspaceUserMessageId && msg.id === workspaceUserMessageId) continue;
+           if (existingWorkspaceAssistantMessage && msg.id === workspaceAssistantMessageId) continue;
            // Skip duplicating the current prompt
           const decryptedContent = encryptionService.decryptSensitive(msg.content) || msg.content;
           if (msg.plugin === 'system_plugin_result') {
@@ -758,21 +917,14 @@ router.post('/chat/stream', authenticateChatStream, optionalAttachmentOwner, aiC
                 try {
                   const res = await attachmentStorageService.getAttachmentForUser(att.id, req.attachmentOwnerId || '');
                   if (res) {
-                    if (att.mimeType === 'text/plain' || att.mimeType === 'text/markdown') {
-                      let text = res.buffer.toString('utf8');
-                      text = scanAndSanitizePII(text).sanitizedText;
-                      if (aiSafetyService.detectPromptInjection(text)) {
-                        text = '[REDACTED_UNTRUSTED_ATTACHMENT_INJECTION]';
-                      }
-                      parts.push({ text: `[LAMPIRAN TEKS: ${att.filename}]\n${text}` });
-                    } else {
-                      parts.push({
-                        inlineData: {
-                          data: res.base64!,
-                          mimeType: att.mimeType
-                        }
-                      });
-                    }
+                    const part = await formatAttachmentForModelPart({
+                      filename: att.filename,
+                      mimeType: att.mimeType,
+                      buffer: res.buffer,
+                      base64: res.base64,
+                      attachmentRecord: res.attachment
+                    });
+                    if (part) parts.push(part);
                   }
                 } catch (err: any) {
                   console.warn(`[ATTACHMENT_READ_WARN] Could not read attachment ${att.id}:`, err.message);
@@ -793,40 +945,22 @@ router.post('/chat/stream', authenticateChatStream, optionalAttachmentOwner, aiC
               if (attId) {
                 const res = await attachmentStorageService.getAttachmentForUser(attId, req.attachmentOwnerId || '');
                 if (res) {
-                  if (res.attachment.mimeType === 'text/plain' || res.attachment.mimeType === 'text/markdown') {
-                    let text = res.buffer.toString('utf8');
-                    text = scanAndSanitizePII(text).sanitizedText;
-                    if (aiSafetyService.detectPromptInjection(text)) {
-                      text = '[REDACTED_UNTRUSTED_ATTACHMENT_INJECTION]';
-                    }
-                    parts.push({ text: `[LAMPIRAN TEKS: ${res.attachment.filename}]\n${text}` });
-                  } else {
-                    parts.push({
-                      inlineData: {
-                        data: res.base64!,
-                        mimeType: res.attachment.mimeType
-                      }
-                    });
-                  }
+                  const part = await formatAttachmentForModelPart({
+                    filename: res.attachment.filename,
+                    mimeType: res.attachment.mimeType,
+                    buffer: res.buffer,
+                    base64: res.base64,
+                    attachmentRecord: res.attachment
+                  });
+                  if (part) parts.push(part);
                 }
               } else if (att.base64) {
-                if (att.mimeType === 'text/plain' || att.mimeType === 'text/markdown') {
-                  const base64Data = att.base64.includes(',') ? att.base64.split(',')[1] : att.base64;
-                  let text = Buffer.from(base64Data, 'base64').toString('utf8');
-                  text = scanAndSanitizePII(text).sanitizedText;
-                  if (aiSafetyService.detectPromptInjection(text)) {
-                    text = '[REDACTED_UNTRUSTED_ATTACHMENT_INJECTION]';
-                  }
-                  parts.push({ text: `[LAMPIRAN TEKS: ${att.filename || 'attachment.txt'}]\n${text}` });
-                } else {
-                  const base64Data = att.base64.includes(',') ? att.base64.split(',')[1] : att.base64;
-                  parts.push({
-                    inlineData: {
-                      data: base64Data,
-                      mimeType: att.mimeType
-                    }
-                  });
-                }
+                const part = await formatAttachmentForModelPart({
+                  filename: att.filename || 'attachment.bin',
+                  mimeType: att.mimeType,
+                  base64: att.base64
+                });
+                if (part) parts.push(part);
               }
             } catch (err) {}
           }
@@ -851,40 +985,22 @@ router.post('/chat/stream', authenticateChatStream, optionalAttachmentOwner, aiC
             if (attId) {
               const res = await attachmentStorageService.getAttachmentForUser(attId, req.attachmentOwnerId || '');
               if (res) {
-                if (res.attachment.mimeType === 'text/plain' || res.attachment.mimeType === 'text/markdown') {
-                  let text = res.buffer.toString('utf8');
-                  text = scanAndSanitizePII(text).sanitizedText;
-                  if (aiSafetyService.detectPromptInjection(text)) {
-                    text = '[REDACTED_UNTRUSTED_ATTACHMENT_INJECTION]';
-                  }
-                  parts.push({ text: `[LAMPIRAN TEKS: ${res.attachment.filename}]\n${text}` });
-                } else {
-                  parts.push({
-                    inlineData: {
-                      data: res.base64!,
-                      mimeType: res.attachment.mimeType
-                    }
-                  });
-                }
+                const part = await formatAttachmentForModelPart({
+                  filename: res.attachment.filename,
+                  mimeType: res.attachment.mimeType,
+                  buffer: res.buffer,
+                  base64: res.base64,
+                  attachmentRecord: res.attachment
+                });
+                if (part) parts.push(part);
               }
             } else if (att.base64) {
-              if (att.mimeType === 'text/plain' || att.mimeType === 'text/markdown') {
-                const base64Data = att.base64.includes(',') ? att.base64.split(',')[1] : att.base64;
-                let text = Buffer.from(base64Data, 'base64').toString('utf8');
-                text = scanAndSanitizePII(text).sanitizedText;
-                if (aiSafetyService.detectPromptInjection(text)) {
-                  text = '[REDACTED_UNTRUSTED_ATTACHMENT_INJECTION]';
-                }
-                parts.push({ text: `[LAMPIRAN TEKS: ${att.filename || 'attachment.txt'}]\n${text}` });
-              } else {
-                const base64Data = att.base64.includes(',') ? att.base64.split(',')[1] : att.base64;
-                parts.push({
-                  inlineData: {
-                    data: base64Data,
-                    mimeType: att.mimeType
-                  }
-                });
-              }
+              const part = await formatAttachmentForModelPart({
+                filename: att.filename || 'attachment.bin',
+                mimeType: att.mimeType,
+                base64: att.base64
+              });
+              if (part) parts.push(part);
             }
           } catch (err) {}
         }
@@ -1089,9 +1205,9 @@ router.post('/chat/stream', authenticateChatStream, optionalAttachmentOwner, aiC
       }
       if (!isTemporary && userId && currentChatId && !clientDisconnected) {
         try {
-          await prisma.chatMessages.create({
+          await persistAssistantMessage({
              data: {
-               id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+               id: workspaceAssistantMessageId || `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
                chatId: currentChatId,
                role: 'assistant',
                content: encryptionService.encryptSensitive(currentFullText.trim()) || currentFullText.trim()
@@ -1191,6 +1307,20 @@ router.post('/chat/stream', authenticateChatStream, optionalAttachmentOwner, aiC
           }
 
           if (!isToolCall && !res.writableEnded) {
+            // Incremental streaming safety check
+            const streamSafety = aiSafetyService.validateStreamChunk(fullResponseText);
+            if (!streamSafety.isValid) {
+              console.warn(`[CHAT_STREAM] Critical safety violation during streaming! Terminating stream. Reason: ${streamSafety.reason}`);
+              reqAbortController.abort();
+              const safeOverrideText = '\n\n[Pesan diputus oleh sistem keamanan demi keselamatan pengguna. Hubungi 119 ext 8 jika membutuhkan bantuan segera.]';
+              res.write(`data: ${JSON.stringify({ text: safeOverrideText, safetyViolation: true })}\n\n`);
+              res.write(`data: ${JSON.stringify({ done: true, chatId: currentChatId, safetyViolation: true })}\n\n`);
+              res.write('data: [DONE]\n\n');
+              res.end();
+              fullResponseText += safeOverrideText;
+              break;
+            }
+
             hasStreamedAnyText = true;
             res.write(`data: ${JSON.stringify({ text })}\n\n`);
           }
@@ -1287,9 +1417,9 @@ router.post('/chat/stream', authenticateChatStream, optionalAttachmentOwner, aiC
             }
             if (!activeIsTemporary && userId && currentChatId) {
                try {
-                 await prisma.chatMessages.create({
+                 await persistAssistantMessage({
                     data: {
-                      id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+                      id: workspaceAssistantMessageId || `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
                       chatId: currentChatId,
                       role: 'assistant',
                       content: encryptionService.encryptSensitive(safeText) || safeText
@@ -1307,9 +1437,9 @@ router.post('/chat/stream', authenticateChatStream, optionalAttachmentOwner, aiC
           }
           if (!activeIsTemporary && userId && currentChatId) {
              try {
-               await prisma.chatMessages.create({
+               await persistAssistantMessage({
                   data: {
-                    id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+                    id: workspaceAssistantMessageId || `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
                     chatId: currentChatId,
                     role: 'assistant',
                     content: encryptionService.encryptSensitive(safeText) || safeText
@@ -1325,11 +1455,18 @@ router.post('/chat/stream', authenticateChatStream, optionalAttachmentOwner, aiC
           return await runLocalFallback(Object.assign(new Error('Provider returned an empty response.'), { category: 'EMPTY_PROVIDER_RESPONSE' }));
         }
 
+        // Mandatory Final Output Validation before DB Persistence
+        const finalValidation = aiSafetyService.validateOutput(fullResponseText);
+        if (!finalValidation.isValid) {
+          console.warn(`[CHAT_STREAM] Final safety validation failed! Reason: ${finalValidation.reason}. Overriding saved message.`);
+          fullResponseText = 'Maaf, respons yang saya siapkan tidak dapat disimpan atau ditampilkan karena melanggar batasan keselamatan atau kepatuhan klinis. Jika Anda sedang menghadapi kesulitan atau krisis, silakan hubungi saluran bantuan resmi 119 ext 8.';
+        }
+
         if (!activeIsTemporary && userId && currentChatId && fullResponseText) {
            try {
-             await prisma.chatMessages.create({
+             await persistAssistantMessage({
                 data: {
-                  id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+                  id: workspaceAssistantMessageId || `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
                   chatId: currentChatId,
                   role: 'assistant',
                   content: encryptionService.encryptSensitive(fullResponseText) || fullResponseText
@@ -1364,9 +1501,9 @@ router.post('/chat/stream', authenticateChatStream, optionalAttachmentOwner, aiC
           res.write(`data: ${JSON.stringify({ text: interruptedMarker })}\n\n`);
           if (!activeIsTemporary && userId && currentChatId) {
             try {
-              await prisma.chatMessages.create({
+              await persistAssistantMessage({
                 data: {
-                  id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+                  id: workspaceAssistantMessageId || `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
                   chatId: currentChatId,
                   role: 'assistant',
                   content: encryptionService.encryptSensitive(fullResponseText) || fullResponseText

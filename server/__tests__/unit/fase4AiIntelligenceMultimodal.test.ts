@@ -24,8 +24,8 @@ describe('FASE 4: Advanced AI Intelligence & Multimodal Engine Verification', ()
         smartModelRouter.routeProfile('kerja-fast', {
           userTier: 'Free',
           workspaceMode: true,
-          // Exclude Gemini models which support document_ocr, leaving only Groq & OpenRouter candidates
-          excludedModelIds: ['gemini-3.5-flash-lite', 'gemini-3.8-flash'],
+          // Exclude Gemini and vision models which support document_ocr, leaving only Groq & OpenRouter candidates
+          excludedModelIds: ['gemini-3.5-flash-lite', 'gemini-3.8-flash', 'ollama-qwen3.5-0.8b'],
           requestedCapabilities: ['document_ocr']
         });
       }).toThrow('MODEL_UNAVAILABLE');

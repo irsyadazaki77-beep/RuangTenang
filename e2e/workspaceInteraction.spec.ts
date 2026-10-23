@@ -78,6 +78,7 @@ test.describe('Workspace navigation and responsive shell', () => {
       sessionStorage.setItem(initializedKey, 'true');
       localStorage.setItem('rt_onboarding_completed_guest', 'true');
       localStorage.setItem('ruangtenang_last_seen_version', 'v3.4.0');
+      sessionStorage.setItem('rt_guest_ai_consent', 'true');
     });
     await page.route('**/api/v1/chat/stream', async route => {
       const payload = route.request().postDataJSON();
@@ -98,15 +99,15 @@ test.describe('Workspace navigation and responsive shell', () => {
     await expect(page.getByText('Fixture jawaban untuk Canvas.')).toBeVisible({ timeout: 20_000 });
     await expect(page.getByRole('button', { name: 'Hentikan respons' })).toHaveCount(0);
     await page.getByRole('button', { name: 'Kirim ke Canvas' }).last().click();
-    await expect(page.getByRole('banner').getByText('Jawaban AI', { exact: true })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('button', { name: 'Jawaban AI', exact: true })).toBeVisible({ timeout: 15_000 });
 
     await page.reload({ waitUntil: 'domcontentloaded' });
     await expect(composer).toBeVisible({ timeout: 20_000 });
     const openCanvas = page.getByRole('button', { name: 'Buka Canvas', exact: true });
     await expect(openCanvas).toBeVisible();
     await openCanvas.click();
-    await expect(page.getByRole('banner').getByText('Jawaban AI', { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Jawaban AI', exact: true })).toBeVisible();
     await expect(page.getByText('Fixture jawaban untuk Canvas.')).toBeVisible();
-    await expect(page.getByText('Draf lokal (belum tersimpan ke server)')).toBeVisible();
+    await expect(page.getByText(/Draf lokal tab ini \(belum tersimpan ke server\)/)).toBeVisible();
   });
 });

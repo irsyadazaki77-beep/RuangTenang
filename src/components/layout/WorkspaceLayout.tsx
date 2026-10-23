@@ -27,9 +27,9 @@ export const WorkspaceLayout: React.FC<WorkspaceLayoutProps> = ({
   const shouldReduceMotion = useReducedMotion();
 
   return (
-    <div className="flex-1 flex flex-col h-[100dvh] max-h-[100dvh] overflow-hidden bg-slate-50/50 dark:bg-transparent backdrop-blur-[2px] relative min-w-0">
+    <div className="flex-1 flex flex-col h-[100dvh] max-h-[100dvh] overflow-hidden bg-[#f8f9fb] dark:bg-[#0b0d10] relative min-w-0">
       {/* Top Navbar */}
-      <header className="h-13 px-3 sm:px-4 bg-white/90 dark:bg-[#0F172A]/90 backdrop-blur-md flex items-center justify-between shrink-0 sticky top-0 z-20 border-b border-slate-200/80 dark:border-slate-800/80">
+      <header className="h-14 px-3 sm:px-5 bg-white/90 dark:bg-[#111316]/92 backdrop-blur-xl flex items-center justify-between shrink-0 sticky top-0 z-20 border-b border-slate-200/80 dark:border-slate-800/80">
         <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
           {onOpenSidebar && (
             <button
@@ -43,7 +43,7 @@ export const WorkspaceLayout: React.FC<WorkspaceLayoutProps> = ({
 
           <button
             onClick={() => navigate('/')}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white bg-slate-100/90 dark:bg-slate-800/80 hover:bg-slate-200/90 dark:hover:bg-slate-700/80 border border-slate-200/60 dark:border-slate-700/60 rounded-xl transition-all group shrink-0 cursor-pointer min-h-[44px] sm:min-h-[32px]"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white bg-slate-50 dark:bg-[#1b1e23] hover:bg-slate-100 dark:hover:bg-[#25282e] border border-slate-200/80 dark:border-slate-700/80 rounded-xl transition-colors group shrink-0 cursor-pointer min-h-[44px] sm:min-h-[36px]"
             title="Kembali ke Chat RuangTenang"
           >
             <BrandLogo size="xs" iconOnly />
@@ -76,7 +76,8 @@ export const WorkspaceLayout: React.FC<WorkspaceLayoutProps> = ({
             onClick={() => {
               window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }));
             }}
-            className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 bg-slate-100/80 dark:bg-slate-800/80 hover:bg-slate-200/80 dark:hover:bg-slate-700/80 border border-slate-200/60 dark:border-slate-700/60 transition-colors cursor-pointer"
+            aria-label="Cari atau buka aksi"
+            className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 bg-slate-50 dark:bg-[#1b1e23] hover:bg-slate-100 dark:hover:bg-[#25282e] border border-slate-200/80 dark:border-slate-700/80 transition-colors cursor-pointer"
             title="Buka Command Palette (⌘K)"
           >
             <span>Cari atau Aksi</span>

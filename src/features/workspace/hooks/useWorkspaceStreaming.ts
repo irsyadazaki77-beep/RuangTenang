@@ -265,6 +265,7 @@ export function useWorkspaceStreaming({
         : userPrompt;
       await client.stream({
         message: formattedPrompt,
+        idempotencyKey: identity.requestId,
         workspaceContext,
         chatId: chatId || undefined,
         isTemporary,

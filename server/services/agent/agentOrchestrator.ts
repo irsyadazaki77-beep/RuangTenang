@@ -130,6 +130,7 @@ export async function runWorkspaceAgent(input: WorkspaceAgentRunInput): Promise<
   let estimatedOutputTokens = 0;
 
   let workspaceMemories: Array<{ category: string; content: string; provenance?: string | null }> = [];
+  let userAgentProfile: { aboutMe?: string; responseInstructions?: string } | null = null;
   try {
     const { WorkspaceMemoryService } = await import('../workspaceMemoryService.js');
     const memoryRes = await WorkspaceMemoryService.getRelevantMemories({
@@ -147,6 +148,20 @@ export async function runWorkspaceAgent(input: WorkspaceAgentRunInput): Promise<
   } catch (err) {
     // Non-blocking fallback if memory retrieval fails
   }
+  try {
+    if (input.userId && input.userId !== 'guest') {
+      const { agentProfileService } = await import('../agentProfileService.js');
+      const profile = await agentProfileService.get(input.userId);
+      if (profile.isEnabled && (profile.aboutMe.trim() || profile.responseInstructions.trim())) {
+        userAgentProfile = {
+          ...(profile.aboutMe.trim() ? { aboutMe: profile.aboutMe.trim() } : {}),
+          ...(profile.responseInstructions.trim() ? { responseInstructions: profile.responseInstructions.trim() } : {})
+        };
+      }
+    }
+  } catch {
+    // Non-blocking fallback if profile retrieval fails
+  }
 
   try {
   for (let step = 0; step < AGENT_EXECUTION_LIMITS.maxSteps; step += 1) {
@@ -154,7 +169,7 @@ export async function runWorkspaceAgent(input: WorkspaceAgentRunInput): Promise<
     if (Date.now() - startedAt >= AGENT_EXECUTION_LIMITS.maxDurationMs) {
       throw budgetFailure(results, modelId, steps, estimatedInputTokens, estimatedOutputTokens, 'AGENT_BUDGET_EXHAUSTED', 'batas durasi Agent tercapai');
     }
-    const context = buildAgentTurnContext({ plan: input.plan, task, workspaceId: input.workspaceId, userId: input.userId, recentResults: results, workspaceMemories });
+    const context = buildAgentTurnContext({ plan: input.plan, task, workspaceId: input.workspaceId, userId: input.userId, recentResults: results, workspaceMemories, userAgentProfile });
     const prompt = JSON.stringify({
       step: step + 1,
       maxSteps: AGENT_EXECUTION_LIMITS.maxSteps,

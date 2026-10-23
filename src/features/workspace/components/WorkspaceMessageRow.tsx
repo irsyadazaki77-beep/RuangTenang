@@ -173,7 +173,13 @@ export const WorkspaceMessageRow = React.memo(function WorkspaceMessageRow({
           )}
         </div>
       )}
-      <div className={`w-full max-w-full leading-relaxed ${msg.error ? 'rounded-xl border border-rose-300 bg-rose-50/90 p-3.5 text-rose-900 shadow-xs dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-100' : msg.role === 'user' ? 'rounded-xl border border-slate-200/80 bg-slate-100/80 px-3.5 py-2.5 text-slate-900 selection:bg-indigo-200 selection:text-slate-900 dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-100 dark:selection:bg-indigo-900 dark:selection:text-indigo-100 text-xs sm:text-sm font-normal' : 'w-full max-w-full text-slate-800 dark:text-slate-100 text-xs sm:text-sm selection:bg-indigo-100 selection:text-indigo-900 dark:selection:bg-indigo-950 dark:selection:text-indigo-100'}`}>
+      <div className={`w-full max-w-full leading-relaxed ${
+        msg.error
+          ? 'rounded-xl border border-rose-200/80 bg-rose-50/70 p-4 text-rose-900 shadow-xs dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-100'
+          : msg.role === 'user'
+            ? 'rounded-xl border border-slate-200/90 bg-gradient-to-b from-slate-100/95 to-slate-100/80 px-4 py-3 text-slate-900 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.04)] selection:bg-indigo-200 selection:text-slate-900 dark:border-slate-800/80 dark:bg-gradient-to-b dark:from-slate-900/90 dark:to-slate-900/60 dark:text-slate-100 dark:shadow-none dark:selection:bg-indigo-900 dark:selection:text-indigo-100 text-xs sm:text-sm font-normal'
+            : 'w-full max-w-full text-slate-800 dark:text-slate-100 text-xs sm:text-sm selection:bg-indigo-100 selection:text-indigo-900 dark:selection:bg-indigo-950 dark:selection:text-indigo-100'
+      }`}>
         {isEditing && msg.role === 'user' ? (
           <div className="flex flex-col gap-2">
             <textarea
@@ -283,7 +289,7 @@ export const WorkspaceMessageRow = React.memo(function WorkspaceMessageRow({
         )}
       </div>
       {msg.role === 'assistant' && !msg.error && (
-        <div className="mt-1 flex flex-wrap items-center gap-1 text-[11px] text-slate-400">
+        <div className="mt-1 flex flex-wrap items-center gap-1 text-[11px] text-slate-400 opacity-90 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100 transition-opacity duration-150">
           <button
             type="button"
             onClick={() => onCopyMessage(msg)}

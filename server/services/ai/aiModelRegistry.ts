@@ -1,3 +1,4 @@
+import { isLocalModelAvailable } from './ollamaRuntime.js';
 import { aiProviderConfig } from '../../config/aiProviderConfig.js';
 import { getProviderHealth } from './aiReliabilityService.js';
 import {
@@ -53,6 +54,34 @@ export interface AiModelDefinition extends AiModelMetadata {
 }
 
 const MODEL_METADATA: AiModelMetadata[] = [
+  { id: 'ollama-phi4-mini', name: 'Phi 4 Mini via Ollama', category: 'Penalaran Mendalam & Analisis', tag: 'Ollama • Lokal', description: 'Coding, penulisan terstruktur, dan tugas harian.', speed: 'Cepat', reasoning: 'Tinggi', recommendedFor: 'Coding, penulisan terstruktur, dan tugas harian.', allowedTiers: ['Free', 'Pro', 'Premium'] },
+  { id: 'ollama-deepseek-r1-1.5b', name: 'DeepSeek R1 1.5B via Ollama', category: 'Penalaran Mendalam & Analisis', tag: 'Ollama • Lokal', description: 'Logika, matematika, dan penalaran ringan.', speed: 'Cepat', reasoning: 'Tinggi', recommendedFor: 'Logika, matematika, dan penalaran ringan.', allowedTiers: ['Free', 'Pro', 'Premium'] },
+  { id: 'ollama-gemma3-270m', name: 'Gemma 3 270M via Ollama', category: 'Ultra-Cepat & Ringan', tag: 'Ollama • Lokal', description: 'Percakapan sangat singkat dan fallback hemat memori.', speed: 'Sangat Cepat', reasoning: 'Standar', recommendedFor: 'Percakapan sangat singkat dan fallback hemat memori.', allowedTiers: ['Free', 'Pro', 'Premium'] },
+
+  {
+    id: 'ollama-gemma3-1b',
+    name: 'Gemma 3 1B via Ollama',
+    category: 'Model Utama & Seimbang',
+    tag: 'Ollama • 1B Super Cepat',
+    description: 'Google Gemma 3 1B melalui Ollama lokal. Sangat ringan, efisien, dan responsif untuk konsultasi cepat.',
+    isDefault: false,
+    speed: 'Sangat Cepat',
+    reasoning: 'Standar',
+    recommendedFor: 'Percakapan ringan, respons instan, dan konsultasi bebas kuota.',
+    allowedTiers: ['Free', 'Pro', 'Premium']
+  },
+  {
+    id: 'ollama-qwen3.5-0.8b',
+    name: 'Qwen 3.5 0.8B via Ollama',
+    category: 'Model Utama & Seimbang',
+    tag: 'Ollama • 0.8B Ringan',
+    description: 'Qwen 3.5 0.8B melalui Ollama lokal. Arsitektur terbaru dengan efisiensi memori luar biasa.',
+    isDefault: false,
+    speed: 'Sangat Cepat',
+    reasoning: 'Standar',
+    recommendedFor: 'Percakapan cepat, tanya-jawab ringkas, dan pendampingan santai.',
+    allowedTiers: ['Free', 'Pro', 'Premium']
+  },
   {
     id: 'ollama-qwen3-1.7b',
     name: 'Qwen 3 1.7B via Ollama',
@@ -69,24 +98,24 @@ const MODEL_METADATA: AiModelMetadata[] = [
     id: 'ollama-qwen3-8b',
     name: 'Qwen 3 8B via Ollama',
     category: 'Model Utama & Seimbang',
-    tag: 'Ollama • 8B',
-    description: 'Qwen 3 8B melalui endpoint Ollama yang dikonfigurasi. Lokasi pemrosesan mengikuti host endpoint; kecepatan dan kebutuhan memori bergantung pada perangkat serta konfigurasi model.',
+    tag: 'Ollama • 8B Berbobot',
+    description: 'Qwen 3 8B melalui endpoint Ollama. Membutuhkan alokasi memori RAM/VRAM yang cukup agar respon optimal.',
     isDefault: false,
-    speed: 'Sangat Cepat',
+    speed: 'Sedang',
     reasoning: 'Tinggi',
-    recommendedFor: 'Percakapan dan asistensi tugas; kemampuan bergantung pada konfigurasi host.',
+    recommendedFor: 'Percakapan dan asistensi tugas mendalam saat perangkat memiliki memori longgar.',
     allowedTiers: ['Free', 'Pro', 'Premium']
   },
   {
     id: 'ollama-bonsai-27b',
     name: 'Bonsai 27B via Ollama',
     category: 'Model Utama & Seimbang',
-    tag: 'Ollama • 27B',
-    description: 'Bonsai 27B melalui endpoint Ollama yang dikonfigurasi. Lokasi pemrosesan mengikuti host endpoint; pastikan model terpasang dan sumber modelnya sesuai kebutuhan deployment.',
+    tag: 'Ollama • 27B Analisis Berat',
+    description: 'Bonsai 27B melalui endpoint Ollama. Model besar untuk analisis mendalam dengan proses inferensi bertahap.',
     isDefault: false,
-    speed: 'Cepat',
+    speed: 'Sedang',
     reasoning: 'Sangat Tinggi',
-    recommendedFor: 'Analisis percakapan dan tugas; kualitas serta kebutuhan komputasi bergantung pada model dan host.',
+    recommendedFor: 'Analisis percakapan dan tugas kompleks (membutuhkan waktu komputasi lebih panjang).',
     allowedTiers: ['Free', 'Pro', 'Premium']
   },
   {
@@ -364,6 +393,11 @@ const MODEL_METADATA: AiModelMetadata[] = [
 export const RESILIENT_FALLBACK_AI_MODEL_ID = 'ollama-qwen3-1.7b';
 
 const providerModels: Record<string, { provider: ProviderId; providerModelId: string }> = {
+  'ollama-phi4-mini': { provider: 'ollama', providerModelId: 'phi4-mini:latest' },
+  'ollama-deepseek-r1-1.5b': { provider: 'ollama', providerModelId: 'deepseek-r1:1.5b' },
+  'ollama-gemma3-270m': { provider: 'ollama', providerModelId: 'gemma3:270m' },
+  'ollama-gemma3-1b': { provider: 'ollama', providerModelId: 'gemma3:1b' },
+  'ollama-qwen3.5-0.8b': { provider: 'ollama', providerModelId: 'qwen3.5:0.8b' },
   'ollama-qwen3-1.7b': { provider: 'ollama', providerModelId: 'qwen3:1.7b' },
   'ollama-qwen3-8b': { provider: 'ollama', providerModelId: 'qwen3:8b' },
   'ollama-bonsai-27b': { provider: 'ollama', providerModelId: 'bonsai-27b:latest' },
@@ -392,6 +426,9 @@ export const AI_MODEL_REGISTRY: readonly AiModelDefinition[] = MODEL_METADATA.ma
   // Gemini chat models support multimodal input and function calling. Audio transcription
   // is only advertised by dedicated transcription models, which are not chat models.
   // OpenAI gpt-5.1 & gpt-5-mini support vision, image_understanding, document_ocr, and tool_calling
+  if (model.id === 'ollama-qwen3.5-0.8b') {
+    baseCaps.push('vision', 'image_understanding', 'document_ocr');
+  }
   if (providerInfo.provider === 'gemini') {
     baseCaps.push('vision', 'image_understanding', 'document_ocr', 'tool_calling');
   } else if (providerInfo.provider === 'openai') {
@@ -493,6 +530,11 @@ export const AI_PROFILE_DEFINITIONS: readonly AiProfileMetadata[] = [
     isDefault: false,
     allowedTiers: ['Free', 'Pro', 'Premium'],
     candidateModelIds: [
+      'ollama-phi4-mini',
+      'ollama-deepseek-r1-1.5b',
+      'ollama-gemma3-270m',
+      'ollama-gemma3-1b',
+      'ollama-qwen3.5-0.8b',
       'ollama-qwen3-1.7b',
       'ollama-qwen3-8b',
       'ollama-bonsai-27b',
@@ -518,6 +560,11 @@ export const AI_PROFILE_DEFINITIONS: readonly AiProfileMetadata[] = [
     isDefault: true,
     allowedTiers: ['Free', 'Pro', 'Premium'],
     candidateModelIds: [
+      'ollama-phi4-mini',
+      'ollama-deepseek-r1-1.5b',
+      'ollama-gemma3-270m',
+      'ollama-gemma3-1b',
+      'ollama-qwen3.5-0.8b',
       'ollama-qwen3-1.7b',
       'ollama-qwen3-8b',
       'ollama-bonsai-27b',
@@ -543,6 +590,11 @@ export const AI_PROFILE_DEFINITIONS: readonly AiProfileMetadata[] = [
     isDefault: false,
     allowedTiers: ['Free', 'Pro', 'Premium'],
     candidateModelIds: [
+      'ollama-phi4-mini',
+      'ollama-deepseek-r1-1.5b',
+      'ollama-gemma3-270m',
+      'ollama-gemma3-1b',
+      'ollama-qwen3.5-0.8b',
       'ollama-qwen3-1.7b',
       'ollama-qwen3-8b',
       'ollama-bonsai-27b',
@@ -569,6 +621,11 @@ export const AI_PROFILE_DEFINITIONS: readonly AiProfileMetadata[] = [
     isDefault: false,
     allowedTiers: ['Free', 'Pro', 'Premium'],
     candidateModelIds: [
+      'ollama-phi4-mini',
+      'ollama-deepseek-r1-1.5b',
+      'ollama-gemma3-270m',
+      'ollama-gemma3-1b',
+      'ollama-qwen3.5-0.8b',
       'ollama-qwen3-1.7b',
       'ollama-qwen3-8b',
       'ollama-bonsai-27b',
@@ -592,6 +649,11 @@ export const AI_PROFILE_DEFINITIONS: readonly AiProfileMetadata[] = [
     isDefault: true,
     allowedTiers: ['Free', 'Pro', 'Premium'],
     candidateModelIds: [
+      'ollama-phi4-mini',
+      'ollama-deepseek-r1-1.5b',
+      'ollama-gemma3-270m',
+      'ollama-gemma3-1b',
+      'ollama-qwen3.5-0.8b',
       'ollama-qwen3-1.7b',
       'ollama-qwen3-8b',
       'ollama-bonsai-27b',
@@ -617,6 +679,11 @@ export const AI_PROFILE_DEFINITIONS: readonly AiProfileMetadata[] = [
     isDefault: false,
     allowedTiers: ['Free', 'Pro', 'Premium'],
     candidateModelIds: [
+      'ollama-phi4-mini',
+      'ollama-deepseek-r1-1.5b',
+      'ollama-gemma3-270m',
+      'ollama-gemma3-1b',
+      'ollama-qwen3.5-0.8b',
       'ollama-qwen3-1.7b',
       'ollama-qwen3-8b',
       'ollama-bonsai-27b',
@@ -683,7 +750,7 @@ export function getPublicProfileCatalog(tier = 'Free', scope?: 'tenang' | 'kerja
     const tierAllowed = isTierAllowed(profile, tier);
     const hasConfiguredCandidate = profile.candidateModelIds.some(modelId => {
       const def = getModelDefinition(modelId);
-      return def && isTierAllowed(def, tier) && isProviderConfigured(def.provider) && getProviderHealth(def.provider) !== 'unavailable';
+      return def && isTierAllowed(def, tier) && isRegisteredModelAvailable(def) && getProviderHealth(def.provider) !== 'unavailable';
     });
     return {
       id: profile.id,
@@ -734,14 +801,15 @@ export function getConfiguredDefaultAiModelId(tier = 'Free'): string {
     AI_MODEL_REGISTRY.find(model => model.id === RESILIENT_FALLBACK_AI_MODEL_ID),
     ...AI_MODEL_REGISTRY
   ].filter((model): model is AiModelDefinition => Boolean(model));
-  return candidates.find(model => isTierAllowed(model, tier) && aiProviderConfig.isConfigured(model.provider) && getProviderHealth(model.provider) !== 'unavailable')?.id
+  return candidates.find(model => isTierAllowed(model, tier) && isRegisteredModelAvailable(model) && getProviderHealth(model.provider) !== 'unavailable')?.id
     || AUTO_ROUTING_MODEL_ID;
 }
 
 export function getPublicModelCatalog(tier = 'Free') {
   return AI_MODEL_REGISTRY.map(({ id, name, category, tag, description, recommendedFor, speed, reasoning, allowedTiers, provider, capabilities, isDefault }) => {
     const configured = isProviderConfigured(provider);
-    const availability = !configured ? 'provider_not_configured' as const : getProviderHealth(provider) === 'unavailable' ? 'temporarily_unavailable' as const : 'configured' as const;
+    const installed = provider !== 'ollama' || isLocalModelAvailable(getModelDefinition(id)!.providerModelId);
+    const availability = !configured ? 'provider_not_configured' as const : !installed || getProviderHealth(provider) === 'unavailable' ? 'temporarily_unavailable' as const : 'configured' as const;
     return {
       id, name, category, tag, description, recommendedFor, speed, reasoning, allowedTiers, provider, capabilities: [...capabilities], isDefault: Boolean(isDefault),
       availability,
@@ -795,4 +863,8 @@ export function isModelAllowedForTier(modelId: string, tier: string = 'Free'): b
 function isTierAllowed(model: Pick<AiModelDefinition, 'allowedTiers'>, tier: string): boolean {
   const normalizedTier = tier === 'Developer' ? 'Pro' : tier;
   return model.allowedTiers.some(allowedTier => allowedTier === normalizedTier);
+}
+
+export function isRegisteredModelAvailable(model: AiModelDefinition): boolean {
+  return aiProviderConfig.isConfigured(model.provider) && (model.provider !== 'ollama' || isLocalModelAvailable(model.providerModelId));
 }

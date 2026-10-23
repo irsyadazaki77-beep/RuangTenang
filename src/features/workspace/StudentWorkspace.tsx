@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useEffect, useLayoutEffect, useMemo } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { Paperclip, Sparkles } from 'lucide-react';
+import { FileText, Paperclip, Sparkles } from 'lucide-react';
+import { safeLocalStorage } from '../../lib/storage';
 import { WorkspaceMode, WorkspaceArtifact, WorkspaceCanvasDraft, WorkspaceTab, WorkspaceComposerConfig, WorkspaceComparisonCandidate, WorkspaceComparisonRun, WorkspaceRequestSnapshot, WorkspaceArtifactSelection, ArtifactPatch, WorkspaceChapterScope } from './types';
 import { UserSession } from '../../types';
 import { Chat, Message } from '../chat/types';
@@ -22,6 +23,7 @@ import type { WorkspaceToolDefinition } from './tools/toolTypes';
 import { WorkspaceHeader } from './components/WorkspaceHeader';
 import { WorkspaceConversation } from './components/WorkspaceConversation';
 import { WorkspaceComposer } from './components/WorkspaceComposer';
+import { WorkspaceMemorySuggestionBar, type WorkspaceMemorySuggestionItem } from './components/WorkspaceMemorySuggestionBar';
 import { WorkspaceCanvasPane } from './components/WorkspaceCanvasPane';
 import { WorkspaceInspectorPanel } from './components/WorkspaceInspectorPanel';
 import { StoredAttachment } from '../chat/types';
@@ -40,6 +42,7 @@ import { validateResearchCitations } from './utils/citationIntegrity';
 import { useWorkspaceViewController } from './hooks/useWorkspaceViewController';
 import { WORKSPACE_COMMAND_EVENT, type WorkspaceCommandId } from './utils/workspaceCommandEvents';
 import { readWorkspacePromptDraft, writeWorkspacePromptDraft } from './utils/workspacePromptDraft';
+import { isWorkspaceAttachmentAnalyzable } from './utils/workspaceAttachments';
 import type { AgentExecutionResult } from '../../../shared/contracts/agent';
 
 const WorkspaceWorkflowPipeline = React.lazy(() => import('./components/WorkspaceWorkflowPipeline').then(module => ({ default: module.WorkspaceWorkflowPipeline })));
@@ -418,7 +421,7 @@ function StudentWorkspaceSession({
     recheckAttachment
   } = useWorkspaceFileIngestion(effectiveChatId, workspaceLoadAttemptId, aiConsentAllowed, onRequestAiConsent);
   const selectedReadyWorkspaceFileCount = includeFilesInContext
-    ? selectedWorkspaceFileIds.filter(id => workspaceAttachments.some(file => file.id === id && file.status === 'ready')).length
+    ? selectedWorkspaceFileIds.filter(id => workspaceAttachments.some(file => file.id === id && isWorkspaceAttachmentAnalyzable(file))).length
     : 0;
   const workspaceContextSummary = [
     activeChapterScope !== 'ALL' ? `Fokus: ${CHAPTER_SCOPE_LABELS[activeChapterScope].shortLabel}` : '',
@@ -439,7 +442,7 @@ function StudentWorkspaceSession({
   }, [isLoadingAttachments, location.pathname, location.state, navigate, openWorkspaceFilePreview, openWorkspaceInspector, showToast, workspaceAttachments]);
   useEffect(() => {
     setSelectedWorkspaceFileIds(current => {
-      const readyIds = workspaceAttachments.filter(file => file.status === 'ready' && file.id).map(file => file.id!);
+      const readyIds = workspaceAttachments.filter(isWorkspaceAttachmentAnalyzable).map(file => file.id!);
       const existing = new Set(current);
       return [...current.filter(id => readyIds.includes(id)), ...readyIds.filter(id => !existing.has(id))];
     });
@@ -529,6 +532,47 @@ function StudentWorkspaceSession({
     setIsCreatingArtifact(true);
   }, [openWorkspaceInspector]);
 
+  const [memorySuggestions, setMemorySuggestions] = useState<WorkspaceMemorySuggestionItem[]>([]);
+  const [savingMemoryContent, setSavingMemoryContent] = useState<string | null>(null);
+  const messagesForMemoryRef = React.useRef(messages);
+  messagesForMemoryRef.current = messages;
+
+  const requestMemorySuggestions = useCallback(async (assistantReply: string, workspaceId: string | undefined) => {
+    if (!workspaceId || isGuestUser || isTemporaryChat) return;
+    const lastUserMessage = [...messagesForMemoryRef.current].reverse().find(item => item.role === 'user')?.content;
+    if (!lastUserMessage || lastUserMessage.trim().length < 15) return;
+    try {
+      const response = await apiClient.post<{ success: boolean; data: WorkspaceMemorySuggestionItem[] }>(
+        `/api/v1/workspace/${encodeURIComponent(workspaceId)}/memories/suggest`,
+        { userMessage: lastUserMessage, assistantReply }
+      );
+      const items = response.success ? response.data?.data : undefined;
+      if (Array.isArray(items) && items.length > 0 && workspaceId === effectiveChatIdRef.current) setMemorySuggestions(items);
+    } catch { /* Suggestions are optional; stay silent on failure. */ }
+  }, [isGuestUser, isTemporaryChat]);
+
+  const handleAcceptMemorySuggestion = useCallback(async (suggestion: WorkspaceMemorySuggestionItem) => {
+    const workspaceId = effectiveChatIdRef.current;
+    if (!workspaceId) return;
+    setSavingMemoryContent(suggestion.content);
+    try {
+      const response = await apiClient.post<{ success: boolean }>(
+        `/api/v1/workspace/${encodeURIComponent(workspaceId)}/memories`,
+        { category: suggestion.category, content: suggestion.content, provenance: 'Saran AI, disetujui pengguna' }
+      );
+      if (response.success) {
+        setMemorySuggestions(current => current.filter(item => item.content !== suggestion.content));
+        showToast('Disimpan ke memori proyek.', 'success');
+      } else {
+        showToast(response.error || 'Memori belum tersimpan.', 'error');
+      }
+    } catch {
+      showToast('Memori belum tersimpan.', 'error');
+    } finally {
+      setSavingMemoryContent(null);
+    }
+  }, [showToast]);
+
   const handleStreamCompleted = useCallback(async (assistantMsg: Message, extractedArtifacts: WorkspaceArtifact[], identity: WorkspaceRequestIdentity) => {
     const isCurrent = () => identity.workspaceId === logicalWorkspaceIdentityRef.current && isStreamRequestCurrentRef.current(identity);
     if (!isCurrent()) return;
@@ -579,8 +623,8 @@ function StudentWorkspaceSession({
       ? { ...assistantMsg, content: `${assistantMsg.content.replace(/Artefak Aktif[^\n]*/g, 'Draf dokumen dibuat secara lokal')}\n\nDokumen belum tersimpan ke server. Draf tetap tersedia di Canvas; coba simpan lagi.` }
       : assistantMsg;
     if (!isCurrent()) return;
-    setMessages(prev => prev.some(message => message.id === finalMessage.id) ? prev : [...prev, finalMessage]);
-  }, [openWorkspaceInspector, setMessages, setHasUnreadArtifact, syncParsedMessageArtifacts, setActiveArtifactId, createWorkspacePlan, showToast]);
+    setMessages(prev => prev.some(message => message.id === finalMessage.id) ? prev : [...prev, finalMessage]); if (!assistantMsg.error) void requestMemorySuggestions(assistantMsg.content, identity.chatId || effectiveChatIdRef.current);
+  }, [openWorkspaceInspector, setMessages, setHasUnreadArtifact, syncParsedMessageArtifacts, setActiveArtifactId, createWorkspacePlan, showToast, requestMemorySuggestions]);
 
   const handleAgentTaskCompleted = useCallback(async (result: AgentExecutionResult, identity: { workspaceId: string; planId: string; taskId: string }) => {
     if (identity.workspaceId !== logicalWorkspaceIdentityRef.current || workspacePlanRef.current?.id !== identity.planId) return;
@@ -703,9 +747,9 @@ function StudentWorkspaceSession({
             }
           : undefined,
         selectedText: comparisonSelectedText,
-        attachments: includeFilesInContext ? workspaceAttachments.filter(file => file.status === 'ready' && file.id && selectedWorkspaceFileIds.includes(file.id)).map(file => ({ id: file.id!, filename: file.name, mimeType: file.mimeType, size: file.size })) : undefined,
+        attachments: includeFilesInContext ? workspaceAttachments.filter(file => isWorkspaceAttachmentAnalyzable(file) && selectedWorkspaceFileIds.includes(file.id!)).map(file => ({ id: file.id!, filename: file.name, mimeType: file.mimeType, size: file.size })) : undefined,
         workspaceInstructions: comparisonWorkspaceInstructions || undefined,
-        includeWorkspaceFiles: includeFilesInContext && selectedWorkspaceFileIds.length > 0,
+        includeWorkspaceFiles: includeFilesInContext && workspaceAttachments.some(file => isWorkspaceAttachmentAnalyzable(file) && selectedWorkspaceFileIds.includes(file.id)),
         createdAt: new Date().toISOString()
       });
       return true;
@@ -724,7 +768,7 @@ function StudentWorkspaceSession({
       workspaceId: effectiveChatIdRef.current,
         model: resolvedConfig.aiModel,
       config: resolvedConfig,
-      files: taskContextMode ? workspaceAttachments.filter(file => file.status === 'ready' && file.id && taskFileIds.includes(file.id)).map(file => ({ id: file.id, name: file.name })) : !includeFilesInContext ? [] : workspaceAttachments.filter(file => file.status === 'ready' && file.id && taskFileIds.includes(file.id)).map(file => ({ id: file.id, name: file.name })),
+      files: taskContextMode ? workspaceAttachments.filter(file => isWorkspaceAttachmentAnalyzable(file) && taskFileIds.includes(file.id!)).map(file => ({ id: file.id!, name: file.name })) : !includeFilesInContext ? [] : workspaceAttachments.filter(file => isWorkspaceAttachmentAnalyzable(file) && taskFileIds.includes(file.id!)).map(file => ({ id: file.id!, name: file.name })),
       workspaceInstructions: taskContextMode ? config?.taskWorkspaceInstructions : workspaceData?.instructions || undefined,
       artifact: taskContextMode && activeContent ? { id: 'task-canvas-snapshot', title: 'Canvas snapshot', type: 'DOCUMENT', version: 1, content: activeContent } : includeCanvasInContext && activeArtifact && activeArtifact.id !== DEFAULT_WELCOME_ARTIFACT_ID ? {
         id: activeArtifact.id, title: activeArtifact.title, type: activeArtifact.type,
@@ -735,14 +779,12 @@ function StudentWorkspaceSession({
       selectedText: taskContextMode ? undefined : includeCanvasInContext ? scopedSelection?.text || (selectedText && activeArtifact?.id !== DEFAULT_WELCOME_ARTIFACT_ID ? selectedText : undefined) : undefined,
       chapterScope: taskContextMode ? undefined : activeChapterScope
     });
-    const snapshot = isRetry
-      ? { ...baseSnapshot, requestId: crypto.randomUUID(), createdAt: new Date().toISOString() }
-      : baseSnapshot;
-    const requestWorkspaceFileIds = config?.isolatedTaskExecution
-      ? config.taskContextSourceIds || []
-      : existingSnapshot
-      ? existingSnapshot.context.activeFiles.map(file => file.id).filter((id): id is string => Boolean(id))
-      : includeFilesInContext ? taskFileIds : [];
+    // A retry is the same logical submission. Reuse its key so the server can
+    // resume/replay the persisted turn without adding duplicate history rows.
+    const snapshot = baseSnapshot;
+    const requestWorkspaceFileIds = baseSnapshot.context.activeFiles
+      .map(file => file.id)
+      .filter((id): id is string => Boolean(id));
     const includeWorkspaceFilesForRequest = requestWorkspaceFileIds.length > 0;
     activeSendOperationRef.current = snapshot.requestId;
     const sendAttachments = existingSnapshot ? attachments : includeFilesInContext ? attachments : undefined;
@@ -779,9 +821,12 @@ function StudentWorkspaceSession({
       pending.isRetry,
       pending.scopedSelection
     );
-    if (accepted) setInputText('');
+    if (accepted) {
+      writeWorkspacePromptDraft(getWorkspaceSessionStorage(), promptDraftIdentity, '');
+      setInputText('');
+    }
     else pendingConsentSendRef.current = pending;
-  }, [aiConsentAllowed, handleExecuteSendMessage, setInputText]);
+  }, [aiConsentAllowed, handleExecuteSendMessage, promptDraftIdentity, setInputText]);
 
   const handleUseComparisonResponse = useCallback(async (run: WorkspaceComparisonRun, candidate: WorkspaceComparisonCandidate) => {
     if (run.workspaceIdentity !== logicalWorkspaceIdentity || run.chatId !== effectiveChatIdRef.current || candidate.comparisonId !== run.comparisonId || candidate.snapshotId !== run.snapshotId || candidate.status !== 'completed' || !candidate.output || !candidate.attemptId) return false;
@@ -870,7 +915,7 @@ function StudentWorkspaceSession({
         ? { artifactId: activeArtifact.id, title: activeArtifact.title, version: activeArtifact.version, content: (canvasDraft?.artifactId === activeArtifact.id ? canvasDraft.content : activeArtifact.content).slice(0, 50000) }
         : undefined,
       selectedText: selectedText || undefined,
-      attachments: workspaceAttachments.filter(file => file.status === 'ready' && file.id).map(file => ({ id: file.id!, filename: file.name, mimeType: file.mimeType, size: file.size }))
+      attachments: workspaceAttachments.filter(isWorkspaceAttachmentAnalyzable).map(file => ({ id: file.id!, filename: file.name, mimeType: file.mimeType, size: file.size }))
     });
   }, [activeArtifact, canvasDraft, effectiveChatId, selectedText, workspaceAttachments, logicalWorkspaceIdentity]);
 
@@ -1081,9 +1126,16 @@ function StudentWorkspaceSession({
     if (!task || task.status !== 'waiting_review' || task.artifactProposal?.content !== agentProposalPreview.proposal.content) setAgentProposalPreview(null);
   }, [agentProposalPreview, workspacePlan]);
   const handleSelectStarterTask = useCallback((prompt: string) => { handleExecuteSendMessage(prompt); }, [handleExecuteSendMessage]);
+  const isFreshWorkspace = !isLoadingMessages
+    && !isStreaming
+    && !activeStreamingMessage
+    && messages.length <= 1
+    && !messages.some(message => message.role === 'user');
   const handleComposerSend = useCallback((prompt: string, attachments?: StoredAttachment[], config?: WorkspaceComposerConfig) => {
-    return handleExecuteSendMessage(prompt, undefined, attachments, config);
-  }, [handleExecuteSendMessage]);
+    const accepted = handleExecuteSendMessage(prompt, undefined, attachments, config);
+    if (accepted) writeWorkspacePromptDraft(getWorkspaceSessionStorage(), promptDraftIdentity, '');
+    return accepted;
+  }, [handleExecuteSendMessage, promptDraftIdentity]);
   const {
     runTask: handleRunWorkspaceTask,
     startContinuousWorkflow: handleStartContinuousWorkflow,
@@ -1216,6 +1268,43 @@ function StudentWorkspaceSession({
   }, [createNewArtifact, handleCompareModeChange, handleOpenCanvas, openWorkspaceInspector]);
 
   const isSplitView = isCanvasOpen || isContextPanelOpen;
+  const mainContainerRef = React.useRef<HTMLElement | null>(null);
+  const [splitRatio, setSplitRatio] = useState<number>(() => {
+    const saved = Number(safeLocalStorage.getItem('ruangkerja:split-ratio'));
+    return Number.isFinite(saved) && saved >= 34 && saved <= 70 ? saved : 52;
+  });
+  const [isResizingSplit, setIsResizingSplit] = useState(false);
+
+  const handleDividerPointerDown = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setIsResizingSplit(true);
+    const startX = event.clientX;
+    const startRatio = splitRatio;
+    const containerWidth = mainContainerRef.current?.getBoundingClientRect().width || window.innerWidth;
+
+    const handleMove = (moveEvent: MouseEvent) => {
+      const deltaPercent = ((moveEvent.clientX - startX) / containerWidth) * 100;
+      let next = Math.min(70, Math.max(34, Math.round((startRatio + deltaPercent) * 10) / 10));
+      // Magnetic snap point to 50:50 if within 1.5% threshold
+      if (Math.abs(next - 50) < 1.5) {
+        next = 50;
+      }
+      setSplitRatio(next);
+    };
+
+    const handleUp = () => {
+      setIsResizingSplit(false);
+      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('mouseup', handleUp);
+    };
+
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mouseup', handleUp);
+  }, [splitRatio]);
+
+  useEffect(() => {
+    safeLocalStorage.setItem('ruangkerja:split-ratio', String(splitRatio));
+  }, [splitRatio]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -1270,6 +1359,7 @@ function StudentWorkspaceSession({
         workspaceTitle={workspaceTitle}
         activeArtifact={visibleActiveArtifact}
         isCanvasOpen={isCanvasOpen}
+        isContextOpen={isContextPanelOpen}
         isFocusMode={isCanvasExpanded && isCanvasOpen}
         isTemporary={isTemporaryChat}
         onToggleTemporary={() => {
@@ -1337,44 +1427,62 @@ function StudentWorkspaceSession({
         </React.Suspense>
       )}
 
-      {/* Floating Notification for Mobile when Artifact Updates */}
-      {mobileActiveTab === 'chat' && hasUnreadArtifact && visibleActiveArtifact && (
-        <div className="xl:hidden absolute top-14 left-3 right-3 z-30 animate-slide-down">
-          <div className="bg-slate-900/95 dark:bg-slate-900/95 text-white px-3 py-2 rounded-xl shadow-xl flex items-center justify-between border border-slate-700/80 backdrop-blur-md">
-            <div className="flex items-center gap-2 min-w-0">
-              <Sparkles className="w-3.5 h-3.5 text-indigo-400 shrink-0 animate-pulse" />
-              <div className="text-xs truncate">
-                <span className="font-semibold">Artefak diperbarui:</span>{' '}
-                <span className="text-slate-300">{visibleActiveArtifact.title}</span>
+      {/* Floating Notification / Bottom Pill for Mobile when Artifact Exists */}
+      {mobileActiveTab === 'chat' && visibleActiveArtifact && (
+        hasUnreadArtifact ? (
+          <div className="xl:hidden absolute top-14 left-3 right-3 z-30 animate-slide-down">
+            <div className="bg-slate-900/95 dark:bg-slate-900/95 text-white px-3 py-2 rounded-xl shadow-xl flex items-center justify-between border border-slate-700/80 backdrop-blur-md">
+              <div className="flex items-center gap-2 min-w-0">
+                <Sparkles className="w-3.5 h-3.5 text-indigo-400 shrink-0 animate-pulse" />
+                <div className="text-xs truncate">
+                  <span className="font-semibold">Artefak diperbarui:</span>{' '}
+                  <span className="text-slate-300">{visibleActiveArtifact.title}</span>
+                </div>
               </div>
+              <button
+                type="button"
+                onClick={() => {
+                  handleSetMobileTab('canvas');
+                  setHasUnreadArtifact(false);
+                }}
+                className="h-7 px-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold transition-colors shrink-0 ml-2 cursor-pointer"
+              >
+                Lihat Canvas
+              </button>
             </div>
+          </div>
+        ) : (
+          <div className="xl:hidden absolute bottom-20 right-3 z-20 pointer-events-none">
             <button
               type="button"
-              onClick={() => {
-                handleSetMobileTab('canvas');
-                setHasUnreadArtifact(false);
-              }}
-              className="h-7 px-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold transition-colors shrink-0 ml-2 cursor-pointer"
+              onClick={() => handleSetMobileTab('canvas')}
+              className="pointer-events-auto inline-flex items-center gap-1.5 rounded-full border border-indigo-200/80 dark:border-indigo-800/80 bg-white/95 dark:bg-slate-900/95 px-3 py-1.5 text-xs font-semibold text-indigo-700 dark:text-indigo-300 shadow-lg backdrop-blur-md transition-transform active:scale-95 cursor-pointer"
+              title="Buka Dokumen Canvas Aktif"
+              aria-label={`Buka Canvas: ${visibleActiveArtifact.title}`}
             >
-              Lihat Canvas
+              <FileText className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
+              <span className="max-w-[140px] truncate">{visibleActiveArtifact.title}</span>
             </button>
           </div>
-        </div>
+        )
       )}
 
       {/* 2. Main Dual-Pane Workspace */}
-      <main className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden bg-transparent">
+      <main ref={mainContainerRef} className={`relative flex min-h-0 min-w-0 flex-1 overflow-hidden bg-transparent ${isResizingSplit ? 'select-none cursor-col-resize' : ''}`}>
         {/* LEFT PANE: CONVERSATION & COMPOSER */}
         <section
-          className={`flex flex-col min-h-0 min-w-0 h-full transition-all duration-200 ${
+          style={isSplitView && !isCanvasExpanded ? ({ '--split-ratio': `${splitRatio}%` } as React.CSSProperties) : undefined}
+          className={`flex flex-col min-h-0 min-w-0 h-full transition-colors duration-200 ${
             isCanvasExpanded
               ? 'hidden'
               : isSplitView
-                ? 'w-full xl:flex-[0_0_54%] 2xl:flex-[0_0_52%] shrink-0 border-r border-slate-200/70 bg-white/75 backdrop-blur-md dark:border-slate-800/80 dark:bg-slate-950/75'
-                : 'mx-auto w-full max-w-3xl border-r-0 bg-white/70 backdrop-blur-md xl:max-w-5xl dark:bg-slate-950/70'
+                ? 'w-full xl:flex-[0_0_var(--split-ratio,52%)] shrink-0 border-r border-slate-200/80 bg-[#f8f9fb] dark:border-slate-800/80 dark:bg-[#0b0d10]'
+                : isFreshWorkspace
+                  ? 'mx-auto w-full max-w-none border-r-0 bg-transparent dark:bg-transparent '
+                  : 'mx-auto w-full max-w-3xl border-r-0 bg-[#f8f9fb] xl:max-w-5xl dark:bg-[#0b0d10]'
           } ${mobileActiveTab === 'chat' || workspaceView.inspector === 'sources' ? 'flex' : 'hidden xl:flex'}`}
         >
-          <WorkspaceConversation
+          {!isFreshWorkspace && <WorkspaceConversation
             key={activeRouteChatId || 'workspace-new'}
             messages={messages}
             isLoading={isLoadingMessages}
@@ -1397,16 +1505,27 @@ function StudentWorkspaceSession({
             onOpenSource={openWorkspaceSource}
             onEditUserMessage={handleEditUserMessage}
             isTemporary={isTemporaryChat}
+          />}
+
+          <WorkspaceMemorySuggestionBar
+            suggestions={memorySuggestions}
+            savingContent={savingMemoryContent}
+            onAccept={suggestion => void handleAcceptMemorySuggestion(suggestion)}
+            onDismiss={suggestion => setMemorySuggestions(current => current.filter(item => item.content !== suggestion.content))}
+            onDismissAll={() => setMemorySuggestions([])}
           />
 
           <WorkspaceComposer
+            isFreshWorkspace={isFreshWorkspace}
+            isTemporary={isTemporaryChat}
+            starterTasks={STARTER_TASKS}
+            onSelectStarterTask={handleSelectStarterTask}
             activeArtifactType={activeArtifact?.id !== DEFAULT_WELCOME_ARTIFACT_ID ? activeArtifact?.type : null}
             activeArtifactTitle={visibleActiveArtifact?.title || null}
             selectedText={selectedText}
             inputText={inputText}
             setInputText={setInputText}
             onSelectTool={handleSelectWorkspaceTool}
-            onInputTextChange={setInputText}
             attachments={workspaceAttachments}
             isStreaming={isStreaming}
             isDisabled={isClearingConversation}
@@ -1448,6 +1567,29 @@ function StudentWorkspaceSession({
             onResetPersonalization={resetPersonalization}
           />
         </section>
+
+        {/* INTERACTIVE RESIZABLE SPLIT DIVIDER (DESKTOP) */}
+        {isSplitView && !isCanvasExpanded && (
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Ubah ukuran panel obrolan dan Canvas"
+            title="Geser untuk mengubah ukuran panel (Klik ganda untuk reset 50:50)"
+            onMouseDown={handleDividerPointerDown}
+            onDoubleClick={() => setSplitRatio(50)}
+            className={`hidden xl:flex w-1.5 shrink-0 items-center justify-center cursor-col-resize group transition-colors z-20 -ml-[3px] -mr-[3px] ${
+              isResizingSplit ? 'bg-indigo-500/30' : 'hover:bg-indigo-500/20'
+            }`}
+          >
+            <div
+              className={`h-10 w-1 rounded-full transition-all ${
+                isResizingSplit
+                  ? 'bg-indigo-500 scale-y-125'
+                  : 'bg-slate-300/70 dark:bg-slate-700/70 group-hover:bg-indigo-500'
+              }`}
+            />
+          </div>
+        )}
 
         <WorkspaceInspectorPanel
           isOpen={(mobileActiveTab === 'context' || mobileActiveTab === 'sources') || isContextPanelOpen}

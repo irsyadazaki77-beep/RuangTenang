@@ -1,7 +1,6 @@
 import { useEscapeKey } from '../hooks/useEscapeKey';
 import React, { createContext, useContext, useState, ReactNode } from 'react';
 import { CheckCircle2, AlertCircle, Info, X } from 'lucide-react';
-import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 
 export type ToastType = 'success' | 'error' | 'info' | 'warning';
 
@@ -10,6 +9,7 @@ export interface ToastMessage {
   type: ToastType;
   title?: string;
   message: string;
+  isExiting?: boolean;
 }
 
 interface ToastContextType {
@@ -20,16 +20,16 @@ const ToastContext = createContext<ToastContextType | undefined>(undefined);
 
 export const ToastProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
-  const shouldReduceMotion = useReducedMotion();
 
   const showToast = (message: string, type: ToastType = 'info', title?: string) => {
     const id = 'toast-' + Date.now() + '-' + Math.random().toString(36).slice(2, 5);
     // Limit queue to max 2 items to prevent stacking over UI
     setToasts((prev) => [...prev.slice(-1), { id, type, title, message }]);
 
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 3200);
+    window.setTimeout(() => {
+      setToasts((prev) => prev.map((toast) => toast.id === id ? { ...toast, isExiting: true } : toast));
+      window.setTimeout(() => setToasts((prev) => prev.filter((toast) => toast.id !== id)), 150);
+    }, 3050);
   };
 
   const removeToast = (id: string) => {
@@ -45,17 +45,11 @@ export const ToastProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         aria-atomic="true"
         className="fixed top-4 sm:top-5 left-1/2 -translate-x-1/2 sm:left-auto sm:right-5 sm:translate-x-0 z-50 flex flex-col gap-2 max-w-sm w-[calc(100%-2rem)] sm:w-80 px-1 pointer-events-none"
       >
-        <AnimatePresence>
-          {toasts.map((toast) => (
-            <motion.div
+        {toasts.map((toast) => (
+            <div
               key={toast.id}
               role="alert"
-              layout={!shouldReduceMotion}
-              initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: -8, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: -8, scale: 0.95 }}
-              transition={{ duration: shouldReduceMotion ? 0.05 : 0.15 }}
-              className={`pointer-events-auto p-3 rounded-xl border shadow-sm backdrop-blur-md flex items-start gap-2.5 text-xs font-medium ${
+              className={`${toast.isExiting ? 'animate-rt-toast-exit' : 'animate-rt-toast-enter'} pointer-events-auto p-3 rounded-xl border shadow-sm backdrop-blur-md flex items-start gap-2.5 text-xs font-medium ${
                 toast.type === 'success'
                   ? 'bg-emerald-50/95 dark:bg-emerald-950/90 border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200'
                   : toast.type === 'error'
@@ -82,9 +76,8 @@ export const ToastProvider: React.FC<{ children: ReactNode }> = ({ children }) =
               >
                 <X className="w-3.5 h-3.5" />
               </button>
-            </motion.div>
+            </div>
           ))}
-        </AnimatePresence>
       </div>
     </ToastContext.Provider>
   );

@@ -21,6 +21,13 @@ const NEGATION_PATTERNS = [
   'tidak berniat',
   'bukan bermaksud',
   'tidak ada niat',
+  'tidak pernah ingin',
+  'tidak pernah mau',
+  'tidak pernah berniat',
+  'ga pernah ingin',
+  'ga pernah mau',
+  'nggak pernah ingin',
+  'nggak pernah mau',
   'jangan berpikiran',
   'bukan berarti mau',
   'tidak akan'
@@ -279,6 +286,8 @@ export interface CrisisAnalysisResult {
   confidenceScore: number;
   reasoning: string;
   isAcademicExemption?: boolean;
+  isThirdParty?: boolean;
+  isPastIdeation?: boolean;
 }
 
 // Past tense indicators
@@ -318,13 +327,7 @@ const THIRD_PARTY_INDICATORS = [
   'sepupu saya'
 ];
 
-/**
- * Clinical Response Protocols Reviewed & Approved by Mental Health Professionals
- * (UPT Bimbingan & Konseling Universitas Indonesia)
- *
- * These protocols outline safe, non-stigmatizing, empathetic, and evidence-based
- * guidelines for responding to students expressing different levels of distress or crisis.
- */
+/** Draft response examples only. They are not a clinical assessment or approval. */
 export const CLINICAL_RESPONSE_PROTOCOLS = {
   CRISIS_ACUTE: {
     title: "Protokol Penanganan Krisis Akut (Active Crisis Protocol)",
@@ -335,7 +338,7 @@ export const CLINICAL_RESPONSE_PROTOCOLS = {
       "Hindari kalimat bernada menyalahkan, menasihati berlebihan, atau membandingkan nasib.",
       "Fasilitasi pelacakan kontak darurat / SOS dengan persetujuan."
     ],
-    approvedTemplate: "Saya mendengar betapa beratnya beban yang kamu pikul saat ini, dan saya peduli dengan keselamatanmu. Kamu tidak harus menghadapi ini sendirian. Jika ada bahaya langsung, hubungi 119 atau minta seseorang menemani ke fasilitas kesehatan terdekat. Untuk dukungan psikologis awal, kamu bisa menghubungi Healing119 di 119 ekstensi 8 atau membuka healing119.id; antrean layanan dapat penuh."
+    draftTemplate: "Saya mendengar betapa beratnya beban yang kamu pikul saat ini, dan saya peduli dengan keselamatanmu. Kamu tidak harus menghadapi ini sendirian. Jika ada bahaya langsung, hubungi 119 atau minta seseorang menemani ke fasilitas kesehatan terdekat. Untuk dukungan psikologis awal, kamu bisa menghubungi Healing119 di 119 ekstensi 8 atau membuka healing119.id; antrean layanan dapat penuh."
   },
   CRISIS_NEGATED: {
     title: "Protokol Penolakan Niat/Negasi (Negated Intent Protocol)",
@@ -345,17 +348,16 @@ export const CLINICAL_RESPONSE_PROTOCOLS = {
       "Jangan abaikan pemicu stres asli yang membuat mereka membicarakan topik ini.",
       "Tawarkan ruang aman untuk berbagi tanpa memaksakan intervensi darurat."
     ],
-    approvedTemplate: "Terima kasih sudah menjelaskan keadaanmu. Aku tidak akan menganggap semuanya sudah aman hanya dari satu jawaban. Apa kamu merasa berada dalam bahaya sekarang? Jika iya atau kamu merasa mungkin bertindak, hubungi 119 atau minta orang tepercaya menemanimu ke IGD. Untuk dukungan psikologis awal, Healing119 dapat dihubungi lewat 119 ekstensi 8 atau healing119.id; antrean dapat penuh."
+    draftTemplate: "Terima kasih sudah menjelaskan keadaanmu. Aku tidak akan menganggap semuanya sudah aman hanya dari satu jawaban. Apa kamu merasa berada dalam bahaya sekarang? Jika iya atau kamu merasa mungkin bertindak, hubungi 119 atau minta orang tepercaya menemanimu ke IGD. Untuk dukungan psikologis awal, Healing119 dapat dihubungi lewat 119 ekstensi 8 atau healing119.id; antrean dapat penuh."
   },
   CRISIS_PAST_IDEATION: {
     title: "Protokol Riwayat Ideasi Masa Lalu (Past Ideation History Protocol)",
     principles: [
-      "Sambut pengakuan siswa dengan rasa hormat yang mendalam atas ketahanan mereka (resilience).",
-      "Validasi emosi mereka saat menghadapi memori tersebut.",
-      "Fokus pada momen masa kini dan pencegahan preventif.",
-      "Tawarkan opsi konseling terjadwal untuk penguatan kesehatan mental."
+      "Tanggapi cerita tentang pikiran masa lalu dengan empati tanpa menyimpulkan keadaan saat ini.",
+      "Tanyakan secara langsung dan lembut apakah pikiran tersebut muncul sekarang atau ada bahaya saat ini.",
+      "Tawarkan pilihan bantuan manusia tanpa mengklaim bahwa konseling selalu tersedia."
     ],
-    approvedTemplate: "Terima kasih sudah berbagi cerita yang sangat berharga ini dengan saya. Melewati masa-masa sulit seperti itu membutuhkan kekuatan yang luar biasa, dan saya bersyukur kamu berada di sini hari ini dalam keadaan aman. Jika pikiran-pikiran lama itu terasa mengganggu lagi, pintu konseling kampus selalu terbuka untuk membantumu."
+    draftTemplate: "Terima kasih sudah menceritakan pengalaman itu. Aku tidak ingin menyimpulkan keadaanmu sekarang hanya dari cerita tentang masa lalu. Apakah pikiran untuk menyakiti diri muncul saat ini, atau kamu merasa berada dalam bahaya? Jika iya atau kamu mungkin bertindak, hubungi 119 atau minta orang tepercaya menemanimu ke IGD. Untuk dukungan psikologis awal, Healing119 dapat dihubungi lewat 119 ekstensi 8 atau healing119.id; antrean dapat penuh."
   },
   CRISIS_THIRD_PARTY: {
     title: "Protokol Krisis Pihak Ketiga (Third-Party Crisis Protocol)",
@@ -365,9 +367,22 @@ export const CLINICAL_RESPONSE_PROTOCOLS = {
       "Berikan instruksi jelas tentang cara mendukung teman secara aktif (active listening) tanpa membahayakan diri sendiri.",
       "Sediakan direktori hotline resmi untuk diteruskan kepada temannya."
     ],
-    approvedTemplate: "Kamu adalah teman yang sangat baik dan peduli. Pasti tidak mudah mendengar temanmu sedang mengalami masa sulit seperti itu. Hal terpenting yang bisa kamu lakukan adalah mendengarkannya dengan empati tanpa menghakimi, dan membantunya terhubung dengan layanan profesional. Berikut adalah kontak bantuan yang bisa kamu bagikan kepadanya..."
+    draftTemplate: "Kamu sedang berusaha mendukung seseorang yang penting bagimu. Dengarkan tanpa menghakimi dan, jika ada bahaya langsung, jangan tangani sendirian: hubungi 119 atau minta orang tepercaya menemani ke fasilitas kesehatan terdekat. Untuk dukungan psikologis awal, bagikan healing119.id atau 119 ekstensi 8; antrean dapat penuh."
   }
 };
+
+function containsAnyPattern(text: string, patterns: string[]): boolean {
+  const lower = text.toLowerCase();
+  const { normalized, collapsed } = normalizeTextForCrisisDetection(text);
+  return patterns.some(pattern => lower.includes(pattern) || normalized.includes(pattern) || collapsed.includes(pattern));
+}
+
+function getCrisisMentionClauses(text: string, crisisKeywords: string[]): string[] {
+  return text.toLowerCase()
+    .split(/[\n.!?;,:]+|\b(?:but|however|although|yet|tapi|tetapi|namun|sedangkan)\b/gi)
+    .map(clause => clause.trim())
+    .filter(clause => clause && containsAnyPattern(clause, crisisKeywords));
+}
 
 /**
  * Analyzes text input for distress and self-harm risk.
@@ -378,15 +393,6 @@ export function analyzeMessageSentiment(text: string): CrisisAnalysisResult {
   const { normalized, collapsed } = normalizeTextForCrisisDetection(text);
   const detectedCrisisTriggers: string[] = [];
   const detectedDistressTriggers: string[] = [];
-
-  // Check for negations in text
-  const hasNegation = NEGATION_PATTERNS.some(neg => lower.includes(neg) || normalized.includes(neg) || collapsed.includes(neg));
-  // Check for past-tense indicators, but make sure it's not "tidak pernah" or "nggak pernah"
-  const hasPastTense = PAST_TENSE_INDICATORS.some(past => lower.includes(past) || normalized.includes(past) || collapsed.includes(past)) &&
-    !lower.includes('tidak pernah') && !lower.includes('ga pernah') && !lower.includes('nggak pernah') &&
-    !normalized.includes('tidak pernah') && !normalized.includes('ga pernah') && !normalized.includes('nggak pernah');
-  // Check for third-party indicators
-  const hasThirdParty = THIRD_PARTY_INDICATORS.some(tp => lower.includes(tp) || normalized.includes(tp) || collapsed.includes(tp));
 
   // Check for benign metaphors in text
   const hasBenignMetaphor = BENIGN_METAPHOR_PATTERNS.some(meta => lower.includes(meta) || normalized.includes(meta) || collapsed.includes(meta));
@@ -407,8 +413,23 @@ export function analyzeMessageSentiment(text: string): CrisisAnalysisResult {
     }
   }
 
+  // Scope negation, past tense, and third-party cues to each clause that contains
+  // a crisis phrase. A cue elsewhere in the message must not downgrade an active
+  // personal crisis. Every crisis mention must carry the cue for a downgrade.
+  const crisisMentionClauses = getCrisisMentionClauses(text, detectedCrisisTriggers);
+  const hasNegation = crisisMentionClauses.length > 0 && crisisMentionClauses.every(clause =>
+    containsAnyPattern(clause, NEGATION_PATTERNS)
+  );
+  const hasPastTense = crisisMentionClauses.length > 0 && crisisMentionClauses.every(clause =>
+    containsAnyPattern(clause, PAST_TENSE_INDICATORS) &&
+    !containsAnyPattern(clause, ['tidak pernah', 'ga pernah', 'nggak pernah'])
+  );
+  const hasThirdParty = crisisMentionClauses.length > 0 && crisisMentionClauses.every(clause =>
+    containsAnyPattern(clause, THIRD_PARTY_INDICATORS)
+  );
+
   // Case 0: Benign Metaphors without explicit intent to self-harm (e.g. "Mati gaya nih", "Tugas ini membunuhku")
-  if (hasBenignMetaphor && !lower.includes('bunuh diri') && !lower.includes('ingin mati') && !lower.includes('self harm') && !lower.includes('gantung diri')) {
+  if (hasBenignMetaphor && detectedCrisisTriggers.length === 0) {
     return {
       severity: 'normal',
       isCrisis: false,
@@ -435,6 +456,7 @@ export function analyzeMessageSentiment(text: string): CrisisAnalysisResult {
       riskLevel: 'MEDIUM',
       detectedTriggers: detectedCrisisTriggers,
       isNegated: false,
+      isThirdParty: true,
       requiresDirectSafetyQuestion: false,
       escalationPath: 'bot_support',
       confidenceScore: 0.90,
@@ -453,6 +475,7 @@ export function analyzeMessageSentiment(text: string): CrisisAnalysisResult {
       riskLevel: 'MEDIUM',
       detectedTriggers: detectedCrisisTriggers,
       isNegated: false,
+      isPastIdeation: true,
       requiresDirectSafetyQuestion: false,
       escalationPath: 'bot_support',
       confidenceScore: 0.90,
@@ -567,9 +590,15 @@ export function analyzeMultiTurnSentiment(
 
   for (const prevText of previousUserMessages) {
     const prevResult = analyzeMessageSentiment(prevText);
-    if (prevResult.severity === 'crisis' && !prevResult.isNegated) {
+    if (prevResult.severity === 'crisis' && prevResult.isCrisis && !prevResult.isNegated && !prevResult.isThirdParty) {
       previousCrisisCount++;
-    } else if (prevResult.severity === 'distress') {
+    } else if (
+      prevResult.severity === 'distress' &&
+      prevResult.riskLevel === 'HIGH' &&
+      !prevResult.isNegated &&
+      !prevResult.isPastIdeation &&
+      !prevResult.isThirdParty
+    ) {
       previousDistressCount++;
     }
   }
@@ -597,9 +626,11 @@ export function analyzeMultiTurnSentiment(
 
   const lowerText = text.toLowerCase();
   const hasSubAcuteTrigger = SUB_ACUTE_TRIGGERS.some(trigger => lowerText.includes(trigger));
+  const canEscalateCurrentMessage =
+    !currentResult.isNegated && !currentResult.isPastIdeation && !currentResult.isThirdParty;
 
   // If the current message has a sub-acute trigger AND there is a history of distress/crisis in previous turns:
-  if (hasSubAcuteTrigger && (previousDistressCount >= 1 || previousCrisisCount >= 1)) {
+  if (canEscalateCurrentMessage && hasSubAcuteTrigger && (previousDistressCount >= 1 || previousCrisisCount >= 1)) {
     return {
       severity: 'crisis',
       isCrisis: true,
@@ -617,7 +648,12 @@ export function analyzeMultiTurnSentiment(
   }
 
   // If there are 3 consecutive turns of high distress with no recovery sign, escalate to crisis direct check
-  if (currentResult.severity === 'distress' && previousDistressCount >= 2) {
+  if (
+    canEscalateCurrentMessage &&
+    currentResult.severity === 'distress' &&
+    currentResult.riskLevel === 'HIGH' &&
+    previousDistressCount >= 2
+  ) {
     return {
       severity: 'crisis',
       isCrisis: true,

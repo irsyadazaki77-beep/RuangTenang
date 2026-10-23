@@ -1,13 +1,20 @@
 # Production Release Checklist - RuangTenang Kampus 🌿
 
-## Current Release Gate Status — 2026-10-20
-- [x] **Typecheck (`npm run typecheck`)**: Passes with **0 errors**; both SQLite and PostgreSQL Prisma schemas validate cleanly.
-- [x] **Linter (`npm run lint`)**: Passes with **0 errors and 0 warnings** across the entire repository.
-- [x] **Full Test Suite (`npm test`)**: **175 test files passed, 1,254 tests passed (0 failed)** covering frontend unit/integration, backend unit/integration, security hardening (`auditRemediation`, `auditRemediationGoal`, IDOR, secrets fail-closed, file-intelligence pipeline), and all UI/UX audit remediation stages (`auditTahap1`, `auditTahap2`, `auditTahap3`).
-- [x] **Production Build & Performance Budget (`npm run build:production` + `node scripts/check_bundle_size.cjs`)**: Passes cleanly (`dist/server.mjs`, `dist/backupTool.mjs`, `dist/rehearseEncryptedBackup.mjs` emitted as ESM; total JS compressed size 3,032 KB <= 3,200 KB budget; largest chunk 443 KB <= 1,500 KB budget).
-- [x] **Repository Formatting Hygiene (`git diff --check`)**: Passes with 0 trailing whitespace or conflict markers.
-- [x] **Security Audit Remediations (`A-01` to `A-03` & `SEC-01` to `SEC-06`)**: Atomic transactional MFA attempt counter and one-time challenge consumption (`authRepository.ts`), IP/User-Agent anonymization in Nginx logs (`nginx/nginx.conf`), aligned AES-256-GCM `.enc` backup documentation (`docs/deployment.md`), strict HTTPS meeting link sanitization, password-verified email modification, admin-scoped telemetry logging, removal of OTP/MFA secret leakage in JSON responses, and multi-campus SSE stream isolation.
-- [x] **UI/UX & Accessibility Remediations (`F01` to `F16`)**: Honest empty states for PHQ-9/GAD-7 (`null` score handling), `inert` background & closed mobile sidebar focus prevention, unified `useFocusTrap` & `ModalShell` dialog semantics, accessible labels (`aria-label`/`htmlFor`), WCAG AA contrast tokens, short-viewport/320px chat & popover adaptations, two-tier mobile counselor header, streamlined 3-step booking flow, structured campus-admin emergency contact/timezone controls, skip links + `<main>` landmarks, and resilient `Avatar` fallback initials.
+## Baseline Release Gate Status — 2026-10-21 (Audit Remediation Applied)
+- [x] **Audit Remediation P1/P2 (2026-10-21)**:
+  - Crisis triage prioritised ahead of prompt injection detection (`aiSafetyService.ts`).
+  - Streaming output safety: added `validateStreamChunk()` real-time guardrail, mid-stream kill switch, and mandatory `validateOutput()` before DB persistence (`chat.ts`).
+  - Unified Emergency Registry: Aligned backend & frontend to Healing119 / 119 ext 8 (Kemenkes RI), reclassified LISA to unverified community resource with accurate disclaimers (`emergencyRegistry.ts`, `emergencyResources.ts`, `emergency.ts`).
+  - Request Timeout & Abort: Raised AI route timeout to 120s and linked downstream provider calls to `AbortController` (`apiV1Helpers.ts`, `chat.ts`).
+  - Dependency Vulnerabilities: Upgraded `vite` to `>=8.3.5` and overridden `follow-redirects` to `>=1.16.1`, resolving all GHSA high-severity advisories (`npm audit` reporting 0 vulnerabilities).
+  - Security Static Exposure: Denied `.mjs`, backup scripts, and internal tools in static middleware (`server.ts`) and segregated backup builds to `dist/server-tools/` (`package.json`).
+  - Workspace Comparison Consent: Added active consent check on retry comparisons (`workspaceComparison.ts`).
+- [x] **Production Build (`npm run build:production`)**: Passes cleanly (`dist/server.mjs`, `dist/server-tools/backupTool.mjs`, `dist/server-tools/rehearseEncryptedBackup.mjs`).
+- [ ] **External Release Gates (Required before Production Cutover)**:
+  - Sign-off klinis oleh tenaga kesehatan mental berlisensi.
+  - Tinjauan privasi vendor & perjanjian pemrosesan data (DPA/ZDR) dengan provider LLM/OCR.
+  - Latihan pemulihan backup & rollback database di staging.
+  - Uji aksesibilitas manual dan validasi perangkat pengguna nyata.
 
 ## Multi-campus readiness gate — 2026-10-15
 - [x] Added nullable campus ownership to accounts, counselor profiles, and appointments, plus a shared campus configuration and privacy-limited product-event store.
@@ -38,6 +45,7 @@
 - [x] Changed the screening dialog action so dismissing it no longer labels the person "safe"; unanswered safety questions remain unanswered in submitted data.
 - [x] Changed positive PHQ-9 item 9 from an automatic crisis label to professional follow-up in the student's progress view.
 - [x] Updated crisis response guidance to avoid treating a denial as proof of safety or claiming a human escalation that did not occur.
+- [x] Scoped negation, past-ideation, and third-party cues to crisis-containing clauses; prevented metaphor handling and multi-turn escalation from masking explicit or non-personal context. This code change is not clinical validation.
 - [x] Checked current Healing119 access and queue guidance against the official Kemenkes site and FAQ.
 - [ ] **Clinical sign-off required before production**: a licensed mental-health professional and the responsible campus team must review the screening language, triage thresholds, escalation ownership, and emergency routing. This software review is not clinical approval.
 - [ ] **Live availability check required before production**: verify the 119 ext. 8 route and campus-specific referral contacts with the responsible service owner; source review does not confirm live phone availability.
@@ -84,11 +92,12 @@
 ## 7. Accessibility and mobile interaction review
 - [x] Screening and safety-check dialogs expose dialog semantics, trap keyboard focus, and restore focus on close; the safety overlay has a name/description for assistive technology.
 - [x] Shared `ModalShell` and `useFocusTrap` dialogs have unique accessible title/description IDs, initial focus, a keyboard focus loop, Escape close, focus restoration, and background scroll lock.
+- [x] Onboarding dialog has dialog semantics, trapped/restored keyboard focus, Escape-to-skip, announced step and selection states, reduced-motion support, and duplicate-completion protection.
 - [x] Closed mobile sidebar is marked `inert` so keyboard Tab navigation cannot focus off-screen drawer controls.
 - [x] Privacy-center focus handling runs only while open, skips hidden/disabled controls, keeps Tab within the dialog, and restores prior focus on close.
 - [x] Screening question changes are announced politely, and selected answers expose pressed state to screen readers.
 - [x] ESLint (`jsx-a11y` + `react-hooks`) passes with 0 errors and 0 warnings across the entire codebase.
-- [ ] **Manual accessibility review required before production**: test the screening and safety dialogs with NVDA/VoiceOver, keyboard-only navigation, 200% zoom, and reduced-motion settings on physical devices.
+- [ ] **Manual accessibility review required before production**: test onboarding, screening, and safety dialogs with NVDA/VoiceOver, keyboard-only navigation, 200% zoom, and reduced-motion settings on physical devices.
 
 ## 8. Release and recovery review
 - [x] Corrected the smoke check to inspect the real public web manifest; removed its request to a nonexistent version endpoint.

@@ -83,7 +83,7 @@ export const openaiService = {
     if (!apiKey) throw new Error('OPENAI_API_KEY_MISSING');
     const model = this.mapModelName(targetModel);
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), AI_RELIABILITY_POLICY.connectTimeoutMs);
+    const timeoutId = setTimeout(() => controller.abort(), AI_RELIABILITY_POLICY.totalRequestTimeoutMs);
     const abort = () => controller.abort();
     if (options.abortSignal?.aborted) controller.abort();
     else options.abortSignal?.addEventListener('abort', abort, { once: true });

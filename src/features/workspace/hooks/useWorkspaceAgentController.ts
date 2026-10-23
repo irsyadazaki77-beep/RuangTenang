@@ -23,7 +23,7 @@ interface UseWorkspaceAgentControllerOptions {
   activeArtifact: WorkspaceArtifact | null;
   workspaceInstructions?: string;
   selectedModel: string;
-  allowExternalSearch: boolean;
+  allowExternalSearch?: boolean;
   workspaceId: string;
   activeSendOperationRef: MutableRefObject<string | null>;
   taskGenerationRequestsRef: MutableRefObject<Map<string, string>>;
@@ -38,7 +38,7 @@ export function useWorkspaceAgentController(options: UseWorkspaceAgentController
   const {
     plan, startTaskExecution, executeAgentTask, reviewTask, transitionPlan, cancelTaskExecution, recoverTaskExecution, refreshWorkspace,
     isStreaming, includeFilesInContext, selectedFileIds, includeCanvasInContext, activeArtifact,
-    workspaceInstructions, selectedModel, allowExternalSearch, workspaceId, activeSendOperationRef, taskGenerationRequestsRef,
+    workspaceInstructions, selectedModel, allowExternalSearch = false, workspaceId, activeSendOperationRef, taskGenerationRequestsRef,
     sendMessage, abortStream, onAgentTaskCompleted, onTaskAccepted, showToast
   } = options;
   const [isAgentExecuting, setIsAgentExecuting] = useState(false);

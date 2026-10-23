@@ -109,6 +109,12 @@ export const SCHEMA_DATA_CLASSIFICATION: Record<string, Record<string, FieldPriv
     content: { classification: DataClassification.MENTAL_HEALTH_DATA, encryptedAtRest: true, retentionCategory: 'user_configured', purpose: 'Encrypted personalized AI context memory', allowedRoles: ['mahasiswa', 'system'] },
   },
 
+  UserAgentProfiles: {
+    userId: { classification: DataClassification.INTERNAL, encryptedAtRest: false, retentionCategory: 'user_configured', purpose: 'User account link', allowedRoles: ['mahasiswa', 'system'] },
+    aboutMe: { classification: DataClassification.PII, encryptedAtRest: true, retentionCategory: 'user_configured', purpose: 'Encrypted user-authored work background for RuangKerja personalization', allowedRoles: ['mahasiswa', 'system'] },
+    responseInstructions: { classification: DataClassification.PII, encryptedAtRest: true, retentionCategory: 'user_configured', purpose: 'Encrypted user-authored AI response style preferences', allowedRoles: ['mahasiswa', 'system'] },
+  },
+
   AuditLogs: {
     id: { classification: DataClassification.INTERNAL, encryptedAtRest: false, retentionCategory: 'legal_audit', purpose: 'Audit event identifier', allowedRoles: ['admin', 'system'] },
     action: { classification: DataClassification.INTERNAL, encryptedAtRest: false, retentionCategory: 'legal_audit', purpose: 'Action classification tag', allowedRoles: ['admin', 'system'] },

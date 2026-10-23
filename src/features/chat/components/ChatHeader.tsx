@@ -28,6 +28,7 @@ import {
   DEFAULT_TENANG_PROFILE_ID,
   TENANG_PROFILES,
   isTenangProfile,
+  isAutoRoutingModel,
   migrateLegacyTenangModelToProfile,
   type TenangProfileId
 } from '../../../lib/aiModels';
@@ -81,23 +82,22 @@ export function ChatHeader({
   const ollamaModels = aiModels.filter(model => model.provider === 'ollama' && model.availability !== 'provider_not_configured');
   const ollamaTemporarilyUnavailable = ollamaModels.length > 0 && ollamaModels.every(model => model.availability === 'temporarily_unavailable');
 
+  const isAuto = isAutoRoutingModel(aiModel);
   const activeProfileId: TenangProfileId = isTenangProfile(aiModel)
     ? aiModel
     : migrateLegacyTenangModelToProfile(aiModel);
 
   const catalogTenangProfiles = catalogProfiles.filter(profile => profile.scope === 'tenang');
   const tenangProfiles = catalogTenangProfiles.length > 0 ? catalogTenangProfiles : TENANG_PROFILES;
-  const activeProfile = tenangProfiles.find(profile => profile.id === activeProfileId) ?? tenangProfiles[1] ?? TENANG_PROFILES[1];
+  const activeProfile = isAuto
+    ? { id: 'auto' as any, name: 'Otomatis (Cerdas)', tag: 'Adaptif', description: 'Menyesuaikan model otomatis berdasarkan kebutuhan, perintah, & lampiran (PDF/gambar).' }
+    : (tenangProfiles.find(profile => profile.id === activeProfileId) ?? tenangProfiles[1] ?? TENANG_PROFILES[1]);
 
   useEffect(() => {
     if (isSettingsOpen) void refreshAiModelCatalog();
   }, [isSettingsOpen, refreshAiModelCatalog]);
 
-  useEffect(() => {
-    if (aiModel && !isTenangProfile(aiModel)) {
-      setAiModel(activeProfileId);
-    }
-  }, [aiModel, activeProfileId, setAiModel]);
+  const selectedManualModel = aiModels.find(model => model.id === aiModel);
 
   const settingsSheetRef = useFocusTrap<HTMLDivElement>({
     isOpen: isSettingsOpen,
@@ -106,7 +106,7 @@ export function ChatHeader({
   });
 
   return (
-    <header className="sticky top-0 z-20 w-full shrink-0 flex items-center justify-between px-2.5 sm:px-4 pt-safe pt-[env(safe-area-inset-top,0px)] min-h-[calc(3rem+env(safe-area-inset-top,0px))] bg-[#fafaf9]/85 dark:bg-[#080d16]/85 backdrop-blur-2xl border-b border-slate-200/60 dark:border-slate-800/60 transition-colors">
+    <header className="sticky top-0 z-20 w-full shrink-0 flex items-center justify-between px-2.5 sm:px-4 pt-safe pt-[env(safe-area-inset-top,0px)] min-h-[calc(3.25rem+env(safe-area-inset-top,0px))] bg-[#f8f9fb]/90 dark:bg-[#0b0d10]/90 backdrop-blur-xl border-b border-slate-200/80 dark:border-slate-800/80 transition-colors">
 
       {/* Left: Mobile Navigation Drawer Toggle & Identity / Model Trigger */}
       <div className="flex items-center gap-1 sm:gap-2 min-w-0 flex-1">
@@ -131,7 +131,7 @@ export function ChatHeader({
               RuangTenang
             </span>
             <span className="hidden md:inline-flex text-[11px] text-stone-400 dark:text-slate-500 font-normal truncate">
-              · {activeProfile.name}
+              · {selectedManualModel?.name || activeProfile.name}
             </span>
             <ChevronDown className={`w-3 h-3 text-stone-400 transition-transform duration-150 shrink-0 ${isSettingsOpen ? 'rotate-180 text-teal-600 dark:text-teal-400' : 'group-hover:text-stone-600 dark:group-hover:text-slate-300'}`} />
           </button>
@@ -190,8 +190,43 @@ export function ChatHeader({
                     </span>
                   </div>
                   <div role="radiogroup" aria-label="Profil AI RuangTenang" className="space-y-1">
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={isAuto}
+                      onClick={() => setAiModel('auto')}
+                      className={`flex w-full items-start gap-2 rounded-lg p-2 text-left transition-colors cursor-pointer ${
+                        isAuto
+                          ? 'bg-teal-50 dark:bg-teal-950/50 ring-1 ring-teal-500/50'
+                          : 'hover:bg-stone-100 dark:hover:bg-slate-800'
+                      }`}
+                    >
+                      <div className={`p-1 rounded-md mt-0.5 shrink-0 ${
+                        isAuto
+                          ? 'bg-teal-100 dark:bg-teal-900/60 text-teal-700 dark:text-teal-300'
+                          : 'bg-stone-100 dark:bg-slate-800 text-stone-500 dark:text-slate-400'
+                      }`}>
+                        <Sparkles className="w-3.5 h-3.5" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[11.5px] font-semibold text-stone-800 dark:text-stone-200">
+                            Otomatis (Cerdas)
+                          </span>
+                          <span className="text-[9px] font-medium px-1 py-0.2 rounded bg-teal-100/70 dark:bg-teal-900/60 text-teal-800 dark:text-teal-300">
+                            Rekomendasi
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-stone-600 dark:text-slate-400 mt-0.5 leading-snug">
+                          Menyesuaikan model otomatis berdasarkan jenis instruksi dan berkas (PDF/gambar/analisis).
+                        </p>
+                      </div>
+                      {isAuto && (
+                        <Check className="w-3.5 h-3.5 text-teal-700 dark:text-teal-400 mt-1 shrink-0" />
+                      )}
+                    </button>
                     {tenangProfiles.map(profile => {
-                      const isSelected = profile.id === activeProfileId;
+                      const isSelected = !isAuto && !selectedManualModel && profile.id === activeProfileId;
                       const IconComp = profile.id === 'tenang-turbo' ? Brain : profile.id === 'tenang-low' ? Zap : Sparkles;
                       const isDefault = profile.id === DEFAULT_TENANG_PROFILE_ID;
                       const isSelectable = profile.selectable && !aiModelCatalogLoading;
@@ -242,6 +277,27 @@ export function ChatHeader({
                     })}
                   </div>
                 </div>
+
+                {aiModels.some(model => model.provider === 'ollama' && model.selectable) && (
+                  <div className="space-y-1 border-t border-stone-100 pt-2 dark:border-slate-800">
+                    <div className="text-[10.5px] font-semibold text-stone-700 dark:text-slate-300">Model lokal manual</div>
+                    <div role="radiogroup" aria-label="Model lokal RuangTenang" className="max-h-40 space-y-1 overflow-y-auto">
+                      {aiModels.filter(model => model.provider === 'ollama' && model.selectable).map(model => (
+                        <button
+                          key={model.id}
+                          type="button"
+                          role="radio"
+                          aria-checked={aiModel === model.id}
+                          onClick={() => setAiModel(model.id)}
+                          className={`flex w-full items-center justify-between rounded-lg p-2 text-left text-[11px] ${aiModel === model.id ? 'bg-teal-50 font-semibold text-teal-900 dark:bg-teal-950/50 dark:text-teal-200' : 'text-stone-700 hover:bg-stone-100 dark:text-slate-300 dark:hover:bg-slate-800'}`}
+                        >
+                          <span>{model.name}</span>
+                          {aiModel === model.id && <Check className="h-3.5 w-3.5 shrink-0" />}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Temporary Chat Toggle inside Popover */}
                 <div className="pt-2 border-t border-stone-100 dark:border-slate-800 flex items-center justify-between gap-3">

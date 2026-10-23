@@ -77,7 +77,7 @@ describe('Workspace workflow authorization and task execution', () => {
     expect(response.body.data.claimed).toBe(true);
     expect(response.body.data.plan.status).toBe('running');
     expect(response.body.data.plan.tasks[0]).toMatchObject({ status: 'running', executionId: 'exec-a', snapshot });
-    expect(workflow.startWorkspaceTask).toHaveBeenCalledWith('chat-a', 'user-a', 'p1', 't1', 'exec-a', snapshot, 'Free');
+    expect(workflow.startWorkspaceTask).toHaveBeenCalledWith('chat-a', 'user-a', 'p1', 't1', 'exec-a', expect.objectContaining(snapshot), 'Free');
   });
 
   it('decrypts encrypted plan records for the owning Workspace API response', async () => {

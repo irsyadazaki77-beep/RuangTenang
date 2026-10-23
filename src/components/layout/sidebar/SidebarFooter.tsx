@@ -162,11 +162,11 @@ export const SidebarFooter: React.FC<SidebarFooterProps> = ({
       <button
         type="button"
         onClick={handleOpenEmergency}
-        className="w-full flex items-center justify-between px-2.5 py-1.2 rounded-lg text-xs font-semibold text-rose-700 dark:text-rose-300 bg-rose-50/80 dark:bg-rose-950/40 hover:bg-rose-100/90 dark:hover:bg-rose-900/40 border border-rose-200/80 dark:border-rose-900/60 transition-colors cursor-pointer"
+        className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium text-rose-700 dark:text-rose-300 bg-rose-50/60 dark:bg-rose-950/25 hover:bg-rose-50 dark:hover:bg-rose-950/45 border border-rose-200/70 dark:border-rose-900/50 transition-colors cursor-pointer"
         title="Bantuan krisis psikologis dan darurat medis"
       >
         <div className="flex items-center gap-1.5">
-          <div className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
+          <div className="w-1.5 h-1.5 rounded-full bg-rose-500" />
           <AlertCircle className="w-3.5 h-3.5 text-rose-500 shrink-0" />
           <span>Bantuan Darurat (SOS)</span>
         </div>

@@ -11,6 +11,8 @@ import { useChatLibrary } from '../features/chat/hooks/useChatLibrary';
 import { useOfflineSync } from '../features/offline/useOfflineSync';
 import { useToast } from './Toast';
 import { LoadingState } from './ui/primitives/Surfaces';
+import { apiClient } from '../lib/apiClient';
+import { notifyPerformanceTelemetryConsent } from '../lib/performanceTelemetryConsent';
 
 const CounselorShell = lazyWithRetry(() => import('./CounselorShell').then(module => ({ default: module.CounselorShell })));
 const StudentShell = lazyWithRetry(() => import('./StudentShell').then(module => ({ default: module.StudentShell })));
@@ -24,6 +26,8 @@ const ShellLoadingState: React.FC<{ label: string }> = ({ label }) => (
 
 export const AppShell: React.FC = () => {
   const { user, setUser, isOffline, logout, loading: authLoading, authLifecycle, sessionGeneration } = useAuth();
+  const telemetryUserId = user?.id;
+  const telemetryUserRole = user?.role;
   const { showToast } = useToast();
   const navigate = useNavigate();
   const modals = useAppModals();
@@ -31,6 +35,23 @@ export const AppShell: React.FC = () => {
   const chatLibrary = useChatLibrary(user, showToast);
   const { setChats } = chatLibrary;
   const { setIsCommandPaletteOpen } = modals;
+
+  React.useEffect(() => {
+    if (authLoading || !telemetryUserId || telemetryUserRole === 'guest' || telemetryUserRole === 'mahasiswa') return;
+    const controller = new AbortController();
+    let active = true;
+    void apiClient.get<any>('/api/v1/privacy/consent', { signal: controller.signal }).then(response => {
+      if (!active || !response.success || response.data?.consent?.consentForTelemetry !== true) return;
+      void import('../lib/performanceTelemetry')
+        .then(module => { if (active) module.setPerformanceTelemetryConsent(true); })
+        .catch(() => undefined);
+    }).catch(() => undefined);
+    return () => {
+      active = false;
+      controller.abort();
+      notifyPerformanceTelemetryConsent(false);
+    };
+  }, [authLoading, telemetryUserId, telemetryUserRole]);
 
   const handleSwitchMode = useCallback((mode: WorkspaceMode) => {
     navigate(getModeHomePath(mode));

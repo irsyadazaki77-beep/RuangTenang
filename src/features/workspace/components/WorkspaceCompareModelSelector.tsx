@@ -36,7 +36,7 @@ export const WorkspaceCompareModelSelector = React.memo(function WorkspaceCompar
     () => models.filter(model => model.selectable && model.capabilities.includes('chat') && model.capabilities.includes('streaming')),
     [models]
   );
-  const kerjaProfiles = useMemo(() => profiles.filter(profile => profile.scope === 'kerja'), [profiles]);
+  const kerjaProfiles = useMemo(() => (profiles || []).filter(profile => profile.scope === 'kerja'), [profiles]);
 
   // Check if caller is comparing official profiles or canonical models
   const isProfileMode = useMemo(() => {

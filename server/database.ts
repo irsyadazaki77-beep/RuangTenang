@@ -8,6 +8,7 @@ import { moodRepository } from "./repositories/moodRepository";
 import { privacyRepository } from "./repositories/privacyRepository";
 import { auditRepository } from "./repositories/auditRepository";
 import { counselorRepository } from "./repositories/counselorRepository";
+import { metricsService } from "./services/metricsService.js";
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
@@ -45,6 +46,7 @@ export const prisma = globalForPrisma.prisma ?? new PrismaClient({
   datasources: { db: { url: databaseUrl } },
   log: [
     { emit: 'event', level: 'query' },
+    { emit: 'event', level: 'error' },
     { emit: 'stdout', level: 'warn' },
     { emit: 'stdout', level: 'error' },
   ],
@@ -55,6 +57,7 @@ if (isLocalDevelopmentOrTest()) globalForPrisma.prisma = prisma;
 try {
   (prisma as any).$on?.('query', (e: any) => {
     const duration = e.duration;
+    metricsService.recordDbQuery(true, duration);
     const { sanitizedQuery, sanitizedParams } = sanitizeQueryLog(e.query || '', e.params || '');
     if (duration > 200) {
       console.warn(`[SLOW_QUERY_WARN] (${duration}ms): ${sanitizedQuery} | params: ${sanitizedParams}`);
@@ -62,6 +65,7 @@ try {
       // console.log(`[PRISMA_QUERY] (${duration}ms): ${sanitizedQuery}`);
     }
   });
+  (prisma as any).$on?.('error', () => metricsService.recordDbQuery(false, 0));
 } catch {
   // Ignore query event listener setup error
 }

@@ -17,6 +17,7 @@ import { LoadingState } from './ui/primitives/Surfaces';
 import { FeatureErrorBoundary } from './error/FeatureErrorBoundary';
 import { trackProductEvent } from '../lib/productAnalytics';
 import { apiClient } from '../lib/apiClient';
+import { notifyPerformanceTelemetryConsent } from '../lib/performanceTelemetryConsent';
 import { GUEST_AI_CONSENT_CHANGED_EVENT, readGuestAiConsent, writeGuestAiConsent } from '../lib/guestAiConsent';
 import { AiConsentPrompt } from '../features/privacy/components/AiConsentPrompt';
 import { BRAND_IDENTITIES } from './ui/BrandLogo';
@@ -154,6 +155,11 @@ export const StudentShell: React.FC<StudentShellProps> = ({
       }
       const consent = response.data?.consent;
       const allowed = consent?.consentForAI === true;
+      if (consent?.consentForTelemetry === true) {
+        void import('../lib/performanceTelemetry')
+          .then(module => { if (active) module.setPerformanceTelemetryConsent(true); })
+          .catch(() => undefined);
+      }
       setAiConsentAllowed(allowed);
       if (allowed) setIsAiConsentPromptOpen(false);
     }).catch(() => {
@@ -163,6 +169,7 @@ export const StudentShell: React.FC<StudentShellProps> = ({
     return () => {
       active = false;
       controller.abort();
+      notifyPerformanceTelemetryConsent(false);
     };
   }, [user.id, user.role]);
 
@@ -243,7 +250,7 @@ export const StudentShell: React.FC<StudentShellProps> = ({
           </div>
         )}
         {isSettingsOpen ? (
-          <div className="absolute inset-0 bg-slate-50/75 dark:bg-[#0e141b]/80 backdrop-blur-md z-20 flex flex-col overflow-hidden">
+          <div className="absolute inset-0 bg-[#f8f9fb]/95 dark:bg-[#0b0d10]/95 backdrop-blur-sm z-20 flex flex-col overflow-hidden">
             <div className="p-3 sm:p-3.5 border-b border-default flex items-center surface-card shadow-xs shrink-0">
               <button
                 type="button"

@@ -306,10 +306,10 @@ export default function Sidebar({
         id="ruangtenang-main-sidebar"
         inert={isMobile && !isOpen ? true : undefined}
         aria-hidden={isMobile && !isOpen ? true : undefined}
-        className={`fixed lg:sticky lg:top-0 lg:h-[100dvh] inset-y-0 left-0 z-50 shrink-0 bg-[#fbfbfa] dark:bg-[#0d1117] border-r border-slate-200/70 dark:border-slate-800/80 flex flex-col overflow-y-auto lg:overflow-y-hidden pt-safe pb-safe transform transition-all duration-200 ease-in-out select-none shadow-sm lg:shadow-none ${
+        className={`fixed lg:sticky lg:top-0 lg:h-[100dvh] inset-y-0 left-0 z-50 shrink-0 bg-[var(--color-surface-sidebar-light)] dark:bg-[var(--color-surface-sidebar-dark)] border-r border-slate-200/80 dark:border-slate-800/80 flex flex-col overflow-y-auto lg:overflow-y-hidden pt-safe pb-safe transform transition-all duration-200 ease-in-out select-none shadow-sm lg:shadow-none ${
           isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         } ${
-          isCollapsed ? 'lg:w-[72px] w-[280px]' : 'w-[280px] lg:w-[256px]'
+          isCollapsed ? 'lg:w-[72px] w-[280px]' : 'w-[280px] lg:w-[272px]'
         }`}
       >
         {/* Header (Brand Logo, Mode Switcher, + New Chat, Instant Search) */}

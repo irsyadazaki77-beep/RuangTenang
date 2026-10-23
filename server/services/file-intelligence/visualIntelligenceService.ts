@@ -2,6 +2,8 @@ import { getGenAIClient } from '../../config/aiConfig.js';
 import { aiProviderConfig } from '../../config/aiProviderConfig.js';
 import { openaiService } from '../ai/openaiService.js';
 import { geminiAdapter } from '../ai/geminiAdapter.js';
+import { ollamaService } from '../ai/ollamaService.js';
+import { isLocalModelAvailable, refreshOllamaInventory } from '../ai/ollamaRuntime.js';
 
 export interface VisualExtractionOptions {
   buffer: Buffer;
@@ -27,7 +29,7 @@ Pedoman penting:
 4. Berikan hasil ekstraksi teks yang bersih tanpa pembuka atau penutup basa-basi.`;
 
 export function isVisualOcrAvailable(): boolean {
-  return Boolean(getGenAIClient() || (openaiService.isAvailable() && aiProviderConfig.isConfigured('openai')));
+  return Boolean((ollamaService.isAvailable() && isLocalModelAvailable('qwen3.5:0.8b')) || getGenAIClient() || (openaiService.isAvailable() && aiProviderConfig.isConfigured('openai')));
 }
 
 /**
@@ -39,6 +41,24 @@ export async function performVisualOcr(options: VisualExtractionOptions): Promis
   if (abortSignal?.aborted) return null;
 
   const base64Data = buffer.toString('base64');
+
+  await refreshOllamaInventory();
+  if (ollamaService.isAvailable() && isLocalModelAvailable('qwen3.5:0.8b')) {
+    try {
+      const response = await ollamaService.generateResponse({
+        requestedModelId: 'ollama-qwen3.5-0.8b', prompt: OCR_PROMPT,
+        attachments: [{ base64: base64Data, mimeType }], abortSignal, maxOutputTokens: 1500
+      }, 'ollama-qwen3.5-0.8b');
+      if (response.text.trim()) return {
+        text: response.text.trim(), isVisualExtraction: true, ocrConfidence: 0.6,
+        readingUncertainty: 'Hasil pembacaan model lokal perlu diperiksa terhadap gambar asli, terutama teks kecil dan tabel.',
+        modelUsed: response.modelUsed
+      };
+    } catch (error) {
+      if (abortSignal?.aborted) throw error;
+      console.warn('[VISUAL_OCR] Local extraction unavailable; trying configured alternatives.');
+    }
+  }
 
   // Tier 1: Gemini Vision
   const geminiClient = getGenAIClient();

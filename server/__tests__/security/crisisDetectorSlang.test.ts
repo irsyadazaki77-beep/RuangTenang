@@ -76,10 +76,10 @@ describe('Crisis Detector Indonesian Slang & Pre-flight Safe Interceptor Tests',
       // Verify that external LLM was NOT invoked
       expect(generateSpy).not.toHaveBeenCalled();
 
-      // Verify emergency response contains official hotlines (119 ext 8 & LISA)
+      // Verify emergency response contains official hotline (119 ext 8 / Healing119)
       const responseText = res.body.message || res.body.response || '';
       expect(responseText).toMatch(/119/);
-      expect(responseText).toMatch(/LISA/i);
+      expect(responseText).toMatch(/Healing119/i);
 
       // Verify contacts payload
       if (res.body.hotlines) {

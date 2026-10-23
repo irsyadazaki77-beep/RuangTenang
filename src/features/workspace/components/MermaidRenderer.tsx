@@ -54,6 +54,9 @@ export const MermaidRenderer: React.FC<MermaidRendererProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [zoomLevel, setZoomLevel] = useState<number>(1);
+  const [panOffset, setPanOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState<boolean>(false);
+  const dragStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const [isCopied, setIsCopied] = useState<boolean>(false);
   const [showRawCodeOnError, setShowRawCodeOnError] = useState<boolean>(false);
   const { showToast } = useToast();
@@ -184,6 +187,32 @@ export const MermaidRenderer: React.FC<MermaidRendererProps> = ({
 
   const handleResetZoom = () => {
     setZoomLevel(1);
+    setPanOffset({ x: 0, y: 0 });
+  };
+
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.button !== 0 || error || loading) return;
+    setIsDragging(true);
+    dragStartRef.current = { x: e.clientX - panOffset.x, y: e.clientY - panOffset.y };
+  };
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isDragging) return;
+    setPanOffset({
+      x: e.clientX - dragStartRef.current.x,
+      y: e.clientY - dragStartRef.current.y
+    });
+  };
+
+  const handleMouseUp = () => {
+    if (isDragging) setIsDragging(false);
+  };
+
+  const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      handleZoom(e.deltaY < 0 ? 0.12 : -0.12);
+    }
   };
 
   const handleTriggerFix = () => {
@@ -284,7 +313,14 @@ export const MermaidRenderer: React.FC<MermaidRendererProps> = ({
       {/* Render Canvas Area */}
       <div
         ref={containerRef}
-        className="p-6 overflow-x-auto min-h-[160px] flex items-center justify-center bg-white/50 dark:bg-slate-950/40"
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp}
+        onWheel={handleWheel}
+        className={`p-6 overflow-hidden min-h-[160px] flex items-center justify-center bg-white/50 dark:bg-slate-950/40 select-none ${
+          !error && !loading ? (isDragging ? 'cursor-grabbing' : 'cursor-grab') : ''
+        }`}
       >
         {loading ? (
           <div className="flex flex-col items-center justify-center gap-2 py-8 text-slate-400 text-xs animate-pulse">
@@ -330,7 +366,11 @@ export const MermaidRenderer: React.FC<MermaidRendererProps> = ({
           </div>
         ) : (
           <div
-            style={{ transform: `scale(${zoomLevel})`, transformOrigin: 'top center', transition: 'transform 0.15s ease-out' }}
+            style={{
+              transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${zoomLevel})`,
+              transformOrigin: 'center center',
+              transition: isDragging ? 'none' : 'transform 0.15s ease-out'
+            }}
             dangerouslySetInnerHTML={{ __html: svgContent }}
             className="mermaid-svg-container max-w-full"
           />

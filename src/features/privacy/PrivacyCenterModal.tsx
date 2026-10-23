@@ -25,6 +25,7 @@ import { ConsentTab } from './components/ConsentTab';
 import { ErasureTab } from './components/ErasureTab';
 import { clientDb } from '../../lib/clientDb';
 import { safeLocalStorage } from '../../lib/storage';
+import { notifyPerformanceTelemetryConsent } from '../../lib/performanceTelemetryConsent';
 
 interface PrivacyCenterModalProps {
   isOpen: boolean;
@@ -213,6 +214,13 @@ export const PrivacyCenterModal: React.FC<PrivacyCenterModalProps> = ({
       if (res.success) {
         setMsg({ type: 'success', text: `Preferensi consent berhasil disimpan (Kebijakan ${policyVersion}, Versi ${consentVersion}).` });
         onAiConsentChange?.(consentForAI);
+        if (consentForTelemetry) {
+          void import('../../lib/performanceTelemetry')
+            .then(module => module.setPerformanceTelemetryConsent(true))
+            .catch(() => undefined);
+        } else {
+          notifyPerformanceTelemetryConsent(false);
+        }
         if (res.data?.record) {
           setConsentTimestamp(res.data.record.consentTimestamp);
         }
@@ -245,6 +253,7 @@ export const PrivacyCenterModal: React.FC<PrivacyCenterModalProps> = ({
       if (res.success) {
         setMsg({ type: 'success', text: 'Seluruh izin persetujuan telah dicabut dan memori AI dibersihkan.' });
         onAiConsentChange?.(false);
+        notifyPerformanceTelemetryConsent(false);
         fetchPrivacyData();
       } else {
         setMsg({ type: 'error', text: res.error || 'Gagal mencabut consent.' });

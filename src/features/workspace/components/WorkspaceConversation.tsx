@@ -63,7 +63,12 @@ const StreamingMarkdownPreview = React.memo(function StreamingMarkdownPreview({ 
     if (timerRef.current) clearTimeout(timerRef.current);
   }, []);
 
-  return <LazyMarkdown content={renderedContent || '...'} />;
+  return (
+    <span className="inline">
+      <LazyMarkdown content={renderedContent || '...'} />
+      <span className="streaming-cursor" aria-hidden="true" />
+    </span>
+  );
 });
 
 export const WorkspaceConversation: React.FC<WorkspaceConversationProps> = React.memo(({
@@ -184,12 +189,16 @@ export const WorkspaceConversation: React.FC<WorkspaceConversationProps> = React
     return undefined;
   }, [messages]);
   const hasArtifacts = artifacts.length > 0;
-  const persistedMessageRows = useMemo(() => messages.map((message, idx) => {
+  const persistedMessageRows = useMemo(() => {
+    const visibleMessages = hasUserSentMessage
+      ? messages.filter(message => message.id !== 'msg_welcome')
+      : messages;
+    return visibleMessages.map((message, idx) => {
     // Find the corresponding or nearest preceding user prompt for regeneration
     let associatedUserPrompt = lastUserPrompt;
     for (let i = idx - 1; i >= 0; i--) {
-      if (messages[i].role === 'user') {
-        associatedUserPrompt = messages[i].content;
+      if (visibleMessages[i].role === 'user') {
+        associatedUserPrompt = visibleMessages[i].content;
         break;
       }
     }
@@ -210,7 +219,8 @@ export const WorkspaceConversation: React.FC<WorkspaceConversationProps> = React
         formatMessageTime={formatMessageTime}
       />
     );
-  }), [hasArtifacts, copiedMessageId, copyMessage, formatMessageTime, lastUserPrompt, messages, onOpenCanvas, onOpenSource, onRetryMessage, onSendToCanvas, onEditUserMessage, scrollToMessageId]);
+    });
+  }, [hasArtifacts, hasUserSentMessage, copiedMessageId, copyMessage, formatMessageTime, lastUserPrompt, messages, onOpenCanvas, onOpenSource, onRetryMessage, onSendToCanvas, onEditUserMessage, scrollToMessageId]);
 
   const handleConversationScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
     const scroller = event.currentTarget;
@@ -220,9 +230,9 @@ export const WorkspaceConversation: React.FC<WorkspaceConversationProps> = React
   return (
     <div ref={scrollContainerRef} role="log" aria-label="Percakapan RuangKerja" aria-live={isStreaming ? 'off' : 'polite'} onScroll={handleConversationScroll} className="flex-1 min-h-0 overflow-y-auto overscroll-contain bg-transparent p-3.5 sm:p-5 space-y-4 custom-scrollbar flex flex-col">
       {isTemporary && (
-        <div className="mx-auto flex max-w-xl items-center justify-center gap-2 rounded-xl border border-amber-300/80 bg-amber-50/90 px-3 py-1.5 text-[11px] font-medium text-amber-900 shadow-2xs dark:border-amber-800/80 dark:bg-amber-950/40 dark:text-amber-200">
-          <Ghost className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
-          <span><strong>Sesi Sementara Aktif:</strong> Percakapan ini tidak disimpan ke riwayat akun dan memori jangka panjang.</span>
+        <div className="mx-auto flex max-w-xl items-center justify-center gap-1.5 text-[11px] font-medium text-amber-800 dark:text-amber-300 xl:hidden">
+          <Ghost className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          <span>Sesi sementara · percakapan tidak disimpan</span>
         </div>
       )}
       {isLoading ? (
@@ -233,12 +243,11 @@ export const WorkspaceConversation: React.FC<WorkspaceConversationProps> = React
         </div>
       ) : !hasUserSentMessage && !activeStreamingMessage ? (
         /* FRESH WORKSPACE STATE: Compact Intro & Starter Tasks */
-        <div className="relative my-auto mx-auto w-full max-w-2xl animate-fade-in px-2 py-8 sm:px-4">
-          <div aria-hidden="true" className="pointer-events-none absolute -inset-x-1 -inset-y-2 rounded-3xl border border-white/80 bg-white/70 shadow-[0_24px_70px_-48px_rgba(99,102,241,0.22)] backdrop-blur-md dark:border-slate-800/80 dark:bg-slate-900/60 dark:shadow-[0_24px_70px_-45px_rgba(0,0,0,0.8)]" />
-          <div className="relative space-y-5">
+        <div className="my-auto mx-auto w-full max-w-2xl animate-fade-in px-2 py-8 sm:px-4">
+          <div className="space-y-5">
           {/* Compact Workspace Introduction */}
           <div className="space-y-2 text-center">
-            <div className="mb-3 flex flex-col items-center gap-2"><BrandLogo mode="RUANG_KERJA" size="xl" iconOnly /><span className="text-sm font-semibold tracking-tight text-teal-800 dark:text-teal-300">RuangKerja</span></div>
+            <div className="mb-3 flex flex-col items-center gap-2"><BrandLogo mode="RUANG_KERJA" size="lg" iconOnly /><span className="text-xs font-semibold tracking-wide text-indigo-700 dark:text-indigo-300">RUANGKERJA</span></div>
             <h2 className="text-xl font-semibold tracking-tight text-slate-900 dark:text-slate-100 sm:text-2xl">
               Mulai sesuatu
             </h2>
@@ -256,8 +265,8 @@ export const WorkspaceConversation: React.FC<WorkspaceConversationProps> = React
                 onClick={() => onSelectStarterTask(task.prompt)}
                 className={`w-full p-2.5 rounded-xl text-left transition-all flex items-center justify-between group cursor-pointer active:scale-[0.99] border ${
                   task.primary
-                    ? 'border-indigo-200/90 bg-gradient-to-br from-indigo-50/80 to-white/90 shadow-[0_8px_24px_-18px_rgba(99,102,241,0.35)] hover:border-indigo-300 hover:shadow-xs dark:border-indigo-900/70 dark:from-indigo-950/40 dark:to-slate-900 dark:hover:border-indigo-800'
-                    : 'border-slate-200/90 bg-white/85 shadow-[0_8px_24px_-20px_rgba(15,23,42,0.25)] hover:border-indigo-200 hover:bg-indigo-50/40 hover:shadow-xs dark:border-slate-800 dark:bg-slate-900/80 dark:hover:border-indigo-900 dark:hover:bg-indigo-950/20'
+                    ? 'border-indigo-200 bg-indigo-50/70 hover:border-indigo-300 hover:bg-indigo-50 dark:border-indigo-900/70 dark:bg-indigo-950/25 dark:hover:border-indigo-800 dark:hover:bg-indigo-950/40'
+                    : 'border-slate-200/90 bg-white hover:border-indigo-200 hover:bg-indigo-50/40 dark:border-slate-800 dark:bg-[#17191d] dark:hover:border-indigo-900 dark:hover:bg-indigo-950/20'
                 }`}
               >
                 <div className="flex items-center gap-2.5 min-w-0 pr-2">

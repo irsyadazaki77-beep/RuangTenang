@@ -57,6 +57,7 @@ Centang di bawah berarti perubahan kode pada butir tersebut sudah diterapkan; it
 - [ ] Pastikan bantuan krisis dan rujukan kampus aktif serta kepemilikan eskalasinya jelas.
 - [x] Hapus klaim ketersediaan Healing119 24 jam yang tidak didukung informasi resmi; arahkan pengguna ke situs resmi untuk jam layanan terbaru.
 - [x] Samakan fallback krisis AI dengan kanal yang terverifikasi dan beri tahu pengguna bahwa antrean serta jam layanan dapat berubah.
+- [x] Batasi negasi, riwayat masa lalu, dan pihak ketiga ke klausa yang memuat pemicu krisis; cegah eskalasi multi-turn menghitung krisis pihak ketiga atau riwayat sebagai risiko personal aktif, dan biarkan pemicu eksplisit mengalahkan metafora.
 - [x] Ganti sakelar berbagi data konselor yang hanya mengubah state layar dengan pintasan ke pengaturan izin yang tersimpan di Pusat Privasi.
 - [ ] Konfirmasi provider aktif, syarat pemrosesan, retensi, dan kontrol penggunaan data dengan pemilik deployment.
 - [ ] Audit pencarian web, komparasi model, OCR dokumen/gambar, dan semua jalur workspace agar penggunaan provider eksternal cocok dengan mode/model yang dipilih.
@@ -70,6 +71,7 @@ Centang di bawah berarti perubahan kode pada butir tersebut sudah diterapkan; it
 - [ ] Tinjau halaman awal berdasarkan tiga niat utama bersama mahasiswa: mencari ketenangan, memahami kondisi, atau menghubungi konselor.
 - [ ] Kelompokkan navigasi dan jelaskan hubungan RuangTenang dengan RuangKerja.
 - [ ] Tinjau onboarding, pilihan melewati langkah, login/daftar, pemulihan akses, dan masuk sebagai tamu.
+  - [x] Buat onboarding berfungsi sebagai dialog aksesibel dengan penahanan/pemulihan fokus, navigasi Escape, pengumuman langkah dan pilihan, dukungan reduced motion, serta perlindungan dari penyimpanan ganda.
 - [ ] Periksa setiap route pada ponsel, layar kecil, koneksi lambat, zoom besar, dan penggunaan keyboard.
 - [ ] Lengkapi status loading, kosong, offline, kegagalan server, dan pemulihan yang dapat dimengerti.
 
@@ -103,8 +105,10 @@ Centang di bawah berarti perubahan kode pada butir tersebut sudah diterapkan; it
   - [x] Sediakan simpan ulang dengan kunci idempotensi agar respons server yang terlambat tidak membuat riwayat skrining duplikat; perjelas bahwa butir PHQ-9 nomor 9 tidak menentukan bahaya saat ini.
 - [ ] Mood tracker/tren: pencatatan, koreksi, riwayat, offline sync, ekspor/penghapusan, dan batas interpretasi grafik.
   - [x] Reset state halaman Mood dan Mindfulness saat identitas akun berubah agar catatan atau form lama tidak tampil di sesi berikutnya.
+  - [x] Reset dashboard mood/skrining/penggunaan dan modal terkait sebelum paint saat akun berubah; batalkan fetch lama dan abaikan pembaruan dari identitas sebelumnya.
   - [x] Simpan tanggal mood yang dipilih, validasi batas tanggal di server, dan gunakan tanggal kalender lokal untuk grafik serta laporan.
   - [x] Tambahkan koreksi catatan mood tersimpan melalui endpoint pemilik akun; pertahankan data tidur yang belum dicatat dan jangan menawarkan edit untuk entri offline yang belum memiliki ID server.
+  - [x] Izinkan penghapusan catatan yang pasti belum dikirim dengan menghapus hanya antrean milik akun saat ini; tahan pembatalan saat sinkronisasi berlangsung dan jelaskan status kiriman yang belum pasti.
 - [ ] Mindfulness/grounding: instruksi, timer/audio, kontrol pengguna, jurnal, reduced motion, dan alternatif tanpa audio.
   - [x] Tambahkan kontrol matikan semua audio yang tetap terlihat saat berpindah tab; hormati reduced motion pada panel, langkah grounding, dan visualisasi napas, serta terapkan volume pilihan saat audio dimulai ulang.
   - [x] Jadikan langkah aroma opsional, gunakan instruksi netral, dan pertahankan grounding tanpa audio.
@@ -160,6 +164,7 @@ Centang di bawah berarti perubahan kode pada butir tersebut sudah diterapkan; it
   - [x] Bedakan kegagalan endpoint status (mis. sesi berakhir atau lampiran tak ditemukan) dari timeout ekstraksi dan pertahankan ID lampiran untuk pemeriksaan ulang.
   - [x] Buat penghapusan lampiran tahan klik ganda dan aman terhadap permintaan bersamaan atau referensi yang sudah terhapus.
   - [x] Pertahankan hasil OCR halaman PDF yang berhasil saat halaman pasangan gagal, dan laporkan halaman yang belum terbaca.
+  - [x] Bawa status file tanpa teks terindeks dan peringatan ekstraksi parsial ke konteks AI; tandai metadata sebagai tidak tepercaya, batasi panjangnya, dan tampilkan protokol sitasi hanya jika ada evidence chunk.
 - [ ] Tinjau sitasi, penelusuran sumber, batas verifikasi, dan tampilan asal klaim.
   - [x] Labeli sumber web sebagai eksternal belum diverifikasi dan bedakan daftar rujukan dari bukti dukungan klaim.
   - [x] Lengkapi modal pencarian/import sitasi dengan nama dialog, perangkap fokus, fokus awal, pemulihan fokus, dan penutupan Escape.

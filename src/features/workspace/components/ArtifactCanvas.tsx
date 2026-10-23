@@ -1033,7 +1033,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
 
   return (
     <div
-      className={`flex flex-col h-full bg-slate-50/60 dark:bg-[#0B101B] transition-all duration-200 overflow-hidden ${
+      className={`@container flex flex-col h-full bg-slate-50/60 dark:bg-[#0B101B] transition-all duration-200 overflow-hidden ${
         isExpanded ? 'fixed inset-0 z-50 bg-white dark:bg-slate-950' : 'relative w-full'
       }`}
     >
@@ -1240,6 +1240,12 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
                   setExecutionStatus('idle');
                 }}
                 onStop={handleStopExecution}
+                onRequestFixCode={onRequestRevision ? (errorSummary) => {
+                  onRequestRevision(
+                    `Perbaiki bug/error berikut pada kode (${artifact.language || 'code'}):\n\`\`\`\n${errorSummary}\n\`\`\`\nPastikan logika utama tetap berjalan aman dan bebas dari error sintaks maupun runtime.`,
+                    { ...artifact, content: editableContent }
+                  );
+                } : undefined}
               />
             </div>
           ) : (

@@ -5,6 +5,7 @@ import { encryptionService } from '../encryptionService.js';
 import { scanAndSanitizePII } from '../piiService.js';
 import { chatSummarizer, ChatMessageItem } from './chatSummarizer.js';
 import { aiMetricsService } from './aiMetricsService.js';
+import { metricsService } from '../metricsService.js';
 import { detectPromptInjection } from '../../security.js';
 import { FileSourceReference, WorkspaceContextSnapshot, MAX_DOCUMENT_CONTEXT_CHUNKS, MAX_DOCUMENT_CONTEXT_TOKENS } from '../../../shared/contracts/files.js';
 
@@ -77,6 +78,15 @@ export const aiContextBuilder = {
    * Enforces strict default-deny policies, chatMode boundary isolation, and PII sanitization.
    */
   async buildContext(params: AiContextParams): Promise<BuiltContextResult> {
+    const startedAt = Date.now();
+    try {
+      return await this.buildContextInternal(params);
+    } finally {
+      metricsService.recordAiStage('context_build', Date.now() - startedAt);
+    }
+  },
+
+  async buildContextInternal(params: AiContextParams): Promise<BuiltContextResult> {
     const { userId, chatId, fullHistory = [], currentMessage = '', pluginResult: _pluginResult = '', abortSignal, isTemporary, chatMode } = params;
     
     let tokensSavedTotal = 0;
@@ -261,11 +271,24 @@ ${memoryLines.join('\n')}
         });
 
         if (retrievedDocContext && retrievedDocContext.contextBlock) {
-          contextParts.push('RESEARCH CITATION PROTOCOL: Evidence chunks carry request-scoped markers such as [cite:SRC_1]. You may cite only markers present in the supplied evidence. Never invent a page, author, year, DOI, or source. If evidence is insufficient, say it is unverified. Marker identity validation does not itself prove semantic support.');
+          if (retrievedDocContext.chunksSelected?.length) {
+            contextParts.push('RESEARCH CITATION PROTOCOL: Evidence chunks carry request-scoped markers such as [cite:SRC_1]. You may cite only markers present in the supplied evidence. Never invent a page, author, year, DOI, or source. If evidence is insufficient, say it is unverified. Marker identity validation does not itself prove semantic support.');
+          }
           contextParts.push(retrievedDocContext.contextBlock);
         }
       } catch (err: any) {
         console.warn('[AI_CONTEXT_DOC_WARN] Document retrieval failed:', err?.message || err);
+      }
+    }
+
+    // 5b-2. Personal agent profile (work preferences only; RuangKerja, never temporary or guest sessions)
+    if (isAcademicWorkspace && userId && userId !== 'guest' && !isTemporary) {
+      try {
+        const { agentProfileService } = await import('../agentProfileService.js');
+        const profileBlock = await agentProfileService.buildPromptBlock(userId);
+        if (profileBlock) contextParts.push(profileBlock);
+      } catch (err: any) {
+        console.warn('[AI_CONTEXT_PROFILE_WARN] Agent profile retrieval failed:', err?.message || err);
       }
     }
 

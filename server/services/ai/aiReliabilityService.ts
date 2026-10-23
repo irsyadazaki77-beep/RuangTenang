@@ -116,7 +116,7 @@ function wait(ms: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
-export async function executeWithReliability<T>(provider: ProviderId, operation: (signal: AbortSignal) => Promise<T>, parentSignal?: AbortSignal, requestId = globalThis.crypto?.randomUUID?.() || `ai-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`): Promise<T> {
+export async function executeWithReliability<T>(provider: ProviderId, operation: (signal: AbortSignal) => Promise<T>, parentSignal?: AbortSignal, requestId: string = globalThis.crypto?.randomUUID?.() || `ai-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, phase: 'connect' | 'response' | 'first-token' = 'connect'): Promise<T> {
   assertProviderAvailable(provider);
   const maxAttempts = AI_RELIABILITY_POLICY.maxRetries + 1;
   let lastError: unknown;
@@ -129,18 +129,21 @@ export async function executeWithReliability<T>(provider: ProviderId, operation:
     let timedOut = false;
     let timeoutReject!: (error: Error) => void;
     const timeoutPromise = new Promise<never>((_, reject) => { timeoutReject = reject; });
-    const effectiveTimeout = provider === 'ollama' ? Math.max(AI_RELIABILITY_POLICY.connectTimeoutMs, 60_000) : AI_RELIABILITY_POLICY.connectTimeoutMs;
+    // A completed response (or stream headers after model warm-up) is not a TCP connection.
+    const effectiveTimeout = phase === 'response' ? AI_RELIABILITY_POLICY.totalRequestTimeoutMs
+      : phase === 'first-token' ? AI_RELIABILITY_POLICY.firstTokenTimeoutMs
+      : AI_RELIABILITY_POLICY.connectTimeoutMs;
     const timer = setTimeout(() => {
       timedOut = true;
       controller.abort();
-      timeoutReject(new Error('AI_CONNECT_TIMEOUT'));
+      timeoutReject(new Error(phase === 'response' ? 'AI_TOTAL_REQUEST_TIMEOUT' : phase === 'first-token' ? 'AI_FIRST_TOKEN_TIMEOUT' : 'AI_CONNECT_TIMEOUT'));
     }, effectiveTimeout);
     try {
       const result = await Promise.race([operation(controller.signal), timeoutPromise]);
       record(provider);
       return result;
     } catch (error) {
-      lastError = classifyAiError(timedOut ? new Error('AI_CONNECT_TIMEOUT') : error);
+      lastError = classifyAiError(timedOut ? new Error(phase === 'response' ? 'AI_TOTAL_REQUEST_TIMEOUT' : phase === 'first-token' ? 'AI_FIRST_TOKEN_TIMEOUT' : 'AI_CONNECT_TIMEOUT') : error);
       console.warn(`[AI_RELIABILITY] requestId=${requestId} attemptId=${attemptId} provider=${provider} category=${(lastError as AiProviderError).category}`);
       if (parentSignal?.aborted) throw lastError;
       if (!(lastError as AiProviderError).retryable || attempt + 1 >= maxAttempts) { record(provider, lastError); throw lastError; }

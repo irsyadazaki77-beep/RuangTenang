@@ -35,7 +35,7 @@ export const StreamingBubble: React.FC<Props> = memo(({ msg }) => {
             <LazyMarkdown content={msg.content} />
             <span
               aria-hidden="true"
-              className="inline-block w-1.5 h-4 ml-1 bg-teal-500 rounded-xs align-middle animate-pulse"
+              className="inline-block w-2 h-4 ml-1 bg-teal-500/90 dark:bg-teal-400/90 rounded-[2px] align-text-bottom shadow-[0_0_8px_rgba(20,184,166,0.45)] animate-pulse"
             />
           </div>
         )}

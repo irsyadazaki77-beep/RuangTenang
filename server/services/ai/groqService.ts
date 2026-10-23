@@ -75,7 +75,7 @@ export const groqService = {
     const maxTokens = Math.min(options.maxOutputTokens || defaultMax, isAnonymous ? 2048 : 4096);
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), AI_RELIABILITY_POLICY.connectTimeoutMs);
+    const timeoutId = setTimeout(() => controller.abort(), AI_RELIABILITY_POLICY.totalRequestTimeoutMs);
 
     if (options.abortSignal) {
       options.abortSignal.addEventListener('abort', () => controller.abort(), { once: true });

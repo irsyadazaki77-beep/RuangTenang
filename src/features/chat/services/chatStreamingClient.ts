@@ -42,6 +42,8 @@ export interface StreamCallbacks {
 export interface StreamPayload {
   message: string;
   chatId?: string;
+  /** Stable key for retry-safe Workspace message persistence. */
+  idempotencyKey?: string;
   isTemporary?: boolean;
   workspaceMode?: boolean;
   /** Session-only acknowledgement for anonymous AI processing; never account-persisted. */
@@ -68,6 +70,46 @@ function getCookie(name: string): string | null {
   const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
   if (match) return decodeURIComponent(match[2]);
   return null;
+}
+
+function reportClientAiTiming(name: 'AI_TTFT' | 'AI_TOTAL', value: number) {
+  if (typeof window === 'undefined' || typeof CustomEvent === 'undefined' || !Number.isFinite(value) || value < 0) return;
+  window.dispatchEvent(new CustomEvent('rt-ai-stream-performance', { detail: { name, value } }));
+}
+
+function highResolutionNow(): number {
+  return typeof performance !== 'undefined' ? performance.now() : Date.now();
+}
+
+async function getNetworkFailureMessage(requestSignal: AbortSignal): Promise<string> {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    return 'Koneksi internet sedang offline. Sambungkan kembali jaringan, lalu tekan Kirim Ulang Pesan.';
+  }
+
+  const controller = new AbortController();
+  const abortProbe = () => controller.abort();
+  if (requestSignal.aborted) abortProbe();
+  else requestSignal.addEventListener('abort', abortProbe, { once: true });
+  const timeout = setTimeout(() => controller.abort(), 1500);
+  try {
+    const response = await fetch('/api/v1/health', {
+      method: 'GET',
+      credentials: 'same-origin',
+      cache: 'no-store',
+      signal: controller.signal
+    });
+
+    if (response.ok) {
+      return 'Server aplikasi aktif, tetapi koneksi ke layanan AI terputus. Periksa model AI lalu tekan Kirim Ulang Pesan.';
+    }
+
+    return `Server aplikasi merespons dengan status ${response.status}. Coba lagi setelah layanan pulih.`;
+  } catch {
+    return 'Server RuangKerja tidak merespons. Pastikan server aplikasi aktif dan koneksi internet tersedia, lalu tekan Kirim Ulang Pesan.';
+  } finally {
+    clearTimeout(timeout);
+    requestSignal.removeEventListener('abort', abortProbe);
+  }
 }
 
 export class ChatStreamingClient {
@@ -98,6 +140,8 @@ export class ChatStreamingClient {
 
     const abortController = new AbortController();
     this.abortController = abortController;
+    const requestStartedAt = highResolutionNow();
+    let firstContentRecorded = false;
     const assistantMsgId = `msg_${Date.now() + 1}`;
     let currentText = '';
     let pluginName = '';
@@ -277,6 +321,10 @@ export class ChatStreamingClient {
                     } else if (parsed.text || (parsed.type === 'text' && parsed.content)) {
                       const content = parsed.text || parsed.content;
                       currentText += content;
+                      if (!firstContentRecorded && typeof content === 'string' && content.length > 0) {
+                        firstContentRecorded = true;
+                        reportClientAiTiming('AI_TTFT', highResolutionNow() - requestStartedAt);
+                      }
                       if (token === this.activeToken && callbacks.onChunk) {
                         callbacks.onChunk(content);
                       }
@@ -308,6 +356,10 @@ export class ChatStreamingClient {
                 if (parsed.text || (parsed.type === 'text' && parsed.content)) {
                   const content = parsed.text || parsed.content;
                   currentText += content;
+                  if (!firstContentRecorded && typeof content === 'string' && content.length > 0) {
+                    firstContentRecorded = true;
+                    reportClientAiTiming('AI_TTFT', highResolutionNow() - requestStartedAt);
+                  }
                   if (token === this.activeToken && callbacks.onChunk) {
                     callbacks.onChunk(content);
                   }
@@ -341,6 +393,7 @@ export class ChatStreamingClient {
       if (!pluginName && callbacks.onMessageComplete) {
         await callbacks.onMessageComplete(currentText);
       }
+      if (firstContentRecorded) reportClientAiTiming('AI_TOTAL', highResolutionNow() - requestStartedAt);
 
     } catch (err: any) {
       if (token !== this.activeToken) {
@@ -356,9 +409,11 @@ export class ChatStreamingClient {
         if (callbacks.onError) {
           const rawMessage = typeof err?.message === 'string' ? err.message : '';
           const isNetworkFailure = err instanceof TypeError && /failed to fetch|networkerror|load failed/i.test(rawMessage);
-          await callbacks.onError(isNetworkFailure
-            ? 'Tidak dapat terhubung ke server. Periksa koneksi internet lalu coba lagi.'
-            : rawMessage || 'Koneksi terputus.');
+          const errorMessage = isNetworkFailure
+            ? await getNetworkFailureMessage(abortController.signal)
+            : rawMessage || 'Koneksi terputus.';
+          if (token !== this.activeToken || abortController.signal.aborted) return;
+          await callbacks.onError(errorMessage);
         }
       }
     } finally {

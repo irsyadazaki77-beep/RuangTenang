@@ -13,16 +13,14 @@ import {
 } from '../../../shared/aiModelContract.js';
 import {
   AI_MODEL_REGISTRY,
+  isRegisteredModelAvailable,
   AiModelDefinition,
   AiModelError,
   resolveAiModel,
-  getConfiguredDefaultAiModelId,
-  RESILIENT_FALLBACK_AI_MODEL_ID,
   getProfileDefinition,
   validateProfileMode,
   getModelDefinition
 } from './aiModelRegistry.js';
-import { aiProviderConfig } from '../../config/aiProviderConfig.js';
 import { getProviderHealth } from './aiReliabilityService.js';
 import { aiCostCalculator } from './aiCostCalculator.js';
 
@@ -53,7 +51,8 @@ export function classifyRequest(context: AiRoutingContext, promptText?: string):
       category: context.taskCategory,
       latencyPreference: latPref,
       qualityPreference: qualPref,
-      requiredCapabilities: ['chat'],
+      requiredCapabilities: (context.attachments || []).some(a => a.mimeType?.startsWith('image/') || /\.(png|jpe?g|webp|gif|bmp|svg)$/i.test(a.filename || ''))
+        ? ['chat', 'vision', 'image_understanding'] : ['chat'],
       reasonHint: `Kategori tugas ${context.taskCategory} ditentukan oleh preferensi aktif`
     };
   }
@@ -237,7 +236,8 @@ export function filterCandidates(
     if (!tierAllowed) return false;
 
     // 3. Provider must be configured
-    if (!aiProviderConfig.isConfigured(model.provider)) return false;
+    if (!isRegisteredModelAvailable(model)) return false;
+    if (getProviderHealth(model.provider) === 'unavailable') return false;
 
     // 4. Must support required capabilities
     if (context.streamingRequired && !model.capabilities.includes('streaming')) {
@@ -302,7 +302,7 @@ export function scoreCandidate(
 
     case 'document_analysis':
       if (model.reasoning === 'Sangat Tinggi' || model.reasoning === 'Tinggi') score += 25;
-      if (model.provider === 'gemini') score += 10; // Strong long-context/multimodal documents
+      if (model.capabilities.includes('document_ocr') || model.provider === 'gemini') score += 30; // Strong long-context/multimodal documents
       break;
 
     case 'summarization':
@@ -338,7 +338,7 @@ export function scoreCandidate(
     score -= 30;
   }
 
-  return score;
+  return score + localTaskScore(model, context, classification);
 }
 
 export class SmartModelRouter {
@@ -372,7 +372,7 @@ export class SmartModelRouter {
       const model = getModelDefinition(candidateId);
       if (!model) continue;
       if (!model.allowedTiers.includes(normalizedTier as ModelTier)) continue;
-      if (!aiProviderConfig.isConfigured(model.provider)) continue;
+      if (!isRegisteredModelAvailable(model)) continue;
       if (getProviderHealth(model.provider) === 'unavailable') continue;
       if (context.streamingRequired && !model.capabilities.includes('streaming')) continue;
       if (hasImage && !model.capabilities.includes('vision')) continue;
@@ -425,7 +425,7 @@ export class SmartModelRouter {
       if (targetCategory === 'coding') {
         if (candidate.id.includes('code') || candidate.id.includes('reasoner') || candidate.id.includes('qwen')) score += 25;
       } else if (targetCategory === 'document_analysis') {
-        if (candidate.provider === 'gemini') score += 20; // superior document context
+        if (candidate.provider === 'gemini' || candidate.capabilities.includes('document_ocr')) score += 40; // superior document context & multimodal OCR
       } else if (targetCategory === 'academic_writing' || targetCategory === 'research') {
         if (candidate.reasoning === 'Sangat Tinggi') score += 25;
       }
@@ -435,6 +435,10 @@ export class SmartModelRouter {
         score -= 40;
       }
 
+      if (candidate.provider === 'ollama') {
+        // Local task suitability outranks arbitrary catalog insertion order.
+        score = scoreCandidate(candidate, { ...context, latencyPreference: profile.goal === 'speed' ? 'fast' : profile.goal === 'reasoning' ? 'deep' : context.latencyPreference }, classification);
+      }
       return { model: candidate, score };
     });
 
@@ -447,10 +451,10 @@ export class SmartModelRouter {
 
     const chosen = scored[0].model;
     const rankedAlternatives = scored.slice(1);
-    const fallbackList = [
+    const fallbackList = preferLightLocalFallback(chosen, [
       ...rankedAlternatives.filter(item => item.model.provider !== chosen.provider),
       ...rankedAlternatives.filter(item => item.model.provider === chosen.provider)
-    ].slice(0, 2).map(item => item.model.id);
+    ].map(item => item.model));
 
     // Compare the actual candidate with the profile's promised quality level.
     const reasoningRank = (value: string) => value === 'Sangat Tinggi' ? 2 : value === 'Tinggi' ? 1 : 0;
@@ -494,7 +498,7 @@ export class SmartModelRouter {
       const model = resolveAiModel(requestedId, userTier);
 
       // Verify provider configuration
-      if (!aiProviderConfig.isConfigured(model.provider)) {
+      if (!isRegisteredModelAvailable(model)) {
         throw new AiModelError('PROVIDER_NOT_CONFIGURED');
       }
 
@@ -531,31 +535,7 @@ export class SmartModelRouter {
     const candidates = filterCandidates(context, classification);
 
     if (candidates.length === 0) {
-      // Check if fallback to safe default is possible
-      const defaultId = getConfiguredDefaultAiModelId(userTier);
-      const defaultModel = AI_MODEL_REGISTRY.find(m => m.id === defaultId);
-      if (defaultModel && aiProviderConfig.isConfigured(defaultModel.provider)) {
-        return {
-          selectedModelId: defaultModel.id,
-          provider: defaultModel.provider,
-          routingMode: 'auto',
-          routingReason: 'Model standar digunakan karena tidak ada kandidat spesifik yang memenuhi kriteria',
-          fallbackCandidates: []
-        };
-      }
-
-      // Auto mode must remain usable without provider credentials. The request
-      // pipeline attempts this configured model and returns its guarded local
-      // response when the provider is unavailable. Manual selections still fail
-      // closed above so a user's explicit model choice is respected.
-      const localFallbackModel = resolveAiModel(RESILIENT_FALLBACK_AI_MODEL_ID, userTier);
-      return {
-        selectedModelId: localFallbackModel.id,
-        provider: localFallbackModel.provider,
-        routingMode: 'auto',
-        routingReason: 'Tidak ada penyedia AI yang tersedia; respons lokal digunakan.',
-        fallbackCandidates: []
-      };
+      throw new AiModelError('MODEL_UNAVAILABLE');
     }
 
     // Rank candidates deterministically
@@ -573,7 +553,7 @@ export class SmartModelRouter {
     });
 
     const chosen = scored[0].model;
-    const fallbackList = scored.slice(1, 3).map(s => s.model.id);
+    const fallbackList = preferLightLocalFallback(chosen, scored.slice(1).map(s => s.model));
 
     return {
       selectedModelId: chosen.id,
@@ -613,7 +593,7 @@ export class SmartModelRouter {
 
       const normalizedTier = userTier === 'Developer' ? 'Pro' : userTier;
       if (!model.allowedTiers.includes(normalizedTier as ModelTier)) continue;
-      if (!aiProviderConfig.isConfigured(model.provider)) continue;
+      if (!isRegisteredModelAvailable(model)) continue;
       if (streamingRequired && !model.capabilities.includes('streaming')) continue;
 
       visited.add(id);
@@ -626,3 +606,26 @@ export class SmartModelRouter {
 }
 
 export const smartModelRouter = new SmartModelRouter();
+
+function preferLightLocalFallback(chosen: AiModelDefinition, alternatives: AiModelDefinition[]): string[] {
+  const ids = alternatives.slice(0, 2).map(model => model.id);
+  if (chosen.provider !== 'ollama' || alternatives.length < 2) return ids;
+  const light = ['ollama-qwen3-1.7b', 'ollama-gemma3-1b', 'ollama-qwen3.5-0.8b', 'ollama-gemma3-270m']
+    .find(id => alternatives.some(model => model.id === id));
+  if (light && !ids.includes(light)) ids[1] = light;
+  return ids;
+}
+
+/** Conservative task policy for the installed local family; models remain manually selectable. */
+function localTaskScore(model: AiModelDefinition, context: AiRoutingContext, classification: ClassificationSignal): number {
+  if (model.provider !== 'ollama') return 0;
+  const task = context.taskCategory || classification.category;
+  const latency = context.latencyPreference || classification.latencyPreference;
+  let order: string[];
+  if (latency === 'fast') order = ['qwen3-1.7b', 'gemma3-1b', 'qwen3.5-0.8b', 'gemma3-270m', 'phi4-mini', 'deepseek-r1-1.5b', 'qwen3-8b', 'bonsai-27b'];
+  else if (task === 'structured_reasoning') order = ['qwen3-8b', 'bonsai-27b', 'phi4-mini', 'deepseek-r1-1.5b', 'qwen3-1.7b', 'qwen3.5-0.8b', 'gemma3-1b', 'gemma3-270m'];
+  else if (task === 'coding' || task === 'document_analysis' || latency === 'deep') order = ['qwen3-8b', 'phi4-mini', 'bonsai-27b', 'qwen3-1.7b', 'deepseek-r1-1.5b', 'qwen3.5-0.8b', 'gemma3-1b', 'gemma3-270m'];
+  else order = ['qwen3-1.7b', 'phi4-mini', 'qwen3.5-0.8b', 'gemma3-1b', 'deepseek-r1-1.5b', 'qwen3-8b', 'bonsai-27b', 'gemma3-270m'];
+  const index = order.indexOf(model.id.replace(/^ollama-/, ''));
+  return index < 0 ? 0 : 500 - index * 100;
+}

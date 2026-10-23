@@ -212,7 +212,7 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ userId, onComple
         </div>
 
         {/* Content Area with Soft Fluid Transitions */}
-        <div className="flex-1 flex flex-col justify-center min-h-[280px]">
+        <div className="flex flex-none flex-col justify-start">
           <AnimatePresence mode="wait">
 
             {/* STEP 1: Welcome and explicit privacy choices */}

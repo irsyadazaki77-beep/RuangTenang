@@ -75,6 +75,7 @@ model Users {
   soapNotesAsCounselor      ClinicalSoapNotes[]   @relation("CounselorSoapNotes")
   artifacts                 Artifacts[]
   workspaceMemories         WorkspaceMemories[]
+  agentProfile               UserAgentProfiles?
   campus                    Campuses? @relation(fields: [campusId], references: [id], onDelete: SetNull)
 
   @@index([campusId, role])
@@ -806,4 +807,15 @@ model WorkspaceMemories {
   @@index([userId, workspaceId])
   @@index([workspaceId, category])
   @@index([createdAt])
+}
+
+model UserAgentProfiles {
+  userId               String   @id
+  aboutMe              String   @default("")
+  responseInstructions String   @default("")
+  isEnabled            Boolean  @default(true)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  user                 Users    @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

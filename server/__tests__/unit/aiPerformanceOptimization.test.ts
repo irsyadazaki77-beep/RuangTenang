@@ -6,6 +6,7 @@ import { chatSummarizer } from '../../services/ai/chatSummarizer.js';
 import { contextRetrievalService } from '../../services/file-intelligence/contextRetrievalService.js';
 import { documentContextCacheService } from '../../services/file-intelligence/documentContextCacheService.js';
 import { prisma } from '../../database.js';
+import { aiRequestService } from '../../services/ai/aiRequestService.js';
 
 describe('FASE 11 Performance, Token & Cost Optimization Benchmark Suite', () => {
   const originalEnv = { ...process.env };
@@ -18,6 +19,7 @@ describe('FASE 11 Performance, Token & Cost Optimization Benchmark Suite', () =>
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     process.env = { ...originalEnv };
   });
 
@@ -171,6 +173,9 @@ describe('FASE 11 Performance, Token & Cost Optimization Benchmark Suite', () =>
     });
 
     it('isolates chat summarizer cache across distinct users', async () => {
+      const generate = vi.spyOn(aiRequestService, 'generateChatResponse')
+        .mockResolvedValueOnce({ text: 'Ringkasan pengguna pertama', modelUsed: 'ollama-qwen3-1.7b', isFallback: false })
+        .mockResolvedValueOnce({ text: 'Ringkasan pengguna kedua', modelUsed: 'ollama-qwen3-1.7b', isFallback: false });
       const mockHistory = [
         { id: '1', role: 'user' as const, content: 'halo pertama' },
         { id: '2', role: 'model' as const, content: 'hai balasan' },
@@ -192,6 +197,8 @@ describe('FASE 11 Performance, Token & Cost Optimization Benchmark Suite', () =>
       // If user 2 accesses, user 1 cache key is not returned
       const resUserB = await chatSummarizer.getOrUpdateSummary('shared_chat_id', mockHistory, { userId: 'user_2' });
       expect(resUserB.summary).toBeDefined();
+      expect(resUserA.summary).not.toEqual(resUserB.summary);
+      expect(generate).toHaveBeenCalledTimes(2);
     });
   });
 

@@ -16,10 +16,10 @@ export const Surface: React.FC<SurfaceProps> = ({
   ...props
 }) => {
   const levelStyles = {
-    base: 'bg-[#fafaf9] dark:bg-[#080d16]',
-    card: 'bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-3xs',
-    elevated: 'bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm',
-    sunken: 'bg-slate-50/80 dark:bg-slate-950/60 border border-slate-200/60 dark:border-slate-800/60',
+    base: 'bg-[#f8f9fb] dark:bg-[#0b0d10]',
+    card: 'bg-white dark:bg-[#17191d] border border-slate-200/80 dark:border-slate-800 shadow-3xs',
+    elevated: 'bg-white dark:bg-[#191c20] border border-slate-200/80 dark:border-slate-800 shadow-sm',
+    sunken: 'bg-slate-50 dark:bg-[#202328] border border-slate-200/70 dark:border-slate-700/70',
   };
 
   return (
@@ -50,7 +50,7 @@ export const Card: React.FC<CardProps> = ({
   return (
     <div
       className={`
-        bg-white dark:bg-slate-900/90 rounded-2xl border border-slate-200/80 dark:border-slate-800/80
+        bg-white dark:bg-[#17191d] rounded-2xl border border-slate-200/80 dark:border-slate-800/80
         shadow-3xs overflow-hidden flex flex-col text-left transition-all duration-150
         ${interactive ? 'hover:border-slate-300 dark:hover:border-slate-700 hover:shadow-xs cursor-pointer active:scale-[0.99]' : ''}
         ${className}
@@ -68,7 +68,7 @@ export const Card: React.FC<CardProps> = ({
       )}
       <div className="p-4 sm:p-5 flex-1">{children}</div>
       {footer && (
-        <div className="px-4 sm:px-5 py-3 border-t border-slate-100 dark:border-slate-800/80 bg-slate-50/60 dark:bg-slate-950/40">
+        <div className="px-4 sm:px-5 py-3 border-t border-slate-100 dark:border-slate-800/80 bg-slate-50/70 dark:bg-[#111316]">
           {footer}
         </div>
       )}

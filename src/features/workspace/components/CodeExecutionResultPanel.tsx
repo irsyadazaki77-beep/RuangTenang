@@ -1,5 +1,5 @@
 import React from 'react';
-import { Terminal, X, CheckCircle2, AlertTriangle, XCircle, ShieldCheck, Square, Clock } from 'lucide-react';
+import { Terminal, X, CheckCircle2, AlertTriangle, XCircle, ShieldCheck, Square, Clock, Sparkles } from 'lucide-react';
 import { CodeValidationResult, CodeExecutionStatus } from '../services/codeExecutionTypes';
 
 interface CodeExecutionResultPanelProps {
@@ -7,13 +7,15 @@ interface CodeExecutionResultPanelProps {
   status: CodeExecutionStatus;
   onClose: () => void;
   onStop?: () => void;
+  onRequestFixCode?: (errorSummary: string) => void;
 }
 
 export const CodeExecutionResultPanel: React.FC<CodeExecutionResultPanelProps> = ({
   result,
   status,
   onClose,
-  onStop
+  onStop,
+  onRequestFixCode
 }) => {
   if (!result && status === 'idle') return null;
 
@@ -154,10 +156,22 @@ export const CodeExecutionResultPanel: React.FC<CodeExecutionResultPanelProps> =
 
         {/* Stderr / Errors */}
         {result?.stderr && result.stderr.length > 0 && (
-          <div className="p-2.5 rounded-lg bg-rose-950/30 border border-rose-800/60 text-rose-300 text-xs space-y-1">
-            <div className="font-semibold text-rose-200 mb-1 flex items-center gap-1.5">
-              <XCircle className="w-3 h-3 text-rose-400" />
-              <span>Detail Kesalahan:</span>
+          <div className="p-2.5 rounded-lg bg-rose-950/30 border border-rose-800/60 text-rose-300 text-xs space-y-2">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div className="font-semibold text-rose-200 flex items-center gap-1.5">
+                <XCircle className="w-3 h-3 text-rose-400" />
+                <span>Detail Kesalahan:</span>
+              </div>
+              {onRequestFixCode && !isRunning && (
+                <button
+                  type="button"
+                  onClick={() => onRequestFixCode(result.stderr.join('\n').slice(0, 1200))}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-sans text-[11px] font-semibold cursor-pointer transition-colors shadow-2xs"
+                >
+                  <Sparkles className="w-3 h-3" />
+                  <span>Perbaiki Otomatis dengan AI</span>
+                </button>
+              )}
             </div>
             {result.stderr.map((err, idx) => (
               <div key={idx} className="whitespace-pre-wrap text-rose-200">

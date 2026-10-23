@@ -199,10 +199,10 @@ router.post(
         statusMessage = `Permintaan pengiriman SOS diterima penyedia SMS/WhatsApp untuk kontak ${maskedName} (${maskedPhone}). Status ini belum memastikan pesan diterima atau dibaca oleh kontak.`;
       } else if (gatewayResult.status === 'mock_mode' || gatewayResult.status === 'not_configured') {
         responseStatus = 'SIMULATED';
-        statusMessage = `Mode Simulasi: Gateway SMS produksi belum dikonfigurasi. Sinyal SOS dicatat secara internal pada server (${maskedName}: ${maskedPhone}). Untuk bantuan nyata, hubungi nomor hotline 119 / LISA.`;
+        statusMessage = `Mode Simulasi: Gateway SMS produksi belum dikonfigurasi. Sinyal SOS dicatat secara internal pada server (${maskedName}: ${maskedPhone}). Untuk bantuan nyata, hubungi nomor hotline darurat 119 ext 8 (Healing119) atau IGD terdekat.`;
       } else {
         responseStatus = 'FAILED';
-        statusMessage = `Pengiriman sinyal SOS gagal (${gatewayResult.error || 'kesalahan gateway'}). Segera hubungi hotline darurat 119 atau LISA.`;
+        statusMessage = `Pengiriman sinyal SOS gagal (${gatewayResult.error || 'kesalahan gateway'}). Segera hubungi hotline darurat 119 ext 8 (Healing119) atau IGD terdekat.`;
       }
 
       return res.json({

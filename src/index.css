@@ -81,6 +81,28 @@
   @apply text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1.5;
 }
 
+/* Streaming cursor pulse */
+@keyframes cursor-pulse {
+  0%, 100% { opacity: 1; transform: scaleY(1); }
+  50% { opacity: 0.15; transform: scaleY(0.85); }
+}
+
+.streaming-cursor {
+  display: inline-block;
+  width: 0.45em;
+  height: 1.15em;
+  margin-left: 0.15em;
+  vertical-align: -0.15em;
+  border-radius: 2px;
+  background-color: #6366f1;
+  animation: cursor-pulse 0.9s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.dark .streaming-cursor {
+  background-color: #818cf8;
+  box-shadow: 0 0 8px rgba(129, 140, 248, 0.6);
+}
+
 /* Tactile Micro-Interactions (GPU-accelerated scale with cubic-bezier) */
 .btn-tactile,
 .btn-press {

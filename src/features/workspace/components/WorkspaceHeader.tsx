@@ -96,7 +96,7 @@ export const WorkspaceHeader: React.FC<WorkspaceHeaderProps> = React.memo(({
 
   return (
     <>
-    <header className="grid grid-cols-[minmax(0,1fr)_auto] py-1 sm:py-0 sm:h-12 px-3 sm:px-4 bg-white/75 dark:bg-[#0b101b]/75 backdrop-blur-md border-b border-slate-200/70 dark:border-slate-800/80 sm:flex items-center justify-between gap-x-2 gap-y-1 sm:gap-3 z-30 shrink-0 min-w-0">
+    <header className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-2 gap-y-1.5 border-b border-slate-200/80 bg-white px-3 py-1.5 dark:border-slate-800 dark:bg-[#11151e] sm:flex sm:h-14 sm:items-center sm:justify-between sm:gap-3 sm:px-4 sm:py-0 z-30 shrink-0 min-w-0">
       {/* Left Zone: Workspace Identity & Mobile Navigation Toggle */}
       <div className="flex items-center gap-2 sm:gap-3 min-w-0">
         {onOpenSidebar && (
@@ -136,20 +136,20 @@ export const WorkspaceHeader: React.FC<WorkspaceHeaderProps> = React.memo(({
       {/* Center / Right Zone: Segmented Switcher & Workspace Actions */}
       <div className="contents sm:flex sm:items-center sm:gap-1 sm:shrink-0">
         {/* Mobile/Tablet Tab Switcher */}
-        <div role="group" aria-label="Tampilan workspace" className="col-span-2 row-start-2 xl:hidden flex items-center justify-center gap-4 sm:gap-0.5 rounded-lg border border-slate-200/60 bg-slate-100/90 p-0.5 dark:border-slate-700/60 dark:bg-slate-800/90">
+        <div role="group" aria-label="Tampilan workspace" className="col-span-2 row-start-2 flex items-center gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-800/80 xl:hidden">
           <button
             type="button"
             onClick={() => onSetMobileActiveTab('chat')}
             aria-pressed={mobileActiveTab === 'chat'}
             aria-label="Obrolan"
             title="Obrolan"
-            className={`flex min-h-10 min-w-10 items-center justify-center gap-1.5 rounded-md px-2 sm:px-2.5 text-xs font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
+            className={`flex min-h-10 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-lg px-2 text-xs font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 sm:flex-none sm:px-2.5 ${
               mobileActiveTab === 'chat'
                 ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-semibold shadow-2xs'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
             }`}
           >
-            <MessageSquareText className="h-4 w-4 sm:hidden" aria-hidden="true" /><span className="hidden sm:inline">Obrolan</span>
+            <MessageSquareText className="h-4 w-4" aria-hidden="true" /><span>Obrolan</span>
           </button>
           <button
             type="button"
@@ -157,18 +157,18 @@ export const WorkspaceHeader: React.FC<WorkspaceHeaderProps> = React.memo(({
             aria-pressed={mobileActiveTab === 'canvas'}
             aria-label="Canvas"
             title="Canvas"
-            className={`relative flex min-h-10 min-w-10 items-center justify-center gap-1.5 rounded-md px-2 sm:px-2.5 text-xs font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
+            className={`relative flex min-h-10 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-lg px-2 text-xs font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 sm:flex-none sm:px-2.5 ${
               mobileActiveTab === 'canvas'
                 ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-semibold shadow-2xs'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
             }`}
           >
-            <FileText className="h-4 w-4 sm:hidden" aria-hidden="true" /><span className="hidden sm:inline">Canvas</span>
+            <FileText className="h-4 w-4" aria-hidden="true" /><span>Canvas</span>
             {hasUnreadArtifact && (
               <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 inline-block ml-1 animate-pulse" />
             )}
           </button>
-          <button type="button" onClick={() => onSetMobileActiveTab('context')} aria-label="Panel" title="Panel" aria-pressed={mobileActiveTab === 'context' || mobileActiveTab === 'sources'} className={`flex min-h-10 min-w-10 items-center justify-center gap-1.5 rounded-md px-2 sm:px-2.5 text-xs font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${mobileActiveTab === 'context' || mobileActiveTab === 'sources' ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-semibold shadow-2xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'}`}><Sparkles className="h-4 w-4 sm:hidden" aria-hidden="true" /><span className="hidden sm:inline">Panel</span></button>
+          <button type="button" onClick={() => onSetMobileActiveTab('context')} aria-label="Panel" title="Panel" aria-pressed={mobileActiveTab === 'context' || mobileActiveTab === 'sources'} className={`flex min-h-10 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-lg px-2 text-xs font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 sm:flex-none sm:px-2.5 ${mobileActiveTab === 'context' || mobileActiveTab === 'sources' ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-semibold shadow-2xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'}`}><Sparkles className="h-4 w-4" aria-hidden="true" /><span>Panel</span></button>
         </div>
 
         {onToggleContext && (
@@ -227,9 +227,9 @@ export const WorkspaceHeader: React.FC<WorkspaceHeaderProps> = React.memo(({
             aria-pressed={isTemporary}
             title={isTemporary ? 'Sesi Sementara Aktif: Percakapan tidak disimpan ke histori' : 'Aktifkan Sesi Sementara (Tanpa Riwayat)'}
             aria-label={isTemporary ? 'Matikan Sesi Sementara' : 'Aktifkan Sesi Sementara'}
-            className={`inline-flex h-9 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 ${
+            className={`hidden sm:inline-flex h-9 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 ${
               isTemporary
-                ? 'bg-amber-500 text-white font-semibold shadow-xs'
+                ? 'border border-amber-200/90 bg-amber-50/90 text-amber-800 font-medium dark:border-amber-900/70 dark:bg-amber-950/35 dark:text-amber-300'
                 : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
             }`}
           >
@@ -274,6 +274,7 @@ export const WorkspaceHeader: React.FC<WorkspaceHeaderProps> = React.memo(({
 
           {showMoreMenu && (
             <div role="group" aria-label="Opsi workspace" className="absolute right-0 top-full mt-1.5 w-[min(14rem,calc(100vw-1.5rem))] p-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl z-50 animate-scale-up space-y-0.5">
+              {onToggleTemporary && <button type="button" onClick={() => { setShowMoreMenu(false); onToggleTemporary(); }} className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800 sm:hidden"><Ghost className="h-4 w-4 text-amber-600" /><span>{isTemporary ? 'Sesi sementara aktif' : 'Aktifkan sesi sementara'}</span></button>}
               {onSwitchMode && (
                 <button
                   type="button"

@@ -32,6 +32,7 @@ import { generalApiLimiter, diagnosticsLimiter, clientTelemetryLimiter, getRateL
 import { optionalAuth, requireAuth, requireRole } from './server/middleware/auth.js';
 import { clientTelemetryService, clientDebugSchema } from './server/services/clientTelemetryService.js';
 import { metricsService } from './server/services/metricsService.js';
+import { aiMetricsService } from './server/services/ai/aiMetricsService.js';
 import { installProductionConsoleSanitizer } from './server/utils/logger.js';
 import { isLocalDevelopmentOrTest, isProductionLikeEnvironment } from './server/config/environment.js';
 import { buildContentSecurityPolicyDirectives } from './server/config/contentSecurityPolicy.js';
@@ -53,8 +54,11 @@ import counselorsRouter from './server/routes/counselors.js';
 import counselorPortalRouter from './server/routes/counselorPortal.js';
 import systemStatsRouter from './server/routes/systemStats.js';
 import workspaceArtifactsRouter from './server/routes/workspaceArtifacts.js';
+import workspaceProfileRouter from './server/routes/workspaceProfile.js';
 import workspaceRouter from './server/routes/workspace.js';
 import campusesRouter from './server/routes/campuses.js';
+import { imageGenerationRouter } from './server/routes/imageGeneration.js';
+import performanceTelemetryRouter from './server/routes/performanceTelemetry.js';
 
 async function startServer() {
   const isProd = isProductionLikeEnvironment();
@@ -233,7 +237,7 @@ async function startServer() {
     const isPrometheus = req.headers.accept?.includes('text/plain');
     if (isPrometheus) {
       res.setHeader('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
-      return res.send(`${metricsService.toPrometheusText()}\n${getRateLimitStorePrometheus()}\n`);
+      return res.send(`${metricsService.toPrometheusText()}\n${aiMetricsService.toPrometheusText()}\n${getRateLimitStorePrometheus()}\n`);
     }
     return res.json({
       success: true,
@@ -364,6 +368,7 @@ async function startServer() {
   app.use('/api/v1/screenings', screeningRouter);
 
   app.use('/api/v1/privacy', privacyRouter);
+  app.use('/api/v1/telemetry/performance', clientTelemetryLimiter, performanceTelemetryRouter);
 
   app.use('/api/v1', campusesRouter);
 
@@ -381,6 +386,8 @@ async function startServer() {
 
   app.use('/api/v1', chatRouter);
   app.use('/api', chatRouter);
+  app.use('/api/v1/ai', imageGenerationRouter);
+  app.use('/api/ai', imageGenerationRouter);
   app.use('/api/v1', workspaceComparisonRouter);
   app.use('/api', workspaceComparisonRouter);
 
@@ -400,6 +407,7 @@ async function startServer() {
   app.use('/api/health', systemStatsRouter);
 
   app.use('/api/v1/workspace/artifacts', workspaceArtifactsRouter);
+app.use('/api/v1/workspace/profile', workspaceProfileRouter);
   app.use('/api/v1/workspace', workspaceRouter);
   app.use('/api/workspace/artifacts', workspaceArtifactsRouter);
   app.use('/api/workspace', workspaceRouter);
@@ -424,11 +432,12 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    // Security filter: Deny direct access to server build artifacts, source maps, prisma schemas, and env files
+    // Security filter: Deny direct access to server build artifacts, scripts, source maps, prisma schemas, and env files
     app.use((req, res, next) => {
       const normalizedPath = req.path.toLowerCase();
       if (
         normalizedPath.endsWith('.cjs') ||
+        normalizedPath.endsWith('.mjs') ||
         normalizedPath.endsWith('.map') ||
         normalizedPath.includes('.env') ||
         normalizedPath.endsWith('.prisma') ||
@@ -436,7 +445,10 @@ async function startServer() {
         normalizedPath.includes('schema.') ||
         normalizedPath.endsWith('.ts') ||
         normalizedPath.includes('server.') ||
-        normalizedPath.includes('database.')
+        normalizedPath.includes('database.') ||
+        normalizedPath.includes('backuptool') ||
+        normalizedPath.includes('rehearseencryptedbackup') ||
+        normalizedPath.includes('backup')
       ) {
         return res.status(404).send('Not Found');
       }

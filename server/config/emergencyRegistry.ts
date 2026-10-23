@@ -24,39 +24,21 @@ export interface VerifiedEmergencyResource {
 
 export const VERIFIED_EMERGENCY_REGISTRY: VerifiedEmergencyResource[] = [
   {
-    id: 'kemenkes_sejiwa',
-    name: 'Kemenkes Sejiwa (119 ext 8)',
-    type: 'Layanan Psikologi Krisis Nasional',
+    id: 'kemenkes_healing119',
+    name: 'Healing119 (Kementerian Kesehatan RI)',
+    type: 'Layanan Dukungan Psikologis Awal & Krisis Nasional',
     phone: '119 ext 8',
-    url: 'tel:119',
-    description: 'Hotline nasional resmi bebas pulsa untuk layanan darurat kesehatan jiwa masyarakat dari Kementerian Kesehatan RI.',
+    url: 'https://www.healing119.id/',
+    description: 'Hotline nasional resmi bebas pulsa untuk dukungan psikologis awal dari Kementerian Kesehatan RI via telepon 119 ekstensi 8 atau web healing119.id. Periksa situs resmi untuk jam operasional terbaru.',
     source: 'Kementerian Kesehatan Republik Indonesia',
-    sourceUrl: 'https://sehatnegeriku.kemkes.go.id/',
-    verifiedAt: '2026-08-01',
-    reviewDueAt: '2026-12-01',
-    channelAvailability: 'Saluran telepon dapat dihubungi 24 jam setiap hari',
-    humanResponseAvailability: 'Respons konselor psikolog profesional bergantung pada ketersediaan petugas aktif di call center Kemenkes',
+    sourceUrl: 'https://kesprimkom.kemkes.go.id/assets/uploads/contents/others/FAQ_Cegah_Bunuh_Diri%2C_Dukung_Kesehatan_Jiwa__Kenali_Layanan_Healing119.id.pdf',
+    verifiedAt: '2026-10-21',
+    reviewDueAt: '2027-01-21',
+    channelAvailability: 'Periksa situs resmi healing119.id untuk jadwal operasional terbaru; antrean dapat penuh.',
+    humanResponseAvailability: 'Konselor terlatih Kemenkes RI sesuai jam operasional aktif',
     geographicScope: 'Nasional (Seluruh Indonesia)',
     verificationStatus: 'VERIFIED',
     isOfficialService: true,
-    isVerifiedProduction: true
-  },
-  {
-    id: 'lisa_helpline',
-    name: 'LISA (Layanan Integrasi Sehat Jiwa)',
-    type: 'Hotline Pencegahan Krisis Jiwa & Bunuh Diri',
-    phone: '0811-3855-472',
-    url: 'tel:08113855472',
-    description: 'Layanan integrasi pencegahan bunuh diri dan pendampingan psikososial krisis.',
-    source: 'Love Inside All (LISA) Foundation',
-    sourceUrl: 'https://www.loveinsideall.org/',
-    verifiedAt: '2026-08-01',
-    reviewDueAt: '2026-12-01',
-    channelAvailability: 'Hotline telepon dan pesan WhatsApp aktif 24 jam',
-    humanResponseAvailability: 'Waktu tunggu respons relawan dan konselor terlatih bergantung pada antrean krisis',
-    geographicScope: 'Nasional (Seluruh Indonesia)',
-    verificationStatus: 'VERIFIED',
-    isOfficialService: false,
     isVerifiedProduction: true
   },
   {
@@ -64,18 +46,39 @@ export const VERIFIED_EMERGENCY_REGISTRY: VerifiedEmergencyResource[] = [
     name: 'Instalasi Gawat Darurat (IGD) RS Terdekat',
     type: 'Layanan Darurat Medis & Psikiatri',
     phone: '118 / 119',
-    url: 'tel:118',
+    url: 'tel:119',
     description: 'Penanganan kedaruratan fisik, psikologis, dan psikiatri langsung di rumah sakit umum / rumah sakit jiwa terdekat.',
-    source: 'Sistem Layanan Medis Darurat Nasional (SPGDT)',
+    source: 'Sistem Penanggulangan Gawat Darurat Terpadu (SPGDT)',
     sourceUrl: 'https://kemkes.go.id/',
-    verifiedAt: '2026-08-01',
-    reviewDueAt: '2026-12-01',
-    channelAvailability: 'Buka 24 jam setiap hari untuk kedaruratan langsung',
+    verifiedAt: '2026-10-21',
+    reviewDueAt: '2027-01-21',
+    channelAvailability: 'Buka 24 jam setiap hari untuk kedaruratan langsung di fasilitas kesehatan',
     humanResponseAvailability: 'Dokter jaga dan tim medis bertugas di lokasi IGD secara langsung',
     geographicScope: 'Lokal / Terdekat',
     verificationStatus: 'VERIFIED',
     isOfficialService: true,
     isVerifiedProduction: true
+  }
+];
+
+export const UNVERIFIED_COMMUNITY_RESOURCES: VerifiedEmergencyResource[] = [
+  {
+    id: 'lisa_helpline',
+    name: 'LISA Helpline (Love Inside All)',
+    type: 'Inisiatif Komunitas Pencegahan Krisis',
+    phone: '0811-3855-472',
+    url: 'https://www.loveinsideall.org/',
+    description: 'Inisiatif komunitas non-pemerintah untuk pendampingan pencegahan bunuh diri. Jam operasional dan ketersediaan relawan dapat berubah sewaktu-waktu.',
+    source: 'Love Inside All Foundation',
+    sourceUrl: 'https://www.loveinsideall.org/',
+    verifiedAt: '2026-10-21',
+    reviewDueAt: '2027-01-21',
+    channelAvailability: 'Hubungi via WhatsApp/telepon; ketersediaan tidak dijamin 24 jam',
+    humanResponseAvailability: 'Relawan pendamping terlatih sesuai ketersediaan',
+    geographicScope: 'Nasional',
+    verificationStatus: 'UNDER_REVIEW',
+    isOfficialService: false,
+    isVerifiedProduction: false
   }
 ];
 

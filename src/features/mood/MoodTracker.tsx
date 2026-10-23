@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useEscapeKey } from '../../hooks/useEscapeKey';
 import { calculateStreak, getLocalIsoDateString, parseLocalIsoDateString } from '../../utils/streak';
@@ -21,7 +21,9 @@ import {
 } from 'lucide-react';
 import { EmptyState } from '../../components/common/EmptyState';
 import { apiClient } from '../../lib/apiClient';
+import { clientDb } from '../../lib/clientDb';
 import { DailyCheckinModal, MoodLog, MOOD_OPTIONS, EMOTION_TAGS, FACTOR_TAGS } from './DailyCheckinModal';
+import { getCancelableOfflineMoodKey, isMoodLogPendingSync } from './moodLogUtils';
 import { AcademicMoodCorrelationChart } from './components/AcademicMoodCorrelationChart';
 import { CounselingReportModal } from './components/CounselingReportModal';
 import { FileText } from 'lucide-react';
@@ -32,6 +34,7 @@ interface MoodTrackerProps {
   showToast: (msg: string, type?: 'info' | 'success' | 'warning' | 'error', title?: string) => void;
   onRequestOpenCheckin?: () => void;
   onRequestEditCheckin?: (log: MoodLog) => void;
+  onRefreshData?: () => void;
 }
 
 export const MoodTracker: React.FC<MoodTrackerProps> = ({
@@ -39,12 +42,15 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
   setMoodLogs,
   showToast,
   onRequestOpenCheckin,
-  onRequestEditCheckin
+  onRequestEditCheckin,
+  onRefreshData
 }) => {
   const navigate = useNavigate();
   const [isCheckinModalOpen, setIsCheckinModalOpen] = useState<boolean>(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState<boolean>(false);
   const [savedLogForBridge, setSavedLogForBridge] = useState<MoodLog | null>(null);
+  const deletingMoodIdsRef = useRef(new Set<string>());
+  const [deletingMoodIds, setDeletingMoodIds] = useState<Set<string>>(new Set());
 
   useEscapeKey(() => {
     if (savedLogForBridge) setSavedLogForBridge(null);
@@ -81,20 +87,66 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
   };
 
   const handleDeleteMoodLog = async (id: string) => {
-    const previousLogs = [...moodLogs];
-    setMoodLogs(prev => prev.filter(log => log.id !== id));
+    if (deletingMoodIdsRef.current.has(id)) return;
+    const logToDelete = moodLogs.find(log => log.id === id);
+    if (!logToDelete) return;
+
+    deletingMoodIdsRef.current.add(id);
+    setDeletingMoodIds(previous => new Set(previous).add(id));
     try {
+      const cancelableOfflineKey = getCancelableOfflineMoodKey(id);
+      if (id.startsWith('offline-')) {
+        if (!cancelableOfflineKey) {
+          showToast('Catatan offline ini tidak dapat diidentifikasi untuk dihapus.', 'error');
+          return;
+        }
+        const result = await clientDb.removePendingOfflineAction('mood_log', cancelableOfflineKey);
+        if (result === 'deleted') {
+          setMoodLogs(previous => previous.filter(log => log.id !== id));
+          showToast('Catatan mood dihapus dari antrean offline.', 'success');
+        } else if (result === 'syncing') {
+          showToast('Catatan sedang disinkronkan. Setelah sinkronisasi selesai, hapus catatan dari riwayat.', 'warning');
+        } else if (result === 'uncertain') {
+          showToast('Pengiriman terakhir belum terkonfirmasi. Tunggu status antrean diperbarui sebelum menghapus.', 'warning');
+        } else {
+          onRefreshData?.();
+          showToast('Catatan sudah tidak ada di antrean. Riwayat sedang diperbarui.', 'info');
+        }
+        return;
+      }
+
+      if (isMoodLogPendingSync(id)) {
+        showToast('Pengiriman catatan belum terkonfirmasi. Tunggu sinkronisasi selesai sebelum menghapusnya.', 'warning');
+        return;
+      }
+
+      setMoodLogs(previous => previous.filter(log => log.id !== id));
       const res = await apiClient.delete(`/api/v1/mood/${id}`);
       if (!res.success) {
-        setMoodLogs(previousLogs);
+        setMoodLogs(previous => previous.some(log => log.id === id)
+          ? previous
+          : [...previous, logToDelete].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
         showToast(res.error || 'Gagal menghapus catatan mood dari server.', 'error');
         return;
       }
       showToast('Catatan Mood berhasil dihapus.', 'success');
     } catch (err) {
       console.warn('Failed to delete mood log on server:', err);
-      setMoodLogs(previousLogs);
-      showToast('Gagal menghapus catatan mood (koneksi terputus).', 'error');
+      if (!isMoodLogPendingSync(id)) {
+        setMoodLogs(previous => previous.some(log => log.id === id)
+          ? previous
+          : [...previous, logToDelete].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+      }
+      showToast(id.startsWith('offline-')
+        ? 'Catatan belum dihapus dari antrean offline. Coba lagi saat penyimpanan tersedia.'
+        : 'Gagal menghapus catatan mood (koneksi terputus).', 'error');
+    } finally {
+      deletingMoodIdsRef.current.delete(id);
+      setDeletingMoodIds(previous => {
+        const next = new Set(previous);
+        next.delete(id);
+        return next;
+      });
     }
   };
 
@@ -625,6 +677,11 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
                         <span className="text-xs sm:text-sm font-bold text-primary flex items-center gap-1.5">
                           {formattedDate}
                           {isToday && <span className="w-2 h-2 rounded-full bg-teal-500 animate-pulse"></span>}
+                          {isMoodLogPendingSync(log.id) && (
+                            <span className="text-[9px] font-semibold normal-case tracking-normal rounded-full px-1.5 py-0.5 bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
+                              {getCancelableOfflineMoodKey(log.id) ? 'Tersimpan offline' : 'Menunggu sinkronisasi'}
+                            </span>
+                          )}
                         </span>
                         <span className="text-[11px] text-secondary font-semibold uppercase tracking-wider block">
                           Mood: {moodOpt.label}
@@ -633,7 +690,7 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
                     </div>
 
                     <div className="flex items-center gap-1">
-                      {onRequestEditCheckin && !log.id.startsWith('offline-') && (
+                      {onRequestEditCheckin && !isMoodLogPendingSync(log.id) && (
                         <button
                           type="button"
                           onClick={() => onRequestEditCheckin(log)}
@@ -647,9 +704,13 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
                       <button
                         type="button"
                         onClick={() => handleDeleteMoodLog(log.id)}
-                        className="text-muted hover:text-rose-600 p-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors opacity-70 group-hover:opacity-100 cursor-pointer"
-                        title="Hapus Catatan"
-                        aria-label="Hapus catatan mood"
+                        disabled={deletingMoodIds.has(log.id) || (isMoodLogPendingSync(log.id) && !getCancelableOfflineMoodKey(log.id))}
+                        className="text-muted hover:text-rose-600 disabled:opacity-40 disabled:cursor-not-allowed p-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors opacity-70 group-hover:opacity-100 cursor-pointer"
+                        title={isMoodLogPendingSync(log.id) && !getCancelableOfflineMoodKey(log.id)
+                          ? 'Hapus tersedia setelah sinkronisasi selesai'
+                          : deletingMoodIds.has(log.id) ? 'Menghapus catatan…' : 'Hapus Catatan'}
+                        aria-label={`Hapus catatan mood ${formattedDate}`}
+                        aria-busy={deletingMoodIds.has(log.id)}
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>

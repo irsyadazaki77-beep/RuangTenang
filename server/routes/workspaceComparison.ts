@@ -289,6 +289,10 @@ router.post('/chat/compare/:comparisonId/retry/:candidateId', optionalAuth, aiCh
   if (lookup.status === 'forbidden') return res.status(404).json({ success: false, code: 'SNAPSHOT_NOT_FOUND' });
   const snapshot = lookup.snapshot;
   if (snapshot.comparisonId !== req.params.comparisonId || !snapshot.selectedModelIds.includes(req.params.candidateId)) return res.status(409).json({ success: false, code: 'SNAPSHOT_MISMATCH' });
+  if (userId !== 'guest') {
+    const consent = await consentService.getUserConsents(userId);
+    if (!consent.consentForAI) return res.status(403).json({ success: false, code: 'AI_CONSENT_REQUIRED', message: 'Persetujuan pemrosesan AI telah dicabut. Aktifkan kembali persetujuan untuk mencoba ulang perbandingan.' });
+  }
   const candidate = snapshot.candidateModels.find(item => item.candidateId === req.params.candidateId);
   const model = candidate ? getModelDefinition(candidate.modelId) : undefined;
   if (!model) return res.status(400).json({ success: false, code: 'MODEL_NOT_FOUND' });

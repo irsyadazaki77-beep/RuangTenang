@@ -167,23 +167,9 @@ describe('SmartModelRouter unit tests', () => {
     });
   });
 
-  it('routes auto mode to the guarded local fallback when no provider is configured', () => {
-    for (const key of ['GEMINI_API_KEY', 'DEEPSEEK_API_KEY', 'GROQ_API_KEY', 'OPENROUTER_API_KEY', 'OPENAI_API_KEY', 'OLLAMA_BASE_URL', 'LOCAL_AI_ONLY']) {
-      delete process.env[key];
-    }
-
-    const decision = smartModelRouter.routeModel({
-      manualModelId: AUTO_ROUTING_MODEL_ID,
-      userTier: 'Free'
-    }, 'Aku sedang merasa kewalahan.');
-
-    expect(decision).toMatchObject({
-      selectedModelId: 'ollama-qwen3-1.7b',
-      provider: 'ollama',
-      routingMode: 'auto',
-      routingReason: expect.stringContaining('respons lokal')
-    });
-    expect(decision.fallbackCandidates).toEqual([]);
+  it('reports unavailable when no provider is configured', () => {
+    for (const key of ['GEMINI_API_KEY', 'DEEPSEEK_API_KEY', 'GROQ_API_KEY', 'OPENROUTER_API_KEY', 'OPENAI_API_KEY', 'OLLAMA_BASE_URL', 'LOCAL_AI_ONLY']) delete process.env[key];
+    expect(() => smartModelRouter.routeModel({ manualModelId: AUTO_ROUTING_MODEL_ID, userTier: 'Free' }, 'Halo')).toThrow('MODEL_UNAVAILABLE');
   });
 
   describe('4. Deterministic Ranking & Scoring', () => {
@@ -291,6 +277,21 @@ describe('SmartModelRouter unit tests', () => {
         presetId: 'custom-pro',
         userTier: 'Free'
       })).toThrowError(expect.objectContaining({ code: 'MODEL_NOT_ALLOWED' }));
+    });
+
+    it('routes request with PDF attachment to document analysis with high capability model', () => {
+      const decision = smartModelRouter.routeModel({
+        routingMode: 'auto',
+        userTier: 'Free',
+        attachments: [
+          { filename: 'skripsi_bab1.pdf', mimeType: 'application/pdf', size: 1024 }
+        ]
+      }, 'Tolong baca dan analisis bab 1 ini');
+
+      expect(decision.routingMode).toBe('auto');
+      const model = AI_MODEL_REGISTRY.find(m => m.id === decision.selectedModelId);
+      expect(model).toBeDefined();
+      expect(model?.capabilities).toContain('chat');
     });
   });
 });

@@ -277,9 +277,15 @@ export const WorkspaceCanvasPane: React.FC<WorkspaceCanvasPaneProps> = React.mem
   return (
     <>
       {/* DESKTOP RIGHT PANE: LIVE ARTIFACT CANVAS */}
+      <AnimatePresence initial={false}>
       {isCanvasOpen && isDesktopLayout && (
-        <section
-        className="hidden min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white/80 dark:bg-slate-950/80 backdrop-blur-md transition-all duration-200 xl:flex"
+        <motion.section
+        key="desktop-canvas-pane"
+        initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, x: 24 }}
+        animate={{ opacity: 1, x: 0 }}
+        exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, x: 20 }}
+        transition={shouldReduceMotion ? { duration: 0.12 } : { type: 'spring', stiffness: 360, damping: 32, mass: 0.85 }}
+        className="hidden min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white/80 dark:bg-slate-950/80 backdrop-blur-md xl:flex"
         >
           {isCreatingArtifact && <div role="status" className="flex h-8 shrink-0 items-center gap-2 border-b border-indigo-100 bg-indigo-50/70 px-3 text-xs font-medium text-indigo-800 dark:border-indigo-900/50 dark:bg-indigo-950/30 dark:text-indigo-300"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-indigo-500" />Membuat dokumen di Canvas…</div>}
           {activeArtifact?.persistenceStatus && activeArtifact.persistenceStatus !== 'persistent' && <div className="flex min-h-8 shrink-0 items-center justify-between gap-2 border-b border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200" role="status">
@@ -483,20 +489,25 @@ export const WorkspaceCanvasPane: React.FC<WorkspaceCanvasPaneProps> = React.mem
               </div>
             </div>
           )}
-        </section>
+        </motion.section>
       )}
+      </AnimatePresence>
 
       {/* MOBILE SLIDE-OVER DRAWER FOR CANVAS */}
       <AnimatePresence>
         {mobileActiveTab === 'canvas' && !isDesktopLayout && (
           <motion.div
             key="mobile-canvas-drawer"
-            initial={shouldReduceMotion ? { opacity: 0 } : { x: '100%' }}
-            animate={{ x: 0 }}
-            exit={shouldReduceMotion ? { opacity: 0 } : { x: '100%' }}
-            transition={{ duration: 0.18 }}
+            initial={shouldReduceMotion ? { opacity: 0 } : { y: '100%' }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={shouldReduceMotion ? { opacity: 0 } : { y: '100%' }}
+            transition={shouldReduceMotion ? { duration: 0.15 } : { type: 'spring', stiffness: 360, damping: 32 }}
             className="xl:hidden absolute inset-0 z-10 bg-white dark:bg-secondary-900 flex flex-col shadow-2xl pb-safe"
           >
+            {/* Mobile Sheet Drag Handle */}
+            <div className="flex justify-center pt-1.5 pb-0.5 bg-slate-50 dark:bg-slate-900 shrink-0">
+              <div className="w-10 h-1 rounded-full bg-slate-300 dark:bg-slate-700" aria-hidden="true" />
+            </div>
             {/* Mobile Drawer Top Bar */}
             <div className="flex items-center justify-between px-3 py-2 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 shrink-0">
               <div className="flex items-center gap-2 min-w-0">

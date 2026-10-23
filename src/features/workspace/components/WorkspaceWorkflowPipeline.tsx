@@ -41,11 +41,37 @@ export const WorkspaceWorkflowPipeline: React.FC<WorkspaceWorkflowPipelineProps>
   onAnalysisClick,
   onCanvasClick,
   onExportClick,
-  isCollapsed = false,
-  onToggleCollapse
+  isCollapsed: controlledIsCollapsed,
+  onToggleCollapse: controlledOnToggleCollapse
 }) => {
+  const [internalCollapsed, setInternalCollapsed] = React.useState(false);
+  const isCollapsed = controlledIsCollapsed ?? internalCollapsed;
+  const toggleCollapse = controlledOnToggleCollapse ?? (() => setInternalCollapsed(prev => !prev));
   const hasFiles = uploadedFilesCount > 0;
   const hasDraft = Boolean(activeArtifact && activeArtifact.id !== 'welcome-canvas-doc');
+
+  if (isCollapsed) {
+    return (
+      <div className="w-full shrink-0 border-b border-slate-200/70 bg-white/60 px-3 py-1 backdrop-blur-xs transition-all dark:border-slate-800/80 dark:bg-slate-950/30 flex items-center justify-between text-xs">
+        <div className="flex items-center gap-2">
+          <span className="flex h-1.5 w-1.5 rounded-full bg-indigo-500 animate-pulse" />
+          <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+            {activePlanTitle ? `Alur: ${activePlanTitle}` : 'Alur Kerja RuangKerja'}
+          </span>
+          {hasFiles && <span className="text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-1.5 py-0.5 rounded">{readyFilesCount} berkas</span>}
+          {hasDraft && <span className="text-[10px] bg-cyan-50 dark:bg-cyan-950/40 text-cyan-700 dark:text-cyan-300 px-1.5 py-0.5 rounded">Draf aktif</span>}
+        </div>
+        <button
+          type="button"
+          onClick={toggleCollapse}
+          className="inline-flex items-center gap-1 text-[11px] text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+        >
+          <span>Tampilkan langkah</span>
+          <ChevronDown className="h-3 w-3" />
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -153,18 +179,16 @@ export const WorkspaceWorkflowPipeline: React.FC<WorkspaceWorkflowPipelineProps>
           </button>
         </div>
 
-        {/* Right Toggle (if collapsable) */}
-        {onToggleCollapse && (
-          <button
-            type="button"
-            onClick={onToggleCollapse}
-            className="flex h-7 w-7 items-center justify-center rounded-md text-slate-400 hover:bg-slate-200/50 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200 transition-colors"
-            aria-label={isCollapsed ? "Tampilkan panel alur" : "Sembunyikan panel alur"}
-            title={isCollapsed ? "Tampilkan alur kerja" : "Sembunyikan alur kerja"}
-          >
-            {isCollapsed ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}
-          </button>
-        )}
+        {/* Right Toggle Button */}
+        <button
+          type="button"
+          onClick={toggleCollapse}
+          className="flex h-7 w-7 items-center justify-center rounded-md text-slate-400 hover:bg-slate-200/50 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200 transition-colors cursor-pointer"
+          aria-label={isCollapsed ? "Tampilkan panel alur" : "Sembunyikan panel alur"}
+          title={isCollapsed ? "Tampilkan alur kerja" : "Ciutkan alur kerja"}
+        >
+          {isCollapsed ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}
+        </button>
       </div>
     </div>
   );

@@ -41,6 +41,42 @@ describe('AI reliability policy', () => {
     expect(operation).toHaveBeenCalledTimes(1);
   });
 
+  it.each(['response', 'first-token'] as const)('allows %s generation to outlive the connection budget', async phase => {
+    vi.useFakeTimers();
+    const operation = vi.fn(() => new Promise<string>(resolve => setTimeout(() => resolve('ready'), AI_RELIABILITY_POLICY.connectTimeoutMs + 1)));
+    const result = executeWithReliability('ollama', operation, undefined, 'slow-document', phase);
+    const assertion = expect(result).resolves.toBe('ready');
+    await vi.advanceTimersByTimeAsync(AI_RELIABILITY_POLICY.connectTimeoutMs + 1);
+    await assertion;
+    expect(operation).toHaveBeenCalledOnce();
+  });
+
+  it('retries stream setup after a timeout without cancelling the whole request', async () => {
+    vi.useFakeTimers();
+    const previousMock = process.env.E2E_MOCK_AI;
+    process.env.E2E_MOCK_AI = '0';
+    const signals: AbortSignal[] = [];
+    const adapter = vi.spyOn(AI_PROVIDER_ADAPTERS.ollama, 'generateStream').mockImplementation(async options => {
+      signals.push(options.abortSignal!);
+      if (signals.length === 1) return new Promise(() => undefined);
+      return { stream: (async function* () { yield { text: 'Analisis PDF.' }; })(), modelUsed: 'ollama-qwen3-1.7b' };
+    });
+    try {
+      const request = aiRequestService.generateStreamResponse({ requestedModelId: 'ollama-qwen3-1.7b', prompt: 'Analisis dokumen ini.', systemInstruction: '[CONTEXT_BOUNDARIES]' });
+      await vi.advanceTimersByTimeAsync(AI_RELIABILITY_POLICY.firstTokenTimeoutMs + AI_RELIABILITY_POLICY.retryMaxDelayMs);
+      const response = await request;
+      const chunks = [];
+      for await (const chunk of response.stream) chunks.push(chunk);
+      expect(chunks).toEqual([{ text: 'Analisis PDF.' }]);
+      expect(signals[0].aborted).toBe(true);
+      expect(signals[1].aborted).toBe(false);
+    } finally {
+      adapter.mockRestore();
+      if (previousMock === undefined) delete process.env.E2E_MOCK_AI;
+      else process.env.E2E_MOCK_AI = previousMock;
+    }
+  });
+
   it('opens provider circuit after the rolling failure threshold and permits one half-open probe', async () => {
     vi.useFakeTimers();
     const operation = vi.fn().mockRejectedValue(new Error('fetch failed'));

@@ -10,6 +10,7 @@ import {
   Command,
   MicOff,
   Mic,
+  ArrowUp,
   LucideIcon
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
@@ -33,6 +34,7 @@ interface Props {
   onCommand?: (cmd: string) => void;
   onOpenPlugin?: (pluginId: string) => void;
   quotaExceeded?: boolean;
+  isEmptyState?: boolean;
 }
 
 export function ChatComposer({
@@ -47,7 +49,8 @@ export function ChatComposer({
   draftOwnerId = 'guest',
   onCommand,
   onOpenPlugin,
-  quotaExceeded = false
+  quotaExceeded = false,
+  isEmptyState = false
 }: Props) {
   const { showToast } = useToast();
   const [input, setInput] = useState('');
@@ -121,13 +124,14 @@ export function ChatComposer({
       safeLocalStorage.removeItem(draftStorageKey);
     }
 
-    // Auto-grow textarea smoothly from 40px up to 120px without layout jump
+    // Keep the two-line mobile placeholder fully visible in the empty state.
     if (textareaRef.current) {
+      const minimumHeight = isEmptyState ? 64 : 40;
       if (!input.trim()) {
-        textareaRef.current.style.height = '40px';
+        textareaRef.current.style.height = `${minimumHeight}px`;
       } else {
         textareaRef.current.style.height = 'auto';
-        const newHeight = Math.min(Math.max(textareaRef.current.scrollHeight, 40), 120);
+        const newHeight = Math.min(Math.max(textareaRef.current.scrollHeight, minimumHeight), 120);
         textareaRef.current.style.height = `${newHeight}px`;
       }
     }
@@ -136,7 +140,7 @@ export function ChatComposer({
     const isSlash = input.startsWith('/');
     setShowCommands(isSlash);
     if (isSlash) setSelectedCmdIndex(0);
-  }, [input, draftStorageKey, isTemporary]);
+  }, [input, draftStorageKey, isTemporary, isEmptyState]);
 
   // Click outside to dismiss open menus
   useEffect(() => {
@@ -378,9 +382,12 @@ export function ChatComposer({
   return (
     <div
       ref={composerContainerRef}
-      className="w-full sticky bottom-0 z-20 shrink-0 bg-gradient-to-t from-slate-50/80 via-slate-50/40 to-transparent dark:from-[#080d16]/80 dark:via-[#080d16]/40 pointer-events-none [&>*]:pointer-events-auto"
+      className={`w-full z-20 shrink-0 pointer-events-none [&>*]:pointer-events-auto ${isEmptyState
+        ? 'relative bg-transparent'
+        : 'sticky bottom-0 bg-gradient-to-t from-[#f8f9fb]/98 via-[#f8f9fb]/88 to-transparent dark:from-[#0b0d10]/98 dark:via-[#0b0d10]/88'
+      }`}
     >
-      <div className="pt-1 pb-safe pb-[max(0.5rem,env(safe-area-inset-bottom))] px-3 max-w-2xl mx-auto w-full relative">
+      <div className={`mx-auto w-full relative ${isEmptyState ? 'max-w-4xl px-4 pt-5 pb-0 sm:px-6 sm:pt-6' : 'max-w-3xl px-3 pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))]'}`}>
 
         {/* 1. Quick Slash Commands Dropdown */}
         <AnimatePresence>
@@ -577,9 +584,9 @@ export function ChatComposer({
         )}
 
         {/* 4. Floating Island Input Bar with Restrained Borders */}
-        <div className="relative w-full max-w-2xl mx-auto">
+        <div className={`relative w-full ${isEmptyState ? 'max-w-4xl' : 'max-w-3xl'} mx-auto`}>
           {/* Input Container */}
-          <div className="relative flex items-center gap-1 sm:gap-1.5 p-1.5 sm:p-2 rounded-2xl bg-white dark:bg-[#0f141f] border border-slate-200/80 dark:border-slate-800 shadow-subtle dark:shadow-subtle-dark transition-all duration-150 focus-within:border-teal-500/80 dark:focus-within:border-teal-500/80 focus-within:ring-1 focus-within:ring-teal-500/20">
+          <div className={`relative flex items-center gap-1 sm:gap-1.5 rounded-[1.6rem] bg-white/95 dark:bg-[#0f141f]/95 border border-stone-200/90 dark:border-slate-700/80 shadow-[0_10px_34px_-16px_rgba(15,23,42,0.24)] dark:shadow-[0_12px_36px_-18px_rgba(0,0,0,0.72)] transition-all duration-150 focus-within:border-teal-500/80 dark:focus-within:border-teal-500/80 focus-within:ring-2 focus-within:ring-teal-500/10 ${isEmptyState ? 'p-2.5 sm:p-3' : 'p-1.5 sm:p-2'}`}>
 
             {/* Left Actions: Plus (+) & Mic */}
             <div className="flex items-center gap-0.5 shrink-0">
@@ -600,7 +607,7 @@ export function ChatComposer({
                 <Plus className="w-4 h-4 transition-transform duration-200" />
               </motion.button>
 
-              <motion.button
+              {!isEmptyState && <motion.button
                 type="button"
                 whileTap={{ scale: 0.94 }}
                 onClick={toggleListening}
@@ -614,7 +621,7 @@ export function ChatComposer({
                 aria-pressed={isListening}
               >
                 {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-              </motion.button>
+              </motion.button>}
             </div>
 
             {/* Textarea Input - Font size 16px on mobile prevents iOS Safari forced viewport auto-zoom */}
@@ -635,13 +642,32 @@ export function ChatComposer({
                   ? "Kuota harian telah digunakan. Istirahatlah sejenak dan kembali besok."
                   : isListening
                     ? "Mendengarkan ucapan Anda (Bahasa Indonesia)..."
-                    : "Ketik apa yang kamu rasakan..."
+                    : isEmptyState
+                      ? "Tulis ceritamu..."
+                      : "Ketik apa yang kamu rasakan..."
               }
-              className="flex-1 bg-transparent text-[16px] sm:text-[14px] text-stone-850 dark:text-stone-100 placeholder:text-stone-400 dark:placeholder:text-slate-500 focus:outline-none resize-none min-h-[38px] py-2 px-1.5 leading-relaxed overflow-y-auto custom-scrollbar disabled:opacity-60 disabled:cursor-not-allowed"
+              className={`min-w-0 flex-1 bg-transparent text-[16px] sm:text-[14px] text-stone-850 dark:text-stone-100 placeholder:text-stone-500 dark:placeholder:text-slate-400 focus:outline-none resize-none py-2 px-1.5 leading-relaxed overflow-y-auto custom-scrollbar disabled:opacity-60 disabled:cursor-not-allowed ${isEmptyState ? 'min-h-16' : 'min-h-[38px]'}`}
               rows={1}
               disabled={isTyping || quotaExceeded}
               aria-label="Tulis pesan untuk asisten AI"
             />
+
+            {isEmptyState && (
+              <motion.button
+                type="button"
+                whileTap={{ scale: 0.94 }}
+                onClick={toggleListening}
+                className={`min-w-10 min-h-10 rounded-full flex items-center justify-center shrink-0 transition-all cursor-pointer ${isListening
+                  ? 'bg-rose-500 text-white animate-pulse shadow-sm'
+                  : 'text-stone-400 hover:text-teal-700 dark:hover:text-teal-300 hover:bg-stone-100 dark:hover:bg-slate-800'
+                }`}
+                aria-label={isListening ? 'Hentikan rekam suara' : 'Input suara (Speech-to-Text)'}
+                title={isListening ? 'Hentikan rekam suara (Sedang mendengarkan...)' : 'Bicara (Input Suara Speech-to-Text)'}
+                aria-pressed={isListening}
+              >
+                {isListening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+              </motion.button>
+            )}
 
             {/* Primary Conversational Send / Stop Action Button */}
             <AnimatePresence mode="wait" initial={false}>
@@ -671,7 +697,7 @@ export function ChatComposer({
                   whileTap={hasContent ? { scale: 0.94 } : undefined}
                   onClick={handleSend}
                   disabled={!hasContent}
-                  className={`min-w-11 min-h-11 sm:min-w-10 sm:min-h-10 lg:min-w-9.5 lg:min-h-9.5 rounded-xl flex items-center justify-center shrink-0 transition-all duration-120 ${
+                  className={`min-w-11 min-h-11 sm:min-w-10 sm:min-h-10 lg:min-w-9.5 lg:min-h-9.5 ${isEmptyState ? 'rounded-full' : 'rounded-xl'} flex items-center justify-center shrink-0 transition-all duration-120 ${
                     hasContent
                       ? 'bg-teal-700 hover:bg-teal-800 text-white shadow-3xs cursor-pointer'
                       : 'text-stone-300 dark:text-slate-600 bg-transparent cursor-not-allowed'
@@ -679,7 +705,7 @@ export function ChatComposer({
                   aria-label="Kirim Pesan"
                   title="Kirim pesan (Enter)"
                 >
-                  <Send className="w-3.5 h-3.5 ml-0.5" />
+                  {isEmptyState ? <ArrowUp className="h-4 w-4" /> : <Send className="w-3.5 h-3.5 ml-0.5" />}
                 </motion.button>
               )}
             </AnimatePresence>

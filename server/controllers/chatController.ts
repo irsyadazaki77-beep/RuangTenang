@@ -1,3 +1,4 @@
+import { refreshOllamaInventory } from '../services/ai/ollamaRuntime.js';
 import { Request, Response } from 'express';
 import { ChatService } from '../services/chatService.js';
 import {
@@ -9,7 +10,8 @@ import {
 } from '../services/ai/aiModelRegistry.js';
 
 export class ChatController {
-  static getModels(req: Request, res: Response) {
+  static async getModels(req: Request, res: Response) {
+    await refreshOllamaInventory();
     const tier = req.user?.tier || 'Free';
     return res.json({
       defaultModel: getConfiguredDefaultAiModelId(tier),
