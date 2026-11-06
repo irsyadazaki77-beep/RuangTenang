@@ -1,5 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { ChatStreamingClient, StreamPayload, RoutingEventData } from '../services/chatStreamingClient';
+import { ReasoningEventData } from '../types';
+import type { FileSourceReference } from '../../../../shared/contracts/files';
 import { playCompletionChime } from '../../../lib/soundEffects';
 
 export function useChatStreaming() {
@@ -53,6 +55,8 @@ export function useChatStreaming() {
       onChatCreated?: (chatId: string) => void;
       onQuotaExceeded?: (data: { message: string; resetAt?: string; suggestedActions?: string[] }) => void;
       onRoutingMetadata?: (data: RoutingEventData) => void;
+      onSources?: (sources: FileSourceReference[]) => void;
+      onReasoning?: (data: ReasoningEventData) => void;
       onConsentRequired?: () => void;
     }
   ) => {
@@ -158,6 +162,14 @@ export function useChatStreaming() {
         onRoutingMetadata: (data) => {
           if (token !== currentTokenRef.current) return;
           callbacks.onRoutingMetadata?.(data);
+        },
+        onSources: (sources) => {
+          if (token !== currentTokenRef.current) return;
+          callbacks.onSources?.(sources);
+        },
+        onReasoning: (data) => {
+          if (token !== currentTokenRef.current) return;
+          callbacks.onReasoning?.(data);
         },
         onConsentRequired: () => {
           if (token !== currentTokenRef.current) return;

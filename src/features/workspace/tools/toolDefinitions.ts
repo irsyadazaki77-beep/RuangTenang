@@ -134,6 +134,36 @@ export const WORKSPACE_TOOL_DEFINITIONS: WorkspaceToolDefinition[] = [
     promptTemplate: (_input, contextText) =>
       `Jelaskan konsep inti, landasan ilmiah, dan keterkaitan teori yang terdapat dalam materi berikut secara komprehensif untuk mahasiswa:\n\n${contextText}`
   },
+  {
+    id: 'research_literature_matrix',
+    name: 'Susun Matriks Sintesis Literatur',
+    description: 'Membandingkan metodologi, temuan kunci, dan celah riset (research gap) dalam tabel matriks ilmiah.',
+    icon: 'FileSpreadsheet',
+    category: 'Research',
+    executionMode: 'ai',
+    outputType: 'ARTIFACT_UPDATE',
+    supportedArtifactTypes: ['DOCUMENT', 'OUTLINE'],
+    requiresArtifact: true,
+    supportsStreaming: true,
+    requiredCapabilities: ['chat'],
+    promptTemplate: (_input, contextText) =>
+      `Susun Matriks Sintesis Literatur dalam format tabel Markdown yang membandingkan: (1) Sumber/Penulis & Tahun, (2) Metodologi & Sampel, (3) Temuan Kunci, (4) Celah Riset / Limitasi, dan (5) Relevansi terhadap penelitian ini, diikuti paragraf sintesis kritis:\n\n${contextText}`
+  },
+  {
+    id: 'study_generate_flashcards_quiz',
+    name: 'Rangkuman Flashcard & Kuis Mandiri',
+    description: 'Menyusun daftar kartu tanya-jawab konsep inti dan soal latihan evaluasi mandiri di naskah.',
+    icon: 'GraduationCap',
+    category: 'Research',
+    executionMode: 'ai',
+    outputType: 'TEXT',
+    supportedArtifactTypes: ['DOCUMENT', 'OUTLINE'],
+    requiresArtifact: true,
+    supportsStreaming: true,
+    requiredCapabilities: ['chat'],
+    promptTemplate: (_input, contextText) =>
+      `Buatkan 5 kartu Flashcard (Pertanyaan & Jawaban ringkas) serta 3 soal Kuis Pilihan Ganda beserta kunci jawaban dan pembahasannya untuk menguji penguasaan mahasiswa terhadap materi berikut:\n\n${contextText}`
+  },
 
   // 3. CODING CATEGORY
   {

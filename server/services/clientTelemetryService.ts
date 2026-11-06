@@ -4,15 +4,15 @@ import { consentService } from './consentService.js';
 import { isProductionLikeEnvironment } from '../config/environment.js';
 
 export const clientDebugSchema = z.object({
-  type: z.enum(['onerror', 'unhandledrejection']).optional(),
+  type: z.enum(['onerror', 'unhandledrejection']).nullish(),
   message: z.string().min(1).max(500),
-  stack: z.string().max(2000).optional(),
-  source: z.string().max(300).optional(),
-  lineno: z.number().int().optional(),
-  colno: z.number().int().optional(),
-  url: z.string().max(500).optional(),
-  componentStack: z.string().max(2000).optional(),
-  timestamp: z.string().max(100).optional()
+  stack: z.string().max(2000).nullish(),
+  source: z.string().max(300).nullish(),
+  lineno: z.number().int().nullish(),
+  colno: z.number().int().nullish(),
+  url: z.string().max(500).nullish(),
+  componentStack: z.string().max(2000).nullish(),
+  timestamp: z.string().max(100).nullish()
 }).strict();
 
 export type ClientDebugPayload = z.infer<typeof clientDebugSchema>;
@@ -41,7 +41,7 @@ const MAX_BUFFER_SIZE = 50;
 /**
  * Strips sensitive query parameters and URL hashes
  */
-export function sanitizeTelemetryUrl(rawUrl?: string): string {
+export function sanitizeTelemetryUrl(rawUrl?: string | null): string {
   if (!rawUrl) return '';
   try {
     const urlObj = new URL(rawUrl, 'http://localhost');
@@ -54,7 +54,7 @@ export function sanitizeTelemetryUrl(rawUrl?: string): string {
 /**
  * Redacts secrets, tokens, passwords, session identifiers, and PII from stack traces and messages
  */
-export function redactTelemetryText(text?: string): string {
+export function redactTelemetryText(text?: string | null): string {
   if (!text) return '';
   let sanitized = scanAndSanitizePII(text).sanitizedText;
 

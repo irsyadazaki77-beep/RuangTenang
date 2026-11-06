@@ -2,7 +2,7 @@ import { getGenAIClient, DEFAULT_AI_MODEL } from '../../config/aiConfig.js';
 import { aiContextBuilder } from './aiContextBuilder.js';
 import { aiSafetyService } from './aiSafetyService.js';
 import { scanAndSanitizePII } from '../piiService.js';
-import { getActualGeminiModel, isRegisteredModelAvailable, resolveAiModel, getModelDefinition, isModelAllowedForTier } from './aiModelRegistry.js';
+import { getActualGeminiModel, resolveAiModel, getModelDefinition, isModelAllowedForTier } from './aiModelRegistry.js';
 import { AI_PROVIDER_ADAPTERS } from './aiProviderAdapters.js';
 import { geminiAdapter } from './geminiAdapter.js';
 import { AI_RELIABILITY_POLICY, executeWithReliability, guardAiStream, recordProviderStreamFailure } from './aiReliabilityService.js';
@@ -33,21 +33,29 @@ export interface AiRequestOptions {
 export function selectReliableModelCandidates(options: AiRequestOptions, primaryModelId: string, requirements: { capability: ModelCapability; hasAttachments?: boolean }): string[] {
   const selected = [primaryModelId];
   const fallbackPermitted = !options.comparisonMode && AI_RELIABILITY_POLICY.fallbackEnabled && (
-    options.routingDecision?.routingMode === 'auto' || Boolean(options.routingDecision?.profileId)
+    options.routingDecision?.routingMode === 'auto' || Boolean(options.routingDecision?.profileId) || !options.routingDecision
   );
   if (!fallbackPermitted) return selected;
 
-  for (const modelId of options.fallbackCandidates || options.routingDecision?.fallbackCandidates || []) {
+  const fallbackPool = [
+    ...(options.fallbackCandidates || options.routingDecision?.fallbackCandidates || []),
+    'openrouter-free-auto',
+    'openrouter-minimax-m3.1-flash',
+    'openrouter-gemma-4-31b',
+    'openrouter-nemotron-lightning'
+  ];
+
+  for (const modelId of fallbackPool) {
     const model = getModelDefinition(modelId);
     if (!model || selected.includes(modelId) || !isModelAllowedForTier(modelId, options.userTier || 'Free')) continue;
     const providerAvailable = model.provider === 'gemini'
       ? Boolean(getGenAIClient())
       : AI_PROVIDER_ADAPTERS[model.provider].isAvailable();
-    if (!providerAvailable || !isRegisteredModelAvailable(model)) continue;
+    if (!providerAvailable) continue;
     if (!model.capabilities.includes(requirements.capability)) continue;
     if (requirements.hasAttachments && !model.capabilities.includes('vision')) continue;
     selected.push(modelId);
-    if (selected.length === 3) break;
+    if (selected.length === 4) break;
   }
   return selected;
 }
@@ -109,7 +117,7 @@ export const aiRequestService = {
 
     const isAnonymous = !userId || userId === 'guest';
     const hasAttachments = Boolean(attachments && attachments.length > 0);
-    const defaultLimit = hasAttachments ? 2500 : (isAnonymous ? 1500 : 2500);
+    const defaultLimit = hasAttachments ? 6144 : (isAnonymous ? 4096 : 8192);
     const outputTokens = options.maxOutputTokens || defaultLimit;
 
     let fullSystemInstruction = systemInstruction || `Kamu adalah 'RuangTenang Companion', pendamping reflektif, empatik, dan suportif untuk mahasiswa Indonesia.
@@ -151,7 +159,10 @@ Pedoman Interaksi & Klasifikasi Kebutuhan:
     let failedProvider: string | undefined;
     for (const [index, modelId] of candidates.entries()) {
       const model = resolveAiModel(modelId, userTier);
-      if (index > 0 && failedProvider === model.provider && model.provider !== 'ollama' && ['TIMEOUT', 'NETWORK_ERROR', 'PROVIDER_UNAVAILABLE', 'RATE_LIMIT', 'QUOTA_EXCEEDED', 'AUTH_ERROR'].includes((lastError as any)?.category)) continue;
+      const skipSameProvider = model.provider === 'openrouter'
+        ? ['AUTH_ERROR'].includes((lastError as any)?.category)
+        : ['TIMEOUT', 'NETWORK_ERROR', 'PROVIDER_UNAVAILABLE', 'RATE_LIMIT', 'QUOTA_EXCEEDED', 'AUTH_ERROR'].includes((lastError as any)?.category);
+      if (index > 0 && failedProvider === model.provider && skipSameProvider) continue;
       try {
         let outputText = '';
         if (process.env.NODE_ENV === 'test' && process.env.E2E_MOCK_AI === '1') {
@@ -163,7 +174,7 @@ Pedoman Interaksi & Klasifikasi Kebutuhan:
             model: getActualGeminiModel(modelId),
             contents: [...sanitizedHistory, { role: 'user', parts: userParts }],
             config: { systemInstruction: fullSystemInstruction, temperature: 0.6, maxOutputTokens: outputTokens, ...(options.responseFormat === 'json' ? { responseMimeType: 'application/json' } : {}), abortSignal: signal }
-          }), abortSignal, requestId, 'response');
+          }), abortSignal, requestId);
           outputText = response.text || '';
         } else {
           const adapter = AI_PROVIDER_ADAPTERS[model.provider];
@@ -176,9 +187,8 @@ Pedoman Interaksi & Klasifikasi Kebutuhan:
             // Non-Gemini adapters only receive image attachments if the model supports vision
             attachments: model.capabilities.includes('vision') ? (options.attachments || []) : [],
             systemInstruction: fullSystemInstruction,
-            maxOutputTokens: outputTokens,
             abortSignal: signal
-          }, modelId), abortSignal, requestId, 'response');
+          }, modelId), abortSignal, requestId);
           outputText = response.text;
         }
         const validation = aiSafetyService.validateOutput(outputText);
@@ -190,9 +200,8 @@ Pedoman Interaksi & Klasifikasi Kebutuhan:
         if (abortSignal?.aborted) throw error;
         console.warn(`[AI_REQUEST] requestId=${requestId} attempt=${index + 1} model=${modelId} failed category=${(error as any)?.category || 'INTERNAL_ERROR'}`);
         const category = (error as any)?.category;
-        const mayTryProfileAlternative = (Boolean(options.routingDecision?.profileId)
-          && ['AUTH_ERROR', 'QUOTA_EXCEEDED'].includes(category))
-          || (model.provider === 'ollama' && ['CONTENT_ERROR', 'INVALID_REQUEST'].includes(category));
+        const mayTryProfileAlternative = Boolean(options.routingDecision?.profileId)
+          && ['AUTH_ERROR', 'QUOTA_EXCEEDED'].includes(category);
         if (index + 1 >= candidates.length || (!(error as any)?.retryable && !mayTryProfileAlternative)) break;
       }
     }
@@ -250,7 +259,7 @@ Pedoman Interaksi & Klasifikasi Kebutuhan:
 
     const isAnonymous = !userId || userId === 'guest';
     const hasAttachments = Boolean(attachments && attachments.length > 0);
-    const defaultLimit = hasAttachments ? 2500 : (isAnonymous ? 1500 : 2500);
+    const defaultLimit = hasAttachments ? 6144 : (isAnonymous ? 4096 : 8192);
     const outputTokens = options.maxOutputTokens || defaultLimit;
 
     const requestId = globalThis.crypto?.randomUUID?.() || `ai-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -300,7 +309,10 @@ Pedoman Interaksi & Klasifikasi Kebutuhan:
     let failedProvider: string | undefined;
     for (const [index, modelId] of candidates.entries()) {
       const model = resolveAiModel(modelId, userTier);
-      if (index > 0 && failedProvider === model.provider && model.provider !== 'ollama' && ['TIMEOUT', 'NETWORK_ERROR', 'PROVIDER_UNAVAILABLE', 'RATE_LIMIT', 'QUOTA_EXCEEDED', 'AUTH_ERROR'].includes((lastError as any)?.category)) continue;
+      const skipSameProvider = model.provider === 'openrouter'
+        ? ['AUTH_ERROR'].includes((lastError as any)?.category)
+        : ['TIMEOUT', 'NETWORK_ERROR', 'PROVIDER_UNAVAILABLE', 'RATE_LIMIT', 'QUOTA_EXCEEDED', 'AUTH_ERROR'].includes((lastError as any)?.category);
+      if (index > 0 && failedProvider === model.provider && skipSameProvider) continue;
       const streamController = new AbortController();
       const onParentAbort = () => streamController.abort();
       if (abortSignal?.aborted) streamController.abort();
@@ -315,16 +327,18 @@ Pedoman Interaksi & Klasifikasi Kebutuhan:
           const client = getGenAIClient();
           if (!client) throw Object.assign(new Error('PROVIDER_NOT_CONFIGURED'), { category: 'PROVIDER_UNAVAILABLE', retryable: true });
           source = await executeWithReliability(model.provider, signal => {
+            signal.addEventListener('abort', onParentAbort, { once: true });
             return geminiAdapter.generateStream(client, {
             model: getActualGeminiModel(modelId),
             contents: [...sanitizedHistory, { role: 'user', parts: userParts }],
-            config: { systemInstruction: fullSystemInstruction, temperature: 0.6, maxOutputTokens: outputTokens, abortSignal: AbortSignal.any([signal, streamController.signal]) }
+            config: { systemInstruction: fullSystemInstruction, temperature: 0.6, maxOutputTokens: outputTokens, abortSignal: streamController.signal }
             });
-          }, streamController.signal, requestId, 'first-token');
+          }, streamController.signal, requestId);
         } else {
           const adapter = AI_PROVIDER_ADAPTERS[model.provider];
           if (!adapter.isAvailable()) throw Object.assign(new Error('PROVIDER_NOT_CONFIGURED'), { category: 'PROVIDER_UNAVAILABLE', retryable: true });
           const result = await executeWithReliability(model.provider, signal => {
+            signal.addEventListener('abort', onParentAbort, { once: true });
             return adapter.generateStream({
               ...options,
               requestedModelId: modelId,
@@ -333,10 +347,9 @@ Pedoman Interaksi & Klasifikasi Kebutuhan:
               // Non-Gemini adapters only receive image attachments if the model supports vision
               attachments: model.capabilities.includes('vision') ? (options.attachments || []) : [],
               systemInstruction: fullSystemInstruction,
-              maxOutputTokens: outputTokens,
-              abortSignal: AbortSignal.any([signal, streamController.signal])
+              abortSignal: streamController.signal
             }, modelId);
-          }, streamController.signal, requestId, 'first-token');
+          }, streamController.signal, requestId);
           source = result.stream;
         }
         const guardedStream = async function* () {
@@ -351,9 +364,9 @@ Pedoman Interaksi & Klasifikasi Kebutuhan:
             const category = (error as any)?.category;
             const fallbackIds = candidates.slice(index + 1).filter(id => {
               const nextModel = getModelDefinition(id);
-              return nextModel && (nextModel.provider !== model.provider || model.provider === 'ollama');
+              return nextModel && (nextModel.provider !== model.provider || nextModel.provider === 'openrouter');
             });
-            if (!emittedText && !comparisonMode && !abortSignal?.aborted && ((error as any)?.retryable || (model.provider === 'ollama' && category === 'CONTENT_ERROR')) && fallbackIds.length) {
+            if (!emittedText && !comparisonMode && !abortSignal?.aborted && (error as any)?.retryable && fallbackIds.length) {
               const fallbackModelId = fallbackIds[0];
               const nextDecision = options.routingDecision?.profileId
                 ? { ...options.routingDecision, selectedModelId: fallbackModelId, fallbackCandidates: fallbackIds.slice(1) }
@@ -380,9 +393,8 @@ Pedoman Interaksi & Klasifikasi Kebutuhan:
         failedProvider = model.provider;
         console.warn(`[AI_REQUEST] requestId=${requestId} attempt=${index + 1} model=${modelId} failed category=${(error as any)?.category || 'INTERNAL_ERROR'}`);
         const category = (error as any)?.category;
-        const mayTryProfileAlternative = (Boolean(options.routingDecision?.profileId)
-          && ['AUTH_ERROR', 'QUOTA_EXCEEDED'].includes(category))
-          || (model.provider === 'ollama' && ['CONTENT_ERROR', 'INVALID_REQUEST'].includes(category));
+        const mayTryProfileAlternative = Boolean(options.routingDecision?.profileId)
+          && ['AUTH_ERROR', 'QUOTA_EXCEEDED'].includes(category);
         if (abortSignal?.aborted || (!(error as any)?.retryable && !mayTryProfileAlternative) || index + 1 >= candidates.length) throw error;
       }
     }

@@ -169,11 +169,16 @@ export const ExportModal: React.FC<ExportModalProps> = ({
         showToast('Excel (.xlsx) berhasil diunduh.', 'success');
         onClose();
       } else if (formatToUse === 'pdf_print') {
-        showToast('Membuka dialog cetak PDF browser...', 'info');
+        showToast('Menyusun dokumen PDF A4 akademik...', 'info');
+        const { exportToAcademicPdf } = await import('../utils/exportAcademicPdf');
+        const downloaded = await exportToAcademicPdf({
+          title: artifact.title || 'Naskah Akademik Skripsi',
+          content
+        });
+        if (downloaded) {
+          showToast('Dokumen PDF A4 akademik (.pdf) berhasil diunduh.', 'success');
+        }
         onClose();
-        setTimeout(() => {
-          window.print();
-        }, 300);
       } else if (formatToUse === 'markdown') {
         const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
         downloadBlob(blob, `${safeTitle}.md`);

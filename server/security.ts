@@ -67,7 +67,10 @@ export function sanitizeInput(text: string, maxLength: number = 1000): string {
   // eslint-disable-next-line no-control-regex
   clean = clean.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F\u202A-\u202E\u2066-\u2069\uFEFF]/g, '');
 
-  // 7. Trim whitespace and enforce length cap
+  // 7. Strip object prototype pollution keys if injected into raw strings
+  clean = clean.replace(/\b(__proto__|constructor|prototype)\b/gi, '');
+
+  // 8. Trim whitespace and enforce length cap
   clean = clean.trim();
   if (clean.length > maxLength) {
     clean = clean.substring(0, maxLength);

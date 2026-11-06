@@ -1,8 +1,7 @@
 import { 
   DEFAULT_KERJA_PROFILE_ID, 
   isKerjaProfile, 
-  KerjaProfileId,
-  AUTO_ROUTING_MODEL_ID
+  KerjaProfileId
 } from '../../../lib/aiModels';
 
 const MODEL_PREFERENCE_KEY = 'ruangkerja.model';
@@ -38,11 +37,14 @@ export function loadWorkspaceModelPreference(storage: Pick<Storage, 'getItem'> |
   try {
     const savedModel = storage?.getItem(getModelPreferenceKey(userId));
     if (!savedModel) {
-      return { modelId: AUTO_ROUTING_MODEL_ID, wasReset: false };
+      return { modelId: DEFAULT_KERJA_PROFILE_ID, wasReset: false };
     }
-    return { modelId: savedModel, wasReset: false };
+    if (isKerjaProfile(savedModel)) {
+      return { modelId: savedModel, wasReset: false };
+    }
+    return { modelId: migrateLegacyWorkspaceModelToProfile(savedModel), wasReset: true };
   } catch {
-    return { modelId: AUTO_ROUTING_MODEL_ID, wasReset: false };
+    return { modelId: DEFAULT_KERJA_PROFILE_ID, wasReset: false };
   }
 }
 

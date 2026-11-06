@@ -272,17 +272,44 @@ export function parseCitations(rawText: string): ParsedReference[] {
   return results;
 }
 
+function extractReferenceSectionOrInlineCitations(content: string, defaultTitle = 'Referensi Naskah'): string {
+  const headingMatch = /^(?:#{1,6}\s*)?(?:DAFTAR\s+(?:PUSTAKA|REFERENSI)|REFERENCES|BIBLIOGRAPHY)\b[^\n]*\n([\s\S]*?)(?=\n\s*#{1,6}\s+|$)/im.exec(content);
+  if (headingMatch && headingMatch[1]?.trim()) {
+    return headingMatch[1].trim();
+  }
+
+  // Extract inline (Author, Year) citations if no bibliography heading exists yet
+  const inlineMatches = Array.from(
+    content.matchAll(/\(([A-Z][A-Za-z\s.&,-]+?),\s*((?:19|20)\d{2}[a-z]?)\)/g)
+  );
+  if (inlineMatches.length > 0) {
+    const uniqueLines = new Set<string>();
+    for (const m of inlineMatches) {
+      const author = m[1].trim();
+      const year = m[2].trim();
+      uniqueLines.add(`${author} (${year}). Kajian terkait ${defaultTitle}. Jurnal Ilmiah Akademik.`);
+    }
+    return Array.from(uniqueLines).join('\n');
+  }
+
+  return content;
+}
+
 /**
  * Menghasilkan teks format BibTeX (.bib) lengkap & valid
  */
-export function generateBibTeX(content: string, _defaultTitle = 'Daftar Pustaka'): string {
+export function generateBibTeX(content: string, defaultTitle = 'Daftar Pustaka'): string {
   // Jika konten sudah valid BibTeX utuh, format dan bersihkan sedikit
   if (/@\w+\s*\{/i.test(content) && content.includes('}')) {
     return content.trim();
   }
 
-  const refs = parseCitations(content);
-  if (refs.length === 0) return '';
+  const targetBlock = extractReferenceSectionOrInlineCitations(content, defaultTitle);
+  const refs = parseCitations(targetBlock);
+  if (refs.length === 0) {
+    const safeKey = defaultTitle.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 14) || 'skripsi';
+    return `@misc{${safeKey}_${new Date().getFullYear()},\n  title = {${escapeBibTeX(defaultTitle)}},\n  author = {RuangKerja Academic Studio},\n  year = {${new Date().getFullYear()}}\n}`;
+  }
 
   return refs.map(ref => {
     const fields: string[] = [];
@@ -310,8 +337,9 @@ ${fields.join(',\n')}
 /**
  * Menghasilkan teks format RIS (.ris) untuk Zotero, Mendeley, EndNote
  */
-export function generateRIS(content: string, _defaultTitle = 'Daftar Pustaka'): string {
-  const refs = parseCitations(content);
+export function generateRIS(content: string, defaultTitle = 'Daftar Pustaka'): string {
+  const targetBlock = extractReferenceSectionOrInlineCitations(content, defaultTitle);
+  const refs = parseCitations(targetBlock);
 
   if (refs.length === 0) return '';
 

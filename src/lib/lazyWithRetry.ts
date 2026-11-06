@@ -6,37 +6,37 @@ const CHUNK_RELOAD_KEY = 'ruangtenang_chunk_reload_guard';
 export function lazyWithRetry<T extends ComponentType<any>>(
   factory: () => Promise<{ default: T } | any>
 ) {
-  return lazy(() =>
-    factory().catch(async (err: any) => {
-      const isChunkError =
-        err?.name === 'ChunkLoadError' ||
-        /loading chunk/i.test(err?.message || '') ||
-        /failed to fetch dynamically imported module/i.test(err?.message || '') ||
-        /importing a module script failed/i.test(err?.message || '');
+  return lazy(async () => {
+    const delays = [300, 800, 1500];
+    let lastError: any;
 
-      console.warn('Dynamic import failed:', err);
-
+    for (let attempt = 0; attempt <= delays.length; attempt++) {
       try {
-        await new Promise((resolve) => setTimeout(resolve, 300));
         return await factory();
-      } catch (retryErr: any) {
-        const isRetryChunkError =
-          isChunkError ||
-          retryErr?.name === 'ChunkLoadError' ||
-          /loading chunk/i.test(retryErr?.message || '') ||
-          /failed to fetch dynamically imported module/i.test(retryErr?.message || '') ||
-          /importing a module script failed/i.test(retryErr?.message || '');
-
-        if (isRetryChunkError && typeof window !== 'undefined') {
-          const lastReload = safeSessionStorage.getItem(CHUNK_RELOAD_KEY);
-          const now = Date.now();
-          if (!lastReload || now - parseInt(lastReload, 10) > 10000) {
-            safeSessionStorage.setItem(CHUNK_RELOAD_KEY, now.toString());
-            window.location.reload();
-          }
+      } catch (err: any) {
+        lastError = err;
+        if (attempt < delays.length) {
+          console.warn(`Dynamic import attempt ${attempt + 1} failed, retrying...`, err);
+          await new Promise((resolve) => setTimeout(resolve, delays[attempt]));
         }
-        throw retryErr;
       }
-    })
-  );
+    }
+
+    const isChunkError =
+      lastError?.name === 'ChunkLoadError' ||
+      /loading chunk/i.test(lastError?.message || '') ||
+      /failed to fetch dynamically imported module/i.test(lastError?.message || '') ||
+      /importing a module script failed/i.test(lastError?.message || '');
+
+    if (isChunkError && typeof window !== 'undefined') {
+      const lastReload = safeSessionStorage.getItem(CHUNK_RELOAD_KEY);
+      const now = Date.now();
+      if (!lastReload || now - parseInt(lastReload, 10) > 10000) {
+        safeSessionStorage.setItem(CHUNK_RELOAD_KEY, now.toString());
+        window.location.reload();
+      }
+    }
+    throw lastError;
+  });
 }
+

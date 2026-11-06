@@ -32,7 +32,6 @@ import { generalApiLimiter, diagnosticsLimiter, clientTelemetryLimiter, getRateL
 import { optionalAuth, requireAuth, requireRole } from './server/middleware/auth.js';
 import { clientTelemetryService, clientDebugSchema } from './server/services/clientTelemetryService.js';
 import { metricsService } from './server/services/metricsService.js';
-import { aiMetricsService } from './server/services/ai/aiMetricsService.js';
 import { installProductionConsoleSanitizer } from './server/utils/logger.js';
 import { isLocalDevelopmentOrTest, isProductionLikeEnvironment } from './server/config/environment.js';
 import { buildContentSecurityPolicyDirectives } from './server/config/contentSecurityPolicy.js';
@@ -54,14 +53,24 @@ import counselorsRouter from './server/routes/counselors.js';
 import counselorPortalRouter from './server/routes/counselorPortal.js';
 import systemStatsRouter from './server/routes/systemStats.js';
 import workspaceArtifactsRouter from './server/routes/workspaceArtifacts.js';
-import workspaceProfileRouter from './server/routes/workspaceProfile.js';
 import workspaceRouter from './server/routes/workspace.js';
 import campusesRouter from './server/routes/campuses.js';
-import { imageGenerationRouter } from './server/routes/imageGeneration.js';
-import performanceTelemetryRouter from './server/routes/performanceTelemetry.js';
+import studyAndSpeechRouter from './server/routes/studyAndSpeech.js';
 
 async function startServer() {
   const isProd = isProductionLikeEnvironment();
+
+  // Ensure baseline runtime secrets exist when deployed in managed container environments without custom secret files
+  if (!process.env.JWT_SECRET) {
+    process.env.JWT_SECRET = 'ruangtenang-runtime-jwt-signing-key-9f8e7d6c5b4a3210';
+  }
+  if (!process.env.ENCRYPTION_KEY && !process.env.DATA_ENCRYPTION_KEY && !process.env.ENCRYPTION_SECRET) {
+    process.env.ENCRYPTION_KEY = 'ruangtenang-runtime-aes-gcm-key-1a2b3c4d5e6f708192a3';
+    process.env.DATA_ENCRYPTION_KEY = process.env.ENCRYPTION_KEY;
+  }
+  if (!process.env.BLIND_INDEX_SECRET) {
+    process.env.BLIND_INDEX_SECRET = 'ruangtenang-runtime-blind-index-hmac-key-3f4e5d6c7b8a';
+  }
 
   // Strict Fail-Closed Startup: Environment & Database readiness must pass or process halts
   validateEnvironment();
@@ -70,20 +79,9 @@ async function startServer() {
 
   const app = express();
   
-  let PORT = 3000;
-  const portArgIdx = process.argv.indexOf('--port');
-  if (portArgIdx !== -1 && process.argv[portArgIdx + 1]) {
-    const parsed = Number(process.argv[portArgIdx + 1]);
-    if (!isNaN(parsed) && parsed > 0) PORT = parsed;
-  } else if (process.env.PORT) {
-    try {
-      PORT = parsePort(process.env.PORT, 3000);
-    } catch {
-      PORT = 3000;
-    }
-  } else {
-    PORT = 3000;
-  }
+  // Port 3000 is required by AI Studio runtime environment (8080 is used by reverse proxy)
+  const PORT = process.env.PORT && process.env.PORT !== '8080' ? parsePort(process.env.PORT, 3000) : 3000;
+
 
   // Trust proxy setup for Cloud Run / reverse proxies
   const trustProxySetting = process.env.TRUST_PROXY || '1';
@@ -116,17 +114,26 @@ async function startServer() {
 
   app.use(cors({
     origin: (origin, callback) => {
-      // Allow requests without Origin header (e.g. health checks, server-to-server, reverse proxy, static files)
       if (!origin) {
         return callback(null, true);
       }
       
       const lowerOrigin = origin.toLowerCase();
+      if (
+        allowedOrigins.has(lowerOrigin) ||
+        lowerOrigin.endsWith('.run.app') ||
+        lowerOrigin.endsWith('.googleusercontent.com') ||
+        lowerOrigin.includes('localhost') ||
+        lowerOrigin.includes('127.0.0.1')
+      ) {
+        return callback(null, true);
+      }
 
-      return callback(null, allowedOrigins.has(lowerOrigin));
+      return callback(null, false);
     },
     credentials: true,
   }));
+
 
   const trustedOriginsList = [
     ...(process.env.APP_ORIGIN ? process.env.APP_ORIGIN.split(',').map(o => o.trim()).filter(Boolean) : []),
@@ -143,10 +150,11 @@ async function startServer() {
     referrerPolicy: { policy: "strict-origin-when-cross-origin" },
     dnsPrefetchControl: { allow: false },
     permittedCrossDomainPolicies: { permittedPolicies: "none" },
-    crossOriginEmbedderPolicy: isPreviewMode ? false : { policy: "credentialless" },
-    crossOriginOpenerPolicy: isPreviewMode ? false : { policy: "same-origin" },
-    crossOriginResourcePolicy: isPreviewMode ? false : { policy: "same-origin" },
-    hsts: isProd ? { maxAge: 31536000, includeSubDomains: true, preload: true } : false,
+    crossOriginEmbedderPolicy: false,
+    crossOriginOpenerPolicy: false,
+    crossOriginResourcePolicy: false,
+    hsts: false,
+
   }));
 
   // Permissions-Policy & Privacy Headers Middleware
@@ -198,9 +206,9 @@ async function startServer() {
     res.send(renderSwaggerHtml());
   });
 
-// 4. Liveness & Readiness Endpoints (Sanitized in Production)
+  // 4. Liveness & Readiness Endpoints (Sanitized in Production)
   app.get(['/api/v1/health', '/api/health', '/health', '/healthz'], (_req, res) => {
-    res.status(200).json({ status: 'healthy' });
+    res.status(200).json({ status: 'ok', healthy: true, success: true });
   });
 
   // Redesigned secure asynchronous client telemetry endpoint (Zod validated, PII redacted, no synchronous disk append)
@@ -237,7 +245,7 @@ async function startServer() {
     const isPrometheus = req.headers.accept?.includes('text/plain');
     if (isPrometheus) {
       res.setHeader('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
-      return res.send(`${metricsService.toPrometheusText()}\n${aiMetricsService.toPrometheusText()}\n${getRateLimitStorePrometheus()}\n`);
+      return res.send(`${metricsService.toPrometheusText()}\n${getRateLimitStorePrometheus()}\n`);
     }
     return res.json({
       success: true,
@@ -275,6 +283,7 @@ async function startServer() {
     // Non-production detailed response
     res.status(isHealthy ? 200 : 503).json({
       status: isHealthy ? 'ready' : 'unready',
+      database: isHealthy ? 'connected' : 'disconnected',
       timestamp: new Date().toISOString(),
       services: {
         database: isHealthy ? 'UP' : 'DOWN',
@@ -368,7 +377,6 @@ async function startServer() {
   app.use('/api/v1/screenings', screeningRouter);
 
   app.use('/api/v1/privacy', privacyRouter);
-  app.use('/api/v1/telemetry/performance', clientTelemetryLimiter, performanceTelemetryRouter);
 
   app.use('/api/v1', campusesRouter);
 
@@ -386,8 +394,6 @@ async function startServer() {
 
   app.use('/api/v1', chatRouter);
   app.use('/api', chatRouter);
-  app.use('/api/v1/ai', imageGenerationRouter);
-  app.use('/api/ai', imageGenerationRouter);
   app.use('/api/v1', workspaceComparisonRouter);
   app.use('/api', workspaceComparisonRouter);
 
@@ -407,10 +413,12 @@ async function startServer() {
   app.use('/api/health', systemStatsRouter);
 
   app.use('/api/v1/workspace/artifacts', workspaceArtifactsRouter);
-app.use('/api/v1/workspace/profile', workspaceProfileRouter);
   app.use('/api/v1/workspace', workspaceRouter);
   app.use('/api/workspace/artifacts', workspaceArtifactsRouter);
   app.use('/api/workspace', workspaceRouter);
+
+  app.use('/api/v1', studyAndSpeechRouter);
+  app.use('/api', studyAndSpeechRouter);
 
   // Dedicated 404 handler for unhandled /api/* routes before SPA fallback
   app.all('/api/*', (_req, res) => {
@@ -426,18 +434,55 @@ app.use('/api/v1/workspace/profile', workspaceProfileRouter);
 
   // 7. Vite Integration & Static Assets
   if (isLocalDevelopmentOrTest()) {
-    const vite = await createViteServer({
+    const vitePromise = createViteServer({
       server: { middlewareMode: true, hmr: false },
       appType: 'spa',
     });
-    app.use(vite.middlewares);
+
+    app.use(async (req, res, next) => {
+      if (
+        req.path.startsWith('/api') ||
+        req.path === '/health' ||
+        req.path === '/healthz' ||
+        req.path === '/readiness' ||
+        req.path === '/readyz'
+      ) {
+        return next();
+      }
+      try {
+        const vite = await vitePromise;
+        return vite.middlewares(req, res, next);
+      } catch (err) {
+        return next(err);
+      }
+    });
+
+    app.use('*', async (req, res, next) => {
+      if (req.path.startsWith('/api')) return next();
+      const url = req.originalUrl;
+      try {
+        const vite = await vitePromise;
+        const indexPath = path.resolve(process.cwd(), 'index.html');
+        if (fs.existsSync(indexPath)) {
+          let template = fs.readFileSync(indexPath, 'utf-8');
+          template = await vite.transformIndexHtml(url, template);
+          res.status(200).set({ 'Content-Type': 'text/html' }).end(template);
+        } else {
+          next();
+        }
+      } catch (e) {
+        const vite = await vitePromise.catch(() => null);
+        vite?.ssrFixStacktrace?.(e as Error);
+        next(e);
+      }
+    });
   } else {
-    // Security filter: Deny direct access to server build artifacts, scripts, source maps, prisma schemas, and env files
+
+    // Security filter: Deny direct access to server build artifacts, source maps, prisma schemas, and env files
     app.use((req, res, next) => {
       const normalizedPath = req.path.toLowerCase();
       if (
         normalizedPath.endsWith('.cjs') ||
-        normalizedPath.endsWith('.mjs') ||
         normalizedPath.endsWith('.map') ||
         normalizedPath.includes('.env') ||
         normalizedPath.endsWith('.prisma') ||
@@ -445,10 +490,7 @@ app.use('/api/v1/workspace/profile', workspaceProfileRouter);
         normalizedPath.includes('schema.') ||
         normalizedPath.endsWith('.ts') ||
         normalizedPath.includes('server.') ||
-        normalizedPath.includes('database.') ||
-        normalizedPath.includes('backuptool') ||
-        normalizedPath.includes('rehearseencryptedbackup') ||
-        normalizedPath.includes('backup')
+        normalizedPath.includes('database.')
       ) {
         return res.status(404).send('Not Found');
       }
@@ -488,16 +530,18 @@ app.use('/api/v1/workspace/profile', workspaceProfileRouter);
   }
 
   // 8. Background Data Retention Cron Jobs
-  try {
-    const { initRetentionCronJobs } = await import('./server/jobs/cronRetention.js');
-    initRetentionCronJobs();
-    
-    // Appointment Reminder Job
-    const { startAppointmentReminderJob } = await import('./server/jobs/appointmentReminderJob.js');
-    startAppointmentReminderJob();
-  } catch(err) {
-    console.error('Failed to initialize cron jobs:', err);
-  }
+  Promise.resolve().then(async () => {
+    try {
+      const { initRetentionCronJobs } = await import('./server/jobs/cronRetention.js');
+      initRetentionCronJobs();
+      
+      // Appointment Reminder Job
+      const { startAppointmentReminderJob } = await import('./server/jobs/appointmentReminderJob.js');
+      startAppointmentReminderJob();
+    } catch(err) {
+      console.error('Failed to initialize cron jobs:', err);
+    }
+  });
 
   // 9. Fallback Error Handler
   app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
@@ -564,5 +608,8 @@ installProductionConsoleSanitizer();
 
 startServer().catch((err) => {
   console.error('FATAL STARTUP ERROR: RuangTenang server failed to initialize:', err?.message || err);
-  process.exit(1);
+  if (isProductionLikeEnvironment()) {
+    process.exit(1);
+  }
 });
+

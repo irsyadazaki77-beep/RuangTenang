@@ -3,12 +3,11 @@ import { Brain, Check, ChevronDown, Sparkles, Zap } from 'lucide-react';
 import {
   DEFAULT_KERJA_PROFILE_ID,
   isKerjaProfile,
-  isAutoRoutingModel,
   KerjaProfileId,
   KERJA_PROFILES
 } from '../../../lib/aiModels';
 import { migrateLegacyWorkspaceModelToProfile } from '../utils/workspaceModelPreference';
-import { useAiModelCatalog } from '../../../lib/aiModelCatalog';
+import { isOllamaOnlyCatalog, useAiModelCatalog } from '../../../lib/aiModelCatalog';
 
 interface WorkspaceModelSelectorProps {
   value: string;
@@ -29,27 +28,34 @@ export const WorkspaceModelSelector = React.memo(function WorkspaceModelSelector
   disabled = false,
   overlayPlacement = 'anchored'
 }: WorkspaceModelSelectorProps) {
-  const { models } = useAiModelCatalog();
-  // Check if incoming value is an active profile or a recognized manual model
+  const { models, profiles, loading: catalogLoading, error: catalogError, refresh: refreshCatalog } = useAiModelCatalog();
+  const isOllamaOnly = isOllamaOnlyCatalog(models);
+  const kerjaProfiles = KERJA_PROFILES.map(profile => {
+    const catalogProfile = profiles.find(item => item.id === profile.id && item.scope === 'kerja');
+    return catalogProfile ? { ...profile, ...catalogProfile, id: profile.id } : profile;
+  });
+  const serverProfile = (id: KerjaProfileId) => profiles.find(profile => profile.id === id && profile.scope === 'kerja');
+  const canSelectProfile = (id: KerjaProfileId) => {
+    const sp = serverProfile(id);
+    if (sp) return Boolean(sp.selectable && !catalogError);
+    const local = KERJA_PROFILES.find(p => p.id === id);
+    return Boolean(local?.selectable);
+  };
+  // Check if incoming value is an active profile
   const isProfile = isKerjaProfile(value);
-  const isAuto = isAutoRoutingModel(value);
-  const isRecognizedModel = Boolean(models.some(m => m.id === value));
   const activeProfileId: KerjaProfileId = isProfile
     ? value
     : migrateLegacyWorkspaceModelToProfile(value);
+  const activeProfile = kerjaProfiles.find(profile => profile.id === activeProfileId) ?? KERJA_PROFILES[1];
 
-  // If incoming value is unknown legacy model, migrate to default profile
+  // If incoming value is not a profile, migrate to default profile
   useEffect(() => {
-    if (value && !isProfile && !isAuto && !isRecognizedModel && models.length > 0) {
+    if (value && !isProfile) {
       onChange(activeProfileId);
     }
-  }, [value, isProfile, isAuto, isRecognizedModel, models.length, activeProfileId, onChange]);
+  }, [value, isProfile, activeProfileId, onChange]);
 
-  const activeProfile = isAuto
-    ? { id: 'auto' as any, name: 'Otomatis (Cerdas)', tag: 'Adaptif', description: 'Menyesuaikan model otomatis berdasarkan tugas & dokumen.' }
-    : (KERJA_PROFILES.find(p => p.id === activeProfileId) ?? KERJA_PROFILES[1]);
   const [open, setOpen] = useState(false);
-  const [showAdvanced, setShowAdvanced] = useState(() => !isProfile && isRecognizedModel);
   const [activeIndex, setActiveIndex] = useState(() =>
     Math.max(0, KERJA_PROFILES.findIndex(p => p.id === activeProfileId))
   );
@@ -72,19 +78,25 @@ export const WorkspaceModelSelector = React.memo(function WorkspaceModelSelector
   };
 
   const selectIndex = (index: number) => {
-    const profile = KERJA_PROFILES[index];
-    if (profile) {
+    const profile = kerjaProfiles[index];
+    if (profile && canSelectProfile(profile.id)) {
       onChange(profile.id);
       close();
     }
   };
 
-  const ActiveIcon = isAuto ? Sparkles : (PROFILE_ICONS[activeProfile.id] || Sparkles);
-  const displayName = isAuto
-    ? 'Otomatis (Cerdas)'
-    : isKerjaProfile(value)
-    ? activeProfile.name
-    : (models.find(m => m.id === value)?.name || activeProfile.name);
+  const moveActiveIndex = (direction: 1 | -1) => {
+    setActiveIndex(current => {
+      for (let offset = 1; offset <= kerjaProfiles.length; offset += 1) {
+        const next = (current + direction * offset + kerjaProfiles.length) % kerjaProfiles.length;
+        if (canSelectProfile(kerjaProfiles[next].id)) return next;
+      }
+      return current;
+    });
+  };
+
+  const ActiveIcon = PROFILE_ICONS[activeProfile.id] || Sparkles;
+  const displayName = activeProfile.name;
 
   return (
     <div className="relative">
@@ -95,8 +107,12 @@ export const WorkspaceModelSelector = React.memo(function WorkspaceModelSelector
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={listId}
-        aria-label={`Pilih model, ${displayName}`}
-        onClick={() => setOpen(prev => !prev)}
+        aria-label={`Profil AI: ${displayName}`}
+        onClick={() => {
+          const next = !open;
+          setOpen(next);
+          if (next) void refreshCatalog();
+        }}
         onKeyDown={event => {
           if (event.key === 'Escape' && open) {
             event.preventDefault();
@@ -131,10 +147,10 @@ export const WorkspaceModelSelector = React.memo(function WorkspaceModelSelector
                 close();
               } else if (event.key === 'ArrowDown') {
                 event.preventDefault();
-                setActiveIndex(i => (i + 1) % KERJA_PROFILES.length);
+                moveActiveIndex(1);
               } else if (event.key === 'ArrowUp') {
                 event.preventDefault();
-                setActiveIndex(i => (i - 1 + KERJA_PROFILES.length) % KERJA_PROFILES.length);
+                moveActiveIndex(-1);
               } else if (event.key === 'Enter' || event.key === ' ') {
                 event.preventDefault();
                 selectIndex(activeIndex);
@@ -146,7 +162,9 @@ export const WorkspaceModelSelector = React.memo(function WorkspaceModelSelector
                 Tingkat Kemampuan AI
               </div>
               <p className="text-[10.5px] text-slate-500 dark:text-slate-400 mt-0.5">
-                RuangKerja memilih model dan provider terbaik secara otomatis sesuai profil.
+                {isOllamaOnly
+                  ? 'Provider yang dikonfigurasi: Ollama. Permintaan diproses di endpoint server yang dapat berada di host lain; konfigurasi tidak memastikan endpoint sedang merespons.'
+                  : 'RuangKerja memilih model dan provider terbaik secara otomatis sesuai profil.'}
               </p>
             </div>
 
@@ -158,53 +176,17 @@ export const WorkspaceModelSelector = React.memo(function WorkspaceModelSelector
               tabIndex={0}
               className="space-y-1 outline-none"
             >
-              <button
-                type="button"
-                role="option"
-                id="workspace-profile-auto"
-                aria-selected={isAuto}
-                onClick={() => {
-                  onChange('auto');
-                  close();
-                }}
-                className={`flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 cursor-pointer ${
-                  isAuto
-                    ? 'bg-indigo-50 dark:bg-indigo-950/50 text-slate-900 dark:text-slate-100 ring-1 ring-indigo-500/30'
-                    : 'hover:bg-slate-50 dark:hover:bg-slate-800/40 text-slate-700 dark:text-slate-300'
-                }`}
-              >
-                <div
-                  className={`p-1.5 rounded-md mt-0.5 shrink-0 ${
-                    isAuto
-                      ? 'bg-indigo-600 text-white shadow-xs'
-                      : 'bg-slate-150 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
-                  }`}
-                >
-                  <Sparkles className="h-4 w-4" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between gap-1.5">
-                    <span className="font-semibold text-xs text-slate-900 dark:text-slate-100 truncate">
-                      Otomatis (Cerdas)
-                    </span>
-                    <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 shrink-0">
-                      Rekomendasi
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-2">
-                    Menyesuaikan model otomatis berdasarkan tugas, coding, dan berkas lampiran (PDF/Word/CSV).
-                  </p>
-                </div>
-                {isAuto && (
-                  <Check className="h-4 w-4 text-indigo-600 dark:text-indigo-400 shrink-0 mt-1" />
-                )}
-              </button>
-
-              {KERJA_PROFILES.map((profile, index) => {
-                const isSelected = !isAuto && profile.id === activeProfileId;
+              {catalogLoading && <p role="status" className="px-2.5 py-1 text-[10px] text-slate-500">Memuat ketersediaan profil…</p>}
+              {catalogError && <p role="alert" className="px-2.5 py-1 text-[10px] text-amber-700 dark:text-amber-300">Status profil tidak dapat dimuat. Coba tutup lalu buka pemilih ini lagi.</p>}
+              {!profiles.some(profile => profile.scope === 'kerja') && !catalogLoading && !catalogError && <p role="alert" className="px-2.5 py-1 text-[10px] text-amber-700 dark:text-amber-300">Status profil RuangKerja tidak tersedia dari katalog server. Profil dinonaktifkan sampai status dapat dimuat.</p>}
+              {kerjaProfiles.map((profile, index) => {
+                const isSelected = isProfile && profile.id === activeProfileId;
                 const isFocused = index === activeIndex;
                 const IconComponent = PROFILE_ICONS[profile.id] || Sparkles;
                 const isDefault = profile.id === DEFAULT_KERJA_PROFILE_ID;
+                const selectable = canSelectProfile(profile.id);
+                const serverStatus = serverProfile(profile.id);
+                const unavailableReason = !serverStatus ? 'Status ketersediaan tidak tersedia.' : serverStatus.available ? 'Tidak tersedia untuk paket akun ini.' : 'Tidak ada model yang tersedia untuk profil ini saat ini.';
 
                 return (
                   <button
@@ -213,9 +195,12 @@ export const WorkspaceModelSelector = React.memo(function WorkspaceModelSelector
                     role="option"
                     id={`workspace-profile-${profile.id}`}
                     aria-selected={isSelected}
+                    aria-disabled={!selectable}
+                    disabled={!selectable}
                     onMouseEnter={() => setActiveIndex(index)}
                     onClick={() => selectIndex(index)}
-                    className={`flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
+                    title={!selectable ? unavailableReason : undefined}
+                    className={`flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-50 ${
                       isSelected
                         ? 'bg-indigo-50 dark:bg-indigo-950/50 text-slate-900 dark:text-slate-100'
                         : isFocused
@@ -243,7 +228,7 @@ export const WorkspaceModelSelector = React.memo(function WorkspaceModelSelector
                         )}
                       </div>
                       <p className="mt-0.5 text-[10.5px] text-slate-500 dark:text-slate-400 leading-snug">
-                        {profile.description}
+                        {selectable ? profile.description : unavailableReason}
                       </p>
                     </div>
 
@@ -257,67 +242,6 @@ export const WorkspaceModelSelector = React.memo(function WorkspaceModelSelector
                 );
               })}
             </div>
-
-            {/* Advanced Section: Manual Model Selection */}
-            {models && models.length > 0 && (
-              <div className="mt-2 border-t border-slate-150 pt-2 dark:border-slate-800/80">
-                <button
-                  type="button"
-                  onClick={() => setShowAdvanced(prev => !prev)}
-                  className="flex w-full items-center justify-between px-2.5 py-1 text-[11px] font-semibold text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200 transition-colors cursor-pointer rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/40"
-                  aria-expanded={showAdvanced}
-                >
-                  <span className="flex items-center gap-1.5">
-                    <span>Pengaturan Model Manual</span>
-                    {!isKerjaProfile(value) && !isAuto && (
-                      <span className="rounded bg-indigo-100 px-1 py-0.2 text-[9px] font-semibold text-indigo-800 dark:bg-indigo-950/80 dark:text-indigo-300">
-                        Manual Aktif
-                      </span>
-                    )}
-                  </span>
-                  <ChevronDown
-                    className={`h-3.5 w-3.5 transition-transform duration-150 ${showAdvanced ? 'rotate-180' : ''}`}
-                    aria-hidden="true"
-                  />
-                </button>
-
-                {showAdvanced && (
-                  <div className="mt-1.5 max-h-48 space-y-1 overflow-y-auto px-1 custom-scrollbar">
-                    <p className="px-1.5 py-0.5 text-[9.5px] text-slate-500 dark:text-slate-400">
-                      Pilih model spesifik untuk instruksi teknis langsung (tanpa fallback tersembunyi):
-                    </p>
-                    {models
-                      .filter(m => m.selectable && m.available)
-                      .map(m => {
-                        const isManualSelected = value === m.id;
-                        return (
-                          <button
-                            key={m.id}
-                            type="button"
-                            onClick={() => {
-                              onChange(m.id);
-                              close();
-                            }}
-                            className={`flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left text-xs transition-colors ${
-                              isManualSelected
-                                ? 'bg-indigo-50 font-semibold text-indigo-900 dark:bg-indigo-950/60 dark:text-indigo-200'
-                                : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
-                            }`}
-                          >
-                            <div className="min-w-0 flex-1 pr-2">
-                              <div className="truncate text-[11px] font-medium">{m.name}</div>
-                              <div className="truncate text-[9.5px] text-slate-400">{m.provider} · {m.speed}</div>
-                            </div>
-                            {isManualSelected && (
-                              <Check className="h-3.5 w-3.5 shrink-0 text-indigo-600 dark:text-indigo-400" />
-                            )}
-                          </button>
-                        );
-                      })}
-                  </div>
-                )}
-              </div>
-            )}
           </div>
         </>
       )}

@@ -622,10 +622,10 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
                   {historyList.slice(0, 3).map((item, idx) => (
                     <div key={idx} className="flex items-center justify-between surface-muted p-2.5 rounded-lg border border-default text-xs">
                       <div>
-                        <p className="font-medium text-primary text-xs">
-                          PHQ-9: <span className="text-teal-600 dark:text-teal-400">{item.phq9.severity}</span> • GAD-7: <span className="text-teal-600 dark:text-teal-400">{item.gad7.severity}</span>
+                        <p className="font-medium text-primary text-xs tabular-nums">
+                          PHQ-9: <span className="text-teal-600 dark:text-teal-400 font-semibold">{item.phq9.score}/27 ({item.phq9.severity})</span> · GAD-7: <span className="text-teal-600 dark:text-teal-400 font-semibold">{item.gad7.score}/21 ({item.gad7.severity})</span>
                         </p>
-                        <p className="text-[10.5px] text-secondary mt-0.5">
+                        <p className="text-[10.5px] text-secondary mt-0.5 tabular-nums">
                           {new Date(item.phq9.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
                         </p>
                       </div>
@@ -664,10 +664,10 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
             {/* Top Progress Bar */}
             <div className="space-y-2">
               <div className="flex items-center justify-between text-xs">
-                <span className="font-semibold text-teal-700 dark:text-teal-300 bg-teal-50 dark:bg-teal-950/80 border border-teal-200 dark:border-teal-800 px-2.5 py-1 rounded-full text-[11px]">
+                <span className="font-semibold text-teal-700 dark:text-teal-300 bg-teal-50 dark:bg-teal-950/80 border border-teal-200 dark:border-teal-800 px-2.5 py-1 rounded-lg text-[11px]">
                   {currentQ.sectionTitle}
                 </span>
-                <span className="font-bold text-primary tracking-tight">
+                <span className="font-bold text-primary tracking-tight tabular-nums">
                   Pertanyaan {currentQuestionIndex + 1} dari {TOTAL_QUESTIONS}
                 </span>
               </div>
@@ -698,7 +698,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
                   className="surface-card border border-default p-4 sm:p-5 rounded-2xl shadow-3xs space-y-4 w-full"
                 >
                   <div className="flex items-start gap-3">
-                    <span className="w-7 h-7 shrink-0 rounded-lg bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300 font-extrabold text-xs flex items-center justify-center border border-teal-200/70 dark:border-teal-800/70">
+                    <span className="w-7 h-7 shrink-0 rounded-lg bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300 font-extrabold text-xs flex items-center justify-center border border-teal-200/70 dark:border-teal-800/70 tabular-nums">
                       {currentQ.numberDisplay}
                     </span>
                     <h3 aria-live="polite" aria-atomic="true" className="text-sm sm:text-base font-medium text-primary leading-snug pt-0.5">
@@ -722,7 +722,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
                           }`}
                         >
                           <div className="flex items-center gap-2.5">
-                            <span className={`w-6 h-6 rounded-md text-[11px] font-bold flex items-center justify-center transition-colors ${
+                            <span className={`w-6 h-6 rounded-md text-[11px] font-bold flex items-center justify-center transition-colors tabular-nums ${
                               isSelected
                                 ? 'bg-white/20 text-white'
                                 : 'bg-slate-100 dark:bg-slate-800 text-secondary group-hover:bg-teal-100 dark:group-hover:bg-teal-900 group-hover:text-teal-700 dark:group-hover:text-teal-300'
@@ -846,7 +846,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
               <div className="p-4 sm:p-5 rounded-2xl bg-linear-to-br from-amber-50 via-teal-50/60 to-emerald-50 dark:from-amber-950/40 dark:via-teal-950/30 dark:to-emerald-950/30 border-2 border-amber-300/80 dark:border-amber-700/80 shadow-md space-y-3 relative overflow-hidden">
                 <div className="flex items-start gap-3">
                   <div className="p-2.5 bg-amber-500 text-white rounded-xl shadow-xs shrink-0 mt-0.5">
-                    <HeartHandshake className="w-5 h-5 animate-pulse" />
+                    <HeartHandshake className="w-5 h-5" />
                   </div>
                   <div className="space-y-1">
                     <h4 className="text-xs sm:text-sm font-bold text-amber-950 dark:text-amber-200 leading-snug">

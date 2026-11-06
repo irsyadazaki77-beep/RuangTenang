@@ -27,6 +27,7 @@ interface SidebarHeaderProps {
   searchInputRef: RefObject<HTMLInputElement>;
   showArchived?: boolean;
   onToggleArchiveView?: () => void;
+  onOpenCommandPalette?: () => void;
 }
 
 export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
@@ -41,9 +42,11 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
   searchInputRef,
   showArchived = false,
   onToggleArchiveView,
+  onOpenCommandPalette,
 }) => {
   const isRuangKerja = currentMode === 'RUANG_KERJA';
   const [isModeMenuOpen, setIsModeMenuOpen] = useState(false);
+  const [isInlineSearchOpen, setIsInlineSearchOpen] = useState(false);
   const modeMenuRef = useRef<HTMLDivElement>(null);
 
   // Close dropdown on click outside or Escape
@@ -68,9 +71,18 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
     };
   }, [isModeMenuOpen]);
 
+  const handleSearchClick = () => {
+    if (onOpenCommandPalette) {
+      onOpenCommandPalette();
+      return;
+    }
+    setIsInlineSearchOpen(prev => !prev);
+    setTimeout(() => searchInputRef.current?.focus(), 60);
+  };
+
   if (isCollapsed) {
     return (
-      <div className="p-2 space-y-2 shrink-0 border-b border-slate-200/60 dark:border-slate-800/60 flex flex-col items-center">
+      <div className="p-2 space-y-1.5 shrink-0 flex flex-col items-center">
         <BrandLogo mode={currentMode} size="sm" iconOnly />
         {/* Expand Button */}
         <SidebarTooltip content="Buka Lebar Sidebar (Ctrl+B)" show={true} position="right">
@@ -89,47 +101,38 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
           <button
             type="button"
             onClick={onNewChat}
-            className="w-9 h-9 rounded-lg flex items-center justify-center text-white bg-emerald-600 hover:bg-emerald-700 transition-all cursor-pointer shadow-xs active:scale-95"
+            className="w-9 h-9 rounded-lg flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-200/80 dark:hover:bg-slate-800 transition-all cursor-pointer active:scale-95"
             aria-label="Chat Baru (Obrolan Baru)"
           >
             <SquarePen className="w-4 h-4" />
           </button>
         </SidebarTooltip>
 
-        {/* Mode Switcher Toggle Button */}
-        <div className="pt-1 border-t border-slate-200/60 dark:border-slate-800/60 w-full flex justify-center">
-          <SidebarTooltip
-            content={isRuangKerja ? 'Beralih ke RuangTenang' : 'Beralih ke RuangKerja'}
-            show={true}
-            position="right"
-          >
-            <button
-              type="button"
-              onClick={() => onSwitchMode?.(isRuangKerja ? 'RUANG_TENANG' : 'RUANG_KERJA')}
-              className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all cursor-pointer ${
-                isRuangKerja
-                  ? 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30'
-                  : 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
-              }`}
-              aria-label={isRuangKerja ? 'Beralih ke RuangTenang' : 'Beralih ke RuangKerja'}
-            >
-              <ArrowLeftRight className="w-4 h-4" />
-            </button>
-          </SidebarTooltip>
-        </div>
-
-        {/* Search Icon Trigger */}
-        <SidebarTooltip content="Cari Obrolan (Ctrl+K atau /)" show={true} position="right">
+        {/* Search Icon Trigger (Ctrl+K) */}
+        <SidebarTooltip content="Cari Obrolan & Pintasan (Ctrl+K)" show={true} position="right">
           <button
             type="button"
-            onClick={() => {
-              onToggleCollapse();
-              setTimeout(() => searchInputRef.current?.focus(), 150);
-            }}
-            className="w-9 h-9 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200/70 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+            onClick={handleSearchClick}
+            className="w-9 h-9 rounded-lg flex items-center justify-center text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/70 dark:hover:bg-slate-800 transition-colors cursor-pointer"
             aria-label="Cari Obrolan"
           >
             <Search className="w-4 h-4" />
+          </button>
+        </SidebarTooltip>
+
+        {/* Mode Switcher Toggle Button */}
+        <SidebarTooltip
+          content={isRuangKerja ? 'Beralih ke RuangTenang' : 'Beralih ke RuangKerja'}
+          show={true}
+          position="right"
+        >
+          <button
+            type="button"
+            onClick={() => onSwitchMode?.(isRuangKerja ? 'RUANG_TENANG' : 'RUANG_KERJA')}
+            className="w-9 h-9 rounded-lg flex items-center justify-center text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/70 dark:hover:bg-slate-800 transition-all cursor-pointer"
+            aria-label={isRuangKerja ? 'Beralih ke RuangTenang' : 'Beralih ke RuangKerja'}
+          >
+            <ArrowLeftRight className="w-4 h-4" />
           </button>
         </SidebarTooltip>
       </div>
@@ -137,21 +140,21 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
   }
 
   return (
-    <div className="p-3 space-y-2.5 shrink-0 border-b border-slate-200/60 dark:border-slate-800/60">
-      {/* 1. Baris 1: ChatGPT/Gemini Style Brand Selector Dropdown + Action Buttons */}
-      <div className="flex items-center justify-between min-h-[34px]">
+    <div className="px-2.5 pt-2.5 pb-1.5 space-y-2 shrink-0">
+      {/* Single Clean Top Row: Brand Selector Dropdown + Minimal Action Icons (ChatGPT / Gemini style) */}
+      <div className="flex items-center justify-between min-h-[36px]">
         {/* Brand Dropdown Trigger */}
         <div ref={modeMenuRef} className="relative min-w-0">
           <button
             type="button"
             onClick={() => setIsModeMenuOpen(prev => !prev)}
-            className="flex items-center gap-2 px-2 py-1.5 -ml-1.5 rounded-xl hover:bg-slate-200/60 dark:hover:bg-slate-800/70 transition-colors cursor-pointer text-left group"
+            className="flex items-center gap-2 px-2 py-1.5 -ml-1 rounded-xl hover:bg-slate-200/60 dark:hover:bg-slate-800/70 transition-colors cursor-pointer text-left group"
             aria-label={`Mode: ${isRuangKerja ? 'RuangKerja' : 'RuangTenang'}`}
             aria-expanded={isModeMenuOpen}
           >
             <BrandLogo mode={currentMode} size="xs" />
             <div className="flex items-center gap-1 min-w-0">
-              <span className="font-bold text-sm tracking-tight text-slate-900 dark:text-slate-100 truncate">
+              <span className="font-semibold text-sm tracking-tight text-slate-900 dark:text-slate-100 truncate">
                 {isRuangKerja ? 'RuangKerja' : 'RuangTenang'}
               </span>
               <ChevronDown
@@ -229,13 +232,41 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
           </AnimatePresence>
         </div>
 
-        {/* Right Actions: New Chat & Collapse */}
-        <div className="flex items-center gap-1">
+        {/* Right Actions: Search (Ctrl+K), Archive, New Chat, Collapse */}
+        <div className="flex items-center gap-0.5">
+          <SidebarTooltip content="Cari Obrolan & Pintasan (Ctrl+K)" show={true} position="bottom">
+            <button
+              type="button"
+              onClick={handleSearchClick}
+              className="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-200/70 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              aria-label="Cari Obrolan (Ctrl+K)"
+            >
+              <Search className="w-4 h-4" />
+            </button>
+          </SidebarTooltip>
+
+          {onToggleArchiveView && (
+            <SidebarTooltip content={showArchived ? 'Lihat Obrolan Aktif' : 'Arsip Obrolan'} show={true} position="bottom">
+              <button
+                type="button"
+                onClick={onToggleArchiveView}
+                className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                  showArchived
+                    ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300'
+                    : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-200/70 dark:hover:bg-slate-800'
+                }`}
+                aria-label="Arsip Obrolan"
+              >
+                <Archive className="w-4 h-4" />
+              </button>
+            </SidebarTooltip>
+          )}
+
           <SidebarTooltip content={isRuangKerja ? 'Ruang Kerja Baru (⌘N)' : 'Obrolan Baru (⌘N)'} show={true} position="bottom">
             <button
               type="button"
               onClick={onNewChat}
-              className="p-1.5 rounded-lg transition-all duration-150 cursor-pointer text-slate-600 dark:text-slate-300 hover:bg-slate-200/70 dark:hover:bg-slate-800 active:scale-95 hover:text-emerald-600 dark:hover:text-emerald-400"
+              className="p-1.5 rounded-lg transition-all duration-150 cursor-pointer text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-200/70 dark:hover:bg-slate-800 active:scale-95"
               aria-label="Chat Baru (Obrolan Baru)"
             >
               <SquarePen className="w-4 h-4" />
@@ -266,57 +297,30 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
         </div>
       </div>
 
-      {/* 2. Baris 2: Search Bar Kompak & Archive Icon Button (Langsung di bawah, tanpa slider duplikat!) */}
-      <div className="flex items-center gap-1.5">
-        <div
-          className="flex-1 h-[32px] px-2.5 rounded-lg flex items-center gap-1.5 text-xs bg-slate-100/80 dark:bg-slate-800/60 hover:bg-slate-200/50 dark:hover:bg-slate-800 transition-colors cursor-text border border-slate-200/70 dark:border-slate-750 focus-within:ring-1 focus-within:border-emerald-500/70 focus-within:ring-emerald-500/20"
-          onClick={() => searchInputRef.current?.focus()}
-        >
+      {/* Optional inline search fallback if search text is active */}
+      {(isInlineSearchOpen || Boolean(search)) && (
+        <div className="flex items-center gap-1.5 h-[32px] px-2.5 rounded-lg bg-slate-100/80 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-750">
           <Search className="w-3.5 h-3.5 text-slate-400 shrink-0 pointer-events-none" />
           <input
             ref={searchInputRef}
             value={search}
             onChange={e => onSearchChange(e.target.value)}
-            placeholder="Cari obrolan..."
-            className="flex-1 w-full bg-transparent text-xs text-slate-800 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 outline-none leading-none min-w-0"
+            placeholder="Filter riwayat..."
+            className="flex-1 w-full bg-transparent text-xs text-slate-800 dark:text-slate-100 placeholder:text-slate-400 outline-none leading-none min-w-0"
           />
-          {search ? (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onSearchChange('');
-                searchInputRef.current?.focus();
-              }}
-              className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-0.5 rounded hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer shrink-0"
-              aria-label="Bersihkan pencarian"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          ) : (
-            <span className="hidden sm:inline text-[9.5px] text-slate-400 dark:text-slate-500 select-none font-mono shrink-0 px-1 py-0.2 bg-slate-200/60 dark:bg-slate-700/60 rounded">
-              ⌘K
-            </span>
-          )}
+          <button
+            type="button"
+            onClick={() => {
+              onSearchChange('');
+              setIsInlineSearchOpen(false);
+            }}
+            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-0.5 rounded cursor-pointer shrink-0"
+            aria-label="Tutup filter"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
         </div>
-
-        {onToggleArchiveView && (
-          <SidebarTooltip content={showArchived ? 'Lihat Obrolan Aktif' : 'Lihat Obrolan Terarsip'} show={true} position="bottom">
-            <button
-              type="button"
-              onClick={onToggleArchiveView}
-              className={`h-[32px] w-[32px] rounded-lg flex items-center justify-center transition-colors cursor-pointer shrink-0 border ${
-                showArchived
-                  ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-800'
-                  : 'bg-slate-100/80 dark:bg-slate-800/60 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 border-slate-200/70 dark:border-slate-750 hover:bg-slate-200/50 dark:hover:bg-slate-800'
-              }`}
-              aria-label="Arsip Obrolan"
-            >
-              <Archive className="w-3.5 h-3.5" />
-            </button>
-          </SidebarTooltip>
-        )}
-      </div>
+      )}
     </div>
   );
 };

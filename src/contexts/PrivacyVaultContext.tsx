@@ -1,5 +1,12 @@
-import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import { safeLocalStorage } from '../lib/storage';
+
+export interface VerifyPinResult {
+  valid: boolean;
+  isLockedOut?: boolean;
+  remainingSeconds?: number;
+  remainingAttempts?: number;
+}
 
 interface PrivacyVaultContextType {
   isVaultConfigured: boolean;
@@ -7,8 +14,12 @@ interface PrivacyVaultContextType {
   isIncognitoMode: boolean;
   isPanicScreenActive: boolean;
   autoLockMinutes: number;
+  failedAttempts: number;
+  isLockedOut: boolean;
+  lockoutSecondsRemaining: number;
   setupPin: (pin: string) => Promise<boolean>;
   verifyPin: (pin: string) => Promise<boolean>;
+  verifyPinDetailed: (pin: string) => Promise<VerifyPinResult>;
   changePin: (oldPin: string, newPin: string) => Promise<boolean>;
   removePin: (currentPin: string) => Promise<boolean>;
   lockVault: () => void;
@@ -17,6 +28,7 @@ interface PrivacyVaultContextType {
   setIncognitoMode: (val: boolean) => void;
   triggerPanicScreen: () => void;
   dismissPanicScreen: () => void;
+  resetLockout: () => void;
 }
 
 const PrivacyVaultContext = createContext<PrivacyVaultContextType | undefined>(undefined);
@@ -24,19 +36,58 @@ const PrivacyVaultContext = createContext<PrivacyVaultContextType | undefined>(u
 const VAULT_PIN_HASH_KEY = 'rt_privacy_vault_pin_hash';
 const VAULT_SALT_KEY = 'rt_privacy_vault_salt';
 const VAULT_AUTOLOCK_KEY = 'rt_privacy_vault_autolock_min';
+const VAULT_FAILED_ATTEMPTS_KEY = 'rt_privacy_vault_failed_attempts';
+const VAULT_LOCK_UNTIL_KEY = 'rt_privacy_vault_lock_until';
 
-// Cryptographic hash using SHA-256 Web Crypto API
-async function hashPinWithSalt(pin: string, salt: string): Promise<string> {
+// PBKDF2 with 100,000 rounds using Web Crypto API (OWASP A02 Cryptographic Standard)
+async function hashPinPBKDF2(pin: string, saltHex: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const pinData = encoder.encode(pin);
+
+  // Convert salt hex to Uint8Array
+  let saltBytes: Uint8Array;
+  if (/^[0-9a-fA-F]+$/.test(saltHex) && saltHex.length % 2 === 0) {
+    const matches = saltHex.match(/.{1,2}/g) || [];
+    saltBytes = new Uint8Array(matches.map(byte => parseInt(byte, 16)));
+  } else {
+    saltBytes = encoder.encode(saltHex);
+  }
+
+  const keyMaterial = await window.crypto.subtle.importKey(
+    'raw',
+    pinData,
+    { name: 'PBKDF2' },
+    false,
+    ['deriveBits', 'deriveKey']
+  );
+
+  const derivedBits = await window.crypto.subtle.deriveBits(
+    {
+      name: 'PBKDF2',
+      salt: saltBytes,
+      iterations: 100000,
+      hash: 'SHA-256'
+    },
+    keyMaterial,
+    256
+  );
+
+  const hashArray = Array.from(new Uint8Array(derivedBits));
+  return 'pbkdf2$' + hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Legacy SHA-256 hash for seamless backward compatibility
+async function hashPinLegacy(pin: string, salt: string): Promise<string> {
   const encoder = new TextEncoder();
   const data = encoder.encode(pin + ':' + salt + ':RuangTenangVault2026');
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashBuffer = await window.crypto.subtle.digest('SHA-256', data);
   const hashArray = Array.from(new Uint8Array(hashBuffer));
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
 function generateSalt(): string {
   const array = new Uint8Array(16);
-  crypto.getRandomValues(array);
+  window.crypto.getRandomValues(array);
   return Array.from(array).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
@@ -48,6 +99,15 @@ export const PrivacyVaultProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [isVaultUnlocked, setIsVaultUnlocked] = useState<boolean>(false);
   const [isIncognitoMode, setIsIncognitoMode] = useState<boolean>(false);
   const [isPanicScreenActive, setIsPanicScreenActive] = useState<boolean>(false);
+
+  // Progressive Brute-Force Defense State
+  const [failedAttempts, setFailedAttempts] = useState<number>(() => {
+    const saved = safeLocalStorage.getItem(VAULT_FAILED_ATTEMPTS_KEY);
+    return saved ? parseInt(saved, 10) : 0;
+  });
+
+  const [lockoutSecondsRemaining, setLockoutSecondsRemaining] = useState<number>(0);
+
   const [autoLockMinutes] = useState<number>(() => {
     const saved = safeLocalStorage.getItem(VAULT_AUTOLOCK_KEY);
     return saved ? parseInt(saved, 10) : 5; // Default 5 minutes
@@ -59,6 +119,27 @@ export const PrivacyVaultProvider: React.FC<{ children: React.ReactNode }> = ({ 
   useEffect(() => {
     const storedHash = safeLocalStorage.getItem(VAULT_PIN_HASH_KEY);
     setIsVaultConfigured(Boolean(storedHash));
+  }, []);
+
+  // Monitor lockout countdown
+  useEffect(() => {
+    const checkLockout = () => {
+      const lockUntil = safeLocalStorage.getItem(VAULT_LOCK_UNTIL_KEY);
+      if (lockUntil) {
+        const lockUntilTs = parseInt(lockUntil, 10);
+        const diffSeconds = Math.max(0, Math.ceil((lockUntilTs - Date.now()) / 1000));
+        setLockoutSecondsRemaining(diffSeconds);
+        if (diffSeconds === 0) {
+          safeLocalStorage.removeItem(VAULT_LOCK_UNTIL_KEY);
+        }
+      } else {
+        setLockoutSecondsRemaining(0);
+      }
+    };
+
+    checkLockout();
+    const interval = setInterval(checkLockout, 1000);
+    return () => clearInterval(interval);
   }, []);
 
   // 5-Minute Inactivity Auto-Lock Monitor
@@ -74,14 +155,14 @@ export const PrivacyVaultProvider: React.FC<{ children: React.ReactNode }> = ({ 
     window.addEventListener('touchstart', handleUserActivity, { passive: true });
     window.addEventListener('scroll', handleUserActivity, { passive: true });
 
-    // Check every 30 seconds
+    // Check every 15 seconds
     const interval = setInterval(() => {
       const now = Date.now();
       const elapsedMinutes = (now - lastActivityRef.current) / (1000 * 60);
       if (elapsedMinutes >= autoLockMinutes) {
         setIsVaultUnlocked(false);
       }
-    }, 30000);
+    }, 15000);
 
     return () => {
       window.removeEventListener('mousemove', handleUserActivity);
@@ -117,12 +198,20 @@ export const PrivacyVaultProvider: React.FC<{ children: React.ReactNode }> = ({ 
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
+  const resetLockout = useCallback(() => {
+    safeLocalStorage.removeItem(VAULT_FAILED_ATTEMPTS_KEY);
+    safeLocalStorage.removeItem(VAULT_LOCK_UNTIL_KEY);
+    setFailedAttempts(0);
+    setLockoutSecondsRemaining(0);
+  }, []);
+
   const setupPin = async (pin: string): Promise<boolean> => {
     try {
       const salt = generateSalt();
-      const hash = await hashPinWithSalt(pin, salt);
+      const hash = await hashPinPBKDF2(pin, salt);
       safeLocalStorage.setItem(VAULT_SALT_KEY, salt);
       safeLocalStorage.setItem(VAULT_PIN_HASH_KEY, hash);
+      resetLockout();
       setIsVaultConfigured(true);
       setIsVaultUnlocked(true);
       lastActivityRef.current = Date.now();
@@ -132,18 +221,74 @@ export const PrivacyVaultProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }
   };
 
-  const verifyPin = async (pin: string): Promise<boolean> => {
+  const verifyPinDetailed = async (pin: string): Promise<VerifyPinResult> => {
+    const lockUntil = safeLocalStorage.getItem(VAULT_LOCK_UNTIL_KEY);
+    if (lockUntil) {
+      const lockUntilTs = parseInt(lockUntil, 10);
+      const diffSeconds = Math.max(0, Math.ceil((lockUntilTs - Date.now()) / 1000));
+      if (diffSeconds > 0) {
+        return { valid: false, isLockedOut: true, remainingSeconds: diffSeconds };
+      }
+      safeLocalStorage.removeItem(VAULT_LOCK_UNTIL_KEY);
+    }
+
     const salt = safeLocalStorage.getItem(VAULT_SALT_KEY);
     const storedHash = safeLocalStorage.getItem(VAULT_PIN_HASH_KEY);
-    if (!salt || !storedHash) return false;
+    if (!salt || !storedHash) return { valid: false };
 
-    const computedHash = await hashPinWithSalt(pin, salt);
-    return computedHash === storedHash;
+    let isMatch: boolean;
+
+    if (storedHash.startsWith('pbkdf2$')) {
+      const computed = await hashPinPBKDF2(pin, salt);
+      isMatch = computed === storedHash;
+    } else {
+      // Legacy SHA-256 fallback
+      const legacyComputed = await hashPinLegacy(pin, salt);
+      isMatch = legacyComputed === storedHash;
+      if (isMatch) {
+        // Transparent upgrade to PBKDF2
+        const upgraded = await hashPinPBKDF2(pin, salt);
+        safeLocalStorage.setItem(VAULT_PIN_HASH_KEY, upgraded);
+      }
+    }
+
+    if (isMatch) {
+      resetLockout();
+      return { valid: true };
+    }
+
+    // Failed attempt handling: progressive lockout
+    const newCount = failedAttempts + 1;
+    setFailedAttempts(newCount);
+    safeLocalStorage.setItem(VAULT_FAILED_ATTEMPTS_KEY, String(newCount));
+
+    let lockSeconds = 0;
+    if (newCount >= 7) {
+      lockSeconds = 900; // 15 minutes
+    } else if (newCount >= 5) {
+      lockSeconds = 120; // 2 minutes
+    } else if (newCount >= 3) {
+      lockSeconds = 30; // 30 seconds
+    }
+
+    if (lockSeconds > 0) {
+      const lockUntilTime = Date.now() + (lockSeconds * 1000);
+      safeLocalStorage.setItem(VAULT_LOCK_UNTIL_KEY, String(lockUntilTime));
+      setLockoutSecondsRemaining(lockSeconds);
+      return { valid: false, isLockedOut: true, remainingSeconds: lockSeconds };
+    }
+
+    return { valid: false, isLockedOut: false, remainingAttempts: Math.max(0, 3 - newCount) };
+  };
+
+  const verifyPin = async (pin: string): Promise<boolean> => {
+    const result = await verifyPinDetailed(pin);
+    return result.valid;
   };
 
   const unlockVault = async (pin: string): Promise<boolean> => {
-    const valid = await verifyPin(pin);
-    if (valid) {
+    const result = await verifyPinDetailed(pin);
+    if (result.valid) {
       setIsVaultUnlocked(true);
       lastActivityRef.current = Date.now();
       return true;
@@ -166,6 +311,7 @@ export const PrivacyVaultProvider: React.FC<{ children: React.ReactNode }> = ({ 
     if (!valid) return false;
     safeLocalStorage.removeItem(VAULT_SALT_KEY);
     safeLocalStorage.removeItem(VAULT_PIN_HASH_KEY);
+    resetLockout();
     setIsVaultConfigured(false);
     setIsVaultUnlocked(false);
     return true;
@@ -183,6 +329,8 @@ export const PrivacyVaultProvider: React.FC<{ children: React.ReactNode }> = ({ 
     setIsPanicScreenActive(false);
   };
 
+  const isLockedOut = lockoutSecondsRemaining > 0;
+
   return (
     <PrivacyVaultContext.Provider
       value={{
@@ -191,8 +339,12 @@ export const PrivacyVaultProvider: React.FC<{ children: React.ReactNode }> = ({ 
         isIncognitoMode,
         isPanicScreenActive,
         autoLockMinutes,
+        failedAttempts,
+        isLockedOut,
+        lockoutSecondsRemaining,
         setupPin,
         verifyPin,
+        verifyPinDetailed,
         changePin,
         removePin,
         lockVault,
@@ -200,7 +352,8 @@ export const PrivacyVaultProvider: React.FC<{ children: React.ReactNode }> = ({ 
         toggleIncognito,
         setIncognitoMode: setIsIncognitoMode,
         triggerPanicScreen,
-        dismissPanicScreen
+        dismissPanicScreen,
+        resetLockout
       }}
     >
       {children}
@@ -214,8 +367,12 @@ const defaultPrivacyVault: PrivacyVaultContextType = {
   isIncognitoMode: false,
   isPanicScreenActive: false,
   autoLockMinutes: 5,
+  failedAttempts: 0,
+  isLockedOut: false,
+  lockoutSecondsRemaining: 0,
   setupPin: async () => false,
   verifyPin: async () => false,
+  verifyPinDetailed: async () => ({ valid: false }),
   changePin: async () => false,
   removePin: async () => false,
   lockVault: () => {},
@@ -223,7 +380,8 @@ const defaultPrivacyVault: PrivacyVaultContextType = {
   toggleIncognito: () => {},
   setIncognitoMode: () => {},
   triggerPanicScreen: () => {},
-  dismissPanicScreen: () => {}
+  dismissPanicScreen: () => {},
+  resetLockout: () => {}
 };
 
 export const usePrivacyVault = (): PrivacyVaultContextType => {

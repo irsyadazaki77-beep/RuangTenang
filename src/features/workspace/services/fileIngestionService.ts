@@ -6,6 +6,7 @@ import {
 } from '../types.js';
 import { MAX_UPLOAD_FILE_SIZE_BYTES, SUPPORTED_WORKSPACE_FILE_EXTENSIONS } from '../../../../shared/contracts/files.js';
 import { readGuestAiConsent } from '../../../lib/guestAiConsent.js';
+import { getStoredAuthToken, getOrCreateGuestAttachmentToken, setStoredGuestAttachmentToken } from '../../../lib/apiClient.js';
 
 export const MAX_FILE_SIZE_BYTES = MAX_UPLOAD_FILE_SIZE_BYTES;
 
@@ -103,10 +104,19 @@ export async function pollProcessingStatus(
 
     try {
       const scope = chatId ? `?chatId=${encodeURIComponent(chatId)}` : '';
+      const storedToken = getStoredAuthToken();
+      const guestToken = getOrCreateGuestAttachmentToken();
       const res = await fetch(`/api/v1/chat/attachments/${attachmentId}/status${scope}`, {
         credentials: 'include',
+        headers: {
+          'X-Guest-Attachment-Token': guestToken,
+          ...(storedToken ? { Authorization: `Bearer ${storedToken}` } : {})
+        },
         signal
       });
+      const returnedGuestToken = typeof res.headers?.get === 'function' ? res.headers.get('x-guest-attachment-token') : null;
+      if (returnedGuestToken) setStoredGuestAttachmentToken(returnedGuestToken);
+
 
       if (!res.ok) {
         const errorMessage = res.status === 401
@@ -213,11 +223,14 @@ export async function processFileForWorkspace(
     }
     formData.append('workspaceMode', 'true');
     const csrfCookie = document.cookie.match(/(?:^|; )XSRF-TOKEN=([^;]+)/)?.[1];
+    const storedToken = getStoredAuthToken();
     const uploadHeaders: Record<string, string> = {
       'X-Requested-With': 'XMLHttpRequest',
-      'X-Guest-AI-Consent': String(readGuestAiConsent())
+      'X-Guest-AI-Consent': String(readGuestAiConsent()),
+      'X-Guest-Attachment-Token': getOrCreateGuestAttachmentToken()
     };
     if (csrfCookie) uploadHeaders['X-CSRF-Token'] = decodeURIComponent(csrfCookie);
+    if (storedToken) uploadHeaders['Authorization'] = `Bearer ${storedToken}`;
 
     const res = await fetch('/api/v1/chat/attachments/upload', {
       method: 'POST',
@@ -227,7 +240,13 @@ export async function processFileForWorkspace(
       signal
     });
 
+    const returnedGuestToken = res.headers.get('X-Guest-Attachment-Token');
+    if (returnedGuestToken) setStoredGuestAttachmentToken(returnedGuestToken);
+
     const data = await res.json();
+    if (typeof data?.guestAttachmentToken === 'string') {
+      setStoredGuestAttachmentToken(data.guestAttachmentToken);
+    }
 
     if (!res.ok || !data.success) {
       const errMsg = data.message || data.error?.message || 'Gagal mengunggah berkas.';
@@ -346,17 +365,24 @@ export async function processFileForWorkspace(
 export async function retryWorkspaceFile(attachmentId: string, signal?: AbortSignal, chatId?: string): Promise<FileValidationResult> {
   try {
     const scope = chatId ? `?chatId=${encodeURIComponent(chatId)}` : '';
+    const storedToken = getStoredAuthToken();
+    const csrfCookie = document.cookie.match(/(?:^|; )XSRF-TOKEN=([^;]+)/)?.[1];
     const response = await fetch(`/api/v1/chat/attachments/${encodeURIComponent(attachmentId)}/retry${scope}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'X-Requested-With': 'XMLHttpRequest',
-        'X-Guest-AI-Consent': String(readGuestAiConsent())
+        'X-Guest-AI-Consent': String(readGuestAiConsent()),
+        'X-Guest-Attachment-Token': getOrCreateGuestAttachmentToken(),
+        ...(csrfCookie ? { 'X-CSRF-Token': decodeURIComponent(csrfCookie) } : {}),
+        ...(storedToken ? { Authorization: `Bearer ${storedToken}` } : {})
       },
       credentials: 'include',
       body: JSON.stringify({ guestAiConsent: readGuestAiConsent() }),
       signal
     });
+    const returnedGuestToken = response.headers.get('X-Guest-Attachment-Token');
+    if (returnedGuestToken) setStoredGuestAttachmentToken(returnedGuestToken);
     const payload = await response.json();
     if (!response.ok || !payload.success) {
       return { valid: false, error: 'PROCESSING_FAILED', message: payload.message || 'Gagal mencoba ulang pemrosesan dokumen.' };

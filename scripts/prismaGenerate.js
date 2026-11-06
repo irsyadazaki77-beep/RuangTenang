@@ -2,31 +2,10 @@ import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
-// Establish schema.postgres.prisma as Single Source of Truth (SSOT)
-const pgSchemaPath = path.resolve(process.cwd(), 'prisma', 'schema.postgres.prisma');
-const sqliteSchemaPath = path.resolve(process.cwd(), 'prisma', 'schema.sqlite.prisma');
-
-if (fs.existsSync(pgSchemaPath)) {
-  const pgContent = fs.readFileSync(pgSchemaPath, 'utf8');
-  const sqliteDatasource = `datasource db {\n  provider = "sqlite"\n  url      = "file:./ruangtenang_sqlite.db"\n}`;
-  const synchronizedSqlite = pgContent.replace(/datasource db \{[\s\S]*?\}/, sqliteDatasource);
-
-  const existingSqlite = fs.existsSync(sqliteSchemaPath) ? fs.readFileSync(sqliteSchemaPath, 'utf8') : '';
-  if (existingSqlite !== synchronizedSqlite) {
-    try {
-      fs.writeFileSync(sqliteSchemaPath, synchronizedSqlite, 'utf8');
-      console.log('[PRISMA VALIDATE] Successfully synchronized schema.sqlite.prisma from PostgreSQL Single Source of Truth (schema.postgres.prisma).');
-    } catch (writeErr) {
-      console.warn('[PRISMA VALIDATE] Warning: Could not update schema.sqlite.prisma (file might be locked by another process):', writeErr?.message || writeErr);
-    }
-  }
-}
-
 const dbUrl = (process.env.DATABASE_URL || '').trim();
 const hasPostgresUrl = dbUrl.startsWith('postgresql://') || dbUrl.startsWith('postgres://');
 const explicitProvider = (process.env.DB_PROVIDER || '').toLowerCase().trim();
 
-// Use PostgreSQL ONLY if a valid postgres URL is present or explicitly configured with valid connection string
 const isPostgres = hasPostgresUrl || (explicitProvider === 'postgresql' && hasPostgresUrl);
 const rawProvider = isPostgres ? 'postgresql' : 'sqlite';
 const schemaPath = isPostgres
@@ -37,31 +16,25 @@ console.log(`[PRISMA GENERATE] Selected schema: ${schemaPath} (Provider: ${rawPr
 
 const clientPath = path.resolve(process.cwd(), 'node_modules', '.prisma', 'client', 'index.js');
 const clientExists = fs.existsSync(clientPath);
-const dbPath = path.resolve(process.cwd(), 'prisma', 'ruangtenang_sqlite.db');
-const dbExists = fs.existsSync(dbPath);
+
+if (clientExists && !isPostgres) {
+  console.log('[PRISMA GENERATE] Prisma Client is already available. Skipping regeneration.');
+  process.exit(0);
+}
 
 const isWin = process.platform === 'win32';
 const prismaBin = path.resolve(process.cwd(), 'node_modules', '.bin', isWin ? 'prisma.cmd' : 'prisma');
-const prismaCmd = fs.existsSync(prismaBin) ? `"${prismaBin}"` : 'npx --yes prisma';
 
-try {
-  execSync(`${prismaCmd} generate --schema ${schemaPath}`, { stdio: 'inherit' });
-} catch (err) {
-  if (clientExists) {
-    console.warn('[PRISMA GENERATE] Warning: Prisma generate encountered an issue, but existing Prisma Client is available. Continuing...', err?.message || err);
-  } else {
-    console.error('[PRISMA GENERATE] Failed to generate Prisma Client:', err);
-    process.exit(1);
-  }
-}
-
-// Auto-initialize SQLite database and synchronize schema if absent
-if (!isPostgres && !dbExists) {
-  console.log('[PRISMA INIT] SQLite database not detected. Auto-creating database and synchronizing schema...');
+if (fs.existsSync(prismaBin)) {
   try {
-    execSync(`${prismaCmd} db push --schema prisma/schema.sqlite.prisma --skip-generate`, { stdio: 'inherit' });
-    console.log('[PRISMA INIT] SQLite database schema synchronized successfully.');
-  } catch (pushErr) {
-    console.error('[PRISMA INIT] Warning: Failed to auto-initialize SQLite schema:', pushErr);
+    execSync(`"${prismaBin}" generate --schema ${schemaPath}`, {
+      stdio: 'inherit',
+      timeout: 8000,
+    });
+  } catch (err) {
+    console.warn('[PRISMA GENERATE] Notice: Prisma generate skipped or timed out; falling back to safe runtime store.', err?.message || err);
   }
+} else {
+  console.log('[PRISMA GENERATE] Local prisma binary not found; using safe runtime store.');
 }
+

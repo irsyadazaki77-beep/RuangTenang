@@ -100,6 +100,22 @@ export const documentIngestionService = {
       };
     }
 
+    // Purge any stale failed records for the identical file in this scope so re-uploading succeeds cleanly
+    const staleFailed = await prisma.attachments.findMany({
+      where: {
+        userId,
+        checksum: verified.checksum,
+        chatId: chatId || null,
+        status: 'failed'
+      },
+      select: { id: true, data: true }
+    });
+    for (const failedAtt of staleFailed) {
+      await prisma.documentChunks.deleteMany({ where: { attachmentId: failedAtt.id } }).catch(() => {});
+      await prisma.attachments.deleteMany({ where: { id: failedAtt.id, userId } }).catch(() => {});
+      await deleteStoredAttachmentFile(failedAtt.data).catch(() => {});
+    }
+
     // 3. STORE: Write file securely with randomized name and safe permissions (0o600)
     const attachmentId = `att_${Date.now()}_${crypto.randomBytes(6).toString('hex')}`;
     const storageFilename = `${attachmentId}.bin`;

@@ -122,7 +122,7 @@ export const WorkspacePresetSelector: React.FC<WorkspacePresetSelectorProps> = R
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={listId}
-        aria-label={`Preset AI: ${activePreset.name}${isManualOverride ? ' (dengan override manual)' : ''}`}
+        aria-label={`Preset AI: ${activePreset.name}${isManualOverride ? ' (disesuaikan)' : ''}`}
         onClick={() => setOpen(prev => !prev)}
         onKeyDown={(e) => { if (e.key === 'Escape' && open) closeMenu(); }}
         className="h-8 max-w-[min(48vw,16rem)] inline-flex items-center gap-1.5 rounded-lg px-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-200/70 dark:hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 transition-colors cursor-pointer"

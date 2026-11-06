@@ -265,7 +265,6 @@ export function useWorkspaceStreaming({
         : userPrompt;
       await client.stream({
         message: formattedPrompt,
-        idempotencyKey: identity.requestId,
         workspaceContext,
         chatId: chatId || undefined,
         isTemporary,
@@ -283,7 +282,10 @@ export function useWorkspaceStreaming({
         presetId: config?.presetId,
         taskCategory: config?.taskCategory,
         latencyPreference: config?.latencyPreference,
-        qualityPreference: config?.qualityPreference
+        qualityPreference: config?.qualityPreference,
+        webSearchEnabled: config?.webSearchEnabled,
+        thinkingDepth: config?.thinkingDepth,
+        projectInstructions: config?.projectInstructions
       }, {
         onChatCreated: newChatId => {
           if (isCurrentRequest(identity)) {
@@ -292,7 +294,18 @@ export function useWorkspaceStreaming({
           }
         },
         onRoutingMetadata: data => {
-          if (isCurrentRequest(identity)) routingMeta = data;
+          if (isCurrentRequest(identity)) routingMeta = { ...routingMeta, ...data };
+        },
+        onReasoning: data => {
+          if (!isCurrentRequest(identity)) return;
+          routingMeta = {
+            ...routingMeta,
+            reasoningSteps: data.steps,
+            thinkingDurationMs: data.durationMs,
+            thinkingDepth: data.thinkingDepth,
+            webSearchUsed: data.webSearchUsed
+          };
+          scheduleStreamingMessageFlush();
         },
         onSources: sources => {
           if (isCurrentRequest(identity)) sourceReferences = sources;

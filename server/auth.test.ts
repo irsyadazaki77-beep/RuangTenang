@@ -93,7 +93,8 @@ describe('Role-Based Access Control (RBAC) & Middleware Security', () => {
     expect(normalizeRole('licensed_psychologist')).toBe('konselor');
     expect(normalizeRole('CLINICAL_COUNSELOR')).toBe('konselor');
     expect(normalizeRole('PEER_COUNSELOR')).toBe('peer_counselor');
-    expect(normalizeRole('campus-admin')).toBe('admin');
+    expect(normalizeRole('campus-admin')).toBe('campus_admin');
+    expect(normalizeRole('admin')).toBe('admin');
     expect(normalizeRole('student')).toBe('mahasiswa');
     expect(normalizeRole('counsellorr')).toBe('unknown');
   });

@@ -25,7 +25,6 @@ import { ConsentTab } from './components/ConsentTab';
 import { ErasureTab } from './components/ErasureTab';
 import { clientDb } from '../../lib/clientDb';
 import { safeLocalStorage } from '../../lib/storage';
-import { notifyPerformanceTelemetryConsent } from '../../lib/performanceTelemetryConsent';
 
 interface PrivacyCenterModalProps {
   isOpen: boolean;
@@ -121,6 +120,8 @@ export const PrivacyCenterModal: React.FC<PrivacyCenterModalProps> = ({
   // Active Sessions & Logs
   const [sessions, setSessions] = useState<any[]>([]);
   const [staffAccessLogs, setStaffAccessLogs] = useState<any[]>([]);
+  const [securityEvents, setSecurityEvents] = useState<any[]>([]);
+  const [loginHistory, setLoginHistory] = useState<any[]>([]);
   const [erasureStatus, setErasureStatus] = useState<any>(null);
 
   // Status & UI State
@@ -179,6 +180,17 @@ export const PrivacyCenterModal: React.FC<PrivacyCenterModalProps> = ({
       if (resErasure.success && resErasure.data) {
         setErasureStatus(resErasure.data.erasureRecord || null);
       }
+
+      // 5. Security Audit Activity & Login History (OWASP A09)
+      try {
+        const resAudit = await apiClient.get<any>('/api/v1/auth/security-audit');
+        if (resAudit.success && resAudit.data) {
+          setSecurityEvents(resAudit.data.securityEvents || []);
+          setLoginHistory(resAudit.data.loginHistory || []);
+        }
+      } catch {
+        // Non-blocking fallback
+      }
     } catch (err: any) {
       console.error('Gagal memuat data privasi:', err);
       setInitError(err.message || 'Terjadi kesalahan jaringan.');
@@ -214,13 +226,6 @@ export const PrivacyCenterModal: React.FC<PrivacyCenterModalProps> = ({
       if (res.success) {
         setMsg({ type: 'success', text: `Preferensi consent berhasil disimpan (Kebijakan ${policyVersion}, Versi ${consentVersion}).` });
         onAiConsentChange?.(consentForAI);
-        if (consentForTelemetry) {
-          void import('../../lib/performanceTelemetry')
-            .then(module => module.setPerformanceTelemetryConsent(true))
-            .catch(() => undefined);
-        } else {
-          notifyPerformanceTelemetryConsent(false);
-        }
         if (res.data?.record) {
           setConsentTimestamp(res.data.record.consentTimestamp);
         }
@@ -253,7 +258,6 @@ export const PrivacyCenterModal: React.FC<PrivacyCenterModalProps> = ({
       if (res.success) {
         setMsg({ type: 'success', text: 'Seluruh izin persetujuan telah dicabut dan memori AI dibersihkan.' });
         onAiConsentChange?.(false);
-        notifyPerformanceTelemetryConsent(false);
         fetchPrivacyData();
       } else {
         setMsg({ type: 'error', text: res.error || 'Gagal mencabut consent.' });
@@ -408,7 +412,7 @@ export const PrivacyCenterModal: React.FC<PrivacyCenterModalProps> = ({
     { id: 'export', label: 'Unduh Data', fullLabel: '2. Unduh Data (Portabilitas)', icon: Download },
     { id: 'correct', label: 'Koreksi Profil', fullLabel: '3. Koreksi Data Pribadi', icon: Edit3 },
     { id: 'retention', label: 'Masa Simpan', fullLabel: '4. Atur Masa Penyimpanan', icon: Clock },
-    { id: 'sessions', label: 'Sesi Aktif', fullLabel: '5. Sesi Perangkat Aktif', icon: KeyRound },
+    { id: 'sessions', label: 'Sesi & Audit', fullLabel: '5. Sesi & Log Keamanan Akun', icon: KeyRound },
     { id: 'access_logs', label: 'Akses Petugas', fullLabel: '6. Akses Petugas Data', icon: Eye },
     { id: 'erasure', label: 'Hapus Data', fullLabel: '7. Hak untuk Dilupakan', icon: Trash2 },
   ] as const;
@@ -723,9 +727,9 @@ export const PrivacyCenterModal: React.FC<PrivacyCenterModalProps> = ({
               </div>
             )}
 
-            {/* TAB 5: Active Device Sessions */}
+            {/* TAB 5: Active Device Sessions & Security Audit */}
             {activeTab === 'sessions' && (
-              <div className="space-y-4 text-xs sm:text-sm">
+              <div className="space-y-5 text-xs sm:text-sm">
                 <div>
                   <h3 className="text-xs sm:text-sm font-bold text-primary">Perangkat Terhubung & Sesi Aktif</h3>
                   <p className="text-xs text-secondary mt-1">
@@ -765,6 +769,65 @@ export const PrivacyCenterModal: React.FC<PrivacyCenterModalProps> = ({
                     ))
                   )}
                 </div>
+
+                {/* Login History (OWASP A09 Logging & Monitoring) */}
+                <div className="pt-2 border-t border-default space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-xs font-bold text-primary">Riwayat Autentikasi & Percobaan Masuk</h4>
+                      <p className="text-[11px] text-secondary">
+                        Rekam jejak upaya login berhasil dan gagal untuk mendeteksi potensi pembajakan.
+                      </p>
+                    </div>
+                    <span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-[10px] font-mono text-secondary rounded-full">
+                      OWASP A09
+                    </span>
+                  </div>
+
+                  <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                    {loginHistory.length === 0 ? (
+                      <p className="text-[11px] text-secondary italic py-2">Belum ada riwayat login tambahan.</p>
+                    ) : (
+                      loginHistory.map((item, idx) => (
+                        <div key={idx} className="p-2.5 border border-default rounded-xl surface-card flex items-center justify-between text-[11px]">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                                item.status === 'SUCCESS'
+                                  ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300'
+                                  : 'bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300'
+                              }`}>
+                                {item.status === 'SUCCESS' ? 'BERHASIL' : 'GAGAL'}
+                              </span>
+                              <span className="font-semibold text-primary">{item.userAgent ? (item.userAgent.includes('Mobile') ? 'Smartphone' : 'Peramban Desktop') : 'Aplikasi Web'}</span>
+                            </div>
+                            <div className="text-[10px] text-secondary mt-0.5">IP: {item.ip || '127.0.0.1'}</div>
+                          </div>
+                          <span className="text-[10px] text-secondary">
+                            {new Date(item.timestamp).toLocaleString('id-ID')}
+                          </span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                {/* Personal Audit Event Timeline */}
+                {securityEvents.length > 0 && (
+                  <div className="pt-2 border-t border-default space-y-2.5">
+                    <h4 className="text-xs font-bold text-primary">Peristiwa Keamanan Akun</h4>
+                    <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                      {securityEvents.map((event) => (
+                        <div key={event.id} className="p-2 border border-default rounded-xl surface-muted flex items-center justify-between text-[11px]">
+                          <span className="font-mono text-[10px] text-primary">{event.action}</span>
+                          <span className="text-[10px] text-secondary font-mono">
+                            {new Date(event.timestamp).toLocaleString('id-ID')}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

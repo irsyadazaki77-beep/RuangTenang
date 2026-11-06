@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Check, Copy, FilePlus2, GitMerge, Sparkles, Square, SquareStop } from 'lucide-react';
 import { useAiModelCatalog } from '../../../lib/aiModelCatalog';
 import { KERJA_PROFILES } from '../../../lib/aiModels';
+import { getStoredAuthToken, getOrCreateGuestAttachmentToken } from '../../../lib/apiClient';
+import { readGuestAiConsent } from '../../../lib/guestAiConsent';
 import type { WorkspaceComparisonCandidate, WorkspaceComparisonRun } from '../types';
 
 interface Props {
@@ -13,7 +15,15 @@ interface Props {
 
 function csrfHeaders(): Record<string, string> {
   const match = document.cookie.match(/(?:^|; )XSRF-TOKEN=([^;]+)/);
-  return { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest', ...(match ? { 'X-CSRF-Token': decodeURIComponent(match[1]) } : {}) };
+  const storedToken = getStoredAuthToken();
+  return {
+    'Content-Type': 'application/json',
+    'X-Requested-With': 'XMLHttpRequest',
+    'X-Guest-AI-Consent': String(readGuestAiConsent()),
+    'X-Guest-Attachment-Token': getOrCreateGuestAttachmentToken(),
+    ...(storedToken ? { Authorization: `Bearer ${storedToken}` } : {}),
+    ...(match ? { 'X-CSRF-Token': decodeURIComponent(match[1]) } : {})
+  };
 }
 
 const CandidateCard = React.memo(function CandidateCard({ candidate, run, providerLabel, selected, selectionLocked, onUse, onCanvas, onCancel, onRetry }: {
@@ -47,15 +57,15 @@ const CandidateCard = React.memo(function CandidateCard({ candidate, run, provid
     <header className="flex min-h-11 items-center justify-between gap-2 border-b border-slate-100 px-3 py-2 dark:border-slate-800">
       <div className="min-w-0">
         <div className="truncate text-xs font-semibold text-slate-800 dark:text-slate-100">{candidate.modelName}</div>
-        <div className="flex items-center gap-1.5 mt-0.5">
+        <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
           {candidate.profileId && KERJA_PROFILES.some(profile => profile.id === candidate.profileId) && <span className="text-[9px] text-slate-400">{KERJA_PROFILES.find(profile => profile.id === candidate.profileId)?.name}</span>}
           {providerLabel && <span className="text-[9px] font-medium text-indigo-600 dark:text-indigo-300">via {providerLabel}</span>}
-          <span className={`inline-block px-1.5 py-0.2 rounded-full border text-[9px] font-medium ${statusDisplay.color}`}>
+          <span className={`inline-block px-1.5 py-0.2 rounded-md border text-[9px] font-medium ${statusDisplay.color}`}>
             {statusDisplay.text}
           </span>
           {candidate.latencyMs !== undefined && (
-            <span role="status" aria-live="polite" className="text-[10px] text-slate-400">
-              {(candidate.latencyMs / 1000).toFixed(1)}s
+            <span role="status" aria-live="polite" className="text-[10px] text-slate-400 tabular-nums">
+              · {(candidate.latencyMs / 1000).toFixed(1)}s
             </span>
           )}
         </div>
@@ -492,7 +502,7 @@ export const WorkspaceComparisonPanel = React.memo(function WorkspaceComparisonP
             <Sparkles className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
             Evaluasi Konsensus & Kesepakatan Model
           </div>
-          <span className="text-[10px] text-emerald-700 dark:text-emerald-300">
+          <span className="text-[10px] text-emerald-700 dark:text-emerald-300 tabular-nums">
             {consensusAnalysis.totalEvaluatedCandidates} Model Dievaluasi
           </span>
         </div>

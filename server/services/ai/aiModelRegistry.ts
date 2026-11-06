@@ -1,4 +1,3 @@
-import { isLocalModelAvailable } from './ollamaRuntime.js';
 import { aiProviderConfig } from '../../config/aiProviderConfig.js';
 import { getProviderHealth } from './aiReliabilityService.js';
 import {
@@ -34,7 +33,6 @@ export {
 };
 export type { ModelCapability, ModelTier, ProviderId, AiProfileId, TenangProfileId, KerjaProfileId, AiProfileOption };
 
-
 export interface AiModelMetadata {
   id: string;
   name: string;
@@ -54,68 +52,27 @@ export interface AiModelDefinition extends AiModelMetadata {
 }
 
 const MODEL_METADATA: AiModelMetadata[] = [
-  { id: 'ollama-phi4-mini', name: 'Phi 4 Mini via Ollama', category: 'Penalaran Mendalam & Analisis', tag: 'Ollama • Lokal', description: 'Coding, penulisan terstruktur, dan tugas harian.', speed: 'Cepat', reasoning: 'Tinggi', recommendedFor: 'Coding, penulisan terstruktur, dan tugas harian.', allowedTiers: ['Free', 'Pro', 'Premium'] },
-  { id: 'ollama-deepseek-r1-1.5b', name: 'DeepSeek R1 1.5B via Ollama', category: 'Penalaran Mendalam & Analisis', tag: 'Ollama • Lokal', description: 'Logika, matematika, dan penalaran ringan.', speed: 'Cepat', reasoning: 'Tinggi', recommendedFor: 'Logika, matematika, dan penalaran ringan.', allowedTiers: ['Free', 'Pro', 'Premium'] },
-  { id: 'ollama-gemma3-270m', name: 'Gemma 3 270M via Ollama', category: 'Ultra-Cepat & Ringan', tag: 'Ollama • Lokal', description: 'Percakapan sangat singkat dan fallback hemat memori.', speed: 'Sangat Cepat', reasoning: 'Standar', recommendedFor: 'Percakapan sangat singkat dan fallback hemat memori.', allowedTiers: ['Free', 'Pro', 'Premium'] },
-
   {
-    id: 'ollama-gemma3-1b',
-    name: 'Gemma 3 1B via Ollama',
+    id: 'gemini-3.8-flash',
+    name: 'Gemini 3.8 Flash',
     category: 'Model Utama & Seimbang',
-    tag: 'Ollama • 1B Super Cepat',
-    description: 'Google Gemma 3 1B melalui Ollama lokal. Sangat ringan, efisien, dan responsif untuk konsultasi cepat.',
-    isDefault: false,
-    speed: 'Sangat Cepat',
-    reasoning: 'Standar',
-    recommendedFor: 'Percakapan ringan, respons instan, dan konsultasi bebas kuota.',
-    allowedTiers: ['Free', 'Pro', 'Premium']
-  },
-  {
-    id: 'ollama-qwen3.5-0.8b',
-    name: 'Qwen 3.5 0.8B via Ollama',
-    category: 'Model Utama & Seimbang',
-    tag: 'Ollama • 0.8B Ringan',
-    description: 'Qwen 3.5 0.8B melalui Ollama lokal. Arsitektur terbaru dengan efisiensi memori luar biasa.',
-    isDefault: false,
-    speed: 'Sangat Cepat',
-    reasoning: 'Standar',
-    recommendedFor: 'Percakapan cepat, tanya-jawab ringkas, dan pendampingan santai.',
-    allowedTiers: ['Free', 'Pro', 'Premium']
-  },
-  {
-    id: 'ollama-qwen3-1.7b',
-    name: 'Qwen 3 1.7B via Ollama',
-    category: 'Model Utama & Seimbang',
-    tag: 'Ollama • Ringan',
-    description: 'Qwen 3 1.7B melalui endpoint Ollama yang dikonfigurasi. Lokasi pemrosesan mengikuti host endpoint; kebutuhan memori dan latensi bergantung pada perangkat serta konfigurasi model.',
+    tag: 'Terbaru • Cepat & Cerdas',
+    description: 'Model teks dan multimodal generasi 3.8 terbaru dari Google AI. Keseimbangan terbaik antara pemahaman emosional mendalam, penalaran adaptif, dan respon instan.',
     isDefault: true,
     speed: 'Sangat Cepat',
-    reasoning: 'Standar',
-    recommendedFor: 'Pertanyaan singkat dan percakapan ringan; kemampuan bergantung pada konfigurasi host.',
-    allowedTiers: ['Free', 'Pro', 'Premium']
-  },
-  {
-    id: 'ollama-qwen3-8b',
-    name: 'Qwen 3 8B via Ollama',
-    category: 'Model Utama & Seimbang',
-    tag: 'Ollama • 8B Berbobot',
-    description: 'Qwen 3 8B melalui endpoint Ollama. Membutuhkan alokasi memori RAM/VRAM yang cukup agar respon optimal.',
-    isDefault: false,
-    speed: 'Sedang',
     reasoning: 'Tinggi',
-    recommendedFor: 'Percakapan dan asistensi tugas mendalam saat perangkat memiliki memori longgar.',
+    recommendedFor: 'Percakapan konseling utama, active listening, refleksi emosi, dan panduan harian',
     allowedTiers: ['Free', 'Pro', 'Premium']
   },
   {
-    id: 'ollama-bonsai-27b',
-    name: 'Bonsai 27B via Ollama',
+    id: 'openrouter-free-auto',
+    name: 'OpenRouter • Free Auto Router (Gratis)',
     category: 'Model Utama & Seimbang',
-    tag: 'Ollama • 27B Analisis Berat',
-    description: 'Bonsai 27B melalui endpoint Ollama. Model besar untuk analisis mendalam dengan proses inferensi bertahap.',
-    isDefault: false,
-    speed: 'Sedang',
-    reasoning: 'Sangat Tinggi',
-    recommendedFor: 'Analisis percakapan dan tugas kompleks (membutuhkan waktu komputasi lebih panjang).',
+    tag: '100% Gratis • Auto-Router',
+    description: 'Router cerdas resmi OpenRouter (`openrouter/free`) yang otomatis memilih model gratis aktif terbaik & tercepat dengan biaya Rp 0 ($0.00).',
+    speed: 'Sangat Cepat',
+    reasoning: 'Tinggi',
+    recommendedFor: 'Semua kebutuhan obrolan, akademik, dan refleksi 100% bebas biaya kredit',
     allowedTiers: ['Free', 'Pro', 'Premium']
   },
   {
@@ -129,7 +86,74 @@ const MODEL_METADATA: AiModelMetadata[] = [
     recommendedFor: 'Analisis kompleks, riset, coding, dan perencanaan bertahap',
     allowedTiers: ['Free', 'Pro', 'Premium']
   },
+
   // --- 1. FRONTIER & DEEP REASONING TIER (Sangat Tinggi) ---
+  {
+    id: 'openrouter-nemotron-550b',
+    name: 'OpenRouter • NVIDIA Nemotron 3 Ultra 550B (Gratis)',
+    category: 'Penalaran Mendalam & Analisis',
+    tag: '100% Gratis • Ultra 550B (1M Konteks)',
+    description: 'Model raksasa 550B parameter dari NVIDIA via OpenRouter (`:free`) dengan konteks 1 juta token untuk analisis mendalam & riset.',
+    speed: 'Sedang',
+    reasoning: 'Sangat Tinggi',
+    recommendedFor: 'Analisis mendalam, penalaran bertahap, skripsi, dan pemecahan masalah kompleks',
+    allowedTiers: ['Free', 'Pro', 'Premium']
+  },
+  {
+    id: 'openrouter-nemotron-super-120b',
+    name: 'OpenRouter • NVIDIA Nemotron 3 Super 120B (Gratis)',
+    category: 'Penalaran Mendalam & Analisis',
+    tag: '100% Gratis • Super 120B',
+    description: 'Model NVIDIA Nemotron 120B parameter via OpenRouter (`:free`) yang kuat dalam penalaran terstruktur dan bahasa ilmiah.',
+    speed: 'Cepat',
+    reasoning: 'Sangat Tinggi',
+    recommendedFor: 'Eksplorasi masalah akademis/skripsi dan restrukturisasi pola pikir kognitif',
+    allowedTiers: ['Free', 'Pro', 'Premium']
+  },
+  {
+    id: 'openrouter-nemotron-super-vl',
+    name: 'OpenRouter • NVIDIA Nemotron 3.5 Super VL (Gratis)',
+    category: 'Penalaran Mendalam & Analisis',
+    tag: '100% Gratis • Vision & 1M Konteks',
+    description: 'Model multimodal vision-language NVIDIA Nemotron 3.5 Super VL (`:free`) dengan konteks 1 juta token untuk analisis gambar & dokumen.',
+    speed: 'Cepat',
+    reasoning: 'Sangat Tinggi',
+    recommendedFor: 'Analisis gambar, diagram akademik, dan dokumen panjang bebas biaya',
+    allowedTiers: ['Free', 'Pro', 'Premium']
+  },
+  {
+    id: 'openrouter-nemotron-nano-omni',
+    name: 'OpenRouter • NVIDIA Nemotron 3 Nano Omni Reasoning (Gratis)',
+    category: 'Penalaran Mendalam & Analisis',
+    tag: '100% Gratis • Omni Reasoning',
+    description: 'Model reasoning multimodal NVIDIA Nemotron 3 Nano Omni 30B (`:free`) dengan penalaran Chain-of-Thought terstruktur.',
+    speed: 'Cepat',
+    reasoning: 'Sangat Tinggi',
+    recommendedFor: 'Penalaran bertahap, pemecahan soal logika, dan refleksi terstruktur',
+    allowedTiers: ['Free', 'Pro', 'Premium']
+  },
+  {
+    id: 'openrouter-inkling',
+    name: 'OpenRouter • Thinking Machines Inkling (Gratis)',
+    category: 'Penalaran Mendalam & Analisis',
+    tag: '100% Gratis • 1M Konteks Reasoning',
+    description: 'Model flagship Thinking Machines Inkling (`:free`) dengan jendela konteks 1 juta token untuk sintesis literatur dan riset mendalam.',
+    speed: 'Cepat',
+    reasoning: 'Sangat Tinggi',
+    recommendedFor: 'Riset akademik, penulisan ilmiah, dan diskusi konseptual mendalam',
+    allowedTiers: ['Free', 'Pro', 'Premium']
+  },
+  {
+    id: 'openrouter-flint',
+    name: 'OpenRouter • Recursive Flint v1.0 (Gratis)',
+    category: 'Penalaran Mendalam & Analisis',
+    tag: '100% Gratis • Penalaran Rekursif',
+    description: 'Model Recursive Flint v1.0 (`:free`) dengan konteks 262K token untuk analisis sistematis dan pemecahan masalah multi-langkah.',
+    speed: 'Cepat',
+    reasoning: 'Sangat Tinggi',
+    recommendedFor: 'Pemecahan masalah struktural, logika algoritma, dan telaah kritis',
+    allowedTiers: ['Free', 'Pro', 'Premium']
+  },
   {
     id: 'deepseek-reasoner',
     name: 'DeepSeek R1 (Reasoner)',
@@ -139,28 +163,6 @@ const MODEL_METADATA: AiModelMetadata[] = [
     speed: 'Sedang',
     reasoning: 'Sangat Tinggi',
     recommendedFor: 'Restrukturisasi kognitif mendalam, analisis kasus skripsi/karya ilmiah, dan pemecahan masalah kompleks',
-    allowedTiers: ['Free', 'Pro', 'Premium']
-  },
-  {
-    id: 'openrouter-nemotron-550b',
-    name: 'OpenRouter • Nemotron 550B',
-    category: 'Penalaran Mendalam & Analisis',
-    tag: 'OpenRouter • Ultra 550B',
-    description: 'Model raksasa 550B parameter dari NVIDIA via OpenRouter dengan kapasitas pemahaman tingkat lanjut dan analisis multi-domain.',
-    speed: 'Sedang',
-    reasoning: 'Sangat Tinggi',
-    recommendedFor: 'Analisis mendalam, penalaran bertahap, dan pemecahan masalah kompleks berbobot tinggi',
-    allowedTiers: ['Free', 'Pro', 'Premium']
-  },
-  {
-    id: 'openrouter-nemotron-super-120b',
-    name: 'OpenRouter • Nemotron 120B',
-    category: 'Penalaran Mendalam & Analisis',
-    tag: 'OpenRouter • Super 120B',
-    description: 'Model NVIDIA Nemotron 120B parameter via OpenRouter yang kuat dalam penalaran terstruktur dan artikulasi bahasa ilmiah.',
-    speed: 'Cepat',
-    reasoning: 'Sangat Tinggi',
-    recommendedFor: 'Eksplorasi masalah akademis/skripsi dan restrukturisasi pola pikir kognitif',
     allowedTiers: ['Free', 'Pro', 'Premium']
   },
   {
@@ -199,15 +201,80 @@ const MODEL_METADATA: AiModelMetadata[] = [
 
   // --- 2. HIGH PERFORMANCE & BALANCED TIER (Utama & Cerdas) ---
   {
-    id: 'gemini-3.8-flash',
-    name: 'Gemini 3.8 Flash',
+    id: 'openrouter-gemma-4-31b',
+    name: 'OpenRouter • Google Gemma 4 31B (Gratis)',
     category: 'Model Utama & Seimbang',
-    tag: 'Terbaru • Cepat & Cerdas',
-    description: 'Model teks dan multimodal generasi 3.8 terbaru dari Google AI. Keseimbangan terbaik antara pemahaman emosional mendalam, penalaran adaptif, dan respon instan.',
-    isDefault: true,
+    tag: '100% Gratis • Google Gemma 4',
+    description: 'Model generasi terbaru Google Gemma 4 31B Instruct (`:free`) via OpenRouter dengan pemahaman bahasa Indonesia yang sangat natural dan empatik.',
     speed: 'Sangat Cepat',
     reasoning: 'Tinggi',
-    recommendedFor: 'Percakapan konseling utama, active listening, refleksi emosi, dan panduan harian',
+    recommendedFor: 'Percakapan konseling hangat, penulisan esai, dan diskusi akademik harian',
+    allowedTiers: ['Free', 'Pro', 'Premium']
+  },
+  {
+    id: 'openrouter-gemma-4-26b',
+    name: 'OpenRouter • Google Gemma 4 26B MoE (Gratis)',
+    category: 'Model Utama & Seimbang',
+    tag: '100% Gratis • Gemma 4 MoE Cepat',
+    description: 'Arsitektur Mixture-of-Experts Google Gemma 4 26B A4B (`:free`) via OpenRouter yang menggabungkan penalaran cerdas dengan respons ekstra cepat.',
+    speed: 'Sangat Cepat',
+    reasoning: 'Tinggi',
+    recommendedFor: 'Brainstorming cepat, pendampingan belajar, dan obrolan reflektif',
+    allowedTiers: ['Free', 'Pro', 'Premium']
+  },
+  {
+    id: 'openrouter-minimax-m3.1-flash',
+    name: 'OpenRouter • MiniMax M3.1 Flash (Gratis)',
+    category: 'Model Utama & Seimbang',
+    tag: '100% Gratis • 1M Konteks Flash',
+    description: 'Model MiniMax M3.1 Flash (`:free`) dengan jendela konteks 1 juta token, penalaran adaptif cepat, dan gaya bahasa yang luwes.',
+    speed: 'Sangat Cepat',
+    reasoning: 'Tinggi',
+    recommendedFor: 'Rangkuman dokumen besar, obrolan interaktif cepat, dan penyusunan draf',
+    allowedTiers: ['Free', 'Pro', 'Premium']
+  },
+  {
+    id: 'openrouter-cohere-code',
+    name: 'OpenRouter • Cohere North Mini Code (Gratis)',
+    category: 'Model Utama & Seimbang',
+    tag: '100% Gratis • Spesialis Kode & Logika',
+    description: 'Model cerdas dari Cohere via OpenRouter (`:free`) yang dioptimalkan untuk sintaksis pemrograman, logika terstruktur, dan analisis teknis bebas kuota.',
+    speed: 'Sangat Cepat',
+    reasoning: 'Tinggi',
+    recommendedFor: 'Tugas pemrograman, analisis kode teknis, dan penalaran logika terstruktur',
+    allowedTiers: ['Free', 'Pro', 'Premium']
+  },
+  {
+    id: 'openrouter-laguna-s',
+    name: 'OpenRouter • Poolside Laguna S 2.1 (Gratis)',
+    category: 'Model Utama & Seimbang',
+    tag: '100% Gratis • Coding & Engineering',
+    description: 'Model spesialis software engineering Poolside Laguna S 2.1 (`:free`) dengan konteks 262K untuk penulisan kode dan debugging.',
+    speed: 'Cepat',
+    reasoning: 'Tinggi',
+    recommendedFor: 'Pemrograman, debugging kode, arsitektur perangkat lunak, dan tugas praktikum IT',
+    allowedTiers: ['Free', 'Pro', 'Premium']
+  },
+  {
+    id: 'openrouter-xing-29b',
+    name: 'OpenRouter • XingChen Xing 4.0 29B (Gratis)',
+    category: 'Model Utama & Seimbang',
+    tag: '100% Gratis • MoE 29B Seimbang',
+    description: 'Model XingChen 4.0 29B A4B (`:free`) dengan konteks 262K untuk percakapan multibahasa dan sintesis materi kuliah.',
+    speed: 'Sangat Cepat',
+    reasoning: 'Tinggi',
+    recommendedFor: 'Diskusi akademik, terjemahan ilmiah, dan tanya jawab cepat',
+    allowedTiers: ['Free', 'Pro', 'Premium']
+  },
+  {
+    id: 'openrouter-dots-note',
+    name: 'OpenRouter • Dots Studio Dots3-Note (Gratis)',
+    category: 'Model Utama & Seimbang',
+    tag: '100% Gratis • Spesialis Catatan 512K',
+    description: 'Model Dots3-Note Preview (`:free`) dengan konteks 512K yang dirancang khusus untuk merangkum catatan kuliah, jurnal, dan poin-poin penting.',
+    speed: 'Sangat Cepat',
+    reasoning: 'Tinggi',
+    recommendedFor: 'Merangkum materi kuliah, menyusun catatan Canvas, dan ekstraksi poin kunci',
     allowedTiers: ['Free', 'Pro', 'Premium']
   },
   {
@@ -276,39 +343,61 @@ const MODEL_METADATA: AiModelMetadata[] = [
     recommendedFor: 'Pengalaman AI yang selalu terbarukan dengan performa optimal',
     allowedTiers: ['Free', 'Pro', 'Premium']
   },
-  {
-    id: 'openrouter-cohere-code',
-    name: 'OpenRouter • Cohere North Code',
-    category: 'Model Utama & Seimbang',
-    tag: 'OpenRouter • Spesialis Kode & Logika',
-    description: 'Model cerdas dari Cohere via OpenRouter yang dioptimalkan untuk sintaksis pemrograman, logika terstruktur, dan analisis teknis bebas kuota.',
-    speed: 'Sangat Cepat',
-    reasoning: 'Tinggi',
-    recommendedFor: 'Tugas pemrograman, analisis kode teknis, dan penalaran logika terstruktur',
-    allowedTiers: ['Free', 'Pro', 'Premium']
-  },
 
   // --- 3. ULTRA-FAST & LIGHTWEIGHT TIER (Respons Kilat / Minim Latensi) ---
   {
     id: 'openrouter-nemotron-lightning',
-    name: 'OpenRouter • Nemotron Lightning',
+    name: 'OpenRouter • NVIDIA Nemotron 3.5 Lightning (Gratis)',
     category: 'Ultra-Cepat & Ringan',
-    tag: 'OpenRouter • Lightning',
-    description: 'Model ultra cepat NVIDIA Nemotron 3.5 Lightning via OpenRouter, dirancang khusus untuk kecepatan eksekusi tinggi dan respon dinamis.',
+    tag: '100% Gratis • Lightning 1M Konteks',
+    description: 'Model ultra cepat NVIDIA Nemotron 3.5 Lightning via OpenRouter (`:free`), dirancang khusus untuk kecepatan eksekusi tinggi dan respon dinamis.',
     speed: 'Sangat Cepat',
     reasoning: 'Tinggi',
     recommendedFor: 'Tanggapan instan, pendampingan responsif cepat, dan obrolan hemat waktu',
     allowedTiers: ['Free', 'Pro', 'Premium']
   },
   {
-    id: 'openrouter-ling-flash',
-    name: 'OpenRouter • Ling 3.1 Flash',
+    id: 'openrouter-inkling-small',
+    name: 'OpenRouter • Thinking Machines Inkling Small (Gratis)',
     category: 'Ultra-Cepat & Ringan',
-    tag: 'OpenRouter • Kilat & Efisien',
-    description: 'Model ultra responsif Ling 3.1 Flash via OpenRouter dengan jendela konteks 256k untuk respons ringan dan cepat.',
+    tag: '100% Gratis • Ringan 1M Konteks',
+    description: 'Varian cepat Thinking Machines Inkling Small (`:free`) dengan konteks 1 juta token untuk respons kilat dan akurat.',
+    speed: 'Sangat Cepat',
+    reasoning: 'Tinggi',
+    recommendedFor: 'Tanya jawab cepat, parafrase kalimat, dan diskusi ringan',
+    allowedTiers: ['Free', 'Pro', 'Premium']
+  },
+  {
+    id: 'openrouter-laguna-xs',
+    name: 'OpenRouter • Poolside Laguna XS 2.1 (Gratis)',
+    category: 'Ultra-Cepat & Ringan',
+    tag: '100% Gratis • Kode & Teks Kilat',
+    description: 'Model ultra-ringan Poolside Laguna XS 2.1 (`:free`) untuk bantuan koding instan dan jawaban ringkas tanpa jeda.',
     speed: 'Sangat Cepat',
     reasoning: 'Standar',
-    recommendedFor: 'Tanggapan kilat, obrolan ringan, dan ringkasan cepat',
+    recommendedFor: 'Potongan kode cepat, penjelasan singkat, dan obrolan santai',
+    allowedTiers: ['Free', 'Pro', 'Premium']
+  },
+  {
+    id: 'openrouter-lfm-2.6b',
+    name: 'OpenRouter • LiquidAI LFM 2.5 2.6B (Gratis)',
+    category: 'Ultra-Cepat & Ringan',
+    tag: '100% Gratis • Liquid Foundation Model',
+    description: 'Model arsitektur LiquidAI LFM 2.5 (`:free`) yang sangat ringan dan responsif untuk percakapan sehari-hari.',
+    speed: 'Sangat Cepat',
+    reasoning: 'Standar',
+    recommendedFor: 'Curhat singkat, sapaan harian, dan ringkasan kilat',
+    allowedTiers: ['Free', 'Pro', 'Premium']
+  },
+  {
+    id: 'openrouter-nemotron-safety',
+    name: 'OpenRouter • NVIDIA Nemotron 3.5 Safety (Gratis)',
+    category: 'Ultra-Cepat & Ringan',
+    tag: '100% Gratis • Evaluasi Aman',
+    description: 'Model NVIDIA Nemotron 3.5 (`:free`) dengan fokus keamanan konten dan percakapan suportif yang terarah.',
+    speed: 'Sangat Cepat',
+    reasoning: 'Standar',
+    recommendedFor: 'Refleksi aman, pengecekan nada tulisan, dan obrolan ringan',
     allowedTiers: ['Free', 'Pro', 'Premium']
   },
   {
@@ -387,28 +476,76 @@ const MODEL_METADATA: AiModelMetadata[] = [
     reasoning: 'Standar',
     recommendedFor: 'Pertanyaan singkat dan pekerjaan ringan',
     allowedTiers: ['Free', 'Pro', 'Premium']
+  },
+  {
+    id: 'ollama-qwen3-1.7b',
+    name: 'Qwen 3 1.7B via Ollama',
+    category: 'Model Tambahan',
+    tag: 'Ollama • Ringan',
+    description: 'Qwen 3 1.7B melalui endpoint Ollama lokal.',
+    isDefault: false,
+    speed: 'Sangat Cepat',
+    reasoning: 'Standar',
+    recommendedFor: 'Model opsional Ollama lokal.',
+    allowedTiers: ['Free', 'Pro', 'Premium']
+  },
+  {
+    id: 'ollama-qwen3-8b',
+    name: 'Qwen 3 8B via Ollama',
+    category: 'Model Tambahan',
+    tag: 'Ollama • 8B',
+    description: 'Qwen 3 8B melalui endpoint Ollama lokal.',
+    isDefault: false,
+    speed: 'Sangat Cepat',
+    reasoning: 'Tinggi',
+    recommendedFor: 'Model opsional Ollama lokal.',
+    allowedTiers: ['Free', 'Pro', 'Premium']
+  },
+  {
+    id: 'ollama-bonsai-27b',
+    name: 'Bonsai 27B via Ollama',
+    category: 'Model Tambahan',
+    tag: 'Ollama • 27B',
+    description: 'Bonsai 27B melalui endpoint Ollama lokal.',
+    isDefault: false,
+    speed: 'Cepat',
+    reasoning: 'Sangat Tinggi',
+    recommendedFor: 'Model opsional Ollama lokal.',
+    allowedTiers: ['Free', 'Pro', 'Premium']
   }
 ];
 
-export const RESILIENT_FALLBACK_AI_MODEL_ID = 'ollama-qwen3-1.7b';
+export const RESILIENT_FALLBACK_AI_MODEL_ID = 'gemini-3.5-flash-lite';
 
 const providerModels: Record<string, { provider: ProviderId; providerModelId: string }> = {
-  'ollama-phi4-mini': { provider: 'ollama', providerModelId: 'phi4-mini:latest' },
-  'ollama-deepseek-r1-1.5b': { provider: 'ollama', providerModelId: 'deepseek-r1:1.5b' },
-  'ollama-gemma3-270m': { provider: 'ollama', providerModelId: 'gemma3:270m' },
-  'ollama-gemma3-1b': { provider: 'ollama', providerModelId: 'gemma3:1b' },
-  'ollama-qwen3.5-0.8b': { provider: 'ollama', providerModelId: 'qwen3.5:0.8b' },
   'ollama-qwen3-1.7b': { provider: 'ollama', providerModelId: 'qwen3:1.7b' },
   'ollama-qwen3-8b': { provider: 'ollama', providerModelId: 'qwen3:8b' },
   'ollama-bonsai-27b': { provider: 'ollama', providerModelId: 'bonsai-27b:latest' },
   'deepseek-reasoner': { provider: 'deepseek', providerModelId: 'deepseek-v4-pro' },
   'deepseek-chat': { provider: 'deepseek', providerModelId: 'deepseek-flash' },
   'gemini-3.5-pro': { provider: 'gemini', providerModelId: 'gemini-3.1-pro-preview' },
+
+  // STRICT 100% FREE OPENROUTER MODELS (:free / openrouter/free ONLY)
+  'openrouter-free-auto': { provider: 'openrouter', providerModelId: 'openrouter/free' },
   'openrouter-nemotron-550b': { provider: 'openrouter', providerModelId: 'nvidia/nemotron-3-ultra-550b-a55b:free' },
   'openrouter-nemotron-super-120b': { provider: 'openrouter', providerModelId: 'nvidia/nemotron-3-super-120b-a12b:free' },
-  'openrouter-nemotron-lightning': { provider: 'openrouter', providerModelId: 'nvidia/nemotron-3.5-lightning:free' },
+  'openrouter-nemotron-super-vl': { provider: 'openrouter', providerModelId: 'nvidia/nemotron-3.5-super-vl:free' },
+  'openrouter-nemotron-nano-omni': { provider: 'openrouter', providerModelId: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free' },
+  'openrouter-inkling': { provider: 'openrouter', providerModelId: 'thinkingmachines/inkling:free' },
+  'openrouter-flint': { provider: 'openrouter', providerModelId: 'recursive/flint-v1.0:free' },
+  'openrouter-gemma-4-31b': { provider: 'openrouter', providerModelId: 'google/gemma-4-31b-it:free' },
+  'openrouter-gemma-4-26b': { provider: 'openrouter', providerModelId: 'google/gemma-4-26b-a4b-it:free' },
+  'openrouter-minimax-m3.1-flash': { provider: 'openrouter', providerModelId: 'minimax/minimax-m3.1-flash:free' },
   'openrouter-cohere-code': { provider: 'openrouter', providerModelId: 'cohere/north-mini-code:free' },
-  'openrouter-ling-flash': { provider: 'openrouter', providerModelId: 'inclusionai/ling-3.1-flash' },
+  'openrouter-laguna-s': { provider: 'openrouter', providerModelId: 'poolside/laguna-s-2.1:free' },
+  'openrouter-xing-29b': { provider: 'openrouter', providerModelId: 'xingchen-agi/xing4.0-29b-a4b:free' },
+  'openrouter-dots-note': { provider: 'openrouter', providerModelId: 'dots-studio/dots-3-note-preview:free' },
+  'openrouter-nemotron-lightning': { provider: 'openrouter', providerModelId: 'nvidia/nemotron-3.5-lightning:free' },
+  'openrouter-inkling-small': { provider: 'openrouter', providerModelId: 'thinkingmachines/inkling-small:free' },
+  'openrouter-laguna-xs': { provider: 'openrouter', providerModelId: 'poolside/laguna-xs-2.1:free' },
+  'openrouter-lfm-2.6b': { provider: 'openrouter', providerModelId: 'liquid/lfm-2.5-2.6b:free' },
+  'openrouter-nemotron-safety': { provider: 'openrouter', providerModelId: 'nvidia/nemotron-3.5-content-safety:free' },
+
   'groq-gpt-120b': { provider: 'groq', providerModelId: 'openai/gpt-oss-120b' },
   'groq-gpt-20b': { provider: 'groq', providerModelId: 'openai/gpt-oss-20b' },
   'groq-qwen-27b': { provider: 'groq', providerModelId: 'qwen/qwen3.8-27b' },
@@ -418,19 +555,25 @@ const providerModels: Record<string, { provider: ProviderId; providerModelId: st
   'gemini-flash-latest': { provider: 'gemini', providerModelId: 'gemini-3.8-flash' },
 };
 
+const OPENROUTER_VISION_MODEL_IDS = new Set([
+  'openrouter-nemotron-super-vl',
+  'openrouter-nemotron-nano-omni',
+  'openrouter-free-auto'
+]);
+
 export const AI_MODEL_REGISTRY: readonly AiModelDefinition[] = MODEL_METADATA.map(model => {
   const providerInfo = providerModels[model.id] ?? { provider: 'gemini' as const, providerModelId: model.id };
   const baseCaps: ModelCapability[] = model.reasoning === 'Standar' ? ['chat', 'streaming'] : ['chat', 'streaming', 'reasoning'];
 
-  // Multimodal Vision & OCR capabilities:
-  // Gemini chat models support multimodal input and function calling. Audio transcription
-  // is only advertised by dedicated transcription models, which are not chat models.
-  // OpenAI gpt-5.1 & gpt-5-mini support vision, image_understanding, document_ocr, and tool_calling
-  if (model.id === 'ollama-qwen3.5-0.8b') {
-    baseCaps.push('vision', 'image_understanding', 'document_ocr');
-  }
   if (providerInfo.provider === 'gemini') {
     baseCaps.push('vision', 'image_understanding', 'document_ocr', 'tool_calling');
+  } else if (providerInfo.provider === 'openrouter') {
+    if (OPENROUTER_VISION_MODEL_IDS.has(model.id)) {
+      baseCaps.push('vision', 'image_understanding', 'document_ocr');
+    }
+    if (model.id !== 'openrouter-nemotron-safety') {
+      baseCaps.push('tool_calling');
+    }
   } else if (providerInfo.provider === 'openai') {
     if (model.id === 'openai-gpt-5.1' || model.id === 'openai-gpt-5-mini') {
       baseCaps.push('vision', 'image_understanding', 'document_ocr', 'tool_calling');
@@ -461,11 +604,29 @@ export const LEGACY_AI_MODEL_ALIASES: Readonly<Record<string, string>> = Object.
   'qwen/qwen3.8-27b': 'groq-qwen-27b',
   'openai/gpt-oss-120b': 'groq-gpt-120b',
   'openai/gpt-oss-20b': 'groq-gpt-20b',
+  'openrouter/free': 'openrouter-free-auto',
   'nvidia/nemotron-3-ultra-550b-a55b:free': 'openrouter-nemotron-550b',
   'nvidia/nemotron-3-super-120b-a12b:free': 'openrouter-nemotron-super-120b',
-  'nvidia/nemotron-3.5-lightning:free': 'openrouter-nemotron-lightning',
+  'nvidia/nemotron-3.5-super-vl:free': 'openrouter-nemotron-super-vl',
+  'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free': 'openrouter-nemotron-nano-omni',
+  'thinkingmachines/inkling:free': 'openrouter-inkling',
+  'recursive/flint-v1.0:free': 'openrouter-flint',
+  'google/gemma-4-31b-it:free': 'openrouter-gemma-4-31b',
+  'google/gemma-4-26b-a4b-it:free': 'openrouter-gemma-4-26b',
+  'minimax/minimax-m3.1-flash:free': 'openrouter-minimax-m3.1-flash',
   'cohere/north-mini-code:free': 'openrouter-cohere-code',
-  'inclusionai/ling-3.0-flash-sante:free': 'openrouter-ling-flash',
+  'poolside/laguna-s-2.1:free': 'openrouter-laguna-s',
+  'xingchen-agi/xing4.0-29b-a4b:free': 'openrouter-xing-29b',
+  'dots-studio/dots-3-note-preview:free': 'openrouter-dots-note',
+  'nvidia/nemotron-3.5-lightning:free': 'openrouter-nemotron-lightning',
+  'thinkingmachines/inkling-small:free': 'openrouter-inkling-small',
+  'poolside/laguna-xs-2.1:free': 'openrouter-laguna-xs',
+  'liquid/lfm-2.5-2.6b:free': 'openrouter-lfm-2.6b',
+  'nvidia/nemotron-3.5-content-safety:free': 'openrouter-nemotron-safety',
+  // Redirect legacy paid Ling model to 100% free MiniMax M3.1 Flash (:free)
+  'openrouter-ling-flash': 'openrouter-minimax-m3.1-flash',
+  'inclusionai/ling-3.0-flash-sante:free': 'openrouter-minimax-m3.1-flash',
+  'inclusionai/ling-3.1-flash': 'openrouter-minimax-m3.1-flash',
   'gemini-1.5-flash': 'gemini-3.8-flash',
   'gemini-1.5-pro': 'gemini-3.5-pro',
   'gemini-1.5-flash-8b': 'gemini-3.5-flash-lite',
@@ -530,22 +691,18 @@ export const AI_PROFILE_DEFINITIONS: readonly AiProfileMetadata[] = [
     isDefault: false,
     allowedTiers: ['Free', 'Pro', 'Premium'],
     candidateModelIds: [
-      'ollama-phi4-mini',
-      'ollama-deepseek-r1-1.5b',
-      'ollama-gemma3-270m',
-      'ollama-gemma3-1b',
-      'ollama-qwen3.5-0.8b',
-      'ollama-qwen3-1.7b',
-      'ollama-qwen3-8b',
-      'ollama-bonsai-27b',
-      'gemini-3.5-pro',
-      'gemini-3.1-pro-preview',
-      'deepseek-reasoner',
-      'groq-gpt-120b',
-      'openai-gpt-5.1',
+      'gemini-3.8-flash',
+      'gemini-4-argon',
       'openrouter-nemotron-550b',
       'openrouter-nemotron-super-120b',
-      'gemini-3.8-flash'
+      'openrouter-inkling',
+      'openrouter-nemotron-super-vl',
+      'openrouter-gemma-4-31b',
+      'openrouter-free-auto',
+      'openrouter-cohere-code',
+      'gemini-3.5-pro',
+      'gemini-3.1-pro-preview',
+      'gemini-3.7-flash'
     ]
   },
   {
@@ -560,21 +717,14 @@ export const AI_PROFILE_DEFINITIONS: readonly AiProfileMetadata[] = [
     isDefault: true,
     allowedTiers: ['Free', 'Pro', 'Premium'],
     candidateModelIds: [
-      'ollama-phi4-mini',
-      'ollama-deepseek-r1-1.5b',
-      'ollama-gemma3-270m',
-      'ollama-gemma3-1b',
-      'ollama-qwen3.5-0.8b',
-      'ollama-qwen3-1.7b',
-      'ollama-qwen3-8b',
-      'ollama-bonsai-27b',
       'gemini-3.8-flash',
-      'deepseek-chat',
+      'openrouter-gemma-4-31b',
+      'openrouter-minimax-m3.1-flash',
+      'openrouter-nemotron-lightning',
+      'openrouter-gemma-4-26b',
+      'openrouter-free-auto',
       'gemini-3.7-flash',
       'gemini-3.5-flash',
-      'groq-qwen-27b',
-      'openrouter-nemotron-lightning',
-      'openai-gpt-5-mini',
       'gemini-3.5-flash-lite'
     ]
   },
@@ -590,20 +740,14 @@ export const AI_PROFILE_DEFINITIONS: readonly AiProfileMetadata[] = [
     isDefault: false,
     allowedTiers: ['Free', 'Pro', 'Premium'],
     candidateModelIds: [
-      'ollama-phi4-mini',
-      'ollama-deepseek-r1-1.5b',
-      'ollama-gemma3-270m',
-      'ollama-gemma3-1b',
-      'ollama-qwen3.5-0.8b',
-      'ollama-qwen3-1.7b',
-      'ollama-qwen3-8b',
-      'ollama-bonsai-27b',
       'gemini-3.5-flash-lite',
       'gemini-3.1-flash-lite',
-      'groq-gpt-20b',
-      'openrouter-ling-flash',
-      'openai-gpt-5-nano',
-      'groq-qwen-27b',
+      'openrouter-minimax-m3.1-flash',
+      'openrouter-nemotron-lightning',
+      'openrouter-inkling-small',
+      'openrouter-laguna-xs',
+      'openrouter-lfm-2.6b',
+      'openrouter-free-auto',
       'gemini-3.8-flash'
     ]
   },
@@ -621,19 +765,12 @@ export const AI_PROFILE_DEFINITIONS: readonly AiProfileMetadata[] = [
     isDefault: false,
     allowedTiers: ['Free', 'Pro', 'Premium'],
     candidateModelIds: [
-      'ollama-phi4-mini',
-      'ollama-deepseek-r1-1.5b',
-      'ollama-gemma3-270m',
-      'ollama-gemma3-1b',
-      'ollama-qwen3.5-0.8b',
-      'ollama-qwen3-1.7b',
-      'ollama-qwen3-8b',
-      'ollama-bonsai-27b',
       'gemini-3.5-flash-lite',
-      'groq-gpt-20b',
-      'openrouter-ling-flash',
-      'groq-qwen-27b',
+      'openrouter-minimax-m3.1-flash',
       'openrouter-nemotron-lightning',
+      'openrouter-inkling-small',
+      'openrouter-laguna-xs',
+      'openrouter-free-auto',
       'gemini-3.8-flash'
     ]
   },
@@ -649,22 +786,16 @@ export const AI_PROFILE_DEFINITIONS: readonly AiProfileMetadata[] = [
     isDefault: true,
     allowedTiers: ['Free', 'Pro', 'Premium'],
     candidateModelIds: [
-      'ollama-phi4-mini',
-      'ollama-deepseek-r1-1.5b',
-      'ollama-gemma3-270m',
-      'ollama-gemma3-1b',
-      'ollama-qwen3.5-0.8b',
-      'ollama-qwen3-1.7b',
-      'ollama-qwen3-8b',
-      'ollama-bonsai-27b',
       'gemini-3.8-flash',
-      'deepseek-chat',
+      'openrouter-gemma-4-31b',
+      'openrouter-minimax-m3.1-flash',
       'openrouter-cohere-code',
-      'groq-qwen-27b',
+      'openrouter-laguna-s',
+      'openrouter-dots-note',
+      'openrouter-free-auto',
       'gemini-3.7-flash',
       'gemini-3.5-flash',
-      'gemini-3.5-flash-lite',
-      'openai-gpt-5-mini'
+      'gemini-3.5-flash-lite'
     ]
   },
   {
@@ -679,23 +810,18 @@ export const AI_PROFILE_DEFINITIONS: readonly AiProfileMetadata[] = [
     isDefault: false,
     allowedTiers: ['Free', 'Pro', 'Premium'],
     candidateModelIds: [
-      'ollama-phi4-mini',
-      'ollama-deepseek-r1-1.5b',
-      'ollama-gemma3-270m',
-      'ollama-gemma3-1b',
-      'ollama-qwen3.5-0.8b',
-      'ollama-qwen3-1.7b',
-      'ollama-qwen3-8b',
-      'ollama-bonsai-27b',
-      'gemini-3.5-pro',
-      'gemini-3.1-pro-preview',
-      'deepseek-reasoner',
-      'groq-gpt-120b',
+      'gemini-3.8-flash',
+      'gemini-4-argon',
       'openrouter-nemotron-550b',
       'openrouter-nemotron-super-120b',
+      'openrouter-inkling',
+      'openrouter-flint',
+      'openrouter-nemotron-super-vl',
       'openrouter-cohere-code',
-      'openai-gpt-5.1',
-      'gemini-3.8-flash'
+      'openrouter-laguna-s',
+      'openrouter-free-auto',
+      'gemini-3.5-pro',
+      'gemini-3.1-pro-preview'
     ]
   }
 ];
@@ -750,7 +876,7 @@ export function getPublicProfileCatalog(tier = 'Free', scope?: 'tenang' | 'kerja
     const tierAllowed = isTierAllowed(profile, tier);
     const hasConfiguredCandidate = profile.candidateModelIds.some(modelId => {
       const def = getModelDefinition(modelId);
-      return def && isTierAllowed(def, tier) && isRegisteredModelAvailable(def) && getProviderHealth(def.provider) !== 'unavailable';
+      return def && isTierAllowed(def, tier) && isProviderConfigured(def.provider) && getProviderHealth(def.provider) !== 'unavailable';
     });
     return {
       id: profile.id,
@@ -779,6 +905,20 @@ export function resolveAiModel(modelId: string, tier = 'Free'): AiModelDefinitio
     const profile = getProfileDefinition(modelId);
     if (!profile) throw new AiModelError('MODEL_NOT_FOUND');
     if (!isTierAllowed(profile, tier)) throw new AiModelError('MODEL_NOT_ALLOWED');
+    // Prefer candidates whose provider is currently configured and healthy
+    for (const candidateId of profile.candidateModelIds) {
+      const candidate = getModelDefinition(candidateId);
+      if (
+        candidate &&
+        isTierAllowed(candidate, tier) &&
+        candidate.providerModelId &&
+        isProviderConfigured(candidate.provider) &&
+        getProviderHealth(candidate.provider) !== 'unavailable'
+      ) {
+        return candidate;
+      }
+    }
+    // Fallback to any tier-allowed candidate in the profile
     for (const candidateId of profile.candidateModelIds) {
       const candidate = getModelDefinition(candidateId);
       if (candidate && isTierAllowed(candidate, tier) && candidate.providerModelId) {
@@ -798,18 +938,20 @@ export function resolveAiModel(modelId: string, tier = 'Free'): AiModelDefinitio
 export function getConfiguredDefaultAiModelId(tier = 'Free'): string {
   const candidates = [
     ...AI_MODEL_REGISTRY.filter(model => model.id === DEFAULT_AI_MODEL_ID),
+    AI_MODEL_REGISTRY.find(model => model.id === 'openrouter-free-auto'),
+    AI_MODEL_REGISTRY.find(model => model.id === 'openrouter-gemma-4-31b'),
+    AI_MODEL_REGISTRY.find(model => model.id === 'openrouter-minimax-m3.1-flash'),
     AI_MODEL_REGISTRY.find(model => model.id === RESILIENT_FALLBACK_AI_MODEL_ID),
     ...AI_MODEL_REGISTRY
   ].filter((model): model is AiModelDefinition => Boolean(model));
-  return candidates.find(model => isTierAllowed(model, tier) && isRegisteredModelAvailable(model) && getProviderHealth(model.provider) !== 'unavailable')?.id
+  return candidates.find(model => isTierAllowed(model, tier) && aiProviderConfig.isConfigured(model.provider) && getProviderHealth(model.provider) !== 'unavailable')?.id
     || AUTO_ROUTING_MODEL_ID;
 }
 
 export function getPublicModelCatalog(tier = 'Free') {
   return AI_MODEL_REGISTRY.map(({ id, name, category, tag, description, recommendedFor, speed, reasoning, allowedTiers, provider, capabilities, isDefault }) => {
     const configured = isProviderConfigured(provider);
-    const installed = provider !== 'ollama' || isLocalModelAvailable(getModelDefinition(id)!.providerModelId);
-    const availability = !configured ? 'provider_not_configured' as const : !installed || getProviderHealth(provider) === 'unavailable' ? 'temporarily_unavailable' as const : 'configured' as const;
+    const availability = !configured ? 'provider_not_configured' as const : getProviderHealth(provider) === 'unavailable' ? 'temporarily_unavailable' as const : 'configured' as const;
     return {
       id, name, category, tag, description, recommendedFor, speed, reasoning, allowedTiers, provider, capabilities: [...capabilities], isDefault: Boolean(isDefault),
       availability,
@@ -819,7 +961,6 @@ export function getPublicModelCatalog(tier = 'Free') {
     };
   });
 }
-
 
 export function isOllamaModel(modelId: string): boolean {
   return getModelDefinition(modelId)?.provider === 'ollama';
@@ -863,8 +1004,4 @@ export function isModelAllowedForTier(modelId: string, tier: string = 'Free'): b
 function isTierAllowed(model: Pick<AiModelDefinition, 'allowedTiers'>, tier: string): boolean {
   const normalizedTier = tier === 'Developer' ? 'Pro' : tier;
   return model.allowedTiers.some(allowedTier => allowedTier === normalizedTier);
-}
-
-export function isRegisteredModelAvailable(model: AiModelDefinition): boolean {
-  return aiProviderConfig.isConfigured(model.provider) && (model.provider !== 'ollama' || isLocalModelAvailable(model.providerModelId));
 }

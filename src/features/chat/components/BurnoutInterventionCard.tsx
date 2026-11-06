@@ -29,7 +29,7 @@ type TabType = 'breathing' | 'grounding' | 'counselor';
 
 export const BurnoutInterventionCard: React.FC<BurnoutInterventionCardProps> = ({
   distressType = 'overwhelm',
-  triggerReason: _triggerReason,
+  triggerReason,
   onOpenBreathingModal,
   onOpenCounselorBooking
 }) => {
@@ -140,14 +140,15 @@ export const BurnoutInterventionCard: React.FC<BurnoutInterventionCardProps> = (
             <Sparkles className="w-4 h-4" />
           </div>
           <div>
-            <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
-              <span>Jeda Pemulihan Diri (Micro-Intervention)</span>
-              <span className="text-[10px] font-semibold text-emerald-800 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950 px-2 py-0.5 rounded-full">
+            <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100 flex flex-wrap items-center gap-1.5">
+              <span>Jeda Pemulihan Diri</span>
+              <span aria-hidden="true" className="text-slate-400 dark:text-slate-500 font-normal">·</span>
+              <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-300">
                 {distressType === 'panic' ? 'Atasi Panik' : distressType === 'exhaustion' ? 'Pulihkan Energi' : 'Redakan Beban'}
               </span>
             </h4>
             <p className="text-[11.5px] text-slate-500 dark:text-slate-400">
-              Pikiran Anda berhak mendapatkan jeda tenang sejenak sebelum melanjutkan.
+              {triggerReason || 'Pikiran Anda berhak mendapatkan jeda tenang sejenak sebelum melanjutkan.'}
             </p>
           </div>
         </div>
@@ -224,7 +225,7 @@ export const BurnoutInterventionCard: React.FC<BurnoutInterventionCardProps> = (
                 className="absolute inset-0 rounded-full bg-emerald-500/20 dark:bg-emerald-400/25 border-2 border-emerald-500/40"
               />
               <div className="relative z-10 flex flex-col items-center">
-                <span className="text-lg font-mono font-bold text-emerald-700 dark:text-emerald-300">
+                <span className="text-lg font-mono font-bold text-emerald-700 dark:text-emerald-300 tabular-nums">
                   {phaseSeconds}s
                 </span>
               </div>
@@ -234,7 +235,7 @@ export const BurnoutInterventionCard: React.FC<BurnoutInterventionCardProps> = (
               <div className="text-xs font-bold text-slate-800 dark:text-slate-200 mb-0.5">
                 {isBreathingRunning ? getPhaseText() : 'Latihan Napas Kotak (Box Breathing 4-4-4-4)'}
               </div>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-snug">
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-snug tabular-nums">
                 {isBreathingRunning
                   ? `Siklus terselesaikan: ${completedCycles} putaran`
                   : 'Ikuti ritme napas dengan nyaman; berhenti jika terasa tidak nyaman.'}
@@ -283,7 +284,7 @@ export const BurnoutInterventionCard: React.FC<BurnoutInterventionCardProps> = (
       {activeTab === 'grounding' && (
         <div className="bg-white/80 dark:bg-slate-800/60 rounded-2xl p-4 border border-slate-200/60 dark:border-slate-800/80 space-y-3">
           <div className="flex items-center justify-between gap-2">
-            <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+            <span className="text-xs font-bold text-slate-800 dark:text-slate-200 tabular-nums">
               Langkah {groundingStep + 1} dari 5: {groundingSteps[groundingStep].title}
             </span>
             <div className="flex gap-1">

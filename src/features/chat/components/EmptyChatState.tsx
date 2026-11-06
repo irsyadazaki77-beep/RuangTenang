@@ -1,15 +1,16 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { apiClient } from '../../../lib/apiClient';
-import { BookOpen, CheckSquare, Heart, Sparkles, Wind } from 'lucide-react';
+import { ArrowRight, ClipboardCheck, Heart, Sparkles, Wind, BookOpen } from 'lucide-react';
 import { BreathingModal } from './BreathingModal';
 import { BrandLogo } from '../../../components/ui/BrandLogo';
+import { Link } from 'react-router-dom';
 
 interface EmptyChatStateProps {
   userName?: string;
   onSelectPrompt: (prompt: string) => void;
   onOpenBreathing?: () => void;
-  composer?: React.ReactNode;
+  composerSlot?: React.ReactNode;
 }
 
 interface MoodItem {
@@ -50,7 +51,7 @@ const EMOTIONAL_MOODS: MoodItem[] = [
     id: 'neutral',
     value: 4,
     label: 'Tenang',
-    feeling: 'relatif stabil dan ingin berefleksi',
+    feeling: 'merasa tenang dan ingin berefleksi',
     emoji: '🌿',
     prompt: 'Hari ini terasa cukup tenang, tapi aku ingin meluangkan waktu sejenak untuk refleksi diri.'
   },
@@ -64,30 +65,24 @@ const EMOTIONAL_MOODS: MoodItem[] = [
   },
 ];
 
-const QUICK_PROMPTS = [
+const QUICK_STARTER_CHIPS = [
   {
-    id: 'anxiety',
+    id: 'cbt-reflection',
     label: 'Urai pikiran cemas',
-    prompt: 'Pikiranku lagi riuh banget dan ada rasa cemas yang susah hilang. Bisa bantu aku urai satu per satu?',
-    icon: Sparkles
+    icon: Sparkles,
+    prompt: 'Pikiranku sedang dipenuhi rasa cemas dan overthinking. Boleh bantu telaah pemicunya dan temani aku mencari sudut pandang yang lebih tenang?'
   },
   {
-    id: 'study-load',
+    id: 'burnout',
     label: 'Kewalahan tugas kuliah',
-    prompt: 'Aku lagi merasa kewalahan dengan tugas kuliah. Boleh bantu aku urai semuanya pelan-pelan dan memilih satu langkah kecil?',
-    icon: BookOpen
-  },
-  {
-    id: 'check-in',
-    label: 'Cek kondisi',
-    prompt: 'Hari ini rasanya campur aduk. Aku hanya butuh ruang tenang untuk menceritakan apa yang sedang kurasakan tanpa dihakimi.',
-    icon: CheckSquare
+    icon: BookOpen,
+    prompt: 'Aku lagi merasa kewalahan dan burnout dengan tugas kuliah belakangan ini. Boleh bantu aku urai rasa lelah ini pelan-pelan?'
   }
 ];
 
-export function EmptyChatState({ userName, onSelectPrompt, onOpenBreathing, composer }: EmptyChatStateProps) {
+export function EmptyChatState({ userName, onSelectPrompt, onOpenBreathing, composerSlot }: EmptyChatStateProps) {
+  const [isMoodTrayOpen, setIsMoodTrayOpen] = useState(false);
   const [selectedMood, setSelectedMood] = useState<MoodItem | null>(null);
-  const [isMoodPickerOpen, setIsMoodPickerOpen] = useState(false);
   const [isBreathingModalOpen, setIsBreathingModalOpen] = useState(false);
   const [isSavingMood, setIsSavingMood] = useState(false);
   const [moodSaveMessage, setMoodSaveMessage] = useState('');
@@ -147,73 +142,84 @@ export function EmptyChatState({ userName, onSelectPrompt, onOpenBreathing, comp
   };
 
   return (
-    <div className="quiet-empty-content mx-auto my-auto flex w-full max-w-4xl flex-col items-center px-3 py-7 sm:px-6 sm:py-10 animate-fade-in">
-      <div className="mb-4 sm:mb-6">
-        <BrandLogo mode="RUANG_TENANG" size="lg" iconOnly />
+    <div className="w-full max-w-2xl mx-auto flex flex-col items-center text-center px-4 py-6 my-auto select-none animate-fade-in">
+
+      {/* 1. Subtle Brand Mark & Calm Editorial Greeting */}
+      <div className="mb-3 opacity-90">
+        <BrandLogo size="md" iconOnly />
       </div>
 
-      <div className="max-w-3xl text-center">
-        <h1 className="font-serif text-[1.8rem] font-medium leading-tight tracking-tight text-stone-900 dark:text-stone-100 sm:text-4xl md:text-[2.75rem]">
-          Hai {userName || 'Mahasiswa'}, ada yang ingin diceritakan?
-        </h1>
-        <p className="mx-auto mt-3 max-w-xl text-sm leading-relaxed text-stone-600 dark:text-stone-300 sm:text-base">
-          Mulai dari satu kalimat. Ceritakan sebatas yang kamu nyaman.
-        </p>
-      </div>
+      <h1 className="text-2xl sm:text-3xl font-serif font-medium tracking-tight text-stone-850 dark:text-stone-100 max-w-lg mx-auto leading-snug text-balance">
+        {userName ? `Hai ${userName}, ada yang ingin diceritakan?` : 'Hai, ada yang ingin kamu ceritakan hari ini?'}
+      </h1>
 
-      {composer}
+      {/* 2. Centered Composer Slot (ChatGPT / Gemini style) */}
+      {composerSlot && (
+        <div className="w-full mt-6 mb-4">
+          {composerSlot}
+        </div>
+      )}
 
-      <nav aria-label="Mulai dengan cepat" className="mx-auto mt-5 flex max-w-3xl flex-wrap justify-center gap-2">
+      {/* 3. Thin Action Chips Row */}
+      <div className="flex flex-wrap items-center justify-center gap-2 mt-1 max-w-xl">
         <button
           type="button"
-          onClick={() => setIsMoodPickerOpen(open => !open)}
-          aria-expanded={isMoodPickerOpen}
-          aria-controls="quiet-mood-checkin"
-          className="inline-flex min-h-10 items-center gap-2 rounded-full border border-stone-200/90 bg-white/85 px-3.5 py-2 text-xs font-medium text-stone-700 shadow-sm transition hover:-translate-y-0.5 hover:border-teal-300 hover:bg-teal-50/80 hover:text-teal-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 dark:border-slate-700/90 dark:bg-slate-900/75 dark:text-slate-200 dark:hover:border-teal-800 dark:hover:bg-teal-950/50 dark:hover:text-teal-200 sm:px-4 sm:text-sm"
+          onClick={() => setIsMoodTrayOpen(prev => !prev)}
+          aria-expanded={isMoodTrayOpen}
+          className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium transition-all duration-150 cursor-pointer whitespace-nowrap shrink-0 border ${
+            isMoodTrayOpen || selectedMood
+              ? 'border-teal-500/70 bg-teal-50/80 dark:bg-teal-950/50 text-teal-800 dark:text-teal-200'
+              : 'border-stone-200/80 dark:border-slate-800 bg-white/70 dark:bg-slate-900/60 text-stone-600 dark:text-slate-300 hover:border-stone-300 dark:hover:border-slate-700 hover:text-stone-900 dark:hover:text-white'
+          }`}
         >
-          <Heart className="h-4 w-4 text-teal-700 dark:text-teal-400" aria-hidden="true" />
-          Cek perasaan hari ini
+          <Heart className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+          <span>{selectedMood ? `Perasaan: ${selectedMood.label}` : 'Cek perasaan hari ini'}</span>
         </button>
+
         <button
           type="button"
           onClick={handleOpenBreathing}
-          className="inline-flex min-h-10 items-center gap-2 rounded-full border border-stone-200/90 bg-white/85 px-3.5 py-2 text-xs font-medium text-stone-700 shadow-sm transition hover:-translate-y-0.5 hover:border-teal-300 hover:bg-teal-50/80 hover:text-teal-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 dark:border-slate-700/90 dark:bg-slate-900/75 dark:text-slate-200 dark:hover:border-teal-800 dark:hover:bg-teal-950/50 dark:hover:text-teal-200 sm:px-4 sm:text-sm"
+          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium border border-stone-200/80 dark:border-slate-800 bg-white/70 dark:bg-slate-900/60 text-stone-600 dark:text-slate-300 hover:border-stone-300 dark:hover:border-slate-700 hover:text-stone-900 dark:hover:text-white transition-all duration-150 cursor-pointer whitespace-nowrap shrink-0"
         >
-          <Wind className="h-4 w-4 text-teal-700 dark:text-teal-400" aria-hidden="true" />
-          Jeda hening 1 menit
+          <Wind className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+          <span>Jeda hening 1 menit</span>
         </button>
-        {QUICK_PROMPTS.map(item => {
-          const Icon = item.icon;
+
+        {QUICK_STARTER_CHIPS.map(chip => {
+          const Icon = chip.icon;
           return (
             <button
-              key={item.id}
+              key={chip.id}
               type="button"
-              onClick={() => handlePromptSelectWithHaptic(item.prompt)}
-              className="inline-flex min-h-10 items-center gap-2 rounded-full border border-stone-200/90 bg-white/85 px-3.5 py-2 text-xs font-medium text-stone-700 shadow-sm transition hover:-translate-y-0.5 hover:border-teal-300 hover:bg-teal-50/80 hover:text-teal-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 dark:border-slate-700/90 dark:bg-slate-900/75 dark:text-slate-200 dark:hover:border-teal-800 dark:hover:bg-teal-950/50 dark:hover:text-teal-200 sm:px-4 sm:text-sm"
+              onClick={() => handlePromptSelectWithHaptic(chip.prompt)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium border border-stone-200/80 dark:border-slate-800 bg-white/70 dark:bg-slate-900/60 text-stone-600 dark:text-slate-300 hover:border-stone-300 dark:hover:border-slate-700 hover:text-stone-900 dark:hover:text-white transition-all duration-150 cursor-pointer whitespace-nowrap shrink-0"
             >
-              <Icon className="h-4 w-4 text-teal-700 dark:text-teal-400" aria-hidden="true" />
-              {item.label}
+              <Icon className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+              <span>{chip.label}</span>
             </button>
           );
         })}
-      </nav>
 
-      <AnimatePresence initial={false}>
-        {isMoodPickerOpen && (
-          <motion.section
-            id="quiet-mood-checkin"
-            aria-label="Check-in suasana hati"
-            initial={{ opacity: 0, height: 0, y: -6 }}
-            animate={{ opacity: 1, height: 'auto', y: 0 }}
-            exit={{ opacity: 0, height: 0, y: -6 }}
-            transition={{ duration: 0.18 }}
-            className="mt-4 w-full max-w-3xl overflow-hidden rounded-2xl border border-white/80 bg-white/55 p-3 shadow-sm backdrop-blur-sm dark:border-slate-700/80 dark:bg-slate-900/45 sm:p-4"
+        <Link
+          to="/screening"
+          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium border border-stone-200/80 dark:border-slate-800 bg-white/70 dark:bg-slate-900/60 text-stone-600 dark:text-slate-300 hover:border-stone-300 dark:hover:border-slate-700 hover:text-stone-900 dark:hover:text-white transition-all duration-150 whitespace-nowrap shrink-0"
+        >
+          <ClipboardCheck className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+          <span>Cek kondisi</span>
+        </Link>
+      </div>
+
+      {/* 4. Progressive Disclosure: Inline Mood Check-in Tray (Only visible when toggled or selected) */}
+      <AnimatePresence>
+        {(isMoodTrayOpen || selectedMood) && (
+          <motion.div
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.15 }}
+            className="w-full max-w-md mt-3 pt-2"
           >
-            <div className="mb-2 flex items-center justify-between gap-3 px-1">
-              <h2 className="text-xs font-semibold text-stone-700 dark:text-stone-300 sm:text-sm">Bagaimana perasaanmu hari ini?</h2>
-              <span className="text-[10px] text-stone-500 dark:text-slate-400 sm:text-xs">Opsional</span>
-            </div>
-            <div className="grid grid-cols-5 gap-2">
+            <div className="grid grid-cols-5 gap-1.5">
               {EMOTIONAL_MOODS.map(item => {
                 const isSelected = selectedMood?.id === item.id;
                 return (
@@ -222,16 +228,19 @@ export function EmptyChatState({ userName, onSelectPrompt, onOpenBreathing, comp
                     type="button"
                     onClick={() => handleMoodSelect(item)}
                     aria-label={`Perasaan: ${item.label}`}
-                    aria-pressed={isSelected}
                     title={item.label}
-                    className={`flex min-h-14 flex-col items-center justify-center rounded-xl border px-1.5 py-2 transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 ${
+                    className={`flex flex-col items-center justify-center py-2 px-1 rounded-xl transition-all duration-120 cursor-pointer min-h-[44px] ${
                       isSelected
-                        ? 'border-teal-500/70 bg-teal-50/90 text-teal-800 shadow-sm dark:bg-teal-950/50 dark:text-teal-200'
-                        : 'border-stone-200/70 bg-white/75 text-stone-600 hover:border-teal-300 hover:bg-white dark:border-slate-700/80 dark:bg-slate-900/55 dark:text-slate-400 dark:hover:border-teal-800 dark:hover:bg-slate-900'
+                        ? 'border border-teal-500/80 bg-teal-50/80 dark:bg-teal-950/50 text-teal-800 dark:text-teal-200 shadow-2xs'
+                        : 'border border-stone-200/60 dark:border-slate-800/70 bg-white/60 dark:bg-slate-900/50 text-stone-500 dark:text-slate-400 hover:border-stone-300 dark:hover:border-slate-700 hover:bg-white dark:hover:bg-slate-850'
                     }`}
                   >
-                    <span className="text-base leading-none" role="img" aria-hidden="true">{item.emoji}</span>
-                    <span className={`mt-1 w-full truncate text-[10px] tracking-tight sm:text-xs ${isSelected ? 'font-semibold text-teal-800 dark:text-teal-200' : 'font-normal'}`}>
+                    <span className="text-base leading-none select-none" role="img" aria-hidden="true">
+                      {item.emoji}
+                    </span>
+                    <span className={`text-[11px] mt-1 tracking-tight truncate w-full ${
+                      isSelected ? 'font-semibold text-teal-800 dark:text-teal-200' : 'font-normal'
+                    }`}>
                       {item.label}
                     </span>
                   </button>
@@ -239,41 +248,38 @@ export function EmptyChatState({ userName, onSelectPrompt, onOpenBreathing, comp
               })}
             </div>
 
-            <AnimatePresence>
-              {selectedMood && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="mt-3 flex flex-wrap items-center justify-center gap-2 overflow-hidden text-xs"
+            {selectedMood && (
+              <div className="mt-2.5 flex flex-wrap items-center justify-center gap-2 text-xs">
+                <span className="text-stone-500 dark:text-slate-400 text-[11.5px]">
+                  Kamu <span className="font-medium text-stone-800 dark:text-stone-200">{selectedMood.feeling}</span>.
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handlePromptSelectWithHaptic(selectedMood.prompt)}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-teal-700 hover:bg-teal-800 text-white font-medium text-[11px] transition-colors cursor-pointer shadow-2xs"
                 >
-                  <span className="text-center text-[11px] text-stone-500 dark:text-slate-400 sm:text-xs">
-                    Kamu <span className="font-medium text-stone-800 dark:text-stone-200">{selectedMood.feeling}</span>.
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => handlePromptSelectWithHaptic(selectedMood.prompt)}
-                    className="inline-flex min-h-9 items-center rounded-full bg-teal-700 px-4 py-2 text-xs font-medium text-white shadow-sm transition-colors hover:bg-teal-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2"
-                  >
-                    Mulai cerita
-                  </button>
-                  <button
-                    type="button"
-                    onClick={saveMoodCheckin}
-                    disabled={isSavingMood || Boolean(moodSaveMessage && moodSaveMessage.startsWith('Check-in tersimpan'))}
-                    className="inline-flex min-h-9 items-center rounded-full border border-stone-200 bg-white/80 px-4 py-2 text-xs font-medium text-stone-600 transition-colors hover:bg-white disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900/80 dark:text-slate-300"
-                  >
-                    {isSavingMood ? 'Menyimpan…' : moodSaveMessage.startsWith('Check-in tersimpan') ? 'Tersimpan' : 'Simpan check-in'}
-                  </button>
-                  {moodSaveMessage && <span role="status" className="basis-full text-center text-[11px] text-stone-600 dark:text-slate-300">{moodSaveMessage}</span>}
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </motion.section>
+                  <span>Mulai Cerita</span>
+                  <ArrowRight className="w-3 h-3" />
+                </button>
+                <button
+                  type="button"
+                  onClick={saveMoodCheckin}
+                  disabled={isSavingMood || Boolean(moodSaveMessage && moodSaveMessage.startsWith('Check-in tersimpan'))}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-stone-200 dark:border-slate-700 text-stone-600 dark:text-slate-300 font-medium text-[11px] transition-colors disabled:opacity-60 cursor-pointer"
+                >
+                  {isSavingMood ? 'Menyimpan…' : moodSaveMessage.startsWith('Check-in tersimpan') ? 'Tersimpan' : 'Simpan check-in'}
+                </button>
+                {moodSaveMessage && <span role="status" className="basis-full text-center text-[11px] text-secondary">{moodSaveMessage}</span>}
+              </div>
+            )}
+          </motion.div>
         )}
       </AnimatePresence>
 
-      <BreathingModal isOpen={isBreathingModalOpen} onClose={() => setIsBreathingModalOpen(false)} />
+      <BreathingModal
+        isOpen={isBreathingModalOpen}
+        onClose={() => setIsBreathingModalOpen(false)}
+      />
     </div>
   );
 }

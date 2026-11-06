@@ -1,5 +1,6 @@
-import React, { type ReactNode } from 'react';
+import React, { Suspense, type ReactNode } from 'react';
 import { ErrorState } from '../common/ErrorState';
+import { LoadingState } from '../ui/primitives/Surfaces';
 import { GlobalErrorBoundary } from './GlobalErrorBoundary';
 
 interface FeatureErrorBoundaryProps {
@@ -22,7 +23,16 @@ export function FeatureErrorBoundary({ children, featureName }: FeatureErrorBoun
       }
       onReset={reload}
     >
-      {children}
+      <Suspense
+        fallback={
+          <div className="h-full flex items-center justify-center surface-page" role="status">
+            <LoadingState message={`Memuat ${featureName.toLowerCase()}`} className="p-4" />
+          </div>
+        }
+      >
+        {children}
+      </Suspense>
     </GlobalErrorBoundary>
   );
 }
+

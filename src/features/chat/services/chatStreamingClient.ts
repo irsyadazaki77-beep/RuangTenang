@@ -1,4 +1,4 @@
-import { StoredAttachment } from '../types';
+import { StoredAttachment, ReasoningEventData } from '../types';
 import type { FileSourceReference } from '../../../../shared/contracts/files';
 import { AUTH_SESSION_INVALIDATED_EVENT } from '../../../lib/apiClient';
 
@@ -36,14 +36,13 @@ export interface StreamCallbacks {
   onQuotaExceeded?: (data: QuotaExceededData) => void;
   onRoutingMetadata?: (data: RoutingEventData) => void;
   onSources?: (sources: FileSourceReference[]) => void;
+  onReasoning?: (data: ReasoningEventData) => void;
   onConsentRequired?: () => void;
 }
 
 export interface StreamPayload {
   message: string;
   chatId?: string;
-  /** Stable key for retry-safe Workspace message persistence. */
-  idempotencyKey?: string;
   isTemporary?: boolean;
   workspaceMode?: boolean;
   /** Session-only acknowledgement for anonymous AI processing; never account-persisted. */
@@ -62,6 +61,10 @@ export interface StreamPayload {
   latencyPreference?: string;
   qualityPreference?: string;
   presetId?: string;
+  webSearchEnabled?: boolean;
+  thinkingDepth?: 'auto' | 'fast' | 'deep';
+  projectId?: string | null;
+  projectInstructions?: string;
   history?: Array<{ role: 'user' | 'assistant' | 'model'; content: string }>;
 }
 
@@ -72,45 +75,8 @@ function getCookie(name: string): string | null {
   return null;
 }
 
-function reportClientAiTiming(name: 'AI_TTFT' | 'AI_TOTAL', value: number) {
-  if (typeof window === 'undefined' || typeof CustomEvent === 'undefined' || !Number.isFinite(value) || value < 0) return;
-  window.dispatchEvent(new CustomEvent('rt-ai-stream-performance', { detail: { name, value } }));
-}
-
-function highResolutionNow(): number {
-  return typeof performance !== 'undefined' ? performance.now() : Date.now();
-}
-
-async function getNetworkFailureMessage(requestSignal: AbortSignal): Promise<string> {
-  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-    return 'Koneksi internet sedang offline. Sambungkan kembali jaringan, lalu tekan Kirim Ulang Pesan.';
-  }
-
-  const controller = new AbortController();
-  const abortProbe = () => controller.abort();
-  if (requestSignal.aborted) abortProbe();
-  else requestSignal.addEventListener('abort', abortProbe, { once: true });
-  const timeout = setTimeout(() => controller.abort(), 1500);
-  try {
-    const response = await fetch('/api/v1/health', {
-      method: 'GET',
-      credentials: 'same-origin',
-      cache: 'no-store',
-      signal: controller.signal
-    });
-
-    if (response.ok) {
-      return 'Server aplikasi aktif, tetapi koneksi ke layanan AI terputus. Periksa model AI lalu tekan Kirim Ulang Pesan.';
-    }
-
-    return `Server aplikasi merespons dengan status ${response.status}. Coba lagi setelah layanan pulih.`;
-  } catch {
-    return 'Server RuangKerja tidak merespons. Pastikan server aplikasi aktif dan koneksi internet tersedia, lalu tekan Kirim Ulang Pesan.';
-  } finally {
-    clearTimeout(timeout);
-    requestSignal.removeEventListener('abort', abortProbe);
-  }
-}
+import { getStoredAuthToken, getOrCreateGuestAttachmentToken, setStoredGuestAttachmentToken } from '../../../lib/apiClient';
+import { readGuestAiConsent } from '../../../lib/guestAiConsent';
 
 export class ChatStreamingClient {
   private activeToken = 0;
@@ -140,8 +106,6 @@ export class ChatStreamingClient {
 
     const abortController = new AbortController();
     this.abortController = abortController;
-    const requestStartedAt = highResolutionNow();
-    let firstContentRecorded = false;
     const assistantMsgId = `msg_${Date.now() + 1}`;
     let currentText = '';
     let pluginName = '';
@@ -156,13 +120,21 @@ export class ChatStreamingClient {
       }
 
       const csrfToken = getCookie('XSRF-TOKEN');
+      const storedToken = getStoredAuthToken();
+      const guestAttachmentToken = getOrCreateGuestAttachmentToken();
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
-        'X-Requested-With': 'XMLHttpRequest'
+        'X-Requested-With': 'XMLHttpRequest',
+        'X-Guest-AI-Consent': String(payload.guestAiConsent ?? readGuestAiConsent()),
+        'X-Guest-Attachment-Token': guestAttachmentToken
       };
       if (csrfToken) {
         headers['X-CSRF-Token'] = csrfToken;
       }
+      if (storedToken) {
+        headers['Authorization'] = `Bearer ${storedToken}`;
+      }
+
 
       if (token !== this.activeToken || abortController.signal.aborted) return;
       let response: Response | null = await fetch('/api/v1/chat/stream', {
@@ -172,6 +144,8 @@ export class ChatStreamingClient {
         body: JSON.stringify(payload),
         signal: abortController.signal
       });
+      const returnedGuestToken = typeof response.headers?.get === 'function' ? response.headers.get('x-guest-attachment-token') : null;
+      if (returnedGuestToken) setStoredGuestAttachmentToken(returnedGuestToken);
 
       // If 403 occurs due to CSRF token mismatch/expiry, attempt fresh token refresh once
       if (response.status === 403 && token === this.activeToken && !abortController.signal.aborted) {
@@ -316,15 +290,21 @@ export class ChatStreamingClient {
                           degradationNotice: parsed.degradationNotice
                         });
                       }
+                    } else if (parsed.type === 'reasoning' && Array.isArray(parsed.steps)) {
+                      if (token === this.activeToken && callbacks.onReasoning) {
+                        callbacks.onReasoning({
+                          steps: parsed.steps,
+                          durationMs: parsed.durationMs,
+                          thinkingDepth: parsed.thinkingDepth,
+                          webSearchUsed: Boolean(parsed.webSearchUsed),
+                          searchQuery: parsed.searchQuery
+                        });
+                      }
                     } else if (Array.isArray(parsed.sources)) {
                       if (token === this.activeToken && callbacks.onSources) callbacks.onSources(parsed.sources as FileSourceReference[]);
                     } else if (parsed.text || (parsed.type === 'text' && parsed.content)) {
                       const content = parsed.text || parsed.content;
                       currentText += content;
-                      if (!firstContentRecorded && typeof content === 'string' && content.length > 0) {
-                        firstContentRecorded = true;
-                        reportClientAiTiming('AI_TTFT', highResolutionNow() - requestStartedAt);
-                      }
                       if (token === this.activeToken && callbacks.onChunk) {
                         callbacks.onChunk(content);
                       }
@@ -356,10 +336,6 @@ export class ChatStreamingClient {
                 if (parsed.text || (parsed.type === 'text' && parsed.content)) {
                   const content = parsed.text || parsed.content;
                   currentText += content;
-                  if (!firstContentRecorded && typeof content === 'string' && content.length > 0) {
-                    firstContentRecorded = true;
-                    reportClientAiTiming('AI_TTFT', highResolutionNow() - requestStartedAt);
-                  }
                   if (token === this.activeToken && callbacks.onChunk) {
                     callbacks.onChunk(content);
                   }
@@ -393,7 +369,6 @@ export class ChatStreamingClient {
       if (!pluginName && callbacks.onMessageComplete) {
         await callbacks.onMessageComplete(currentText);
       }
-      if (firstContentRecorded) reportClientAiTiming('AI_TOTAL', highResolutionNow() - requestStartedAt);
 
     } catch (err: any) {
       if (token !== this.activeToken) {
@@ -409,11 +384,9 @@ export class ChatStreamingClient {
         if (callbacks.onError) {
           const rawMessage = typeof err?.message === 'string' ? err.message : '';
           const isNetworkFailure = err instanceof TypeError && /failed to fetch|networkerror|load failed/i.test(rawMessage);
-          const errorMessage = isNetworkFailure
-            ? await getNetworkFailureMessage(abortController.signal)
-            : rawMessage || 'Koneksi terputus.';
-          if (token !== this.activeToken || abortController.signal.aborted) return;
-          await callbacks.onError(errorMessage);
+          await callbacks.onError(isNetworkFailure
+            ? 'Tidak dapat terhubung ke server. Periksa koneksi internet lalu coba lagi.'
+            : rawMessage || 'Koneksi terputus.');
         }
       }
     } finally {

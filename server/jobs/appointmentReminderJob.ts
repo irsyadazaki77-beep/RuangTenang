@@ -31,17 +31,27 @@ async function processReminders() {
   const now = new Date();
   
   // Find appointments that are CONFIRMED
-  const upcomingAppointments = await prisma.appointments.findMany({
-    where: {
-      status: 'CONFIRMED',
-    },
-    include: {
-      user: true,
-      counselor: true,
+  let upcomingAppointments: any[] = [];
+  try {
+    const records = await prisma.appointments?.findMany?.({
+      where: {
+        status: 'CONFIRMED',
+      },
+      include: {
+        user: true,
+        counselor: true,
+      }
+    });
+    if (Array.isArray(records)) {
+      upcomingAppointments = records;
     }
-  });
+  } catch (err: any) {
+    console.warn('[ReminderJob] Failed to query appointments:', err?.message || err);
+    return;
+  }
 
   for (const appt of upcomingAppointments) {
+
     try {
       const apptDate = new Date(appt.scheduledAt);
       if (isNaN(apptDate.getTime())) {

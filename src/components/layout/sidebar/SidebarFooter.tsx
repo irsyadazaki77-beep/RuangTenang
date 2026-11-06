@@ -7,7 +7,7 @@ import {
   LogOut,
   LogIn,
   AlertCircle,
-  MoreVertical,
+  MoreHorizontal,
   ShieldCheck
 } from 'lucide-react';
 import { useTheme } from '../../../contexts/ThemeContext';
@@ -88,16 +88,16 @@ export const SidebarFooter: React.FC<SidebarFooterProps> = ({
 
   if (isCollapsed) {
     return (
-      <div className="mt-auto border-t border-slate-200/60 dark:border-slate-800/80 p-2 space-y-1.5 flex flex-col items-center shrink-0">
+      <div className="mt-auto border-t border-slate-200/50 dark:border-slate-800/70 p-2 space-y-1.5 flex flex-col items-center shrink-0 w-full overflow-x-hidden">
         {/* Urgent Crisis SOS */}
-        <SidebarTooltip content="Bantuan krisis dan SOS" show={true} position="right">
+        <SidebarTooltip content="Bantuan krisis dan SOS 119" show={true} position="right">
           <button
             type="button"
             onClick={handleOpenEmergency}
-            className="w-9 h-9 rounded-lg bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/50 text-rose-600 dark:text-rose-400 border border-rose-200/80 dark:border-rose-800/60 flex items-center justify-center transition-colors cursor-pointer"
+            className="w-9 h-9 rounded-lg text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 flex items-center justify-center transition-colors cursor-pointer"
             aria-label="Bantuan Darurat SOS"
           >
-            <AlertCircle className="w-4 h-4 text-rose-500" />
+            <AlertCircle className="w-4 h-4" />
           </button>
         </SidebarTooltip>
 
@@ -140,7 +140,7 @@ export const SidebarFooter: React.FC<SidebarFooterProps> = ({
                 onOpenSettings?.();
                 onCloseMobile();
               }}
-              className="w-9 h-9 rounded-full bg-emerald-600 text-white font-bold text-xs flex items-center justify-center shadow-2xs hover:ring-2 hover:ring-emerald-500/40 transition-all cursor-pointer relative"
+              className="w-8 h-8 rounded-full bg-emerald-600 text-white font-bold text-xs flex items-center justify-center shadow-2xs hover:ring-2 hover:ring-emerald-500/40 transition-all cursor-pointer relative"
               aria-label="Pengaturan Profil"
             >
               {user?.name?.charAt(0)?.toUpperCase() || 'U'}
@@ -157,32 +157,15 @@ export const SidebarFooter: React.FC<SidebarFooterProps> = ({
   }
 
   return (
-    <div ref={menuRef} className="mt-auto border-t border-slate-200/60 dark:border-slate-800/80 px-2.5 py-2 space-y-1.5 shrink-0 relative bg-slate-50/40 dark:bg-[#111315]/80">
-      {/* 1. Compact SOS Strip Button (1 Line) */}
-      <button
-        type="button"
-        onClick={handleOpenEmergency}
-        className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium text-rose-700 dark:text-rose-300 bg-rose-50/60 dark:bg-rose-950/25 hover:bg-rose-50 dark:hover:bg-rose-950/45 border border-rose-200/70 dark:border-rose-900/50 transition-colors cursor-pointer"
-        title="Bantuan krisis psikologis dan darurat medis"
-      >
-        <div className="flex items-center gap-1.5">
-          <div className="w-1.5 h-1.5 rounded-full bg-rose-500" />
-          <AlertCircle className="w-3.5 h-3.5 text-rose-500 shrink-0" />
-          <span>Bantuan Darurat (SOS)</span>
-        </div>
-        <span className="text-[10px] text-rose-600/80 dark:text-rose-400 font-medium">
-          SOS
-        </span>
-      </button>
-
-      {/* 2. Unified Profile Bar with Popover Trigger */}
+    <div ref={menuRef} className="mt-auto border-t border-slate-200/50 dark:border-slate-800/70 px-2 py-2 shrink-0 relative w-full overflow-x-hidden">
+      {/* Unified Profile & Quick Actions Bar (ChatGPT / Gemini style) */}
       <div className="relative">
-        <div className="flex items-center justify-between gap-1 p-0.5 rounded-lg hover:bg-slate-200/50 dark:hover:bg-slate-800/60 transition-colors">
+        <div className="flex items-center justify-between gap-1 p-1 rounded-xl hover:bg-slate-200/50 dark:hover:bg-slate-800/60 transition-colors">
           {isGuest ? (
             <button
               type="button"
               onClick={() => { onOpenAuth?.(); onCloseMobile(); }}
-              className="flex items-center gap-2 py-1 px-1.5 rounded-md text-left flex-1 min-w-0 cursor-pointer"
+              className="flex items-center gap-2.5 py-1 px-1.5 rounded-lg text-left flex-1 min-w-0 cursor-pointer"
               title="Masuk Akun"
             >
               <div className="w-7 h-7 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 shrink-0">
@@ -201,7 +184,7 @@ export const SidebarFooter: React.FC<SidebarFooterProps> = ({
             <button
               type="button"
               onClick={() => setIsMenuOpen(!isMenuOpen)}
-              className="flex items-center gap-2 py-1 px-1.5 rounded-md text-left flex-1 min-w-0 cursor-pointer"
+              className="flex items-center gap-2.5 py-1 px-1.5 rounded-lg text-left flex-1 min-w-0 cursor-pointer"
               title={user?.name || 'Profil Pengguna'}
               aria-expanded={isMenuOpen}
             >
@@ -224,12 +207,22 @@ export const SidebarFooter: React.FC<SidebarFooterProps> = ({
             </button>
           )}
 
-          {/* Direct Controls or Menu Toggle */}
-          <div className="flex items-center gap-1 shrink-0 pr-0.5">
+          {/* Subtle Right Utility Icons: SOS, Theme, Menu/Settings */}
+          <div className="flex items-center gap-0.5 shrink-0">
+            <button
+              type="button"
+              onClick={handleOpenEmergency}
+              className="w-8 h-8 flex items-center justify-center rounded-lg text-rose-500/80 hover:text-rose-600 dark:text-rose-400/80 dark:hover:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
+              aria-label="Bantuan Darurat (SOS)"
+              title="Pusat Bantuan Krisis & Darurat (SOS 119)"
+            >
+              <AlertCircle className="w-4 h-4" />
+            </button>
+
             <button
               type="button"
               onClick={toggleTheme}
-              className="min-w-[36px] min-h-[36px] p-2 flex items-center justify-center rounded-lg text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/70 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+              className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/70 dark:hover:bg-slate-700 transition-colors cursor-pointer"
               aria-label="Ganti Tema"
               title={actualTheme === 'dark' ? 'Mode Terang' : 'Mode Gelap'}
             >
@@ -244,7 +237,7 @@ export const SidebarFooter: React.FC<SidebarFooterProps> = ({
               <button
                 type="button"
                 onClick={() => setIsMenuOpen(!isMenuOpen)}
-                className={`min-w-[36px] min-h-[36px] p-2 flex items-center justify-center rounded-lg transition-colors cursor-pointer ${
+                className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors cursor-pointer ${
                   isMenuOpen
                     ? 'bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-white'
                     : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/70 dark:hover:bg-slate-700'
@@ -252,13 +245,13 @@ export const SidebarFooter: React.FC<SidebarFooterProps> = ({
                 aria-label="Menu Pengguna"
                 title="Menu Pengguna"
               >
-                <MoreVertical className="w-4 h-4" />
+                <MoreHorizontal className="w-4 h-4" />
               </button>
             ) : (
               <button
                 type="button"
                 onClick={() => { onOpenSettings?.(); onCloseMobile(); }}
-                className="min-w-[36px] min-h-[36px] p-2 flex items-center justify-center rounded-lg text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/70 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/70 dark:hover:bg-slate-700 transition-colors cursor-pointer"
                 aria-label="Pengaturan"
                 title="Pengaturan"
               >
@@ -324,6 +317,18 @@ export const SidebarFooter: React.FC<SidebarFooterProps> = ({
                 <span className="text-[10px] text-slate-400 capitalize">
                   {actualTheme === 'dark' ? 'Gelap' : 'Terang'}
                 </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setIsMenuOpen(false);
+                  handleOpenEmergency();
+                }}
+                className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer text-left font-medium"
+              >
+                <AlertCircle className="w-3.5 h-3.5 text-rose-500" />
+                <span>Bantuan Darurat (SOS 119)</span>
               </button>
 
               {onLogout && (

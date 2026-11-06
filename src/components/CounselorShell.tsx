@@ -48,7 +48,7 @@ export const CounselorShell: React.FC<CounselorShellProps> = ({
   const navigate = useNavigate();
 
   return (
-    <div className="flex flex-col min-h-[100dvh] w-full surface-page text-primary font-sans relative overflow-hidden">
+    <div className="flex flex-col h-full min-h-0 w-full surface-page text-primary font-sans relative overflow-hidden">
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:px-4 focus:py-2 focus:bg-teal-700 focus:text-white focus:rounded-lg focus:shadow-md focus:outline-none text-xs font-semibold"

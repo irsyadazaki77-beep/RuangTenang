@@ -43,11 +43,17 @@ export const SidebarNavLinks: React.FC<SidebarNavLinksProps> = ({
     user && (user.role === 'konselor' || user.role === 'admin' || (user.role as string) === 'peer_counselor')
   );
 
-  // Default expanded if currently on a secondary route
-  const [isExpanded, setIsExpanded] = useState(() => location.pathname !== '/');
+  const isPrimaryCanvasRoute = (pathname: string) =>
+    pathname === '/' ||
+    pathname === '/workspace' ||
+    pathname.startsWith('/c/') ||
+    pathname.startsWith('/workspace/c/');
+
+  // Default expanded only if currently on a secondary tool route
+  const [isExpanded, setIsExpanded] = useState(() => !isPrimaryCanvasRoute(location.pathname));
 
   useEffect(() => {
-    if (location.pathname !== '/') {
+    if (!isPrimaryCanvasRoute(location.pathname)) {
       setIsExpanded(true);
     }
   }, [location.pathname]);
@@ -61,7 +67,7 @@ export const SidebarNavLinks: React.FC<SidebarNavLinksProps> = ({
 
   if (isCollapsed) {
     return (
-      <div className="py-2 px-2 border-t border-slate-200/60 dark:border-slate-800/60 space-y-1 flex flex-col items-center shrink-0">
+      <div className="py-2 px-2 border-t border-slate-200/60 dark:border-slate-800/60 space-y-1 flex flex-col items-center shrink-0 w-full overflow-x-hidden">
         <SidebarTooltip content="AI Chat (Utama)" show={true} position="right">
           <button
             type="button"
@@ -181,7 +187,7 @@ export const SidebarNavLinks: React.FC<SidebarNavLinksProps> = ({
   }
 
   return (
-    <div className="px-2.5 py-1.5 border-t border-slate-200/60 dark:border-slate-800/70 shrink-0 space-y-1">
+    <div className="px-2.5 py-1.5 border-t border-slate-200/60 dark:border-slate-800/70 shrink-0 space-y-1 w-full overflow-x-hidden">
       {/* Collapsible Accordion Header */}
       <button
         type="button"
@@ -226,17 +232,30 @@ export const SidebarNavLinks: React.FC<SidebarNavLinksProps> = ({
                   type="button"
                   onClick={() => handleNavigate('/workspace')}
                   className={`w-full flex items-center justify-between px-2 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-                  location.pathname.startsWith('/workspace')
+                    location.pathname === '/workspace' || location.pathname.startsWith('/workspace/c/')
+                      ? 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-800 dark:text-indigo-300 font-semibold'
+                      : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <MessageSquare className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                    <span>Kanvas RuangKerja</span>
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleNavigate('/workspace/projects')}
+                  className={`w-full flex items-center justify-between px-2 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+                    location.pathname === '/workspace/projects'
                       ? 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-800 dark:text-indigo-300 font-semibold'
                       : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60'
                   }`}
                 >
                   <div className="flex items-center gap-2">
                     <LayoutDashboard className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
-                    <span>Beranda RuangKerja</span>
+                    <span>Proyek & Pencarian</span>
                   </div>
                 </button>
-
               </>
             ) : (
               /* Campus Services */

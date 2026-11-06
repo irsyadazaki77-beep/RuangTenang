@@ -117,7 +117,7 @@ export function useWorkspaceAgentController(options: UseWorkspaceAgentController
         setIsAgentExecuting(false);
       }
     }
-  }, [activeArtifact, allowExternalSearch, executeAgentTask, includeCanvasInContext, includeFilesInContext, isStreaming, onAgentTaskCompleted, plan, refreshWorkspace, reportWorkflowFailure, selectedFileIds, selectedModel, showToast, startTaskExecution, workspaceId, workspaceInstructions]);
+  }, [activeArtifact, allowExternalSearch, executeAgentTask, includeCanvasInContext, includeFilesInContext, isStreaming, onAgentTaskCompleted, plan, reportWorkflowFailure, selectedFileIds, selectedModel, showToast, startTaskExecution, workspaceId, workspaceInstructions]);
 
   // Check and run next ready task if in continuous auto mode and not waiting for review
   useEffect(() => {

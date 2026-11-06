@@ -208,12 +208,13 @@ export const DailyCheckinModal: React.FC<DailyCheckinModalProps> = ({
     }
     submitGuard.current = true;
     setIsSubmitting(true);
-    const payload: Omit<MoodLog, 'id'> = {
+    const mappedSleepQuality: MoodLog['sleepQuality'] = sleepQuality === 'Tidak Dicatat' ? null : sleepQuality === 'Nyenyak' ? 'good' : sleepQuality === 'Insomnia' ? 'very_poor' : 'poor';
+    const payload = {
       mood: selectedMood,
       date: logDate,
       notes: journalNote.trim(),
       sleepHours: initialLog && initialLog.sleepHours === null && !sleepHoursTouched ? null : sleepHours,
-      sleepQuality: sleepQuality === 'Tidak Dicatat' ? null : sleepQuality === 'Nyenyak' ? 'good' : sleepQuality === 'Insomnia' ? 'very_poor' : 'poor',
+      sleepQuality: mappedSleepQuality,
       factors: selectedFactors,
       emotions: selectedEmotions
     };
@@ -231,7 +232,7 @@ export const DailyCheckinModal: React.FC<DailyCheckinModalProps> = ({
       showToast(message, type);
     };
 
-    const queueOffline = async (message: string, type: 'info' | 'warning', requestWasNeverSent = false) => {
+    const queueOffline = async (message: string, type: 'info' | 'warning') => {
       if (!idempotencyKey) throw new Error('MOOD_IDEMPOTENCY_KEY_MISSING');
       await clientDb.enqueueOfflineAction({
         type: 'mood_log',
@@ -240,7 +241,7 @@ export const DailyCheckinModal: React.FC<DailyCheckinModalProps> = ({
         idempotencyKey,
       });
       const offlineLog: MoodLog = {
-        id: `${requestWasNeverSent ? 'offline' : 'pending'}-${idempotencyKey}`,
+        id: `offline-${Date.now()}`,
         date: logDate,
         mood: selectedMood,
         emotions: selectedEmotions,
@@ -258,7 +259,7 @@ export const DailyCheckinModal: React.FC<DailyCheckinModalProps> = ({
           showToast('Perubahan catatan belum tersimpan. Sambungkan ke internet lalu coba lagi.', 'warning');
           return;
         }
-        await queueOffline('Catatan mood tersimpan terenkripsi untuk akun ini dan akan dicoba saat online.', 'info', true);
+        await queueOffline('Catatan mood tersimpan terenkripsi untuk akun ini dan akan dicoba saat online.', 'info');
         return;
       }
 

@@ -93,6 +93,7 @@ export const SOUNDSCAPE_TRACKS: SoundscapeTrackConfig[] = [
 ];
 
 export type TimerMode = 'none' | 'pomodoro' | 'sleep';
+export type PomodoroPreset = '25_5' | '50_10';
 
 export interface SoundscapeState {
   isPlaying: boolean;
@@ -103,6 +104,9 @@ export interface SoundscapeState {
   timerTotalSeconds: number;
   timerRemainingSeconds: number;
   pomodoroPhase: 'work' | 'break';
+  pomodoroPreset: PomodoroPreset;
+  completedPomodoros: number;
+  autoDuckOnBreak: boolean;
 }
 
 class SoundscapeSynthesizer {
@@ -116,6 +120,7 @@ class SoundscapeSynthesizer {
 
   private isRunning = false;
   private timerInterval: NodeJS.Timeout | null = null;
+  private timerTargetEndTimeMs: number | null = null;
   private lofiInterval: NodeJS.Timeout | null = null;
   private birdInterval: NodeJS.Timeout | null = null;
   private rainDropletInterval: NodeJS.Timeout | null = null;
@@ -140,7 +145,10 @@ class SoundscapeSynthesizer {
     timerMode: 'none',
     timerTotalSeconds: 0,
     timerRemainingSeconds: 0,
-    pomodoroPhase: 'work'
+    pomodoroPhase: 'work',
+    pomodoroPreset: '25_5',
+    completedPomodoros: 0,
+    autoDuckOnBreak: true
   };
 
   constructor() {
@@ -737,21 +745,45 @@ class SoundscapeSynthesizer {
     }
   }
 
-  // --- TIMER & POMODORO SYSTEM ---
+  // --- TIMER & POMODORO SYSTEM (MONOTONIC ANTI-DRIFT) ---
 
-  public startPomodoroTimer(): void {
+  private applyEffectiveMasterGain(multiplier = 1): void {
+    if (this.masterGain && this.ctx) {
+      const target = Math.max(0.0001, this.state.masterVolume * multiplier);
+      this.masterGain.gain.setTargetAtTime(target, this.ctx.currentTime, 0.25);
+    }
+  }
+
+  public setAutoDuckOnBreak(enabled: boolean): void {
+    this.state.autoDuckOnBreak = enabled;
+    const isBreak = this.state.timerMode === 'pomodoro' && this.state.pomodoroPhase === 'break';
+    this.applyEffectiveMasterGain(isBreak && enabled ? 0.55 : 1);
+    this.notify();
+  }
+
+  public startPomodoroTimer(preset: PomodoroPreset = this.state.pomodoroPreset): void {
     this.clearTimers();
+    this.state.pomodoroPreset = preset;
     this.state.timerMode = 'pomodoro';
     this.state.pomodoroPhase = 'work';
-    this.state.timerTotalSeconds = 25 * 60; // 25 min focus
-    this.state.timerRemainingSeconds = 25 * 60;
-    
+    const workMinutes = preset === '50_10' ? 50 : 25;
+    this.state.timerTotalSeconds = workMinutes * 60;
+    this.state.timerRemainingSeconds = workMinutes * 60;
+    this.timerTargetEndTimeMs = Date.now() + workMinutes * 60 * 1000;
+
     if (!this.state.isPlaying) {
       this.playAllActive();
+    } else {
+      this.applyEffectiveMasterGain(1);
     }
 
     this.runTimerTick();
     this.notify();
+  }
+
+  public skipPomodoroPhase(): void {
+    if (this.state.timerMode !== 'pomodoro') return;
+    this.handleTimerComplete();
   }
 
   public startSleepTimer(minutes: number): void {
@@ -759,9 +791,12 @@ class SoundscapeSynthesizer {
     this.state.timerMode = 'sleep';
     this.state.timerTotalSeconds = minutes * 60;
     this.state.timerRemainingSeconds = minutes * 60;
+    this.timerTargetEndTimeMs = Date.now() + minutes * 60 * 1000;
 
     if (!this.state.isPlaying) {
       this.playAllActive();
+    } else {
+      this.applyEffectiveMasterGain(1);
     }
 
     this.runTimerTick();
@@ -773,46 +808,60 @@ class SoundscapeSynthesizer {
     this.state.timerMode = 'none';
     this.state.timerTotalSeconds = 0;
     this.state.timerRemainingSeconds = 0;
+    this.applyEffectiveMasterGain(1);
     this.notify();
   }
 
   private runTimerTick(): void {
     this.timerInterval = setInterval(() => {
-      if (this.state.timerRemainingSeconds <= 0) {
+      if (!this.timerTargetEndTimeMs) {
         this.handleTimerComplete();
         return;
       }
 
-      this.state.timerRemainingSeconds -= 1;
+      const remainingMs = this.timerTargetEndTimeMs - Date.now();
+      const remainingSec = Math.max(0, Math.ceil(remainingMs / 1000));
+      this.state.timerRemainingSeconds = remainingSec;
+
+      if (remainingSec <= 0) {
+        this.handleTimerComplete();
+        return;
+      }
 
       // Sleep timer gradual fade-out in last 60 seconds
-      if (this.state.timerMode === 'sleep' && this.state.timerRemainingSeconds <= 60 && this.state.timerRemainingSeconds > 0) {
-        const factor = this.state.timerRemainingSeconds / 60;
-        if (this.masterGain && this.ctx) {
-          this.masterGain.gain.setValueAtTime(Math.max(0.0001, this.state.masterVolume * factor), this.ctx.currentTime);
-        }
+      if (this.state.timerMode === 'sleep' && remainingSec <= 60 && remainingSec > 0) {
+        const factor = remainingSec / 60;
+        this.applyEffectiveMasterGain(factor);
       }
 
       this.notify();
-    }, 1000);
+    }, 500);
   }
 
   private handleTimerComplete(): void {
     this.clearTimers();
 
     if (this.state.timerMode === 'pomodoro') {
+      const workMinutes = this.state.pomodoroPreset === '50_10' ? 50 : 25;
+      const breakMinutes = this.state.pomodoroPreset === '50_10' ? 10 : 5;
+
       if (this.state.pomodoroPhase === 'work') {
-        // Switch to 5 min break
+        this.state.completedPomodoros += 1;
         this.state.pomodoroPhase = 'break';
-        this.state.timerTotalSeconds = 5 * 60;
-        this.state.timerRemainingSeconds = 5 * 60;
-        this.playChimeTone(659.25); // E5 break chime
+        this.state.timerTotalSeconds = breakMinutes * 60;
+        this.state.timerRemainingSeconds = breakMinutes * 60;
+        this.timerTargetEndTimeMs = Date.now() + breakMinutes * 60 * 1000;
+        if (this.state.autoDuckOnBreak) {
+          this.applyEffectiveMasterGain(0.55);
+        }
+        this.playChimeTone(659.25); // E5 gentle break chime
         this.runTimerTick();
       } else {
-        // Break finished -> switch back to focus or pause
         this.state.pomodoroPhase = 'work';
-        this.state.timerTotalSeconds = 25 * 60;
-        this.state.timerRemainingSeconds = 25 * 60;
+        this.state.timerTotalSeconds = workMinutes * 60;
+        this.state.timerRemainingSeconds = workMinutes * 60;
+        this.timerTargetEndTimeMs = Date.now() + workMinutes * 60 * 1000;
+        this.applyEffectiveMasterGain(1);
         this.playChimeTone(523.25); // C5 focus chime
         this.runTimerTick();
       }
@@ -846,6 +895,7 @@ class SoundscapeSynthesizer {
       clearInterval(this.timerInterval);
       this.timerInterval = null;
     }
+    this.timerTargetEndTimeMs = null;
   }
 
   // --- AUDIO ANALYSER / VISUALIZER ---

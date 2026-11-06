@@ -11,8 +11,7 @@ export {
   ALL_AI_PROFILE_IDS,
   isTenangProfile,
   isKerjaProfile,
-  isAiProfile,
-  isAutoRoutingModel
+  isAiProfile
 } from '../../shared/aiModelContract';
 export type {
   AiModelCatalogResponse,

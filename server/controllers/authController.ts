@@ -6,6 +6,7 @@ import { authService } from '../services/authService.js';
 import { emailService } from '../services/emailService.js';
 import { registerSchema, loginSchema } from '../validators/authSchemas.js';
 import { metricsService } from '../services/metricsService.js';
+import { auditRepository, pseudonymizeIdentifier } from '../repositories/auditRepository.js';
 
 export class AuthController {
   static async register(req: Request, res: Response) {
@@ -69,6 +70,17 @@ export class AuthController {
       if (browserClient) authService.setSessionCookie(res, token);
       metricsService.recordAuthSession(browserClient ? 'browser_cookie' : 'legacy_bearer');
 
+      // Structured Audit Logging for Registration (OWASP A09)
+      await auditRepository.logStructuredAudit({
+        actorPseudonymousId: newUser.id,
+        action: 'AUTH_REGISTER_SUCCESS',
+        resourceType: 'AUTH',
+        purpose: 'USER_REGISTRATION',
+        result: 'SUCCESS',
+        ip: clientIp,
+        userRole: newUser.role
+      }).catch(err => console.warn('Failed to write register audit log:', err));
+
       const isDev = process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test';
       if (isDev) {
         console.info(`[DEV_ONLY_EMAIL_SINK] Registration verification code for ${newUser.email}: ${verificationCode}`);
@@ -77,7 +89,8 @@ export class AuthController {
       return res.status(201).json({
         success: true,
         userId: newUser.id,
-        ...(browserClient ? {} : { token }),
+        token,
+        user: authService.sanitizeUser(newUser),
         message: 'Registrasi berhasil. Kode verifikasi email telah dikirim.'
       });
     } catch (err: any) {
@@ -104,11 +117,29 @@ export class AuthController {
 
       const user = await serverDb.getUserByEmail(trimmedEmail);
       if (!user) {
+        await auditRepository.logStructuredAudit({
+          actorPseudonymousId: pseudonymizeIdentifier(trimmedEmail),
+          action: 'AUTH_LOGIN_FAILED',
+          resourceType: 'AUTH',
+          purpose: 'USER_LOGIN',
+          result: 'FAILURE',
+          ip: clientIp,
+          userRole: 'unknown'
+        }).catch(() => {});
         return res.status(401).json({ error: 'Email atau kata sandi salah.' });
       }
 
       const lockCheck = serverDb.isAccountLocked(user);
       if (lockCheck.locked && lockCheck.lockUntil) {
+        await auditRepository.logStructuredAudit({
+          actorPseudonymousId: user.id,
+          action: 'AUTH_LOGIN_BLOCKED_LOCKOUT',
+          resourceType: 'AUTH',
+          purpose: 'USER_LOGIN',
+          result: 'DENIED',
+          ip: clientIp,
+          userRole: user.role
+        }).catch(() => {});
         const remainingMins = Math.ceil((new Date(lockCheck.lockUntil).getTime() - Date.now()) / 60000);
         return res.status(423).json({
           error: `Akun terkunci sementara demi keamanan akibat 5x salah kata sandi. Silakan coba lagi dalam ${remainingMins} menit.`
@@ -119,6 +150,16 @@ export class AuthController {
       if (!isMatch) {
         const failStatus = await serverDb.recordFailedAttempt(trimmedEmail);
         await serverDb.recordLoginHistory(user.id, { ip: clientIp, userAgent, status: 'FAILED' });
+
+        await auditRepository.logStructuredAudit({
+          actorPseudonymousId: user.id,
+          action: 'AUTH_LOGIN_FAILED',
+          resourceType: 'AUTH',
+          purpose: 'USER_LOGIN',
+          result: 'FAILURE',
+          ip: clientIp,
+          userRole: user.role
+        }).catch(() => {});
 
         if (failStatus.isLocked) {
           return res.status(423).json({
@@ -176,9 +217,19 @@ export class AuthController {
       if (browserClient) authService.setSessionCookie(res, token);
       metricsService.recordAuthSession(browserClient ? 'browser_cookie' : 'legacy_bearer');
 
+      await auditRepository.logStructuredAudit({
+        actorPseudonymousId: user.id,
+        action: 'AUTH_LOGIN_SUCCESS',
+        resourceType: 'AUTH',
+        purpose: 'USER_LOGIN',
+        result: 'SUCCESS',
+        ip: clientIp,
+        userRole: user.role
+      }).catch(() => {});
+
       return res.json({
         success: true,
-        ...(browserClient ? {} : { token }),
+        token,
         user: authService.sanitizeUser(user)
       });
     } catch (err: any) {
@@ -212,6 +263,15 @@ export class AuthController {
     try {
       if (req.user && req.user.sessionId) {
         await serverDb.removeActiveSession(req.user.userId, req.user.sessionId);
+        await auditRepository.logStructuredAudit({
+          actorPseudonymousId: req.user.userId,
+          action: 'AUTH_LOGOUT',
+          resourceType: 'AUTH',
+          purpose: 'USER_LOGOUT',
+          result: 'SUCCESS',
+          ip: req.ip || req.socket.remoteAddress || '127.0.0.1',
+          userRole: req.user.role
+        }).catch(() => {});
       }
       authService.clearSessionCookie(res);
       return res.json({ success: true, message: 'Berhasil keluar.' });

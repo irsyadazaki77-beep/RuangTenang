@@ -7,11 +7,10 @@
  *
  * Usage: npm run audit:screening-severity
  */
-import { PrismaClient } from '@prisma/client';
-import { calculatePhq9Severity, calculateGad7Severity } from '../shared/clinical/scoring';
+import { prisma } from '../server/database.js';
+import { calculatePhq9Severity, calculateGad7Severity } from '../shared/clinical/scoring.js';
 
 async function main() {
-  const prisma = new PrismaClient();
   try {
     const rows = await prisma.screenings.findMany({
       select: { phq9Score: true, gad7Score: true, phq9Severity: true, gad7Severity: true, riskIndicators: true },

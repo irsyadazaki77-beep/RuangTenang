@@ -55,7 +55,7 @@ export const ScoreGaugeMeter: React.FC<{
           />
         </svg>
 
-        <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+        <div className="absolute inset-0 flex flex-col items-center justify-center text-center tabular-nums">
           <span className="text-2xl sm:text-3xl font-extrabold font-sans text-primary tracking-tight">
             {score}
           </span>
@@ -63,7 +63,7 @@ export const ScoreGaugeMeter: React.FC<{
         </div>
       </div>
 
-      <div className={`mt-2 px-2.5 py-1 rounded-full text-[10.5px] font-bold border ${badgeBg}`}>
+      <div className={`mt-2 px-2.5 py-1 rounded-lg text-[10.5px] font-bold border ${badgeBg}`}>
         Tingkat {severity}
       </div>
     </div>

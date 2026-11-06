@@ -2,7 +2,6 @@ import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import {defineConfig} from 'vite';
-import { visualizer } from 'rollup-plugin-visualizer';
 
 export default defineConfig(() => {
   return {
@@ -11,15 +10,6 @@ export default defineConfig(() => {
     plugins: [
       react(),
       tailwindcss(),
-      ...(process.env.ANALYZE_BUNDLE === 'true' ? [
-        visualizer({
-          filename: 'stats.html',
-          open: false,
-          gzipSize: true,
-          brotliSize: true,
-          template: 'treemap',
-        }),
-      ] : []),
     ],
     test: {
       globals: true,
@@ -32,8 +22,7 @@ export default defineConfig(() => {
           test: {
             name: 'frontend',
             environment: 'jsdom',
-            setupFiles: ['./src/__tests__/setup.ts'],
-            include: ['src/__tests__/**/*.test.{ts,tsx}'],
+            include: ['src/**/*.test.{ts,tsx}'],
           },
         },
         {
@@ -41,8 +30,7 @@ export default defineConfig(() => {
           test: {
             name: 'backend',
             environment: 'node',
-            setupFiles: ['./server/__tests__/setup.ts'],
-            include: ['server/__tests__/**/*.test.ts'],
+            include: ['server/**/*.test.ts'],
           },
         },
       ],
@@ -54,21 +42,25 @@ export default defineConfig(() => {
       dedupe: ['react', 'react-dom'],
     },
     optimizeDeps: {
+      entries: ['index.html'],
       include: [
         'react',
         'react-dom',
         'react-router-dom',
         'react-markdown',
-        'lucide-react',
         'date-fns',
         'motion/react'
       ]
     },
     server: {
+      host: '0.0.0.0',
+      port: 3000,
+      allowedHosts: true,
       // Keep HMR disabled, but let Vite watch source files so a page refresh
       // picks up edits served by this embedded Express development server.
       hmr: false,
     },
+
     esbuild: {
       legalComments: 'none',
     },

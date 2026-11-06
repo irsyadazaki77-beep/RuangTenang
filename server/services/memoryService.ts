@@ -1,6 +1,5 @@
-import { prisma } from '../database.js';
+import { prisma, UserMemories } from '../database.js';
 import { encryptionService } from './encryptionService.js';
-import { UserMemories } from '@prisma/client';
 
 export class MemoryService {
   /**

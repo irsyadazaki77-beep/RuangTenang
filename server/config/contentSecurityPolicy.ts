@@ -1,20 +1,30 @@
 export function buildContentSecurityPolicyDirectives(
   trustedOrigins: string[],
-  options: { production: boolean; preview: boolean },
+  _options: { production: boolean; preview: boolean },
 ) {
+  const allowedIframeHosts = [
+    "'self'",
+    'https://aistudio.google.com',
+    'https://*.google.com',
+    'https://*.run.app',
+    'https://*.googleusercontent.com',
+    ...trustedOrigins,
+  ];
+
   return {
-    defaultSrc: ["'self'"],
+    defaultSrc: ["'self'", 'data:', 'blob:'],
     objectSrc: ["'none'"],
     baseUri: ["'self'"],
     formAction: ["'self'"],
-    scriptSrc: ["'self'", ...(options.production ? [] : ["'unsafe-eval'"]), 'blob:'],
+    scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", 'blob:', 'https://*.googleapis.com'],
     scriptSrcAttr: ["'none'"],
     styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
     fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
-    imgSrc: ["'self'", 'data:', 'blob:', 'https://images.unsplash.com', 'https://api.dicebear.com', 'https://*.google.com', 'https://*.googleapis.com', 'https://*.googleusercontent.com', 'https://*.gstatic.com'],
-    connectSrc: ["'self'", 'https://generativelanguage.googleapis.com', ...(options.preview ? ['ws:', 'wss:', 'data:'] : []), ...trustedOrigins],
-    frameAncestors: [...new Set(["'self'", ...trustedOrigins])],
+    imgSrc: ["'self'", 'data:', 'blob:', 'https:', 'http:'],
+    connectSrc: ["'self'", 'https:', 'http:', 'ws:', 'wss:', 'data:', 'blob:', ...trustedOrigins],
+    frameAncestors: [...new Set(allowedIframeHosts)],
     workerSrc: ["'self'", 'blob:'],
     reportUri: ['/api/v1/security/csp-report'],
   };
 }
+

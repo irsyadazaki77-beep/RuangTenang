@@ -1,5 +1,5 @@
-import { Brain } from 'lucide-react';
-import React, { useState, memo, useCallback } from 'react';
+import { Brain, FileCode, ArrowUpRight } from 'lucide-react';
+import React, { useState, memo, useCallback, useMemo } from 'react';
 import { LazyMarkdown } from '../../../components/common/LazyMarkdown';
 import { Message } from '../types';
 import CounselorCard from '../../plugins/CounselorCard';
@@ -8,11 +8,66 @@ import MoodCard from '../../plugins/MoodCard';
 import ScreeningCard from '../../plugins/ScreeningCard';
 import ArticlesCard from '../../plugins/ArticlesCard';
 import { BurnoutInterventionCard } from './BurnoutInterventionCard';
-import { AlertCircle, Copy, RefreshCw, ThumbsUp, ThumbsDown, Edit2, Check, Bookmark, GitBranch, FileText, Image as ImageIcon, Volume2, VolumeX } from 'lucide-react';
+import { AlertCircle, Copy, RefreshCw, ThumbsUp, ThumbsDown, Edit2, Check, Bookmark, GitBranch, FileText, Image as ImageIcon, Volume2, VolumeX, Loader2 } from 'lucide-react';
 import { useToast } from '../../../components/Toast';
 import { motion, useReducedMotion } from 'motion/react';
 import { RhythmicTypingIndicator } from '../../../components/ui/RhythmicTypingIndicator';
 import { BrandLogo } from '../../../components/ui/BrandLogo';
+import { speechPlayer, type SpeechPlaybackStatus } from '../../../lib/speechPlayer';
+import { ThinkingReasoningDrawer } from '../../../components/ai/ThinkingReasoningDrawer';
+import { GroundingSourcesBar } from '../../../components/ai/GroundingSourcesBar';
+import { extractQuickArtifactFromMessage, QuickCanvasArtifact } from './QuickArtifactCanvasDrawer';
+
+function InlineCitedMarkdown({
+  content,
+  sources
+}: {
+  content: string;
+  sources?: Message['sources'];
+}) {
+  if (!sources || sources.length === 0 || !content.includes('[cite:')) {
+    return <LazyMarkdown content={content} />;
+  }
+  const byId = new Map(sources.filter(s => s.citationId).map(s => [s.citationId!, s]));
+  const parts: Array<{ text?: string; id?: string }> = [];
+  const marker = /\[cite:([A-Za-z0-9_-]+)\]/g;
+  let cursor = 0;
+  let match: RegExpExecArray | null;
+  while ((match = marker.exec(content))) {
+    if (match.index > cursor) parts.push({ text: content.slice(cursor, match.index) });
+    parts.push(byId.has(match[1]) ? { id: match[1] } : { text: `[${match[1]}]` });
+    cursor = marker.lastIndex;
+  }
+  if (cursor < content.length) parts.push({ text: content.slice(cursor) });
+
+  return (
+    <>
+      {parts.map((part, idx) => {
+        if (!part.id) return <LazyMarkdown key={`md_${idx}`} content={part.text || ''} />;
+        const src = byId.get(part.id);
+        return (
+          <button
+            key={`cite_${idx}`}
+            type="button"
+            onClick={() => {
+              if (src?.url && typeof window !== 'undefined') {
+                const a = document.createElement('a');
+                a.href = src.url;
+                a.target = '_blank';
+                a.rel = 'noopener noreferrer';
+                a.click();
+              }
+            }}
+            title={src ? `${src.filename}${src.snippet ? ` — ${src.snippet}` : ''}` : part.id}
+            className="inline-flex items-center gap-0.5 rounded-md bg-stone-100 dark:bg-slate-800 px-1.5 py-0.5 mx-0.5 text-[11px] font-mono font-semibold tabular-nums text-teal-700 dark:text-teal-300 hover:bg-teal-50 dark:hover:bg-teal-950/60 transition-colors cursor-pointer"
+          >
+            <span>[{part.id.replace('SRC_', '')}]</span>
+          </button>
+        );
+      })}
+    </>
+  );
+}
 
 interface Props {
   msg: Message;
@@ -24,6 +79,7 @@ interface Props {
   onBookmarkToggle?: (messageId: string, currentStatus: boolean) => void;
   isBookmarked?: boolean;
   onBranch?: (messageId: string, contentSnippet: string) => void;
+  onOpenCanvasArtifact?: (artifact: QuickCanvasArtifact) => void;
   isSearchTarget?: boolean;
   searchHighlightQuery?: string;
 }
@@ -37,6 +93,7 @@ export const MessageBubble = memo(function MessageBubble({
   onBookmarkToggle,
   isBookmarked = false,
   onBranch,
+  onOpenCanvasArtifact,
   isSearchTarget = false,
   searchHighlightQuery
 }: Props) {
@@ -45,51 +102,33 @@ export const MessageBubble = memo(function MessageBubble({
   const [editContent, setEditContent] = useState(msg.content);
   const [feedback, setFeedback] = useState<'up' | 'down' | null>(null);
   const [copied, setCopied] = useState(false);
-  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [speechStatus, setSpeechStatus] = useState<SpeechPlaybackStatus>('idle');
   const shouldReduceMotion = useReducedMotion();
 
-  const handleToggleSpeech = useCallback(() => {
-    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
-      showToast('Browser Anda tidak mendukung fitur pembacaan suara (Speech Synthesis).', 'info');
-      return;
-    }
+  const detectedArtifact = useMemo(() => {
+    if (msg.role !== 'assistant' || msg.error) return null;
+    return extractQuickArtifactFromMessage(msg.content, msg.id);
+  }, [msg.role, msg.error, msg.content, msg.id]);
 
-    if (isSpeaking) {
-      window.speechSynthesis.cancel();
-      setIsSpeaking(false);
-    } else {
-      window.speechSynthesis.cancel();
-
-      const cleanText = msg.content
-        .replace(/```[\s\S]*?```/g, '')
-        .replace(/`([^`]+)`/g, '$1')
-        .replace(/\*\*([^*]+)\*\*/g, '$1')
-        .replace(/\*([^*]+)\*/g, '$1')
-        .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-        .replace(/^[#\-*+]\s+/gm, '')
-        .trim();
-
-      if (!cleanText) return;
-
-      const utterance = new SpeechSynthesisUtterance(cleanText);
-      const voices = window.speechSynthesis.getVoices();
-      const idVoice = voices.find(v => v.lang.includes('id') || v.lang.includes('ID'));
-      if (idVoice) {
-        utterance.voice = idVoice;
+  React.useEffect(() => {
+    const targetId = `msg-tts-${msg.id}`;
+    return speechPlayer.subscribe(state => {
+      if (state.activeId === targetId) {
+        setSpeechStatus(state.status);
       } else {
-        utterance.lang = 'id-ID';
+        setSpeechStatus('idle');
       }
+    });
+  }, [msg.id]);
 
-      utterance.pitch = 0.95;
-      utterance.rate = 0.92;
-
-      utterance.onend = () => setIsSpeaking(false);
-      utterance.onerror = () => setIsSpeaking(false);
-
-      window.speechSynthesis.speak(utterance);
-      setIsSpeaking(true);
-    }
-  }, [isSpeaking, msg.content, showToast]);
+  const handleToggleSpeech = useCallback(() => {
+    void speechPlayer.toggleSpeak({
+      id: `msg-tts-${msg.id}`,
+      text: msg.content,
+      mode: 'empathetic',
+      voiceName: 'Kore',
+    });
+  }, [msg.id, msg.content]);
 
   const handleCopy = useCallback(() => {
     navigator.clipboard.writeText(msg.content);
@@ -140,7 +179,6 @@ export const MessageBubble = memo(function MessageBubble({
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={shouldReduceMotion ? { duration: 0.15 } : { type: "spring", stiffness: 340, damping: 26, mass: 0.8 }}
       onAnimationComplete={() => {
-        // Hapus willChange setelah animasi masuk selesai agar memori GPU tidak bocor
         const el = document.getElementById(`msg-${msg.id}`);
         if (el) el.style.willChange = 'auto';
       }}
@@ -207,12 +245,12 @@ export const MessageBubble = memo(function MessageBubble({
                         {att.mimeType?.startsWith('image/') && (
                           <span className="text-[9.5px] px-1 py-0.2 rounded bg-teal-100/70 dark:bg-teal-900/60 text-teal-700 dark:text-teal-300 font-medium">Visual</span>
                         )}
-                        {att.size > 0 && <span className="text-[10px] opacity-60">({(att.size / 1024).toFixed(0)}KB)</span>}
+                        {att.size > 0 && <span className="text-[10px] opacity-60 tabular-nums">({(att.size / 1024).toFixed(0)}KB)</span>}
                       </a>
                     ))}
                   </div>
                 )}
-                <div className="backdrop-blur-xs bg-teal-50/85 dark:bg-teal-950/50 text-stone-900 dark:text-stone-100 border border-teal-100/70 dark:border-teal-900/40 px-4 py-2.5 sm:px-4.5 sm:py-3 rounded-2xl rounded-br-sm text-[14px] sm:text-[14.5px] leading-relaxed break-words shadow-2xs">
+                <div className="backdrop-blur-xs bg-stone-100/90 dark:bg-slate-800/85 text-stone-900 dark:text-stone-100 border border-stone-200/70 dark:border-slate-700/70 px-4 py-2.5 sm:px-5 sm:py-3 rounded-3xl rounded-br-md text-[15px] leading-[1.65] break-words shadow-2xs">
                   {renderHighlightedContent(msg.content.replace('[PLUGIN_RESULT]\n', 'Hasil Fitur: '), searchHighlightQuery)}
                 </div>
 
@@ -268,57 +306,76 @@ export const MessageBubble = memo(function MessageBubble({
                 <RhythmicTypingIndicator label="Menuliskan pesan yang tenang..." avatarSrc="" />
               </div>
             ) : (
-              <div className="prose prose-stone dark:prose-invert max-w-none break-words text-[14.5px] sm:text-[15px] leading-[1.65] text-stone-800 dark:text-stone-200 space-y-2.5 font-normal">
-                {(msg.modelUsed || msg.degradationNotice) && (
-                  <div className="not-prose mb-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-stone-400 dark:text-slate-500">
-                    {msg.modelUsed && (
+              <div
+                data-assistant-prose="true"
+                className="prose prose-stone dark:prose-invert max-w-none break-words text-[15px] leading-[1.7] text-stone-800 dark:text-stone-200 space-y-2.5 font-normal"
+              >
+                {(msg.isFallback || msg.degradationNotice) && (
+                  <div className="not-prose mb-1 flex flex-wrap items-center gap-1.5 text-[11px] text-stone-400 dark:text-slate-500">
+                    {msg.isFallback && msg.modelUsed && (
                       <span
-                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-stone-100 dark:bg-slate-800 text-stone-600 dark:text-slate-400 font-medium text-[10.5px]"
-                        title={msg.isFallback ? `${msg.fallbackFromName || 'Model utama'} gagal; respons diselesaikan dengan ${msg.modelName || msg.modelUsed}.` : msg.routingReason || `Model: ${msg.modelName || msg.modelUsed}`}
+                        title={`${msg.fallbackFromName || 'Model utama'} gagal; respons diselesaikan dengan ${msg.modelName || msg.modelUsed}.`}
                       >
-                        {msg.isFallback ? 'Fallback · ' : msg.routingMode === 'auto' ? 'Auto: ' : ''}{msg.modelName || msg.modelUsed}
+                        Fallback · {msg.modelName || msg.modelUsed}
                       </span>
                     )}
                     {msg.degradationNotice && (
                       <span
-                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-200/70 dark:border-amber-900/60 text-[10.5px] font-medium"
+                        className="text-amber-700 dark:text-amber-400"
                         title={msg.degradationNotice}
                       >
-                        Penyesuaian: {msg.degradationNotice}
+                        {msg.isFallback ? '· ' : ''}Penyesuaian: {msg.degradationNotice}
                       </span>
                     )}
                   </div>
                 )}
-                <LazyMarkdown content={msg.content} />
-                {msg.sources && msg.sources.length > 0 && (
-                  <div className="not-prose mt-3 pt-2.5 border-t border-stone-200/60 dark:border-slate-800 space-y-1.5 text-xs text-stone-600 dark:text-slate-400">
-                    <div className="font-semibold text-[11px] uppercase tracking-wider text-stone-500 dark:text-slate-400 flex items-center gap-1">
-                      <span>Sumber & Bukti Terverifikasi</span>
-                    </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {msg.sources.map(src => (
-                        <div
-                          key={src.citationId || src.sourceRef}
-                          className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-stone-100/90 dark:bg-slate-800/90 border border-stone-200/70 dark:border-slate-700 text-[11px]"
-                          title={src.snippet || src.sourceRef}
-                        >
-                          <span className="font-mono text-[10px] font-bold text-teal-600 dark:text-teal-400">{src.citationId || 'REF'}</span>
-                          <span className="truncate max-w-[180px]">{src.filename}{src.page ? ` [Hal. ${src.page}]` : ''}</span>
-                          {src.isVisualExtraction && (
-                            <span className="px-1 py-0.2 rounded bg-teal-50 dark:bg-teal-950/60 text-teal-600 dark:text-teal-300 text-[9.5px] font-medium border border-teal-200/50 dark:border-teal-800/50">
-                              OCR
-                            </span>
-                          )}
-                          {src.readingUncertainty && (
-                            <span className="px-1 py-0.2 rounded bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 text-[9.5px] font-medium border border-amber-200/50">
-                              Ketidakpastian
-                            </span>
-                          )}
+
+                {/* Transparent AI Reasoning Step Accordion */}
+                {((msg.reasoningSteps && msg.reasoningSteps.length > 0) || msg.thinkingDurationMs || msg.webSearchUsed) && (
+                  <ThinkingReasoningDrawer
+                    steps={msg.reasoningSteps}
+                    durationMs={msg.thinkingDurationMs}
+                    thinkingDepth={msg.thinkingDepth}
+                    webSearchUsed={msg.webSearchUsed}
+                    isStreaming={false}
+                    accent="teal"
+                  />
+                )}
+
+                <InlineCitedMarkdown content={msg.content} sources={msg.sources} />
+
+                {/* Interactive Artifact / Canvas Card (Claude Artifact / ChatGPT Canvas style) */}
+                {detectedArtifact && onOpenCanvasArtifact && (
+                  <div className="not-prose mt-3 flex items-center justify-between gap-3 rounded-2xl border border-stone-200/85 dark:border-slate-800 bg-stone-50/80 dark:bg-slate-900/65 px-4 py-3 transition-colors hover:border-teal-400/70 dark:hover:border-teal-800">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-400 border border-teal-200/60 dark:border-teal-800/60">
+                        {detectedArtifact.type === 'code' ? <FileCode className="h-4.5 w-4.5" /> : <FileText className="h-4.5 w-4.5" />}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-xs sm:text-[13px] font-semibold text-stone-900 dark:text-slate-100 truncate">
+                          {detectedArtifact.title}
                         </div>
-                      ))}
+                        <div className="text-[11px] text-stone-500 dark:text-slate-400 truncate">
+                          Artefak interaktif · Klik untuk menyunting atau memoles di Live Canvas
+                        </div>
+                      </div>
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => onOpenCanvasArtifact(detectedArtifact)}
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-teal-50 dark:hover:bg-teal-950/60 px-3 py-1.5 text-xs font-semibold text-teal-700 dark:text-teal-300 border border-stone-200/80 dark:border-slate-700 transition-colors cursor-pointer shrink-0 whitespace-nowrap shadow-2xs"
+                    >
+                      <span>Buka di Canvas</span>
+                      <ArrowUpRight className="h-3.5 w-3.5" />
+                    </button>
                   </div>
                 )}
+
+                {/* Clickable Citations & Grounding Sources Bar */}
+                {msg.sources && msg.sources.length > 0 && (
+                  <GroundingSourcesBar sources={msg.sources} accent="teal" />
+                )}
+
                 {isTyping && (
                   <motion.span
                     aria-hidden="true"
@@ -372,17 +429,48 @@ export const MessageBubble = memo(function MessageBubble({
 
             {/* Subtle Action Toolbar */}
             {!isTyping && msg.content && !msg.error && (
-              <div className="flex items-center gap-0.5 pt-0.5 opacity-80 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-150">
+              <div className="flex flex-wrap items-center gap-0.5 pt-0.5 opacity-80 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-150">
                 <button
                   onClick={handleToggleSpeech}
-                  className={`min-h-[40px] min-w-[40px] flex items-center justify-center rounded-lg hover:bg-stone-100 dark:hover:bg-slate-800 transition-colors cursor-pointer ${
-                    isSpeaking ? 'text-teal-600 dark:text-teal-400 font-bold bg-teal-50 dark:bg-teal-950/50' : 'text-stone-400 hover:text-stone-700 dark:hover:text-stone-200'
+                  className={`min-h-[40px] px-2.5 flex items-center gap-1.5 rounded-lg hover:bg-stone-100 dark:hover:bg-slate-800 transition-colors cursor-pointer ${
+                    speechStatus !== 'idle' ? 'text-teal-600 dark:text-teal-400 font-semibold bg-teal-50 dark:bg-teal-950/50' : 'text-stone-400 hover:text-stone-700 dark:hover:text-stone-200'
                   }`}
-                  title={isSpeaking ? 'Hentikan Pembacaan Suara' : 'Dengarkan Suara (Audio Reader)'}
-                  aria-label={isSpeaking ? 'Hentikan Pembacaan Suara' : 'Dengarkan Suara'}
+                  title={speechStatus === 'playing' ? 'Hentikan Suara Empatik' : speechStatus === 'loading' ? 'Menyiapkan Suara AI...' : 'Dengarkan Suara Empatik (Gemini TTS)'}
+                  aria-label={speechStatus === 'playing' ? 'Hentikan Pembacaan Suara' : 'Dengarkan Suara Empatik'}
                 >
-                  {isSpeaking ? <VolumeX className="w-3.5 h-3.5 animate-pulse" /> : <Volume2 className="w-3.5 h-3.5" />}
+                  {speechStatus === 'loading' ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : speechStatus === 'playing' ? (
+                    <VolumeX className="w-3.5 h-3.5" />
+                  ) : (
+                    <Volume2 className="w-3.5 h-3.5" />
+                  )}
+                  <span className="text-[11px] whitespace-nowrap">
+                    {speechStatus === 'loading' ? 'Memuat Suara...' : speechStatus === 'playing' ? 'Berhenti' : 'Suara'}
+                  </span>
                 </button>
+
+                {onOpenCanvasArtifact && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onOpenCanvasArtifact(
+                        detectedArtifact || {
+                          id: `canvas_${msg.id}`,
+                          title: 'Catatan & Draf Percakapan',
+                          content: msg.content,
+                          type: 'document'
+                        }
+                      )
+                    }
+                    className="min-h-[40px] px-2.5 flex items-center gap-1 rounded-lg text-stone-400 hover:text-teal-700 dark:hover:text-teal-300 hover:bg-stone-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                    title="Buka atau sunting pesan ini di Live Canvas"
+                    aria-label="Buka di Canvas"
+                  >
+                    <FileCode className="w-3.5 h-3.5" />
+                    <span className="text-[11px] whitespace-nowrap">Ke Canvas</span>
+                  </button>
+                )}
 
                 <button
                   onClick={handleCopy}
@@ -468,8 +556,9 @@ export const MessageBubble = memo(function MessageBubble({
   if (prevProps.isBookmarked !== nextProps.isBookmarked) return false;
   if (prevProps.isSearchTarget !== nextProps.isSearchTarget) return false;
   if (prevProps.searchHighlightQuery !== nextProps.searchHighlightQuery) return false;
+  if (prevProps.msg.sources !== nextProps.msg.sources) return false;
+  if (prevProps.msg.reasoningSteps !== nextProps.msg.reasoningSteps) return false;
 
-  // Fast reference & length comparison for attachments to avoid heavy JSON.stringify
   const prevAtt = prevProps.msg.attachments;
   const nextAtt = nextProps.msg.attachments;
   if (prevAtt !== nextAtt) {

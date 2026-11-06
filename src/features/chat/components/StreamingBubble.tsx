@@ -3,6 +3,7 @@ import { LazyMarkdown } from '../../../components/common/LazyMarkdown';
 import { Message } from '../types';
 import { RhythmicTypingIndicator } from '../../../components/ui/RhythmicTypingIndicator';
 import { BrandLogo } from '../../../components/ui/BrandLogo';
+import { ThinkingReasoningDrawer } from '../../../components/ai/ThinkingReasoningDrawer';
 
 interface Props {
   msg: Message;
@@ -25,7 +26,16 @@ export const StreamingBubble: React.FC<Props> = memo(({ msg }) => {
     >
       <BrandLogo size="xs" iconOnly className="shrink-0 mt-0.5" />
 
-      <div className="flex-1 min-w-0 max-w-full">
+      <div className="flex-1 min-w-0 max-w-full space-y-2">
+        <ThinkingReasoningDrawer
+          steps={msg.reasoningSteps}
+          durationMs={msg.thinkingDurationMs}
+          thinkingDepth={msg.thinkingDepth}
+          webSearchUsed={msg.webSearchUsed}
+          isStreaming={!msg.content}
+          accent="teal"
+        />
+
         {!msg.content ? (
           <div className="py-1">
             <RhythmicTypingIndicator label="Menuliskan pesan yang tenang..." avatarSrc="" />
@@ -35,7 +45,7 @@ export const StreamingBubble: React.FC<Props> = memo(({ msg }) => {
             <LazyMarkdown content={msg.content} />
             <span
               aria-hidden="true"
-              className="inline-block w-2 h-4 ml-1 bg-teal-500/90 dark:bg-teal-400/90 rounded-[2px] align-text-bottom shadow-[0_0_8px_rgba(20,184,166,0.45)] animate-pulse"
+              className="inline-block w-1.5 h-4 ml-1 bg-teal-500 rounded-xs align-middle animate-pulse"
             />
           </div>
         )}
@@ -43,7 +53,12 @@ export const StreamingBubble: React.FC<Props> = memo(({ msg }) => {
     </div>
   );
 }, (prevProps, nextProps) => {
-  return prevProps.msg.id === nextProps.msg.id && prevProps.msg.content === nextProps.msg.content;
+  return (
+    prevProps.msg.id === nextProps.msg.id &&
+    prevProps.msg.content === nextProps.msg.content &&
+    prevProps.msg.reasoningSteps === nextProps.msg.reasoningSteps &&
+    prevProps.msg.thinkingDurationMs === nextProps.msg.thinkingDurationMs
+  );
 });
 
 StreamingBubble.displayName = 'StreamingBubble';

@@ -24,7 +24,7 @@ export const AI_CONFIG = {
   TEMPERATURE_CREATIVE: 0.8,
   TEMPERATURE_PRECISE: 0.2,
   TOP_P: 0.9,
-  MAX_OUTPUT_TOKENS: 1000,
+  MAX_OUTPUT_TOKENS: 8192,
   MAX_HISTORY_MESSAGES: 60,
 
   // Retry settings
@@ -57,6 +57,6 @@ export function getGenAIClient(): GoogleGenAI | null {
 export const getAiClient = getGenAIClient;
 
 export function isAiAvailable(): boolean {
-  return (['openai', 'gemini', 'deepseek', 'groq', 'openrouter', 'ollama'] as const)
+  return (['gemini', 'openrouter'] as const)
     .some(provider => aiProviderConfig.isConfigured(provider));
 }

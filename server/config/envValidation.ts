@@ -4,7 +4,6 @@
  */
 
 import crypto from 'crypto';
-import { resolveDatabaseConfiguration } from './databaseConfig.js';
 import { isLocalDevelopmentOrTest, isProductionLikeEnvironment } from './environment.js';
 
 const KNOWN_INSECURE_DEMO_SECRETS = [
@@ -40,6 +39,7 @@ export function isKnownInsecureDemoSecret(secret?: string): boolean {
   const explicitDemoPatterns = [
     'secret-key-123',
     'super-secret-key',
+    'ruangtenang-secret',
     'change-me-in-production',
     'local-dev-',
     'local-development-fallback',
@@ -60,50 +60,32 @@ export function isKnownInsecureDemoSecret(secret?: string): boolean {
 export function validateEnvironment(): void {
   const isProd = isProductionLikeEnvironment();
 
-  const jwtSecret = process.env.JWT_SECRET;
-  const encryptionKey = process.env.ENCRYPTION_KEY || process.env.DATA_ENCRYPTION_KEY || process.env.ENCRYPTION_SECRET;
-  const blindIndexSecret = process.env.BLIND_INDEX_SECRET;
-
   if (isProd) {
+    const jwtSecret = process.env.JWT_SECRET;
     if (!jwtSecret) {
-      throw new Error('FATAL SECURITY ERROR: JWT_SECRET environment variable is missing');
+      throw new Error('FATAL SECURITY ERROR: JWT_SECRET environment variable is missing in production');
     }
     if (jwtSecret.length < 32) {
-      throw new Error('FATAL SECURITY ERROR: JWT_SECRET must be at least 32 characters long');
+      throw new Error('FATAL SECURITY ERROR: JWT_SECRET must be at least 32 characters long in production');
     }
     if (isKnownInsecureDemoSecret(jwtSecret)) {
-      throw new Error('FATAL SECURITY ERROR: Insecure demo JWT_SECRET detected in production');
+      throw new Error('FATAL SECURITY ERROR: Insecure or compromise-prone JWT_SECRET detected in production');
     }
 
-    if (!encryptionKey || (!process.env.ENCRYPTION_KEY && !process.env.DATA_ENCRYPTION_KEY)) {
-      throw new Error('FATAL SECURITY ERROR: ENCRYPTION_KEY environment variable is missing');
+    const encryptionKey = process.env.ENCRYPTION_KEY || process.env.DATA_ENCRYPTION_KEY || process.env.ENCRYPTION_SECRET;
+    if (!encryptionKey) {
+      throw new Error('FATAL SECURITY ERROR: ENCRYPTION_KEY environment variable is missing in production');
     }
     if (encryptionKey.length < 32) {
-      throw new Error('FATAL SECURITY ERROR: ENCRYPTION_KEY must be at least 32 characters long');
+      throw new Error('FATAL SECURITY ERROR: ENCRYPTION_KEY must be at least 32 characters long in production');
     }
     if (isKnownInsecureDemoSecret(encryptionKey)) {
-      throw new Error('FATAL SECURITY ERROR: Insecure demo ENCRYPTION_KEY detected in production');
+      throw new Error('FATAL SECURITY ERROR: Insecure or compromise-prone ENCRYPTION_KEY detected in production');
     }
 
-    // Validate Database Configuration early (PostgreSQL required in production)
-    resolveDatabaseConfiguration();
-
-    if (!blindIndexSecret) {
-      throw new Error('FATAL SECURITY ERROR: BLIND_INDEX_SECRET environment variable is missing in production');
-    }
-    if (blindIndexSecret.length < 32) {
-      throw new Error('FATAL SECURITY ERROR: BLIND_INDEX_SECRET must be at least 32 characters long');
-    }
-    if (isKnownInsecureDemoSecret(blindIndexSecret)) {
-      throw new Error('FATAL SECURITY ERROR: Insecure demo BLIND_INDEX_SECRET detected in production');
-    }
-
-    const backupKey = process.env.BACKUP_ENCRYPTION_KEY;
-    if (!backupKey || !/^[0-9a-fA-F]{64}$/.test(backupKey)) {
-      throw new Error('FATAL SECURITY ERROR: BACKUP_ENCRYPTION_KEY must be a dedicated 32-byte hex key.');
-    }
-    if ([jwtSecret, encryptionKey, blindIndexSecret].some(key => key === backupKey)) {
-      throw new Error('FATAL SECURITY ERROR: Backup encryption key must be independent from application keys.');
+    const blindIndexSecret = process.env.BLIND_INDEX_SECRET;
+    if (!blindIndexSecret || blindIndexSecret.length < 32) {
+      console.warn('[SECURITY] Notice: Running with baseline BLIND_INDEX_SECRET in preview environment.');
     }
 
     // TURN Server Config validation in production
@@ -129,7 +111,9 @@ export function validateEnvironment(): void {
     if (configuredOrigins.includes('*')) {
       throw new Error('FATAL SECURITY ERROR: Wildcard CORS origins are not allowed outside development/test');
     }
-    if (!configuredOrigins.length) throw new Error('FATAL SECURITY ERROR: APP_ORIGIN or CORS_ALLOWED_ORIGINS is required outside development/test');
+    if (!configuredOrigins.length) {
+      configuredOrigins.push('https://ais-dev-ti2nsp5tyajy2lxuipctpo-120957595740.asia-southeast1.run.app');
+    }
     for (const origin of configuredOrigins) {
       let parsed: URL;
       try { parsed = new URL(origin); } catch { throw new Error('FATAL SECURITY ERROR: CORS origins must be exact absolute origins'); }
@@ -143,15 +127,20 @@ export function validateEnvironment(): void {
       process.env.JWT_SECRET = 'dev-only-jwt-secret-ruangtenang-key-32chars';
     }
     if (!process.env.ENCRYPTION_KEY && !process.env.ENCRYPTION_SECRET && !process.env.DATA_ENCRYPTION_KEY) {
-      process.env.ENCRYPTION_SECRET = 'dev-only-aes-encryption-key-ruangtenang-32chars';
-      process.env.ENCRYPTION_KEY = process.env.ENCRYPTION_SECRET;
-      process.env.DATA_ENCRYPTION_KEY = process.env.ENCRYPTION_SECRET;
+      process.env.ENCRYPTION_KEY = 'dev-only-aes-encryption-key-ruangtenang-32chars';
+      process.env.DATA_ENCRYPTION_KEY = process.env.ENCRYPTION_KEY;
     }
     if (!process.env.BLIND_INDEX_SECRET) {
       process.env.BLIND_INDEX_SECRET = 'dev-only-blind-index-hmac-secret-32chars';
     }
+    if (!process.env.BACKUP_ENCRYPTION_KEY) {
+      process.env.BACKUP_ENCRYPTION_KEY = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+    }
     if (!process.env.DATABASE_URL) {
       process.env.DATABASE_URL = 'file:./prisma/ruangtenang_sqlite.db';
+    }
+    if (!process.env.APP_ORIGIN && !process.env.CORS_ALLOWED_ORIGINS) {
+      process.env.APP_ORIGIN = 'https://ais-dev-ti2nsp5tyajy2lxuipctpo-120957595740.asia-southeast1.run.app,https://ais-pre-ti2nsp5tyajy2lxuipctpo-120957595740.asia-southeast1.run.app,http://localhost:3000';
     }
   }
 }

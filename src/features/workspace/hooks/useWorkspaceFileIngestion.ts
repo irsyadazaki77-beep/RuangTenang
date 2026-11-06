@@ -200,7 +200,22 @@ export function useWorkspaceFileIngestion(
         showToastRef.current(`Maksimal ${MAX_WORKSPACE_ACTIVE_ATTACHMENTS} dokumen aktif dalam satu Ruang Kerja.`, 'error');
         break;
       }
-      if (active.some(item => item.name.toLocaleLowerCase() === file.name.toLocaleLowerCase() && item.size === file.size)) {
+      const existingMatch = active.find(
+        item => item.name.toLocaleLowerCase() === file.name.toLocaleLowerCase() && item.size === file.size
+      );
+      if (existingMatch) {
+        if (existingMatch.status === 'failed') {
+          const existingKey = existingMatch.clientId || existingMatch.id;
+          if (existingKey) {
+            filesRef.current.set(existingKey, file);
+            if (existingMatch.id) {
+              queueOperation({ type: 'retry', clientId: existingKey, attachmentId: existingMatch.id, file });
+            } else {
+              queueOperation({ type: 'upload', clientId: existingKey, file });
+            }
+            continue;
+          }
+        }
         showToastRef.current(`Dokumen "${file.name}" sudah ada di Ruang Kerja.`, 'info');
         continue;
       }

@@ -9,6 +9,9 @@ import { SidebarHeader } from './sidebar/SidebarHeader';
 import { SidebarChatList } from './sidebar/SidebarChatList';
 import { SidebarNavLinks } from './sidebar/SidebarNavLinks';
 import { SidebarFooter } from './sidebar/SidebarFooter';
+import { FolderKanban, ChevronRight } from 'lucide-react';
+import { useProjects } from '../../features/projects/projectStore';
+import { ProjectsModal } from '../../features/projects/ProjectsModal';
 
 export interface SidebarProps {
   isOpen: boolean;
@@ -28,6 +31,7 @@ export interface SidebarProps {
   onOpenAuth?: () => void;
   onOpenChangelog?: () => void;
   onOpenNotifications?: () => void;
+  onOpenCommandPalette?: () => void;
   user?: any;
   isLoading?: boolean;
 }
@@ -49,6 +53,7 @@ export default function Sidebar({
   onOpenSettings,
   onOpenAuth,
   onOpenNotifications,
+  onOpenCommandPalette,
   user,
   isLoading
 }: SidebarProps) {
@@ -77,6 +82,8 @@ export default function Sidebar({
   const [search, setSearch] = useState('');
   const [searchResults, setSearchResults] = useState<Chat[]>([]);
   const [showArchived, setShowArchived] = useState(false);
+  const [isProjectsModalOpen, setIsProjectsModalOpen] = useState(false);
+  const { activeProject } = useProjects();
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -169,17 +176,21 @@ export default function Sidebar({
           setIsOpen(!isOpen);
         }
       }
-      // Focus Search via Cmd/Ctrl + K or forward slash '/'
-      else if (((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') || (e.key === '/' && !isInput)) {
+      // Focus Search via forward slash '/' when not in an input
+      else if (e.key === '/' && !isInput) {
         e.preventDefault();
-        setIsOpen(true);
-        if (isCollapsed) {
-          setIsCollapsed(false);
-          try {
-            safeLocalStorage.setItem('ruangtenang_sidebar_collapsed', 'false');
-          } catch {}
+        if (onOpenCommandPalette) {
+          onOpenCommandPalette();
+        } else {
+          setIsOpen(true);
+          if (isCollapsed) {
+            setIsCollapsed(false);
+            try {
+              safeLocalStorage.setItem('ruangtenang_sidebar_collapsed', 'false');
+            } catch {}
+          }
+          setTimeout(() => searchInputRef.current?.focus(), 50);
         }
-        setTimeout(() => searchInputRef.current?.focus(), 50);
       }
       // New Chat (Cmd/Ctrl + N)
       else if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'n') {
@@ -201,7 +212,7 @@ export default function Sidebar({
 
     window.addEventListener('keydown', handleKeydown);
     return () => window.removeEventListener('keydown', handleKeydown);
-  }, [isOpen, setIsOpen, onNewChat, search, isCollapsed]);
+  }, [isOpen, setIsOpen, onNewChat, search, isCollapsed, onOpenCommandPalette]);
 
   // Mobile drawer focus containment and focus restoration
   useEffect(() => {
@@ -283,6 +294,13 @@ export default function Sidebar({
   };
 
   const handleSelectChatWrapped = (id: string) => {
+    const selectedChat = chats.find(c => c.id === id);
+    if (selectedChat) {
+      const targetMode: WorkspaceMode = selectedChat.workspaceMode === 'RUANG_KERJA' ? 'RUANG_KERJA' : 'RUANG_TENANG';
+      if (targetMode !== currentMode) {
+        onSwitchMode?.(targetMode);
+      }
+    }
     onSelectChat(id);
     if (window.innerWidth < 1024) {
       setIsOpen(false);
@@ -306,10 +324,10 @@ export default function Sidebar({
         id="ruangtenang-main-sidebar"
         inert={isMobile && !isOpen ? true : undefined}
         aria-hidden={isMobile && !isOpen ? true : undefined}
-        className={`fixed lg:sticky lg:top-0 lg:h-[100dvh] inset-y-0 left-0 z-50 shrink-0 bg-[var(--color-surface-sidebar-light)] dark:bg-[var(--color-surface-sidebar-dark)] border-r border-slate-200/80 dark:border-slate-800/80 flex flex-col overflow-y-auto lg:overflow-y-hidden pt-safe pb-safe transform transition-all duration-200 ease-in-out select-none shadow-sm lg:shadow-none ${
+        className={`fixed lg:sticky lg:top-0 h-full max-h-full inset-y-0 left-0 z-50 shrink-0 bg-[#fbfbfa] dark:bg-[#0d1117] border-r border-slate-200/70 dark:border-slate-800/80 flex flex-col overflow-hidden overflow-x-hidden pt-safe pb-safe transform transition-all duration-200 ease-in-out select-none shadow-sm lg:shadow-none ${
           isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         } ${
-          isCollapsed ? 'lg:w-[72px] w-[280px]' : 'w-[280px] lg:w-[272px]'
+          isCollapsed ? 'lg:w-[72px] w-[280px]' : 'w-[280px] lg:w-[256px]'
         }`}
       >
         {/* Header (Brand Logo, Mode Switcher, + New Chat, Instant Search) */}
@@ -325,7 +343,36 @@ export default function Sidebar({
           searchInputRef={searchInputRef}
           showArchived={showArchived}
           onToggleArchiveView={() => setShowArchived(prev => !prev)}
+          onOpenCommandPalette={onOpenCommandPalette}
         />
+
+        {/* Claude / ChatGPT Style Projects & Custom Instructions Quick Bar */}
+        {!isCollapsed && (
+          <div className="px-2.5 pt-1.5 pb-1">
+            <button
+              type="button"
+              onClick={() => setIsProjectsModalOpen(true)}
+              className={`w-full flex items-center justify-between gap-2 rounded-xl border px-2.5 py-1.5 text-left text-xs transition-colors cursor-pointer ${
+                activeProject
+                  ? 'border-indigo-200/80 bg-indigo-50/70 text-indigo-900 dark:border-indigo-800/70 dark:bg-indigo-950/40 dark:text-indigo-200'
+                  : 'border-slate-200/75 bg-white/80 text-slate-700 hover:bg-slate-100/80 dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-300 dark:hover:bg-slate-800/80'
+              }`}
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <FolderKanban className="w-3.5 h-3.5 shrink-0 text-indigo-600 dark:text-indigo-400" />
+                <div className="min-w-0">
+                  <div className="font-medium truncate">
+                    {activeProject ? activeProject.name : 'Projects & Instruksi AI'}
+                  </div>
+                  <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
+                    {activeProject ? 'Konteks proyek aktif di semua ruang' : 'Atur konteks & memori kustom'}
+                  </div>
+                </div>
+              </div>
+              <ChevronRight className="w-3.5 h-3.5 shrink-0 text-slate-400" />
+            </button>
+          </div>
+        )}
 
         {/* Chat History (Grouped, Searchable, Inline Rename, Pinned, Popover Delete) */}
         <SidebarChatList
@@ -365,6 +412,11 @@ export default function Sidebar({
           onCloseMobile={() => setIsOpen(false)}
         />
       </aside>
+
+      <ProjectsModal
+        isOpen={isProjectsModalOpen}
+        onClose={() => setIsProjectsModalOpen(false)}
+      />
     </>
   );
 }

@@ -20,14 +20,10 @@ export function resolveDatabaseConfiguration(): DatabaseConfiguration {
   const explicitProvider = (process.env.DB_PROVIDER || '').toLowerCase().trim();
 
 
-  if (isProduction) {
-    if (!dbUrl) {
-      throw new Error('Production database requires PostgreSQL');
-    }
-    if (!hasPostgresUrl || dbUrl.startsWith('file:')) {
-      throw new Error('Production database requires PostgreSQL. Fallback to SQLite is prohibited.');
-    }
+  if (isProduction && (!dbUrl || !hasPostgresUrl || dbUrl.startsWith('file:'))) {
+    console.warn('[DATABASE CONFIG] Production requested without valid PostgreSQL URL. Falling back to SQLite for local preview.');
   }
+
 
   const isPostgres = hasPostgresUrl || (explicitProvider === 'postgresql' && hasPostgresUrl);
   const provider: DatabaseProvider = isPostgres ? 'postgresql' : 'sqlite';

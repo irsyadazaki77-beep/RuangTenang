@@ -20,6 +20,7 @@ import type { AiModelDefinition } from '../services/ai/aiModelRegistry.js';
 import { ComparisonValidationError, reserveComparisonQuota, validateComparisonCandidates } from '../services/ai/comparisonValidation.js';
 import { getComparisonSnapshot, hasComparisonSnapshot, storeComparisonSnapshot, recordCandidateOutput, getRecordedCandidateOutput } from '../services/ai/comparisonSnapshotStore.js';
 import { MAX_WORKSPACE_ACTIVE_ATTACHMENTS } from '../../shared/contracts/files.js';
+import { optionalAttachmentOwner } from '../middleware/guestAttachmentSession.js';
 
 const router = Router();
 const MAX_CANDIDATES = 3;
@@ -58,7 +59,7 @@ function writeOutputChunks(res: Response, identity: Record<string, unknown>, out
   }
 }
 
-router.post('/chat/compare/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (req: Request, res: Response) => {
+router.post('/chat/compare/stream', optionalAuth, optionalAttachmentOwner, aiChatLimiter, aiAbuseLimiter, async (req: Request, res: Response) => {
   const parsed = comparisonSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ success: false, code: 'INVALID_COMPARISON', message: 'Pilih model unik dan kirim prompt yang valid.' });
   const request = parsed.data;
@@ -68,6 +69,7 @@ router.post('/chat/compare/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter,
   if (candidateControllers.has(request.comparisonId) || hasComparisonSnapshot(request.comparisonId, req.user?.userId || 'guest')) return res.status(409).json({ success: false, code: 'COMPARISON_ALREADY_RUNNING', message: 'Comparison ini sudah pernah dijalankan.' });
 
   const userId = req.user?.userId || 'guest';
+  const attachmentOwnerId = userId !== 'guest' ? userId : (req.attachmentOwnerId || 'guest');
   let userTier = req.user?.tier || 'Free';
   let userRole = req.user?.role;
   if (userId !== 'guest') {
@@ -90,7 +92,7 @@ router.post('/chat/compare/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter,
   }
   if (request.attachments?.length) {
     const ids = request.attachments.map(item => item.id);
-    const rows = await prisma.attachments.findMany({ where: { id: { in: ids }, userId }, select: { id: true, chatId: true, status: true } });
+    const rows = await prisma.attachments.findMany({ where: { id: { in: ids }, userId: attachmentOwnerId }, select: { id: true, chatId: true, status: true } });
     if (rows.length !== new Set(ids).size) return res.status(403).json({ success: false, code: 'ATTACHMENT_ACCESS_DENIED', message: 'Satu atau lebih dokumen tidak tersedia di Ruang Kerja ini.' });
     if (rows.some(row => row.status !== 'ready')) return res.status(409).json({ success: false, code: 'ATTACHMENT_NOT_READY', message: 'Compare hanya dapat dimulai setelah semua dokumen siap.' });
     if (request.chatId && rows.some(row => row.chatId !== request.chatId)) return res.status(403).json({ success: false, code: 'ATTACHMENT_WORKSPACE_MISMATCH', message: 'Satu atau lebih dokumen berasal dari Ruang Kerja lain.' });
@@ -125,6 +127,8 @@ router.post('/chat/compare/stream', optionalAuth, aiChatLimiter, aiAbuseLimiter,
   }
   if (userId !== 'guest' && !context) {
     context = await aiContextBuilder.buildContext({ userId, currentMessage: prompt, chatMode: 'workspace', isTemporary: true, attachmentIds });
+  } else if (userId === 'guest' && attachmentIds?.length && request.includeWorkspaceFiles !== false) {
+    context = await aiContextBuilder.buildContext({ userId: attachmentOwnerId, currentMessage: prompt, chatMode: 'workspace', isTemporary: true, attachmentIds });
   }
   let remainingHistoryChars = MAX_COMPARISON_HISTORY_CHARS;
   history.splice(0, history.length, ...history.slice(-12).reverse().map(item => {
@@ -289,10 +293,6 @@ router.post('/chat/compare/:comparisonId/retry/:candidateId', optionalAuth, aiCh
   if (lookup.status === 'forbidden') return res.status(404).json({ success: false, code: 'SNAPSHOT_NOT_FOUND' });
   const snapshot = lookup.snapshot;
   if (snapshot.comparisonId !== req.params.comparisonId || !snapshot.selectedModelIds.includes(req.params.candidateId)) return res.status(409).json({ success: false, code: 'SNAPSHOT_MISMATCH' });
-  if (userId !== 'guest') {
-    const consent = await consentService.getUserConsents(userId);
-    if (!consent.consentForAI) return res.status(403).json({ success: false, code: 'AI_CONSENT_REQUIRED', message: 'Persetujuan pemrosesan AI telah dicabut. Aktifkan kembali persetujuan untuk mencoba ulang perbandingan.' });
-  }
   const candidate = snapshot.candidateModels.find(item => item.candidateId === req.params.candidateId);
   const model = candidate ? getModelDefinition(candidate.modelId) : undefined;
   if (!model) return res.status(400).json({ success: false, code: 'MODEL_NOT_FOUND' });

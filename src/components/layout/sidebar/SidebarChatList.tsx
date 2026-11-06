@@ -55,6 +55,7 @@ export const SidebarChatList: React.FC<SidebarChatListProps> = ({
   const [editTitle, setEditTitle] = useState('');
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
+  const [showAllModes, setShowAllModes] = useState<boolean>(true);
 
   const editInputRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -94,11 +95,13 @@ export const SidebarChatList: React.FC<SidebarChatListProps> = ({
   // Filter archived & temporary
   let displayChats = rawList.filter(c => (showArchived ? c.isArchived : !c.isArchived) && !c.isTemporary);
 
-  // Automatic filter by current active mode
-  if (currentMode === 'RUANG_KERJA') {
-    displayChats = displayChats.filter(c => c.workspaceMode === 'RUANG_KERJA');
-  } else {
-    displayChats = displayChats.filter(c => c.workspaceMode !== 'RUANG_KERJA');
+  // Filter by current mode only when showAllModes is false
+  if (!showAllModes) {
+    if (currentMode === 'RUANG_KERJA') {
+      displayChats = displayChats.filter(c => c.workspaceMode === 'RUANG_KERJA');
+    } else {
+      displayChats = displayChats.filter(c => c.workspaceMode !== 'RUANG_KERJA');
+    }
   }
 
   // Split pinned vs unpinned
@@ -194,7 +197,7 @@ export const SidebarChatList: React.FC<SidebarChatListProps> = ({
 
   if (isCollapsed) {
     return (
-      <div className="flex-1 overflow-y-auto px-2 py-2 space-y-1 custom-scrollbar min-h-0">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden px-2 py-2 space-y-1 custom-scrollbar min-h-0">
         {displayChats.slice(0, 20).map(c => {
           const isActive = currentChatId === c.id;
           const isWorkspace = c.workspaceMode === 'RUANG_KERJA';
@@ -228,7 +231,22 @@ export const SidebarChatList: React.FC<SidebarChatListProps> = ({
   }
 
   return (
-    <div className="flex-1 overflow-y-auto px-2 py-2 space-y-2.5 custom-scrollbar min-h-0">
+    <div className="flex-1 overflow-y-auto overflow-x-hidden px-2 py-2 space-y-2.5 custom-scrollbar min-h-0">
+      {/* Unified vs Scoped Mode Filter */}
+      <div className="flex items-center justify-between px-1 pb-0.5">
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+          Riwayat Sesi
+        </span>
+        <button
+          type="button"
+          onClick={() => setShowAllModes(prev => !prev)}
+          className="text-[10.5px] font-medium text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 transition-colors cursor-pointer"
+          title={showAllModes ? 'Menampilkan obrolan dari RuangTenang & RuangKerja' : 'Hanya menampilkan obrolan dari ruang aktif'}
+        >
+          {showAllModes ? 'Semua Ruang' : currentMode === 'RUANG_KERJA' ? 'Hanya RuangKerja' : 'Hanya RuangTenang'}
+        </button>
+      </div>
+
       {/* Archived Indicator Banner */}
       {showArchived && (
         <div className="px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-850 flex items-center justify-between text-[11px] text-amber-800 dark:text-amber-300">

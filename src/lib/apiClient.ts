@@ -1,6 +1,8 @@
 /**
  * Centralized API Client with Timeout, Retry, and Standardized Error Handling
  */
+import { safeSessionStorage } from './storage';
+import { readGuestAiConsent } from './guestAiConsent';
 
 export interface ApiResponse<T = unknown> {
   success: boolean;
@@ -14,6 +16,61 @@ export interface ApiResponse<T = unknown> {
 
 export const AUTH_SESSION_INVALIDATED_EVENT = 'rt-auth-session-invalidated';
 let lastAuthInvalidatedEventAt = 0;
+
+const AUTH_TOKEN_STORAGE_KEY = 'rt_session_token';
+const GUEST_ATTACHMENT_TOKEN_STORAGE_KEY = 'rt_guest_attachment_token';
+let inMemoryGuestAttachmentToken: string | null = null;
+
+function generateHexToken(bytes = 32): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+    const arr = new Uint8Array(bytes);
+    crypto.getRandomValues(arr);
+    return Array.from(arr, b => b.toString(16).padStart(2, '0')).join('');
+  }
+  let out = '';
+  for (let i = 0; i < bytes * 2; i++) {
+    out += Math.floor(Math.random() * 16).toString(16);
+  }
+  return out;
+}
+
+export function getOrCreateGuestAttachmentToken(): string {
+  const stored = safeSessionStorage.getItem(GUEST_ATTACHMENT_TOKEN_STORAGE_KEY);
+  if (stored && /^[a-f0-9]{64}$/i.test(stored.trim())) {
+    const normalized = stored.trim().toLowerCase();
+    inMemoryGuestAttachmentToken = normalized;
+    return normalized;
+  }
+  if (inMemoryGuestAttachmentToken && /^[a-f0-9]{64}$/.test(inMemoryGuestAttachmentToken)) {
+    return inMemoryGuestAttachmentToken;
+  }
+  const created = generateHexToken(32);
+  inMemoryGuestAttachmentToken = created;
+  safeSessionStorage.setItem(GUEST_ATTACHMENT_TOKEN_STORAGE_KEY, created);
+  return created;
+}
+
+export function setStoredGuestAttachmentToken(token: string | null | undefined): void {
+  if (typeof token === 'string' && /^[a-f0-9]{64}$/i.test(token.trim())) {
+    const normalized = token.trim().toLowerCase();
+    inMemoryGuestAttachmentToken = normalized;
+    safeSessionStorage.setItem(GUEST_ATTACHMENT_TOKEN_STORAGE_KEY, normalized);
+  }
+}
+
+export function getStoredAuthToken(): string | null {
+  return safeSessionStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+}
+
+export function setStoredAuthToken(token: string | null | undefined): void {
+  if (typeof token === 'string' && token.trim().length > 0) {
+    safeSessionStorage.setItem(AUTH_TOKEN_STORAGE_KEY, token.trim());
+  }
+}
+
+export function clearStoredAuthToken(): void {
+  safeSessionStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+}
 
 function extractErrorMessage(body: unknown, fallbackMessage: string): string {
   if (!body) return fallbackMessage;
@@ -107,41 +164,53 @@ export async function fetchWithTimeoutAndRetry<T = unknown>(
   const isIdempotentMutation = !isGetOrHead && (hasIdempotencyKey || isSafeEndpoint);
   const canRetry = isGetOrHead || isIdempotentMutation;
 
+  const setHeader = (key: string, value: string) => {
+    if (finalHeaders instanceof Headers) {
+      finalHeaders.set(key, value);
+    } else if (Array.isArray(finalHeaders)) {
+      finalHeaders = [...finalHeaders, [key, value]] as unknown as Record<string, string>;
+    } else {
+      finalHeaders = { ...finalHeaders, [key]: value };
+    }
+  };
+
+  if (options.headers instanceof Headers) {
+    finalHeaders = new Headers(options.headers) as unknown as Record<string, string>;
+  }
+
   // Generate and attach a single idempotency key for retry resilience if not already provided
   if (isIdempotentMutation && !hasIdempotencyKey) {
     const idempotencyKey = typeof crypto !== 'undefined' && crypto.randomUUID
       ? crypto.randomUUID()
       : 'idemp-' + Math.random().toString(36).substring(2) + '-' + Date.now();
-      
-    if (options.headers instanceof Headers) {
-      finalHeaders = new Headers(options.headers) as unknown as Record<string, string>;
-      (finalHeaders as unknown as Headers).set('Idempotency-Key', idempotencyKey);
-    } else if (Array.isArray(options.headers)) {
-      finalHeaders = [...options.headers, ['Idempotency-Key', idempotencyKey]] as unknown as Record<string, string>;
-    } else {
-      finalHeaders = {
-        ...finalHeaders,
-        'Idempotency-Key': idempotencyKey
-      };
-    }
+    setHeader('Idempotency-Key', idempotencyKey);
+  }
+
+  // Attach X-Requested-With, X-Guest-AI-Consent, X-Guest-Attachment-Token, and Bearer token fallback
+  if (!normalizedHeaders['x-requested-with']) {
+    setHeader('X-Requested-With', 'XMLHttpRequest');
+  }
+  if (!normalizedHeaders['x-guest-ai-consent']) {
+    setHeader('X-Guest-AI-Consent', String(readGuestAiConsent()));
+  }
+  if (!normalizedHeaders['x-guest-attachment-token']) {
+    setHeader('X-Guest-Attachment-Token', getOrCreateGuestAttachmentToken());
+  }
+  const storedToken = getStoredAuthToken();
+  if (storedToken && !normalizedHeaders['authorization']) {
+    setHeader('Authorization', `Bearer ${storedToken}`);
   }
 
   // Also attach CSRF token for mutation requests if cookie is present
   if (!isGetOrHead) {
     const csrfToken = getCookie('XSRF-TOKEN');
-    if (csrfToken) {
-      if (options.headers instanceof Headers) {
-        finalHeaders = new Headers(options.headers) as unknown as Record<string, string>;
-        (finalHeaders as unknown as Headers).set('X-CSRF-Token', csrfToken);
-      } else if (Array.isArray(options.headers)) {
-        finalHeaders = [...options.headers, ['X-CSRF-Token', csrfToken]] as unknown as Record<string, string>;
-      } else {
-        finalHeaders = {
-          ...finalHeaders,
-          'X-CSRF-Token': csrfToken
-        };
-      }
+    if (csrfToken && !normalizedHeaders['x-csrf-token']) {
+      setHeader('X-CSRF-Token', csrfToken);
     }
+  }
+
+  if (url.includes('/api/v1/auth/logout') || url.includes('/api/auth/logout')) {
+    clearStoredAuthToken();
   }
 
   const controller = new AbortController();
@@ -162,7 +231,7 @@ export async function fetchWithTimeoutAndRetry<T = unknown>(
     credentials: 'include',
     signal: controller.signal,
     headers: finalHeaders instanceof Headers ? finalHeaders : {
-      'Content-Type': 'application/json',
+      ...(options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
       ...finalHeaders
     }
   };
@@ -171,6 +240,10 @@ export async function fetchWithTimeoutAndRetry<T = unknown>(
     const res = await fetch(url, mergedOptions);
     clearTimeout(id);
     callerSignal?.removeEventListener('abort', abortFromCaller);
+    const returnedGuestToken = typeof res.headers?.get === 'function' ? res.headers.get('x-guest-attachment-token') : null;
+    if (returnedGuestToken) {
+      setStoredGuestAttachmentToken(returnedGuestToken);
+    }
 
     if (!res.ok) {
       const fallbackMsg = `Server error (${res.status})`;
@@ -189,7 +262,7 @@ export async function fetchWithTimeoutAndRetry<T = unknown>(
 
       // Protected requests can be the first signal that a session expired. Notify
       // AuthContext so the UI stops rendering data for the stale account.
-      if (res.status === 401 && !url.includes('/api/auth/')) {
+      if (res.status === 401 && !url.includes('/api/auth/') && !url.includes('/api/v1/auth/')) {
         const now = Date.now();
         if (now - lastAuthInvalidatedEventAt > 1000 && typeof window !== 'undefined') {
           lastAuthInvalidatedEventAt = now;
@@ -256,6 +329,19 @@ export async function fetchWithTimeoutAndRetry<T = unknown>(
       };
     }
 
+    if (data && typeof data === 'object') {
+      const record = data as Record<string, unknown>;
+      const nested = typeof record.data === 'object' && record.data !== null ? (record.data as Record<string, unknown>) : null;
+      const returnedToken = typeof record.token === 'string'
+        ? record.token
+        : nested && typeof nested.token === 'string'
+          ? nested.token
+          : null;
+      if (returnedToken && (url.includes('/auth/login') || url.includes('/auth/register') || url.includes('/auth/mfa/verify'))) {
+        setStoredAuthToken(returnedToken);
+      }
+    }
+
     return { success: true, data: data as T, status: res.status };
   } catch (err: any) {
     clearTimeout(id);
@@ -303,5 +389,15 @@ export const apiClient = {
     }),
   delete: <T = unknown>(url: string, options: RequestInit = {}) =>
     fetchWithTimeoutAndRetry<T>(url, { ...options, method: 'DELETE' }),
-  request: fetchWithTimeoutAndRetry
+  request: fetchWithTimeoutAndRetry,
+  fetchJson: async <T = unknown>(url: string, options: RequestInit = {}): Promise<T> => {
+    const method = (options.method || 'GET').toUpperCase();
+    const retries = method === 'GET' || method === 'HEAD' ? 2 : 0;
+    const res = await fetchWithTimeoutAndRetry<T>(url, options, retries, 30000);
+    if (res.data !== undefined && res.data !== null) {
+      return res.data;
+    }
+    return res as unknown as T;
+  }
 };
+

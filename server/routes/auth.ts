@@ -8,6 +8,8 @@ import { authService } from '../services/authService.js';
 import { emailService } from '../services/emailService.js';
 import { metricsService } from '../services/metricsService.js';
 import { MobileAuthController, nativeMobileClientOnly } from '../controllers/mobileAuthController.js';
+import { changePasswordSchema } from '../validators/authSchemas.js';
+import { auditRepository, pseudonymizeIdentifier } from '../repositories/auditRepository.js';
 
 import {
   loginLimiter,
@@ -129,7 +131,7 @@ router.post('/mfa/verify', mfaLimiter, async (req: Request, res: Response) => {
 
     res.json({
       success: true,
-      ...(browserClient ? {} : { token }),
+      token,
       user: authService.sanitizeUser(user)
     });
   } catch (err: any) {
@@ -270,18 +272,18 @@ router.get('/login-history', requireAuth, async (req: Request, res: Response) =>
   }
 });
 
-// Change Password
+// Change Password (OWASP A07 & A09)
 router.post('/change-password', requireAuth, async (req: Request, res: Response) => {
   try {
-    const { currentPassword, newPassword } = req.body;
-    if (!currentPassword || !newPassword) {
-      return res.status(400).json({ error: 'Kata sandi saat ini dan kata sandi baru wajib diisi.' });
+    const parsed = changePasswordSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        error: 'Validasi kata sandi gagal.',
+        details: parsed.error.issues.map(e => ({ path: e.path.join('.'), message: e.message }))
+      });
     }
 
-    if (newPassword.length < 10) {
-      return res.status(400).json({ error: 'Kata sandi baru minimal 10 karakter.' });
-    }
-
+    const { currentPassword, newPassword } = parsed.data;
     const user = await serverDb.getUserById(req.user.userId);
     if (!user) {
       return res.status(404).json({ error: 'Pengguna tidak ditemukan.' });
@@ -289,17 +291,72 @@ router.post('/change-password', requireAuth, async (req: Request, res: Response)
 
     const isMatch = await bcrypt.compare(currentPassword, user.passwordHash);
     if (!isMatch) {
+      await auditRepository.logStructuredAudit({
+        actorPseudonymousId: user.id,
+        action: 'AUTH_PASSWORD_CHANGE_FAILED',
+        resourceType: 'AUTH',
+        purpose: 'USER_PASSWORD_CHANGE',
+        result: 'FAILURE',
+        ip: req.ip || req.socket.remoteAddress || '127.0.0.1',
+        userRole: user.role
+      }).catch(() => {});
       return res.status(400).json({ error: 'Kata sandi saat ini salah.' });
     }
 
     const newHash = await bcrypt.hash(newPassword, 10);
     await serverDb.updateUserPassword(user.id, newHash);
+
+    await auditRepository.logStructuredAudit({
+      actorPseudonymousId: user.id,
+      action: 'AUTH_PASSWORD_CHANGED',
+      resourceType: 'AUTH',
+      purpose: 'USER_PASSWORD_CHANGE',
+      result: 'SUCCESS',
+      ip: req.ip || req.socket.remoteAddress || '127.0.0.1',
+      userRole: user.role
+    }).catch(() => {});
+
     authService.clearSessionCookie(res);
 
     res.json({ success: true, message: 'Kata sandi berhasil diubah. Seluruh sesi lain telah dicabut. Silakan masuk kembali.' });
   } catch (err: any) {
     console.error('Change password error:', err);
     res.status(500).json({ error: 'Gagal mengubah kata sandi.' });
+  }
+});
+
+// Personal Security Activity & Audit Events (OWASP A09 Transparency)
+router.get('/security-audit', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const history = await serverDb.getLoginHistory(req.user.userId);
+    const sessions = await serverDb.getActiveSessions(req.user.userId);
+    const userHash = pseudonymizeIdentifier(req.user.userId);
+
+    // Fetch personal audit logs filtered to user pseudonymous ID
+    const rawLogs = await auditRepository.getAuditLogs(50, 0);
+    const personalLogs = rawLogs.filter(log => {
+      try {
+        const parsed = JSON.parse(log.details);
+        return parsed.actor === userHash || parsed.subject === userHash;
+      } catch {
+        return false;
+      }
+    }).map(log => ({
+      id: log.id,
+      action: log.action,
+      timestamp: log.timestamp,
+      userRole: log.userRole
+    }));
+
+    res.json({
+      success: true,
+      loginHistory: history.slice(0, 15),
+      activeSessionsCount: sessions.length,
+      securityEvents: personalLogs.slice(0, 20)
+    });
+  } catch (err: any) {
+    console.error('Security audit retrieval error:', err);
+    res.status(500).json({ error: 'Gagal mengambil riwayat audit keamanan.' });
   }
 });
 

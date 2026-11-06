@@ -5,6 +5,7 @@ import { UserSession } from '../../types';
 import { apiClient } from '../../lib/apiClient';
 import { useAuth } from '../../contexts/AuthContext';
 import { BrandLogo } from '../../components/ui/BrandLogo';
+import { evaluatePasswordStrength } from '../../lib/passwordStrength';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -90,6 +91,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [resetSubmitted, setResetSubmitted] = useState<boolean>(false);
   const { logout: authLogout } = useAuth();
+
+  const regPasswordEval = evaluatePasswordStrength(password);
+  const resetPasswordEval = evaluatePasswordStrength(newPassword);
 
   if (!isOpen) return null;
 
@@ -237,8 +241,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       return;
     }
 
-    if (password.length < 10) {
-      setErrorMsg('Kata sandi minimal 10 karakter untuk perlindungan akun.');
+    if (!regPasswordEval.isValid) {
+      setErrorMsg('Kata sandi harus memenuhi seluruh kriteria keamanan: minimal 10 karakter, huruf besar, huruf kecil, angka, dan karakter simbol.');
       setLoading(false);
       return;
     }
@@ -330,8 +334,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       return;
     }
 
-    if (newPassword.length < 10) {
-      setErrorMsg('Kata sandi baru minimal 10 karakter.');
+    if (!resetPasswordEval.isValid) {
+      setErrorMsg('Kata sandi baru harus memenuhi seluruh kriteria keamanan: minimal 10 karakter, huruf besar, huruf kecil, angka, dan karakter simbol.');
       setLoading(false);
       return;
     }
@@ -742,11 +746,47 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       required
                       minLength={10}
                       className={`w-full px-3.5 py-2 min-h-[44px] border rounded-xl text-base sm:text-sm text-primary focus:outline-none transition-all ${
-                        password.length > 0 && password.length < 10
-                          ? 'border-rose-400 focus:border-rose-500 focus:ring-1 focus:ring-rose-500 bg-rose-50 dark:bg-rose-950/30'
+                        password.length > 0 && !regPasswordEval.isValid
+                          ? 'border-amber-400 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-amber-50/30 dark:bg-amber-950/20'
+                          : password.length > 0 && regPasswordEval.isValid
+                          ? 'border-teal-500 focus:border-teal-600 focus:ring-1 focus:ring-teal-600 bg-teal-50/20 dark:bg-teal-950/20'
                           : 'border-default focus:border-teal-600 focus:ring-1 focus:ring-teal-600 surface-muted'
                       }`}
                     />
+
+                    {/* Password Strength Indicator */}
+                    {password.length > 0 && (
+                      <div className="space-y-1.5 pt-2 animate-fade-in">
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="text-secondary font-medium">Kekuatan Sandi:</span>
+                          <span className={`font-semibold ${regPasswordEval.color.split(' ')[1] || 'text-teal-600'}`}>
+                            {regPasswordEval.label}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-4 gap-1 h-1.5 w-full">
+                          {[1, 2, 3, 4].map((stepIdx) => (
+                            <div
+                              key={stepIdx}
+                              className={`h-full rounded-full transition-all ${
+                                regPasswordEval.score >= stepIdx
+                                  ? regPasswordEval.color.split(' ')[0]
+                                  : 'bg-slate-200 dark:bg-slate-700'
+                              }`}
+                            />
+                          ))}
+                        </div>
+                        <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-[10px] pt-1">
+                          {regPasswordEval.criteria.map((c) => (
+                            <div key={c.id} className="flex items-center gap-1.5">
+                              <span className={c.met ? 'text-teal-600 dark:text-teal-400 font-bold' : 'text-slate-400'}>
+                                {c.met ? '✓' : '•'}
+                              </span>
+                              <span className={c.met ? 'text-primary font-medium' : 'text-slate-400'}>{c.label}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div>
@@ -872,11 +912,47 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                           required
                           minLength={10}
                           className={`w-full px-3.5 py-2 min-h-[44px] border surface-card text-base sm:text-sm text-primary rounded-xl focus:outline-none transition-all ${
-                            newPassword.length > 0 && newPassword.length < 10
-                              ? 'border-rose-400 focus:border-rose-500 focus:ring-1 focus:ring-rose-500 bg-rose-50 dark:bg-rose-950/30'
+                            newPassword.length > 0 && !resetPasswordEval.isValid
+                              ? 'border-amber-400 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-amber-50/30 dark:bg-amber-950/20'
+                              : newPassword.length > 0 && resetPasswordEval.isValid
+                              ? 'border-teal-500 focus:border-teal-600 focus:ring-1 focus:ring-teal-600 bg-teal-50/20 dark:bg-teal-950/20'
                               : 'border-amber-300 dark:border-amber-800 focus:border-amber-600 focus:ring-1 focus:ring-amber-600'
                           }`}
                         />
+
+                        {/* Reset Password Strength Indicator */}
+                        {newPassword.length > 0 && (
+                          <div className="space-y-1.5 pt-2 animate-fade-in">
+                            <div className="flex items-center justify-between text-[11px]">
+                              <span className="text-secondary font-medium">Kekuatan Sandi:</span>
+                              <span className={`font-semibold ${resetPasswordEval.color.split(' ')[1] || 'text-teal-600'}`}>
+                                {resetPasswordEval.label}
+                              </span>
+                            </div>
+                            <div className="grid grid-cols-4 gap-1 h-1.5 w-full">
+                              {[1, 2, 3, 4].map((stepIdx) => (
+                                <div
+                                  key={stepIdx}
+                                  className={`h-full rounded-full transition-all ${
+                                    resetPasswordEval.score >= stepIdx
+                                      ? resetPasswordEval.color.split(' ')[0]
+                                      : 'bg-slate-200 dark:bg-slate-700'
+                                  }`}
+                                />
+                              ))}
+                            </div>
+                            <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-[10px] pt-1">
+                              {resetPasswordEval.criteria.map((c) => (
+                                <div key={c.id} className="flex items-center gap-1.5">
+                                  <span className={c.met ? 'text-teal-600 dark:text-teal-400 font-bold' : 'text-slate-400'}>
+                                    {c.met ? '✓' : '•'}
+                                  </span>
+                                  <span className={c.met ? 'text-primary font-medium' : 'text-slate-400'}>{c.label}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                       <div className="flex space-x-2">
                         <button

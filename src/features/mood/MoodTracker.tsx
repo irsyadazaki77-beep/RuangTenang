@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useEscapeKey } from '../../hooks/useEscapeKey';
 import { calculateStreak, getLocalIsoDateString, parseLocalIsoDateString } from '../../utils/streak';
@@ -21,9 +21,7 @@ import {
 } from 'lucide-react';
 import { EmptyState } from '../../components/common/EmptyState';
 import { apiClient } from '../../lib/apiClient';
-import { clientDb } from '../../lib/clientDb';
 import { DailyCheckinModal, MoodLog, MOOD_OPTIONS, EMOTION_TAGS, FACTOR_TAGS } from './DailyCheckinModal';
-import { getCancelableOfflineMoodKey, isMoodLogPendingSync } from './moodLogUtils';
 import { AcademicMoodCorrelationChart } from './components/AcademicMoodCorrelationChart';
 import { CounselingReportModal } from './components/CounselingReportModal';
 import { FileText } from 'lucide-react';
@@ -34,7 +32,6 @@ interface MoodTrackerProps {
   showToast: (msg: string, type?: 'info' | 'success' | 'warning' | 'error', title?: string) => void;
   onRequestOpenCheckin?: () => void;
   onRequestEditCheckin?: (log: MoodLog) => void;
-  onRefreshData?: () => void;
 }
 
 export const MoodTracker: React.FC<MoodTrackerProps> = ({
@@ -42,15 +39,12 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
   setMoodLogs,
   showToast,
   onRequestOpenCheckin,
-  onRequestEditCheckin,
-  onRefreshData
+  onRequestEditCheckin
 }) => {
   const navigate = useNavigate();
   const [isCheckinModalOpen, setIsCheckinModalOpen] = useState<boolean>(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState<boolean>(false);
   const [savedLogForBridge, setSavedLogForBridge] = useState<MoodLog | null>(null);
-  const deletingMoodIdsRef = useRef(new Set<string>());
-  const [deletingMoodIds, setDeletingMoodIds] = useState<Set<string>>(new Set());
 
   useEscapeKey(() => {
     if (savedLogForBridge) setSavedLogForBridge(null);
@@ -87,66 +81,20 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
   };
 
   const handleDeleteMoodLog = async (id: string) => {
-    if (deletingMoodIdsRef.current.has(id)) return;
-    const logToDelete = moodLogs.find(log => log.id === id);
-    if (!logToDelete) return;
-
-    deletingMoodIdsRef.current.add(id);
-    setDeletingMoodIds(previous => new Set(previous).add(id));
+    const previousLogs = [...moodLogs];
+    setMoodLogs(prev => prev.filter(log => log.id !== id));
     try {
-      const cancelableOfflineKey = getCancelableOfflineMoodKey(id);
-      if (id.startsWith('offline-')) {
-        if (!cancelableOfflineKey) {
-          showToast('Catatan offline ini tidak dapat diidentifikasi untuk dihapus.', 'error');
-          return;
-        }
-        const result = await clientDb.removePendingOfflineAction('mood_log', cancelableOfflineKey);
-        if (result === 'deleted') {
-          setMoodLogs(previous => previous.filter(log => log.id !== id));
-          showToast('Catatan mood dihapus dari antrean offline.', 'success');
-        } else if (result === 'syncing') {
-          showToast('Catatan sedang disinkronkan. Setelah sinkronisasi selesai, hapus catatan dari riwayat.', 'warning');
-        } else if (result === 'uncertain') {
-          showToast('Pengiriman terakhir belum terkonfirmasi. Tunggu status antrean diperbarui sebelum menghapus.', 'warning');
-        } else {
-          onRefreshData?.();
-          showToast('Catatan sudah tidak ada di antrean. Riwayat sedang diperbarui.', 'info');
-        }
-        return;
-      }
-
-      if (isMoodLogPendingSync(id)) {
-        showToast('Pengiriman catatan belum terkonfirmasi. Tunggu sinkronisasi selesai sebelum menghapusnya.', 'warning');
-        return;
-      }
-
-      setMoodLogs(previous => previous.filter(log => log.id !== id));
       const res = await apiClient.delete(`/api/v1/mood/${id}`);
       if (!res.success) {
-        setMoodLogs(previous => previous.some(log => log.id === id)
-          ? previous
-          : [...previous, logToDelete].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+        setMoodLogs(previousLogs);
         showToast(res.error || 'Gagal menghapus catatan mood dari server.', 'error');
         return;
       }
       showToast('Catatan Mood berhasil dihapus.', 'success');
     } catch (err) {
       console.warn('Failed to delete mood log on server:', err);
-      if (!isMoodLogPendingSync(id)) {
-        setMoodLogs(previous => previous.some(log => log.id === id)
-          ? previous
-          : [...previous, logToDelete].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
-      }
-      showToast(id.startsWith('offline-')
-        ? 'Catatan belum dihapus dari antrean offline. Coba lagi saat penyimpanan tersedia.'
-        : 'Gagal menghapus catatan mood (koneksi terputus).', 'error');
-    } finally {
-      deletingMoodIdsRef.current.delete(id);
-      setDeletingMoodIds(previous => {
-        const next = new Set(previous);
-        next.delete(id);
-        return next;
-      });
+      setMoodLogs(previousLogs);
+      showToast('Gagal menghapus catatan mood (koneksi terputus).', 'error');
     }
   };
 
@@ -293,12 +241,12 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
           <div className="flex items-center justify-between">
             <span className="text-xs text-secondary font-medium uppercase tracking-wider">Mood Streak</span>
             <div className="p-1.5 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-500">
-              <Flame className={`w-4 h-4 ${streakCount > 0 ? 'animate-pulse' : ''}`} />
+              <Flame className="w-4 h-4" />
             </div>
           </div>
           <div>
             <div className="flex items-baseline gap-1.5">
-              <span className="text-2xl sm:text-3xl font-bold text-primary">{streakCount}</span>
+              <span className="text-2xl sm:text-3xl font-bold text-primary tabular-nums">{streakCount}</span>
               <span className="text-xs font-semibold text-secondary">Hari Berturut-turut</span>
             </div>
             <p className="text-xs text-muted mt-1 leading-normal">
@@ -321,7 +269,7 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-2xl sm:text-3xl font-bold text-primary">{averageMood}</span>
+              <span className="text-2xl sm:text-3xl font-bold text-primary tabular-nums">{averageMood}</span>
               <span className="text-2xl">{moodSummary.emoji}</span>
             </div>
             <p className="text-xs text-secondary font-medium mt-1">
@@ -364,7 +312,7 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
           </div>
           <div>
             <div className="flex items-baseline gap-1.5">
-              <span className="text-2xl sm:text-3xl font-bold text-primary">{averageSleep}</span>
+              <span className="text-2xl sm:text-3xl font-bold text-primary tabular-nums">{averageSleep}</span>
               <span className="text-xs font-semibold text-secondary">Jam / Hari</span>
             </div>
             <p className="text-xs text-muted mt-1 leading-normal">
@@ -448,7 +396,7 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
                     className={`p-3 rounded-xl border border-default text-center transition-all cursor-pointer group relative flex flex-col justify-center items-center min-h-[72px] ${colorClass}`}
                   >
                     <span className="text-xs font-medium opacity-90">{cell.dayName}</span>
-                    <span className="text-base font-bold">{cell.dayNumber}</span>
+                    <span className="text-base font-bold tabular-nums">{cell.dayNumber}</span>
                     <span className="text-[10px] mt-0.5 truncate max-w-full font-medium">
                       {cell.log ? MOOD_OPTIONS[cell.log.mood - 1].label : 'Kosong'}
                     </span>
@@ -475,7 +423,7 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
                     className={`h-9 sm:h-10 rounded-lg border border-default transition-all cursor-pointer relative group flex flex-col items-center justify-center ${colorClass}`}
                     title={`${cell.label}: ${cell.log ? MOOD_OPTIONS[cell.log.mood - 1].label : 'Kosong'}`}
                   >
-                    <span className="text-[11px] leading-tight select-none">
+                    <span className="text-[11px] leading-tight select-none tabular-nums">
                       {cell.dayNumber}
                     </span>
 
@@ -512,7 +460,7 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
                     className={`h-7 sm:h-8 rounded-md border border-default transition-all cursor-pointer relative group flex items-center justify-center ${colorClass}`}
                     title={`${cell.label}: ${cell.log ? MOOD_OPTIONS[cell.log.mood - 1].label : 'Kosong'}`}
                   >
-                    <span className="text-[9px] leading-tight select-none opacity-80">
+                    <span className="text-[9px] leading-tight select-none opacity-80 tabular-nums">
                       {cell.dayNumber}
                     </span>
 
@@ -590,6 +538,17 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
                 </div>
               </div>
             )}
+
+            <div className="pt-2 flex items-center justify-end">
+              <button
+                type="button"
+                onClick={() => navigate('/', { state: { initialPrompt: `Saya baru saja melihat analisis mingguan Mood Tracker saya: "${aiInsight.summary}". Boleh bantu saya menyusun langkah kecil yang realistis untuk menjaga keseimbangan minggu ini?` } })}
+                className="px-3 py-1.5 rounded-xl text-xs font-semibold text-teal-700 dark:text-teal-300 bg-teal-50/80 dark:bg-teal-950/50 hover:bg-teal-100 dark:hover:bg-teal-900/60 border border-teal-200/80 dark:border-teal-800/80 flex items-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <MessageSquare className="w-3.5 h-3.5" />
+                <span>Diskusikan Wawasan Ini dengan AI</span>
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -619,7 +578,7 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
           </span>
           <button
             onClick={() => setSelectedFactorFilter(null)}
-            className={`px-2.5 py-1 text-xs rounded-lg font-medium transition-all cursor-pointer ${
+            className={`px-2.5 py-1 text-xs rounded-lg font-medium transition-all cursor-pointer tabular-nums ${
               selectedFactorFilter === null
                 ? 'bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900'
                 : 'surface-muted text-secondary hover:text-primary'
@@ -675,11 +634,10 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
                       <span className="text-2xl sm:text-3xl leading-none">{moodOpt.emoji}</span>
                       <div>
                         <span className="text-xs sm:text-sm font-bold text-primary flex items-center gap-1.5">
-                          {formattedDate}
-                          {isToday && <span className="w-2 h-2 rounded-full bg-teal-500 animate-pulse"></span>}
-                          {isMoodLogPendingSync(log.id) && (
-                            <span className="text-[9px] font-semibold normal-case tracking-normal rounded-full px-1.5 py-0.5 bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
-                              {getCancelableOfflineMoodKey(log.id) ? 'Tersimpan offline' : 'Menunggu sinkronisasi'}
+                          <span>{formattedDate}</span>
+                          {isToday && (
+                            <span className="text-[11px] font-medium text-teal-600 dark:text-teal-400">
+                              · Terbaru
                             </span>
                           )}
                         </span>
@@ -690,7 +648,7 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
                     </div>
 
                     <div className="flex items-center gap-1">
-                      {onRequestEditCheckin && !isMoodLogPendingSync(log.id) && (
+                      {onRequestEditCheckin && !log.id.startsWith('offline-') && (
                         <button
                           type="button"
                           onClick={() => onRequestEditCheckin(log)}
@@ -704,13 +662,9 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
                       <button
                         type="button"
                         onClick={() => handleDeleteMoodLog(log.id)}
-                        disabled={deletingMoodIds.has(log.id) || (isMoodLogPendingSync(log.id) && !getCancelableOfflineMoodKey(log.id))}
-                        className="text-muted hover:text-rose-600 disabled:opacity-40 disabled:cursor-not-allowed p-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors opacity-70 group-hover:opacity-100 cursor-pointer"
-                        title={isMoodLogPendingSync(log.id) && !getCancelableOfflineMoodKey(log.id)
-                          ? 'Hapus tersedia setelah sinkronisasi selesai'
-                          : deletingMoodIds.has(log.id) ? 'Menghapus catatan…' : 'Hapus Catatan'}
-                        aria-label={`Hapus catatan mood ${formattedDate}`}
-                        aria-busy={deletingMoodIds.has(log.id)}
+                        className="text-muted hover:text-rose-600 p-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors opacity-70 group-hover:opacity-100 cursor-pointer"
+                        title="Hapus Catatan"
+                        aria-label="Hapus catatan mood"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -744,9 +698,9 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
                     </div>
 
                     {log.sleepHours != null && (
-                      <div className="flex items-center gap-1.5 text-secondary text-xs font-medium ml-auto">
+                      <div className="flex items-center gap-1.5 text-secondary text-xs font-medium ml-auto tabular-nums">
                         <Moon className="w-3.5 h-3.5 text-indigo-500" />
-                        <span>{log.sleepHours} Jam {log.sleepQuality ? `(${log.sleepQuality})` : ''}</span>
+                        <span>{log.sleepHours} Jam {log.sleepQuality ? `· ${log.sleepQuality}` : ''}</span>
                       </div>
                     )}
                   </div>

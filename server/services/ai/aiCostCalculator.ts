@@ -32,12 +32,26 @@ export const MODEL_PRICING_REGISTRY: Readonly<Record<string, ModelPricing>> = Ob
   'groq-gpt-20b': { inputPerMillionUsd: 0.20, outputPerMillionUsd: 0.20, pricingStatus: 'verified', source: 'Groq Cloud Official Rates', validatedDate: '2026-02-20' },
   'groq-gpt-120b': { inputPerMillionUsd: 0.50, outputPerMillionUsd: 0.50, pricingStatus: 'verified', source: 'Groq Cloud Official Rates', validatedDate: '2026-02-20' },
 
-  // OpenRouter Free Models (Source: OpenRouter catalog, verified 2026-03)
-  'openrouter-nemotron-550b': { inputPerMillionUsd: 0.0, outputPerMillionUsd: 0.0, pricingStatus: 'verified', source: 'OpenRouter Free Model Tier', validatedDate: '2026-03-01' },
-  'openrouter-nemotron-super-120b': { inputPerMillionUsd: 0.0, outputPerMillionUsd: 0.0, pricingStatus: 'verified', source: 'OpenRouter Free Model Tier', validatedDate: '2026-03-01' },
-  'openrouter-nemotron-lightning': { inputPerMillionUsd: 0.0, outputPerMillionUsd: 0.0, pricingStatus: 'verified', source: 'OpenRouter Free Model Tier', validatedDate: '2026-03-01' },
-  'openrouter-cohere-code': { inputPerMillionUsd: 0.0, outputPerMillionUsd: 0.0, pricingStatus: 'verified', source: 'OpenRouter Free Model Tier', validatedDate: '2026-03-01' },
-  'openrouter-ling-flash': { inputPerMillionUsd: 0.075, outputPerMillionUsd: 0.225, pricingStatus: 'verified', source: 'OpenRouter Models API', validatedDate: '2026-10-14' },
+  // OpenRouter Free Models (Source: OpenRouter catalog, strictly $0.00 / :free tier, verified 2026-10)
+  'openrouter-free-auto': { inputPerMillionUsd: 0.0, outputPerMillionUsd: 0.0, pricingStatus: 'verified', source: 'OpenRouter Free Model Tier', validatedDate: '2026-10-22' },
+  'openrouter-nemotron-550b': { inputPerMillionUsd: 0.0, outputPerMillionUsd: 0.0, pricingStatus: 'verified', source: 'OpenRouter Free Model Tier', validatedDate: '2026-10-22' },
+  'openrouter-nemotron-super-120b': { inputPerMillionUsd: 0.0, outputPerMillionUsd: 0.0, pricingStatus: 'verified', source: 'OpenRouter Free Model Tier', validatedDate: '2026-10-22' },
+  'openrouter-nemotron-super-vl': { inputPerMillionUsd: 0.0, outputPerMillionUsd: 0.0, pricingStatus: 'verified', source: 'OpenRouter Free Model Tier', validatedDate: '2026-10-22' },
+  'openrouter-nemotron-nano-omni': { inputPerMillionUsd: 0.0, outputPerMillionUsd: 0.0, pricingStatus: 'verified', source: 'OpenRouter Free Model Tier', validatedDate: '2026-10-22' },
+  'openrouter-inkling': { inputPerMillionUsd: 0.0, outputPerMillionUsd: 0.0, pricingStatus: 'verified', source: 'OpenRouter Free Model Tier', validatedDate: '2026-10-22' },
+  'openrouter-flint': { inputPerMillionUsd: 0.0, outputPerMillionUsd: 0.0, pricingStatus: 'verified', source: 'OpenRouter Free Model Tier', validatedDate: '2026-10-22' },
+  'openrouter-gemma-4-31b': { inputPerMillionUsd: 0.0, outputPerMillionUsd: 0.0, pricingStatus: 'verified', source: 'OpenRouter Free Model Tier', validatedDate: '2026-10-22' },
+  'openrouter-gemma-4-26b': { inputPerMillionUsd: 0.0, outputPerMillionUsd: 0.0, pricingStatus: 'verified', source: 'OpenRouter Free Model Tier', validatedDate: '2026-10-22' },
+  'openrouter-minimax-m3.1-flash': { inputPerMillionUsd: 0.0, outputPerMillionUsd: 0.0, pricingStatus: 'verified', source: 'OpenRouter Free Model Tier', validatedDate: '2026-10-22' },
+  'openrouter-cohere-code': { inputPerMillionUsd: 0.0, outputPerMillionUsd: 0.0, pricingStatus: 'verified', source: 'OpenRouter Free Model Tier', validatedDate: '2026-10-22' },
+  'openrouter-laguna-s': { inputPerMillionUsd: 0.0, outputPerMillionUsd: 0.0, pricingStatus: 'verified', source: 'OpenRouter Free Model Tier', validatedDate: '2026-10-22' },
+  'openrouter-xing-29b': { inputPerMillionUsd: 0.0, outputPerMillionUsd: 0.0, pricingStatus: 'verified', source: 'OpenRouter Free Model Tier', validatedDate: '2026-10-22' },
+  'openrouter-dots-note': { inputPerMillionUsd: 0.0, outputPerMillionUsd: 0.0, pricingStatus: 'verified', source: 'OpenRouter Free Model Tier', validatedDate: '2026-10-22' },
+  'openrouter-nemotron-lightning': { inputPerMillionUsd: 0.0, outputPerMillionUsd: 0.0, pricingStatus: 'verified', source: 'OpenRouter Free Model Tier', validatedDate: '2026-10-22' },
+  'openrouter-inkling-small': { inputPerMillionUsd: 0.0, outputPerMillionUsd: 0.0, pricingStatus: 'verified', source: 'OpenRouter Free Model Tier', validatedDate: '2026-10-22' },
+  'openrouter-laguna-xs': { inputPerMillionUsd: 0.0, outputPerMillionUsd: 0.0, pricingStatus: 'verified', source: 'OpenRouter Free Model Tier', validatedDate: '2026-10-22' },
+  'openrouter-lfm-2.6b': { inputPerMillionUsd: 0.0, outputPerMillionUsd: 0.0, pricingStatus: 'verified', source: 'OpenRouter Free Model Tier', validatedDate: '2026-10-22' },
+  'openrouter-nemotron-safety': { inputPerMillionUsd: 0.0, outputPerMillionUsd: 0.0, pricingStatus: 'verified', source: 'OpenRouter Free Model Tier', validatedDate: '2026-10-22' },
 
   // OpenAI Models (Source: OpenAI API Pricing, verified 2026-02)
   'openai-gpt-4o-mini': { inputPerMillionUsd: 0.15, outputPerMillionUsd: 0.60, pricingStatus: 'verified', source: 'OpenAI Standard API Pricing', validatedDate: '2026-02-01' },

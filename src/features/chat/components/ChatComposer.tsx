@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
-  Send,
+  ArrowUp,
   Plus,
   Square,
   Paperclip,
@@ -10,7 +10,10 @@ import {
   Command,
   MicOff,
   Mic,
-  ArrowUp,
+  Globe,
+  Brain,
+  Radio,
+  FolderKanban,
   LucideIcon
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
@@ -20,6 +23,15 @@ import { Attachment } from '../types';
 import { useToast } from '../../../components/Toast';
 import { useComposerVoiceInput } from '../hooks/useComposerVoiceInput';
 import { readGuestAiConsent } from '../../../lib/guestAiConsent';
+import { getStoredAuthToken, getOrCreateGuestAttachmentToken, setStoredGuestAttachmentToken } from '../../../lib/apiClient';
+import {
+  DEFAULT_CHAPTER_MENTIONS,
+  detectActiveMentionQuery,
+  ContextMentionPopover,
+  AttachedMentionsBar,
+  type ContextMentionItem,
+} from '../../workspace/components/ComposerSlashAndMentionMenus';
+import { BurnoutRadarBar } from '../../workspace/components/BurnoutRadarBar';
 
 interface Props {
   onSend: (msg: string, plugin?: string, attachments?: Attachment[]) => void | boolean;
@@ -34,7 +46,20 @@ interface Props {
   onCommand?: (cmd: string) => void;
   onOpenPlugin?: (pluginId: string) => void;
   quotaExceeded?: boolean;
-  isEmptyState?: boolean;
+  variant?: 'centered' | 'docked';
+  quotedSnippet?: string | null;
+  onClearQuote?: () => void;
+  webSearchEnabled?: boolean;
+  onToggleWebSearch?: () => void;
+  thinkingDepth?: 'auto' | 'fast' | 'deep';
+  onToggleThinkingDepth?: () => void;
+  onOpenLiveVoice?: () => void;
+  activeProjectName?: string | null;
+  onOpenProjects?: () => void;
+  activeArtifactTitle?: string | null;
+  userTurnCount?: number;
+  onRunDeepResearch?: (topic: string) => void | Promise<void>;
+  isRunningDeepResearch?: boolean;
 }
 
 export function ChatComposer({
@@ -50,7 +75,20 @@ export function ChatComposer({
   onCommand,
   onOpenPlugin,
   quotaExceeded = false,
-  isEmptyState = false
+  variant = 'docked',
+  quotedSnippet = null,
+  onClearQuote,
+  webSearchEnabled = false,
+  onToggleWebSearch,
+  thinkingDepth = 'auto',
+  onToggleThinkingDepth,
+  onOpenLiveVoice,
+  activeProjectName = null,
+  onOpenProjects,
+  activeArtifactTitle = null,
+  userTurnCount = 0,
+  onRunDeepResearch,
+  isRunningDeepResearch = false
 }: Props) {
   const { showToast } = useToast();
   const [input, setInput] = useState('');
@@ -58,6 +96,9 @@ export function ChatComposer({
   const [showActionMenu, setShowActionMenu] = useState(false);
   const [showCommands, setShowCommands] = useState(false);
   const [selectedCmdIndex, setSelectedCmdIndex] = useState(0);
+  const [selectedMentionIndex, setSelectedMentionIndex] = useState(0);
+  const [attachedMentions, setAttachedMentions] = useState<ContextMentionItem[]>([]);
+  const [cursorPosition, setCursorPosition] = useState(0);
   const waitingForConsentRef = useRef(false);
   const draftWasJustLoadedRef = useRef(false);
   const wasTemporaryRef = useRef(isTemporary);
@@ -71,11 +112,21 @@ export function ChatComposer({
   const attachmentsRef = useRef<Attachment[]>([]);
   attachmentsRef.current = attachments;
   const draftStorageKey = `ruangtenang:chat-draft:${encodeURIComponent(draftOwnerId)}:${encodeURIComponent(chatId || 'new')}`;
+
+  useEffect(() => {
+    if (quotedSnippet) {
+      setTimeout(() => {
+        textareaRef.current?.focus();
+      }, 30);
+    }
+  }, [quotedSnippet]);
+
   useEffect(() => () => {
     attachmentsRef.current.forEach(attachment => {
       if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
     });
   }, []);
+
   // Load and persist draft per chat session
   useEffect(() => {
     const draft = isTemporaryRef.current ? null : safeLocalStorage.getItem(draftStorageKey);
@@ -124,23 +175,98 @@ export function ChatComposer({
       safeLocalStorage.removeItem(draftStorageKey);
     }
 
-    // Keep the two-line mobile placeholder fully visible in the empty state.
+    // Auto-grow textarea smoothly from 40px up to 140px
     if (textareaRef.current) {
-      const minimumHeight = isEmptyState ? 64 : 40;
       if (!input.trim()) {
-        textareaRef.current.style.height = `${minimumHeight}px`;
+        textareaRef.current.style.height = '40px';
       } else {
         textareaRef.current.style.height = 'auto';
-        const newHeight = Math.min(Math.max(textareaRef.current.scrollHeight, minimumHeight), 120);
+        const newHeight = Math.min(Math.max(textareaRef.current.scrollHeight, 40), 140);
         textareaRef.current.style.height = `${newHeight}px`;
       }
     }
 
-    // Detect slash commands
-    const isSlash = input.startsWith('/');
+    // Detect slash commands (only when no space typed yet)
+    const isSlash = input.startsWith('/') && !input.trimStart().split('\n')[0].includes(' ');
     setShowCommands(isSlash);
     if (isSlash) setSelectedCmdIndex(0);
-  }, [input, draftStorageKey, isTemporary, isEmptyState]);
+  }, [input, draftStorageKey, isTemporary]);
+
+  const availableMentions = React.useMemo<ContextMentionItem[]>(() => {
+    const items: ContextMentionItem[] = [];
+    for (const att of attachments) {
+      if (['success', 'ready', 'visual_ready'].includes(att.status)) {
+        const name = att.filename || att.file.name;
+        const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+        items.push({
+          id: `doc-${att.id}`,
+          tag: `@dokumen:${slug || 'berkas'}`,
+          label: name,
+          category: 'document',
+          subtitle: 'Berkas terlampir pada obrolan',
+          contextPrompt: `[KONTEKS DOKUMEN @dokumen:${slug}: Rujuk secara ketat berkas terlampir "${name}"]`,
+        });
+      }
+    }
+    if (activeArtifactTitle) {
+      const slug = activeArtifactTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 24);
+      items.push({
+        id: 'art-active',
+        tag: `@artefak:${slug || 'canvas'}`,
+        label: `Canvas: ${activeArtifactTitle}`,
+        category: 'artifact',
+        subtitle: 'Artefak aktif di panel Live Canvas',
+        contextPrompt: `[KONTEKS ARTEFAK @artefak:${slug}: Gunakan naskah aktif di Canvas "${activeArtifactTitle}" sebagai acuan utama]`,
+      });
+    }
+    if (activeProjectName) {
+      const slug = activeProjectName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 24);
+      items.push({
+        id: 'proj-active',
+        tag: `@proyek:${slug || 'aktif'}`,
+        label: `Proyek: ${activeProjectName}`,
+        category: 'project',
+        subtitle: 'Instruksi & pedoman proyek aktif',
+        contextPrompt: `[KONTEKS PROYEK @proyek:${slug}: Patuhi pedoman Proyek "${activeProjectName}"]`,
+      });
+    }
+    items.push(...DEFAULT_CHAPTER_MENTIONS);
+    return items;
+  }, [attachments, activeArtifactTitle, activeProjectName]);
+
+  const activeMentionState = React.useMemo(
+    () => detectActiveMentionQuery(input, cursorPosition || input.length),
+    [input, cursorPosition]
+  );
+
+  const filteredMentions = React.useMemo(() => {
+    if (!activeMentionState) return [];
+    const q = activeMentionState.query.toLowerCase();
+    if (!q) return availableMentions;
+    return availableMentions.filter(
+      item =>
+        item.tag.toLowerCase().includes(q) ||
+        item.label.toLowerCase().includes(q) ||
+        item.subtitle.toLowerCase().includes(q)
+    );
+  }, [activeMentionState, availableMentions]);
+
+  const handleSelectMention = (item: ContextMentionItem) => {
+    if (!activeMentionState) return;
+    const before = input.slice(0, activeMentionState.startIndex);
+    const after = input.slice(cursorPosition || input.length);
+    const nextText = `${before}${item.tag} ${after}`;
+    setInput(nextText);
+    setAttachedMentions(prev => (prev.some(m => m.id === item.id) ? prev : [...prev, item]));
+    setTimeout(() => {
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+        const nextPos = before.length + item.tag.length + 1;
+        textareaRef.current.setSelectionRange(nextPos, nextPos);
+        setCursorPosition(nextPos);
+      }
+    }, 20);
+  };
 
   // Click outside to dismiss open menus
   useEffect(() => {
@@ -215,15 +341,18 @@ export function ChatComposer({
         previewUrl: isImage ? URL.createObjectURL(file) : undefined
       };
 
-      // Upload via backend endpoint
       const formData = new FormData();
       formData.append('files', file);
       const csrfCookie = document.cookie.match(/(?:^|; )XSRF-TOKEN=([^;]+)/)?.[1];
+      const storedToken = getStoredAuthToken();
+      const guestAttachmentToken = getOrCreateGuestAttachmentToken();
       const uploadHeaders: Record<string, string> = {
         'X-Requested-With': 'XMLHttpRequest',
-        'X-Guest-AI-Consent': String(readGuestAiConsent())
+        'X-Guest-AI-Consent': String(readGuestAiConsent()),
+        'X-Guest-Attachment-Token': guestAttachmentToken
       };
       if (csrfCookie) uploadHeaders['X-CSRF-Token'] = decodeURIComponent(csrfCookie);
+      if (storedToken) uploadHeaders['Authorization'] = `Bearer ${storedToken}`;
 
       fetch('/api/v1/chat/attachments/upload', {
         method: 'POST',
@@ -232,7 +361,10 @@ export function ChatComposer({
         body: formData
       })
       .then(async res => {
+        const returnedGuestToken = typeof res.headers?.get === 'function' ? res.headers.get('x-guest-attachment-token') : null;
+        if (returnedGuestToken) setStoredGuestAttachmentToken(returnedGuestToken);
         const data = await res.json();
+        if (typeof data?.guestAttachmentToken === 'string') setStoredGuestAttachmentToken(data.guestAttachmentToken);
         if (!res.ok || !data.success) {
           const errMsg = data.message || data.error?.message || 'Gagal mengunggah berkas';
           setAttachments(prev => prev.map(a => a.id === id ? { ...a, status: 'error', errorMessage: errMsg } : a));
@@ -278,7 +410,32 @@ export function ChatComposer({
   };
 
   const handleExecuteCommand = (cmdStr: string) => {
+    const cleanCmd = cmdStr.trim().split(/\s+/)[0].toLowerCase();
+    const commandObj = CHAT_COMMANDS.find(c => c.cmd.toLowerCase() === cleanCmd);
+
+    if (commandObj?.actionType === 'prompt' && commandObj.promptTemplate) {
+      setShowCommands(false);
+      setShowActionMenu(false);
+      setInput(commandObj.promptTemplate);
+      setTimeout(() => {
+        if (textareaRef.current) {
+          textareaRef.current.focus();
+          textareaRef.current.setSelectionRange(commandObj.promptTemplate!.length, commandObj.promptTemplate!.length);
+        }
+      }, 20);
+      return;
+    }
+
+    if (cleanCmd === '/riset' && cmdStr.trim().toLowerCase() === '/riset') {
+      setShowCommands(false);
+      setShowActionMenu(false);
+      setInput('/riset ');
+      setTimeout(() => textareaRef.current?.focus(), 20);
+      return;
+    }
+
     setInput('');
+    setAttachedMentions([]);
     safeLocalStorage.removeItem(draftStorageKey);
     setShowCommands(false);
     setShowActionMenu(false);
@@ -286,7 +443,6 @@ export function ChatComposer({
       textareaRef.current.style.height = 'auto';
     }
 
-    const commandObj = CHAT_COMMANDS.find(c => c.cmd.toLowerCase() === cmdStr.toLowerCase());
     if (commandObj?.actionType === 'plugin' && commandObj.pluginId && onOpenPlugin) {
       onOpenPlugin(commandObj.pluginId);
       return;
@@ -313,17 +469,34 @@ export function ChatComposer({
       return;
     }
 
+    if (input.trim().toLowerCase().startsWith('/riset') && onRunDeepResearch) {
+      const topic = input.trim().replace(/^\/riset\s*/i, '').trim() || activeArtifactTitle || 'Kajian Literatur & Metodologi Skripsi';
+      setInput('');
+      setAttachedMentions([]);
+      safeLocalStorage.removeItem(draftStorageKey);
+      setShowCommands(false);
+      void onRunDeepResearch(topic);
+      return;
+    }
+
     if (input.startsWith('/')) {
       handleExecuteCommand(input.trim());
       return;
     }
 
     const validAttachments = attachments.filter(a => ['success', 'ready', 'visual_ready'].includes(a.status));
+    const mentionPrefix = attachedMentions.length > 0
+      ? `${attachedMentions.map(m => m.contextPrompt).join('\n')}\n\n`
+      : '';
+    const baseText = `${mentionPrefix}${input.trim()}`;
+    const outgoingText = quotedSnippet
+      ? `Mengacu pada bagian ini:\n> "${quotedSnippet.slice(0, 420)}"\n\n${baseText}`
+      : baseText;
     let accepted: void | boolean;
     if (validAttachments.length > 0) {
-      accepted = onSend(input.trim(), undefined, validAttachments);
+      accepted = onSend(outgoingText, undefined, validAttachments);
     } else {
-      accepted = onSend(input.trim());
+      accepted = onSend(outgoingText);
     }
 
     if (accepted === false) {
@@ -335,7 +508,9 @@ export function ChatComposer({
       if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
     });
     setInput('');
+    setAttachedMentions([]);
     setAttachments([]);
+    onClearQuote?.();
     safeLocalStorage.removeItem(draftStorageKey);
     setShowActionMenu(false);
     setShowCommands(false);
@@ -371,6 +546,25 @@ export function ChatComposer({
       }
     }
 
+    if (activeMentionState && filteredMentions.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSelectedMentionIndex(prev => (prev + 1) % filteredMentions.length);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSelectedMentionIndex(prev => (prev - 1 + filteredMentions.length) % filteredMentions.length);
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        const chosen = filteredMentions[selectedMentionIndex] || filteredMentions[0];
+        if (chosen) handleSelectMention(chosen);
+        return;
+      }
+    }
+
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
@@ -378,16 +572,18 @@ export function ChatComposer({
   };
 
   const hasContent = Boolean(input.trim() || attachments.length > 0);
+  const isCentered = variant === 'centered';
 
   return (
     <div
       ref={composerContainerRef}
-      className={`w-full z-20 shrink-0 pointer-events-none [&>*]:pointer-events-auto ${isEmptyState
-        ? 'relative bg-transparent'
-        : 'sticky bottom-0 bg-gradient-to-t from-[#f8f9fb]/98 via-[#f8f9fb]/88 to-transparent dark:from-[#0b0d10]/98 dark:via-[#0b0d10]/88'
-      }`}
+      className={
+        isCentered
+          ? 'w-full relative z-20'
+          : 'w-full sticky bottom-0 z-20 shrink-0 bg-gradient-to-t from-[#fafaf9] via-[#fafaf9]/85 to-transparent dark:from-[#080d16] dark:via-[#080d16]/85 pointer-events-none [&>*]:pointer-events-auto'
+      }
     >
-      <div className={`mx-auto w-full relative ${isEmptyState ? 'max-w-4xl px-4 pt-5 pb-0 sm:px-6 sm:pt-6' : 'max-w-3xl px-3 pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))]'}`}>
+      <div className={isCentered ? 'w-full relative' : 'pt-1 pb-safe pb-[max(0.5rem,env(safe-area-inset-bottom))] px-3 sm:px-4 max-w-3xl mx-auto w-full relative'}>
 
         {/* 1. Quick Slash Commands Dropdown */}
         <AnimatePresence>
@@ -397,7 +593,7 @@ export function ChatComposer({
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 8, scale: 0.98 }}
               transition={{ duration: 0.15 }}
-              className="absolute bottom-full mb-2 left-0 right-0 sm:right-auto sm:w-80 bg-white dark:bg-slate-850 rounded-2xl border border-slate-200 dark:border-slate-750 shadow-xl overflow-hidden z-30 p-1.5"
+              className="absolute bottom-full mb-2 left-0 right-0 sm:right-auto sm:w-80 bg-white dark:bg-slate-850 rounded-2xl border border-slate-200 dark:border-slate-750 shadow-xl overflow-hidden z-30 p-1.5 text-left"
               role="listbox"
               aria-label="Pintas Perintah Cepat"
             >
@@ -462,14 +658,14 @@ export function ChatComposer({
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 8, scale: 0.96 }}
               transition={{ duration: 0.16, ease: 'easeOut' }}
-              className="absolute bottom-full left-0 mb-3 w-72 rounded-2xl border border-stone-200/90 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md p-2 shadow-2xl z-30"
+              className="absolute bottom-full left-0 mb-2.5 w-72 rounded-2xl border border-stone-200/90 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md p-2 shadow-2xl z-30 text-left"
               role="menu"
               aria-label="Aksi Cepat & Layanan Kampus"
             >
               <div className="px-2 pb-1.5 mb-1 border-b border-stone-100 dark:border-slate-800 flex items-center justify-between">
                 <span className="text-xs font-semibold text-stone-700 dark:text-stone-300">Layanan & Fitur</span>
-                <span className="text-[10px] font-medium text-teal-700 dark:text-teal-300 bg-teal-50 dark:bg-teal-950/80 px-2 py-0.5 rounded-full border border-teal-200/60 dark:border-teal-800/60">
-                  Proses berkas
+                <span className="text-[10px] text-stone-400 dark:text-slate-500">
+                  RuangTenang
                 </span>
               </div>
 
@@ -526,9 +722,9 @@ export function ChatComposer({
               </div>
 
               {/* Privacy Footer Reassurance */}
-              <div className="mt-1.5 pt-1.5 border-t border-stone-100 dark:border-slate-800/80 flex items-center gap-1.5 px-2 text-[10.5px] text-stone-500 dark:text-slate-400">
+              <div className="mt-1.5 pt-1.5 border-t border-stone-100 dark:border-slate-800/80 flex items-center gap-1.5 px-2 text-[10px] text-stone-400 dark:text-slate-500">
                 <ShieldCheck className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 shrink-0" />
-                <span>Persetujuan AI diperlukan sebelum unggah. Berkas diproses server; OCR gambar atau hasil pindai dapat memakai provider cloud yang dikonfigurasi.</span>
+                <span>Lampiran diproses aman setelah persetujuan AI aktif.</span>
               </div>
             </motion.div>
           )}
@@ -550,7 +746,7 @@ export function ChatComposer({
             {attachments.map(att => (
               <div
                 key={att.id}
-                className="relative flex items-center gap-2 p-1.5 pr-2 bg-white dark:bg-slate-900 border border-stone-200/90 dark:border-slate-800 rounded-xl shadow-xs text-xs"
+                className="relative flex items-center gap-2 p-1.5 pr-2 bg-white dark:bg-slate-900 border border-stone-200/90 dark:border-slate-800 rounded-xl shadow-xs text-xs text-left"
               >
                 {att.previewUrl ? (
                   <div className="w-7 h-7 rounded-lg shrink-0 overflow-hidden bg-stone-100 dark:bg-slate-800">
@@ -583,13 +779,70 @@ export function ChatComposer({
           </div>
         )}
 
-        {/* 4. Floating Island Input Bar with Restrained Borders */}
-        <div className={`relative w-full ${isEmptyState ? 'max-w-4xl' : 'max-w-3xl'} mx-auto`}>
-          {/* Input Container */}
-          <div className={`relative flex items-center gap-1 sm:gap-1.5 rounded-[1.6rem] bg-white/95 dark:bg-[#0f141f]/95 border border-stone-200/90 dark:border-slate-700/80 shadow-[0_10px_34px_-16px_rgba(15,23,42,0.24)] dark:shadow-[0_12px_36px_-18px_rgba(0,0,0,0.72)] transition-all duration-150 focus-within:border-teal-500/80 dark:focus-within:border-teal-500/80 focus-within:ring-2 focus-within:ring-teal-500/10 ${isEmptyState ? 'p-2.5 sm:p-3' : 'p-1.5 sm:p-2'}`}>
+        {/* Burnout Radar & Adaptive Study Rhythm Co-Pilot */}
+        {!isCentered && (
+          <BurnoutRadarBar
+            userTurnCount={userTurnCount}
+            currentInputText={input}
+            activeTopicTitle={activeArtifactTitle || activeProjectName}
+            onOpenBreathing={() => onOpenPlugin?.('breathing')}
+            onSelectTaskPrompt={(promptText) => {
+              setInput(promptText);
+              setTimeout(() => textareaRef.current?.focus(), 20);
+            }}
+            onRunDeepResearch={onRunDeepResearch ? (topic) => void onRunDeepResearch(topic) : undefined}
+            isRunningDeepResearch={isRunningDeepResearch}
+          />
+        )}
 
-            {/* Left Actions: Plus (+) & Mic */}
-            <div className="flex items-center gap-0.5 shrink-0">
+        {/* 4. Floating Pill Input Bar (ChatGPT / Gemini style) */}
+        <div className="relative w-full">
+          {/* Context Mentions (@) Popover */}
+          <ContextMentionPopover
+            isOpen={Boolean(activeMentionState) && filteredMentions.length > 0}
+            query={activeMentionState?.query || ''}
+            items={availableMentions}
+            selectedIndex={selectedMentionIndex}
+            onSelectIndex={setSelectedMentionIndex}
+            onSelectMention={handleSelectMention}
+          />
+
+          {/* Attached @Context Mentions Chips */}
+          <AttachedMentionsBar
+            mentions={attachedMentions}
+            onRemove={id => setAttachedMentions(prev => prev.filter(m => m.id !== id))}
+          />
+
+          {quotedSnippet && (
+            <div className="mb-1.5 flex items-start justify-between gap-2 rounded-2xl bg-stone-100/90 dark:bg-slate-800/80 px-3.5 py-2 text-xs text-stone-600 dark:text-slate-300 border border-stone-200/80 dark:border-slate-700/70 text-left">
+              <div className="min-w-0 flex-1">
+                <div className="text-[10.5px] font-semibold text-teal-700 dark:text-teal-400 mb-0.5">
+                  Menanyakan kutipan pesan
+                </div>
+                <p className="line-clamp-2 italic text-stone-600 dark:text-slate-300 leading-snug">
+                  “{quotedSnippet}”
+                </p>
+              </div>
+              {onClearQuote && (
+                <button
+                  type="button"
+                  onClick={onClearQuote}
+                  className="rounded-full p-1 text-stone-400 hover:bg-stone-200/80 hover:text-stone-700 dark:hover:bg-slate-700 dark:hover:text-slate-200 transition-colors cursor-pointer shrink-0"
+                  aria-label="Hapus kutipan"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          )}
+          <div className={`relative flex items-end gap-1.5 px-2.5 py-2 rounded-3xl bg-white/95 dark:bg-[#111622]/95 border border-stone-200/80 dark:border-slate-800/90 transition-all duration-150 focus-within:border-teal-500/70 dark:focus-within:border-teal-500/70 focus-within:ring-2 focus-within:ring-teal-500/15 ${
+            isCentered
+              ? 'shadow-[0_14px_40px_-18px_rgba(15,23,42,0.12)] dark:shadow-[0_18px_48px_-18px_rgba(0,0,0,0.65)]'
+              : 'shadow-subtle dark:shadow-subtle-dark'
+          }`}>
+
+            {/* Left Actions: Plus (+) & Frontier Toggles */}
+            <div className="flex items-center gap-1 shrink-0 pb-0.5">
               <motion.button
                 type="button"
                 whileTap={{ scale: 0.94 }}
@@ -597,125 +850,180 @@ export function ChatComposer({
                   setShowActionMenu(!showActionMenu);
                   setShowCommands(false);
                 }}
-                className={`min-w-11 min-h-11 sm:min-w-10 sm:min-h-10 lg:min-w-9.5 lg:min-h-9.5 rounded-xl flex items-center justify-center text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-slate-800 shrink-0 transition-colors cursor-pointer ${
+                className={`w-9 h-9 rounded-full flex items-center justify-center text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-slate-800 shrink-0 transition-colors cursor-pointer ${
                   showActionMenu ? 'rotate-45 text-teal-700 dark:text-teal-300 bg-teal-50 dark:bg-teal-950/60' : ''
                 }`}
                 aria-label="Buka Menu Bantuan & Fitur"
-                title="Layanan & Bantuan (+)"
+                title="Lampirkan berkas atau buka layanan (+)"
                 aria-expanded={showActionMenu}
               >
-                <Plus className="w-4 h-4 transition-transform duration-200" />
+                <Plus className="w-4.5 h-4.5 transition-transform duration-200" />
               </motion.button>
 
-              {!isEmptyState && <motion.button
-                type="button"
-                whileTap={{ scale: 0.94 }}
-                onClick={toggleListening}
-                className={`min-w-11 min-h-11 sm:min-w-10 sm:min-h-10 lg:min-w-9.5 lg:min-h-9.5 rounded-xl flex items-center justify-center shrink-0 transition-all cursor-pointer ${
-                  isListening
-                    ? 'bg-rose-500 text-white animate-pulse shadow-3xs'
-                    : 'text-stone-400 hover:text-teal-600 dark:hover:text-teal-400 hover:bg-stone-100 dark:hover:bg-slate-800'
-                }`}
-                aria-label={isListening ? "Hentikan rekam suara" : "Input suara (Speech-to-Text)"}
-                title={isListening ? "Hentikan rekam suara (Sedang mendengarkan...)" : "Bicara (Input Suara Speech-to-Text)"}
-                aria-pressed={isListening}
-              >
-                {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-              </motion.button>}
+              {onToggleWebSearch && (
+                <button
+                  type="button"
+                  onClick={onToggleWebSearch}
+                  aria-pressed={webSearchEnabled}
+                  title={webSearchEnabled ? 'Pencarian Web Real-time Aktif (Klik untuk matikan)' : 'Aktifkan Pencarian Web Real-time & Sitasi'}
+                  className={`h-8 px-2.5 rounded-full inline-flex items-center gap-1 text-xs font-medium transition-colors cursor-pointer ${
+                    webSearchEnabled
+                      ? 'bg-teal-50 dark:bg-teal-950/70 text-teal-700 dark:text-teal-300 border border-teal-300/70 dark:border-teal-800'
+                      : 'text-stone-500 dark:text-slate-400 hover:text-stone-800 dark:hover:text-slate-200 hover:bg-stone-100 dark:hover:bg-slate-800'
+                  }`}
+                >
+                  <Globe className="w-3.5 h-3.5 shrink-0" />
+                  <span className="hidden sm:inline">Cari Web</span>
+                </button>
+              )}
+
+              {onToggleThinkingDepth && (
+                <button
+                  type="button"
+                  onClick={onToggleThinkingDepth}
+                  aria-pressed={thinkingDepth === 'deep'}
+                  title={thinkingDepth === 'deep' ? 'Penalaran Mendalam (Extended Thinking) Aktif' : 'Aktifkan Penalaran Mendalam (Extended Thinking)'}
+                  className={`h-8 px-2.5 rounded-full inline-flex items-center gap-1 text-xs font-medium transition-colors cursor-pointer ${
+                    thinkingDepth === 'deep'
+                      ? 'bg-teal-50 dark:bg-teal-950/70 text-teal-700 dark:text-teal-300 border border-teal-300/70 dark:border-teal-800'
+                      : 'text-stone-500 dark:text-slate-400 hover:text-stone-800 dark:hover:text-slate-200 hover:bg-stone-100 dark:hover:bg-slate-800'
+                  }`}
+                >
+                  <Brain className="w-3.5 h-3.5 shrink-0" />
+                  <span className="hidden sm:inline">Berpikir</span>
+                </button>
+              )}
+
+              {onOpenProjects && (
+                <button
+                  type="button"
+                  onClick={onOpenProjects}
+                  title={activeProjectName ? `Proyek Aktif: ${activeProjectName}` : 'Pilih Proyek & Custom Instructions'}
+                  className={`hidden md:inline-flex h-8 px-2.5 rounded-full items-center gap-1 text-xs font-medium transition-colors cursor-pointer ${
+                    activeProjectName
+                      ? 'bg-stone-100 dark:bg-slate-800 text-stone-800 dark:text-slate-200 border border-stone-300/70 dark:border-slate-700'
+                      : 'text-stone-500 dark:text-slate-400 hover:text-stone-800 dark:hover:text-slate-200 hover:bg-stone-100 dark:hover:bg-slate-800'
+                  }`}
+                >
+                  <FolderKanban className="w-3.5 h-3.5 shrink-0 text-teal-600 dark:text-teal-400" />
+                  <span className="truncate max-w-[100px]">{activeProjectName || 'Proyek'}</span>
+                </button>
+              )}
             </div>
 
-            {/* Textarea Input - Font size 16px on mobile prevents iOS Safari forced viewport auto-zoom */}
+            {/* Textarea Input */}
             <textarea
               ref={textareaRef}
               value={input}
               onFocus={() => {
-                setTimeout(() => {
-                  composerContainerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-                }, 120);
+                if (!isCentered) {
+                  setTimeout(() => {
+                    composerContainerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+                  }, 120);
+                }
               }}
               onChange={e => {
                 setInput(e.target.value);
+                setCursorPosition(e.target.selectionStart || e.target.value.length);
               }}
+              onClick={e => setCursorPosition((e.target as HTMLTextAreaElement).selectionStart || 0)}
+              onKeyUp={e => setCursorPosition((e.target as HTMLTextAreaElement).selectionStart || 0)}
               onKeyDown={handleKeyDown}
               placeholder={
                 quotaExceeded
                   ? "Kuota harian telah digunakan. Istirahatlah sejenak dan kembali besok."
                   : isListening
                     ? "Mendengarkan ucapan Anda (Bahasa Indonesia)..."
-                    : isEmptyState
-                      ? "Tulis ceritamu..."
-                      : "Ketik apa yang kamu rasakan..."
+                    : webSearchEnabled
+                      ? "Ketik /riset, @konteks, atau tanyakan apa saja untuk ditelusuri..."
+                      : "Ketik / untuk pintas (/riset, /diagram) atau @ untuk konteks..."
               }
-              className={`min-w-0 flex-1 bg-transparent text-[16px] sm:text-[14px] text-stone-850 dark:text-stone-100 placeholder:text-stone-500 dark:placeholder:text-slate-400 focus:outline-none resize-none py-2 px-1.5 leading-relaxed overflow-y-auto custom-scrollbar disabled:opacity-60 disabled:cursor-not-allowed ${isEmptyState ? 'min-h-16' : 'min-h-[38px]'}`}
+              className="flex-1 bg-transparent text-[16px] sm:text-[14.5px] text-stone-850 dark:text-stone-100 placeholder:text-stone-400 dark:placeholder:text-slate-500 focus:outline-none resize-none min-h-[40px] py-2 px-1 leading-relaxed overflow-y-auto custom-scrollbar disabled:opacity-60 disabled:cursor-not-allowed"
               rows={1}
-              disabled={isTyping || quotaExceeded}
+              disabled={isTyping || quotaExceeded || isRunningDeepResearch}
               aria-label="Tulis pesan untuk asisten AI"
             />
 
-            {isEmptyState && (
+            {/* Right Actions: Mic, Live Voice Mode & Circular Send/Stop */}
+            <div className="flex items-center gap-1 shrink-0 pb-0.5">
               <motion.button
                 type="button"
                 whileTap={{ scale: 0.94 }}
                 onClick={toggleListening}
-                className={`min-w-10 min-h-10 rounded-full flex items-center justify-center shrink-0 transition-all cursor-pointer ${isListening
-                  ? 'bg-rose-500 text-white animate-pulse shadow-sm'
-                  : 'text-stone-400 hover:text-teal-700 dark:hover:text-teal-300 hover:bg-stone-100 dark:hover:bg-slate-800'
+                className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 transition-all cursor-pointer ${
+                  isListening
+                    ? 'bg-rose-500 text-white animate-pulse shadow-3xs'
+                    : 'text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-slate-800'
                 }`}
-                aria-label={isListening ? 'Hentikan rekam suara' : 'Input suara (Speech-to-Text)'}
-                title={isListening ? 'Hentikan rekam suara (Sedang mendengarkan...)' : 'Bicara (Input Suara Speech-to-Text)'}
+                aria-label={isListening ? "Hentikan rekam suara" : "Input suara (Speech-to-Text)"}
+                title={isListening ? "Hentikan rekam suara" : "Input suara"}
                 aria-pressed={isListening}
               >
-                {isListening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
               </motion.button>
-            )}
 
-            {/* Primary Conversational Send / Stop Action Button */}
-            <AnimatePresence mode="wait" initial={false}>
-              {isTyping ? (
+              {onOpenLiveVoice && !hasContent && !isTyping && (
                 <motion.button
-                  key="stop-btn"
                   type="button"
-                  initial={{ scale: 0.85, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  exit={{ scale: 0.85, opacity: 0 }}
-                  transition={{ duration: 0.12 }}
-                  onClick={onStop}
-                  className="min-w-11 min-h-11 sm:min-w-10 sm:min-h-10 lg:min-w-9.5 lg:min-h-9.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center shrink-0 cursor-pointer shadow-3xs"
-                  aria-label="Hentikan Jawaban AI"
-                  title="Hentikan respons AI"
+                  whileTap={{ scale: 0.94 }}
+                  onClick={onOpenLiveVoice}
+                  className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 text-teal-700 dark:text-teal-300 bg-teal-50/90 hover:bg-teal-100 dark:bg-teal-950/70 dark:hover:bg-teal-900/70 border border-teal-200/70 dark:border-teal-800/70 transition-colors cursor-pointer"
+                  aria-label="Mulai Mode Percakapan Suara Dua Arah (Live Voice)"
+                  title="Mode Suara Langsung Dua Arah (Live Voice)"
                 >
-                  <Square className="w-3.5 h-3.5 fill-current" />
-                </motion.button>
-              ) : (
-                <motion.button
-                  key="send-btn"
-                  type="button"
-                  initial={{ scale: 0.85, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  exit={{ scale: 0.85, opacity: 0 }}
-                  transition={{ duration: 0.12 }}
-                  whileTap={hasContent ? { scale: 0.94 } : undefined}
-                  onClick={handleSend}
-                  disabled={!hasContent}
-                  className={`min-w-11 min-h-11 sm:min-w-10 sm:min-h-10 lg:min-w-9.5 lg:min-h-9.5 ${isEmptyState ? 'rounded-full' : 'rounded-xl'} flex items-center justify-center shrink-0 transition-all duration-120 ${
-                    hasContent
-                      ? 'bg-teal-700 hover:bg-teal-800 text-white shadow-3xs cursor-pointer'
-                      : 'text-stone-300 dark:text-slate-600 bg-transparent cursor-not-allowed'
-                  }`}
-                  aria-label="Kirim Pesan"
-                  title="Kirim pesan (Enter)"
-                >
-                  {isEmptyState ? <ArrowUp className="h-4 w-4" /> : <Send className="w-3.5 h-3.5 ml-0.5" />}
+                  <Radio className="w-4 h-4" />
                 </motion.button>
               )}
-            </AnimatePresence>
+
+              <AnimatePresence mode="wait" initial={false}>
+                {isTyping ? (
+                  <motion.button
+                    key="stop-btn"
+                    type="button"
+                    initial={{ scale: 0.85, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 0.85, opacity: 0 }}
+                    transition={{ duration: 0.12 }}
+                    onClick={onStop}
+                    className="w-9 h-9 rounded-full bg-stone-900 dark:bg-white text-white dark:text-stone-900 flex items-center justify-center shrink-0 cursor-pointer shadow-xs"
+                    aria-label="Hentikan Jawaban AI"
+                    title="Hentikan respons AI"
+                  >
+                    <Square className="w-3.5 h-3.5 fill-current" />
+                  </motion.button>
+                ) : (
+                  <motion.button
+                    key="send-btn"
+                    type="button"
+                    initial={{ scale: 0.85, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 0.85, opacity: 0 }}
+                    transition={{ duration: 0.12 }}
+                    whileTap={hasContent ? { scale: 0.94 } : undefined}
+                    onClick={handleSend}
+                    disabled={!hasContent}
+                    className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 transition-all duration-120 ${
+                      hasContent
+                        ? 'bg-teal-700 hover:bg-teal-800 dark:bg-teal-600 dark:hover:bg-teal-500 text-white shadow-xs cursor-pointer'
+                        : 'text-stone-300 dark:text-slate-600 bg-stone-100 dark:bg-slate-800/70 cursor-not-allowed'
+                    }`}
+                    aria-label="Kirim Pesan"
+                    title="Kirim pesan (Enter)"
+                  >
+                    <ArrowUp className="w-4 h-4 stroke-[2.25]" />
+                  </motion.button>
+                )}
+              </AnimatePresence>
+            </div>
           </div>
         </div>
 
-        {/* Reassurance Caption */}
-        <p className="text-[11px] text-stone-400 dark:text-slate-500 text-center mt-1.5 select-none">
-          Persetujuan diminta sebelum pesan diproses oleh AI
-        </p>
+        {/* Quiet 1-line caption only when docked */}
+        {!isCentered && (
+          <p className="text-[11px] text-stone-400 dark:text-slate-500 text-center mt-1.5 select-none">
+            RuangTenang adalah pendamping refleksi AI, bukan pengganti diagnosis klinis.
+          </p>
+        )}
       </div>
     </div>
   );

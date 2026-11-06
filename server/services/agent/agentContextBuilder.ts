@@ -9,7 +9,6 @@ export interface AgentContextInput {
   recentResults: AgentToolResult[];
   latestUserFeedback?: string;
   workspaceMemories?: Array<{ category: string; content: string; provenance?: string | null }>;
-  userAgentProfile?: { aboutMe?: string; responseInstructions?: string } | null;
 }
 
 export function buildAgentTurnContext(input: AgentContextInput): string {
@@ -54,7 +53,6 @@ export function buildAgentTurnContext(input: AgentContextInput): string {
     selectedWorkspaceFileIds: task.snapshot?.contextSourceIds || [],
     savedArtifactId: task.snapshot?.artifactId || null,
     workspaceInstructions: task.snapshot?.workspaceInstructions || '',
-    userAgentProfile: input.userAgentProfile || undefined,
     workspaceMemories: input.workspaceMemories || [],
     userRevisionFeedback: input.latestUserFeedback || '',
     recentToolResults: relevantResults

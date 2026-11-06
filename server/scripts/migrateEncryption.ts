@@ -1,7 +1,5 @@
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../database.js';
 import { encryptionService } from '../services/encryptionService.js';
-
-const prisma = new PrismaClient();
 
 async function isEncrypted(text: string | null): Promise<boolean> {
   if (!text) return true; // null/empty is implicitly "safe"

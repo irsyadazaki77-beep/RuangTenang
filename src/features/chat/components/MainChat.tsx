@@ -23,6 +23,7 @@ import { ErrorState } from '../../../components/common/ErrorState';
 import { apiClient } from '../../../lib/apiClient';
 import { ChatSearchBar } from './ChatSearchBar';
 import { RhythmicTypingIndicator } from '../../../components/ui/RhythmicTypingIndicator';
+import { TextSelectionToolbar } from '../../../components/common/TextSelectionToolbar';
 import { detectAcademicDistress } from '../../workspace/utils/distressDetector';
 import { dispatchAuroraActivity } from '../../../lib/auroraEvents';
 import { readGuestAiConsent } from '../../../lib/guestAiConsent';
@@ -33,7 +34,6 @@ import {
   getGuestChats
 } from '../../../lib/guestChatStorage';
 
-// Import our cohesive, feature-scoped custom hooks
 import { useUpcomingAppointment } from '../hooks/useUpcomingAppointment';
 import { usePrivacyShield } from '../hooks/usePrivacyShield';
 import { useChatSearch } from '../hooks/useChatSearch';
@@ -41,6 +41,16 @@ import { useChatBookmarks } from '../hooks/useChatBookmarks';
 import { useChatMemory } from '../hooks/useChatMemory';
 import { useChatPlugins } from '../hooks/useChatPlugins';
 import { useChatScroll } from '../hooks/useChatScroll';
+import { LiveVoiceModal } from './LiveVoiceModal';
+import {
+  QuickArtifactCanvasDrawer,
+  QuickCanvasArtifact,
+  extractQuickArtifactFromMessage
+} from './QuickArtifactCanvasDrawer';
+import { ProjectsModal } from '../../projects/ProjectsModal';
+import { useProjects, buildProjectInstructionsBlock } from '../../projects/projectStore';
+import type { FileSourceReference } from '../../../../shared/contracts/files';
+import type { ReasoningEventData } from '../types';
 
 interface MainChatProps {
   user: UserSession | null;
@@ -70,9 +80,7 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
   const [responseStyle, _setResponseStyle] = useState<ResponseStyle>(() => safeLocalStorage.getItem('responseStyle') as ResponseStyle || 'Seimbang');
   const [aiModel, setAiModel] = useState<string>(() => {
     const saved = safeLocalStorage.getItem('aiModel');
-    return saved?.startsWith('ollama-') || saved === 'auto'
-      ? saved
-      : migrateLegacyTenangModelToProfile(saved);
+    return migrateLegacyTenangModelToProfile(saved);
   });
   const [isTemporary, setIsTemporary] = useState(false);
 
@@ -87,12 +95,13 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
   useEffect(() => { safeLocalStorage.setItem('responseStyle', responseStyle); }, [responseStyle]);
   useEffect(() => { if (aiModel) safeLocalStorage.setItem('aiModel', aiModel); }, [aiModel]);
   useEffect(() => {
-    if (!isTenangProfile(aiModel) && aiModel !== 'auto' && !aiModel.startsWith('ollama-')) {
+    if (!isTenangProfile(aiModel)) {
       setAiModel(migrateLegacyTenangModelToProfile(aiModel));
     }
   }, [aiModel]);
 
   const [followUps, setFollowUps] = useState<string[]>([]);
+  const [quotedSnippet, setQuotedSnippet] = useState<string | null>(null);
   const [streamingMessage, setStreamingMessage] = useState<Message | null>(null);
   const pendingConsentSendRef = React.useRef<{
     content: string;
@@ -105,12 +114,28 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
 
   useEffect(() => {
     pendingConsentSendRef.current = null;
+    setQuotedSnippet(null);
   }, [chatId, user?.id]);
 
   // --- Modal state orchestrations ---
   const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false);
   const [isBranchModalOpen, setIsBranchModalOpen] = useState(false);
   const [branchTarget, setBranchTarget] = useState<{ messageId: string; contentSnippet: string } | null>(null);
+  const [webSearchEnabled, setWebSearchEnabled] = useState<boolean>(() => safeLocalStorage.getItem('ruang_web_search_enabled') === 'true');
+  const [thinkingDepth, setThinkingDepth] = useState<'auto' | 'fast' | 'deep'>(() => (safeLocalStorage.getItem('ruang_thinking_depth') as 'auto' | 'fast' | 'deep') || 'auto');
+  const [isLiveVoiceOpen, setIsLiveVoiceOpen] = useState(false);
+  const [isProjectsModalOpen, setIsProjectsModalOpen] = useState(false);
+  const [activeCanvasArtifact, setActiveCanvasArtifact] = useState<QuickCanvasArtifact | null>(null);
+  const [isRunningDeepResearch, setIsRunningDeepResearch] = useState(false);
+  const { activeProject } = useProjects();
+
+  useEffect(() => {
+    safeLocalStorage.setItem('ruang_web_search_enabled', String(webSearchEnabled));
+  }, [webSearchEnabled]);
+
+  useEffect(() => {
+    safeLocalStorage.setItem('ruang_thinking_depth', thinkingDepth);
+  }, [thinkingDepth]);
 
   // --- Custom Hook consumption to maintain pristine segregation of concerns ---
   const { upcomingAppointment, isReminderDismissed, setIsReminderDismissed } = useUpcomingAppointment(user);
@@ -123,7 +148,6 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
     messages, setMessages, isLoadingMessages, fetchMessagesError,
     nextCursor, isLoadingMore, fetchMessages, loadedChatIdRef
   } = useChatHistory(chatId);
-  const isEmptyConversation = !isLoadingMessages && !fetchMessagesError && messages.length === 0;
 
   const { isTyping, streamMessage, abortStream } = useChatStreaming();
 
@@ -312,12 +336,20 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
     activeRequestRetryableRef.current = Boolean(content.trim()) && !pluginResult && (!attachments || attachments.length === 0);
     let assistantMsgId = `assistant_${Date.now()}`;
     let routingMeta: { modelUsed?: string; modelName?: string; routingMode?: 'manual' | 'auto'; routingReason?: string; fallbackFrom?: string; fallbackFromName?: string } = {};
+    let latestSources: FileSourceReference[] = [];
+    let latestReasoning: ReasoningEventData | undefined;
     dispatchAuroraActivity({
       mode: 'RUANG_TENANG',
       phase: 'preparing',
       chatId: activeChatId,
     });
-    setStreamingMessage({ id: assistantMsgId, role: 'assistant', content: '' });
+    setStreamingMessage({
+      id: assistantMsgId,
+      role: 'assistant',
+      content: '',
+      thinkingDepth,
+      webSearchUsed: webSearchEnabled
+    });
 
     const clientHistory = isGuest && messages.length > 0
       ? messages.map(m => ({ role: m.role, content: m.content }))
@@ -333,6 +365,10 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
         chatMode,
         responseStyle,
         aiModel,
+        webSearchEnabled,
+        thinkingDepth,
+        projectId: activeProject?.id || null,
+        projectInstructions: buildProjectInstructionsBlock(activeProject),
         history: clientHistory,
         attachments: attachments ? attachments.map(a => ({
           id: a.serverAttachmentId || a.id,
@@ -346,9 +382,35 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
         onRoutingMetadata: (data) => {
           routingMeta = data;
         },
+        onSources: (sources) => {
+          latestSources = sources;
+          setStreamingMessage(prev => prev ? { ...prev, sources } : prev);
+        },
+        onReasoning: (data) => {
+          latestReasoning = data;
+          setStreamingMessage(prev =>
+            prev
+              ? {
+                  ...prev,
+                  reasoningSteps: data.steps,
+                  thinkingDurationMs: data.durationMs,
+                  thinkingDepth: data.thinkingDepth,
+                  webSearchUsed: data.webSearchUsed
+                }
+              : prev
+          );
+        },
         onMessageStart: (msgId) => {
           assistantMsgId = msgId;
-          setStreamingMessage(prev => ({ id: msgId, role: 'assistant', content: prev?.content || '' }));
+          setStreamingMessage(prev => ({
+            id: msgId,
+            role: 'assistant',
+            content: prev?.content || '',
+            reasoningSteps: prev?.reasoningSteps,
+            thinkingDurationMs: prev?.thinkingDurationMs,
+            thinkingDepth: prev?.thinkingDepth || thinkingDepth,
+            webSearchUsed: prev?.webSearchUsed ?? webSearchEnabled
+          }));
         },
         onChunk: (text) => {
           streamedTextRef.current += text;
@@ -394,6 +456,12 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
               content: text,
               createdAt: new Date().toISOString(),
               ...routingMeta,
+              sources: latestSources.length > 0 ? latestSources : undefined,
+              reasoningSteps: latestReasoning?.steps,
+              thinkingDurationMs: latestReasoning?.durationMs,
+              thinkingDepth: latestReasoning?.thinkingDepth || thinkingDepth,
+              webSearchUsed: latestReasoning?.webSearchUsed ?? webSearchEnabled,
+              projectId: activeProject?.id || null,
               plugin: distressCheck?.isDistressed ? 'burnout' : undefined,
               pluginResult: distressCheck?.isDistressed
                 ? {
@@ -407,6 +475,13 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
             if (shouldPersistLocally && activeChatId) {
               appendGuestMessage(activeChatId, assistantMessage);
               setChats(getGuestChats());
+            }
+            const explicitArtifact =
+              (text.includes('<artifact') || text.includes(':::artifact'))
+                ? extractQuickArtifactFromMessage(text, assistantMsgId)
+                : null;
+            if (explicitArtifact) {
+              setActiveCanvasArtifact(explicitArtifact);
             }
           }
           streamedTextRef.current = '';
@@ -479,7 +554,7 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
         }
       }
     );
-  }, [chatId, isTemporary, chatMode, responseStyle, aiModel, user, messages, streamMessage, navigate, setChats, showToast, setMessages, loadedChatIdRef, onRequestAiConsent]);
+  }, [chatId, isTemporary, chatMode, responseStyle, aiModel, webSearchEnabled, thinkingDepth, activeProject, user, messages, streamMessage, navigate, setChats, showToast, setMessages, loadedChatIdRef, onRequestAiConsent]);
 
   const handleSend = useCallback((content: string, pluginResult?: string, attachments?: Attachment[], preserveUserMessage = false) => {
     if (aiConsentAllowed !== true) {
@@ -727,26 +802,123 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
       return;
     }
 
+    if (cleanCmd.startsWith('/riset')) {
+      const topic = command.trim().replace(/^\/riset\s*/i, '').trim() || activeCanvasArtifact?.title || currentChat?.title || 'Kajian Literatur & Metodologi Skripsi';
+      void handleRunDeepResearch(topic);
+      return;
+    }
+
     handleSend(command);
   };
 
-  const renderChatComposer = (isEmptyState = false) => (
-    <ChatComposer
-      onSend={handleSend}
-      isTyping={isTyping}
-      isTemporary={isTemporary}
-      draftOwnerId={user?.id || 'guest'}
-      aiConsentAllowed={aiConsentAllowed}
-      aiConsentPromptOpen={aiConsentPromptOpen}
-      onRequestAiConsent={() => onRequestAiConsent?.()}
-      onStop={handleStopResponse}
-      chatId={chatId}
-      onCommand={handleCommand}
-      onOpenPlugin={handleOpenPlugin}
-      quotaExceeded={quotaExceededInfo?.isExceeded}
-      isEmptyState={isEmptyState}
-    />
-  );
+  const handleRunDeepResearch = useCallback(async (rawTopic: string) => {
+    const topic = rawTopic.trim() || activeCanvasArtifact?.title || currentChat?.title || 'Kajian Literatur & Metodologi Skripsi';
+    if (isTyping || isRunningDeepResearch) return;
+    if (aiConsentAllowed !== true) {
+      onRequestAiConsent?.();
+      return;
+    }
+
+    setIsRunningDeepResearch(true);
+    const nowIso = new Date().toISOString();
+    setMessages(prev => [
+      ...prev,
+      {
+        id: `user_dr_${Date.now()}`,
+        role: 'user',
+        content: `/riset ${topic}`,
+        createdAt: nowIso,
+      },
+    ]);
+    showToast(`Menjalankan Agen Deep Research: "${topic.slice(0, 48)}"…`, 'info');
+
+    try {
+      const response = await apiClient.fetchJson<{
+        success: boolean;
+        data: {
+          topic: string;
+          subQuestions: string[];
+          sources: Array<{ id: string; title: string; url: string; snippet: string }>;
+          reportMarkdown: string;
+        };
+      }>('/api/v1/ai/deep-research', {
+        method: 'POST',
+        body: JSON.stringify({
+          topic,
+          contextText: activeCanvasArtifact?.content?.slice(0, 4000) || '',
+        }),
+      });
+
+      if (response.success && response.data?.reportMarkdown) {
+        const { reportMarkdown, subQuestions, sources } = response.data;
+        const artId = `canvas_dr_${Date.now()}`;
+        const reportTitle = `Laporan Deep Research: ${topic.slice(0, 64)}`;
+        setActiveCanvasArtifact({
+          id: artId,
+          title: reportTitle,
+          content: reportMarkdown,
+          type: 'document',
+        });
+
+        const assistantSummary = [
+          `### Laporan Deep Research Selesai Disusun`,
+          `Topik: **${topic}**`,
+          '',
+          `**Sub-Pertanyaan Riset yang Ditelusuri:**`,
+          ...subQuestions.map((q, i) => `${i + 1}. ${q}`),
+          '',
+          `Laporan lengkap (Bab I–IV, Matriks Sintesis Literatur, Diagram Metodologi Mermaid, Tabel Statistik Deskriptif, dan Daftar Pustaka APA 7th) telah dibuka di panel **Live Canvas**. Anda dapat beralih ke tab **Visual** untuk grafik Recharts & diagram Mermaid, tab **Audio 2 Host** untuk berdiskusi bersama Dr. Rina & Raka, atau mengunduh naskah ke **.DOCX**, **.PDF**, dan **.BibTeX**.`,
+        ].join('\n');
+
+        setMessages(prev => [
+          ...prev,
+          {
+            id: `assistant_dr_${Date.now()}`,
+            role: 'assistant',
+            content: assistantSummary,
+            createdAt: new Date().toISOString(),
+            webSearchUsed: true,
+            thinkingDepth: 'deep',
+            reasoningSteps: [
+              {
+                id: 'dr-step-1',
+                label: `Merumuskan ${subQuestions.length} sub-pertanyaan riset dari topik "${topic}"`,
+                status: 'completed',
+                category: 'reasoning',
+              },
+              {
+                id: 'dr-step-2',
+                label: `Menelusuri dan memverifikasi ${sources.length} sumber literatur ilmiah`,
+                status: 'completed',
+                category: 'search',
+              },
+              {
+                id: 'dr-step-3',
+                label: 'Menyintesis Matriks Literatur, Bagan Metodologi Mermaid, dan Naskah Akademik ke Live Canvas',
+                status: 'completed',
+                category: 'synthesis',
+              },
+            ],
+            sources: sources.map((s, idx) => ({
+              citationId: `WEB-${idx + 1}`,
+              documentId: s.id || `web-${idx + 1}`,
+              filename: s.title,
+              url: s.url,
+              sourceRef: s.url || s.title,
+              snippet: s.snippet,
+            })),
+          },
+        ]);
+        showToast('Laporan Deep Research siap di Live Canvas!', 'success');
+      } else {
+        showToast('Gagal menyusun laporan Deep Research. Silakan coba lagi.', 'error');
+      }
+    } catch {
+      showToast('Layanan Deep Research sedang sibuk. Silakan coba lagi.', 'error');
+    } finally {
+      setIsRunningDeepResearch(false);
+    }
+  }, [activeCanvasArtifact, aiConsentAllowed, currentChat?.title, isRunningDeepResearch, isTyping, onRequestAiConsent, setMessages, showToast]);
 
   return (
     <>
@@ -803,11 +975,32 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
         currentChatTitle={currentChat?.title}
       />
 
+      <LiveVoiceModal
+        isOpen={isLiveVoiceOpen}
+        onClose={() => setIsLiveVoiceOpen(false)}
+        workspaceMode={false}
+        projectInstructions={buildProjectInstructionsBlock(activeProject)}
+        onSyncTurnToChat={(userSpoken, aiSpoken) => {
+          const now = new Date().toISOString();
+          setMessages(prev => [
+            ...prev,
+            { id: `voice_u_${Date.now()}`, role: 'user', content: userSpoken, createdAt: now },
+            { id: `voice_a_${Date.now() + 1}`, role: 'assistant', content: aiSpoken, createdAt: now }
+          ]);
+        }}
+      />
+
+      <ProjectsModal
+        isOpen={isProjectsModalOpen}
+        onClose={() => setIsProjectsModalOpen(false)}
+        currentChatId={chatId}
+      />
+
       <div
-        className="flex-1 flex flex-col h-full min-h-0 bg-transparent relative min-w-0 overflow-hidden"
+        className="flex-1 flex flex-row h-full min-h-0 bg-transparent relative min-w-0 overflow-hidden"
         style={viewportHeight ? { height: `${viewportHeight}px`, maxHeight: `${viewportHeight}px` } : undefined}
       >
-        <div className="relative z-10 flex flex-col flex-1 h-full min-h-0 overflow-hidden bg-transparent">
+        <div className="relative z-10 flex flex-col flex-1 h-full min-h-0 min-w-0 overflow-hidden bg-transparent">
           <ChatHeader
             user={user}
             chatId={chatId}
@@ -831,6 +1024,22 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
             hasMessages={messages.length > 0}
             isPrivacyMode={isPrivacyMode}
             onTogglePrivacy={handleTogglePrivacy}
+            activeProjectName={activeProject?.name || null}
+            onOpenProjects={() => setIsProjectsModalOpen(true)}
+            hasActiveCanvas={Boolean(activeCanvasArtifact)}
+            onToggleCanvas={() => {
+              if (activeCanvasArtifact) {
+                setActiveCanvasArtifact(null);
+              } else {
+                const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant' && m.content.trim());
+                setActiveCanvasArtifact({
+                  id: `canvas_${lastAssistant?.id || Date.now()}`,
+                  title: currentChat?.title || 'Dokumen & Catatan Live Canvas',
+                  content: lastAssistant?.content || '# Catatan & Draf Baru\n\nMulai susun ide, kerangka tulisan, atau kode di sini.',
+                  type: 'document'
+                });
+              }
+            }}
           />
 
           <ChatSearchBar
@@ -853,19 +1062,19 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
                 <div className="max-w-3xl mx-auto surface-card/85 backdrop-blur-md rounded-2xl border border-teal-200/60 dark:border-teal-800/60 p-2.5 sm:p-3 shadow-md hover:shadow-lg transition-all flex items-center justify-between gap-3 bg-linear-to-r from-teal-500/10 via-emerald-500/5 to-cyan-500/10">
                   <div className="flex items-center gap-2.5 min-w-0">
                     <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-teal-700 text-white flex items-center justify-center shrink-0 shadow-xs">
-                      <Video className="w-4 h-4 animate-pulse" />
+                      <Video className="w-4 h-4" />
                     </div>
                     <div className="min-w-0">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5">
                         <span className="text-xs sm:text-sm font-bold text-primary truncate">
                           Sesi Konseling Mendatang
                         </span>
-                        <span className="hidden sm:inline-block px-2 py-0.5 rounded-full text-[10.5px] font-bold bg-teal-100 dark:bg-teal-900/60 text-teal-800 dark:text-teal-200">
-                          Terkonfirmasi
+                        <span className="hidden sm:inline text-[11px] font-semibold text-teal-700 dark:text-teal-300">
+                          · Terkonfirmasi
                         </span>
                       </div>
-                      <p className="text-[11px] sm:text-xs text-secondary truncate">
-                        Bersama <strong className="text-teal-700 dark:text-teal-300 font-semibold">{upcomingAppointment.appointment.counselorName}</strong> • {upcomingAppointment.countdownText}
+                      <p className="text-[11px] sm:text-xs text-secondary truncate tabular-nums">
+                        Bersama <strong className="text-teal-700 dark:text-teal-300 font-semibold">{upcomingAppointment.appointment.counselorName}</strong> · {upcomingAppointment.countdownText}
                       </p>
                     </div>
                   </div>
@@ -893,18 +1102,18 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
             )}
 
             <div
-              className={`flex-1 overflow-y-auto chat-scroll-container w-full min-w-0 flex flex-col transition-all duration-300 ${isEmptyConversation
-                ? 'px-0 py-0'
-                : 'bg-transparent px-3 sm:px-4 pt-3 sm:pt-4 pb-40 sm:pb-36'
-              } ${
+              className={`flex-1 overflow-y-auto chat-scroll-container w-full min-w-0 flex flex-col px-3 sm:px-4 pt-2 sm:pt-3 ${
+                messages.length === 0 ? 'pb-2 sm:pb-4' : 'pb-6 sm:pb-8'
+              } transition-all duration-300 bg-transparent ${
                 isPrivacyMode ? 'backdrop-blur-md filter blur-md select-none pointer-events-none' : ''
               }`}
               ref={scrollContainerRef}
             >
               {isTemporary && (
-                <div className="mx-auto mb-3 w-full max-w-3xl rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-3 text-xs text-amber-950 dark:border-amber-900/70 dark:bg-amber-950/30 dark:text-amber-100">
-                  <p className="font-semibold">Mode sementara aktif.</p>
-                  <p className="mt-0.5 leading-relaxed">Pesan baru tidak ditambahkan ke riwayat RuangTenang. Pemrosesan AI tetap berlangsung melalui endpoint yang dipilih; lampiran tetap diunggah dan diproses server sesuai konfigurasi.</p>
+                <div className="mx-auto mb-2 flex w-fit max-w-2xl items-center gap-2 rounded-full border border-amber-200/80 bg-amber-50/80 px-3.5 py-1 text-[11px] text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
+                  <span className="font-medium">Obrolan sementara aktif</span>
+                  <span aria-hidden="true" className="opacity-50">·</span>
+                  <span className="text-amber-800/80 dark:text-amber-300/80">Tidak disimpan ke riwayat</span>
                 </div>
               )}
               {isLoadingMessages ? (
@@ -920,13 +1129,40 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
                     onRetry={() => fetchMessages()}
                   />
                 </div>
-              ) : messages.length === 0 ? (
-                <div className="flex min-h-full w-full flex-1 flex-col">
+              ) : messages.length === 0 && !streamingMessage && !isTyping ? (
+                <div className="min-h-0 flex-1 flex flex-col justify-center py-4 w-full">
                   <EmptyChatState
                     userName={user?.name?.split(' ')[0]}
                     onSelectPrompt={(prompt) => handleSend(prompt)}
                     onOpenBreathing={() => setIsBreathingOpen(true)}
-                    composer={renderChatComposer(true)}
+                    composerSlot={
+                      <ChatComposer
+                        variant="centered"
+                        onSend={handleSend}
+                        isTyping={isTyping}
+                        isTemporary={isTemporary}
+                        draftOwnerId={user?.id || 'guest'}
+                        aiConsentAllowed={aiConsentAllowed}
+                        aiConsentPromptOpen={aiConsentPromptOpen}
+                        onRequestAiConsent={() => onRequestAiConsent?.()}
+                        onStop={handleStopResponse}
+                        chatId={chatId}
+                        onCommand={handleCommand}
+                        onOpenPlugin={handleOpenPlugin}
+                        quotaExceeded={quotaExceededInfo?.isExceeded}
+                        webSearchEnabled={webSearchEnabled}
+                        onToggleWebSearch={() => setWebSearchEnabled(prev => !prev)}
+                        thinkingDepth={thinkingDepth}
+                        onToggleThinkingDepth={() => setThinkingDepth(prev => (prev === 'deep' ? 'auto' : 'deep'))}
+                        onOpenLiveVoice={() => setIsLiveVoiceOpen(true)}
+                        activeProjectName={activeProject?.name || null}
+                        onOpenProjects={() => setIsProjectsModalOpen(true)}
+                        activeArtifactTitle={activeCanvasArtifact?.title || null}
+                        userTurnCount={messages.filter(m => m.role === 'user').length}
+                        onRunDeepResearch={handleRunDeepResearch}
+                        isRunningDeepResearch={isRunningDeepResearch}
+                      />
+                    }
                   />
                 </div>
               ) : (
@@ -956,6 +1192,7 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
                       isBookmarked={bookmarkedMessageIds.has(msg.id)}
                       onBookmarkToggle={handleToggleBookmark}
                       onBranch={handleOpenBranch}
+                      onOpenCanvasArtifact={(artifact) => setActiveCanvasArtifact(artifact)}
                       searchHighlightQuery={isSearchOpen ? searchQuery : undefined}
                       isSearchTarget={isSearchOpen && searchMatches[currentSearchIndex] === msg.id}
                     />
@@ -973,12 +1210,13 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
                   )}
 
                   {!isTyping && followUps.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 mt-3 justify-end">
+                    <div className="flex flex-wrap gap-1.5 mt-2 pl-7 sm:pl-8 justify-start">
                       {followUps.map((q, idx) => (
                         <button
                           key={idx}
+                          type="button"
                           onClick={() => handleSend(q)}
-                          className="px-3 py-1.5 bg-slate-100/80 hover:bg-slate-200/80 dark:bg-slate-800/80 dark:hover:bg-slate-700/80 rounded-full text-xs text-slate-600 dark:text-slate-300 transition-colors text-left cursor-pointer chip-tactile active:scale-[0.96]"
+                          className="px-3.5 py-1.5 bg-white/80 hover:bg-stone-100 dark:bg-slate-900/70 dark:hover:bg-slate-800 border border-stone-200/80 dark:border-slate-800 hover:border-teal-300 dark:hover:border-teal-800 rounded-full text-xs font-medium text-stone-600 dark:text-slate-300 hover:text-teal-700 dark:hover:text-teal-300 transition-colors text-left cursor-pointer active:scale-[0.98]"
                         >
                           {q}
                         </button>
@@ -991,7 +1229,7 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
                       <div className="p-4 sm:p-5 rounded-2xl bg-teal-50/90 dark:bg-slate-850 border border-teal-200/90 dark:border-teal-900/80 shadow-md text-slate-800 dark:text-slate-100 space-y-3.5">
                         <div className="flex items-start gap-3">
                           <div className="p-2 rounded-xl bg-teal-100 dark:bg-teal-900/60 text-teal-700 dark:text-teal-300 shrink-0 mt-0.5">
-                            <Sparkles className="w-5 h-5 animate-pulse" />
+                            <Sparkles className="w-5 h-5" />
                           </div>
                           <div className="space-y-1 flex-1 min-w-0">
                             <h4 className="font-bold text-sm sm:text-base text-teal-950 dark:text-teal-100">
@@ -1092,8 +1330,61 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
             </button>
           )}
 
-          {!isEmptyConversation && renderChatComposer()}
+          {!isPrivacyMode && (
+            <TextSelectionToolbar
+              containerRef={scrollContainerRef}
+              accentColor="teal"
+              onQuoteSelection={(text) => setQuotedSnippet(text)}
+              onExplainSelection={(text) => {
+                handleSend(`Bisa bantu jelaskan atau uraikan bagian ini lebih lanjut?\n\n> "${text.slice(0, 320)}"`);
+              }}
+            />
+          )}
+
+          {(messages.length > 0 || streamingMessage || isTyping || isLoadingMessages || Boolean(fetchMessagesError)) && (
+            <ChatComposer
+              variant="docked"
+              onSend={handleSend}
+              isTyping={isTyping}
+              isTemporary={isTemporary}
+              draftOwnerId={user?.id || 'guest'}
+              aiConsentAllowed={aiConsentAllowed}
+              aiConsentPromptOpen={aiConsentPromptOpen}
+              onRequestAiConsent={() => onRequestAiConsent?.()}
+              onStop={handleStopResponse}
+              chatId={chatId}
+              onCommand={handleCommand}
+              onOpenPlugin={handleOpenPlugin}
+              quotaExceeded={quotaExceededInfo?.isExceeded}
+              quotedSnippet={quotedSnippet}
+              onClearQuote={() => setQuotedSnippet(null)}
+              webSearchEnabled={webSearchEnabled}
+              onToggleWebSearch={() => setWebSearchEnabled(prev => !prev)}
+              thinkingDepth={thinkingDepth}
+              onToggleThinkingDepth={() => setThinkingDepth(prev => (prev === 'deep' ? 'auto' : 'deep'))}
+              onOpenLiveVoice={() => setIsLiveVoiceOpen(true)}
+              activeProjectName={activeProject?.name || null}
+              onOpenProjects={() => setIsProjectsModalOpen(true)}
+              activeArtifactTitle={activeCanvasArtifact?.title || null}
+              userTurnCount={messages.filter(m => m.role === 'user').length}
+              onRunDeepResearch={handleRunDeepResearch}
+              isRunningDeepResearch={isRunningDeepResearch}
+            />
+          )}
         </div>
+
+        {/* Split-Screen Live Artifact & Interactive Canvas Drawer */}
+        <QuickArtifactCanvasDrawer
+          artifact={activeCanvasArtifact}
+          onClose={() => setActiveCanvasArtifact(null)}
+          onUpdateArtifact={updated => setActiveCanvasArtifact(updated)}
+          onRequestAiPolish={(instruction, currentContent) => {
+            handleSend(`${instruction}:\n\n\`\`\`\n${currentContent.slice(0, 1500)}\n\`\`\``);
+          }}
+          onOpenInFullWorkspace={() => {
+            navigate(chatId ? `/workspace/${chatId}` : '/workspace');
+          }}
+        />
       </div>
     </>
   );

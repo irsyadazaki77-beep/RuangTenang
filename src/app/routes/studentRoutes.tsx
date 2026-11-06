@@ -69,7 +69,8 @@ export function createStudentRoutes(context: StudentRouteContext): AppRoute[] {
   return [
     { path: '/', element: mainChat, mode: 'ruangtenang', sidebarSection: 'primary' },
     { path: '/c/:chatId', element: mainChat, mode: 'ruangtenang', sidebarSection: 'history' },
-    { path: '/workspace', element: <WorkspaceHome key={`${user.id}:${user.role}`} chats={chats} isLoading={isLoadingChats} isGuest={user.role === 'guest'} onOpenSidebar={onOpenSidebar} />, mode: 'ruangkerja', sidebarSection: 'primary' },
+    { path: '/workspace', element: workspace, mode: 'ruangkerja', sidebarSection: 'primary' },
+    { path: '/workspace/projects', element: <WorkspaceHome key={`${user.id}:${user.role}`} chats={chats} isLoading={isLoadingChats} isGuest={user.role === 'guest'} onOpenSidebar={onOpenSidebar} />, mode: 'ruangkerja', sidebarSection: 'primary' },
     { path: '/workspace/new', element: <WorkspaceEntry user={user} chats={chats} setChats={setChats} {...openProps} {...consentProps} onSwitchMode={onSwitchMode} />, mode: 'ruangkerja', sidebarSection: 'primary' },
     { path: '/workspace/c/:chatId', element: workspace, mode: 'ruangkerja', sidebarSection: 'history' },
     {

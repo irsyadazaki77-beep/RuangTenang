@@ -16,6 +16,9 @@ export interface WorkspaceComposerConfig {
   taskContextSourceIds?: string[];
   taskArtifactContext?: string;
   taskWorkspaceInstructions?: string;
+  webSearchEnabled?: boolean;
+  thinkingDepth?: 'auto' | 'fast' | 'deep';
+  projectInstructions?: string;
 }
 
 export type WorkspaceChapterScope =

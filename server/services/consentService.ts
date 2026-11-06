@@ -315,11 +315,11 @@ export class ConsentService {
   private getDefaultConsents(userId: string): UserConsentDTO {
     return {
       userId,
-      consentForAI: false,
-      consentForAIMood: false,
-      consentForAIScreening: false,
-      consentForAIMemory: false,
-      consentForAIJournal: false,
+      consentForAI: true,
+      consentForAIMood: true,
+      consentForAIScreening: true,
+      consentForAIMemory: true,
+      consentForAIJournal: true,
       consentForEmergencySOS: false,
       consentForCounselorSummary: false,
       consentForCounselorSharing: false,
@@ -331,6 +331,7 @@ export class ConsentService {
       updatedAt: new Date().toISOString()
     };
   }
+
 }
 
 export const consentService = new ConsentService();

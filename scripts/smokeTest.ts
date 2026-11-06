@@ -11,7 +11,8 @@
  * 6. Direct sensitive static exposure rejection (.env, etc.)
  */
 
-const BASE_URL = process.env.SMOKE_TARGET_URL || `http://127.0.0.1:${process.env.PORT || 3000}`;
+const targetPort = process.env.PORT && process.env.PORT !== '8080' ? process.env.PORT : 3000;
+const BASE_URL = process.env.SMOKE_TARGET_URL || `http://127.0.0.1:${targetPort}`;
 
 interface TestResult {
   step: string;

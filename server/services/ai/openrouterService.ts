@@ -3,9 +3,31 @@ import { AiRequestOptions } from './aiRequestService.js';
 import { getModelDefinition } from './aiModelRegistry.js';
 import { AI_RELIABILITY_POLICY, classifyAiError } from './aiReliabilityService.js';
 
+export type OpenRouterMessageContent =
+  | string
+  | Array<
+      | { type: 'text'; text: string }
+      | { type: 'image_url'; image_url: { url: string } }
+    >;
+
 export interface OpenRouterChatMessage {
   role: 'system' | 'user' | 'assistant';
-  content: string;
+  content: OpenRouterMessageContent;
+}
+
+/**
+ * HARD GUARD: Guarantees 100% zero paid credit usage on OpenRouter.
+ * Every model sent to OpenRouter MUST either be `openrouter/free` or explicitly end with `:free`.
+ */
+export function assertStrictFreeOpenRouterModel(providerModelId: string): string {
+  const normalized = (providerModelId || '').trim();
+  if (normalized === 'openrouter/free' || normalized.endsWith(':free')) {
+    return normalized;
+  }
+  throw Object.assign(
+    new Error(`OPENROUTER_PAID_MODEL_BLOCKED: Model "${normalized}" ditolak karena bukan model gratis (:free).`),
+    { category: 'INVALID_REQUEST', retryable: false, statusCode: 400 }
+  );
 }
 
 export const openrouterService = {
@@ -23,12 +45,14 @@ export const openrouterService = {
 
   mapModelName(modelId: string): string {
     const model = getModelDefinition(modelId);
-    if (!model || model.provider !== 'openrouter') throw new Error('MODEL_NOT_FOUND');
-    return model.providerModelId;
+    if (!model || model.provider !== 'openrouter') {
+      throw new Error('MODEL_NOT_FOUND');
+    }
+    return assertStrictFreeOpenRouterModel(model.providerModelId);
   },
 
   buildMessages(options: AiRequestOptions): OpenRouterChatMessage[] {
-    const { prompt, history = [], systemInstruction } = options;
+    const { prompt, history = [], systemInstruction, attachments = [] } = options;
     const messages: OpenRouterChatMessage[] = [];
 
     if (systemInstruction) {
@@ -50,11 +74,38 @@ export const openrouterService = {
       }
     }
 
-    // Add current user prompt
-    messages.push({
-      role: 'user',
-      content: prompt
-    });
+    // Add current user prompt (with optional multimodal vision attachments for VL free models)
+    const imageAttachments = (attachments || []).filter(
+      att => att && typeof att.base64 === 'string' && (!att.mimeType || att.mimeType.startsWith('image/'))
+    );
+
+    if (imageAttachments.length > 0) {
+      const contentParts: Array<
+        | { type: 'text'; text: string }
+        | { type: 'image_url'; image_url: { url: string } }
+      > = [{ type: 'text', text: prompt }];
+
+      for (const att of imageAttachments) {
+        const mimeType = att.mimeType || 'image/png';
+        const dataUrl = att.base64.startsWith('data:')
+          ? att.base64
+          : `data:${mimeType};base64,${att.base64}`;
+        contentParts.push({
+          type: 'image_url',
+          image_url: { url: dataUrl }
+        });
+      }
+
+      messages.push({
+        role: 'user',
+        content: contentParts
+      });
+    } else {
+      messages.push({
+        role: 'user',
+        content: prompt
+      });
+    }
 
     return messages;
   },
@@ -68,67 +119,96 @@ export const openrouterService = {
       throw new Error('OPENROUTER_API_KEY_MISSING');
     }
 
-    const openrouterModel = this.mapModelName(targetModel);
+    const primaryOpenRouterModel = this.mapModelName(targetModel);
     const messages = this.buildMessages(options);
     const isAnonymous = !options.userId || options.userId === 'guest';
-    const defaultMax = isAnonymous ? 1500 : 4096;
-    const maxTokens = Math.min(options.maxOutputTokens || defaultMax, isAnonymous ? 2048 : 4096);
+    const defaultMax = isAnonymous ? 4096 : 8192;
+    const maxTokens = Math.max(Math.min(options.maxOutputTokens || defaultMax, isAnonymous ? 6144 : 8192), 512);
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), AI_RELIABILITY_POLICY.totalRequestTimeoutMs);
+    // Try the requested `:free` model first; if upstream free provider is busy (429/502/503/404)
+    // and not in strict comparisonMode, automatically fall back to `openrouter/free` (100% Free Router).
+    const modelsToAttempt =
+      !options.comparisonMode && primaryOpenRouterModel !== 'openrouter/free'
+        ? [primaryOpenRouterModel, 'openrouter/free']
+        : [primaryOpenRouterModel];
 
-    if (options.abortSignal) {
-      options.abortSignal.addEventListener('abort', () => controller.abort(), { once: true });
-    }
+    let lastErr: unknown;
 
-    try {
-      console.info(`[OPENROUTER] Requesting non-streaming completion for model "${openrouterModel}"...`);
-      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`,
-          'HTTP-Referer': 'https://ruangtenang.ac.id',
-          'X-Title': 'RuangTenang Kampus'
-        },
-        body: JSON.stringify({
-          model: openrouterModel,
-          messages,
-          temperature: 0.6,
-          max_tokens: maxTokens,
-          stream: false
-        }),
-        signal: controller.signal
-      });
+    for (const [attemptIdx, rawModelId] of modelsToAttempt.entries()) {
+      const openrouterModel = assertStrictFreeOpenRouterModel(rawModelId);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), AI_RELIABILITY_POLICY.connectTimeoutMs);
 
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => '');
-        const quota = /quota|billing|resource_exhausted/i.test(errorText);
-        const retryAfter = response.headers.get('retry-after');
-        const retryAfterMs = retryAfter ? (Number.isFinite(Number(retryAfter)) ? Number(retryAfter) * 1000 : Date.parse(retryAfter) - Date.now()) : undefined;
-        throw Object.assign(new Error(`OPENROUTER_API_ERROR_${response.status}${quota ? '_QUOTA_EXHAUSTED' : ''}`), { statusCode: response.status, retryAfterMs: retryAfterMs && retryAfterMs > 0 ? retryAfterMs : undefined });
+      if (options.abortSignal) {
+        options.abortSignal.addEventListener('abort', () => controller.abort(), { once: true });
       }
 
-      const data = await response.json();
-      const choice = data.choices?.[0];
-      const content = typeof choice?.message?.content === 'string' ? choice.message.content.trim() : '';
-      // OpenRouter may return private chain-of-thought in `reasoning`.
-      // Only `content` is intended for the user-facing chat.
-      const outputText = content;
-      if (!outputText) throw Object.assign(new Error('AI_PROVIDER_CONTENT_ERROR_INVALID_RESPONSE'), { category: 'CONTENT_ERROR', retryable: false });
-      clearTimeout(timeoutId);
+      try {
+        console.info(`[OPENROUTER] Requesting non-streaming completion for free model "${openrouterModel}"...`);
+        const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`,
+            'HTTP-Referer': 'https://ruangtenang.ac.id',
+            'X-Title': 'RuangTenang Kampus'
+          },
+          body: JSON.stringify({
+            model: openrouterModel,
+            messages,
+            temperature: options.responseFormat === 'json' ? 0.2 : 0.6,
+            max_tokens: maxTokens,
+            stream: false
+          }),
+          signal: controller.signal
+        });
 
-      return {
-        text: outputText,
-        modelUsed: targetModel,
-        isFallback: false
-      };
-    } catch (err: unknown) {
-      clearTimeout(timeoutId);
-      const normalized = classifyAiError(err);
-      console.warn(`[OPENROUTER] Request failed category=${normalized.category}`);
-      throw normalized;
+        if (!response.ok) {
+          const errorText = await response.text().catch(() => '');
+          const quota = /quota|billing|resource_exhausted|credits/i.test(errorText);
+          const retryAfter = response.headers.get('retry-after');
+          const retryAfterMs = retryAfter
+            ? Number.isFinite(Number(retryAfter))
+              ? Number(retryAfter) * 1000
+              : Date.parse(retryAfter) - Date.now()
+            : undefined;
+          throw Object.assign(
+            new Error(`OPENROUTER_API_ERROR_${response.status}${quota ? '_QUOTA_EXHAUSTED' : ''}`),
+            {
+              statusCode: response.status,
+              retryAfterMs: retryAfterMs && retryAfterMs > 0 ? retryAfterMs : undefined
+            }
+          );
+        }
+
+        const data = await response.json();
+        const choice = data.choices?.[0];
+        const content = typeof choice?.message?.content === 'string' ? choice.message.content.trim() : '';
+        const outputText = content;
+        if (!outputText) {
+          throw Object.assign(new Error('AI_PROVIDER_CONTENT_ERROR_INVALID_RESPONSE'), {
+            category: 'CONTENT_ERROR',
+            retryable: true
+          });
+        }
+        clearTimeout(timeoutId);
+
+        return {
+          text: outputText,
+          modelUsed: attemptIdx > 0 ? 'openrouter-free-auto' : targetModel,
+          isFallback: attemptIdx > 0
+        };
+      } catch (err: unknown) {
+        clearTimeout(timeoutId);
+        lastErr = classifyAiError(err);
+        console.warn(`[OPENROUTER] Free model "${openrouterModel}" attempt ${attemptIdx + 1} failed category=${(lastErr as any)?.category}`);
+        if (options.abortSignal?.aborted || attemptIdx + 1 >= modelsToAttempt.length) {
+          throw lastErr;
+        }
+      }
     }
+
+    throw classifyAiError(lastErr);
   },
 
   async generateStream(
@@ -140,46 +220,87 @@ export const openrouterService = {
       throw new Error('OPENROUTER_API_KEY_MISSING');
     }
 
-    const openrouterModel = this.mapModelName(targetModel);
+    const primaryOpenRouterModel = this.mapModelName(targetModel);
     const messages = this.buildMessages(options);
     const isAnonymous = !options.userId || options.userId === 'guest';
-    const defaultMax = isAnonymous ? 1500 : 4096;
-    const maxTokens = Math.min(options.maxOutputTokens || defaultMax, isAnonymous ? 2048 : 4096);
+    const defaultMax = isAnonymous ? 4096 : 8192;
+    const maxTokens = Math.max(Math.min(options.maxOutputTokens || defaultMax, isAnonymous ? 6144 : 8192), 512);
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), AI_RELIABILITY_POLICY.totalRequestTimeoutMs);
+    const modelsToAttempt =
+      !options.comparisonMode && primaryOpenRouterModel !== 'openrouter/free'
+        ? [primaryOpenRouterModel, 'openrouter/free']
+        : [primaryOpenRouterModel];
 
-    if (options.abortSignal) {
-      options.abortSignal.addEventListener('abort', () => controller.abort(), { once: true });
+    let response: Response | null = null;
+    let activeModelUsed = targetModel;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    let controller = new AbortController();
+    let lastError: unknown;
+
+    for (const [attemptIdx, rawModelId] of modelsToAttempt.entries()) {
+      const openrouterModel = assertStrictFreeOpenRouterModel(rawModelId);
+      controller = new AbortController();
+      timeoutId = setTimeout(() => controller.abort(), AI_RELIABILITY_POLICY.totalRequestTimeoutMs);
+
+      if (options.abortSignal) {
+        options.abortSignal.addEventListener('abort', () => controller.abort(), { once: true });
+      }
+
+      console.info(`[OPENROUTER] Initiating streaming request for free model "${openrouterModel}"...`);
+
+      try {
+        const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`,
+            'HTTP-Referer': 'https://ruangtenang.ac.id',
+            'X-Title': 'RuangTenang Kampus'
+          },
+          body: JSON.stringify({
+            model: openrouterModel,
+            messages,
+            temperature: 0.6,
+            max_tokens: maxTokens,
+            stream: true
+          }),
+          signal: controller.signal
+        });
+
+        if (!res.ok || !res.body) {
+          clearTimeout(timeoutId);
+          const errorText = await res.text().catch(() => '');
+          const quota = /quota|billing|resource_exhausted|credits/i.test(errorText);
+          const retryAfter = res.headers.get('retry-after');
+          const retryAfterMs = retryAfter
+            ? Number.isFinite(Number(retryAfter))
+              ? Number(retryAfter) * 1000
+              : Date.parse(retryAfter) - Date.now()
+            : undefined;
+          throw Object.assign(
+            new Error(`OPENROUTER_STREAM_ERROR_${res.status}${quota ? '_QUOTA_EXHAUSTED' : ''}`),
+            {
+              statusCode: res.status,
+              retryAfterMs: retryAfterMs && retryAfterMs > 0 ? retryAfterMs : undefined
+            }
+          );
+        }
+
+        response = res;
+        activeModelUsed = attemptIdx > 0 ? 'openrouter-free-auto' : targetModel;
+        break;
+      } catch (err) {
+        if (timeoutId) clearTimeout(timeoutId);
+        lastError = err;
+        if (options.abortSignal?.aborted || attemptIdx + 1 >= modelsToAttempt.length) {
+          throw err;
+        }
+        console.warn(`[OPENROUTER] Stream init failed on "${openrouterModel}", falling back to "openrouter/free"...`);
+      }
     }
 
-    console.info(`[OPENROUTER] Initiating streaming request for model "${openrouterModel}"...`);
-
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-        'HTTP-Referer': 'https://ruangtenang.ac.id',
-        'X-Title': 'RuangTenang Kampus'
-      },
-      body: JSON.stringify({
-        model: openrouterModel,
-        messages,
-        temperature: 0.6,
-        max_tokens: maxTokens,
-        stream: true
-      }),
-      signal: controller.signal
-    });
-
-    if (!response.ok || !response.body) {
-      clearTimeout(timeoutId);
-      const errorText = await response.text().catch(() => '');
-      const quota = /quota|billing|resource_exhausted/i.test(errorText);
-      const retryAfter = response.headers.get('retry-after');
-      const retryAfterMs = retryAfter ? (Number.isFinite(Number(retryAfter)) ? Number(retryAfter) * 1000 : Date.parse(retryAfter) - Date.now()) : undefined;
-      throw Object.assign(new Error(`OPENROUTER_STREAM_ERROR_${response.status}${quota ? '_QUOTA_EXHAUSTED' : ''}`), { statusCode: response.status, retryAfterMs: retryAfterMs && retryAfterMs > 0 ? retryAfterMs : undefined });
+    if (!response || !response.body) {
+      throw lastError || new Error('OPENROUTER_STREAM_UNAVAILABLE');
     }
 
     const reader = response.body.getReader();
@@ -233,10 +354,12 @@ export const openrouterService = {
             if (textContent) {
               yield { text: textContent };
             }
-          } catch { throw new Error('AI_STREAM_CONTENT_ERROR'); }
+          } catch {
+            throw new Error('AI_STREAM_CONTENT_ERROR');
+          }
         }
       } finally {
-        clearTimeout(timeoutId);
+        if (timeoutId) clearTimeout(timeoutId);
         try {
           reader.releaseLock();
         } catch {}
@@ -245,7 +368,7 @@ export const openrouterService = {
 
     return {
       stream: makeGenerator(),
-      modelUsed: targetModel
+      modelUsed: activeModelUsed
     };
   }
 };

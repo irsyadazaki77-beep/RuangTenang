@@ -1,10 +1,6 @@
 import type { ProviderId } from './aiModelRegistry.js';
 import type { AiRequestOptions } from './aiRequestService.js';
-import { deepseekService } from './deepseekService.js';
-import { groqService } from './groqService.js';
 import { openrouterService } from './openrouterService.js';
-import { openaiService } from './openaiService.js';
-import { ollamaService } from './ollamaService.js';
 
 export interface AiProviderAdapter {
   readonly provider: Exclude<ProviderId, 'gemini'>;
@@ -16,35 +12,22 @@ export interface AiProviderAdapter {
   }>;
 }
 
+const unavailableAdapter = (provider: Exclude<ProviderId, 'gemini'>): AiProviderAdapter => ({
+  provider,
+  isAvailable: () => false,
+  generate: () => Promise.reject(Object.assign(new Error(`PROVIDER_${provider.toUpperCase()}_DISABLED`), { category: 'PROVIDER_UNAVAILABLE', retryable: false })),
+  generateStream: () => Promise.reject(Object.assign(new Error(`PROVIDER_${provider.toUpperCase()}_DISABLED`), { category: 'PROVIDER_UNAVAILABLE', retryable: false }))
+});
+
 export const AI_PROVIDER_ADAPTERS: Readonly<Record<Exclude<ProviderId, 'gemini'>, AiProviderAdapter>> = {
-  ollama: {
-    provider: 'ollama',
-    isAvailable: () => ollamaService.isAvailable(),
-    generate: (options, modelId) => ollamaService.generateResponse(options, modelId),
-    generateStream: (options, modelId) => ollamaService.generateStream(options, modelId)
-  },
-  deepseek: {
-    provider: 'deepseek',
-    isAvailable: () => deepseekService.isAvailable(),
-    generate: (options, modelId) => deepseekService.generateResponse(options, modelId),
-    generateStream: (options, modelId) => deepseekService.generateStream(options, modelId)
-  },
-  groq: {
-    provider: 'groq',
-    isAvailable: () => groqService.isAvailable(),
-    generate: (options, modelId) => groqService.generateResponse(options, modelId),
-    generateStream: (options, modelId) => groqService.generateStream(options, modelId)
-  },
+  ollama: unavailableAdapter('ollama'),
+  deepseek: unavailableAdapter('deepseek'),
+  groq: unavailableAdapter('groq'),
+  openai: unavailableAdapter('openai'),
   openrouter: {
     provider: 'openrouter',
     isAvailable: () => openrouterService.isAvailable(),
     generate: (options, modelId) => openrouterService.generateResponse(options, modelId),
     generateStream: (options, modelId) => openrouterService.generateStream(options, modelId)
-  },
-  openai: {
-    provider: 'openai',
-    isAvailable: () => openaiService.isAvailable(),
-    generate: (options, modelId) => openaiService.generateResponse(options, modelId),
-    generateStream: (options, modelId) => openaiService.generateStream(options, modelId)
   }
 };

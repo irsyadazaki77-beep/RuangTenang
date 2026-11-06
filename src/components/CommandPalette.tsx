@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { Chat } from '../features/chat/types';
 import { safeLocalStorage } from '../lib/storage';
+import { apiClient } from '../lib/apiClient';
 import { dispatchWorkspaceCommand } from '../features/workspace/utils/workspaceCommandEvents';
 
 export interface CommandPaletteProps {
@@ -50,6 +51,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   const navigate = useNavigate();
   const location = useLocation();
   const [query, setQuery] = useState('');
+  const [serverChats, setServerChats] = useState<Chat[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -58,12 +60,38 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   useEffect(() => {
     if (isOpen) {
       setQuery('');
+      setServerChats([]);
       setSelectedIndex(0);
       setTimeout(() => {
         inputRef.current?.focus();
       }, 50);
     }
   }, [isOpen]);
+
+  // Live debounced server search for chat history
+  useEffect(() => {
+    if (!isOpen || query.trim().length < 2) {
+      setServerChats([]);
+      return;
+    }
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      apiClient
+        .get(`/api/v1/chat/search?q=${encodeURIComponent(query.trim())}`)
+        .then((res) => {
+          if (!cancelled && res.success && Array.isArray(res.data)) {
+            setServerChats(res.data);
+          }
+        })
+        .catch(() => {
+          if (!cancelled) setServerChats([]);
+        });
+    }, 220);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [isOpen, query]);
 
   // Built-in Actions List
   const baseCommands: CommandItem[] = useMemo(() => {
@@ -251,30 +279,33 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   // Combine static commands and dynamic chat history items
   const allCommands = useMemo(() => {
     const list: CommandItem[] = [...baseCommands];
+    const seenChatIds = new Set<string>();
+    const combinedChats = [...serverChats, ...(chats || [])];
 
-    if (chats && chats.length > 0) {
-      chats.slice(0, 15).forEach((chat) => {
-        list.push({
-          id: `chat-${chat.id}`,
-          title: chat.title || 'Percakapan Tanpa Judul',
-          subtitle: `Riwayat obrolan • ${new Date(chat.updatedAt).toLocaleDateString('id-ID', {
-            day: 'numeric',
-            month: 'short',
-            year: 'numeric'
-          })}`,
-          category: 'Riwayat Obrolan',
-          icon: MessageSquare,
-          badge: chat.isPinned ? 'Tersemat' : undefined,
-          action: () => {
-            navigate(`/c/${chat.id}`);
-            onClose();
-          }
-        });
+    combinedChats.forEach((chat) => {
+      if (!chat?.id || seenChatIds.has(chat.id)) return;
+      seenChatIds.add(chat.id);
+      const isWorkspaceChat = chat.workspaceMode === 'RUANG_KERJA';
+      list.push({
+        id: `chat-${chat.id}`,
+        title: chat.title || 'Percakapan Tanpa Judul',
+        subtitle: `${isWorkspaceChat ? 'RuangKerja' : 'RuangTenang'} · ${new Date(chat.updatedAt).toLocaleDateString('id-ID', {
+          day: 'numeric',
+          month: 'short',
+          year: 'numeric'
+        })}`,
+        category: 'Riwayat Obrolan',
+        icon: isWorkspaceChat ? GraduationCap : MessageSquare,
+        badge: chat.isPinned ? 'Tersemat' : undefined,
+        action: () => {
+          navigate(isWorkspaceChat ? `/workspace/c/${chat.id}` : `/c/${chat.id}`);
+          onClose();
+        }
       });
-    }
+    });
 
     return list;
-  }, [baseCommands, chats, navigate, onClose]);
+  }, [baseCommands, chats, serverChats, navigate, onClose]);
 
   // Filter commands by query
   const filteredCommands = useMemo(() => {

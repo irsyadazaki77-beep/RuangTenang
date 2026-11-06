@@ -430,83 +430,152 @@ export const AmbientSoundscapeWidget: React.FC<AmbientSoundscapeWidgetProps> = (
                   <div className="space-y-4">
                     {/* Active Timer Display */}
                     {engineState.timerMode !== 'none' ? (
-                      <div className="p-5 rounded-2xl bg-gradient-to-tr from-teal-600 to-emerald-600 text-white text-center space-y-2 shadow-lg shadow-teal-500/20">
-                        <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/20 text-xs font-semibold">
-                          <Clock className="w-3.5 h-3.5" />
-                          <span>
-                            {engineState.timerMode === 'pomodoro'
-                              ? engineState.pomodoroPhase === 'work'
-                                ? 'Fokus Pomodoro (25 Min)'
-                                : 'Waktu Rehat (5 Min)'
-                              : 'Timer Tidur / Mati Otomatis'}
+                      <div className="p-5 rounded-2xl bg-gradient-to-tr from-teal-700 to-emerald-600 text-white text-center space-y-2.5 shadow-lg shadow-teal-500/20">
+                        <div className="flex items-center justify-between text-xs font-semibold">
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg bg-white/15">
+                            <Clock className="w-3.5 h-3.5" />
+                            <span>
+                              {engineState.timerMode === 'pomodoro'
+                                ? engineState.pomodoroPhase === 'work'
+                                  ? `Fokus Pomodoro (${engineState.pomodoroPreset === '50_10' ? '50m' : '25m'})`
+                                  : `Rehat Pemulihan (${engineState.pomodoroPreset === '50_10' ? '10m' : '5m'})`
+                                : 'Timer Tidur / Mati Otomatis'}
+                            </span>
+                          </span>
+                          <span className="font-mono tabular-nums text-[11px] text-teal-100">
+                            Sesi Selesai: {engineState.completedPomodoros}
                           </span>
                         </div>
-                        <div className="text-4xl font-extrabold font-mono tracking-wider">
+                        <div className="text-4xl font-extrabold font-mono tabular-nums tracking-wider py-1">
                           {formatTimer(engineState.timerRemainingSeconds)}
                         </div>
-                        <p className="text-xs text-teal-100">
-                          {engineState.timerMode === 'sleep'
-                            ? 'Volume akan memudar halus (fade-out) pada 60 detik terakhir.'
-                            : 'Audio akan berbunyi lonceng lembut saat pergantian sesi.'}
-                        </p>
-                        <button
-                          onClick={() => soundscapeEngine.stopTimer()}
-                          className="mt-2 px-4 py-1.5 bg-white/20 hover:bg-white/30 rounded-xl text-xs font-bold transition-colors cursor-pointer"
-                        >
-                          Hentikan Pengatur Waktu
-                        </button>
+                        {engineState.timerMode === 'pomodoro' && engineState.pomodoroPhase === 'break' ? (
+                          <div className="rounded-xl bg-white/15 p-2.5 text-left text-xs text-teal-50 space-y-1">
+                            <div className="font-semibold">Panduan Jeda Napas & Mata (20-20-20):</div>
+                            <p className="text-[11px] leading-relaxed text-teal-100">
+                              Alihkan pandangan sejauh 6 meter selama 20 detik, lalu tarik napas perlahan 4 detik dan hembuskan 6 detik. Volume latar otomatis dilembutkan.
+                            </p>
+                          </div>
+                        ) : (
+                          <p className="text-xs text-teal-100">
+                            {engineState.timerMode === 'sleep'
+                              ? 'Volume memudar halus (fade-out) pada 60 detik terakhir.'
+                              : 'Timer bebas selisih waktu (anti-drift) meski berpindah tab.'}
+                          </p>
+                        )}
+                        <div className="pt-1 flex items-center justify-center gap-2">
+                          {engineState.timerMode === 'pomodoro' && (
+                            <button
+                              type="button"
+                              onClick={() => soundscapeEngine.skipPomodoroPhase()}
+                              className="px-3 py-1.5 bg-white/15 hover:bg-white/25 rounded-xl text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap"
+                            >
+                              {engineState.pomodoroPhase === 'work' ? 'Masuk Waktu Rehat' : 'Lanjut Sesi Fokus'}
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => soundscapeEngine.stopTimer()}
+                            className="px-3.5 py-1.5 bg-white/25 hover:bg-white/35 rounded-xl text-xs font-bold transition-colors cursor-pointer whitespace-nowrap"
+                          >
+                            Hentikan Timer
+                          </button>
+                        </div>
                       </div>
                     ) : (
-                      <div className="p-4 rounded-2xl bg-stone-50 dark:bg-slate-800/40 border border-stone-200 dark:border-slate-800 text-center space-y-1">
-                        <Timer className="w-6 h-6 text-stone-400 mx-auto" />
-                        <h4 className="text-xs font-bold text-stone-700 dark:text-slate-300">
-                          Tidak Ada Timer Aktif
-                        </h4>
-                        <p className="text-[11px] text-stone-500 dark:text-slate-400">
-                          Pilih sesi Pomodoro fokus belajar atau setel timer tidur dengan auto fade-out.
-                        </p>
+                      <div className="p-4 rounded-2xl bg-stone-50 dark:bg-slate-800/40 border border-stone-200 dark:border-slate-800 flex items-center justify-between gap-3">
+                        <div className="space-y-0.5 text-left">
+                          <h4 className="text-xs font-bold text-stone-800 dark:text-slate-200">
+                            Siklus Fokus & Pencegahan Burnout
+                          </h4>
+                          <p className="text-[11px] text-stone-500 dark:text-slate-400">
+                            Padukan ritme belajar Pomodoro dengan gelombang suara latar yang menenangkan.
+                          </p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <div className="text-lg font-bold font-mono tabular-nums text-teal-700 dark:text-teal-400">
+                            {engineState.completedPomodoros}
+                          </div>
+                          <div className="text-[10px] text-stone-500 dark:text-slate-400 whitespace-nowrap">
+                            Sesi Hari Ini
+                          </div>
+                        </div>
                       </div>
                     )}
 
-                    {/* Pomodoro Focus Option */}
+                    {/* Pomodoro Focus Options */}
                     <div className="space-y-2">
-                      <label className="text-[11px] font-semibold text-stone-500 dark:text-slate-400 uppercase tracking-wider">
-                        Siklus Pomodoro (Belajar & Skripsi):
-                      </label>
-                      <button
-                        onClick={() => soundscapeEngine.startPomodoroTimer()}
-                        className="w-full flex items-center justify-between p-3.5 rounded-2xl border border-teal-200 dark:border-teal-900 bg-teal-50/60 dark:bg-teal-950/40 hover:bg-teal-100 dark:hover:bg-teal-900/60 transition-colors cursor-pointer text-left"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-xl bg-teal-700 text-white flex items-center justify-center font-bold text-xs">
-                            25m
-                          </div>
-                          <div>
-                            <div className="text-xs font-bold text-teal-900 dark:text-teal-200">
-                              Mulai Sesi Fokus Pomodoro
+                      <div className="flex items-center justify-between">
+                        <label className="text-[11px] font-semibold text-stone-500 dark:text-slate-400">
+                          Pilih Ritme Pomodoro (Belajar & Skripsi)
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => soundscapeEngine.setAutoDuckOnBreak(!engineState.autoDuckOnBreak)}
+                          className="text-[11px] font-medium text-teal-700 dark:text-teal-400 hover:underline cursor-pointer"
+                        >
+                          Redupkan Audio Saat Rehat: {engineState.autoDuckOnBreak ? 'Aktif' : 'Nonaktif'}
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => soundscapeEngine.startPomodoroTimer('25_5')}
+                          className="flex items-center justify-between p-3 rounded-2xl border border-teal-200 dark:border-teal-900 bg-teal-50/60 dark:bg-teal-950/40 hover:bg-teal-100 dark:hover:bg-teal-900/60 transition-colors cursor-pointer text-left"
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="w-8 h-8 rounded-xl bg-teal-700 text-white flex items-center justify-center font-bold font-mono tabular-nums text-xs shrink-0">
+                              25/5
                             </div>
-                            <div className="text-[11px] text-teal-700 dark:text-teal-300">
-                              25 menit fokus penuh • 5 menit istirahat sejenak
+                            <div className="min-w-0">
+                              <div className="text-xs font-bold text-teal-900 dark:text-teal-200 truncate">
+                                Fokus Klasik
+                              </div>
+                              <div className="text-[10.5px] text-teal-700 dark:text-teal-300 truncate">
+                                25m fokus · 5m rehat
+                              </div>
                             </div>
                           </div>
-                        </div>
-                        <Zap className="w-4 h-4 text-teal-600 dark:text-teal-400" />
-                      </button>
+                          <Zap className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 shrink-0" />
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => soundscapeEngine.startPomodoroTimer('50_10')}
+                          className="flex items-center justify-between p-3 rounded-2xl border border-indigo-200 dark:border-indigo-900 bg-indigo-50/60 dark:bg-indigo-950/40 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition-colors cursor-pointer text-left"
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold font-mono tabular-nums text-xs shrink-0">
+                              50/10
+                            </div>
+                            <div className="min-w-0">
+                              <div className="text-xs font-bold text-indigo-900 dark:text-indigo-200 truncate">
+                                Sprint Skripsi
+                              </div>
+                              <div className="text-[10.5px] text-indigo-700 dark:text-indigo-300 truncate">
+                                50m mendalam · 10m rehat
+                              </div>
+                            </div>
+                          </div>
+                          <Zap className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                        </button>
+                      </div>
                     </div>
 
                     {/* Sleep Timer Preset Buttons */}
                     <div className="space-y-2">
-                      <label className="text-[11px] font-semibold text-stone-500 dark:text-slate-400 uppercase tracking-wider">
-                        Timer Tidur / Mati Otomatis:
+                      <label className="text-[11px] font-semibold text-stone-500 dark:text-slate-400">
+                        Timer Tidur & Relaksasi (Auto Fade-Out)
                       </label>
                       <div className="grid grid-cols-4 gap-2">
                         {[15, 30, 45, 60].map(mins => (
                           <button
                             key={mins}
+                            type="button"
                             onClick={() => soundscapeEngine.startSleepTimer(mins)}
                             className="p-2.5 rounded-xl border border-stone-200 dark:border-slate-800 hover:border-teal-500 bg-stone-50 dark:bg-slate-800/60 hover:bg-teal-50 dark:hover:bg-teal-950/40 text-center transition-all cursor-pointer font-medium text-xs text-stone-800 dark:text-stone-200"
                           >
-                            <div className="font-bold text-sm">{mins}</div>
+                            <div className="font-bold font-mono tabular-nums text-sm">{mins}</div>
                             <div className="text-[10px] text-stone-400">Menit</div>
                           </button>
                         ))}

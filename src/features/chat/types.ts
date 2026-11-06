@@ -29,6 +29,23 @@ export interface StoredAttachment {
   previewOnly?: boolean;
 }
 
+export interface ReasoningStep {
+  id: string;
+  label: string;
+  detail?: string;
+  status: 'running' | 'completed';
+  timestampMs?: number;
+  category?: 'context' | 'memory' | 'search' | 'reasoning' | 'synthesis';
+}
+
+export interface ReasoningEventData {
+  steps: ReasoningStep[];
+  durationMs?: number;
+  thinkingDepth?: 'auto' | 'fast' | 'deep';
+  webSearchUsed?: boolean;
+  searchQuery?: string;
+}
+
 export interface Message {
   isEdited?: boolean;
   /** Internal link to the immutable Workspace request snapshot used for retry. */
@@ -55,6 +72,11 @@ export interface Message {
   profileId?: string;
   isDegraded?: boolean;
   degradationNotice?: string;
+  reasoningSteps?: ReasoningStep[];
+  thinkingDurationMs?: number;
+  thinkingDepth?: 'auto' | 'fast' | 'deep';
+  webSearchUsed?: boolean;
+  projectId?: string | null;
 }
 
 export interface Chat {
@@ -69,6 +91,7 @@ export interface Chat {
   summary?: string | null;
   createdAt?: string;
   workspaceMode?: 'RUANG_TENANG' | 'RUANG_KERJA';
+  projectId?: string | null;
   messages?: Message[];
   updatedAt: string;
 }

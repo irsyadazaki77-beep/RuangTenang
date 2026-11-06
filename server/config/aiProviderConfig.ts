@@ -1,3 +1,5 @@
+import fs from 'fs';
+import path from 'path';
 import type { ProviderId } from '../services/ai/aiModelRegistry.js';
 
 const keyNames: Record<ProviderId, string> = {
@@ -9,45 +11,53 @@ const keyNames: Record<ProviderId, string> = {
   ollama: 'OLLAMA_BASE_URL'
 };
 
-function isValidKey(provider: ProviderId, key: string): boolean {
-  if (provider === 'ollama') {
-    return key.startsWith('http://') || key.startsWith('https://');
+// STRICT PROVIDER POLICY: ONLY Gemini and OpenRouter are allowed in this application.
+// All other third-party providers (Groq, DeepSeek, OpenAI, Ollama) are permanently blocked.
+const ALLOWED_PROVIDERS: ReadonlySet<ProviderId> = new Set(['gemini', 'openrouter']);
+
+function readLocalSecretFile(filename: string): string {
+  try {
+    const filePath = path.resolve(process.cwd(), 'secrets', filename);
+    if (fs.existsSync(filePath)) {
+      return fs.readFileSync(filePath, 'utf8').trim();
+    }
+  } catch {
+    // Ignore file read errors
   }
-  if (provider === 'gemini') return key.length > 0;
-  if (provider === 'deepseek') return key.startsWith('sk-') && !key.includes('n123') && key.length >= 30;
-  if (provider === 'groq') return key.startsWith('gsk_') && key.length >= 30;
+  return '';
+}
+
+function isValidKey(provider: ProviderId, key: string): boolean {
+  if (provider === 'gemini') return key.length > 0 && key !== 'admin123';
   if (provider === 'openrouter') return key.startsWith('sk-or-') && key.length >= 30;
-  return key.startsWith('sk-') && key.length >= 40;
+  // All other providers are strictly prohibited
+  return false;
 }
 
 /** Internal server-only provider credentials. Never serialize this object. */
 export const aiProviderConfig = {
   getApiKey(provider: ProviderId): string {
-    // If external cloud AI APIs are disabled to save cost, only allow local Ollama provider
-    const disableCloud = (process.env.LOCAL_AI_ONLY === 'true' || process.env.DISABLE_CLOUD_AI === 'true') && process.env.NODE_ENV !== 'test';
-    if (disableCloud && provider !== 'ollama') {
+    // Strictly ONLY Gemini and OpenRouter are permitted
+    if (!ALLOWED_PROVIDERS.has(provider)) {
       return '';
     }
 
-    if (provider === 'ollama') {
-      const configured = process.env.OLLAMA_BASE_URL || (process.env.LOCAL_AI_ONLY === 'true' ? 'http://127.0.0.1:11434' : '');
-      const trimmed = configured.trim();
-      return isValidKey('ollama', trimmed) ? trimmed : '';
+    let key = (process.env[keyNames[provider]] || '').trim();
+    if (!isValidKey(provider, key) && provider === 'openrouter') {
+      key = readLocalSecretFile('openrouter_api_key');
     }
-    const key = (process.env[keyNames[provider]] || '').trim();
     return isValidKey(provider, key) ? key : '';
   },
   isConfigured(provider: ProviderId): boolean {
-    const disableCloud = (process.env.LOCAL_AI_ONLY === 'true' || process.env.DISABLE_CLOUD_AI === 'true') && process.env.NODE_ENV !== 'test';
-    if (disableCloud && provider !== 'ollama') {
+    if (!ALLOWED_PROVIDERS.has(provider)) {
       return false;
     }
     return Boolean(this.getApiKey(provider));
   }
 };
 
-export const DEEPSEEK_API_KEY = aiProviderConfig.getApiKey('deepseek');
-export const GROQ_API_KEY = aiProviderConfig.getApiKey('groq');
+export const DEEPSEEK_API_KEY = '';
+export const GROQ_API_KEY = '';
 export const OPENROUTER_API_KEY = aiProviderConfig.getApiKey('openrouter');
-export const OPENAI_API_KEY = aiProviderConfig.getApiKey('openai');
-export const OLLAMA_BASE_URL = aiProviderConfig.getApiKey('ollama');
+export const OPENAI_API_KEY = '';
+export const OLLAMA_BASE_URL = '';

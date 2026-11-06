@@ -18,7 +18,17 @@ import {
   GitCompare,
   CopyPlus,
   Trash2,
-  AlertTriangle
+  AlertTriangle,
+  GraduationCap,
+  Layers,
+  Table2,
+  BarChart3,
+  Radio,
+  ShieldCheck,
+  FileSearch,
+  Network,
+  HeartPulse,
+  Award
 } from 'lucide-react';
 import { WorkspaceArtifact, CitationStyle, ArtifactVersionRecord, ArtifactPatch, WorkspaceArtifactSelection } from '../types';
 import { applyArtifactPatch } from '../utils/artifactPatch';
@@ -33,6 +43,7 @@ import { ArtifactVersionHistoryModal } from './ArtifactVersionHistoryModal';
 import { ArtifactExportHost } from './ArtifactExportHost';
 import { ChartArtifactPreview, TableArtifactPreview } from './ArtifactDataPreview';
 import type { SavedChartSpec, SavedTableSpec } from './ArtifactDataPreview';
+import { AcademicQuickExportBar } from './CanvasVisualAndAudioStudio';
 
 const MermaidRenderer = React.lazy(() => import('./MermaidRenderer').then(m => ({ default: m.MermaidRenderer })));
 const ArtifactDiffViewer = React.lazy(() => import('./ArtifactDiffViewer').then(m => ({ default: m.ArtifactDiffViewer })));
@@ -45,6 +56,7 @@ const AcademicParaphraseModal = React.lazy(() => import('./AcademicParaphraseMod
 const ArtifactCanvasEditor = React.lazy(() => import('./ArtifactCanvasEditor').then(m => ({ default: m.ArtifactCanvasEditor })));
 const ArtifactTableEditor = React.lazy(() => import('./ArtifactDataEditors').then(m => ({ default: m.ArtifactTableEditor })));
 const ArtifactPresentationEditor = React.lazy(() => import('./ArtifactDataEditors').then(m => ({ default: m.ArtifactPresentationEditor })));
+const InteractiveStudySuite = React.lazy(() => import('./InteractiveStudySuite').then(m => ({ default: m.InteractiveStudySuite })));
 import {
   downloadBibTeXFile,
   downloadRISFile,
@@ -87,6 +99,10 @@ export type SaveState = 'idle' | 'saving' | 'saved' | 'unsaved' | 'failed' | 'lo
 
 function isPresentationContent(content: string): boolean {
   try { return (JSON.parse(content) as { format?: string }).format === 'ruangtenang-presentation-v1'; } catch { return false; }
+}
+
+function isStudySuiteContent(content: string): boolean {
+  try { return (JSON.parse(content) as { format?: string }).format === 'ruangkerja-study-suite-v1'; } catch { return false; }
 }
 
 interface CanvasDraftRecovery {
@@ -186,6 +202,8 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
 
   const [viewMode, setViewMode] = useState<CanvasViewMode>(initialCanvasDraft !== undefined ? 'edit' : 'preview');
   const [isPresentationStudio, setIsPresentationStudio] = useState(artifact.language === 'presentation' || isPresentationContent(artifact.content));
+  const [isStudySuiteOpen, setIsStudySuiteOpen] = useState(() => isStudySuiteContent(artifact.content));
+  const [studySuiteInitialTab, setStudySuiteInitialTab] = useState<'flashcards' | 'quiz' | 'matrix' | 'visual' | 'audio' | 'defense' | 'audit' | 'graph' | 'mood_progress' | 'defense_kit'>('flashcards');
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [titleInput, setTitleInput] = useState(artifact.title || '');
   const [editableContent, setEditableContent] = useState(initialCanvasDraft ?? artifact.content);
@@ -399,7 +417,6 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
 
   useEffect(() => {
     scheduleDraftSync(artifact.id, editableContentRef.current, true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- initialize the parent draft once per artifact from the effective editor content.
   }, [artifact.id, scheduleDraftSync]);
 
   useEffect(() => {
@@ -503,7 +520,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
       }
       return false;
     }
-  }, [artifact.id, artifact.title, onDraftContentChange, onSaveArtifact, onUpdateArtifact, scrollStorageKey]);
+  }, [artifact, onDraftContentChange, onSaveArtifact, onUpdateArtifact, scrollStorageKey]);
 
   const markDraftDirty = useCallback(() => {
     setIsDirty(true);
@@ -1033,7 +1050,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
 
   return (
     <div
-      className={`@container flex flex-col h-full bg-slate-50/60 dark:bg-[#0B101B] transition-all duration-200 overflow-hidden ${
+      className={`flex flex-col h-full bg-slate-50/60 dark:bg-[#0B101B] transition-all duration-200 overflow-hidden ${
         isExpanded ? 'fixed inset-0 z-50 bg-white dark:bg-slate-950' : 'relative w-full'
       }`}
     >
@@ -1052,7 +1069,20 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
         <div className="px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Dokumen</div>
         <button type="button" onClick={() => { setShowMoreMenu(false); setViewMode('raw'); }} className="w-full rounded-xl px-2.5 py-2 text-left text-xs text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"><Code2 className="mr-2 inline h-3.5 w-3.5" />Lihat Markdown atau kode</button>
         <button type="button" onClick={() => { setShowMoreMenu(false); setViewMode('diff'); }} className="w-full rounded-xl px-2.5 py-2 text-left text-xs text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"><GitCompare className="mr-2 inline h-3.5 w-3.5" />Bandingkan perubahan</button>
-        {artifact.type === 'DOCUMENT' && <button type="button" onClick={() => { setIsPresentationStudio(true); setShowMoreMenu(false); setViewMode('edit'); if (!isPresentationContent(editableContent)) void import('./ArtifactDataEditors').then(({ createPresentationFromMarkdown }) => handleContentChange(JSON.stringify(createPresentationFromMarkdown(editableContent, artifact.title)))); }} className="w-full rounded-xl px-2.5 py-2 text-left text-xs text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"><Workflow className="mr-2 inline h-3.5 w-3.5" />Buka PowerPoint Studio</button>}
+        {(artifact.type === 'DOCUMENT' || artifact.type === 'OUTLINE') && (
+          <>
+            <button type="button" onClick={() => { setShowMoreMenu(false); setStudySuiteInitialTab('defense'); setIsStudySuiteOpen(true); setViewMode('preview'); }} className="w-full rounded-xl px-2.5 py-2 text-left text-xs text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"><ShieldCheck className="mr-2 inline h-3.5 w-3.5 text-indigo-600" />Simulasi Sidang Skripsi (Suara & Rubrik)</button>
+            <button type="button" onClick={() => { setShowMoreMenu(false); setStudySuiteInitialTab('audit'); setIsStudySuiteOpen(true); setViewMode('preview'); }} className="w-full rounded-xl px-2.5 py-2 text-left text-xs text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"><FileSearch className="mr-2 inline h-3.5 w-3.5 text-amber-600" />Pemeriksa Klaim, Sitasi & Kohesi PUEBI</button>
+            <button type="button" onClick={() => { setShowMoreMenu(false); setStudySuiteInitialTab('graph'); setIsStudySuiteOpen(true); setViewMode('preview'); }} className="w-full rounded-xl px-2.5 py-2 text-left text-xs text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"><Network className="mr-2 inline h-3.5 w-3.5 text-sky-600" />Literatur Graph & Peta Konsep Interaktif</button>
+            <button type="button" onClick={() => { setShowMoreMenu(false); setStudySuiteInitialTab('mood_progress'); setIsStudySuiteOpen(true); setViewMode('preview'); }} className="w-full rounded-xl px-2.5 py-2 text-left text-xs text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"><HeartPulse className="mr-2 inline h-3.5 w-3.5 text-teal-600" />Jurnal Refleksi & Korelasi Mood vs Bab</button>
+            <button type="button" onClick={() => { setShowMoreMenu(false); setStudySuiteInitialTab('defense_kit'); setIsStudySuiteOpen(true); setViewMode('preview'); }} className="w-full rounded-xl px-2.5 py-2 text-left text-xs text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"><Award className="mr-2 inline h-3.5 w-3.5 text-emerald-600" />Ekspor Paket Sidang Lengkap (PPTX+DOCX+Q&A)</button>
+            <button type="button" onClick={() => { setShowMoreMenu(false); setStudySuiteInitialTab('flashcards'); setIsStudySuiteOpen(true); setViewMode('preview'); }} className="w-full rounded-xl px-2.5 py-2 text-left text-xs text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"><GraduationCap className="mr-2 inline h-3.5 w-3.5 text-indigo-600" />Buka Flashcard & Kuis Mandiri</button>
+            <button type="button" onClick={() => { setShowMoreMenu(false); setStudySuiteInitialTab('matrix'); setIsStudySuiteOpen(true); setViewMode('preview'); }} className="w-full rounded-xl px-2.5 py-2 text-left text-xs text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"><Table2 className="mr-2 inline h-3.5 w-3.5 text-teal-600" />Matriks Sintesis Literatur</button>
+            <button type="button" onClick={() => { setShowMoreMenu(false); setStudySuiteInitialTab('visual'); setIsStudySuiteOpen(true); setViewMode('preview'); }} className="w-full rounded-xl px-2.5 py-2 text-left text-xs text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"><BarChart3 className="mr-2 inline h-3.5 w-3.5 text-indigo-600" />Visual Diagram & Grafik Recharts</button>
+            <button type="button" onClick={() => { setShowMoreMenu(false); setStudySuiteInitialTab('audio'); setIsStudySuiteOpen(true); setViewMode('preview'); }} className="w-full rounded-xl px-2.5 py-2 text-left text-xs text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"><Radio className="mr-2 inline h-3.5 w-3.5 text-emerald-600" />Studio Audio 2 Host (Dr. Rina & Raka)</button>
+          </>
+        )}
+        {artifact.type === 'DOCUMENT' && <button type="button" onClick={() => { setIsPresentationStudio(true); setIsStudySuiteOpen(false); setShowMoreMenu(false); setViewMode('edit'); if (!isPresentationContent(editableContent)) void import('./ArtifactDataEditors').then(({ createPresentationFromMarkdown }) => handleContentChange(JSON.stringify(createPresentationFromMarkdown(editableContent, artifact.title)))); }} className="w-full rounded-xl px-2.5 py-2 text-left text-xs text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"><Workflow className="mr-2 inline h-3.5 w-3.5" />Buka PowerPoint Studio</button>}
         <div className="relative z-20 px-1.5 py-1"><WorkspaceToolSelector artifactType={artifact.type} hasArtifact={artifact.id !== 'art_welcome'} disabled={isStreaming} onSelectTool={handleExecuteTool} triggerVariant="header" /></div>
         <button type="button" onClick={handleCopy} className="w-full rounded-xl px-2.5 py-2 text-left text-xs text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"><Copy className="mr-2 inline h-3.5 w-3.5" />Salin Seluruh Konten</button>
         <button type="button" onClick={() => { setShowMoreMenu(false); setShowCitationModal(true); }} className="w-full rounded-xl px-2.5 py-2 text-left text-xs text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"><Quote className="mr-2 inline h-3.5 w-3.5" />Cari Sitasi DOI</button>
@@ -1150,7 +1180,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
                   Raw Source ({artifact.type === 'CODE' ? (artifact.language || 'code') : 'Markdown'})
                 </span>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 tabular-nums">
                 <span>{lineCount} baris</span>
                 <button
                   type="button"
@@ -1175,7 +1205,25 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
 
         {/* MODE 1: PRATINJAU (PAPER SHEET AESTHETIC FOR DOCUMENTS) */}
         {viewMode === 'preview' && (
-          artifact.type === 'DOCUMENT' && isPresentationStudio ? (
+          isStudySuiteOpen ? (
+            <React.Suspense fallback={<div className="p-8 text-center text-xs text-slate-500">Memuat Studio Belajar Aktif…</div>}>
+              <InteractiveStudySuite
+                artifactId={artifact.id}
+                artifactTitle={artifact.title}
+                sourceContent={editableContent}
+                initialTab={studySuiteInitialTab}
+                onClose={() => setIsStudySuiteOpen(false)}
+                onApplyMarkdownToCanvas={(markdownAppendix) => {
+                  const nextContent = `${editableContent.trim()}\n\n${markdownAppendix}\n`;
+                  handleContentChange(nextContent);
+                  setIsStudySuiteOpen(false);
+                }}
+                onReplaceCanvasContent={(nextContent) => {
+                  handleContentChange(nextContent);
+                }}
+              />
+            </React.Suspense>
+          ) : artifact.type === 'DOCUMENT' && isPresentationStudio ? (
             <div className="mx-auto my-4 max-w-5xl space-y-4">{(() => { try { const deck = JSON.parse(editableContent) as { slides?: Array<{ title?: string; body?: string; notes?: string }>; theme?: string }; if (!Array.isArray(deck.slides)) return <p role="alert" className="rounded-lg bg-amber-50 p-4 text-sm text-amber-800">Format slide tidak valid.</p>; return <><div className="flex items-center justify-between text-xs text-slate-500"><span>Presentasi · {deck.slides.length} slide</span><span>Tema: {deck.theme || 'academic_minimal'}</span></div>{deck.slides.map((slide, index) => <article key={`${index}-${slide.title}`} className="aspect-video overflow-hidden rounded-xl border border-slate-200 bg-white p-[6%] shadow-sm dark:border-slate-800 dark:bg-slate-900"><p className="mb-4 text-[10px] uppercase tracking-wide text-emerald-600">Slide {index + 1}</p><h2 className="mb-4 text-xl font-bold text-slate-900 dark:text-slate-100">{slide.title}</h2><p className="whitespace-pre-wrap text-sm leading-7 text-slate-700 dark:text-slate-300">{slide.body}</p><details className="mt-4 text-[10px] text-slate-500"><summary>Speaker notes</summary><p className="mt-1 whitespace-pre-wrap">{slide.notes}</p></details></article>)}</>; } catch { return <p role="alert" className="rounded-lg bg-amber-50 p-4 text-sm text-amber-800">Format slide tidak valid.</p>; } })()}</div>
           ) : artifact.type === 'TABLE' ? (
             savedTable ? <TableArtifactPreview table={savedTable} /> : <p role="alert" className="m-6 rounded-lg bg-amber-50 p-4 text-xs text-amber-800">Dataset tabel ini tidak valid.</p>
@@ -1219,9 +1267,9 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
                     <span className="w-2.5 h-2.5 rounded-full bg-emerald-500/80" />
                     <span className="ml-2 text-[11px] text-slate-300 font-sans font-medium">{artifact.title}</span>
                   </div>
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2.5 tabular-nums">
                     <span>{artifact.language || 'code'}</span>
-                    <span>•</span>
+                    <span>·</span>
                     <span>{lineCount} baris</span>
                   </div>
                 </div>
@@ -1240,17 +1288,129 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
                   setExecutionStatus('idle');
                 }}
                 onStop={handleStopExecution}
-                onRequestFixCode={onRequestRevision ? (errorSummary) => {
-                  onRequestRevision(
-                    `Perbaiki bug/error berikut pada kode (${artifact.language || 'code'}):\n\`\`\`\n${errorSummary}\n\`\`\`\nPastikan logika utama tetap berjalan aman dan bebas dari error sintaks maupun runtime.`,
-                    { ...artifact, content: editableContent }
-                  );
-                } : undefined}
               />
             </div>
           ) : (
             /* PAPER SHEET VIEW: Lembaran Kertas Kerja Rapi (max-w-3xl, centered, p-8 sampai p-12, shadow-sm, border tipis) */
             <div className="max-w-3xl mx-auto my-2 sm:my-4 bg-white dark:bg-slate-900 rounded-2xl p-7 sm:p-10 md:p-12 border border-slate-200/70 dark:border-slate-800 shadow-sm leading-relaxed print-document-area">
+              {/* Quick Study, Visual & Academic Export Action Bar for Academic Documents & Outlines */}
+              {(artifact.type === 'DOCUMENT' || artifact.type === 'OUTLINE') && (
+                <div className="mb-6 pb-4 border-b border-slate-100 dark:border-slate-800 flex flex-col gap-2.5 text-xs">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-medium text-slate-500 dark:text-slate-400">
+                      Studio Akademik & Visual:
+                    </span>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setStudySuiteInitialTab('defense');
+                          setIsStudySuiteOpen(true);
+                        }}
+                        className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50/70 px-2.5 text-xs font-semibold text-indigo-800 hover:bg-indigo-100 dark:border-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-200 cursor-pointer whitespace-nowrap"
+                      >
+                        <ShieldCheck className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+                        <span>Simulasi Sidang</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setStudySuiteInitialTab('audit');
+                          setIsStudySuiteOpen(true);
+                        }}
+                        className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 text-xs font-medium text-slate-700 hover:border-amber-300 hover:bg-amber-50/60 hover:text-amber-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 cursor-pointer whitespace-nowrap"
+                      >
+                        <FileSearch className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                        <span>Audit Klaim & Sitasi</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setStudySuiteInitialTab('graph');
+                          setIsStudySuiteOpen(true);
+                        }}
+                        className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 text-xs font-medium text-slate-700 hover:border-sky-300 hover:bg-sky-50/60 hover:text-sky-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 cursor-pointer whitespace-nowrap"
+                      >
+                        <Network className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400" />
+                        <span>Peta Literatur</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setStudySuiteInitialTab('mood_progress');
+                          setIsStudySuiteOpen(true);
+                        }}
+                        className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 text-xs font-medium text-slate-700 hover:border-teal-300 hover:bg-teal-50/60 hover:text-teal-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 cursor-pointer whitespace-nowrap"
+                      >
+                        <HeartPulse className="h-3.5 w-3.5 text-teal-600 dark:text-teal-400" />
+                        <span>Mood vs. Progres Bab</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setStudySuiteInitialTab('defense_kit');
+                          setIsStudySuiteOpen(true);
+                        }}
+                        className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50/70 px-2.5 text-xs font-semibold text-emerald-800 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200 cursor-pointer whitespace-nowrap"
+                      >
+                        <Award className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                        <span>Paket Sidang 1-Klik</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setStudySuiteInitialTab('flashcards');
+                          setIsStudySuiteOpen(true);
+                        }}
+                        className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 text-xs font-medium text-slate-700 hover:border-indigo-300 hover:bg-indigo-50/60 hover:text-indigo-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 cursor-pointer whitespace-nowrap"
+                      >
+                        <Layers className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+                        <span>Flashcard & Kuis</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setStudySuiteInitialTab('matrix');
+                          setIsStudySuiteOpen(true);
+                        }}
+                        className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 text-xs font-medium text-slate-700 hover:border-teal-300 hover:bg-teal-50/60 hover:text-teal-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 cursor-pointer whitespace-nowrap"
+                      >
+                        <Table2 className="h-3.5 w-3.5 text-teal-600 dark:text-teal-400" />
+                        <span>Matriks Literatur</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setStudySuiteInitialTab('visual');
+                          setIsStudySuiteOpen(true);
+                        }}
+                        className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 text-xs font-medium text-slate-700 hover:border-indigo-300 hover:bg-indigo-50/60 hover:text-indigo-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 cursor-pointer whitespace-nowrap"
+                      >
+                        <BarChart3 className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+                        <span>Visual & Grafik</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setStudySuiteInitialTab('audio');
+                          setIsStudySuiteOpen(true);
+                        }}
+                        className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 text-xs font-medium text-slate-700 hover:border-emerald-300 hover:bg-emerald-50/60 hover:text-emerald-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 cursor-pointer whitespace-nowrap"
+                      >
+                        <Radio className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                        <span>Studio Audio 2 Host</span>
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100/80 dark:border-slate-800/80">
+                    <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                      Ekspor Naskah Skripsi 1-Klik:
+                    </span>
+                    <AcademicQuickExportBar title={artifact.title} content={editableContent} />
+                  </div>
+                </div>
+              )}
+
               {/* Top Citation Style Bar jika tipe CITATION */}
               {artifact.type === 'CITATION' && (
                 <div className="mb-6 pb-4 border-b border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs">
@@ -1391,11 +1551,11 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
         </div>
 
         {/* Kanan: Info kata & waktu baca / Info kode */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 tabular-nums">
           {artifact.type === 'CODE' ? (
             <>
               <span className="font-mono">{artifact.language || 'code'}</span>
-              <span>•</span>
+              <span>·</span>
               <span>{lineCount} baris</span>
               {viewMode === 'preview' && (
                 <div className="flex items-center gap-1.5 ml-2">
@@ -1426,7 +1586,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
               )}
             </>
           ) : (
-            <span>{wordCount} kata • ±{readingTime} mnt baca</span>
+            <span>{wordCount} kata · ±{readingTime} mnt baca</span>
           )}
         </div>
       </footer>

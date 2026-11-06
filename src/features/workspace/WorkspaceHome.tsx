@@ -6,6 +6,7 @@ import { STARTER_TASKS } from './constants/workspaceConstants';
 import { WorkspaceApiService, type WorkspaceSearchResult } from './services/workspaceApiService';
 import type { WorkspaceContract } from '../../../shared/contracts/workspace';
 import { BrandLogo } from '../../components/ui/BrandLogo';
+import { DailyStudentHub } from './components/DailyStudentHub';
 
 interface WorkspaceHomeProps {
   chats: Chat[];
@@ -296,6 +297,11 @@ export const WorkspaceHome: React.FC<WorkspaceHomeProps> = ({ chats, isLoading =
             {hasMoreSearchResults && <button type="button" disabled={searchLoading || searchLoadingMore} onClick={() => void loadMoreSearchResults()} className="mt-2.5 inline-flex min-h-9 items-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-wait disabled:opacity-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800">{searchLoadingMore ? 'Melanjutkan pencarian…' : 'Telusuri data berikutnya'}</button>}
           </section>
         ) : <>
+          <DailyStudentHub
+            isGuest={isGuest}
+            onStartWorkspaceWithPlan={(prompt) => startWorkspace(prompt, false)}
+          />
+
           <section className="mt-6" aria-labelledby="continue-working-title">
             <div className="mb-2 flex items-center justify-between gap-3"><h2 id="continue-working-title" className="text-sm font-semibold text-slate-900 dark:text-slate-100">Lanjutkan pekerjaan</h2>{(isLoading || isLoadingWorkspaces) && <span role="status" className="text-xs text-slate-500">Memuat…</span>}</div>
             {recent.length > 0 ? (

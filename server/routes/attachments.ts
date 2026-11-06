@@ -436,10 +436,12 @@ router.post(
         }
       }
 
+      const issuedGuestToken = res.getHeader('X-Guest-Attachment-Token');
       return res.status(201).json({
         success: true,
         attachments: savedAttachments,
-        attachment: savedAttachments[0]
+        attachment: savedAttachments[0],
+        ...(typeof issuedGuestToken === 'string' ? { guestAttachmentToken: issuedGuestToken } : {})
       });
     } catch (err: any) {
       console.error('[ATTACHMENT_UPLOAD_FATAL_ERROR]', err?.message || 'Unknown error');

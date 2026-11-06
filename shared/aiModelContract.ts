@@ -12,14 +12,10 @@ export type ModelAvailability = 'configured' | 'temporarily_unavailable' | 'prov
 export type ModelTier = 'Free' | 'Pro' | 'Premium';
 
 /** The only canonical default model ID shared by browser and server. */
-export const DEFAULT_AI_MODEL_ID = 'ollama-qwen3-1.7b';
+export const DEFAULT_AI_MODEL_ID = 'gemini-3.8-flash';
 
 /** Sentinel ID for Auto Smart Routing */
 export const AUTO_ROUTING_MODEL_ID = 'auto';
-
-export function isAutoRoutingModel(id?: string | null): boolean {
-  return id === AUTO_ROUTING_MODEL_ID || id === 'auto';
-}
 
 // --- FASE 23: OFFICIAL RUANGTENANG AI PROFILES ---
 export type TenangProfileId = 'tenang-turbo' | 'tenang-middle' | 'tenang-low';

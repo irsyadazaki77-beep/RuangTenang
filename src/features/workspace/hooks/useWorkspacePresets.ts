@@ -5,7 +5,7 @@ import type {
   UserPersonalizationPreferences,
   PresetSelectionSnapshot
 } from '../../../lib/aiPresets';
-import { AUTO_ROUTING_MODEL_ID, isKerjaProfile } from '../../../lib/aiModels';
+import { AUTO_ROUTING_MODEL_ID, isKerjaProfile, KERJA_PROFILES } from '../../../lib/aiModels';
 import { BUILT_IN_PRESETS, DEFAULT_PRESET_ID, getBuiltInPresetById } from '../constants/presetConstants';
 import {
   loadUserCustomPresets,
@@ -73,11 +73,11 @@ export function useWorkspacePresets({
 
   // Preset summary string
   const activePresetSummary = useMemo(() => {
-    const manualModelName = isManualModelOverride
-      ? (models.find(m => m.id === selectedModel)?.name || selectedModel)
+    const profileName = isManualModelOverride
+      ? (KERJA_PROFILES.find(p => p.id === selectedModel)?.name || selectedModel)
       : undefined;
-    return getPresetSummary(activePreset, manualModelName);
-  }, [activePreset, isManualModelOverride, selectedModel, models]);
+    return getPresetSummary(activePreset, profileName);
+  }, [activePreset, isManualModelOverride, selectedModel]);
 
   // Select a preset
   const selectPreset = useCallback((presetId: PresetId) => {
