@@ -75,6 +75,7 @@ export default defineConfig(() => {
     build: {
       target: 'es2022',
       sourcemap: false,
+      chunkSizeWarningLimit: 1600,
       rollupOptions: {
         output: {
           manualChunks(id) {
@@ -90,6 +91,9 @@ export default defineConfig(() => {
               }
               if (/\/node_modules\/(react-markdown|micromark|unified|mdast|unist|vfile)\//.test(id)) {
                 return 'vendor-markdown';
+              }
+              if (/\/node_modules\/(katex|remark-math|rehype-katex)\//.test(id)) {
+                return 'vendor-katex';
               }
               if (/\/node_modules\/docx\//.test(id)) {
                 return 'vendor-docx';

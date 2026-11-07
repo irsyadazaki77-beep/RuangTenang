@@ -25,6 +25,26 @@ export function applyArtifactPatch(args: {
   };
 }
 
+/**
+ * Re-anchors a patch whose base content is stale (e.g. the user kept typing while the AI answered).
+ * Succeeds only when the original text still occurs exactly once; ambiguous or missing targets are rejected.
+ */
+export function relocateArtifactPatch(args: {
+  patch: ArtifactPatch;
+  artifactId: string;
+  currentContent: string;
+}): ArtifactPatchValidation {
+  const { patch, artifactId, currentContent } = args;
+  if (patch.artifactId !== artifactId) return { valid: false, reason: 'artifact_mismatch' };
+  if (!patch.originalText) return { valid: false, reason: 'target_mismatch' };
+  const first = currentContent.indexOf(patch.originalText);
+  if (first < 0 || currentContent.indexOf(patch.originalText, first + 1) >= 0) return { valid: false, reason: 'target_mismatch' };
+  return {
+    valid: true,
+    content: `${currentContent.slice(0, first)}${patch.replacementText}${currentContent.slice(first + patch.originalText.length)}`
+  };
+}
+
 /** Limit inline requests to the selection and nearby text so large documents are not sent unnecessarily. */
 export function getArtifactSelectionContext(content: string, start: number, end: number, radius = 700): string {
   const safeStart = Math.max(0, Math.min(content.length, start));

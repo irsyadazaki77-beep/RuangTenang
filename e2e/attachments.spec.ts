@@ -2,8 +2,16 @@ import { expect, test } from '@playwright/test';
 
 test.describe('Workspace attachment context', () => {
   test.beforeEach(async ({ page }) => {
-    await page.addInitScript(() => localStorage.setItem('rt_onboarding_completed_guest', 'true'));
+    await page.addInitScript(() => {
+      localStorage.setItem('rt_onboarding_completed_guest', 'true');
+      sessionStorage.setItem('rt_guest_ai_consent', 'true');
+    });
     await page.goto('/workspace/new?__test__=true');
+    const consentDialog = page.getByRole('dialog', { name: 'Persetujuan Pemrosesan AI' });
+    if (await consentDialog.isVisible()) {
+      await consentDialog.getByRole('button', { name: 'Setuju dan lanjutkan' }).click();
+      await expect(consentDialog).toBeHidden();
+    }
     await expect(page.getByRole('textbox', { name: 'Pesan untuk Asisten RuangKerja' })).toBeVisible({ timeout: 20_000 });
   });
 
@@ -18,7 +26,7 @@ test.describe('Workspace attachment context', () => {
     const fileList = page.getByRole('list', { name: 'Dokumen aktif Workspace' });
     const fileRow = fileList.getByRole('listitem').filter({ hasText: fileName });
     await expect(fileRow).toBeVisible();
-    await expect(fileRow.getByText('Siap', { exact: true })).toBeVisible({ timeout: 20_000 });
+    await expect(fileRow.getByText('Siap dianalisis', { exact: true })).toBeVisible({ timeout: 20_000 });
 
     await fileRow.getByRole('button', { name: `Hapus ${fileName}` }).click();
     await expect(fileRow).toHaveCount(0);

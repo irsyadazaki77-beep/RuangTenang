@@ -9,7 +9,8 @@ import {
   Search,
   ChevronDown,
   BarChart3,
-  Table2
+  Table2,
+  Sparkles
 } from 'lucide-react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { WorkspaceArtifact, ArtifactType, WorkspaceTab, WorkspaceArtifactSelection, ArtifactPatch, WorkspaceChapterScope } from '../types';
@@ -28,7 +29,20 @@ function ProposalPreview({ proposal, onDismiss }: {
   onDismiss?: () => void;
 }) {
   const isPresentation = proposal.language === 'presentation' || (proposal.content.includes('"format": "ruangtenang-presentation-v1"') || proposal.content.includes('"format":"ruangtenang-presentation-v1"'));
+  const isPoster = proposal.language === 'poster' || (proposal.content.includes('"format": "ruangtenang-poster-v1"') || proposal.content.includes('"format":"ruangtenang-poster-v1"'));
   const isTable = proposal.type === 'TABLE' || proposal.content.includes('"type": "table"') || proposal.content.includes('"type":"table"');
+
+  let posterData: { title: string; authors?: string; institution?: string; sections: Array<{ id: string; title: string; content: string }> } | null = null;
+  if (isPoster) {
+    try {
+      const parsed = JSON.parse(proposal.content);
+      if (parsed.format === 'ruangtenang-poster-v1' && Array.isArray(parsed.sections)) {
+        posterData = parsed;
+      }
+    } catch {
+      // Fallback
+    }
+  }
 
   let tableData: { title?: string; columns: string[]; rows: Array<Record<string, unknown>> } | null = null;
   if (isTable) {
@@ -80,7 +94,27 @@ function ProposalPreview({ proposal, onDismiss }: {
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto p-5">
-        {deckData ? (
+        {posterData ? (
+          <div className="space-y-4 max-w-4xl mx-auto">
+            <div className="flex items-center justify-between text-xs text-slate-500 border-b border-slate-200 dark:border-slate-800 pb-2">
+              <span className="font-semibold text-slate-700 dark:text-slate-300">Poster Ilmiah ({posterData.sections.length} modul)</span>
+              <span className="text-[11px] font-mono">Format: A1/A2 Poster Proposal</span>
+            </div>
+            <div className="rounded-xl border border-indigo-200 bg-indigo-900 text-white p-5 text-center">
+              <h4 className="text-base font-bold">{posterData.title}</h4>
+              <p className="text-xs opacity-90 mt-1">{posterData.authors || 'Peneliti'}</p>
+              <p className="text-[10px] opacity-75">{posterData.institution || 'Institusi'}</p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {posterData.sections.map((sec, idx) => (
+                <div key={idx} className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3 shadow-2xs">
+                  <h5 className="text-xs font-bold text-slate-900 dark:text-slate-100 mb-1">{idx + 1}. {sec.title}</h5>
+                  <p className="text-xs text-slate-600 dark:text-slate-300 whitespace-pre-wrap leading-relaxed">{sec.content}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : deckData ? (
           <div className="space-y-4 max-w-4xl mx-auto">
             <div className="flex items-center justify-between text-xs text-slate-500 border-b border-slate-200 dark:border-slate-800 pb-2">
               <span className="font-semibold text-slate-700 dark:text-slate-300">Slide Deck ({deckData.slides.length} slide)</span>
@@ -187,6 +221,15 @@ interface WorkspaceCanvasPaneProps {
   activeChapterScope?: WorkspaceChapterScope;
   onChangeChapterScope?: (scope: WorkspaceChapterScope) => void;
   onCreateChapterArtifact?: (scope: WorkspaceChapterScope) => void;
+  onOpenQuizModal?: () => void;
+  onOpenCitationAudit?: () => void;
+  onOpenThesisBinder?: () => void;
+  onOpenMockDefense?: () => void;
+  onOpenSupervisorNotes?: () => void;
+  onOpenDataStudioChart?: () => void;
+  onOpenTurnitinAudit?: () => void;
+  onOpenKnowledgeGraph?: () => void;
+  onOpenCouncilDebate?: () => void;
 }
 
 const CHAPTER_SCOPES: WorkspaceChapterScope[] = ['ALL', 'BAB_1', 'BAB_2', 'BAB_3', 'BAB_4', 'BAB_5', 'LAMPIRAN'];
@@ -228,7 +271,16 @@ export const WorkspaceCanvasPane: React.FC<WorkspaceCanvasPaneProps> = React.mem
   revisionCommit,
   activeChapterScope = 'ALL',
   onChangeChapterScope,
-  onCreateChapterArtifact
+  onCreateChapterArtifact,
+  onOpenQuizModal,
+  onOpenCitationAudit,
+  onOpenThesisBinder,
+  onOpenMockDefense,
+  onOpenSupervisorNotes,
+  onOpenDataStudioChart,
+  onOpenTurnitinAudit,
+  onOpenKnowledgeGraph,
+  onOpenCouncilDebate
 }) => {
   const shouldReduceMotion = useReducedMotion();
   const [isDesktopLayout, setIsDesktopLayout] = useState(() => typeof window === 'undefined'
@@ -444,6 +496,15 @@ export const WorkspaceCanvasPane: React.FC<WorkspaceCanvasPaneProps> = React.mem
               isStreaming={isStreaming}
               isExpanded={isCanvasExpanded}
               onToggleExpand={onToggleExpand}
+              onOpenQuizModal={onOpenQuizModal}
+              onOpenCitationAudit={onOpenCitationAudit}
+              onOpenThesisBinder={onOpenThesisBinder}
+              onOpenMockDefense={onOpenMockDefense}
+              onOpenSupervisorNotes={onOpenSupervisorNotes}
+              onOpenDataStudioChart={onOpenDataStudioChart}
+              onOpenTurnitinAudit={onOpenTurnitinAudit}
+              onOpenKnowledgeGraph={onOpenKnowledgeGraph}
+              onOpenCouncilDebate={onOpenCouncilDebate}
             />
             </Suspense>
           ) : (
@@ -461,6 +522,17 @@ export const WorkspaceCanvasPane: React.FC<WorkspaceCanvasPaneProps> = React.mem
                 >
                   <FilePlus className="w-3.5 h-3.5" />
                   <span>+ Buat Draf Baru</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onCreateNewArtifact('DOCUMENT');
+                  }}
+                  className="h-8 px-2.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 text-xs font-semibold shadow-3xs hover:bg-indigo-100 transition-all cursor-pointer flex items-center gap-1"
+                  title="Buat poster ilmiah A1/A2"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                  <span>+ Poster</span>
                 </button>
                 <button
                   type="button"
@@ -565,6 +637,15 @@ export const WorkspaceCanvasPane: React.FC<WorkspaceCanvasPaneProps> = React.mem
                   isStreaming={isStreaming}
                   isExpanded={false}
                   onToggleExpand={() => {}}
+                  onOpenQuizModal={onOpenQuizModal}
+                  onOpenCitationAudit={onOpenCitationAudit}
+                  onOpenThesisBinder={onOpenThesisBinder}
+                  onOpenMockDefense={onOpenMockDefense}
+                  onOpenSupervisorNotes={onOpenSupervisorNotes}
+                  onOpenDataStudioChart={onOpenDataStudioChart}
+                  onOpenTurnitinAudit={onOpenTurnitinAudit}
+                  onOpenKnowledgeGraph={onOpenKnowledgeGraph}
+                  onOpenCouncilDebate={onOpenCouncilDebate}
                 />
                 </Suspense>
               ) : (

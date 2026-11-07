@@ -120,13 +120,18 @@ export async function createXlsxBuffer(input: ExportXlsxOptions): Promise<Uint8A
   const used = new Set<string>();
   for (const table of tables) {
     const sheet = workbook.addWorksheet(sheetName(table.name, used));
-    sheet.addRow(table.headers.map(header => safeCell(header) ?? ''));
-    sheet.getRow(1).font = { bold: true };
+    const headerRow = sheet.addRow(table.headers.map(header => safeCell(header) ?? ''));
+    headerRow.font = { bold: true, color: { argb: 'FF1E293B' } };
+    headerRow.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFF1F5F9' }
+    };
     table.rows.forEach(row => sheet.addRow(row));
     sheet.views = [{ state: 'frozen', ySplit: 1 }];
     table.headers.forEach((header, index) => {
       const widest = Math.max(header.length, ...table.rows.slice(0, 200).map(row => String(row[index] ?? '').length));
-      sheet.getColumn(index + 1).width = Math.min(60, Math.max(10, widest + 2));
+      sheet.getColumn(index + 1).width = Math.min(60, Math.max(12, widest + 3));
     });
   }
   if (chart?.provenance || chart?.datasetVersion) {

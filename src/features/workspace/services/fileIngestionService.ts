@@ -346,13 +346,17 @@ export async function processFileForWorkspace(
 export async function retryWorkspaceFile(attachmentId: string, signal?: AbortSignal, chatId?: string): Promise<FileValidationResult> {
   try {
     const scope = chatId ? `?chatId=${encodeURIComponent(chatId)}` : '';
+    const csrfCookie = document.cookie.match(/(?:^|; )XSRF-TOKEN=([^;]+)/)?.[1];
+    const retryHeaders: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'X-Requested-With': 'XMLHttpRequest',
+      'X-Guest-AI-Consent': String(readGuestAiConsent())
+    };
+    if (csrfCookie) retryHeaders['X-CSRF-Token'] = decodeURIComponent(csrfCookie);
+
     const response = await fetch(`/api/v1/chat/attachments/${encodeURIComponent(attachmentId)}/retry${scope}`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Requested-With': 'XMLHttpRequest',
-        'X-Guest-AI-Consent': String(readGuestAiConsent())
-      },
+      headers: retryHeaders,
       credentials: 'include',
       body: JSON.stringify({ guestAiConsent: readGuestAiConsent() }),
       signal

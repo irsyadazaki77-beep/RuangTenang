@@ -6,8 +6,8 @@ export const MAX_ATTACHMENT_UPLOAD_BATCH = 3;
 /** Normal Chat message attachment limit; Workspace has a separate active-document limit. */
 export const MAX_CHAT_ATTACHMENTS_PER_MESSAGE = 3;
 export const MAX_UPLOAD_FILE_SIZE_BYTES = 5 * 1024 * 1024;
-export const MAX_DOCUMENT_CONTEXT_TOKENS = 2500;
-export const MAX_DOCUMENT_CONTEXT_CHUNKS = 8;
+export const MAX_DOCUMENT_CONTEXT_TOKENS = 6000;
+export const MAX_DOCUMENT_CONTEXT_CHUNKS = 16;
 export const SUPPORTED_WORKSPACE_FILE_EXTENSIONS = [
   'txt', 'md', 'markdown', 'csv', 'tsv', 'json', 'bib', 'ris',
   'py', 'js', 'jsx', 'ts', 'tsx', 'java', 'cpp', 'c', 'h', 'sql', 'html', 'css', 'xml', 'yaml', 'yml', 'sh', 'r',

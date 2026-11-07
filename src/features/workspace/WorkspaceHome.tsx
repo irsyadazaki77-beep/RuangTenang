@@ -1,6 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowUpRight, BookOpen, FileText, Lightbulb, Menu, Plus, Search, Sparkles } from 'lucide-react';
+import { ArrowUpRight, BookOpen, FileText, LayoutGrid, Lightbulb, List, Menu, Pin, Plus, Search, Sparkles } from 'lucide-react';
+import { safeLocalStorage } from '../../lib/storage';
+
+type RecentLayout = 'list' | 'grid';
+const RECENT_LAYOUT_STORAGE_KEY = 'ruangkerja:home-layout';
 import type { Chat } from '../chat/types';
 import { STARTER_TASKS } from './constants/workspaceConstants';
 import { WorkspaceApiService, type WorkspaceSearchResult } from './services/workspaceApiService';
@@ -59,6 +63,22 @@ export const WorkspaceHome: React.FC<WorkspaceHomeProps> = ({ chats, isLoading =
   const loadMoreControllerRef = useRef<AbortController | null>(null);
   const searchMoreControllerRef = useRef<AbortController | null>(null);
   const legacyChats = useMemo(() => workspaceChats(chats), [chats]);
+
+  // Jembatan Otomatis RuangCoder -> RuangKerja (Redirect langsung ke workspace aktif)
+  useEffect(() => {
+    try {
+      if (globalThis.sessionStorage?.getItem('coder_to_ruangkerja_bridge')) {
+        const latestChat = legacyChats[0];
+        if (latestChat) {
+          navigate(`/workspace/c/${latestChat.id}`, { replace: true });
+        } else {
+          navigate('/workspace/new', { replace: true });
+        }
+      }
+    } catch {
+      // Ignore storage access errors
+    }
+  }, [legacyChats, navigate]);
 
   useEffect(() => () => {
     loadMoreControllerRef.current?.abort();
@@ -209,6 +229,8 @@ export const WorkspaceHome: React.FC<WorkspaceHomeProps> = ({ chats, isLoading =
   };
 
   const [showAllRecent, setShowAllRecent] = useState(false);
+  const [recentLayout, setRecentLayout] = useState<RecentLayout>(() => safeLocalStorage.getItem(RECENT_LAYOUT_STORAGE_KEY) === 'grid' ? 'grid' : 'list');
+  const changeRecentLayout = (layout: RecentLayout) => { setRecentLayout(layout); safeLocalStorage.setItem(RECENT_LAYOUT_STORAGE_KEY, layout); };
 
   const allRecent = useMemo(() => {
     const fromApi = workspaces.filter(workspace => !workspace.isArchived).map(workspace => ({
@@ -241,13 +263,11 @@ export const WorkspaceHome: React.FC<WorkspaceHomeProps> = ({ chats, isLoading =
   const showResults = search.trim().length >= 2;
 
   return (
-    <div className="relative h-full min-h-0 overflow-y-auto bg-gradient-to-br from-[#f0f4ff]/70 via-[#f8fafc]/80 to-[#eef2ff]/70 px-4 py-5 transition-colors duration-300 dark:from-[#090e17]/80 dark:via-slate-950/90 dark:to-[#0f172a]/80 sm:px-7 sm:py-8 lg:px-10">
-      <div aria-hidden="true" className="pointer-events-none absolute -left-24 -top-28 h-80 w-80 rounded-full bg-indigo-200/20 blur-3xl dark:bg-indigo-900/15" />
-      <div aria-hidden="true" className="pointer-events-none absolute -right-24 top-1/3 h-72 w-72 rounded-full bg-blue-200/20 blur-3xl dark:bg-blue-900/10" />
+    <div className="relative h-full min-h-0 overflow-y-auto bg-transparent px-4 py-5 text-primary sm:px-7 sm:py-8 lg:px-10">
       <div className="relative mx-auto w-full max-w-3xl">
-        {onOpenSidebar && <button type="button" onClick={onOpenSidebar} className="mb-4 inline-flex min-h-10 items-center gap-2 rounded-lg px-2 text-xs font-medium text-slate-600 transition hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-slate-300 dark:hover:bg-slate-900 lg:hidden"><Menu className="h-4 w-4" /> Menu workspace</button>}
+        {onOpenSidebar && <button type="button" onClick={onOpenSidebar} className="btn-secondary mb-4 inline-flex items-center gap-2 rounded-lg px-3 text-xs lg:hidden"><Menu className="h-4 w-4" /> Menu workspace</button>}
 
-        <section className="rounded-3xl border border-white/80 bg-white/65 p-4 shadow-[0_20px_55px_-42px_rgba(79,70,229,0.3)] backdrop-blur-sm dark:border-slate-800/80 dark:bg-slate-900/55 dark:shadow-[0_20px_55px_-40px_rgba(0,0,0,0.8)] sm:p-5">
+        <section className="rounded-3xl border border-slate-200/80 bg-white/90 p-5 shadow-2xs backdrop-blur-md dark:border-white/10 dark:bg-white/5 sm:p-6">
           <div className="mb-4 flex items-center gap-3">
             <BrandLogo mode="RUANG_KERJA" size="lg" iconOnly />
             <div><p className="text-lg font-bold tracking-tight text-slate-900 dark:text-slate-100">RuangKerja</p><p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">Bagian dari RuangTenang</p></div>
@@ -257,11 +277,11 @@ export const WorkspaceHome: React.FC<WorkspaceHomeProps> = ({ chats, isLoading =
               <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-white sm:text-3xl">Apa yang ingin kamu kerjakan?</h1>
               <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">Mulai pekerjaan baru atau lanjutkan yang terakhir.</p>
             </div>
-            <button type="button" onClick={() => startWorkspace()} className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 text-sm font-semibold text-white transition hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 dark:bg-indigo-600 dark:hover:bg-indigo-500"><Plus className="h-4 w-4" /> Workspace baru</button>
+            <button type="button" onClick={() => startWorkspace()} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-xs font-semibold text-white shadow-xs hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100 cursor-pointer transition-colors"><Plus className="h-4 w-4" /> Workspace baru</button>
           </div>
-          <label className="mt-5 flex h-11 w-full items-center gap-3 rounded-lg border border-slate-200 bg-white px-3.5 text-slate-400 transition focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/15 dark:border-slate-700 dark:bg-slate-900">
+          <label className="mt-5 flex h-11 w-full items-center gap-3 rounded-2xl border border-slate-200/80 bg-slate-50/80 px-4 text-slate-800 transition-colors focus-within:border-indigo-500 focus-within:bg-white focus-within:ring-2 focus-within:ring-indigo-500/20 dark:border-white/10 dark:bg-white/5 dark:text-slate-100 dark:focus-within:border-indigo-400 dark:focus-within:bg-white/10">
             <Search className="h-4 w-4 shrink-0" />
-            <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Cari workspace, tugas, file, atau dokumen" className="w-full bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400 dark:text-white" aria-label="Cari workspace, tugas, file, atau dokumen" />
+            <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Cari workspace, tugas, file, atau dokumen" className="w-full bg-transparent text-sm text-primary outline-none placeholder:text-muted" aria-label="Cari workspace, tugas, file, atau dokumen" />
             {search && <button type="button" onClick={() => setSearch('')} className="rounded-md px-2 py-1 text-xs font-medium text-slate-500 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:hover:bg-slate-800">Hapus</button>}
           </label>
         </section>
@@ -297,10 +317,10 @@ export const WorkspaceHome: React.FC<WorkspaceHomeProps> = ({ chats, isLoading =
           </section>
         ) : <>
           <section className="mt-6" aria-labelledby="continue-working-title">
-            <div className="mb-2 flex items-center justify-between gap-3"><h2 id="continue-working-title" className="text-sm font-semibold text-slate-900 dark:text-slate-100">Lanjutkan pekerjaan</h2>{(isLoading || isLoadingWorkspaces) && <span role="status" className="text-xs text-slate-500">Memuat…</span>}</div>
+            <div className="mb-2 flex items-center justify-between gap-3"><h2 id="continue-working-title" className="text-sm font-semibold text-slate-900 dark:text-slate-100">Lanjutkan pekerjaan</h2><div className="flex items-center gap-2">{(isLoading || isLoadingWorkspaces) && <span role="status" className="text-xs text-slate-500">Memuat…</span>}{recent.length > 0 && <div className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5 dark:border-slate-800 dark:bg-slate-900" role="group" aria-label="Tampilan daftar workspace">{(['list', 'grid'] as const).map(option => <button key={option} type="button" onClick={() => changeRecentLayout(option)} aria-pressed={recentLayout === option} aria-label={option === 'list' ? 'Tampilan daftar' : 'Tampilan grid'} title={option === 'list' ? 'Tampilan daftar' : 'Tampilan grid'} className={`flex h-7 w-7 items-center justify-center rounded-md transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${recentLayout === option ? 'bg-slate-100 text-slate-900 dark:bg-slate-800 dark:text-slate-100' : 'text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}>{option === 'list' ? <List className="h-3.5 w-3.5" /> : <LayoutGrid className="h-3.5 w-3.5" />}</button>)}</div>}</div></div>
             {recent.length > 0 ? (
               <>
-                <div className="divide-y divide-slate-200/80 rounded-xl border border-slate-200/80 bg-white dark:divide-slate-800 dark:border-slate-800 dark:bg-slate-900">{recent.map(workspace => <button key={workspace.id} type="button" onClick={() => navigate(`/workspace/c/${encodeURIComponent(workspace.id)}`)} className="group flex min-h-15.5 w-full min-w-0 items-center gap-3 px-3.5 py-2.5 text-left transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500 dark:hover:bg-slate-800/60 sm:px-4"><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-300"><BookOpen className="h-4 w-4" /></span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium text-slate-800 group-hover:text-indigo-700 dark:text-slate-100 dark:group-hover:text-indigo-300">{workspace.title}</span><span className="mt-0.5 block text-[11px] text-slate-500">{relativeDate(workspace.updatedAt)}</span></span>{workspace.pinned && <span className="hidden text-[11px] text-slate-500 sm:inline">Disematkan</span>}<ArrowUpRight className="h-4 w-4 shrink-0 text-slate-400 opacity-0 transition group-hover:opacity-100 sm:opacity-100" /></button>)}</div>
+                <div className={recentLayout === 'grid' ? 'grid grid-cols-1 gap-2 sm:grid-cols-2' : 'divide-y divide-slate-200/80 rounded-xl border border-slate-200/80 bg-white dark:divide-slate-800 dark:border-slate-800 dark:bg-slate-900'} data-testid="workspace-recent-list" data-layout={recentLayout}>{recent.map(workspace => <RecentWorkspaceItem key={workspace.id} workspace={workspace} layout={recentLayout} onClick={() => navigate(`/workspace/c/${encodeURIComponent(workspace.id)}`)} />)}</div>
                 {(allRecent.length > 6 || hasMoreWorkspaces) && <div className="mt-2.5 flex flex-wrap items-center gap-2">
                   {!showAllRecent ? <button
                     type="button"
@@ -332,8 +352,18 @@ export const WorkspaceHome: React.FC<WorkspaceHomeProps> = ({ chats, isLoading =
 };
 
 const labels: Record<WorkspaceSearchResult['kind'], string> = { workspace: 'Workspace', task: 'Tugas', artifact: 'Dokumen', file: 'File', message: 'Percakapan' };
+
+interface RecentWorkspace { id: string; title: string; updatedAt?: string; pinned: boolean }
+const RecentWorkspaceItem: React.FC<{ workspace: RecentWorkspace; layout: RecentLayout; onClick: () => void }> = ({ workspace, layout, onClick }) => {
+  const isGrid = layout === 'grid';
+  const pinBadge = workspace.pinned && <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-1.5 py-0.5 text-[10.5px] font-medium text-amber-700 dark:bg-amber-950/40 dark:text-amber-300"><Pin className="h-3 w-3" aria-hidden="true" />Disematkan</span>;
+  if (isGrid) {
+    return <button type="button" onClick={onClick} className="group flex min-h-24 w-full min-w-0 flex-col justify-between gap-3 rounded-2xl border border-slate-200/80 bg-white/90 p-4 text-left shadow-3xs transition-all hover:border-indigo-400 hover:shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-white/10 dark:bg-white/5 dark:hover:border-indigo-500/50 cursor-pointer"><span className="flex items-start justify-between gap-2"><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300"><BookOpen className="h-4 w-4" /></span>{pinBadge}</span><span className="min-w-0"><span className="block truncate text-sm font-medium text-slate-800 group-hover:text-indigo-700 dark:text-slate-100 dark:group-hover:text-indigo-300">{workspace.title}</span><span className="mt-0.5 block text-[11px] text-slate-500">{relativeDate(workspace.updatedAt)}</span></span></button>;
+  }
+  return <button type="button" onClick={onClick} className="group flex min-h-15.5 w-full min-w-0 items-center gap-3 px-3.5 py-2.5 text-left transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500 dark:hover:bg-slate-800/60 sm:px-4"><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-300"><BookOpen className="h-4 w-4" /></span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium text-slate-800 group-hover:text-indigo-700 dark:text-slate-100 dark:group-hover:text-indigo-300">{workspace.title}</span><span className="mt-0.5 block text-[11px] text-slate-500">{relativeDate(workspace.updatedAt)}</span></span>{workspace.pinned && <span className="hidden sm:inline">{pinBadge}</span>}<ArrowUpRight className="h-4 w-4 shrink-0 text-slate-400 opacity-0 transition group-hover:opacity-100 sm:opacity-100" /></button>;
+};
 const SearchResultRow: React.FC<{ result: WorkspaceSearchResult; onClick: () => void }> = ({ result, onClick }) => <button type="button" onClick={onClick} className="flex min-h-15.5 w-full items-center gap-3 px-3.5 py-2.5 text-left transition first:rounded-t-xl last:rounded-b-xl hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500 dark:hover:bg-slate-800/60 sm:px-4"><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300"><FileText className="h-4 w-4" /></span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium text-slate-800 dark:text-slate-100">{result.title}</span><span className="mt-0.5 block truncate text-[11px] text-slate-500">{labels[result.kind]} · {result.snippet}</span></span><ArrowUpRight className="h-4 w-4 shrink-0 text-slate-400" /></button>;
 
-const QuickAction: React.FC<{ label: string; description?: string; icon: React.ReactNode; onClick: () => void }> = ({ label, description, icon, onClick }) => <button type="button" onClick={onClick} className="group flex min-h-16 items-center gap-3 rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-left transition hover:border-indigo-300 hover:bg-indigo-50/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-indigo-800 dark:hover:bg-indigo-950/20"><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300">{icon}</span><span className="min-w-0 flex-1"><span className="block text-xs font-medium leading-5 text-slate-700 line-clamp-2 group-hover:text-indigo-700 dark:text-slate-200 dark:group-hover:text-indigo-300">{label}</span>{description && <span className="block text-[11px] leading-4 text-slate-500 line-clamp-2 dark:text-slate-400">{description}</span>}</span><ArrowUpRight className="h-3.5 w-3.5 shrink-0 text-slate-400 transition group-hover:translate-x-0.5" /></button>;
+const QuickAction: React.FC<{ label: string; description?: string; icon: React.ReactNode; onClick: () => void }> = ({ label, description, icon, onClick }) => <button type="button" onClick={onClick} className="group flex min-h-16 items-center gap-3 rounded-2xl border border-slate-200/80 bg-white/90 px-3.5 py-2.5 text-left shadow-3xs transition-all hover:border-indigo-400 hover:bg-indigo-50/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-white/10 dark:bg-white/5 dark:hover:border-indigo-500/50 dark:hover:bg-indigo-950/20 cursor-pointer"><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300">{icon}</span><span className="min-w-0 flex-1"><span className="block text-xs font-medium leading-5 text-slate-700 line-clamp-2 group-hover:text-indigo-700 dark:text-slate-200 dark:group-hover:text-indigo-300">{label}</span>{description && <span className="block text-[11px] leading-4 text-slate-500 line-clamp-2 dark:text-slate-400">{description}</span>}</span><ArrowUpRight className="h-3.5 w-3.5 shrink-0 text-slate-400 transition group-hover:translate-x-0.5" /></button>;
 
 export default WorkspaceHome;

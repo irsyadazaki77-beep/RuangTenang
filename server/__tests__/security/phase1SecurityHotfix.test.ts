@@ -20,6 +20,17 @@ app.use('/api/v1/counselors', counselorsRouter);
 app.use('/api/v1/sos', emergencyRouter);
 app.use('/api/v1/appointments', appointmentsRouter);
 
+const nextMonday = (from = new Date()) => {
+  const date = new Date(from);
+  date.setUTCHours(12, 0, 0, 0);
+  const daysUntilMonday = (1 - date.getUTCDay() + 7) % 7 || 7;
+  date.setUTCDate(date.getUTCDate() + daysUntilMonday);
+  return date.toISOString().slice(0, 10);
+};
+const firstAppointmentDate = nextMonday();
+const secondAppointmentDate = nextMonday(new Date(`${firstAppointmentDate}T12:00:00Z`));
+const thirdAppointmentDate = nextMonday(new Date(`${secondAppointmentDate}T12:00:00Z`));
+
 const generateUserToken = (user: { userId: string; role: string; name: string; email: string }) => {
   return jwt.sign(
     {
@@ -89,6 +100,7 @@ describe('FASE 1 SECURITY HOTFIX REGRESSION TEST SUITE', () => {
         }
       ]
     });
+    await prisma.idempotencyRecord.deleteMany({ where: { key: { in: ['shared-idempotency-key-123', 'key-payload-conflict-999', 'key-replay-identical-888'] } } });
 
     // Seed test counselor for proper relations compatibility
     await prisma.counselors.create({
@@ -98,6 +110,18 @@ describe('FASE 1 SECURITY HOTFIX REGRESSION TEST SUITE', () => {
         role: 'Konselor Akademik',
         specialties: JSON.stringify(['Akademik']),
         imageUrl: 'https://example.com/c.jpg',
+        availability: JSON.stringify(['Senin']),
+        isVerified: true,
+        isDemoData: false
+      }
+    });
+    await prisma.counselors.create({
+      data: {
+        id: 'c-sec-test-2',
+        name: 'Dimas Satria, S.Psi.',
+        role: 'Konselor Akademik',
+        specialties: JSON.stringify(['Akademik']),
+        imageUrl: 'https://example.com/d.jpg',
         availability: JSON.stringify(['Senin']),
         isVerified: true,
         isDemoData: false
@@ -242,14 +266,14 @@ describe('FASE 1 SECURITY HOTFIX REGRESSION TEST SUITE', () => {
       const idempotencyKey = 'shared-idempotency-key-123';
       const appointmentPayloadA = {
         counselorName: 'Dr. Anita Rahmawati, M.Psi.',
-        date: '2026-09-01',
-        time: '10:00',
+        date: firstAppointmentDate,
+        time: '10:30',
         notes: 'Sesi Mahasiswa A'
       };
 
       const appointmentPayloadB = {
         counselorName: 'Dimas Satria, S.Psi.',
-        date: '2026-09-02',
+        date: firstAppointmentDate,
         time: '14:00',
         notes: 'Sesi Mahasiswa B'
       };
@@ -283,15 +307,15 @@ describe('FASE 1 SECURITY HOTFIX REGRESSION TEST SUITE', () => {
 
       const payloadOriginal = {
         counselorName: 'Dr. Anita Rahmawati, M.Psi.',
-        date: '2026-09-10',
-        time: '09:00',
+        date: secondAppointmentDate,
+        time: '10:30',
         notes: 'Pertemuan Pertama'
       };
 
       const payloadDifferent = {
         counselorName: 'Dr. Anita Rahmawati, M.Psi.',
-        date: '2026-09-10',
-        time: '09:00',
+        date: secondAppointmentDate,
+        time: '10:30',
         notes: 'PAYLOAD BERBEDA DENGAN KEY SAMA'
       };
 
@@ -320,8 +344,8 @@ describe('FASE 1 SECURITY HOTFIX REGRESSION TEST SUITE', () => {
 
       const payload = {
         counselorName: 'Dr. Anita Rahmawati, M.Psi.',
-        date: '2026-09-15',
-        time: '11:00',
+        date: thirdAppointmentDate,
+        time: '10:30',
         notes: 'Identical Replay Test'
       };
 

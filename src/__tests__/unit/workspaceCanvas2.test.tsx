@@ -119,7 +119,9 @@ describe('Workspace Canvas 2.0 UX & Behavior', () => {
     };
     render(<WorkspaceAttachmentList attachments={[attachment]} onRemove={vi.fn()} onRetry={vi.fn()} />);
 
-    expect(screen.getByText('Ekstraksi parsial')).toHaveAttribute('title', attachment.extractionWarnings?.[0]);
+    expect(screen.getByText('Sebagian')).toBeInTheDocument();
+    fireEvent.click(screen.getByText(/Lihat 1 peringatan/));
+    expect(screen.getByText(attachment.extractionWarnings![0])).toBeInTheDocument();
   });
 
   it('renders a long raw document gutter as text instead of one element per line', async () => {
@@ -174,7 +176,13 @@ describe('Workspace Canvas 2.0 UX & Behavior', () => {
     fireEvent.keyDown(input, { key: 'Enter' });
 
     await waitFor(() => expect(onUpdateArtifact).toHaveBeenCalledWith(expect.objectContaining({ title: 'Metodologi Penelitian Baru' })));
-    expect(onSaveArtifact).toHaveBeenCalledWith(mockArtifact.content, 'Metodologi Penelitian Baru');
+    expect(onSaveArtifact).toHaveBeenCalledWith(
+      mockArtifact.content,
+      'Metodologi Penelitian Baru',
+      false,
+      mockArtifact.updatedAt,
+      mockArtifact.version
+    );
   });
 
   it('switches seamlessly between view modes: preview, edit, raw, and diff', async () => {
@@ -231,7 +239,13 @@ describe('Workspace Canvas 2.0 UX & Behavior', () => {
 
     // Click manual save
     fireEvent.click(saveBtn);
-    expect(onSaveArtifact).toHaveBeenCalledWith('# Teks Draf Terupdate', mockArtifact.title);
+    expect(onSaveArtifact).toHaveBeenCalledWith(
+      '# Teks Draf Terupdate',
+      mockArtifact.title,
+      false,
+      mockArtifact.updatedAt,
+      mockArtifact.version
+    );
   });
 
   it('keeps a newer edit dirty when an older save acknowledges', async () => {
@@ -285,7 +299,11 @@ describe('Workspace Canvas 2.0 UX & Behavior', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Terapkan' }));
 
     await waitFor(() => expect(onSaveArtifact).toHaveBeenCalledWith(
-      mockArtifact.content.replace(selected, 'Studi ini menerapkan pendekatan kualitatif.'), mockArtifact.title, true, mockArtifact.updatedAt
+      mockArtifact.content.replace(selected, 'Studi ini menerapkan pendekatan kualitatif.'),
+      mockArtifact.title,
+      true,
+      mockArtifact.updatedAt,
+      mockArtifact.version
     ));
     expect(onDismissInlineEdit).toHaveBeenCalled();
   });

@@ -24,7 +24,7 @@ export interface AcademicStyleProfile {
 export interface ExportDocxOptions {
   title: string;
   content: string;
-  templateType?: 'skripsi' | 'makalah' | 'ieee_apa';
+  templateType?: 'skripsi' | 'makalah' | 'ieee_apa' | 'laporan_proyek' | 'executive_brief';
   authorName?: string;
   university?: string;
   faculty?: string;
@@ -37,6 +37,12 @@ export function createAcademicStylePreset(templateType: ExportDocxOptions['templ
   }
   if (templateType === 'ieee_apa') {
     return { paperSize: 'A4', marginTopCm: 2.54, marginBottomCm: 2.54, marginLeftCm: 2.54, marginRightCm: 2.54, fontFamily: 'Times New Roman', fontSizePt: 12, lineSpacing: 2, citationStyle: 'APA7', pageNumbering: 'arabic_top_right' };
+  }
+  if (templateType === 'laporan_proyek') {
+    return { paperSize: 'A4', marginTopCm: 2.5, marginBottomCm: 2.5, marginLeftCm: 3, marginRightCm: 2.5, fontFamily: 'Calibri', fontSizePt: 11, lineSpacing: 1.15, citationStyle: 'IEEE', pageNumbering: 'arabic_top_right' };
+  }
+  if (templateType === 'executive_brief') {
+    return { paperSize: 'A4', marginTopCm: 2, marginBottomCm: 2, marginLeftCm: 2, marginRightCm: 2, fontFamily: 'Arial', fontSizePt: 10.5, lineSpacing: 1.15, citationStyle: 'APA7', pageNumbering: 'arabic_top_right' };
   }
   return { paperSize: 'A4', marginTopCm: 3, marginBottomCm: 3, marginLeftCm: 3, marginRightCm: 3, fontFamily: 'Times New Roman', fontSizePt: 12, lineSpacing: 1.5, citationStyle: 'APA7', pageNumbering: 'arabic_top_right' };
 }
@@ -216,7 +222,9 @@ async function buildAcademicDocxDocument(options: ExportDocxOptions) {
     PageNumber,
     NumberFormat,
     Header,
-    Footer
+    Footer,
+    ImageRun,
+    TableOfContents
   } = await import('docx');
 
   const isSkripsi = templateType === 'skripsi';
@@ -322,12 +330,13 @@ async function buildAcademicDocxDocument(options: ExportDocxOptions) {
   /**
    * Helper to parse markdown content lines into docx Paragraphs and Tables
    */
-  const parseContentToElements = (markdownText: string): any[] => {
+  const parseContentToElements = async (markdownText: string): Promise<any[]> => {
     const children: any[] = [];
     const lines = markdownText.split('\n');
 
     let isInTable = false;
     let tableRowsData: string[][] = [];
+    let tableAlignments: any[] = [];
     let inCodeBlock = false;
     let codeBlockLines: string[] = [];
 
@@ -340,21 +349,24 @@ async function buildAcademicDocxDocument(options: ExportDocxOptions) {
 
       const tableRows = tableRowsData.map((rowCells, rIdx) => {
         const isHeader = rIdx === 0;
+        const isEvenRow = rIdx > 0 && rIdx % 2 === 0;
         return new TableRow({
           tableHeader: isHeader,
-          children: rowCells.map(cellText => {
+          children: rowCells.map((cellText, cIdx) => {
+            const align = isHeader ? AlignmentType.CENTER : (tableAlignments[cIdx] || AlignmentType.LEFT);
             return new TableCell({
               width: { size: colWidth, type: WidthType.DXA },
               margins: { top: 120, bottom: 120, left: 140, right: 140 },
+              shading: isHeader ? { fill: 'F1F5F9' } : isEvenRow ? { fill: 'F8FAFC' } : undefined,
               borders: {
-                top: { style: isHeader ? BorderStyle.SINGLE : BorderStyle.NONE, size: 4, color: '000000' },
-                bottom: { style: BorderStyle.SINGLE, size: 4, color: '000000' },
+                top: { style: isHeader ? BorderStyle.SINGLE : BorderStyle.SINGLE, size: isHeader ? 6 : 2, color: isHeader ? '334155' : 'CBD5E1' },
+                bottom: { style: BorderStyle.SINGLE, size: isHeader ? 6 : 2, color: isHeader ? '334155' : 'CBD5E1' },
                 left: { style: BorderStyle.NONE, size: 0, color: 'auto' },
                 right: { style: BorderStyle.NONE, size: 0, color: 'auto' }
               },
               children: [
                 new Paragraph({
-                  alignment: isHeader ? AlignmentType.CENTER : AlignmentType.LEFT,
+                  alignment: align,
                   spacing: { before: 0, after: 0, line: LINE_SPACING_SINGLE },
                   children: parseInlineMarkdown(cellText.trim(), isHeader, false, BODY_FONT_SIZE - 2)
                 })
@@ -375,6 +387,7 @@ async function buildAcademicDocxDocument(options: ExportDocxOptions) {
       // Spacer after table
       children.push(new Paragraph({ spacing: { before: 120, after: 120 } }));
       tableRowsData = [];
+      tableAlignments = [];
       isInTable = false;
     };
 
@@ -447,6 +460,12 @@ async function buildAcademicDocxDocument(options: ExportDocxOptions) {
       // Handle Markdown Tables
       if (trimmed.startsWith('|') && trimmed.endsWith('|')) {
         if (trimmed.includes('---')) {
+          const alignSpecs = trimmed.slice(1, -1).split('|').map(c => c.trim());
+          tableAlignments = alignSpecs.map(spec => {
+            if (spec.startsWith(':') && spec.endsWith(':')) return AlignmentType.CENTER;
+            if (spec.endsWith(':')) return AlignmentType.RIGHT;
+            return AlignmentType.LEFT;
+          });
           continue; // Separator row
         }
         const cells = trimmed
@@ -458,6 +477,98 @@ async function buildAcademicDocxDocument(options: ExportDocxOptions) {
         continue;
       } else if (isInTable) {
         flushTable();
+      }
+
+      // Handle Markdown Images (![caption](url))
+      const imgMatch = trimmed.match(/^!\[(.*?)\]\((.*?)\)/);
+      if (imgMatch) {
+        if (isInTable) flushTable();
+        const caption = imgMatch[1].trim();
+        const rawUrl = imgMatch[2].trim();
+        let imageBuffer: Uint8Array | null = null;
+        try {
+          if (rawUrl.startsWith('data:image/')) {
+            const base64Data = rawUrl.split(',')[1];
+            if (base64Data) imageBuffer = Buffer.from(base64Data, 'base64');
+          } else if (typeof window === 'undefined' && (rawUrl.startsWith('/api/ai/images/') || rawUrl.startsWith('uploads/'))) {
+            const fs = await import('node:fs');
+            const path = await import('node:path');
+            const filename = path.basename(rawUrl);
+            const localPath = path.resolve(process.cwd(), 'uploads', 'generated-images', filename);
+            if (fs.existsSync(localPath)) {
+              imageBuffer = fs.readFileSync(localPath);
+            }
+          } else if (typeof fetch !== 'undefined') {
+            const fetchUrl = typeof window !== 'undefined' && rawUrl.startsWith('/') ? `${window.location.origin}${rawUrl}` : rawUrl;
+            const res = await fetch(fetchUrl);
+            if (res.ok) {
+              const ab = await res.arrayBuffer();
+              imageBuffer = new Uint8Array(ab);
+            }
+          }
+        } catch {
+          imageBuffer = null;
+        }
+
+        if (imageBuffer && imageBuffer.length > 0) {
+          children.push(
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              spacing: { before: 180, after: 80 },
+              children: [
+                new ImageRun({
+                  data: imageBuffer,
+                  transformation: {
+                    width: 480,
+                    height: 270
+                  }
+                } as any)
+              ]
+            })
+          );
+        }
+
+        children.push(
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            spacing: { before: 40, after: 180, line: LINE_SPACING_SINGLE },
+            children: [
+              new TextRun({
+                text: `Gambar: ${caption || 'Dokumentasi Visual Penelitian'}`,
+                font: FONT_FAMILY,
+                size: BODY_FONT_SIZE - 2,
+                italics: true
+              })
+            ]
+          })
+        );
+        continue;
+      }
+
+      // Handle Table of Contents
+      if (trimmed === '[TOC]' || trimmed === '<!-- toc -->' || /^(?:#+\s*)?DAFTAR\s+ISI\s*$/i.test(trimmed)) {
+        if (isInTable) flushTable();
+        children.push(
+          new Paragraph({
+            heading: HeadingLevel.HEADING_1,
+            alignment: isSkripsi ? AlignmentType.CENTER : AlignmentType.LEFT,
+            spacing: { before: 240, after: 180, line: LINE_SPACING_1_5 },
+            children: [
+              new TextRun({
+                text: 'DAFTAR ISI',
+                bold: true,
+                font: FONT_FAMILY,
+                size: HEADING1_FONT_SIZE
+              })
+            ]
+          }),
+          new TableOfContents('DAFTAR ISI', {
+            hyperlink: true,
+            headingStyleRange: '1-3'
+          }),
+          new Paragraph({ spacing: { before: 120, after: 120 } })
+        );
+        continue;
       }
 
       // Blank Line
@@ -650,7 +761,7 @@ async function buildAcademicDocxDocument(options: ExportDocxOptions) {
       footers: {
         default: createPageNumberFooter()
       },
-      children: parseContentToElements(frontMatterText)
+      children: await parseContentToElements(frontMatterText)
     });
 
     // Section 2: Main Body -> Arabic numbers (1, 2, 3) in header top right
@@ -664,7 +775,7 @@ async function buildAcademicDocxDocument(options: ExportDocxOptions) {
       headers: {
         default: createPageNumberHeader()
       },
-      children: parseContentToElements(mainBodyText)
+      children: await parseContentToElements(mainBodyText)
     });
   } else {
     const page = {
@@ -686,7 +797,7 @@ async function buildAcademicDocxDocument(options: ExportDocxOptions) {
       ...(style.pageNumbering === 'roman_bottom_center'
         ? { footers: { default: createPageNumberFooter() } }
         : {}),
-      children: parseContentToElements(content)
+      children: await parseContentToElements(content)
     });
   }
 
@@ -702,6 +813,7 @@ export async function createAcademicDocxBlob(options: ExportDocxOptions): Promis
   const { doc, Packer } = await buildAcademicDocxDocument(options);
   return Packer.toBlob(doc);
 }
+export { createAcademicDocxBlob as exportDocxBlob };
 
 export async function exportToAcademicDocx(options: ExportDocxOptions): Promise<void> {
   const blob = await createAcademicDocxBlob(options);

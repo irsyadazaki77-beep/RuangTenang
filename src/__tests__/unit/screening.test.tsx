@@ -64,7 +64,7 @@ describe('Screening Modal Unit & Integration Tests', () => {
     renderWithRouter(<ScreeningModal isOpen={true} onClose={vi.fn()} onComplete={vi.fn()} />);
 
     expect(screen.getByText(/Cek Kondisi Mental Mahasiswa/i)).toBeInTheDocument();
-    expect(screen.getByText(/bukan pengganti diagnosis medis/i)).toBeInTheDocument();
+    expect(screen.getByText(/hasilnya bukan diagnosis/i)).toBeInTheDocument();
   });
 
   it('handles authenticated user submit with successful backend persistence', async () => {
@@ -109,7 +109,7 @@ describe('Screening Modal Unit & Integration Tests', () => {
     // Verify persistence callback called once save succeeds
     await waitFor(() => {
       expect(onPersisted).toHaveBeenCalledTimes(1);
-      expect(screen.getByText(/Hasil (berhasil disimpan|skrining tersimpan aman) ke (profil )?akun Anda/i)).toBeInTheDocument();
+      expect(screen.getByText(/Hasil skrining tersimpan di akun/i)).toBeInTheDocument();
     });
   });
 

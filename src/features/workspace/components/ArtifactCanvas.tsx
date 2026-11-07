@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback, useDeferredValue } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { modalBackdropVariants, modalPanelVariants } from '../../../lib/motionTokens';
 import {
@@ -18,8 +19,25 @@ import {
   GitCompare,
   CopyPlus,
   Trash2,
-  AlertTriangle
+  AlertTriangle,
+  Layout,
+  Printer,
+  ZoomIn,
+  ZoomOut,
+  RefreshCw,
+  Award,
+  RotateCcw,
+  BarChart2,
+  ShieldCheck,
+  Share2,
+  Users,
+  ListTree,
+  Type,
+  Maximize2,
+  Minimize2
 } from 'lucide-react';
+import { downloadHtmlAsPng } from '../../../services/imageService';
+import { isQuizContent, parseQuizSpec, evaluateQuizAttempt, quizToMarkdown } from '../utils/quizModel';
 import { WorkspaceArtifact, CitationStyle, ArtifactVersionRecord, ArtifactPatch, WorkspaceArtifactSelection } from '../types';
 import { applyArtifactPatch } from '../utils/artifactPatch';
 import { WorkspaceToolSelector } from './WorkspaceToolSelector';
@@ -45,6 +63,17 @@ const AcademicParaphraseModal = React.lazy(() => import('./AcademicParaphraseMod
 const ArtifactCanvasEditor = React.lazy(() => import('./ArtifactCanvasEditor').then(m => ({ default: m.ArtifactCanvasEditor })));
 const ArtifactTableEditor = React.lazy(() => import('./ArtifactDataEditors').then(m => ({ default: m.ArtifactTableEditor })));
 const ArtifactPresentationEditor = React.lazy(() => import('./ArtifactDataEditors').then(m => ({ default: m.ArtifactPresentationEditor })));
+const ArtifactPosterEditor = React.lazy(() => import('./ArtifactPosterEditor').then(m => ({ default: m.ArtifactPosterEditor })));
+const ArtifactPosterPreview = React.lazy(() => import('./ArtifactPosterEditor').then(m => ({ default: m.ArtifactPosterPreview })));
+
+function isPosterContent(content: string): boolean {
+  try {
+    const value = JSON.parse(content);
+    return value?.format === 'ruangtenang-poster-v1' && Array.isArray(value?.sections);
+  } catch {
+    return false;
+  }
+}
 import {
   downloadBibTeXFile,
   downloadRISFile,
@@ -55,6 +84,11 @@ import {
   generateBibTeX,
   generateRIS
 } from '../utils/citationExport';
+import { extractDocumentOutline } from '../utils/documentOutline';
+import { safeLocalStorage } from '../../../lib/storage';
+
+type DocumentFont = 'serif' | 'sans';
+const DOCUMENT_FONT_STORAGE_KEY = 'ruangkerja:document-font';
 
 export interface ArtifactCanvasProps {
   artifact: WorkspaceArtifact;
@@ -80,6 +114,15 @@ export interface ArtifactCanvasProps {
   isStreaming?: boolean;
   isExpanded?: boolean;
   onToggleExpand?: () => void;
+  onOpenQuizModal?: () => void;
+  onOpenCitationAudit?: () => void;
+  onOpenThesisBinder?: () => void;
+  onOpenMockDefense?: () => void;
+  onOpenSupervisorNotes?: () => void;
+  onOpenDataStudioChart?: () => void;
+  onOpenTurnitinAudit?: () => void;
+  onOpenKnowledgeGraph?: () => void;
+  onOpenCouncilDebate?: () => void;
 }
 
 export type CanvasViewMode = 'preview' | 'edit' | 'raw' | 'diff';
@@ -159,9 +202,29 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
   revisionCommit,
   isStreaming = false,
   isExpanded: controlledExpanded,
-  onToggleExpand: controlledToggleExpand
+  onToggleExpand: controlledToggleExpand,
+  onOpenQuizModal,
+  onOpenCitationAudit,
+  onOpenThesisBinder,
+  onOpenMockDefense,
+  onOpenSupervisorNotes,
+  onOpenDataStudioChart,
+  onOpenTurnitinAudit,
+  onOpenKnowledgeGraph,
+  onOpenCouncilDebate
 }) => {
   const { showToast } = useToast();
+  let navigate: (to: string, options?: any) => void;
+  try {
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    navigate = useNavigate();
+  } catch {
+    navigate = (to: string) => {
+      if (typeof window !== 'undefined') {
+        window.location.href = to;
+      }
+    };
+  }
   const showToastRef = useRef(showToast);
   showToastRef.current = showToast;
   const initialRecoveredDraft = readCanvasDraftRecovery(scrollStorageKey, artifact.id);
@@ -186,6 +249,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
 
   const [viewMode, setViewMode] = useState<CanvasViewMode>(initialCanvasDraft !== undefined ? 'edit' : 'preview');
   const [isPresentationStudio, setIsPresentationStudio] = useState(artifact.language === 'presentation' || isPresentationContent(artifact.content));
+  const [isPosterStudio, setIsPosterStudio] = useState(artifact.language === 'poster' || isPosterContent(artifact.content));
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [titleInput, setTitleInput] = useState(artifact.title || '');
   const [editableContent, setEditableContent] = useState(initialCanvasDraft ?? artifact.content);
@@ -204,9 +268,43 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
     if (artifact.type !== 'TABLE') return null;
     try {
       const value = JSON.parse(editableContent) as Partial<SavedTableSpec>;
-      return value.type === 'table' && typeof value.title === 'string' && Array.isArray(value.columns) && Array.isArray(value.rows) && typeof value.sourceVersion === 'string' ? value as SavedTableSpec : null;
-    } catch { return null; }
-  }, [artifact.type, editableContent]);
+      if (value.type === 'table' && typeof value.title === 'string' && Array.isArray(value.columns) && Array.isArray(value.rows)) {
+        return value as SavedTableSpec;
+      }
+    } catch {
+      // Fallback: Parse markdown table format
+      const lines = editableContent.trim().split('\n').map(l => l.trim()).filter(Boolean);
+      if (lines.length >= 2 && lines[0].includes('|')) {
+        const header = lines[0].split('|').map(s => s.trim()).filter(Boolean);
+        const rows: Array<Record<string, unknown>> = [];
+        const contentLines = lines.slice(lines[1].includes('---') ? 2 : 1);
+        for (const line of contentLines) {
+          const cells = line.split('|').map(s => s.trim()).filter(Boolean);
+          if (cells.length > 0) {
+            const row: Record<string, unknown> = {};
+            header.forEach((col, idx) => {
+              row[col] = cells[idx] || '';
+            });
+            rows.push(row);
+          }
+        }
+        if (header.length > 0 && rows.length > 0) {
+          return {
+            type: 'table' as const,
+            title: artifact.title || 'Tabel Data Riset',
+            columns: header,
+            rows,
+            sourceVersion: '1',
+            sourceFileId: '',
+            filename: '',
+            sheetName: '',
+            transformations: []
+          };
+        }
+      }
+    }
+    return null;
+  }, [artifact.type, artifact.title, editableContent]);
   const [isDirty, setIsDirty] = useState(initialCanvasDraft !== undefined);
   const [saveStatus, setSaveStatus] = useState<SaveState>(initialCanvasDraft !== undefined ? 'unsaved' : artifact.persistenceStatus === 'persistent' || !artifact.persistenceStatus ? 'saved' : artifact.persistenceStatus === 'saving' ? 'saving' : artifact.persistenceStatus === 'failed' ? 'failed' : 'local');
   const [saveFailureMessage, setSaveFailureMessage] = useState('Gagal simpan');
@@ -323,6 +421,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
       // If switching to another artifact, reset all local session states
       setTitleInput(artifact.title || '');
       setIsPresentationStudio(artifact.language === 'presentation' || isPresentationContent(artifact.content));
+      setIsPosterStudio(artifact.language === 'poster' || isPosterContent(artifact.content));
       const recovery = readCanvasDraftRecovery(scrollStorageKey, artifact.id);
       const recoveryContent = recovery?.content !== artifact.content ? recovery?.content : undefined;
       const hasParentDraft = initialDraftContent !== undefined && initialDraftContent !== artifact.content;
@@ -399,7 +498,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
 
   useEffect(() => {
     scheduleDraftSync(artifact.id, editableContentRef.current, true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- initialize the parent draft once per artifact from the effective editor content.
+     
   }, [artifact.id, scheduleDraftSync]);
 
   useEffect(() => {
@@ -503,7 +602,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
       }
       return false;
     }
-  }, [artifact.id, artifact.title, onDraftContentChange, onSaveArtifact, onUpdateArtifact, scrollStorageKey]);
+  }, [artifact, onDraftContentChange, onSaveArtifact, onUpdateArtifact, scrollStorageKey]);
 
   const markDraftDirty = useCallback(() => {
     setIsDirty(true);
@@ -575,6 +674,18 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
     setInlineInstruction('');
   };
 
+  const handleQuickTransform = (instruction: string) => {
+    if (selection && selection.text.trim()) {
+      requestInlineEdit(instruction);
+    } else {
+      if (onRequestRevision) {
+        onRequestRevision(instruction, { ...artifact, content: editableContent });
+      } else {
+        showToast('Koneksi revisi dokumen tidak tersedia.', 'info');
+      }
+    }
+  };
+
   const acceptInlinePatch = async () => {
     if (!visibleInlineEditPatch) return;
     const result = applyArtifactPatch({
@@ -638,6 +749,10 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'e') {
         e.preventDefault();
         setShowExportModal(true);
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k' && viewMode === 'edit') {
+        e.preventDefault();
+        if (selection) setShowInlineAsk(true);
+        else showToast('Pilih teks di editor terlebih dahulu, lalu tekan Ctrl + K untuk meminta AI.', 'info');
       } else if (e.altKey && e.key.toLowerCase() === 'z') {
         e.preventDefault();
         toggleExpand();
@@ -648,7 +763,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleManualSave, toggleExpand]);
+  }, [handleManualSave, showToast, toggleExpand, viewMode, selection]);
 
   // Close dropdowns when clicking outside
   useEffect(() => {
@@ -676,6 +791,64 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
            trimmed.startsWith('mindmap');
   }, [artifact.type, artifact.language, editableContent]);
 
+  const isVisualHtml = useMemo(() => {
+    if (artifact.type === 'CODE' && (artifact.language === 'html' || artifact.language === 'htm')) return true;
+    const trimmed = (editableContent || '').trim().toLowerCase();
+    return trimmed.startsWith('<!doctype html') || trimmed.startsWith('<html') || trimmed.includes('class="visual-canvas"');
+  }, [artifact.type, artifact.language, editableContent]);
+
+  const [visualHtmlScale, setVisualHtmlScale] = useState(1);
+  const [isExportingVisualPng, setIsExportingVisualPng] = useState(false);
+  const [showVisualSourceCode, setShowVisualSourceCode] = useState(false);
+  const visualIframeRef = useRef<HTMLIFrameElement>(null);
+
+  const handleDownloadVisualHtmlPng = useCallback(async () => {
+    setIsExportingVisualPng(true);
+    try {
+      const filename = `${(artifact.title || 'catatan-visual').toLowerCase().replace(/[^a-z0-9]/g, '-')}.png`;
+      const success = await downloadHtmlAsPng(editableContent, filename);
+      if (success) {
+        showToast('Gambar PNG berhasil diunduh', 'success');
+      } else {
+        showToast('Gagal memproses PNG, silakan gunakan tombol Cetak / PDF', 'info');
+      }
+    } catch {
+      showToast('Gagal memproses gambar', 'error');
+    } finally {
+      setIsExportingVisualPng(false);
+    }
+  }, [artifact.title, editableContent, showToast]);
+
+  const handlePrintVisualHtml = useCallback(() => {
+    if (visualIframeRef.current) {
+      try {
+        visualIframeRef.current.contentWindow?.focus();
+        visualIframeRef.current.contentWindow?.print();
+      } catch {
+        const printWindow = window.open('', '_blank');
+        if (printWindow) {
+          printWindow.document.write(editableContent);
+          printWindow.document.close();
+          printWindow.focus();
+          printWindow.print();
+        }
+      }
+    }
+  }, [editableContent]);
+
+  const isQuiz = useMemo(() => isQuizContent(editableContent), [editableContent]);
+  const parsedQuiz = useMemo(() => (isQuiz ? parseQuizSpec(editableContent) : null), [isQuiz, editableContent]);
+  const [canvasQuizAnswers, setCanvasQuizAnswers] = useState<Record<string, number>>({});
+  const [canvasQuizSubmitted, setCanvasQuizSubmitted] = useState(false);
+
+  const handleCanvasSelectQuizOption = useCallback((questionId: string, optionIdx: number) => {
+    if (canvasQuizSubmitted) return;
+    setCanvasQuizAnswers(prev => ({
+      ...prev,
+      [questionId]: optionIdx
+    }));
+  }, [canvasQuizSubmitted]);
+
   const deferredContent = useDeferredValue(editableContent);
   const { wordCount, lineCount } = useMemo(() => {
     let wordCount = 0;
@@ -696,6 +869,28 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
     ? Array.from({ length: lineCount }, (_, index) => String(index + 1)).join('\n')
     : '', [lineCount, viewMode]);
   const readingTime = Math.max(1, Math.ceil(wordCount / 200));
+
+  // Document outline (mini table of contents) and reading-font preference.
+  const documentOutline = useMemo(() => extractDocumentOutline(deferredContent), [deferredContent]);
+  const proseContainerRef = useRef<HTMLDivElement>(null);
+  const [isOutlineOpen, setIsOutlineOpen] = useState(false);
+  const [documentFont, setDocumentFont] = useState<DocumentFont>(() =>
+    safeLocalStorage.getItem(DOCUMENT_FONT_STORAGE_KEY) === 'sans' ? 'sans' : 'serif'
+  );
+  const toggleDocumentFont = useCallback(() => {
+    setDocumentFont(previous => {
+      const next: DocumentFont = previous === 'serif' ? 'sans' : 'serif';
+      safeLocalStorage.setItem(DOCUMENT_FONT_STORAGE_KEY, next);
+      return next;
+    });
+  }, []);
+  const scrollToOutlineItem = useCallback((index: number) => {
+    const headings = proseContainerRef.current?.querySelectorAll('h1, h2, h3');
+    const target = headings?.[index] as HTMLElement | undefined;
+    if (!target) return;
+    const reduceMotion = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    target.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
+  }, []);
 
   const handleCopy = async () => {
     try {
@@ -829,7 +1024,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
     showToast(`Berkas .${extension} berhasil diunduh.`, 'success');
   };
 
-  const handleContentChange = (newVal: string) => {
+  const handleContentChange = useCallback((newVal: string) => {
     saveSeqRef.current += 1;
     editableContentRef.current = newVal;
     setEditableContent(newVal);
@@ -846,7 +1041,14 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
       setIsDirty(false);
       setSaveStatus(artifact.persistenceStatus === 'persistent' || !artifact.persistenceStatus ? 'saved' : 'local');
     }
-  };
+  }, [artifact, scheduleDraftSync, scrollStorageKey]);
+
+  const handleConvertQuizToMarkdown = useCallback(() => {
+    if (!parsedQuiz) return;
+    const md = quizToMarkdown(parsedQuiz);
+    handleContentChange(md);
+    showToast('Kuis dikonversi menjadi format naskah catatan', 'success');
+  }, [parsedQuiz, handleContentChange, showToast]);
 
   const handleInsertCitation = (formattedCitation: string) => {
     const citationHeading = '\n\n## Daftar Pustaka\n';
@@ -1033,8 +1235,8 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
 
   return (
     <div
-      className={`@container flex flex-col h-full bg-slate-50/60 dark:bg-[#0B101B] transition-all duration-200 overflow-hidden ${
-        isExpanded ? 'fixed inset-0 z-50 bg-white dark:bg-slate-950' : 'relative w-full'
+      className={`@container flex flex-col h-full bg-[var(--rt-surface)] transition-all duration-200 overflow-hidden ${
+        isExpanded ? 'fixed inset-0 z-50 bg-[var(--rt-page)]' : 'relative w-full'
       }`}
     >
       <ArtifactCanvasToolbar
@@ -1046,13 +1248,135 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
         isDirty={isDirty} editorRef={editorRef} showMoreMenu={showMoreMenu} setShowMoreMenu={setShowMoreMenu}
         moreMenuRef={moreMenuRef} showHistory={() => setShowVersionHistoryModal(true)}
         showExport={() => setShowExportModal(true)} isExpanded={isExpanded} toggleExpand={toggleExpand} onClose={onClose}
+        onQuickTransform={handleQuickTransform}
       >
         <button type="button" onClick={() => { setShowMoreMenu(false); setShowVersionHistoryModal(true); }} className="w-full rounded-xl px-2.5 py-2 text-left text-xs text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"><History className="mr-2 inline h-3.5 w-3.5" />Riwayat Versi</button>
         <button type="button" onClick={() => { setShowMoreMenu(false); setShowExportModal(true); }} className="w-full rounded-xl px-2.5 py-2 text-left text-xs text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"><Download className="mr-2 inline h-3.5 w-3.5" />Ekspor dokumen</button>
         <div className="px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Dokumen</div>
         <button type="button" onClick={() => { setShowMoreMenu(false); setViewMode('raw'); }} className="w-full rounded-xl px-2.5 py-2 text-left text-xs text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"><Code2 className="mr-2 inline h-3.5 w-3.5" />Lihat Markdown atau kode</button>
         <button type="button" onClick={() => { setShowMoreMenu(false); setViewMode('diff'); }} className="w-full rounded-xl px-2.5 py-2 text-left text-xs text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"><GitCompare className="mr-2 inline h-3.5 w-3.5" />Bandingkan perubahan</button>
-        {artifact.type === 'DOCUMENT' && <button type="button" onClick={() => { setIsPresentationStudio(true); setShowMoreMenu(false); setViewMode('edit'); if (!isPresentationContent(editableContent)) void import('./ArtifactDataEditors').then(({ createPresentationFromMarkdown }) => handleContentChange(JSON.stringify(createPresentationFromMarkdown(editableContent, artifact.title)))); }} className="w-full rounded-xl px-2.5 py-2 text-left text-xs text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"><Workflow className="mr-2 inline h-3.5 w-3.5" />Buka PowerPoint Studio</button>}
+        {(isPresentationStudio || isPosterStudio) && (
+          <button
+            type="button"
+            onClick={() => {
+              setIsPresentationStudio(false);
+              setIsPosterStudio(false);
+              setShowMoreMenu(false);
+              setViewMode('preview');
+            }}
+            className="w-full rounded-xl px-2.5 py-2 text-left text-xs font-semibold text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950/40"
+          >
+            <FileText className="mr-2 inline h-3.5 w-3.5" />
+            Kembali ke Naskah Dokumen
+          </button>
+        )}
+        {artifact.type === 'DOCUMENT' && <button type="button" onClick={() => { setIsPresentationStudio(true); setIsPosterStudio(false); setShowMoreMenu(false); setViewMode('edit'); if (!isPresentationContent(editableContent)) void import('./ArtifactDataEditors').then(({ createPresentationFromMarkdown }) => handleContentChange(JSON.stringify(createPresentationFromMarkdown(editableContent, artifact.title)))); }} className="w-full rounded-xl px-2.5 py-2 text-left text-xs text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"><Workflow className="mr-2 inline h-3.5 w-3.5" />Buka PowerPoint Studio</button>}
+        {artifact.type === 'DOCUMENT' && <button type="button" onClick={() => { setIsPosterStudio(true); setIsPresentationStudio(false); setShowMoreMenu(false); setViewMode('edit'); if (!isPosterContent(editableContent)) void import('../utils/posterModel').then(({ createPosterFromMarkdown }) => handleContentChange(JSON.stringify(createPosterFromMarkdown(editableContent, artifact.title)))); }} className="w-full rounded-xl px-2.5 py-2 text-left text-xs text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"><Sparkles className="mr-2 inline h-3.5 w-3.5 text-indigo-500" />Buka Poster Ilmiah Studio</button>}
+        {artifact.type === 'DOCUMENT' && onOpenQuizModal && (
+          <button
+            type="button"
+            onClick={() => {
+              setShowMoreMenu(false);
+              onOpenQuizModal();
+            }}
+            className="w-full rounded-xl px-2.5 py-2 text-left text-xs text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+          >
+            <Award className="mr-2 inline h-3.5 w-3.5 text-indigo-500" />
+            Buat Kuis & Latihan Ujian
+          </button>
+        )}
+        {onOpenCitationAudit && (
+          <button
+            type="button"
+            onClick={() => {
+              setShowMoreMenu(false);
+              onOpenCitationAudit();
+            }}
+            className="w-full rounded-xl px-2.5 py-2 text-left text-xs text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+          >
+            <Quote className="mr-2 inline h-3.5 w-3.5 text-teal-600" />
+            Audit Konsistensi Sitasi
+          </button>
+        )}
+        {onOpenThesisBinder && (
+          <button
+            type="button"
+            onClick={() => {
+              setShowMoreMenu(false);
+              onOpenThesisBinder();
+            }}
+            className="w-full rounded-xl px-2.5 py-2 text-left text-xs text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+          >
+            <BookMarked className="mr-2 inline h-3.5 w-3.5 text-amber-600" />
+            Binder Skripsi (Gabung Bab & Ekspor)
+          </button>
+        )}
+        {onOpenMockDefense && (
+          <button
+            type="button"
+            onClick={() => {
+              setShowMoreMenu(false);
+              onOpenMockDefense();
+            }}
+            className="w-full rounded-xl px-2.5 py-2 text-left text-xs text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+          >
+            <Award className="mr-2 inline h-3.5 w-3.5 text-indigo-600" />
+            Simulasi Sidang (AI Mock Defense)
+          </button>
+        )}
+        {onOpenSupervisorNotes && (
+          <button
+            type="button"
+            onClick={() => {
+              setShowMoreMenu(false);
+              onOpenSupervisorNotes();
+            }}
+            className="w-full rounded-xl px-2.5 py-2 text-left text-xs text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+          >
+            <FileText className="mr-2 inline h-3.5 w-3.5 text-violet-600" />
+            Notulensi Bimbingan Dosen
+          </button>
+        )}
+        {onOpenKnowledgeGraph && (
+          <button
+            type="button"
+            onClick={() => {
+              setShowMoreMenu(false);
+              onOpenKnowledgeGraph();
+            }}
+            className="w-full rounded-xl px-2.5 py-2 text-left text-xs text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+          >
+            <Share2 className="mr-2 inline h-3.5 w-3.5 text-cyan-600" />
+            Knowledge Graph & Celah Riset
+          </button>
+        )}
+        {onOpenCouncilDebate && (
+          <button
+            type="button"
+            onClick={() => {
+              setShowMoreMenu(false);
+              onOpenCouncilDebate();
+            }}
+            className="w-full rounded-xl px-2.5 py-2 text-left text-xs text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+          >
+            <Users className="mr-2 inline h-3.5 w-3.5 text-emerald-600" />
+            Debat Dewan Pakar AI (Council)
+          </button>
+        )}
+        {isPresentationContent(editableContent) && (
+          <button
+            type="button"
+            onClick={() => {
+              setShowMoreMenu(false);
+              setIsPresentationStudio(true);
+              setViewMode('edit');
+            }}
+            className="w-full rounded-xl px-2.5 py-2 text-left text-xs font-semibold text-teal-700 hover:bg-teal-50 dark:text-teal-400 dark:hover:bg-teal-950/40"
+          >
+            <Play className="mr-2 inline h-3.5 w-3.5 text-teal-600" />
+            Latihan Presentasi Sidang (Presenter Mode)
+          </button>
+        )}
         <div className="relative z-20 px-1.5 py-1"><WorkspaceToolSelector artifactType={artifact.type} hasArtifact={artifact.id !== 'art_welcome'} disabled={isStreaming} onSelectTool={handleExecuteTool} triggerVariant="header" /></div>
         <button type="button" onClick={handleCopy} className="w-full rounded-xl px-2.5 py-2 text-left text-xs text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"><Copy className="mr-2 inline h-3.5 w-3.5" />Salin Seluruh Konten</button>
         <button type="button" onClick={() => { setShowMoreMenu(false); setShowCitationModal(true); }} className="w-full rounded-xl px-2.5 py-2 text-left text-xs text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"><Quote className="mr-2 inline h-3.5 w-3.5" />Cari Sitasi DOI</button>
@@ -1109,7 +1433,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
           scrollSaveTimerRef.current = null;
           try { globalThis.sessionStorage?.setItem(scrollStorageKey, String(scrollTop)); } catch { /* Scroll restoration is an enhancement only. */ }
         }, 120);
-      }} className="flex-1 overflow-y-auto bg-slate-100/70 dark:bg-[#080d17] p-3 sm:p-5 lg:p-8 custom-scrollbar">
+      }} className="flex-1 overflow-y-auto bg-[var(--rt-page)] p-3 sm:p-5 lg:p-8 custom-scrollbar">
         {/* MODE 4: DIFF (VISUAL VERSION COMPARISON) */}
         {viewMode === 'diff' && (
           <div className="max-w-4xl mx-auto h-145 flex flex-col shadow-sm">
@@ -1125,7 +1449,8 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
 
         {viewMode === 'edit' && artifact.type === 'TABLE' && <React.Suspense fallback={<div role="status" className="mx-auto max-w-4xl p-6 text-xs text-slate-500">Memuat Spreadsheet Studio…</div>}><ArtifactTableEditor content={editableContent} onChange={handleContentChange} onBlur={flushDraftSync} /></React.Suspense>}
         {viewMode === 'edit' && isPresentationStudio && <React.Suspense fallback={<div role="status" className="mx-auto max-w-4xl p-6 text-xs text-slate-500">Memuat PowerPoint Studio…</div>}><ArtifactPresentationEditor content={editableContent} title={artifact.title} onChange={handleContentChange} onBlur={flushDraftSync} /></React.Suspense>}
-        {viewMode === 'edit' && artifact.type !== 'TABLE' && !isPresentationStudio && <React.Suspense fallback={<div role="status" className="mx-auto max-w-4xl p-6 text-xs text-slate-500">Memuat editor…</div>}><ArtifactCanvasEditor
+        {viewMode === 'edit' && isPosterStudio && <React.Suspense fallback={<div role="status" className="mx-auto max-w-4xl p-6 text-xs text-slate-500">Memuat Poster Ilmiah Studio…</div>}><ArtifactPosterEditor content={editableContent} title={artifact.title} onChange={handleContentChange} onBlur={flushDraftSync} /></React.Suspense>}
+        {viewMode === 'edit' && artifact.type !== 'TABLE' && !isPresentationStudio && !isPosterStudio && <React.Suspense fallback={<div role="status" className="mx-auto max-w-4xl p-6 text-xs text-slate-500">Memuat editor…</div>}><ArtifactCanvasEditor
           artifactType={artifact.type} artifact={artifact} onRequestRevision={onRequestRevision} content={editableContent} editorRef={editorRef}
           onChange={handleContentChange} onBlur={flushDraftSync} selection={selection}
           onSelect={captureSelection} onSelectText={captureTextSelection} inlineActions={inlineActions} isStreaming={isStreaming}
@@ -1140,8 +1465,8 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
 
         {/* MODE 3: KODE / MARKDOWN (RAW SOURCE DENGAN GUTTER NOMOR BARIS) */}
         {viewMode === 'raw' && (
-          <div className="max-w-3xl mx-auto rounded-2xl overflow-hidden border border-slate-700/60 dark:border-slate-800 bg-[#0d1117] text-slate-200 shadow-md">
-            <div className="px-4 py-2.5 bg-[#161b22] border-b border-slate-800 flex items-center justify-between text-xs font-mono text-slate-400">
+            <div className="max-w-3xl mx-auto rounded-2xl overflow-hidden border border-default bg-[var(--rt-surface)] text-primary shadow-md">
+            <div className="px-4 py-2.5 bg-[var(--rt-surface-muted)] border-b border-default flex items-center justify-between text-xs font-mono text-muted">
               <div className="flex items-center gap-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-rose-500/80" />
                 <span className="w-2.5 h-2.5 rounded-full bg-amber-500/80" />
@@ -1175,12 +1500,263 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
 
         {/* MODE 1: PRATINJAU (PAPER SHEET AESTHETIC FOR DOCUMENTS) */}
         {viewMode === 'preview' && (
-          artifact.type === 'DOCUMENT' && isPresentationStudio ? (
+          artifact.type === 'DOCUMENT' && isPosterStudio ? (
+            <div className="mx-auto my-4 max-w-5xl">
+              <React.Suspense fallback={<div role="status" className="mx-auto max-w-4xl p-6 text-xs text-slate-500">Memuat pratinjau poster...</div>}>
+                <ArtifactPosterPreview content={editableContent} />
+              </React.Suspense>
+            </div>
+          ) : artifact.type === 'DOCUMENT' && isPresentationStudio ? (
             <div className="mx-auto my-4 max-w-5xl space-y-4">{(() => { try { const deck = JSON.parse(editableContent) as { slides?: Array<{ title?: string; body?: string; notes?: string }>; theme?: string }; if (!Array.isArray(deck.slides)) return <p role="alert" className="rounded-lg bg-amber-50 p-4 text-sm text-amber-800">Format slide tidak valid.</p>; return <><div className="flex items-center justify-between text-xs text-slate-500"><span>Presentasi · {deck.slides.length} slide</span><span>Tema: {deck.theme || 'academic_minimal'}</span></div>{deck.slides.map((slide, index) => <article key={`${index}-${slide.title}`} className="aspect-video overflow-hidden rounded-xl border border-slate-200 bg-white p-[6%] shadow-sm dark:border-slate-800 dark:bg-slate-900"><p className="mb-4 text-[10px] uppercase tracking-wide text-emerald-600">Slide {index + 1}</p><h2 className="mb-4 text-xl font-bold text-slate-900 dark:text-slate-100">{slide.title}</h2><p className="whitespace-pre-wrap text-sm leading-7 text-slate-700 dark:text-slate-300">{slide.body}</p><details className="mt-4 text-[10px] text-slate-500"><summary>Speaker notes</summary><p className="mt-1 whitespace-pre-wrap">{slide.notes}</p></details></article>)}</>; } catch { return <p role="alert" className="rounded-lg bg-amber-50 p-4 text-sm text-amber-800">Format slide tidak valid.</p>; } })()}</div>
           ) : artifact.type === 'TABLE' ? (
             savedTable ? <TableArtifactPreview table={savedTable} /> : <p role="alert" className="m-6 rounded-lg bg-amber-50 p-4 text-xs text-amber-800">Dataset tabel ini tidak valid.</p>
           ) : artifact.type === 'CHART' ? (
             savedChart ? <ChartArtifactPreview chart={savedChart} /> : <p role="alert" className="m-6 rounded-lg bg-amber-50 p-4 text-xs text-amber-800">Spesifikasi grafik ini tidak valid.</p>
+          ) : isQuiz && parsedQuiz ? (
+            <div className="max-w-3xl mx-auto space-y-4">
+              {/* Header Quiz Runner */}
+              <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800/80 pb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="p-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400">
+                      <Award className="w-4 h-4" />
+                    </span>
+                    <div>
+                      <h2 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100">{parsedQuiz.title}</h2>
+                      <p className="text-[11px] text-slate-500">Topik: {parsedQuiz.topic} · Tingkat: {parsedQuiz.difficulty.toUpperCase()} · {parsedQuiz.questions.length} Butir Soal</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleConvertQuizToMarkdown}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                      title="Konversi format kuis ke naskah teks catatan"
+                    >
+                      <FileText className="w-3.5 h-3.5" />
+                      <span>Ke Catatan Teks</span>
+                    </button>
+                    {!canvasQuizSubmitted ? (
+                      <button
+                        type="button"
+                        onClick={() => setCanvasQuizSubmitted(true)}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-xs transition-colors"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        <span>Kumpulkan Jawaban</span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => { setCanvasQuizSubmitted(false); setCanvasQuizAnswers({}); }}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold shadow-xs transition-colors dark:bg-white dark:text-slate-900"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        <span>Reset Kuis</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Score summary if submitted */}
+                {canvasQuizSubmitted && (() => {
+                  const evalResult = evaluateQuizAttempt(parsedQuiz, canvasQuizAnswers, 0);
+                  return (
+                    <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/60 flex items-center justify-between">
+                      <div>
+                        <div className="text-xs font-bold text-emerald-900 dark:text-emerald-200">
+                          Skor Ujian: {evalResult.scorePercentage}% (Nilai: {evalResult.gradeLetter})
+                        </div>
+                        <p className="text-[11px] text-emerald-700 dark:text-emerald-300 mt-0.5">
+                          Benar: {evalResult.correctAnswersCount} · Salah: {evalResult.incorrectAnswersCount} · {evalResult.summaryFeedback}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Interactive Questions list */}
+                <div className="space-y-4 pt-2">
+                  {parsedQuiz.questions.map((q, qIdx) => {
+                    const userSelected = canvasQuizAnswers[q.id];
+                    const isOptionCorrect = userSelected === q.correctIndex;
+                    return (
+                      <div key={q.id} className="p-4 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 space-y-2.5">
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="text-xs sm:text-sm font-semibold text-slate-900 dark:text-slate-100 leading-relaxed">
+                            {qIdx + 1}. {q.question}
+                          </p>
+                          {canvasQuizSubmitted && (
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${isOptionCorrect ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'}`}>
+                              {isOptionCorrect ? 'Benar ✓' : 'Salah ✕'}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="space-y-1.5">
+                          {q.options.map((opt, optIdx) => {
+                            const isSelected = userSelected === optIdx;
+                            const isKey = optIdx === q.correctIndex;
+                            return (
+                              <button
+                                key={optIdx}
+                                type="button"
+                                disabled={canvasQuizSubmitted}
+                                onClick={() => handleCanvasSelectQuizOption(q.id, optIdx)}
+                                className={`w-full p-2.5 rounded-lg text-xs text-left flex items-center justify-between border transition-all ${
+                                  canvasQuizSubmitted
+                                    ? isKey
+                                      ? 'border-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200 font-semibold'
+                                      : isSelected
+                                      ? 'border-rose-300 bg-rose-50 dark:bg-rose-950/40 text-rose-900 dark:text-rose-200'
+                                      : 'border-slate-200 dark:border-slate-800 opacity-60'
+                                    : isSelected
+                                    ? 'border-indigo-600 bg-indigo-50/80 dark:bg-indigo-950/50 text-indigo-900 dark:text-indigo-200 font-semibold ring-1 ring-indigo-500'
+                                    : 'border-slate-200 dark:border-slate-800 hover:bg-white dark:hover:bg-slate-800'
+                                }`}
+                              >
+                                <span>{['A', 'B', 'C', 'D'][optIdx]}. {opt}</span>
+                                {canvasQuizSubmitted && isKey && (
+                                  <span className="text-[10px] text-emerald-600 font-bold">Kunci Jawaban</span>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        {canvasQuizSubmitted && (
+                          <div className="p-2.5 rounded-lg bg-indigo-50/60 dark:bg-indigo-950/30 border-l-2 border-indigo-500 text-[11px] text-slate-700 dark:text-slate-300">
+                            <strong>Pembahasan:</strong> {q.explanation}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          ) : isVisualHtml ? (
+            <div className="max-w-4xl mx-auto space-y-3">
+              {/* Visual Canvas Top Bar */}
+              <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl border border-slate-200/80 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 shadow-2xs backdrop-blur-xs">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+                    Kanvas Visual Grafis
+                  </span>
+                  <span className="text-[10px] px-2 py-0.5 rounded-md bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300 border border-teal-200/50">
+                    HTML & CSS Interaktif
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  {/* Scale Controls */}
+                  <div className="flex items-center gap-1 border-r border-slate-200 dark:border-slate-800 pr-2 mr-1">
+                    <button
+                      type="button"
+                      onClick={() => setVisualHtmlScale(s => Math.max(0.5, +(s - 0.15).toFixed(2)))}
+                      title="Perkecil Pratinjau"
+                      className="p-1 rounded-md text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+                    >
+                      <ZoomOut className="w-3.5 h-3.5" />
+                    </button>
+                    <span className="text-[10px] font-mono text-slate-500 min-w-[32px] text-center">
+                      {Math.round(visualHtmlScale * 100)}%
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setVisualHtmlScale(s => Math.min(1.5, +(s + 0.15).toFixed(2)))}
+                      title="Perbesar Pratinjau"
+                      className="p-1 rounded-md text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+                    >
+                      <ZoomIn className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  {/* Actions */}
+                  <button
+                    type="button"
+                    onClick={handleDownloadVisualHtmlPng}
+                    disabled={isExportingVisualPng}
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-teal-600 hover:bg-teal-700 text-white text-xs font-medium shadow-2xs transition-colors disabled:opacity-50"
+                  >
+                    {isExportingVisualPng ? (
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Download className="w-3.5 h-3.5" />
+                    )}
+                    <span>Unduh PNG HD</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handlePrintVisualHtml}
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-medium transition-colors"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    <span>Cetak / PDF</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowVisualSourceCode(!showVisualSourceCode)}
+                    className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+                      showVisualSourceCode
+                        ? 'bg-slate-800 text-white border-slate-800'
+                        : 'border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
+                    }`}
+                  >
+                    <Code2 className="w-3.5 h-3.5" />
+                    <span>{showVisualSourceCode ? 'Sembunyikan Kode' : 'Kode Sumber'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Sandboxed Visual Frame */}
+              <div className="relative rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-slate-100/70 dark:bg-slate-950 p-2 sm:p-4 overflow-hidden flex justify-center shadow-inner">
+                <div
+                  style={{
+                    transform: `scale(${visualHtmlScale})`,
+                    transformOrigin: 'top center',
+                    width: '100%',
+                    minHeight: '750px',
+                    transition: 'transform 0.15s ease'
+                  }}
+                >
+                  <iframe
+                    ref={visualIframeRef}
+                    title={artifact.title}
+                    srcDoc={editableContent}
+                    sandbox="allow-scripts allow-modals allow-same-origin"
+                    className="w-full min-h-[850px] border-0 rounded-xl shadow-lg bg-white"
+                  />
+                </div>
+              </div>
+
+              {/* Collapsible Source Code */}
+              {showVisualSourceCode && (
+                <div className="rounded-2xl overflow-hidden border border-slate-800 bg-[#1a1b26] text-slate-200 shadow-md">
+                  <div className="px-4 py-2.5 bg-[#16161e] border-b border-slate-700/50 flex items-center justify-between text-xs font-mono text-slate-400">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-rose-500/80" />
+                      <span className="w-2.5 h-2.5 rounded-full bg-amber-500/80" />
+                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-500/80" />
+                      <span className="ml-2 text-[11px] text-slate-300 font-sans font-medium">{artifact.title} (HTML Source)</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span>html</span>
+                      <span>•</span>
+                      <span>{lineCount} baris</span>
+                    </div>
+                  </div>
+                  <div className="p-4 sm:p-6 overflow-x-auto text-xs sm:text-sm font-mono leading-relaxed select-text max-h-[400px] overflow-y-auto custom-scrollbar">
+                    <pre className="custom-scrollbar">
+                      <code>{editableContent}</code>
+                    </pre>
+                  </div>
+                </div>
+              )}
+            </div>
           ) : isMermaid ? (
             <div className="max-w-3xl mx-auto space-y-4">
               <React.Suspense fallback={<div className="p-8 text-center text-xs text-slate-400">Merender diagram Mermaid...</div>}>
@@ -1250,7 +1826,54 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
             </div>
           ) : (
             /* PAPER SHEET VIEW: Lembaran Kertas Kerja Rapi (max-w-3xl, centered, p-8 sampai p-12, shadow-sm, border tipis) */
-            <div className="max-w-3xl mx-auto my-2 sm:my-4 bg-white dark:bg-slate-900 rounded-2xl p-7 sm:p-10 md:p-12 border border-slate-200/70 dark:border-slate-800 shadow-sm leading-relaxed print-document-area">
+            <div className="surface-elevated max-w-3xl mx-auto my-2 sm:my-4 rounded-2xl p-7 sm:p-10 md:p-12 shadow-sm leading-relaxed print-document-area">
+              {/* Quick Format / Studio Switcher Bar untuk Dokumen Akademik */}
+              {artifact.type === 'DOCUMENT' && !isPresentationStudio && !isPosterStudio && (
+                <div className="no-print mb-6 pb-3 border-b border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <span className="text-[11px] font-medium text-slate-500 flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+                    Transformasi Format Dokumen:
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsPresentationStudio(true);
+                        setIsPosterStudio(false);
+                        setViewMode('edit');
+                        if (!isPresentationContent(editableContent)) {
+                          void import('./ArtifactDataEditors').then(({ createPresentationFromMarkdown }) =>
+                            handleContentChange(JSON.stringify(createPresentationFromMarkdown(editableContent, artifact.title)))
+                          );
+                        }
+                      }}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:border-teal-500 hover:text-teal-600 transition-colors cursor-pointer"
+                      title="Ubah naskah ini menjadi format slide PowerPoint"
+                    >
+                      <Workflow className="w-3 h-3 text-teal-600" />
+                      Jadikan Slide PPT
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsPosterStudio(true);
+                        setIsPresentationStudio(false);
+                        setViewMode('edit');
+                        if (!isPosterContent(editableContent)) {
+                          void import('../utils/posterModel').then(({ createPosterFromMarkdown }) =>
+                            handleContentChange(JSON.stringify(createPosterFromMarkdown(editableContent, artifact.title)))
+                          );
+                        }
+                      }}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:border-indigo-500 hover:text-indigo-600 transition-colors cursor-pointer"
+                      title="Ubah naskah ini menjadi format Poster Ilmiah Studio"
+                    >
+                      <Layout className="w-3 h-3 text-indigo-600" />
+                      Jadikan Poster Ilmiah
+                    </button>
+                  </div>
+                </div>
+              )}
               {/* Top Citation Style Bar jika tipe CITATION */}
               {artifact.type === 'CITATION' && (
                 <div className="mb-6 pb-4 border-b border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs">
@@ -1321,9 +1944,71 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
                 </div>
               )}
 
-              {/* Clean Typography with Lora Serif & Emerald Accent Blockquotes */}
-              <div className="prose dark:prose-invert max-w-none text-xs sm:text-sm md:text-base leading-relaxed font-serif prose-headings:font-heading prose-headings:tracking-tight prose-headings:text-slate-900 dark:prose-headings:text-slate-50 prose-p:leading-relaxed prose-p:my-3.5 prose-a:text-emerald-600 dark:prose-a:text-emerald-400 prose-blockquote:border-l-[3px] prose-blockquote:border-emerald-500/80 prose-blockquote:bg-emerald-50/40 dark:prose-blockquote:bg-emerald-950/20 prose-blockquote:py-2.5 prose-blockquote:px-4 prose-blockquote:rounded-r-xl prose-blockquote:italic prose-pre:bg-slate-900 prose-pre:text-slate-100 prose-hr:border-slate-200 dark:prose-hr:border-slate-800">
+              {/* Reading controls: outline navigator + document font toggle */}
+              <div className="mb-4 flex flex-wrap items-center justify-end gap-1.5" data-testid="canvas-reading-controls">
+                {documentOutline.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => setIsOutlineOpen(open => !open)}
+                    aria-expanded={isOutlineOpen}
+                    aria-controls="canvas-document-outline"
+                    className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 text-[11px] font-medium text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 cursor-pointer"
+                  >
+                    <ListTree className="h-3.5 w-3.5" aria-hidden="true" />
+                    <span>Kerangka ({documentOutline.length})</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={toggleDocumentFont}
+                  aria-label={documentFont === 'serif' ? 'Ganti ke huruf Sans' : 'Ganti ke huruf Serif'}
+                  title={documentFont === 'serif' ? 'Huruf Serif (naskah) — klik untuk Sans' : 'Huruf Sans — klik untuk Serif (naskah)'}
+                  className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 text-[11px] font-medium text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 cursor-pointer"
+                >
+                  <Type className="h-3.5 w-3.5" aria-hidden="true" />
+                  <span>{documentFont === 'serif' ? 'Serif' : 'Sans'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={toggleExpand}
+                  aria-pressed={isExpanded}
+                  aria-label={isExpanded ? 'Kembalikan Tampilan Bagi Layar' : 'Fokus Layar Penuh (Zen)'}
+                  title={isExpanded ? 'Kembalikan Tampilan Bagi Layar (Alt+Z)' : 'Fokus Layar Penuh (Zen Mode, Alt+Z)'}
+                  className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 text-[11px] font-medium text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 cursor-pointer"
+                >
+                  {isExpanded ? <Minimize2 className="h-3.5 w-3.5" aria-hidden="true" /> : <Maximize2 className="h-3.5 w-3.5" aria-hidden="true" />}
+                  <span>{isExpanded ? 'Bagi Layar' : 'Fokus Zen'}</span>
+                </button>
+              </div>
+
+              {isOutlineOpen && documentOutline.length > 1 && (
+                <nav
+                  id="canvas-document-outline"
+                  aria-label="Kerangka dokumen"
+                  className="mb-6 rounded-xl border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-800 dark:bg-slate-900/60"
+                >
+                  <ol className="flex max-h-56 flex-col gap-0.5 overflow-y-auto">
+                    {documentOutline.map(item => (
+                      <li key={item.index}>
+                        <button
+                          type="button"
+                          onClick={() => scrollToOutlineItem(item.index)}
+                          className={`w-full truncate rounded-md py-1 pr-2 text-left text-xs transition-colors hover:bg-white hover:text-indigo-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:hover:bg-slate-800 dark:hover:text-indigo-300 cursor-pointer ${
+                            item.level === 1 ? 'pl-2 font-semibold text-slate-800 dark:text-slate-100' : item.level === 2 ? 'pl-5 text-slate-700 dark:text-slate-300' : 'pl-8 text-slate-500 dark:text-slate-400'
+                          }`}
+                        >
+                          {item.text}
+                        </button>
+                      </li>
+                    ))}
+                  </ol>
+                </nav>
+              )}
+
+              {/* Clean Typography (Lora Serif or Plus Jakarta Sans) & Emerald Accent Blockquotes */}
+              <div ref={proseContainerRef} className={`prose dark:prose-invert max-w-none text-xs sm:text-sm md:text-base leading-relaxed ${documentFont === 'serif' ? 'font-serif' : 'font-sans'} prose-headings:scroll-mt-4 prose-headings:font-heading prose-headings:tracking-tight prose-headings:text-slate-900 dark:prose-headings:text-slate-50 prose-p:leading-relaxed prose-p:my-3.5 prose-a:text-emerald-600 dark:prose-a:text-emerald-400 prose-blockquote:border-l-[3px] prose-blockquote:border-emerald-500/80 prose-blockquote:bg-emerald-50/40 dark:prose-blockquote:bg-emerald-950/20 prose-blockquote:py-2.5 prose-blockquote:px-4 prose-blockquote:rounded-r-xl prose-blockquote:italic prose-pre:bg-slate-900 prose-pre:text-slate-100 prose-hr:border-slate-200 dark:prose-hr:border-slate-800`}>
                 <LazyMarkdown content={editableContent || '*(Artefak kosong)*'} />
+                {isStreaming && <span className="inline-block w-2 h-4.5 ml-1 bg-emerald-500 animate-pulse align-middle rounded-xs" />}
               </div>
 
               {/* Contextual Revision Chips at Document Bottom */}
@@ -1352,9 +2037,122 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
       </div>
 
       {/* 3. STATUS BAR BAWAH RAMPING (~28px - 32px) */}
-      <footer className="h-8 px-4 bg-white/95 dark:bg-secondary-900/95 border-t border-slate-200/80 dark:border-slate-800/80 text-[11px] text-slate-500 dark:text-slate-400 flex items-center justify-between shrink-0 select-none z-10">
+      <footer className="h-9 px-4 bg-[var(--rt-header)] border-t border-default text-[11px] text-muted flex items-center justify-between shrink-0 select-none z-10">
         {/* Kiri: Status penyimpanan + Streaming indicator */}
         <div className="flex items-center gap-2">
+          {/* 🚀 Jembatan 1-Klik Buka di Ruang Coder */}
+          <button
+            type="button"
+            onClick={() => {
+              try {
+                let presetFiles: Record<string, string> | undefined = undefined;
+                let activeFile: string | undefined = undefined;
+                let preferredTerminalTab: string | undefined = undefined;
+                const lang = (artifact.language || '').toLowerCase();
+                const code = editableContent;
+
+                const isPython = lang === 'python' || lang === 'py' ||
+                  (/\b(def |import pandas|import numpy|import matplotlib|print\(|if __name__ ==)\b/.test(code) && !code.includes('function') && !code.includes('<html'));
+
+                const isSql = lang === 'sql' ||
+                  (/\b(SELECT\s+[\s\S]+FROM|CREATE\s+TABLE|INSERT\s+INTO|UPDATE\s+\w+\s+SET)\b/i.test(code) && !code.includes('import ') && !code.includes('function'));
+
+                const isC = lang === 'c' || lang === 'cpp' ||
+                  (/\b(#include\s*<stdio\.h>|#include\s*<stdlib\.h>|int\s+main\s*\()\b/.test(code));
+
+                if (artifact.type === 'CODE') {
+                  if (isPython) {
+                    presetFiles = {
+                      'main.py': code,
+                      'requirements.txt': '# Dependensi Skripsi\nnumpy\npandas\nscikit-learn\n'
+                    };
+                    activeFile = 'main.py';
+                    preferredTerminalTab = 'python_repl';
+                  } else if (isSql) {
+                    presetFiles = {
+                      'query.sql': code,
+                      'siakad_schema.sql': '-- Skema Basis Data Relasional Skripsi\n'
+                    };
+                    activeFile = 'query.sql';
+                    preferredTerminalTab = 'sql_runner';
+                  } else if (isC) {
+                    presetFiles = {
+                      'main.c': code
+                    };
+                    activeFile = 'main.c';
+                    preferredTerminalTab = 'c_runner';
+                  } else if (code.includes('<html') || code.includes('<!DOCTYPE') || code.includes('<div')) {
+                    presetFiles = {
+                      'index.html': code,
+                      'styles.css': '/* Custom styles */\nbody { font-family: sans-serif; margin: 0; padding: 1rem; }',
+                      'app.js': '// JavaScript runtime\nconsole.log("Ruang Coder Sandbox Ready");'
+                    };
+                    activeFile = 'index.html';
+                  } else {
+                    presetFiles = {
+                      'index.html': `<!DOCTYPE html>\n<html>\n<head>\n  <meta charset="utf-8">\n  <title>${artifact.title || 'Live Preview'}</title>\n  <script src="https://cdn.tailwindcss.com"></script>\n</head>\n<body class="bg-slate-900 text-white p-6 font-mono">\n  <h1 class="text-xl font-bold mb-4 text-emerald-400">${artifact.title || 'Eksekusi Kode'}</h1>\n  <pre id="output" class="bg-black/60 p-4 rounded-xl border border-slate-800 text-sm overflow-auto"></pre>\n  <script src="app.js"></script>\n</body>\n</html>`,
+                      'app.js': `${code}\n\n// Debug output to screen\nconst out = document.getElementById('output');\nif (out) out.textContent = 'Modul kode berhasil dijalankan tanpa error.';`
+                    };
+                    activeFile = 'app.js';
+                  }
+                } else if (artifact.type === 'TABLE') {
+                  presetFiles = {
+                    'dataset.csv': code,
+                    'analyze.py': `# Skrip Analisis Dataset Skripsi\nimport pandas as pd\n\ntry:\n    df = pd.read_csv('dataset.csv')\n    print("--- Ringkasan Dataset ---")\n    print(df.info())\n    print("\\n--- 5 Baris Pertama ---")\n    print(df.head())\n    print("\\n--- Statistik Deskriptif ---")\n    print(df.describe())\nexcept Exception as e:\n    print(f"Error membaca CSV: {e}")\n`,
+                    'index.html': `<!DOCTYPE html>\n<html>\n<head>\n  <meta charset="utf-8">\n  <title>${artifact.title || 'Visualisasi Data'}</title>\n  <script src="https://cdn.tailwindcss.com"></script>\n  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>\n</head>\n<body class="bg-slate-950 text-slate-100 p-6">\n  <div class="max-w-4xl mx-auto">\n    <h1 class="text-2xl font-bold text-emerald-400 mb-2">${artifact.title || 'Dashboard Data'}</h1>\n    <p class="text-sm text-slate-400 mb-6">Visualisasi otomatis yang diimpor dari Ruang Kerja.</p>\n    <div class="bg-slate-900 p-4 rounded-2xl border border-slate-800 shadow-xl mb-6">\n      <canvas id="myChart" class="max-h-80"></canvas>\n    </div>\n  </div>\n  <script src="app.js"></script>\n</body>\n</html>`,
+                    'app.js': `// Chart.js Visualization\nconst ctx = document.getElementById('myChart');\nif (ctx) {\n  new Chart(ctx, {\n    type: 'bar',\n    data: {\n      labels: ['Sampel A', 'Sampel B', 'Sampel C', 'Sampel D', 'Sampel E'],\n      datasets: [{\n        label: '${artifact.title || 'Metrik Penelitian'}',\n        data: [65, 82, 74, 91, 88],\n        backgroundColor: 'rgba(16, 185, 129, 0.7)',\n        borderColor: 'rgb(16, 185, 129)',\n        borderWidth: 1.5,\n        borderRadius: 8\n      }]\n    },\n    options: {\n      responsive: true,\n      plugins: { legend: { labels: { color: '#e2e8f0' } } },\n      scales: {\n        x: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' } },\n        y: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' } }\n      }\n    }\n  });\n}`
+                  };
+                  activeFile = 'dataset.csv';
+                  preferredTerminalTab = 'python_repl';
+                }
+
+                const bridgePayload = {
+                  title: artifact.title || 'Dokumen Ruang Kerja',
+                  type: artifact.type,
+                  content: editableContent,
+                  presetFiles,
+                  activeFile,
+                  preferredTerminalTab,
+                  sourceType: 'thesis',
+                  prompt: `Halo Dewan AI Ruang Coder! Saya baru saja mengimpor "${artifact.title || 'artefak'}" dari Ruang Kerja. Bantu saya kembangkan menjadi modul aplikasi/simulasi yang lebih kaya!`,
+                  language: artifact.language || 'markdown',
+                  createdAt: Date.now()
+                };
+                sessionStorage.setItem('ruangkerja_to_coder_bridge', JSON.stringify(bridgePayload));
+                navigate('/coder');
+              } catch (e) {
+                console.error('Gagal bridge ke Ruang Coder', e);
+                window.location.href = '/coder';
+              }
+            }}
+            title="Ekspor & Buka Dokumen ini di Ruang Coder untuk dibuatkan web/simulasi interaktif"
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-sky-50 hover:bg-sky-100 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300 dark:hover:bg-sky-900/60 border border-sky-200 dark:border-sky-800 text-[10.5px] font-semibold cursor-pointer transition-colors mr-1"
+          >
+            <Code2 className="w-3 h-3 text-sky-600 dark:text-sky-400" />
+            <span className="hidden sm:inline">Buka di Ruang Coder</span>
+          </button>
+          {onOpenDataStudioChart && (
+            <button
+              type="button"
+              onClick={onOpenDataStudioChart}
+              title="Buka Data Studio untuk visualisasi grafik Bab 4"
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 dark:hover:bg-emerald-900/60 border border-emerald-200 dark:border-emerald-800 text-[10.5px] font-semibold cursor-pointer transition-colors mr-1"
+            >
+              <BarChart2 className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+              <span className="hidden sm:inline">Data Studio</span>
+            </button>
+          )}
+          {onOpenTurnitinAudit && (
+            <button
+              type="button"
+              onClick={onOpenTurnitinAudit}
+              title="Audit Kesiapan Turnitin & Parafrase Akademik Standar Dikti"
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 dark:hover:bg-rose-900/60 border border-rose-200 dark:border-rose-800 text-[10.5px] font-semibold cursor-pointer transition-colors mr-1"
+            >
+              <ShieldCheck className="w-3 h-3 text-rose-600 dark:text-rose-400" />
+              <span className="hidden sm:inline">Audit Turnitin</span>
+            </button>
+          )}
           {saveStatus === 'saving' ? (
             <span className="inline-flex items-center gap-1.5 text-amber-600 dark:text-amber-400 font-medium animate-pulse">
               <Loader2 className="w-3 h-3 animate-spin" />

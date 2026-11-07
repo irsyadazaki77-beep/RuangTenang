@@ -25,7 +25,7 @@ describe('P1 Integration Workflows & Callbacks', () => {
     const onComplete = vi.fn();
     render(<ScreeningModal isOpen={true} onClose={onClose} onComplete={onComplete} />);
 
-    expect(screen.getByText(/bukan pengganti diagnosis medis/i)).toBeInTheDocument();
+    expect(screen.getByText(/hasilnya bukan diagnosis/i)).toBeInTheDocument();
   });
 
   it('emergency center triggers SOS callback and disables button during dispatch', async () => {

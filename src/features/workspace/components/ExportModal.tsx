@@ -14,19 +14,24 @@ import {
   GraduationCap,
   BookOpen,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Archive
 } from 'lucide-react';
 import { WorkspaceArtifact } from '../types';
-import { createAcademicStylePreset, exportToAcademicDocx, validateAcademicCompleteness, type AcademicStyleProfile } from '../utils/exportDocx';
+import { createAcademicDocxBlob, createAcademicStylePreset, exportToAcademicDocx, validateAcademicCompleteness, type AcademicStyleProfile } from '../utils/exportDocx';
 import type { PresentationTheme, PresentationOutlineSlide } from '../utils/exportPptx';
 import { parseCitations } from '../utils/citationExport';
 import { useFocusTrap } from '../../../hooks/useFocusTrap';
 
 export type ExportFormatType = 
+  | 'zip_bundle'
   | 'docx_skripsi' 
   | 'docx_ieee_apa' 
   | 'docx_makalah' 
+  | 'docx_laporan_proyek'
+  | 'docx_executive_brief'
   | 'pptx'
+  | 'poster_pdf'
   | 'xlsx'
   | 'pdf_print' 
   | 'markdown' 
@@ -157,6 +162,39 @@ export const ExportModal: React.FC<ExportModalProps> = ({
         });
         showToast('Dokumen Word (.docx) berhasil diunduh dengan profil yang dipilih.', 'success');
         onClose();
+      } else if (formatToUse === 'docx_laporan_proyek') {
+        showToast('Menyusun dokumen Laporan Proyek/Bisnis (.docx)...', 'info');
+        await exportToAcademicDocx({
+          title: artifact.title || 'Laporan Proyek',
+          content,
+          templateType: 'laporan_proyek',
+          style: createAcademicStylePreset('laporan_proyek')
+        });
+        showToast('Dokumen Laporan Proyek (.docx) berhasil diunduh.', 'success');
+        onClose();
+      } else if (formatToUse === 'docx_executive_brief') {
+        showToast('Menyusun Executive Brief (.docx)...', 'info');
+        await exportToAcademicDocx({
+          title: artifact.title || 'Executive Brief',
+          content,
+          templateType: 'executive_brief',
+          style: createAcademicStylePreset('executive_brief')
+        });
+        showToast('Dokumen Executive Brief (.docx) berhasil diunduh.', 'success');
+        onClose();
+      } else if (formatToUse === 'poster_pdf') {
+        showToast('Mempersiapkan pratinjau cetak / ekspor poster PDF...', 'info');
+        document.body.classList.add('is-printing-poster');
+        onClose();
+        const cleanup = () => {
+          document.body.classList.remove('is-printing-poster');
+          window.removeEventListener('afterprint', cleanup);
+        };
+        window.addEventListener('afterprint', cleanup);
+        setTimeout(() => {
+          window.print();
+          setTimeout(cleanup, 2000);
+        }, 300);
       } else if (formatToUse === 'pptx') {
         const { buildPresentationOutline, exportEditablePptx } = await import('../utils/exportPptx');
         const outline = buildPresentationOutline({ title: artifact.title, content, artifactType: artifact.type, theme: presentationTheme });
@@ -170,9 +208,16 @@ export const ExportModal: React.FC<ExportModalProps> = ({
         onClose();
       } else if (formatToUse === 'pdf_print') {
         showToast('Membuka dialog cetak PDF browser...', 'info');
+        document.body.classList.add('is-printing-document');
         onClose();
+        const cleanup = () => {
+          document.body.classList.remove('is-printing-document');
+          window.removeEventListener('afterprint', cleanup);
+        };
+        window.addEventListener('afterprint', cleanup);
         setTimeout(() => {
           window.print();
+          setTimeout(cleanup, 2000);
         }, 300);
       } else if (formatToUse === 'markdown') {
         const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
@@ -195,6 +240,42 @@ export const ExportModal: React.FC<ExportModalProps> = ({
         const blob = new Blob([risContent], { type: 'application/x-research-info-systems;charset=utf-8' });
         downloadBlob(blob, `${safeTitle}_citations.ris`);
         showToast('Berkas RIS (.ris) berhasil diunduh untuk Mendeley/Zotero.', 'success');
+        onClose();
+      } else if (formatToUse === 'zip_bundle') {
+        const JSZip = (await import('jszip')).default;
+        const zip = new JSZip();
+
+        // 1. Dokumen Word (DOCX)
+        try {
+          const docxBlob = await createAcademicDocxBlob({
+            title: artifact.title || 'Naskah Tugas Akhir',
+            content,
+            templateType: 'skripsi',
+            style: styleProfile
+          });
+          zip.file(`${safeTitle}.docx`, docxBlob);
+        } catch (docxErr) {
+          console.warn('Gagal generate docx bundle:', docxErr);
+        }
+
+        // 2. Naskah Markdown
+        zip.file(`${safeTitle}.md`, content);
+
+        // 3. Sitasi BibTeX
+        const bibContent = onGenerateBibTeX ? onGenerateBibTeX(content, artifact.title) : content;
+        zip.file(`${safeTitle}_referensi.bib`, bibContent);
+
+        // 4. Sitasi RIS
+        const risContent = onGenerateRIS ? onGenerateRIS(content, artifact.title) : content;
+        zip.file(`${safeTitle}_referensi.ris`, risContent);
+
+        // 5. Berkas Metadata & Checklist
+        const readmeContent = `RUANGTENANG KAMPUS - BUNDEL TUGAS AKHIR\nJudul: ${artifact.title || 'Naskah Tugas Akhir'}\nTanggal Ekspor: ${new Date().toLocaleString('id-ID')}\nJumlah Kata: ${validation.wordCount}\nJumlah Sitasi: ${validation.citationCount}\nStatus Struktur: ${validation.structuralStatus}\n\nDaftar Berkas dalam Arsip Ini:\n1. ${safeTitle}.docx -> Naskah utama berformat skripsi siap edit di Microsoft Word\n2. ${safeTitle}.md -> Naskah sumber format Markdown bersih\n3. ${safeTitle}_referensi.bib -> Berkas rujukan untuk LaTeX / Overleaf / Mendeley\n4. ${safeTitle}_referensi.ris -> Berkas rujukan untuk Zotero / EndNote\n`;
+        zip.file('README_TUGAS_AKHIR.txt', readmeContent);
+
+        const zipBlob = await zip.generateAsync({ type: 'blob' });
+        downloadBlob(zipBlob, `${safeTitle}_bundel_tugas_akhir.zip`);
+        showToast('Bundel Tugas Akhir Lengkap (.zip) berhasil diunduh.', 'success');
         onClose();
       }
     } catch (err: any) {
@@ -335,6 +416,40 @@ export const ExportModal: React.FC<ExportModalProps> = ({
             </div>
 
             <div className="grid grid-cols-1 gap-2.5">
+              {/* Opsi Bundel Lengkap Tugas Akhir (.zip) */}
+              <label
+                className={`flex items-start gap-3.5 p-3.5 rounded-2xl border transition-all cursor-pointer ${
+                  selectedFormat === 'zip_bundle'
+                    ? 'bg-amber-50/90 dark:bg-amber-950/40 border-amber-500 shadow-2xs'
+                    : 'bg-white dark:bg-slate-800/60 border-slate-200 dark:border-slate-800 hover:border-amber-200 dark:hover:border-amber-800'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="export_format"
+                  value="zip_bundle"
+                  checked={selectedFormat === 'zip_bundle'}
+                  onChange={() => selectFormat('zip_bundle')}
+                  className="mt-1 text-amber-600 focus:ring-amber-500 shrink-0"
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <Archive className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                      <span className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100">
+                        Bundel Lengkap Tugas Akhir (.zip)
+                      </span>
+                    </div>
+                    <span className="px-2 py-0.5 text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-200 rounded-full shrink-0">
+                      Rekomendasi Skripsi
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 leading-relaxed">
+                    Paket arsip terkompresi berisi Dokumen Word (.docx), Naskah Asli (.md), Berkas BibTeX & RIS, serta Lembar Metadata.
+                  </p>
+                </div>
+              </label>
+
               {/* Opsi 1: Word Standar Skripsi Indonesia 4-4-3-3 */}
               <label
                 className={`flex items-start gap-3.5 p-3.5 rounded-2xl border transition-all cursor-pointer ${
@@ -413,6 +528,25 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                 </details>
               )}
 
+              {/* Opsi Poster Ilmiah */}
+              <label className={`flex items-start gap-3.5 p-3.5 rounded-2xl border transition-all cursor-pointer ${selectedFormat === 'poster_pdf' ? 'bg-indigo-50/90 dark:bg-indigo-950/40 border-indigo-500 shadow-2xs' : 'bg-white dark:bg-slate-800/60 border-slate-200 dark:border-slate-800 hover:border-indigo-200 dark:hover:border-indigo-800'}`}>
+                <input type="radio" name="export_format" value="poster_pdf" checked={selectedFormat === 'poster_pdf'} onChange={() => selectFormat('poster_pdf')} className="mt-1 text-indigo-600 focus:ring-indigo-500 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+                      <Sparkles className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                      Poster Ilmiah Siap Cetak (A1/A2/A3)
+                    </span>
+                    <span className="px-2 py-0.5 text-[10px] font-bold bg-indigo-100 text-indigo-800 dark:bg-indigo-900/60 dark:text-indigo-200 rounded-full shrink-0">
+                      Baru
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
+                    Tata letak grid multi-kolom siap pajang untuk pameran, simposium, atau seminar ilmiah.
+                  </p>
+                </div>
+              </label>
+
               <label className={`flex items-start gap-3.5 p-3.5 rounded-2xl border transition-all cursor-pointer ${selectedFormat === 'pptx' ? 'bg-emerald-50/90 dark:bg-emerald-950/40 border-emerald-500' : 'bg-white dark:bg-slate-800/60 border-slate-200 dark:border-slate-800'}`}>
                 <input type="radio" name="export_format" value="pptx" checked={selectedFormat === 'pptx'} onChange={() => selectFormat('pptx')} className="mt-1 text-emerald-600" />
                 <div className="flex-1 min-w-0">
@@ -420,8 +554,20 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                   <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">Teks, bentuk, dan grafik native disusun dari konten artifact.</p>
                   {selectedFormat === 'pptx' && <div className="mt-2 space-y-2">
                     <label className="block text-xs text-slate-600 dark:text-slate-300">Tema
-                      <select value={presentationTheme} onChange={event => setPresentationTheme(event.target.value as PresentationTheme)} className="ml-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 p-1.5">
-                        <option value="academic_minimal">Academic minimal</option><option value="professional">Professional</option><option value="technology">Technology</option><option value="clean_corporate">Clean corporate</option>
+                      <select value={presentationTheme} onChange={event => setPresentationTheme(event.target.value as PresentationTheme)} className="ml-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 p-1.5 text-xs">
+                        <optgroup label="Tema Profesional & Akademik">
+                          <option value="academic_minimal">Academic Minimal (Teal)</option>
+                          <option value="professional">Professional (Royal Blue)</option>
+                          <option value="technology">Cyber Dark (Technology)</option>
+                          <option value="clean_corporate">Clean Corporate (Emerald)</option>
+                          <option value="vibrant_creative">Vibrant Creative (Purple)</option>
+                        </optgroup>
+                        <optgroup label="Tema Kampus Indonesia">
+                          <option value="kampus_ui">Universitas Indonesia (Makara Kuning)</option>
+                          <option value="kampus_itb">ITB (Ganesha Cyan)</option>
+                          <option value="kampus_ugm">UGM (Biru Tua & Emas)</option>
+                          <option value="kampus_unair">UNAIR (Ksatria Airlangga)</option>
+                        </optgroup>
                       </select>
                     </label>
                     <div className="rounded-lg bg-white/80 dark:bg-slate-900/70 p-2 text-[11px]">
@@ -431,6 +577,44 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                       <p className="mt-1 text-slate-500">Outline ini memeriksa susunan konten; tidak mewakili render visual akhir.</p>
                     </div>
                   </div>}
+                </div>
+              </label>
+
+              {/* Opsi Word Laporan Proyek */}
+              <label className={`flex items-start gap-3.5 p-3.5 rounded-2xl border transition-all cursor-pointer ${selectedFormat === 'docx_laporan_proyek' ? 'bg-emerald-50/90 dark:bg-emerald-950/40 border-emerald-500 shadow-2xs' : 'bg-white dark:bg-slate-800/60 border-slate-200 dark:border-slate-800 hover:border-emerald-200'}`}>
+                <input type="radio" name="export_format" value="docx_laporan_proyek" checked={selectedFormat === 'docx_laporan_proyek'} onChange={() => selectFormat('docx_laporan_proyek')} className="mt-1 text-emerald-600 focus:ring-emerald-500 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+                      <FileText className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                      Laporan Proyek / Bisnis (.docx)
+                    </span>
+                    <span className="px-2 py-0.5 text-[10px] font-bold bg-blue-100 text-blue-800 dark:bg-blue-900/60 dark:text-blue-200 rounded-full shrink-0">
+                      Profesional
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
+                    Format modern font Calibri 11pt, spasi 1.15, tabel bergaris rapi & alternating zebra striping.
+                  </p>
+                </div>
+              </label>
+
+              {/* Opsi Word Executive Brief */}
+              <label className={`flex items-start gap-3.5 p-3.5 rounded-2xl border transition-all cursor-pointer ${selectedFormat === 'docx_executive_brief' ? 'bg-emerald-50/90 dark:bg-emerald-950/40 border-emerald-500 shadow-2xs' : 'bg-white dark:bg-slate-800/60 border-slate-200 dark:border-slate-800 hover:border-emerald-200'}`}>
+                <input type="radio" name="export_format" value="docx_executive_brief" checked={selectedFormat === 'docx_executive_brief'} onChange={() => selectFormat('docx_executive_brief')} className="mt-1 text-emerald-600 focus:ring-emerald-500 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+                      <FileText className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+                      Executive Brief / Memo Singkat (.docx)
+                    </span>
+                    <span className="px-2 py-0.5 text-[10px] font-bold bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200 rounded-full shrink-0">
+                      Ringkas
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
+                    Margin ramping 2cm, font Arial, dirancang untuk lembar satu rangkuman cepat bagi pimpinan/penguji.
+                  </p>
                 </div>
               </label>
 

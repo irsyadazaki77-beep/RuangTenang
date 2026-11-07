@@ -1,5 +1,22 @@
-import { Brain } from 'lucide-react';
-import React, { useState, memo, useCallback } from 'react';
+import React, { useState, memo, useCallback, useMemo } from 'react';
+import {
+  Brain,
+  AlertCircle,
+  Copy,
+  RefreshCw,
+  ThumbsUp,
+  ThumbsDown,
+  Edit2,
+  Check,
+  Bookmark,
+  GitBranch,
+  FileText,
+  Image as ImageIcon,
+  Volume2,
+  VolumeX,
+  ExternalLink,
+  Zap
+} from 'lucide-react';
 import { LazyMarkdown } from '../../../components/common/LazyMarkdown';
 import { Message } from '../types';
 import CounselorCard from '../../plugins/CounselorCard';
@@ -8,11 +25,15 @@ import MoodCard from '../../plugins/MoodCard';
 import ScreeningCard from '../../plugins/ScreeningCard';
 import ArticlesCard from '../../plugins/ArticlesCard';
 import { BurnoutInterventionCard } from './BurnoutInterventionCard';
-import { AlertCircle, Copy, RefreshCw, ThumbsUp, ThumbsDown, Edit2, Check, Bookmark, GitBranch, FileText, Image as ImageIcon, Volume2, VolumeX } from 'lucide-react';
+import { GeneratedImageCard } from './GeneratedImageCard';
 import { useToast } from '../../../components/Toast';
+import { empathicVoiceService } from '../utils/empathicVoiceService';
 import { motion, useReducedMotion } from 'motion/react';
 import { RhythmicTypingIndicator } from '../../../components/ui/RhythmicTypingIndicator';
 import { BrandLogo } from '../../../components/ui/BrandLogo';
+import { ReasoningAccordion } from './ReasoningAccordion';
+import { InteractiveSourcePills } from './InteractiveSourcePills';
+import { parseReasoning } from '../utils/parseReasoning';
 
 interface Props {
   msg: Message;
@@ -26,6 +47,9 @@ interface Props {
   onBranch?: (messageId: string, contentSnippet: string) => void;
   isSearchTarget?: boolean;
   searchHighlightQuery?: string;
+  onTransferToWorkspace?: (content: string) => void;
+  onResumeStream?: (lastContent: string) => void;
+  versionNav?: { index: number; total: number; onChange: (index: number) => void };
 }
 
 export const MessageBubble = memo(function MessageBubble({
@@ -33,12 +57,16 @@ export const MessageBubble = memo(function MessageBubble({
   isTyping,
   onRegenerate,
   onOpenPlugin,
+  onSendPluginResult,
   onEditMessage,
   onBookmarkToggle,
   isBookmarked = false,
   onBranch,
   isSearchTarget = false,
-  searchHighlightQuery
+  searchHighlightQuery,
+  onTransferToWorkspace,
+  onResumeStream,
+  versionNav
 }: Props) {
   const { showToast } = useToast();
   const [isEditing, setIsEditing] = useState(false);
@@ -47,47 +75,28 @@ export const MessageBubble = memo(function MessageBubble({
   const [copied, setCopied] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const shouldReduceMotion = useReducedMotion();
+  const reasoning = useMemo(() => parseReasoning(msg.content), [msg.content]);
+
+  const timeString = useMemo(() => {
+    if (!msg.createdAt) return '';
+    const d = typeof msg.createdAt === 'string' ? new Date(msg.createdAt) : msg.createdAt;
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+  }, [msg.createdAt]);
 
   const handleToggleSpeech = useCallback(() => {
-    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
-      showToast('Browser Anda tidak mendukung fitur pembacaan suara (Speech Synthesis).', 'info');
-      return;
-    }
-
     if (isSpeaking) {
-      window.speechSynthesis.cancel();
+      empathicVoiceService.stop();
       setIsSpeaking(false);
     } else {
-      window.speechSynthesis.cancel();
-
-      const cleanText = msg.content
-        .replace(/```[\s\S]*?```/g, '')
-        .replace(/`([^`]+)`/g, '$1')
-        .replace(/\*\*([^*]+)\*\*/g, '$1')
-        .replace(/\*([^*]+)\*/g, '$1')
-        .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-        .replace(/^[#\-*+]\s+/gm, '')
-        .trim();
-
-      if (!cleanText) return;
-
-      const utterance = new SpeechSynthesisUtterance(cleanText);
-      const voices = window.speechSynthesis.getVoices();
-      const idVoice = voices.find(v => v.lang.includes('id') || v.lang.includes('ID'));
-      if (idVoice) {
-        utterance.voice = idVoice;
-      } else {
-        utterance.lang = 'id-ID';
+      const ok = empathicVoiceService.speak(msg.content, {
+        onStart: () => setIsSpeaking(true),
+        onEnd: () => setIsSpeaking(false),
+        onError: () => setIsSpeaking(false)
+      });
+      if (!ok) {
+        showToast('Browser Anda tidak mendukung fitur suara (Speech Synthesis).', 'info');
       }
-
-      utterance.pitch = 0.95;
-      utterance.rate = 0.92;
-
-      utterance.onend = () => setIsSpeaking(false);
-      utterance.onerror = () => setIsSpeaking(false);
-
-      window.speechSynthesis.speak(utterance);
-      setIsSpeaking(true);
     }
   }, [isSpeaking, msg.content, showToast]);
 
@@ -136,215 +145,222 @@ export const MessageBubble = memo(function MessageBubble({
   return (
     <motion.div
       id={`msg-${msg.id}`}
-      initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 14, scale: 0.98 }}
+      initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 10, scale: 0.99 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
-      transition={shouldReduceMotion ? { duration: 0.15 } : { type: "spring", stiffness: 340, damping: 26, mass: 0.8 }}
+      transition={shouldReduceMotion ? { duration: 0.15 } : { type: "spring", stiffness: 360, damping: 28, mass: 0.7 }}
       onAnimationComplete={() => {
-        // Hapus willChange setelah animasi masuk selesai agar memori GPU tidak bocor
         const el = document.getElementById(`msg-${msg.id}`);
         if (el) el.style.willChange = 'auto';
       }}
       style={{ willChange: 'transform, opacity' }}
-      className={`render-optimized-item flex gap-3 sm:gap-3.5 group w-full transition-all duration-200 ${
-        isSearchTarget ? 'ring-2 ring-amber-500/80 dark:ring-amber-400/80 rounded-2xl p-1.5 bg-amber-50/40 dark:bg-amber-950/30 shadow-xs' : ''
+      className={`render-optimized-item group flex w-full transition-all duration-200 ${
+        isSearchTarget ? 'ring-2 ring-amber-500/80 dark:ring-amber-400/80 rounded-2xl p-2 bg-amber-50/40 dark:bg-amber-950/30' : ''
       } ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
     >
-      {msg.role === 'assistant' && (
-        <BrandLogo size="xs" iconOnly className="shrink-0 mt-0.5" />
-      )}
-
-      <div className={`relative ${
-        msg.role === 'user'
-          ? 'max-w-[88%] sm:max-w-[80%]'
-          : 'flex-1 min-w-0 max-w-full'
-      }`}>
-        {msg.role === 'user' ? (
-          <>
-            {isEditing ? (
-              <div className="flex flex-col gap-2.5 min-w-[260px] sm:min-w-[340px] bg-white dark:bg-slate-800 p-3.5 rounded-2xl border border-stone-200 dark:border-slate-700 shadow-md">
-                <textarea
-                  className="w-full bg-stone-50 dark:bg-slate-900 text-stone-800 dark:text-stone-100 border border-stone-200 dark:border-slate-700 rounded-xl p-2.5 text-[14px] sm:text-[14.5px] leading-relaxed focus:ring-2 focus:ring-teal-500/40 outline-none resize-none"
-                  value={editContent}
-                  onChange={e => setEditContent(e.target.value)}
-                  rows={3}
-                  autoFocus
-                />
-                <div className="flex justify-end gap-1.5">
-                  <button
-                    aria-label="Batal Edit"
-                    onClick={() => setIsEditing(false)}
-                    className="min-h-[40px] min-w-[40px] px-3 py-1.5 text-xs sm:text-sm text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-slate-700 rounded-lg cursor-pointer transition-colors"
-                  >
-                    Batal
-                  </button>
-                  <button
-                    aria-label="Simpan Edit"
-                    onClick={handleSaveEdit}
-                    className="min-h-[40px] min-w-[40px] px-3.5 py-1.5 text-xs sm:text-sm bg-teal-700 hover:bg-teal-800 text-white rounded-lg cursor-pointer transition-colors font-medium shadow-xs"
-                  >
-                    Kirim Perubahan
-                  </button>
-                </div>
+      {msg.role === 'user' ? (
+        /* USER MESSAGE ROW (ChatGPT / Claude Style Right-Aligned Bubble) */
+        <div className="flex flex-col items-end max-w-[85%] sm:max-w-[78%]">
+          {isEditing ? (
+            <div className="w-full min-w-[280px] sm:min-w-[360px] bg-white dark:bg-[#1e1f20] p-3 rounded-2xl border border-slate-200 dark:border-white/10 shadow-lg space-y-2">
+              <textarea
+                className="w-full bg-slate-50 dark:bg-white/5 text-slate-800 dark:text-slate-100 border border-slate-200 dark:border-white/10 rounded-xl p-3 text-[14px] sm:text-[15px] leading-relaxed focus:outline-none focus:ring-2 focus:ring-teal-500/30 resize-none"
+                value={editContent}
+                onChange={e => setEditContent(e.target.value)}
+                rows={3}
+                autoFocus
+              />
+              <div className="flex justify-end gap-1.5">
+                <button
+                  type="button"
+                  aria-label="Batal Edit"
+                  onClick={() => setIsEditing(false)}
+                  className="px-3 py-1.5 text-xs text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 rounded-lg transition-colors cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  aria-label="Simpan Edit"
+                  onClick={handleSaveEdit}
+                  className="px-3.5 py-1.5 text-xs font-medium bg-teal-700 hover:bg-teal-800 text-white rounded-lg transition-colors cursor-pointer shadow-xs"
+                >
+                  Kirim Perubahan
+                </button>
               </div>
-            ) : (
-              <div className="group/user relative inline-block">
-                {msg.attachments && msg.attachments.length > 0 && (
-                  <div className="flex flex-wrap justify-end gap-1.5 mb-1.5">
-                    {msg.attachments.map(att => (
-                      <a
-                        key={att.id}
-                        href={att.url || `/api/v1/chat/attachments/${att.id}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="flex items-center gap-1.5 px-2.5 py-1 bg-stone-100/90 dark:bg-slate-800 hover:bg-stone-200/90 dark:hover:bg-slate-700 rounded-xl text-[11px] text-stone-800 dark:text-stone-200 transition-colors border border-stone-200/50 dark:border-slate-700"
-                      >
-                        {att.mimeType?.startsWith('image/') ? (
-                          <ImageIcon className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 shrink-0" />
-                        ) : (
-                          <FileText className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 shrink-0" />
-                        )}
-                        <span className="truncate max-w-[140px] font-medium">{att.filename}</span>
-                        {att.mimeType?.startsWith('image/') && (
-                          <span className="text-[9.5px] px-1 py-0.2 rounded bg-teal-100/70 dark:bg-teal-900/60 text-teal-700 dark:text-teal-300 font-medium">Visual</span>
-                        )}
-                        {att.size > 0 && <span className="text-[10px] opacity-60">({(att.size / 1024).toFixed(0)}KB)</span>}
-                      </a>
-                    ))}
-                  </div>
+            </div>
+          ) : (
+            <>
+              {/* Attachments (if any) */}
+              {msg.attachments && msg.attachments.length > 0 && (
+                <div className="flex flex-wrap justify-end gap-1.5 mb-1.5">
+                  {msg.attachments.map(att => (
+                    <a
+                      key={att.id}
+                      href={att.url || `/api/v1/chat/attachments/${att.id}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-100 dark:bg-white/10 hover:bg-slate-200/80 dark:hover:bg-white/15 rounded-xl text-xs text-slate-800 dark:text-slate-200 transition-colors border border-slate-200/60 dark:border-white/10"
+                    >
+                      {att.mimeType?.startsWith('image/') ? (
+                        <ImageIcon className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 shrink-0" />
+                      ) : (
+                        <FileText className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 shrink-0" />
+                      )}
+                      <span className="truncate max-w-[140px] font-medium">{att.filename}</span>
+                      {att.size > 0 && <span className="text-[10px] text-slate-400">({(att.size / 1024).toFixed(0)}KB)</span>}
+                    </a>
+                  ))}
+                </div>
+              )}
+
+              {/* Chat Bubble */}
+              <div className="rounded-3xl rounded-br-lg bg-gradient-to-br from-teal-600 to-teal-700 text-white dark:from-teal-600 dark:to-teal-800 px-4 sm:px-5 py-2.5 sm:py-3 text-[14px] sm:text-[15px] leading-relaxed break-words shadow-[0_8px_22px_-6px_rgba(13,148,136,0.3)] font-normal selection:bg-teal-900 selection:text-white">
+                {renderHighlightedContent(msg.content.replace('[PLUGIN_RESULT]\n', 'Hasil Fitur: '), searchHighlightQuery)}
+              </div>
+
+              {/* Quick Hover Controls below user bubble */}
+              <div className="flex items-center gap-1.5 mt-1 pr-1 text-[11px] text-slate-400 dark:text-slate-500">
+                {timeString && (
+                  <span className="text-[10px] font-mono text-slate-400/80 dark:text-slate-500 select-none mr-0.5">
+                    {timeString}
+                  </span>
                 )}
-                <div className="backdrop-blur-xs bg-teal-50/85 dark:bg-teal-950/50 text-stone-900 dark:text-stone-100 border border-teal-100/70 dark:border-teal-900/40 px-4 py-2.5 sm:px-4.5 sm:py-3 rounded-2xl rounded-br-sm text-[14px] sm:text-[14.5px] leading-relaxed break-words shadow-2xs">
-                  {renderHighlightedContent(msg.content.replace('[PLUGIN_RESULT]\n', 'Hasil Fitur: '), searchHighlightQuery)}
-                </div>
-
-                {/* User Message Floating Actions */}
-                <div className="absolute -left-24 top-1/2 -translate-y-1/2 flex items-center gap-0.5 opacity-80 sm:opacity-0 sm:group-hover/user:opacity-100 transition-opacity">
-                  {onBookmarkToggle && (
-                    <button
-                      onClick={handleBookmark}
-                      className={`min-h-[40px] min-w-[40px] flex items-center justify-center text-stone-400 hover:text-teal-600 dark:hover:text-teal-400 transition-colors cursor-pointer rounded-lg hover:bg-stone-100 dark:hover:bg-slate-800 ${isBookmarked ? 'text-teal-600 dark:text-teal-400' : ''}`}
-                      title={isBookmarked ? 'Hapus Simpanan' : 'Simpan Pesan'}
-                      aria-label="Simpan Pesan"
-                    >
-                      <Bookmark className={`w-3.5 h-3.5 ${isBookmarked ? 'fill-teal-600 dark:fill-teal-400' : ''}`} />
-                    </button>
-                  )}
-                  {onBranch && (
-                    <button
-                      onClick={handleBranch}
-                      className="min-h-[40px] min-w-[40px] flex items-center justify-center text-stone-400 hover:text-teal-600 dark:hover:text-teal-400 rounded-lg hover:bg-stone-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-                      title="Buat Cabang Obrolan dari Pesan Ini"
-                      aria-label="Buat Cabang Obrolan"
-                    >
-                      <GitBranch className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                  <button
-                    onClick={() => setIsEditing(true)}
-                    className="min-h-[40px] min-w-[40px] flex items-center justify-center text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 rounded-lg hover:bg-stone-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-                    title="Edit Pesan"
-                    aria-label="Edit Pesan"
+                <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+                {onBookmarkToggle && (
+                  <motion.button
+                    whileHover={{ scale: 1.1 }}
+                    whileTap={{ scale: 0.92 }}
+                    type="button"
+                    onClick={handleBookmark}
+                    className={`p-1 rounded-md text-slate-400 hover:text-teal-600 dark:hover:text-teal-400 hover:bg-slate-100 dark:hover:bg-white/10 transition-colors cursor-pointer ${isBookmarked ? 'text-teal-600 dark:text-teal-400' : ''}`}
+                    title={isBookmarked ? 'Hapus Simpanan' : 'Simpan Pesan'}
+                    aria-label="Simpan Pesan"
                   >
-                    <Edit2 className="w-3.5 h-3.5" />
-                  </button>
+                    <Bookmark className={`w-3.5 h-3.5 ${isBookmarked ? 'fill-teal-600 dark:fill-teal-400' : ''}`} />
+                  </motion.button>
+                )}
+                {onBranch && (
+                  <motion.button
+                    whileHover={{ scale: 1.1 }}
+                    whileTap={{ scale: 0.92 }}
+                    type="button"
+                    onClick={handleBranch}
+                    className="p-1 rounded-md text-slate-400 hover:text-teal-600 dark:hover:text-teal-400 hover:bg-slate-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                    title="Buat Cabang Obrolan dari Pesan Ini"
+                    aria-label="Buat Cabang Obrolan"
+                  >
+                    <GitBranch className="w-3.5 h-3.5" />
+                  </motion.button>
+                )}
+                <motion.button
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.92 }}
+                  type="button"
+                  onClick={() => setIsEditing(true)}
+                  className="p-1 rounded-md text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                  title="Edit Pesan"
+                  aria-label="Edit Pesan"
+                >
+                  <Edit2 className="w-3.5 h-3.5" />
+                </motion.button>
                 </div>
               </div>
-            )}
-          </>
-        ) : (
-          <div className="w-full min-w-0 space-y-2.5">
+            </>
+          )}
+        </div>
+      ) : (
+        /* ASSISTANT MESSAGE ROW (Claude / ChatGPT Editorial Standard) */
+        <div className="flex gap-3 sm:gap-3.5 w-full min-w-0 max-w-full">
+          <div className="shrink-0 mt-0.5">
+            <BrandLogo size="xs" iconOnly />
+          </div>
+
+          <div className="flex-1 min-w-0 max-w-full space-y-2.5">
+            {/* Header Identity & Model pill */}
+            <div className="flex items-center gap-2 select-none text-xs text-slate-500 dark:text-slate-400">
+              <span className="font-semibold text-slate-900 dark:text-slate-100 text-xs">RuangTenang</span>
+              {(msg.modelUsed || msg.degradationNotice) && (
+                <>
+                  <span className="text-slate-300 dark:text-slate-600">·</span>
+                  <span className="text-[11px] text-slate-400 dark:text-slate-500">
+                    {msg.isFallback ? 'Mode Hemat · ' : ''}{msg.modelName || msg.modelUsed}
+                  </span>
+                </>
+              )}
+              {timeString && (
+                <>
+                  <span className="text-slate-300 dark:text-slate-600">·</span>
+                  <span className="text-[10.5px] text-slate-400 dark:text-slate-500 font-mono">
+                    {timeString}
+                  </span>
+                </>
+              )}
+            </div>
+
             {msg.error ? (
-              <div className="p-3.5 rounded-xl bg-rose-50/90 dark:bg-rose-950/40 border border-rose-200/80 dark:border-rose-900/60 text-[13.5px]">
-                <p className="text-rose-800 dark:text-rose-300 mb-2 font-medium leading-relaxed">{msg.content}</p>
+              <div className="p-3.5 rounded-2xl bg-rose-50/90 dark:bg-rose-950/30 border border-rose-200/80 dark:border-rose-900/40 text-xs sm:text-sm text-rose-800 dark:text-rose-200">
+                <p className="mb-2 font-medium leading-relaxed">{msg.content}</p>
                 {msg.retryable === false ? (
-                  <p className="text-xs text-rose-700 dark:text-rose-300">Kirim ulang pesan beserta lampiran atau konteks fiturnya untuk mencoba lagi.</p>
+                  <p className="text-xs text-rose-600 dark:text-rose-400">Kirim ulang pesan beserta lampiran atau konteks fiturnya untuk mencoba lagi.</p>
                 ) : (
-                  <button aria-label="Coba Lagi" onClick={() => onRegenerate?.(msg.id)} className="min-h-[40px] min-w-[40px] px-3.5 py-1.5 bg-rose-100 dark:bg-rose-900 text-rose-800 dark:text-rose-200 rounded-lg font-medium hover:bg-rose-200 transition-colors cursor-pointer text-xs sm:text-sm">
+                  <button
+                    type="button"
+                    aria-label="Coba Lagi"
+                    onClick={() => onRegenerate?.(msg.id)}
+                    className="px-3 py-1.5 bg-rose-100 hover:bg-rose-200 dark:bg-rose-900/60 dark:hover:bg-rose-900 text-rose-800 dark:text-rose-200 rounded-xl font-medium transition-colors cursor-pointer text-xs"
+                  >
                     Coba lagi
                   </button>
                 )}
               </div>
             ) : isTyping && !msg.content ? (
               <div className="py-1">
-                <RhythmicTypingIndicator label="Menuliskan pesan yang tenang..." avatarSrc="" />
+                <RhythmicTypingIndicator label="Menuliskan pesan yang tenang..." avatarSrc="" mode="RUANG_TENANG" hideAvatar />
               </div>
             ) : (
-              <div className="prose prose-stone dark:prose-invert max-w-none break-words text-[14.5px] sm:text-[15px] leading-[1.65] text-stone-800 dark:text-stone-200 space-y-2.5 font-normal">
-                {(msg.modelUsed || msg.degradationNotice) && (
-                  <div className="not-prose mb-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-stone-400 dark:text-slate-500">
-                    {msg.modelUsed && (
-                      <span
-                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-stone-100 dark:bg-slate-800 text-stone-600 dark:text-slate-400 font-medium text-[10.5px]"
-                        title={msg.isFallback ? `${msg.fallbackFromName || 'Model utama'} gagal; respons diselesaikan dengan ${msg.modelName || msg.modelUsed}.` : msg.routingReason || `Model: ${msg.modelName || msg.modelUsed}`}
-                      >
-                        {msg.isFallback ? 'Fallback · ' : msg.routingMode === 'auto' ? 'Auto: ' : ''}{msg.modelName || msg.modelUsed}
-                      </span>
-                    )}
-                    {msg.degradationNotice && (
-                      <span
-                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-200/70 dark:border-amber-900/60 text-[10.5px] font-medium"
-                        title={msg.degradationNotice}
-                      >
-                        Penyesuaian: {msg.degradationNotice}
-                      </span>
-                    )}
-                  </div>
-                )}
-                <LazyMarkdown content={msg.content} />
+              <div className="prose prose-slate dark:prose-invert max-w-none break-words text-[14px] sm:text-[15px] leading-relaxed text-slate-800 dark:text-slate-100 space-y-2.5">
+                {reasoning.thinking || reasoning.isThinking ? (
+                  <ReasoningAccordion thinking={reasoning.thinking} isThinking={reasoning.isThinking} />
+                ) : null}
+                <LazyMarkdown content={reasoning.answer} />
+
+                {/* Verified Citations / Sources (Perplexity/Gemini style interactive pill cards) */}
                 {msg.sources && msg.sources.length > 0 && (
-                  <div className="not-prose mt-3 pt-2.5 border-t border-stone-200/60 dark:border-slate-800 space-y-1.5 text-xs text-stone-600 dark:text-slate-400">
-                    <div className="font-semibold text-[11px] uppercase tracking-wider text-stone-500 dark:text-slate-400 flex items-center gap-1">
-                      <span>Sumber & Bukti Terverifikasi</span>
-                    </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {msg.sources.map(src => (
-                        <div
-                          key={src.citationId || src.sourceRef}
-                          className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-stone-100/90 dark:bg-slate-800/90 border border-stone-200/70 dark:border-slate-700 text-[11px]"
-                          title={src.snippet || src.sourceRef}
-                        >
-                          <span className="font-mono text-[10px] font-bold text-teal-600 dark:text-teal-400">{src.citationId || 'REF'}</span>
-                          <span className="truncate max-w-[180px]">{src.filename}{src.page ? ` [Hal. ${src.page}]` : ''}</span>
-                          {src.isVisualExtraction && (
-                            <span className="px-1 py-0.2 rounded bg-teal-50 dark:bg-teal-950/60 text-teal-600 dark:text-teal-300 text-[9.5px] font-medium border border-teal-200/50 dark:border-teal-800/50">
-                              OCR
-                            </span>
-                          )}
-                          {src.readingUncertainty && (
-                            <span className="px-1 py-0.2 rounded bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 text-[9.5px] font-medium border border-amber-200/50">
-                              Ketidakpastian
-                            </span>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {isTyping && (
-                  <motion.span
-                    aria-hidden="true"
-                    className="inline-block w-1.5 h-4 ml-1 bg-teal-500 rounded-xs align-middle"
-                    animate={
-                      shouldReduceMotion
-                        ? { opacity: [0.35, 1, 0.35] }
-                        : { opacity: [0.25, 1, 0.25], scaleY: [0.85, 1.05, 0.85] }
-                    }
-                    transition={{
-                      duration: 0.9,
-                      repeat: Infinity,
-                      ease: 'easeInOut'
-                    }}
-                  />
+                  <InteractiveSourcePills sources={msg.sources} />
                 )}
               </div>
             )}
 
             {msg.incomplete && (
-              <div role="status" className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+              <div role="status" className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50/70 px-3 py-2 text-xs text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-200">
                 <span className="inline-flex items-center gap-1.5"><AlertCircle className="h-3.5 w-3.5 shrink-0" />Respons ini terputus sebelum selesai.</span>
                 {msg.retryable === false ? (
-                  <span className="text-[11px]">Kirim ulang pesan beserta lampiran atau konteks fiturnya.</span>
-                ) : onRegenerate && (
-                  <button type="button" onClick={() => onRegenerate(msg.id)} className="min-h-9 rounded-md border border-amber-400 px-2.5 font-semibold hover:bg-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 dark:border-amber-800 dark:hover:bg-amber-950">Ulangi jawaban</button>
+                  <span className="text-[11px]">Kirim ulang pesan untuk mencoba lagi.</span>
+                ) : (
+                  <div className="flex items-center gap-1.5">
+                    {onSendPluginResult && msg.content && msg.content.length > 20 && (
+                      <button
+                        type="button"
+                        onClick={() => onSendPluginResult('Lanjutkan penjelasan sebelumnya dari bagian terakhir yang terputus.')}
+                        className="rounded-lg bg-amber-600 px-2.5 py-1 text-xs font-semibold text-white shadow-2xs hover:bg-amber-700 transition-colors cursor-pointer"
+                      >
+                        Lanjutkan
+                      </button>
+                    )}
+                    {onRegenerate && (
+                      <button type="button" onClick={() => onRegenerate(msg.id)} className="rounded-lg border border-amber-400 px-2.5 py-1 text-xs font-semibold hover:bg-amber-100 dark:border-amber-800 dark:hover:bg-amber-950/50 cursor-pointer">Ulangi jawaban</button>
+                    )}
+                    {onResumeStream && (
+                      <button
+                        type="button"
+                        onClick={() => onResumeStream(msg.content)}
+                        className="rounded-lg bg-teal-600 hover:bg-teal-700 text-white px-2.5 py-1 text-xs font-semibold transition cursor-pointer flex items-center gap-1 shadow-xs"
+                      >
+                        <Zap className="h-3 w-3" />
+                        Lanjutkan Respon
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
             )}
@@ -369,92 +385,163 @@ export const MessageBubble = memo(function MessageBubble({
                 <span className="leading-relaxed">Permintaan konteks personalisasi diterima untuk membantu percakapan ini.</span>
               </div>
             )}
+            {msg.plugin === 'generate_image' && (
+              <GeneratedImageCard
+                prompt={(msg.pluginResult?.prompt as string) || (msg.content?.startsWith('![') ? '' : msg.content)}
+                imageUrl={(msg.pluginResult?.imageUrl as string) || (msg.content?.match(/!\[.*?\]\((.*?)\)/)?.[1])}
+                provider={msg.pluginResult?.provider as string}
+                error={msg.pluginResult?.error as string}
+              />
+            )}
 
-            {/* Subtle Action Toolbar */}
+            {/* Bottom Action Toolbar (Clean Claude / ChatGPT Style) */}
             {!isTyping && msg.content && !msg.error && (
-              <div className="flex items-center gap-0.5 pt-0.5 opacity-80 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-150">
-                <button
+              <div className="flex items-center gap-1 pt-1 opacity-80 sm:opacity-0 sm:group-hover:opacity-100 focus-within:opacity-100 transition-opacity duration-150">
+                {versionNav && versionNav.total > 1 && (
+                  <div className="flex items-center gap-0.5 mr-1 text-[11px] text-slate-500 dark:text-slate-400 select-none" aria-label="Versi jawaban">
+                    <button
+                      type="button"
+                      onClick={() => versionNav.onChange(Math.max(0, versionNav.index - 1))}
+                      disabled={versionNav.index === 0}
+                      aria-label="Versi sebelumnya"
+                      className="px-1.5 py-0.5 rounded-md hover:bg-slate-100 dark:hover:bg-white/10 disabled:opacity-30 cursor-pointer"
+                    >
+                      &lt;
+                    </button>
+                    <span className="font-mono tabular-nums">{versionNav.index + 1} / {versionNav.total}</span>
+                    <button
+                      type="button"
+                      onClick={() => versionNav.onChange(Math.min(versionNav.total - 1, versionNav.index + 1))}
+                      disabled={versionNav.index === versionNav.total - 1}
+                      aria-label="Versi berikutnya"
+                      className="px-1.5 py-0.5 rounded-md hover:bg-slate-100 dark:hover:bg-white/10 disabled:opacity-30 cursor-pointer"
+                    >
+                      &gt;
+                    </button>
+                  </div>
+                )}
+                <motion.button
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.92 }}
+                  type="button"
                   onClick={handleToggleSpeech}
-                  className={`min-h-[40px] min-w-[40px] flex items-center justify-center rounded-lg hover:bg-stone-100 dark:hover:bg-slate-800 transition-colors cursor-pointer ${
-                    isSpeaking ? 'text-teal-600 dark:text-teal-400 font-bold bg-teal-50 dark:bg-teal-950/50' : 'text-stone-400 hover:text-stone-700 dark:hover:text-stone-200'
+                  className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                    isSpeaking ? 'text-teal-600 dark:text-teal-400 bg-teal-50 dark:bg-teal-950/50' : 'text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10'
                   }`}
-                  title={isSpeaking ? 'Hentikan Pembacaan Suara' : 'Dengarkan Suara (Audio Reader)'}
+                  title={isSpeaking ? 'Hentikan Pembacaan Suara' : 'Dengarkan Suara'}
                   aria-label={isSpeaking ? 'Hentikan Pembacaan Suara' : 'Dengarkan Suara'}
                 >
-                  {isSpeaking ? <VolumeX className="w-3.5 h-3.5 animate-pulse" /> : <Volume2 className="w-3.5 h-3.5" />}
-                </button>
+                  {isSpeaking ? <VolumeX className="w-4 h-4 animate-pulse" /> : <Volume2 className="w-4 h-4" />}
+                </motion.button>
 
-                <button
+                <motion.button
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.92 }}
+                  type="button"
                   onClick={handleCopy}
-                  className="min-h-[40px] min-w-[40px] flex items-center justify-center text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
                   title="Salin Pesan"
                   aria-label="Salin Pesan"
                 >
-                  {copied ? <Check className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" /> : <Copy className="w-3.5 h-3.5" />}
-                </button>
+                  {copied ? <Check className="w-4 h-4 text-teal-600 dark:text-teal-400" /> : <Copy className="w-4 h-4" />}
+                </motion.button>
 
                 {onBookmarkToggle && (
-                  <button
+                  <motion.button
+                    whileHover={{ scale: 1.1 }}
+                    whileTap={{ scale: 0.92 }}
+                    type="button"
                     onClick={handleBookmark}
-                    className={`min-h-[40px] min-w-[40px] flex items-center justify-center rounded-lg hover:bg-stone-100 dark:hover:bg-slate-800 transition-colors cursor-pointer ${
-                      isBookmarked ? 'text-teal-600 dark:text-teal-400' : 'text-stone-400 hover:text-stone-700 dark:hover:text-stone-200'
+                    className={`p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-white/10 transition-colors cursor-pointer ${
+                      isBookmarked ? 'text-teal-600 dark:text-teal-400' : 'text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
                     }`}
                     title={isBookmarked ? 'Hapus Simpanan' : 'Simpan Pesan'}
                     aria-label="Simpan Pesan"
                   >
-                    <Bookmark className={`w-3.5 h-3.5 ${isBookmarked ? 'fill-teal-600 dark:fill-teal-400' : ''}`} />
-                  </button>
+                    <Bookmark className={`w-4 h-4 ${isBookmarked ? 'fill-teal-600 dark:fill-teal-400' : ''}`} />
+                  </motion.button>
                 )}
 
                 {onBranch && (
-                  <button
+                  <motion.button
+                    whileHover={{ scale: 1.1 }}
+                    whileTap={{ scale: 0.92 }}
+                    type="button"
                     onClick={handleBranch}
-                    className="min-h-[40px] min-w-[40px] flex items-center justify-center text-stone-400 hover:text-teal-600 dark:hover:text-teal-400 hover:bg-stone-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-teal-600 dark:hover:text-teal-400 hover:bg-slate-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
                     title="Buat Cabang Obrolan dari Sini"
                     aria-label="Buat Cabang Obrolan"
                   >
-                    <GitBranch className="w-3.5 h-3.5" />
-                  </button>
+                    <GitBranch className="w-4 h-4" />
+                  </motion.button>
                 )}
 
                 {onRegenerate && (
-                  <button
+                  <motion.button
+                    whileHover={{ scale: 1.1 }}
+                    whileTap={{ scale: 0.92 }}
+                    type="button"
                     onClick={() => onRegenerate(msg.id)}
-                    className="min-h-[40px] min-w-[40px] flex items-center justify-center text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
                     title="Buat Ulang Tanggapan"
                     aria-label="Buat Ulang Tanggapan"
                   >
-                    <RefreshCw className="w-3.5 h-3.5" />
-                  </button>
+                    <RefreshCw className="w-4 h-4" />
+                  </motion.button>
                 )}
 
-                <button
+                <div className="h-3 w-px bg-slate-200 dark:bg-white/10 mx-0.5" />
+
+                <motion.button
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.92 }}
+                  type="button"
                   onClick={() => {
                     setFeedback('up');
                     showToast('Terima kasih atas masukannya', 'success');
                   }}
-                  className={`min-h-[40px] min-w-[40px] flex items-center justify-center rounded-lg hover:bg-stone-100 dark:hover:bg-slate-800 transition-colors cursor-pointer ${feedback === 'up' ? 'text-teal-600 dark:text-teal-400' : 'text-stone-400 hover:text-stone-700 dark:hover:text-stone-200'}`}
+                  className={`p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-white/10 transition-colors cursor-pointer ${feedback === 'up' ? 'text-teal-600 dark:text-teal-400' : 'text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}
                   title="Membantu"
                   aria-label="Membantu"
                 >
-                  <ThumbsUp className="w-3.5 h-3.5" />
-                </button>
-                <button
+                  <ThumbsUp className="w-4 h-4" />
+                </motion.button>
+                <motion.button
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.92 }}
+                  type="button"
                   onClick={() => {
                     setFeedback('down');
                     showToast('Terima kasih atas masukannya', 'info');
                   }}
-                  className={`min-h-[40px] min-w-[40px] flex items-center justify-center rounded-lg hover:bg-stone-100 dark:hover:bg-slate-800 transition-colors cursor-pointer ${feedback === 'down' ? 'text-rose-600 dark:text-rose-400' : 'text-stone-400 hover:text-stone-700 dark:hover:text-stone-200'}`}
+                  className={`p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-white/10 transition-colors cursor-pointer ${feedback === 'down' ? 'text-rose-600 dark:text-rose-400' : 'text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}
                   title="Kurang Membantu"
                   aria-label="Kurang Membantu"
                 >
-                  <ThumbsDown className="w-3.5 h-3.5" />
-                </button>
+                  <ThumbsDown className="w-4 h-4" />
+                </motion.button>
+
+                {onTransferToWorkspace && msg.content && (
+                  <motion.button
+                    whileHover={{ scale: 1.1 }}
+                    whileTap={{ scale: 0.92 }}
+                    type="button"
+                    onClick={() => {
+                      onTransferToWorkspace(msg.content);
+                      showToast('Draf dikirim ke RuangKerja Canvas', 'success');
+                    }}
+                    className="p-1.5 rounded-lg hover:bg-teal-50 dark:hover:bg-teal-900/30 text-slate-400 hover:text-teal-600 dark:hover:text-teal-400 transition-colors cursor-pointer"
+                    title="Buka di RuangKerja (Canvas)"
+                    aria-label="Buka di RuangKerja (Canvas)"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                  </motion.button>
+                )}
               </div>
             )}
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </motion.div>
   );
 }, (prevProps, nextProps) => {
@@ -468,8 +555,11 @@ export const MessageBubble = memo(function MessageBubble({
   if (prevProps.isBookmarked !== nextProps.isBookmarked) return false;
   if (prevProps.isSearchTarget !== nextProps.isSearchTarget) return false;
   if (prevProps.searchHighlightQuery !== nextProps.searchHighlightQuery) return false;
+  if (prevProps.onTransferToWorkspace !== nextProps.onTransferToWorkspace) return false;
+  if (prevProps.onResumeStream !== nextProps.onResumeStream) return false;
+  if (prevProps.versionNav?.index !== nextProps.versionNav?.index) return false;
+  if (prevProps.versionNav?.total !== nextProps.versionNav?.total) return false;
 
-  // Fast reference & length comparison for attachments to avoid heavy JSON.stringify
   const prevAtt = prevProps.msg.attachments;
   const nextAtt = nextProps.msg.attachments;
   if (prevAtt !== nextAtt) {
@@ -479,3 +569,5 @@ export const MessageBubble = memo(function MessageBubble({
 
   return true;
 });
+
+MessageBubble.displayName = 'MessageBubble';

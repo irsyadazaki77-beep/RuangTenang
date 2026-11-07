@@ -3,10 +3,10 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AcademicPaper } from '../../features/workspace/utils/citationEngine';
 
-const { searchAcademicPapers } = vi.hoisted(() => ({ searchAcademicPapers: vi.fn() }));
+const { searchAcademicPapersWithStatus } = vi.hoisted(() => ({ searchAcademicPapersWithStatus: vi.fn() }));
 
 vi.mock('../../features/workspace/utils/citationEngine', () => ({
-  searchAcademicPapers,
+  searchAcademicPapersWithStatus,
   formatAPA7: vi.fn(() => 'APA citation'),
   formatIEEE: vi.fn(() => 'IEEE citation'),
   formatHarvard: vi.fn(() => 'Harvard citation'),
@@ -31,15 +31,17 @@ describe('CitationSearchModal', () => {
 
   it('aborts and ignores an older search response after the query changes', async () => {
     let resolveOlder: (results: AcademicPaper[]) => void = () => undefined;
-    searchAcademicPapers.mockImplementation((query: string) => query === 'older query'
-      ? new Promise<AcademicPaper[]>(resolve => { resolveOlder = resolve; })
-      : Promise.resolve([paper('Newer result')]));
+    searchAcademicPapersWithStatus.mockImplementation((query: string) => query === 'older query'
+      ? new Promise<{ papers: AcademicPaper[]; unavailable: boolean }>(resolve => {
+          resolveOlder = results => resolve({ papers: results, unavailable: false });
+        })
+      : Promise.resolve({ papers: [paper('Newer result')], unavailable: false }));
 
     render(<CitationSearchModal isOpen onClose={vi.fn()} />);
     const input = screen.getByPlaceholderText(/Cari judul paper/);
     fireEvent.change(input, { target: { value: 'older query' } });
-    await waitFor(() => expect(searchAcademicPapers).toHaveBeenCalledWith('older query', expect.any(AbortSignal)));
-    const olderSignal = vi.mocked(searchAcademicPapers).mock.calls[0][1];
+    await waitFor(() => expect(searchAcademicPapersWithStatus).toHaveBeenCalledWith('older query', expect.any(AbortSignal)));
+    const olderSignal = vi.mocked(searchAcademicPapersWithStatus).mock.calls[0][1];
 
     fireEvent.change(input, { target: { value: 'newer query' } });
     expect(await screen.findByRole('button', { name: /Newer result/ })).toBeInTheDocument();

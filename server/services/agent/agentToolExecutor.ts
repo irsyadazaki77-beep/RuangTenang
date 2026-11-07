@@ -227,15 +227,26 @@ async function executeRegisteredTool(toolId: string, input: unknown, context: Ag
   if (toolId === 'propose_presentation_deck') {
     const args = input as {
       title: string;
-      theme: 'academic_minimal' | 'professional' | 'technology' | 'clean_corporate';
-      slides: Array<{ title: string; body: string; notes?: string }>;
+      theme: 'academic_minimal' | 'professional' | 'technology' | 'clean_corporate' | 'vibrant_creative';
+      slides: Array<{
+        title: string;
+        body: string;
+        notes?: string;
+        layout?: 'title' | 'content' | 'comparison' | 'cards' | 'highlight' | 'steps' | 'references';
+        cards?: Array<{ title: string; bullets: string[] }>;
+        imageUrl?: string;
+        imageCaption?: string;
+      }>;
     };
     const title = safeString(args.title) as string;
     const slides = args.slides.map((s, idx) => ({
       id: `slide-${idx + 1}`,
       title: safeString(s.title) as string,
       body: safeString(s.body) as string,
-      notes: safeString(s.notes || '') as string
+      notes: safeString(s.notes || '') as string,
+      ...(s.layout ? { layout: safeString(s.layout) } : {}),
+      ...(Array.isArray(s.cards) ? { cards: s.cards } : {}),
+      ...(s.imageUrl ? { imageUrl: safeString(s.imageUrl), imageCaption: safeString(s.imageCaption || '') } : {})
     }));
     const deck = {
       format: 'ruangtenang-presentation-v1',
@@ -449,6 +460,21 @@ async function executeRegisteredTool(toolId: string, input: unknown, context: Ag
         excerpt: scanAndSanitizePII(item.excerpt).sanitizedText.slice(0, 900),
         ...(item.publishedDate ? { publishedDate: item.publishedDate } : {})
       }))
+    };
+  }
+
+  if (toolId === 'generate_image') {
+    const args = input as { prompt: string; width?: number; height?: number };
+    const { imageGenerationService } = await import('../imageGenerationService.js');
+    const result = await imageGenerationService.generateImage({
+      prompt: args.prompt,
+      width: args.width || 1024,
+      height: args.height || 1024
+    });
+    return {
+      imageUrl: result.imageUrl,
+      prompt: args.prompt,
+      provider: result.provider
     };
   }
 

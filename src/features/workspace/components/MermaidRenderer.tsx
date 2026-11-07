@@ -318,7 +318,7 @@ export const MermaidRenderer: React.FC<MermaidRendererProps> = ({
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
         onWheel={handleWheel}
-        className={`p-6 overflow-hidden min-h-[160px] flex items-center justify-center bg-white/50 dark:bg-slate-950/40 select-none ${
+        className={`p-6 overflow-hidden min-h-40 flex items-center justify-center bg-white/50 dark:bg-slate-950/40 select-none ${
           !error && !loading ? (isDragging ? 'cursor-grabbing' : 'cursor-grab') : ''
         }`}
       >

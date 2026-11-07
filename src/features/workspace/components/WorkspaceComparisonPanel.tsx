@@ -16,6 +16,24 @@ function csrfHeaders(): Record<string, string> {
   return { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest', ...(match ? { 'X-CSRF-Token': decodeURIComponent(match[1]) } : {}) };
 }
 
+function getCandidateRubric(output: string): Array<{ label: string; color: string }> {
+  if (!output) return [];
+  const badges: Array<{ label: string; color: string }> = [];
+  if (/^#{1,4}\s+/m.test(output) || /[-*]\s+/m.test(output)) {
+    badges.push({ label: '🎓 Terstruktur', color: 'bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border-blue-200' });
+  }
+  if (/\[cite:[A-Za-z0-9_-]+\]|\((?:19|20)\d{2}\)|et al\./i.test(output)) {
+    badges.push({ label: '📚 Rujukan Sitasi', color: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-200' });
+  }
+  if (/\|.*\|/m.test(output) || /```[a-z]+/i.test(output) || /\d+%/i.test(output)) {
+    badges.push({ label: '📊 Data / Tabel', color: 'bg-purple-50 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 border-purple-200' });
+  }
+  if (output.length > 800) {
+    badges.push({ label: '⚡ Analisis Mendalam', color: 'bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border-amber-200' });
+  }
+  return badges;
+}
+
 const CandidateCard = React.memo(function CandidateCard({ candidate, run, providerLabel, selected, selectionLocked, onUse, onCanvas, onCancel, onRetry }: {
   candidate: WorkspaceComparisonCandidate;
   run: WorkspaceComparisonRun;
@@ -72,6 +90,15 @@ const CandidateCard = React.memo(function CandidateCard({ candidate, run, provid
     <div className="flex-1 min-h-28 max-h-[55vh] overflow-y-auto p-3 text-xs leading-relaxed text-slate-700 dark:text-slate-200 whitespace-pre-wrap select-text">
       {candidate.error || candidate.output || (candidate.status === 'streaming' ? 'Menulis…' : candidate.status === 'failed' ? 'Respons model ini gagal dibuat. Kandidat lain tetap berjalan.' : candidate.status === 'cancelled' ? 'Respons dihentikan.' : 'Menunggu respons…')}
     </div>
+    {candidate.status === 'completed' && candidate.output && (
+      <div className="flex flex-wrap items-center gap-1 px-3 py-1 bg-slate-50/70 dark:bg-slate-900/40 border-t border-slate-100 dark:border-slate-800/80">
+        {getCandidateRubric(candidate.output).map((b, i) => (
+          <span key={i} className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium border ${b.color}`}>
+            {b.label}
+          </span>
+        ))}
+      </div>
+    )}
     <footer className="flex flex-wrap items-center gap-1 border-t border-slate-100 px-2 py-2 dark:border-slate-800">
       <button type="button" disabled={candidate.status !== 'completed' || !candidate.output || selectionLocked} onClick={() => onUse(run, candidate)} className="h-7 rounded-md bg-emerald-700 px-2.5 text-[10px] font-medium text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"><Check className="mr-1 inline h-3 w-3" />{selected ? 'Dipakai di percakapan' : 'Gunakan jawaban ini'}</button>
       <button type="button" disabled={!candidate.output} onClick={copy} className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-[10px] text-slate-500 hover:bg-slate-100 disabled:opacity-40 dark:hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"><Copy className="h-3 w-3" />{copied ? 'Tersalin' : 'Salin'}</button>

@@ -118,12 +118,12 @@ export const ArtifactDiffViewer: React.FC<ArtifactDiffViewerProps> = ({
               return (
                 <div
                   key={firstVisibleChange + idx}
-                  className="flex items-start gap-2 px-2 py-0.5 bg-emerald-950/40 text-emerald-200 border-l-2 border-emerald-500 rounded-xs select-text"
+                  className="flex items-start gap-2 sm:gap-2.5 px-2.5 py-1 bg-emerald-950/30 hover:bg-emerald-950/45 text-emerald-200 border-l-[3px] border-emerald-500 rounded-r-md transition-colors select-text font-mono"
                 >
-                  <span className="w-6 text-right text-slate-500 select-none font-mono text-[10px] shrink-0">
+                  <span className="w-7 text-right text-emerald-400/60 select-none text-[10.5px] shrink-0 font-medium">
                     {line.lineNumberNew ?? '+'}
                   </span>
-                  <span className="text-emerald-400 select-none font-bold shrink-0">+</span>
+                  <span className="text-emerald-400 select-none font-bold shrink-0 text-xs">+</span>
                   <span className="flex-1 whitespace-pre-wrap break-all leading-relaxed">
                     {line.value || ' '}
                   </span>
@@ -135,12 +135,12 @@ export const ArtifactDiffViewer: React.FC<ArtifactDiffViewerProps> = ({
               return (
                 <div
                   key={firstVisibleChange + idx}
-                  className="flex items-start gap-2 px-2 py-0.5 bg-rose-950/40 text-rose-300 line-through opacity-80 border-l-2 border-rose-500 rounded-xs select-text"
+                  className="flex items-start gap-2 sm:gap-2.5 px-2.5 py-1 bg-rose-950/30 hover:bg-rose-950/45 text-rose-300 line-through opacity-85 border-l-[3px] border-rose-500 rounded-r-md transition-colors select-text font-mono"
                 >
-                  <span className="w-6 text-right text-slate-500 select-none font-mono text-[10px] shrink-0">
+                  <span className="w-7 text-right text-rose-400/60 select-none text-[10.5px] shrink-0 font-medium">
                     {line.lineNumberOld ?? '-'}
                   </span>
-                  <span className="text-rose-400 select-none font-bold shrink-0">-</span>
+                  <span className="text-rose-400 select-none font-bold shrink-0 text-xs">-</span>
                   <span className="flex-1 whitespace-pre-wrap break-all leading-relaxed">
                     {line.value || ' '}
                   </span>
@@ -151,12 +151,12 @@ export const ArtifactDiffViewer: React.FC<ArtifactDiffViewerProps> = ({
             return (
               <div
                 key={firstVisibleChange + idx}
-                className="flex items-start gap-2 px-2 py-0.5 text-slate-400 hover:bg-slate-800/30 rounded-xs select-text"
+                className="flex items-start gap-2 sm:gap-2.5 px-2.5 py-0.5 text-slate-400 hover:bg-slate-800/40 rounded-r-md transition-colors select-text font-mono"
               >
-                <span className="w-6 text-right text-slate-600 select-none font-mono text-[10px] shrink-0">
+                <span className="w-7 text-right text-slate-600 select-none text-[10.5px] shrink-0">
                   {line.lineNumberNew ?? line.lineNumberOld ?? ' '}
                 </span>
-                <span className="w-2.5 select-none text-slate-600 shrink-0"> </span>
+                <span className="w-3 select-none text-slate-600 shrink-0 text-center"> </span>
                 <span className="flex-1 whitespace-pre-wrap break-all leading-relaxed text-slate-300">
                   {line.value || ' '}
                 </span>

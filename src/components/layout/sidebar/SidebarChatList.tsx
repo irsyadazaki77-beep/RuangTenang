@@ -97,6 +97,8 @@ export const SidebarChatList: React.FC<SidebarChatListProps> = ({
   // Automatic filter by current active mode
   if (currentMode === 'RUANG_KERJA') {
     displayChats = displayChats.filter(c => c.workspaceMode === 'RUANG_KERJA');
+  } else if (currentMode === 'RUANG_CODER') {
+    displayChats = [];
   } else {
     displayChats = displayChats.filter(c => c.workspaceMode !== 'RUANG_KERJA');
   }
@@ -203,10 +205,10 @@ export const SidebarChatList: React.FC<SidebarChatListProps> = ({
               <button
                 type="button"
                 onClick={() => onSelectChat(c.id)}
-                className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all cursor-pointer relative ${
+                className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all cursor-pointer relative ${
                   isActive
-                    ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 ring-1 ring-emerald-500/40 font-bold'
-                    : 'text-slate-500 dark:text-slate-400 hover:bg-slate-200/70 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-200'
+                    ? 'bg-slate-200/90 dark:bg-white/10 text-slate-900 dark:text-slate-100 font-semibold'
+                    : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-slate-200'
                 }`}
               >
                 {c.isPinned ? (
@@ -215,9 +217,6 @@ export const SidebarChatList: React.FC<SidebarChatListProps> = ({
                   <FileCode className="w-3.5 h-3.5" />
                 ) : (
                   <MessageSquare className="w-3.5 h-3.5" />
-                )}
-                {isActive && (
-                  <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 rounded-r-full bg-emerald-500" />
                 )}
               </button>
             </SidebarTooltip>
@@ -289,7 +288,7 @@ export const SidebarChatList: React.FC<SidebarChatListProps> = ({
           {/* Time Groups: Hari Ini, Kemarin, 7 Hari Terakhir, 30 Hari Terakhir, Terdahulu */}
           {Object.entries(groups).map(([label, list]) => list.length > 0 && (
             <div key={label}>
-              <div className="px-2 mb-0.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 select-none">
+              <div className="px-2.5 mb-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-400/90 dark:text-slate-500 select-none">
                 {label}
               </div>
               <div className="space-y-0.5">
@@ -312,19 +311,16 @@ export const SidebarChatList: React.FC<SidebarChatListProps> = ({
     return (
       <div
         key={c.id}
-        className={`group relative flex items-center justify-between w-full px-2 py-1 text-xs rounded-lg transition-all duration-150 text-left min-h-[34px] ${
+        className={`group relative flex items-center justify-between w-full px-2.5 py-1.5 text-xs rounded-xl transition-all duration-150 text-left min-h-[34px] ${
           isActive
-            ? 'bg-emerald-500/10 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 font-medium ring-1 ring-emerald-500/20'
+            ? `bg-slate-200/75 dark:bg-white/10 text-slate-900 dark:text-slate-100 font-semibold shadow-3xs before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-1 before:rounded-full ${
+                isWorkspace ? 'before:bg-indigo-600 dark:before:bg-indigo-400' : 'before:bg-teal-600 dark:before:bg-teal-400'
+              }`
             : isMenuOpen
             ? 'bg-slate-200/60 dark:bg-slate-800/80 text-slate-900 dark:text-slate-100'
-            : 'text-slate-700 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-800/80 hover:text-slate-900 dark:hover:text-slate-100'
+            : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100/80 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-slate-100'
         }`}
       >
-        {/* Left vertical active bar */}
-        {isActive && (
-          <span className="absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-r-full bg-emerald-500" />
-        )}
-
         {/* Delete Confirmation Popover Inline */}
         <AnimatePresence>
           {isDeleting && (
@@ -360,16 +356,16 @@ export const SidebarChatList: React.FC<SidebarChatListProps> = ({
         </AnimatePresence>
 
         {/* Content & Inline Edit */}
-        <div className="flex items-center gap-1.5 flex-1 min-w-0 pr-1 pl-0.5">
+        <div className="flex items-center gap-2 flex-1 min-w-0 pr-1 pl-0.5">
           {/* Icon indicator */}
           {c.isPinned ? (
             <Pin className="w-3.5 h-3.5 shrink-0 text-amber-500 fill-amber-500/20" />
           ) : isWorkspace ? (
-            <FileCode className="w-3.5 h-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+            <FileCode className={`w-3.5 h-3.5 shrink-0 transition-colors ${isActive ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500 group-hover:text-slate-600 dark:group-hover:text-slate-300'}`} />
           ) : c.parentChatId ? (
-            <GitBranch className="w-3.5 h-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+            <GitBranch className={`w-3.5 h-3.5 shrink-0 transition-colors ${isActive ? 'text-teal-600 dark:text-teal-400' : 'text-slate-400 dark:text-slate-500 group-hover:text-slate-600 dark:group-hover:text-slate-300'}`} />
           ) : (
-            <MessageSquare className="w-3.5 h-3.5 shrink-0 text-slate-400 dark:text-slate-500 group-hover:text-slate-600 dark:group-hover:text-slate-300" />
+            <MessageSquare className={`w-3.5 h-3.5 shrink-0 transition-colors ${isActive ? 'text-teal-600 dark:text-teal-400' : 'text-slate-400 dark:text-slate-500 group-hover:text-slate-600 dark:group-hover:text-slate-300'}`} />
           )}
 
           {isEditing ? (

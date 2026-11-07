@@ -292,5 +292,74 @@ export const WORKSPACE_TOOL_DEFINITIONS: WorkspaceToolDefinition[] = [
     requiredCapabilities: ['chat'],
     promptTemplate: (_input, contextText) =>
       `Evaluasi dan susun ulang hierarki outline ini agar setiap sub-bab langsung menjawab rumusan masalah dan tujuan penelitian ilmiah:\n\n${contextText}`
+  },
+
+  // 6. VISUAL & MEDIA CATEGORY
+  {
+    id: 'generate_image',
+    name: 'Generate Gambar / Visualisasi AI',
+    description: 'Menghasilkan ilustrasi, diagram, atau poster grafis AI dari deskripsi prompt naskah.',
+    icon: 'Sparkles',
+    category: 'Research',
+    executionMode: 'ai',
+    outputType: 'TEXT',
+    supportedArtifactTypes: ['DOCUMENT', 'OUTLINE'],
+    requiresArtifact: false,
+    supportsStreaming: true,
+    requiredCapabilities: ['chat'],
+    inputSchema: [
+      {
+        name: 'style',
+        type: 'enum',
+        label: 'Gaya Visual',
+        defaultValue: 'academic_illustration',
+        options: [
+          { value: 'academic_illustration', label: 'Ilustrasi Akademik' },
+          { value: 'vector_infographic', label: 'Infografis Vektor' },
+          { value: 'photorealistic', label: 'Fotorealistik' },
+          { value: 'minimalist_diagram', label: 'Diagram Skematis' }
+        ]
+      }
+    ],
+    promptTemplate: (input, contextText) =>
+      `Buatkan deskripsi visual terperinci dan instruksikan pembuatan gambar AI dengan gaya ${input.style || 'academic_illustration'} berdasarkan konteks naskah berikut:\n\n${contextText}`
+  },
+
+  // 7. ACADEMIC RESEARCH & THESIS AUDIT TOOLS (F3.7 UPDATE)
+  {
+    id: 'academic_citation_intext_audit',
+    name: 'Audit Sitasi In-Text vs Daftar Pustaka',
+    description: 'Memindai sitasi kutipan dalam teks (APA/IEEE) dan mencocokkannya dengan entri Daftar Pustaka untuk mencegah sitasi yatim.',
+    icon: 'CheckSquare',
+    category: 'Citation',
+    executionMode: 'client_utility',
+    outputType: 'TEXT',
+    supportedArtifactTypes: ['DOCUMENT', 'OUTLINE', 'CITATION'],
+    requiresArtifact: true,
+    supportsStreaming: false
+  },
+  {
+    id: 'academic_chapter_coherence',
+    name: 'Audit Konsistensi Antar-Bab Skripsi',
+    description: 'Menganalisis kesinambungan logis antara Rumusan Masalah (Bab 1), Metodologi (Bab 3), Hasil & Pembahasan (Bab 4), dan Kesimpulan (Bab 5).',
+    icon: 'Scale',
+    category: 'Research',
+    executionMode: 'client_utility',
+    outputType: 'TEXT',
+    supportedArtifactTypes: ['DOCUMENT', 'OUTLINE'],
+    requiresArtifact: true,
+    supportsStreaming: false
+  },
+  {
+    id: 'academic_lit_matrix_builder',
+    name: 'Generator Matriks Literatur Riset',
+    description: 'Menyusun tabel komparasi State-of-the-Art dan Research Gap dari kajian pustaka terdahulu ke format tabel Canvas.',
+    icon: 'Table',
+    category: 'Research',
+    executionMode: 'client_utility',
+    outputType: 'ARTIFACT_CREATE',
+    supportedArtifactTypes: ['DOCUMENT', 'OUTLINE', 'TABLE'],
+    requiresArtifact: false,
+    supportsStreaming: false
   }
 ];

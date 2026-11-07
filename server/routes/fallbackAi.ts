@@ -137,6 +137,13 @@ Draf di atas telah dimuat ke dalam Canvas Panel kerja Anda. Anda dapat langsung 
 
   // 5. Specific Student Stressors (Indonesian Context)
 
+  // Tugas Kuliah, Beban Akademik & Ujian
+  if (cleanMsg.includes('tugas') || cleanMsg.includes('akademi') || cleanMsg.includes('matkul') || cleanMsg.includes('kuliah') || cleanMsg.includes('ujian') || cleanMsg.includes('uts') || cleanMsg.includes('uas') || cleanMsg.includes('kuis') || cleanMsg.includes('deadline')) {
+    return {
+      text: "Tugas perkuliahan yang menumpuk dan tenggat waktu yang berdekatan memang sering kali terasa sangat melelahkan dan membuat kepala penuh.\n\nSangat wajar jika kamu merasa jenuh atau kewalahan saat harus menyelesaikan semuanya sekaligus. Kamu tidak harus memaksakan diri menuntaskan semuanya dalam satu waktu.\n\nDari semua tugas atau ujian yang ada saat ini, mana yang terasa paling mendesak deadlinenya atau paling membuatmu merasa buntu?"
+    };
+  }
+
   // Skripsi & Dosen Pembimbing (Dospem)
   if (cleanMsg.includes('skripsi') || cleanMsg.includes('dospem') || cleanMsg.includes('pembimbing') || cleanMsg.includes('revisi') || cleanMsg.includes('sidang') || cleanMsg.includes('bab ')) {
     return {

@@ -15,7 +15,7 @@ for (const viewport of [{ name: 'desktop', width: 1280, height: 900 }, { name: '
     await page.locator('[title="Edit Dokumen Langsung (Autosave)"]').click();
     await expect(page.getByRole('toolbar', { name: 'Pemformatan dokumen' })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByRole('button', { name: 'Tebal' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Markdown' })).toBeVisible();
+    await expect(page.locator('button[title="Lihat Markdown atau kode"]')).toBeVisible();
     await page.waitForTimeout(3500);
     const directory = path.join(process.env.E2E_ARTIFACTS_DIR || 'test-artifacts', 'fase25');
     await mkdir(directory, { recursive: true });

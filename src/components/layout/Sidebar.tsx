@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Chat } from '../../features/chat/types';
 import { WorkspaceMode } from '../../features/workspace/types';
+import { getModeHomePath } from '../../features/workspace/utils/workspaceRouting';
 import { apiClient } from '../../lib/apiClient';
 import { getNotifications } from '../../lib/notificationStore';
 import { safeLocalStorage } from '../../lib/storage';
@@ -265,11 +266,7 @@ export default function Sidebar({
 
   const handleSwitchModeAndNavigate = (mode: WorkspaceMode) => {
     onSwitchMode?.(mode);
-    if (mode === 'RUANG_KERJA') {
-      navigate('/workspace');
-    } else {
-      navigate('/');
-    }
+    navigate(getModeHomePath(mode));
     if (window.innerWidth < 1024) {
       setIsOpen(false);
     }

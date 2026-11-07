@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" fill="none">
+  <title>RuangCoder — Autonomous Local AI Coding Agent</title>
+  <rect width="256" height="256" rx="56" fill="#0F172A"/>
+  <rect x="12" y="12" width="232" height="232" rx="46" stroke="#38BDF8" stroke-opacity="0.35" stroke-width="4"/>
+  <path d="M88 86L46 128L88 170" stroke="#38BDF8" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M168 86L210 128L168 170" stroke="#10B981" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M142 70L114 186" stroke="#A855F7" stroke-width="16" stroke-linecap="round"/>
+  <circle cx="196" cy="60" r="14" fill="#10B981"/>
+</svg>

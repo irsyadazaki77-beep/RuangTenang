@@ -105,7 +105,7 @@ test.describe('Reliability, Performance & Security', () => {
     await page.evaluate(() => window.dispatchEvent(new Event('offline')));
 
     // Assert offline badge appears in UI
-    const offlineBadge = page.locator('text=Koneksi ke server terputus').first();
+    const offlineBadge = page.getByRole('status').filter({ hasText: 'Mode Offline:' }).first();
     await expect(offlineBadge).toBeVisible({ timeout: 10000 });
 
     // Simulate restoring online status
@@ -150,6 +150,7 @@ test.describe('Security & Privacy', () => {
     const oversizeBuffer = Buffer.alloc(6 * 1024 * 1024, 'a');
 
     const uploadResp = await request.post('/api/v1/chat/attachments/upload', {
+      headers: { 'X-Guest-AI-Consent': 'true' },
       multipart: {
         files: {
           name: 'oversize_test.pdf',

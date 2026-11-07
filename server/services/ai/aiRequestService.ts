@@ -24,10 +24,13 @@ export interface AiRequestOptions {
   fallbackCandidates?: string[];
   /** Preserve the requested candidate identity and report provider failures as-is. */
   comparisonMode?: boolean;
+  cachedContent?: string;
   /** Optional hard cap for bounded agent decisions. */
   maxOutputTokens?: number;
   /** Request provider JSON mode where supported; other adapters receive a validated JSON-only prompt. */
   responseFormat?: 'json';
+  /** Explicit toggle for extended reasoning / thinking mode (Adaptive CoT) */
+  enableReasoning?: boolean;
 }
 
 export function selectReliableModelCandidates(options: AiRequestOptions, primaryModelId: string, requirements: { capability: ModelCapability; hasAttachments?: boolean }): string[] {
@@ -120,7 +123,9 @@ Pedoman Interaksi & Klasifikasi Kebutuhan:
    a. Jika Pengguna Curhat / Berbagi Beban Emosi (Lelah, Cemas, Sedih, Burnout, dll):
       - Validasi & Empathy-First: respon perasaan di balik cerita sebelum membahas fakta.
       - Normalisasi perasaan mahasiswa (konflik dospem, tekanan skripsi, finansial, ekspektasi keluarga) dan beri ruang bernapas tanpa menghakimi.
-      - Ajukan TEPAT 1 (satu) pertanyaan eksploratif yang lembut untuk membantu mereka mengurai beban pikiran saat ini.
+      - Langsung tanggapi topik spesifik yang disebutkan pengguna. DILARANG bertanya kembali secara umum hal yang sudah disebutkan (misal: jika pengguna sudah berkata "tugas akademi", JANGAN bertanya "apa yang membuatmu pikiran?"). Langsung respon beban topik tersebut secara wajar.
+      - Ajukan TEPAT 1 (satu) pertanyaan santai yang mengalir di akhir kalimat untuk membantu mengurai pikiran.
+      - DILARANG menggunakan format kuesioner/survei, daftar pertanyaan berpoin/nomor (1., 2.), contoh dalam kurung seperti '(Contoh: ...)', atau menulis judul meta (seperti 'Pertanyaan eksploratif:', 'Validasi Perasaan:').
       - Hindari kalimat klise ("Jangan sedih ya", "Semangat!").
    b. Jika Pengguna Meminta Pemahaman Dokumen / Lampiran / Tugas / Pertanyaan Akademik Praktis (misal: "pahami pdf saya", "rangkum laporan ini", "jelaskan konsep ini"):
       - DILARANG berhalusinasi emosi negatif atau membuat drama fiktif (JANGAN meminta maaf tanpa alasan, jangan berasumsi pengguna kesal atau lelah jika tidak mereka sebutkan).
@@ -130,6 +135,7 @@ Pedoman Interaksi & Klasifikasi Kebutuhan:
       - Tutup dengan pertanyaan atau tawaran tindak lanjut praktis (misal: "Apakah ada bagian atau fitur spesifik yang ingin kita bahas lebih dalam atau kita kembangkan?").
 
 2. Gaya Bahasa & Sapaan:
+   - Mengobrollah secara alami dan mengalir dalam 1-2 paragraf pendek yang hangat dan bersahabat layaknya teman yang peduli.
    - Gunakan sapaan "kamu" atau nama panggilan pengguna secara hangat, santun, dan bersahabat.
    - Dilarang menggunakan sapaan sok akrab yang berlebihan ("kawan", "bestie", "bro").
    - Jika merujuk dokumen di Ruang Tenang, sebutkan nama fitur atau bagian dokumen secara natural dan mudah dipahami.
@@ -161,8 +167,8 @@ Pedoman Interaksi & Klasifikasi Kebutuhan:
           if (!client) throw Object.assign(new Error('PROVIDER_NOT_CONFIGURED'), { category: 'PROVIDER_UNAVAILABLE', retryable: true });
           const response = await executeWithReliability(model.provider, signal => geminiAdapter.generate(client, {
             model: getActualGeminiModel(modelId),
-            contents: [...sanitizedHistory, { role: 'user', parts: userParts }],
-            config: { systemInstruction: fullSystemInstruction, temperature: 0.6, maxOutputTokens: outputTokens, ...(options.responseFormat === 'json' ? { responseMimeType: 'application/json' } : {}), abortSignal: signal }
+            contents: [...(sanitizedHistory.length > 0 && sanitizedHistory[sanitizedHistory.length - 1].role === 'user' ? sanitizedHistory.slice(0, -1) : sanitizedHistory), { role: 'user', parts: (sanitizedHistory.length > 0 && sanitizedHistory[sanitizedHistory.length - 1].role === 'user' ? [...(sanitizedHistory[sanitizedHistory.length - 1].parts || []).filter(p => p.text && p.text !== sanitizedPrompt), ...userParts] : userParts) }],
+            config: { systemInstruction: fullSystemInstruction, temperature: 0.6, maxOutputTokens: outputTokens, ...(options.responseFormat === 'json' ? { responseMimeType: 'application/json' } : {}), ...(options.cachedContent ? { cachedContent: options.cachedContent } : {}), abortSignal: signal }
           }), abortSignal, requestId, 'response');
           outputText = response.text || '';
         } else {
@@ -269,7 +275,9 @@ Pedoman Interaksi & Klasifikasi Kebutuhan:
    a. Jika Pengguna Curhat / Berbagi Beban Emosi (Lelah, Cemas, Sedih, Burnout, dll):
       - Validasi & Empathy-First: respon perasaan di balik cerita sebelum membahas fakta.
       - Normalisasi perasaan mahasiswa (konflik dospem, tekanan skripsi, finansial, ekspektasi keluarga) dan beri ruang bernapas tanpa menghakimi.
-      - Ajukan TEPAT 1 (satu) pertanyaan eksploratif yang lembut untuk membantu mereka mengurai beban pikiran saat ini.
+      - Langsung tanggapi topik spesifik yang disebutkan pengguna. DILARANG bertanya kembali secara umum hal yang sudah disebutkan (misal: jika pengguna sudah berkata "tugas akademi", JANGAN bertanya "apa yang membuatmu pikiran?"). Langsung respon beban topik tersebut secara wajar.
+      - Ajukan TEPAT 1 (satu) pertanyaan santai yang mengalir di akhir kalimat untuk membantu mengurai pikiran.
+      - DILARANG menggunakan format kuesioner/survei, daftar pertanyaan berpoin/nomor (1., 2.), contoh dalam kurung seperti '(Contoh: ...)', atau menulis judul meta (seperti 'Pertanyaan eksploratif:', 'Validasi Perasaan:').
       - Hindari kalimat klise ("Jangan sedih ya", "Semangat!").
    b. Jika Pengguna Meminta Pemahaman Dokumen / Lampiran / Tugas / Pertanyaan Akademik Praktis (misal: "pahami pdf saya", "rangkum laporan ini", "jelaskan konsep ini"):
       - DILARANG berhalusinasi emosi negatif atau membuat drama fiktif (JANGAN meminta maaf tanpa alasan, jangan berasumsi pengguna kesal atau lelah jika tidak mereka sebutkan).
@@ -279,6 +287,7 @@ Pedoman Interaksi & Klasifikasi Kebutuhan:
       - Tutup dengan pertanyaan atau tawaran tindak lanjut praktis (misal: "Apakah ada bagian atau fitur spesifik yang ingin kita bahas lebih dalam atau kita kembangkan?").
 
 2. Gaya Bahasa & Sapaan:
+   - Mengobrollah secara alami dan mengalir dalam 1-2 paragraf pendek yang hangat dan bersahabat layaknya teman yang peduli.
    - Gunakan sapaan "kamu" atau nama panggilan pengguna secara hangat, santun, dan bersahabat.
    - Dilarang menggunakan sapaan sok akrab yang berlebihan ("kawan", "bestie", "bro").
    - Jika merujuk dokumen di Ruang Tenang, sebutkan nama fitur atau bagian dokumen secara natural dan mudah dipahami.
@@ -288,7 +297,7 @@ Pedoman Interaksi & Klasifikasi Kebutuhan:
    - Dilarang meresepkan suplemen/obat.
    - Jika terdeteksi tanda-tanda keputusasaan akut atau ingin melukai diri, prioritaskan keselamatan dengan tenang dan hangat sesuai protokol krisis.`;
 
-    if (userId && !isAnonymous && !comparisonMode && !fullSystemInstruction.includes('[CONTEXT_BOUNDARIES]')) {
+    if (userId && !isAnonymous && !comparisonMode && !options.systemInstruction && !fullSystemInstruction.includes('[CONTEXT_BOUNDARIES]')) {
        const userContext = await aiContextBuilder.buildContext({ userId, abortSignal });
        if (userContext.systemContext) {
          fullSystemInstruction += `\n\n${userContext.systemContext}`;
@@ -317,8 +326,8 @@ Pedoman Interaksi & Klasifikasi Kebutuhan:
           source = await executeWithReliability(model.provider, signal => {
             return geminiAdapter.generateStream(client, {
             model: getActualGeminiModel(modelId),
-            contents: [...sanitizedHistory, { role: 'user', parts: userParts }],
-            config: { systemInstruction: fullSystemInstruction, temperature: 0.6, maxOutputTokens: outputTokens, abortSignal: AbortSignal.any([signal, streamController.signal]) }
+            contents: [...(sanitizedHistory.length > 0 && sanitizedHistory[sanitizedHistory.length - 1].role === 'user' ? sanitizedHistory.slice(0, -1) : sanitizedHistory), { role: 'user', parts: (sanitizedHistory.length > 0 && sanitizedHistory[sanitizedHistory.length - 1].role === 'user' ? [...(sanitizedHistory[sanitizedHistory.length - 1].parts || []).filter(p => p.text && p.text !== sanitizedPrompt), ...userParts] : userParts) }],
+            config: { systemInstruction: fullSystemInstruction, temperature: 0.6, maxOutputTokens: outputTokens, ...(options.cachedContent ? { cachedContent: options.cachedContent } : {}), abortSignal: AbortSignal.any([signal, streamController.signal]) }
             });
           }, streamController.signal, requestId, 'first-token');
         } else {

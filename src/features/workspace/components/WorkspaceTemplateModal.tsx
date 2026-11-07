@@ -29,6 +29,7 @@ export const WorkspaceTemplateModal: React.FC<WorkspaceTemplateModalProps> = ({
     { id: 'ALL', label: 'Semua' },
     { id: 'WRITING', label: 'Penulisan' },
     { id: 'RESEARCH', label: 'Riset' },
+    { id: 'PRESENTATION', label: 'Presentasi & Poster' },
     { id: 'CITATION', label: 'Sitasi' },
     { id: 'CODING', label: 'Koding' },
   ];
@@ -49,6 +50,7 @@ export const WorkspaceTemplateModal: React.FC<WorkspaceTemplateModalProps> = ({
       let matchesCategory = true;
       if (activeCategory === 'WRITING') matchesCategory = tpl.targetArtifact === 'DOCUMENT' || tpl.targetArtifact === 'OUTLINE';
       if (activeCategory === 'RESEARCH') matchesCategory = tpl.id.includes('jurnal') || tpl.id.includes('bab1') || tpl.id.includes('proposal');
+      if (activeCategory === 'PRESENTATION') matchesCategory = tpl.id.includes('poster') || tpl.id.includes('presentasi') || tpl.id.includes('slide');
       if (activeCategory === 'CITATION') matchesCategory = tpl.targetArtifact === 'CITATION';
       if (activeCategory === 'CODING') matchesCategory = tpl.targetArtifact === 'CODE';
 

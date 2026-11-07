@@ -35,6 +35,21 @@ describe('editable PowerPoint export', () => {
     expect(outline.some(slide => slide.layout === 'references')).toBe(true);
   });
 
+  it('supports image_content layout when markdown or presentation contains an image', () => {
+    const content = `# Presentasi Riset
+## Arsitektur Model
+![Diagram Arsitektur Transformer](https://example.com/transformer.png)
+- Lapisan self-attention bertingkat
+- Normalisasi residual layer`;
+
+    const outline = buildPresentationOutline({ title: 'Presentasi Riset', content });
+    const imageSlide = outline.find(s => s.title === 'Arsitektur Model');
+    expect(imageSlide).toBeDefined();
+    expect(imageSlide?.layout).toBe('image_content');
+    expect(imageSlide?.image?.url).toBe('https://example.com/transformer.png');
+    expect(imageSlide?.image?.caption).toBe('Diagram Arsitektur Transformer');
+  });
+
   it('produces valid OOXML with editable text, shapes, a native chart, notes, and in-bounds placements', async () => {
     const content = JSON.stringify({
       type: 'bar', title: 'Rata-rata skor per kelompok', xColumn: 'Kelompok', yColumn: 'Skor',
@@ -114,5 +129,121 @@ describe('editable PowerPoint export', () => {
     expect(outline).toHaveLength(4);
     expect(chartSlides.map(slide => slide.chart?.categories.length)).toEqual([12, 12, 3]);
     expect(chartSlides.flatMap(slide => slide.chart?.categories || [])).toEqual(rows.map(row => row.Group));
+  });
+
+  it('handles --- dividers and bold headings without leaking divider characters into bullets', async () => {
+    const rawContent = `Dapat dihidangkan dengan berbagai tambahan seperti bawang, kecap, atau bahan lainnya.
+
+---
+
+**Latar Masalah**
+- Nilai gizi yang baik.
+- Dapat dihidangkan dengan berbagai pilihan tambahan.
+- Cocok untuk berbagai jenis makanan sehari-hari.
+
+---
+
+**Bahan yang Dibutuhkan**
+- 2 butir telur ayam
+- 1 sendok makan minyak goreng
+`;
+
+    const outline = buildPresentationOutline({ title: 'Resep Makanan', content: rawContent });
+    expect(outline.length).toBeGreaterThanOrEqual(3);
+
+    // Verify no bullet contains "---" or "***"
+    for (const slide of outline) {
+      if (slide.bullets) {
+        for (const bullet of slide.bullets) {
+          expect(bullet).not.toMatch(/^[-*_]{3,}$/);
+        }
+      }
+    }
+
+    // Verify sections got extracted properly
+    expect(outline.some(slide => slide.title === 'Latar Masalah')).toBe(true);
+    expect(outline.some(slide => slide.title === 'Bahan yang Dibutuhkan')).toBe(true);
+
+    // Verify it exports to valid PPTX buffer without throwing bounds error
+    const buffer = await createEditablePptxBuffer({ title: 'Resep Makanan', content: rawContent });
+    expect(Buffer.isBuffer(buffer)).toBe(true);
+  });
+
+  it('renders cards layout and highlight layout with valid OOXML and boundary placements', async () => {
+    const cardsContent = `## Tiga Pilar Utama
+### Pilar 1: Fondasi
+- Struktur data yang kuat
+- Keamanan terverifikasi
+### Pilar 2: Proses
+- Otomasi alur kerja
+- Evaluasi berkala
+### Pilar 3: Dampak
+- Efisiensi waktu 40%
+- Kepuasan pengguna tinggi
+`;
+    const outline = buildPresentationOutline({ title: 'Pilar', content: cardsContent });
+    const cardSlide = outline.find(s => s.layout === 'cards');
+    expect(cardSlide).toBeDefined();
+    expect(cardSlide?.cards).toHaveLength(3);
+
+    const buffer = await createEditablePptxBuffer({ title: 'Pilar', content: cardsContent, theme: 'clean_corporate' });
+    expect(Buffer.isBuffer(buffer)).toBe(true);
+
+    const zip = await JSZip.loadAsync(buffer);
+    const slideNames = Object.keys(zip.files).filter(name => /^ppt\/slides\/slide\d+\.xml$/.test(name));
+
+    for (const name of slideNames) {
+      const xml = await zip.file(name)!.async('text');
+      const placements = [...xml.matchAll(/<a:off x="(\d+)" y="(\d+)"\/><a:ext cx="(\d+)" cy="(\d+)"\/>/g)];
+      for (const match of placements) {
+        const x = Number(match[1]);
+        const y = Number(match[2]);
+        const width = Number(match[3]);
+        const height = Number(match[4]);
+        expect(x).toBeGreaterThanOrEqual(0);
+        expect(y).toBeGreaterThanOrEqual(0);
+        expect(x + width).toBeLessThanOrEqual(12_192_000);
+        expect(y + height).toBeLessThanOrEqual(6_858_000);
+      }
+    }
+  });
+
+  it('supports campus themes and native table layouts with valid OOXML', async () => {
+    const deckContent = JSON.stringify({
+      format: 'ruangtenang-presentation-v1',
+      theme: 'kampus_ui',
+      slides: [
+        { id: 's1', title: 'Riset Kampus UI', body: 'Disusun untuk Seminar Nasional', notes: 'Pembukaan' },
+        {
+          id: 's2',
+          title: 'Hasil Evaluasi',
+          layout: 'table',
+          table: {
+            headers: ['Metode', 'Akurasi', 'Latency'],
+            rows: [
+              ['Baseline', '82.4%', '120ms'],
+              ['RuangTenang', '96.8%', '45ms']
+            ]
+          },
+          body: '',
+          notes: 'Tabel komparasi performa'
+        }
+      ]
+    });
+
+    const outline = buildPresentationOutline({ title: 'Riset UI', content: deckContent });
+    expect(outline).toHaveLength(2);
+    expect(outline[1].layout).toBe('table');
+
+    const buffer = await createEditablePptxBuffer({ title: 'Riset UI', content: deckContent, theme: 'kampus_ui', campusName: 'Universitas Indonesia' });
+    expect(Buffer.isBuffer(buffer)).toBe(true);
+
+    const zip = await JSZip.loadAsync(buffer);
+    const firstSlideXml = await zip.file('ppt/slides/slide1.xml')!.async('text');
+    const secondSlideXml = await zip.file('ppt/slides/slide2.xml')!.async('text');
+
+    expect(firstSlideXml).toContain('UNIVERSITAS INDONESIA');
+    expect(secondSlideXml).toContain('<a:tbl');
+    expect(secondSlideXml).toContain('RuangTenang');
   });
 });

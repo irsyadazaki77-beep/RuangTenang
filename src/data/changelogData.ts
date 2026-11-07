@@ -26,14 +26,158 @@ export { CURRENT_APP_VERSION, LAST_UPDATED_DATE, isNewUpdateAvailable, markUpdat
 
 export const APP_CHANGELOG: ReleaseNote[] = [
   {
+    version: 'v3.7.0',
+    date: '2026-10-30',
+    releaseTime: '30 Oktober 2026, 19:30 WIB',
+    periodLabel: 'Hari Ini',
+    title: 'Pembaruan Web Resmi v3.7.0 — Bidirectional RuangCoder IDE, Academic Data Studio & Turnitin Integrity Suite',
+    tagline: 'Integrasi Dua Arah RuangKerja ⟷ RuangCoder, Data Studio & Visualisasi Grafik Bab 4, AI Turnitin Readiness & Parafrase Akademik Dikti, serta Thesis Burnout Sentinel.',
+    badge: 'Terbaru',
+    isLatest: true,
+    highlights: [
+      'Integrasi Dua Arah RuangKerja ⟷ RuangCoder: 1-Klik ekspor skrip Canvas (Python, SQL, C, Tabel) ke Live Sandbox dan kirim balik hasil run/log ke Bab 4 Skripsi',
+      'AI Code-to-Methodology Explainer: Transformasi kode aktif menjadi draf Bab 3 (Desain Algoritma & Pseudocode IEEE) dan Bab 4 (Analisis Kompleksitas Big-O & Evaluasi)',
+      'Interactive Data Studio & Academic Chart Builder: Pengolah data tabel & CSV menjadi 5 tipe grafik vektor SVG (300 DPI) dengan narasi statistik deskriptif otomatis',
+      'AI Turnitin Readiness & Academic Paraphrase Assistant: Audit potensi similaritas teks, eliminasi pleonasme, dan restrukturisasi klausa pasif objektif standar Dikti',
+      'Thesis Burnout & Late-Night Fatigue Sentinel: Pemantau sesi pengetikan intensif (>45 menit / subuh) disertai quick action ambient soundscape hujan dan latihan napas ritmis'
+    ],
+    changes: [
+      {
+        id: 'ch-370-1',
+        category: 'feature',
+        title: 'Integrasi Dua Arah RuangKerja ⟷ RuangCoder',
+        description: 'Jembatan multi-bahasa instan dari Canvas ke IDE (Python Pyodide, SQLite SIAKAD, WebAssembly C, dan Web) serta tombol "Kirim ke Bab 4" di panel terminal RuangCoder untuk menyuntikkan hasil run langsung ke dokumen skripsi.',
+        impact: 'Menghilangkan friksi bolak-balik antara penulisan naskah dan pengujian kode bagi mahasiswa sains, teknik, dan ilmu komputer.'
+      },
+      {
+        id: 'ch-370-2',
+        category: 'ai',
+        title: 'AI Code-to-Methodology Explainer (Bab 3 & 4)',
+        description: 'Fitur pembedah algoritma yang secara otomatis menghasilkan Pseudocode standar IEEE, diagram alur Mermaid, analisis kompleksitas asimtotik waktu & ruang (Big-O), serta draf narasi perancangan dan pembahasan empiris.',
+        impact: 'Mempercepat penyusunan metodologi teknis dan justifikasi efisiensi komputasi pada laporan tugas akhir.'
+      },
+      {
+        id: 'ch-370-3',
+        category: 'feature',
+        title: 'Interactive Data Studio & Academic Chart Builder',
+        description: 'Visualizer grafik ilmiah interaktif di Canvas (Bar, Multi-Line, Area, Scatter, Pie) lengkap dengan kalkulator statistik deskriptif (Mean, Median, StdDev, Min, Max, Range) dan generator narasi pembahasan data otomatis.',
+        impact: 'Menghasilkan grafik beresolusi tinggi (300 DPI) dan interpretasi statistik siap cetak untuk naskah Bab 4.'
+      },
+      {
+        id: 'ch-370-4',
+        category: 'ai',
+        title: 'AI Turnitin Readiness & Academic Paraphrase Engine',
+        description: 'Pemeriksa integritas naskah untuk mengestimasi indeks similaritas Turnitin, mendeteksi frasa klise non-formal, dan menyusun parafrase kalimat pasif objektif sesuai pedoman penulisan ilmiah Dikti.',
+        impact: 'Meningkatkan orisinalitas naskah dan meminimalkan risiko plagiarisme sebelum diajukan ke sidang komprehensif.'
+      },
+      {
+        id: 'ch-370-5',
+        category: 'improvement',
+        title: 'Thesis Burnout & Late-Night Fatigue Sentinel',
+        description: 'Widget kesehatan mental proaktif yang mendeteksi sesi menulis melebihi 45 menit tanpa jeda atau pengerjaan larut malam (23.00-05.00), menawarkan rehat 3 menit dengan ambient suara hujan dan panduan napas 4-4-4.',
+        impact: 'Membantu mahasiswa menjaga ketenangan mental, mencegah leher tegang, dan mengatasi writer\'s block saat mengerjakan skripsi.'
+      },
+      {
+        id: 'ch-370-6',
+        category: 'feature',
+        title: 'Academic Defense Simulator, Citation Audit & Thesis Binder',
+        description: 'Simulasi tanya jawab sidang skripsi turn-by-turn dengan countdown timer, audit konsistensi sitasi APA 7th (pembersih ghost references), dan penggabung Bab 1-5 menjadi naskah utuh (.docx).',
+        impact: 'Membekali mahasiswa dengan kesiapan mental paripurna dan dokumen tugas akhir yang rapi serta konsisten.'
+      }
+    ]
+  },
+  {
+    version: 'v3.6.0',
+    date: '2026-10-29',
+    releaseTime: '29 Oktober 2026, 13:15 WIB',
+    periodLabel: 'Kemarin',
+    title: 'Pembaruan Web Resmi v3.6.0 — Multimodal Exam & Academic Studio',
+    tagline: 'Peluncuran Studio Kuis & Flashcards Ujian, Studio Poster Ilmiah Konferensi A0/A1, Generator Diagram Visual, dan Gemini Context Caching.',
+    isLatest: false,
+    highlights: [
+      'Interactive AI Quiz & Flashcard Studio: Pembuat simulasi ujian, drill tanya jawab sidang skripsi, dan flashcards interaktif dengan evaluasi otomatis',
+      'Academic Poster & Infographic Studio: Rancang poster ilmiah multi-kolom (A0/A1) langsung dari naskah skripsi Bab 1-5',
+      'Multimodal Visual & Diagram Generation: Generator ilustrasi konseptual dan diagram alur penelitian berbasis model AI visual',
+      'Gemini Document Context Caching: Akselerasi dan efisiensi penelaahan naskah skripsi berukuran tebal'
+    ],
+    changes: [
+      {
+        id: 'ch-360-1',
+        category: 'feature',
+        title: 'Interactive AI Quiz & Flashcard Studio',
+        description: 'Fitur pembuat kuis latihan ujian, kartu memori (flashcards), dan drill simulasi tanya jawab kritis sidang skripsi dari dokumen atau draf Canvas yang dilengkapi skor dan penjelasan materi.',
+        impact: 'Membantu mahasiswa menguji pemahaman konsep dan melatih kesiapan mental menghadapi ujian komprehensif atau sidang skripsi.'
+      },
+      {
+        id: 'ch-360-2',
+        category: 'feature',
+        title: 'Academic Poster & Infographic Studio',
+        description: 'Editor visual terintegrasi di Canvas untuk mengonversi draf penelitian menjadi poster ilmiah multi-kolom format A0/A1 dengan pemilihan tema modern, palette warna akademik, dan ekspor instan.',
+        impact: 'Memangkas waktu persiapan presentasi seminar hasil, symposium, dan konferensi mahasiswa.'
+      },
+      {
+        id: 'ch-360-3',
+        category: 'ai',
+        title: 'Multimodal Visual & Diagram Generation Pipeline',
+        description: 'Dukungan pembuatan diagram visual dan ilustrasi alur kerja ilmiah menggunakan model generative visual server-side dengan penyaringan keamanan dan opsi sisip langsung ke Canvas.',
+        impact: 'Memperkaya laporan dan naskah skripsi dengan representasi visual yang profesional.'
+      },
+      {
+        id: 'ch-360-4',
+        category: 'improvement',
+        title: 'Gemini Document Context Caching & Enhanced Canvas Action Suite',
+        description: 'Optimasi penanganan dokumen panjang dengan context caching cerdas pada adapter Gemini serta integrasi aksi cepat pembuatan kuis langsung dari menu toolbar Canvas.',
+        impact: 'Respons analisis dokumen menjadi lebih kencang, hemat kuota token, dan alur kerja antarfitur semakin mulus.'
+      }
+    ]
+  },
+  {
+    version: 'v3.5.0',
+    date: '2026-10-26',
+    releaseTime: '26 Oktober 2026, 09:30 WIB',
+    periodLabel: 'Minggu Ini',
+    title: 'Pembaruan Web Resmi v3.5.0 — Academic Intelligence & Synthesis Suite',
+    tagline: 'Integrasi Matriks Sintesis Literatur interaktif Bab 2 Skripsi, 1-Click Multi-Model Synthesis Engine, Academic Burnout Shield, dan Zen Focus Soundscape.',
+    badge: 'Stabil',
+    isLatest: false,
+    highlights: [
+      'Interactive Literature Matrix UI: Bedah multi-PDF komparatif dan pinpoint excerpt kutipan verbatim',
+      'Ekspor terstandarisasi Word (.docx) margin skripsi 4-4-3-3 cm dan Excel (.xlsx) dengan formula otomatis',
+      '1-Click Multi-Model Section Synthesis dengan rubrik evaluasi kualitatif akademik',
+      'Academic Burnout Shield & Zen Focus Soundscape synthesizer audio binaural/ambient'
+    ],
+    changes: [
+      {
+        id: 'ch-350-1',
+        category: 'feature',
+        title: 'Deep Interactive Literature Matrix UI & Direct Exporters',
+        description: 'Komponen modal penelaah multi-jurnal yang mengekstrak komparasi variabel, metodologi, temuan kunci, dan gap penelitian dengan tombol ekspor langsung Word Bab 2 Skripsi dan Excel terstruktur.',
+        impact: 'Mempercepat penyusunan tinjauan pustaka Bab 2 secara komprehensif dan bebas dari halusinasi rujukan.'
+      },
+      {
+        id: 'ch-350-2',
+        category: 'ai',
+        title: 'Multi-Model Synthesis Engine & Rubrik Evaluasi Akademik',
+        description: 'Penilaian otomatis kualitas jawaban model berdasarkan struktur, kelengkapan sitasi, dan kepadatan data, dengan fitur 1-klik untuk menggabungkan bagian terkuat ke Canvas.',
+        impact: 'Mahasiswa dapat memanfaatkan keunggulan unik dari masing-masing model (Cloud & Lokal) dalam 1 draf final.'
+      },
+      {
+        id: 'ch-350-3',
+        category: 'improvement',
+        title: 'Academic Burnout Shield & Zen Focus Soundscape',
+        description: 'Deteksi keletihan penulisan larut malam dan latihan pernapasan cepat, dilengkapi pemutar suara latar fokus langsung di toolbar Canvas.',
+        impact: 'Menjaga stamina kognitif dan ketenangan mental mahasiswa saat menyelesaikan tugas akhir.'
+      }
+    ]
+  },
+  {
     version: 'v3.4.0',
     date: '2026-10-14',
     releaseTime: '14 Oktober 2026, 06:50 WIB',
-    periodLabel: 'Hari Ini',
+    periodLabel: 'Minggu Lalu',
     title: 'Pembaruan Web Resmi v3.4.0 — Workspace Navigation & Adaptive Architecture',
     tagline: 'Penyempurnaan arsitektur antarmuka Ruang Kerja: navigasi terpadu (Chat, Canvas, Files, Sources, Memory, dan Agent Plan), layout responsif adaptif bebas tumpukan modal, dan peningkatan performa.',
-    badge: 'Terbaru',
-    isLatest: true,
+    isLatest: false,
     highlights: [
       'Pembaruan versi web resmi v3.4.0 (14 Oktober 2026)',
       'Arsitektur navigasi adaptif baru dengan modularisasi WorkspaceInspectorPanel',

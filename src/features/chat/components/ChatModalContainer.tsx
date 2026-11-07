@@ -9,6 +9,9 @@ import { BranchChatModal } from './BranchChatModal';
 import { ChatMemoryModal } from './ChatMemoryModal';
 import { BreathingModal } from './BreathingModal';
 import { GroundingModal } from './GroundingModal';
+import { WalkAndTalkModal } from './WalkAndTalkModal';
+import { InstantFirstAidModal } from './InstantFirstAidModal';
+import { SleepSanctuaryModal } from './SleepSanctuaryModal';
 
 const ScreeningModal = lazyWithRetry(() => import('../../screening/ScreeningModal').then(m => ({ default: m.ScreeningModal })));
 const CounselorDirectory = lazyWithRetry(() => import('../../counselors/CounselorDirectory').then(m => ({ default: m.CounselorDirectory })));
@@ -50,6 +53,18 @@ export interface ChatModalContainerProps {
   // Chat meta
   chatId: string | undefined;
   currentChatTitle?: string;
+  // Sensory & Immersion modals
+  isWalkAndTalkOpen?: boolean;
+  onCloseWalkAndTalk?: () => void;
+  onWalkAndTalkSendMessage?: (text: string) => void;
+  lastAssistantMessage?: string;
+  isAiStreaming?: boolean;
+  isFirstAidOpen?: boolean;
+  onCloseFirstAid?: () => void;
+  onFirstAidPrompt?: (prompt: string) => void;
+  isSleepSanctuaryOpen?: boolean;
+  onCloseSleepSanctuary?: () => void;
+  onSleepStoryPrompt?: () => void;
 }
 
 export const ChatModalContainer: React.FC<ChatModalContainerProps> = ({
@@ -79,7 +94,18 @@ export const ChatModalContainer: React.FC<ChatModalContainerProps> = ({
   onCloseGrounding,
   onOpenBreathing,
   chatId,
-  currentChatTitle
+  currentChatTitle,
+  isWalkAndTalkOpen = false,
+  onCloseWalkAndTalk = () => {},
+  onWalkAndTalkSendMessage = () => {},
+  lastAssistantMessage = '',
+  isAiStreaming = false,
+  isFirstAidOpen = false,
+  onCloseFirstAid = () => {},
+  onFirstAidPrompt = () => {},
+  isSleepSanctuaryOpen = false,
+  onCloseSleepSanctuary = () => {},
+  onSleepStoryPrompt = () => {}
 }) => {
   const navigate = useNavigate();
   const [renderedPlugin, setRenderedPlugin] = React.useState<string | null>(activePlugin);
@@ -213,6 +239,29 @@ export const ChatModalContainer: React.FC<ChatModalContainerProps> = ({
         isOpen={isGroundingOpen}
         onClose={onCloseGrounding}
         onOpenBreathing={onOpenBreathing}
+      />
+
+      {/* Feature 8: Walk and Talk Voice Call Modal */}
+      <WalkAndTalkModal
+        isOpen={isWalkAndTalkOpen}
+        onClose={onCloseWalkAndTalk}
+        onSendMessage={onWalkAndTalkSendMessage}
+        lastAssistantMessage={lastAssistantMessage}
+        isAiStreaming={isAiStreaming}
+      />
+
+      {/* Feature 9: Instant Emotional First-Aid Modal */}
+      <InstantFirstAidModal
+        isOpen={isFirstAidOpen}
+        onClose={onCloseFirstAid}
+        onOpenChatWithPrompt={onFirstAidPrompt}
+      />
+
+      {/* Feature 10: Sleep Sanctuary Modal */}
+      <SleepSanctuaryModal
+        isOpen={isSleepSanctuaryOpen}
+        onClose={onCloseSleepSanctuary}
+        onRequestBedtimeStory={onSleepStoryPrompt}
       />
     </>
   );

@@ -70,7 +70,7 @@ export const ConsentTab: React.FC<ConsentTabProps> = ({
           </div>
           <div className="p-2.5 surface-card border border-default rounded-xl">
             <strong className="text-primary block mb-0.5 font-semibold">Vendor Pemroses AI:</strong>
-            Provider sesuai model yang dipilih atau dirutekan (Gemini, DeepSeek, Groq, atau OpenRouter), melalui server RuangTenang.
+            Provider sesuai model lokal (Ollama On-Device / Self-Hosted) melalui server internal RuangTenang. Cloud AI pihak ketiga dinonaktifkan demi privasi penuh.
           </div>
           <div className="p-2.5 surface-card border border-default rounded-xl">
             <strong className="text-primary block mb-0.5 font-semibold">Kebijakan Penyimpanan Vendor:</strong>

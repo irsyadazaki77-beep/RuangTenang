@@ -30,16 +30,17 @@ describe('Local Ollama integration', () => {
   });
   afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.useRealTimers(); });
 
-  it('registers all eight local models and routes tasks and profiles by suitability', async () => {
+  it('registers all eleven local models and routes tasks and profiles by suitability (prioritizing Si Pinter, Si Tangguh, & Si Gacor)', async () => {
     mockDaemon(() => json({ message: { content: 'ok' } }));
     await refreshOllamaInventory(true);
-    expect(installed).toHaveLength(8);
+    expect(installed).toHaveLength(11);
     const route = (prompt: string) => smartModelRouter.routeModel({ routingMode: 'auto' }, prompt).selectedModelId;
-    expect(route('Halo')).toBe('ollama-qwen3-1.7b');
-    expect(route('Debug function TypeScript')).toBe('ollama-qwen3-8b');
-    expect(route('Buktikan persamaan matematika')).toBe('ollama-qwen3-8b');
-    expect(smartModelRouter.routeModel({ profileId: 'kerja-hard', workspaceMode: true }, 'Halo').selectedModelId).toBe('ollama-qwen3-8b');
-    expect(smartModelRouter.routeModel({ profileId: 'kerja-fast', workspaceMode: true }, 'Halo').selectedModelId).toBe('ollama-qwen3-1.7b');
+    expect(route('Halo')).toBe('ollama-si-pinter');
+    expect(route('Debug function TypeScript')).toBe('ollama-si-gacor');
+    expect(route('Buktikan persamaan matematika')).toBe('ollama-si-gacor');
+    expect(smartModelRouter.routeModel({ profileId: 'kerja-hard', workspaceMode: true }, 'Halo').selectedModelId).toBe('ollama-si-gacor');
+    expect(smartModelRouter.routeModel({ profileId: 'kerja-fast', workspaceMode: true }, 'Halo').selectedModelId).toBe('ollama-si-pinter');
+    expect(smartModelRouter.routeModel({ profileId: 'kerja-santai', workspaceMode: true }, 'Halo').selectedModelId).toBe('ollama-si-tangguh');
     expect(smartModelRouter.routeModel({ taskCategory: 'coding', attachments: [{ mimeType: 'image/png' }] }).selectedModelId).toBe('ollama-qwen3.5-0.8b');
     for (const model of installed) {
       expect(getPublicModelCatalog('Free').find(item => item.id === model.id)?.selectable).toBe(true);

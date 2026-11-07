@@ -18,7 +18,7 @@ export function useGlobalShortcuts(toggleCommandPalette: () => void) {
       } else if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'o') {
         event.preventDefault();
         navigate('/');
-      } else if ((event.ctrlKey || event.metaKey) && event.key === '/') {
+      } else if (((event.ctrlKey || event.metaKey) && event.key === '/') || (event.key === '?' && !event.ctrlKey && !event.metaKey && !event.altKey)) {
         event.preventDefault();
         toggleCommandPalette();
       }

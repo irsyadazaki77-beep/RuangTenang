@@ -6,15 +6,54 @@ import { getLocalModel, isLocalModelAvailable, localInferenceQueue, ollamaBaseUr
 type OllamaMessage = { role: 'system' | 'user' | 'assistant'; content: string; images?: string[] };
 
 function buildMessages(options: AiRequestOptions): OllamaMessage[] {
+  let cleanSystemInstruction = options.systemInstruction || '';
+  let userContent = options.prompt;
+
+  // For local Ollama models (especially lightweight models like Qwen 1.7B / 3B / 8B):
+  // If system instruction contains extracted document context (<untrusted_document_context...>),
+  // extract it and move it exclusively into the user prompt.
+  // CRITICAL: Strip it from system instruction so document text is NOT duplicated
+  // in both system and user prompts. This halves context token usage, stays within 4096 ctx,
+  // and keeps the system instruction static so Ollama's prompt caching (KV-cache) hits!
+  if (cleanSystemInstruction && cleanSystemInstruction.includes('<untrusted_document_context')) {
+    const docMatch = cleanSystemInstruction.match(/<untrusted_document_context[^>]*>([\s\S]*?)<\/untrusted_document_context>/i);
+    if (docMatch && docMatch[1]) {
+      const docText = docMatch[1].trim();
+      if (docText.length > 0) {
+        userContent = `[DOKUMEN TERLAMPIR UNTUK DIANALISIS (ISI TEKS HASIL EKSTRAKSI)]\n${docText}\n[/DOKUMEN TERLAMPIR]\n\nPetunjuk Penting: Jawablah secara akurat HANYA berdasarkan teks dokumen di atas. Dilarang keras mengarang atau berhalusinasi mengenai informasi, data, atau metodologi yang tidak tertulis pada kutipan dokumen. Jika informasi tidak ada di dalam dokumen, katakan dengan jelas bahwa informasi tersebut tidak ditemukan.\n\nPermintaan pengguna terkait dokumen di atas:\n${userContent}`;
+      }
+    }
+    cleanSystemInstruction = cleanSystemInstruction.replace(/<untrusted_document_context[^>]*>[\s\S]*?<\/untrusted_document_context>/gi, '').trim();
+  }
+
   const messages: OllamaMessage[] = [];
-  if (options.systemInstruction) messages.push({ role: 'system', content: options.systemInstruction });
-  for (const item of options.history || []) {
+  if (cleanSystemInstruction) messages.push({ role: 'system', content: cleanSystemInstruction });
+
+  const history = [...(options.history || [])];
+  // If the last item in history is a user message, avoid duplicate user turns
+  let trailingUserNote = '';
+  if (history.length > 0 && history[history.length - 1].role === 'user') {
+    const lastUserTurn = history.pop()!;
+    const partsText = (lastUserTurn.parts || []).map(p => p.text || '').join('\n').trim();
+    if (partsText && partsText !== options.prompt.trim()) {
+      const remaining = partsText.replace(options.prompt.trim(), '').trim();
+      if (remaining) trailingUserNote = remaining;
+    }
+  }
+
+  for (const item of history) {
     const content = (item.parts || []).map(part => part.text || '').join('\n').trim();
     if (content) messages.push({ role: item.role === 'model' ? 'assistant' : 'user', content });
   }
+
   const images = (options.attachments || []).filter(a => a.base64 && a.mimeType?.startsWith('image/'))
     .map(a => a.base64.includes(',') ? a.base64.split(',')[1] : a.base64);
-  messages.push({ role: 'user', content: options.prompt, ...(images.length ? { images } : {}) });
+
+  if (trailingUserNote) {
+    userContent = `${userContent}\n\n[Konteks RuangKerja]\n${trailingUserNote}`;
+  }
+
+  messages.push({ role: 'user', content: userContent, ...(images.length ? { images } : {}) });
   return messages;
 }
 
@@ -52,16 +91,49 @@ async function connect(options: AiRequestOptions, publicModelId: string, stream:
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: model.providerModelId, messages, stream,
-        // Release weights after each inference so model switching cannot accumulate RAM/VRAM.
-        keep_alive: 0,
-        ...(local?.capabilities.includes('thinking') ? { think: false } : {}),
+        // Keep active model hot in VRAM for responsive multi-turn chat and prompt cache hits.
+        // OLLAMA_MAX_LOADED_MODELS=1 automatically handles memory cleanup if another model is requested.
+        keep_alive: process.env.NODE_ENV === 'test' ? 0 : (process.env.OLLAMA_KEEP_ALIVE || '15m'),
+        // Adaptive Thinking Budget: Allow deep thinking for deep reasoning models (si-gacor, deepseek-r1),
+        // while si-pinter utilizes high-speed prompt-anchored deterministic factual inference.
+        ...(local?.capabilities.includes('thinking') ? {
+          think: options.responseFormat !== 'json' && (
+            Boolean(options.enableReasoning) ||
+            (options.enableReasoning !== false && (
+              options.routingDecision?.profileId === 'kerja-hard' ||
+              Boolean(options.routingDecision?.routingReason?.toLowerCase().includes('penalaran')) ||
+              Boolean(options.prompt && /\b(bukti|proof|deduksi|mengapa|kenapa|analisis mendalam|step by step|turunkan rumus)\b/i.test(options.prompt))
+            ) && (model.id === 'ollama-si-gacor' || model.id === 'ollama-deepseek-r1-1.5b'))
+          )
+        } : {}),
         ...(options.responseFormat === 'json' ? { format: 'json' } : {}),
-        options: { temperature: options.responseFormat === 'json' ? 0.1 : 0.6, num_ctx: numCtx,
-          // DeepSeek R1 can spend the requested token budget on hidden thinking
-          // even when think=false; leave enough room for a visible answer.
-          num_predict: Math.min(model.id === 'ollama-deepseek-r1-1.5b'
-            ? Math.max(options.maxOutputTokens || 2500, 1024)
-            : options.maxOutputTokens || 2500, Math.floor(numCtx / 2)) }
+        options: {
+          temperature: options.responseFormat === 'json' ? 0.1 : (
+            (options.routingDecision?.profileId?.startsWith('kerja-') || options.systemInstruction?.includes('RuangKerja'))
+              ? (model.id === 'ollama-si-gacor' ? 0.25 : 0.3)
+              : (model.id === 'ollama-si-pinter' ? 0.2 : 0.55)
+          ),
+          repeat_penalty: options.responseFormat === 'json' ? 1.05 : (
+            (options.routingDecision?.profileId?.startsWith('kerja-') || options.systemInstruction?.includes('RuangKerja'))
+              ? 1.15
+              : (model.id === 'ollama-si-pinter' ? 1.15 : 1.18)
+          ),
+          repeat_last_n: 256,
+          min_p: model.id === 'ollama-si-pinter' ? 0.08 : 0.05,
+          top_k: model.id === 'ollama-si-pinter' ? 20 : 40,
+          presence_penalty: (options.routingDecision?.profileId?.startsWith('kerja-') || options.systemInstruction?.includes('RuangKerja')) ? 0.0 : 0.2,
+          frequency_penalty: (options.routingDecision?.profileId?.startsWith('kerja-') || options.systemInstruction?.includes('RuangKerja')) ? 0.0 : 0.2,
+          top_p: model.id === 'ollama-si-pinter' ? 0.85 : 0.9,
+          num_ctx: numCtx,
+          num_predict: Math.min(
+            model.id === 'ollama-deepseek-r1-1.5b'
+              ? Math.max(options.maxOutputTokens || 2500, 1024)
+              : (model.id === 'ollama-si-gacor' || model.id === 'ollama-bonsai-27b' || model.id === 'ollama-si-tangguh' || model.id === 'ollama-si-pinter')
+                ? Math.max(options.maxOutputTokens || 4096, 2048)
+                : options.maxOutputTokens || 2500,
+            Math.floor(numCtx / 2)
+          )
+        }
       }),
       signal: controller.signal
     });

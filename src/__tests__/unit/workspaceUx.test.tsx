@@ -28,7 +28,9 @@ vi.mock('../../lib/apiClient', () => ({
         { id: 'gemini-3.8-flash', name: 'Gemini 3.8 Flash', category: 'Model Utama & Seimbang', tag: 'Default', description: 'Model cepat', recommendedFor: 'Obrolan', available: true, providerAvailable: true, speed: 'Sangat Cepat', reasoning: 'Tinggi', provider: 'gemini', capabilities: ['chat', 'streaming'], allowedTiers: ['Free', 'Pro', 'Premium'], availability: 'configured', selectable: true, isDefault: true },
         { id: 'deepseek-chat', name: 'DeepSeek V3 (Chat)', category: 'Model Utama & Seimbang', tag: 'Chat', description: 'Model percakapan', recommendedFor: 'Obrolan', available: true, providerAvailable: true, speed: 'Cepat', reasoning: 'Tinggi', provider: 'deepseek', capabilities: ['chat', 'streaming'], allowedTiers: ['Free', 'Pro', 'Premium'], availability: 'configured', selectable: true, isDefault: false }
       ]
-    } }))
+    } })),
+    post: vi.fn(async () => ({ success: true, status: 200, data: {} })),
+    delete: vi.fn(async () => ({ success: true, status: 200, data: {} }))
   }
 }));
 

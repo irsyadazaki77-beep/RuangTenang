@@ -62,7 +62,7 @@ export const AiConsentPrompt: React.FC<AiConsentPromptProps> = ({
               </summary>
               <div className="mt-1.5 space-y-1 rounded-lg bg-slate-50 p-2.5 text-[11px] leading-relaxed text-slate-600 dark:bg-slate-800/60 dark:text-slate-300">
                 <p>• <strong>Cakupan:</strong> Teks obrolan, konteks percakapan, dan lampiran yang kamu kirim untuk diproses.</p>
-                <p>• <strong>OCR berkas:</strong> Unggahan disimpan dan diekstrak di server aplikasi. Jika provider OCR visual Gemini/OpenAI aktif, gambar atau halaman pindai dapat dikirim ke provider itu, terpisah dari model chat pilihan. Memakai Ollama tidak otomatis menonaktifkan jalur OCR cloud.</p>
+                <p>• <strong>OCR berkas:</strong> Unggahan disimpan dan diekstrak di server aplikasi secara lokal. Jika mode lokal aktif, ekstraksi visual dijalankan tanpa mengirim data ke provider cloud eksternal.</p>
                 {isOllamaOnly ? (
                   <p>• <strong>Model:</strong> Katalog saat ini hanya menyediakan Ollama. Pesan dikirim ke endpoint Ollama yang dikonfigurasi; aplikasi tidak dapat memastikan endpoint itu berada di perangkatmu.</p>
                 ) : (

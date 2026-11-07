@@ -1,7 +1,7 @@
 /**
  * @vitest-environment node
  */
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import PDFDocument from 'pdfkit';
 import ExcelJS from 'exceljs';
 import JSZip from 'jszip';
@@ -17,6 +17,7 @@ import { normalizationService } from '../../services/file-intelligence/normaliza
 import { attachmentStorageService } from '../../services/attachmentStorageService.js';
 import { aiContextBuilder } from '../../services/ai/aiContextBuilder.js';
 import { DEFAULT_FILE_LIMITS, DocumentProcessingException } from '../../services/file-intelligence/fileTypes.js';
+import * as visualIntelligenceService from '../../services/file-intelligence/visualIntelligenceService.js';
 
 // Helpers to generate genuine binary files for testing
 async function createPdfBuffer(pagesText: string[]): Promise<Buffer> {
@@ -254,23 +255,32 @@ describe('FASE 8 — File Intelligence & Document Ingestion Pipeline Security Te
 
   // 9. Valid image (PNG)
   it('9. Successfully verifies image and sets honest preview-only status without fake OCR', async () => {
-    const pngHeader = Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D]);
-    const verified = await validateAndInspectFile(pngHeader, 'diagram.png');
-    expect(verified.fileKind).toBe('image');
+    const performOcr = vi.spyOn(visualIntelligenceService, 'performVisualOcr').mockResolvedValue(null);
+    const providerAvailable = vi.spyOn(visualIntelligenceService, 'isVisualOcrAvailable').mockReturnValue(false);
+    try {
+      const pngHeader = Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D]);
+      const verified = await validateAndInspectFile(pngHeader, 'diagram.png');
+      expect(verified.fileKind).toBe('image');
 
-    const result = await documentIngestionService.ingestFile({
-      userId: userA,
-      buffer: pngHeader,
-      originalFilename: 'diagram.png'
-    });
-    createdAttachmentIds.push(result.id);
-    expect(result.status).toBe('ready');
+      const result = await documentIngestionService.ingestFile({
+        userId: userA,
+        buffer: pngHeader,
+        originalFilename: 'diagram.png'
+      });
+      createdAttachmentIds.push(result.id);
+      expect(result.status).toBe('ready');
+      expect(result.previewOnly).toBe(true);
+      expect(result.ocrApplied).toBe(false);
 
-    // Chunks must NOT contain fake OCR strings
-    const chunks = await prisma.documentChunks.findMany({
-      where: { attachmentId: result.id }
-    });
-    expect(chunks.length).toBe(0);
+      // Chunks must NOT contain fake OCR strings
+      const chunks = await prisma.documentChunks.findMany({
+        where: { attachmentId: result.id }
+      });
+      expect(chunks.length).toBe(0);
+    } finally {
+      performOcr.mockRestore();
+      providerAvailable.mockRestore();
+    }
   });
 
   // 10. Unsupported extension

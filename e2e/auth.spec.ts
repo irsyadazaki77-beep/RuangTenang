@@ -2,15 +2,23 @@ import { test, expect } from '@playwright/test';
 
 test.describe('Auth E2E', () => {
   test('rejects unauthenticated API requests and exposes registration form', async ({ page }) => {
+    // Auth form flow is viewport independent; keep the sidebar exposed in both browser projects.
+    await page.setViewportSize({ width: 1280, height: 900 });
     const protectedResp = await page.request.get('/api/v1/chat/history');
     expect(protectedResp.status()).toBe(401);
 
     await page.addInitScript(() => localStorage.setItem('rt_onboarding_completed_guest', 'true'));
     await page.goto('/');
 
+    let openAuth = page.getByRole('button', { name: /Masuk Akun/ }).first();
     const openSidebar = page.getByRole('button', { name: 'Buka Menu Samping' });
-    if (await openSidebar.isVisible().catch(() => false)) await openSidebar.click();
-    const openAuth = page.getByRole('button', { name: /Masuk Akun/ }).first();
+    if (await openSidebar.isVisible().catch(() => false)) {
+      await openSidebar.click();
+      const sidebar = page.locator('#ruangtenang-main-sidebar');
+      await expect(sidebar).not.toHaveAttribute('aria-hidden', 'true');
+      openAuth = sidebar.getByRole('button', { name: /Masuk Akun/ }).first();
+    }
+    await expect(openAuth).toBeVisible();
     await openAuth.focus();
     await page.keyboard.press('Enter');
     await page.getByRole('button', { name: 'Registrasi' }).click();
@@ -18,6 +26,6 @@ test.describe('Auth E2E', () => {
     await expect(page.getByPlaceholder('fauzi@ui.ac.id')).toBeVisible();
 
     await page.getByRole('button', { name: 'Tutup Sesi' }).click();
-    await expect(page.getByPlaceholder('Ketik apa yang kamu rasakan...')).toBeVisible();
+    await expect(page.getByPlaceholder('Tulis ceritamu...')).toBeVisible();
   });
 });

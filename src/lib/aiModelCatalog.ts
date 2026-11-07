@@ -4,7 +4,6 @@ import { apiClient } from './apiClient';
 import {
   AiModelCatalogResponse,
   AiModelOption,
-  AiProfileOption,
   DEFAULT_AI_MODEL_ID,
   DEFAULT_TENANG_PROFILE_ID,
   DEFAULT_KERJA_PROFILE_ID,

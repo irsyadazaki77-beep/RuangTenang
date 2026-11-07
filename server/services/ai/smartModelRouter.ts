@@ -610,7 +610,7 @@ export const smartModelRouter = new SmartModelRouter();
 function preferLightLocalFallback(chosen: AiModelDefinition, alternatives: AiModelDefinition[]): string[] {
   const ids = alternatives.slice(0, 2).map(model => model.id);
   if (chosen.provider !== 'ollama' || alternatives.length < 2) return ids;
-  const light = ['ollama-qwen3-1.7b', 'ollama-gemma3-1b', 'ollama-qwen3.5-0.8b', 'ollama-gemma3-270m']
+  const light = ['ollama-si-pinter', 'ollama-si-tangguh', 'ollama-qwen3-1.7b', 'ollama-gemma3-1b', 'ollama-qwen3.5-0.8b', 'ollama-gemma3-270m']
     .find(id => alternatives.some(model => model.id === id));
   if (light && !ids.includes(light)) ids[1] = light;
   return ids;
@@ -622,10 +622,11 @@ function localTaskScore(model: AiModelDefinition, context: AiRoutingContext, cla
   const task = context.taskCategory || classification.category;
   const latency = context.latencyPreference || classification.latencyPreference;
   let order: string[];
-  if (latency === 'fast') order = ['qwen3-1.7b', 'gemma3-1b', 'qwen3.5-0.8b', 'gemma3-270m', 'phi4-mini', 'deepseek-r1-1.5b', 'qwen3-8b', 'bonsai-27b'];
-  else if (task === 'structured_reasoning') order = ['qwen3-8b', 'bonsai-27b', 'phi4-mini', 'deepseek-r1-1.5b', 'qwen3-1.7b', 'qwen3.5-0.8b', 'gemma3-1b', 'gemma3-270m'];
-  else if (task === 'coding' || task === 'document_analysis' || latency === 'deep') order = ['qwen3-8b', 'phi4-mini', 'bonsai-27b', 'qwen3-1.7b', 'deepseek-r1-1.5b', 'qwen3.5-0.8b', 'gemma3-1b', 'gemma3-270m'];
-  else order = ['qwen3-1.7b', 'phi4-mini', 'qwen3.5-0.8b', 'gemma3-1b', 'deepseek-r1-1.5b', 'qwen3-8b', 'bonsai-27b', 'gemma3-270m'];
+  if (latency === 'fast') order = ['si-pinter', 'qwen3-1.7b', 'si-tangguh', 'gemma3-1b', 'qwen3.5-0.8b', 'gemma3-270m', 'phi4-mini', 'deepseek-r1-1.5b', 'qwen3-8b', 'bonsai-27b', 'si-gacor'];
+  else if (latency === 'deep' || task === 'structured_reasoning') order = ['si-gacor', 'bonsai-27b', 'si-tangguh', 'qwen3-8b', 'si-pinter', 'phi4-mini', 'deepseek-r1-1.5b', 'qwen3-1.7b', 'qwen3.5-0.8b', 'gemma3-1b', 'gemma3-270m'];
+  else if (task === 'academic_writing') order = ['si-tangguh', 'si-gacor', 'bonsai-27b', 'qwen3-8b', 'si-pinter', 'phi4-mini', 'qwen3-1.7b', 'deepseek-r1-1.5b', 'qwen3.5-0.8b', 'gemma3-1b', 'gemma3-270m'];
+  else if (task === 'coding' || task === 'document_analysis') order = ['si-gacor', 'bonsai-27b', 'si-tangguh', 'qwen3-8b', 'si-pinter', 'phi4-mini', 'qwen3-1.7b', 'deepseek-r1-1.5b', 'qwen3.5-0.8b', 'gemma3-1b', 'gemma3-270m'];
+  else order = ['si-pinter', 'si-tangguh', 'qwen3-1.7b', 'qwen3-8b', 'phi4-mini', 'qwen3.5-0.8b', 'gemma3-1b', 'deepseek-r1-1.5b', 'bonsai-27b', 'si-gacor', 'gemma3-270m'];
   const index = order.indexOf(model.id.replace(/^ollama-/, ''));
   return index < 0 ? 0 : 500 - index * 100;
 }

@@ -17,13 +17,14 @@ const EmergencyCenter = lazyWithRetry(() => import('../../components/EmergencyCe
 const StudentWorkspace = lazyWithRetry(() => import('../../features/workspace/StudentWorkspace').then(module => ({ default: module.StudentWorkspace })));
 const WorkspaceHome = lazyWithRetry(() => import('../../features/workspace/WorkspaceHome').then(module => ({ default: module.WorkspaceHome })));
 const WorkspaceEntry = lazyWithRetry(() => import('../../features/workspace/WorkspaceEntry').then(module => ({ default: module.WorkspaceEntry })));
+const RuangCoderIDE = lazyWithRetry(() => import('../../features/coder/RuangCoderIDE').then(module => ({ default: module.RuangCoderIDE })));
 const CounselorDashboard = lazyWithRetry(() => import('../../features/counselors/CounselorDashboard').then(module => ({ default: module.CounselorDashboard })));
 const CounselorPortal = lazyWithRetry(() => import('../../features/counselor-portal/CounselorPortal').then(module => ({ default: module.CounselorPortal })));
 
 export interface AppRoute {
   path: string;
   element: ReactNode;
-  mode?: 'ruangtenang' | 'ruangkerja';
+  mode?: 'ruangtenang' | 'ruangkerja' | 'ruangcoder';
   sidebarSection?: string;
   requiresAuth?: boolean;
 }
@@ -72,38 +73,40 @@ export function createStudentRoutes(context: StudentRouteContext): AppRoute[] {
     { path: '/workspace', element: <WorkspaceHome key={`${user.id}:${user.role}`} chats={chats} isLoading={isLoadingChats} isGuest={user.role === 'guest'} onOpenSidebar={onOpenSidebar} />, mode: 'ruangkerja', sidebarSection: 'primary' },
     { path: '/workspace/new', element: <WorkspaceEntry user={user} chats={chats} setChats={setChats} {...openProps} {...consentProps} onSwitchMode={onSwitchMode} />, mode: 'ruangkerja', sidebarSection: 'primary' },
     { path: '/workspace/c/:chatId', element: workspace, mode: 'ruangkerja', sidebarSection: 'history' },
+    { path: '/coder', element: <RuangCoderIDE onOpenSidebar={onOpenSidebar} onSwitchMode={onSwitchMode} />, mode: 'ruangcoder', sidebarSection: 'primary' },
+    { path: '/ruang-coder', element: <RuangCoderIDE onOpenSidebar={onOpenSidebar} onSwitchMode={onSwitchMode} />, mode: 'ruangcoder', sidebarSection: 'primary' },
     {
       path: '/mood', sidebarSection: 'tools',
-      element: layout('Mood Tracker & Progress', 'Catat pengalaman dan tinjau pola dari waktu ke waktu. Catatan mengikuti penyimpanan akun atau mode tamu.', 'Mood & Jurnal',
-        <PrivacyGuard title="Bilik Catatan Suasana Hati Terkunci" description="PIN membatasi akses halaman ini pada sesi browser. PIN tidak mengenkripsi catatan yang tersimpan di perangkat.">
+      element: layout('Mood Tracker & Progress', 'Catat perasaanmu hari ini dan kenali polanya dari waktu ke waktu dengan tenang.', 'Mood & Jurnal',
+        <PrivacyGuard title="Bilik Catatan Suasana Hati Terkunci" description="Ruang pribadi ini dikunci dengan PIN demi kenyamanan privasimu di sesi browser ini.">
           <UserProgressTracker key={`${user.id}:${user.role}`} onOpenScreening={() => navigate('/screening')} onNavigateToSchedule={() => navigate('/counselors')} onOpenPrivacyCenter={onOpenPrivacyCenter} />
         </PrivacyGuard>)
     },
     {
       path: '/mindfulness', sidebarSection: 'tools',
-      element: layout('Workshop Meditasi & Tenang Mandiri', 'Coba latihan jeda dan refleksi sesuai kenyamanan; hentikan kapan saja.', 'Lokakarya Batin',
-        <PrivacyGuard title="Lokakarya Pribadi Terkunci" description="PIN membatasi akses halaman ini pada sesi browser. PIN tidak mengenkripsi catatan yang tersimpan di perangkat.">
+      element: layout('Workshop Meditasi & Tenang Mandiri', 'Ambil jeda sejenak untuk latihan napas, audio penenang, dan refleksi diri.', 'Lokakarya Batin',
+        <PrivacyGuard title="Lokakarya Pribadi Terkunci" description="Ruang pribadi ini dikunci dengan PIN demi kenyamanan privasimu di sesi browser ini.">
           <MindfulnessWorkshop key={`${user.id}:${user.role}`} userId={user.id} />
         </PrivacyGuard>)
     },
     {
       path: '/screening', sidebarSection: 'tools',
-      element: layout('Cek Kondisi Mental', 'Instrumen cek kondisi awal mandiri. BUKAN alat diagnosis medis.', 'Cek Kondisi',
-        <PrivacyGuard title="Riwayat Skrining Terkunci" description="PIN membatasi akses halaman ini pada sesi browser. Hasil skrining terenkripsi di server, tetapi PIN tidak mengenkripsi salinan lokal.">
+      element: layout('Cek Kondisi Mental', 'Refleksi kondisi emosional mandiri secara berkala (bukan diagnosis medis).', 'Cek Kondisi',
+        <PrivacyGuard title="Riwayat Skrining Terkunci" description="Ruang pribadi ini dikunci dengan PIN demi kenyamanan privasimu di sesi browser ini.">
           <ScreeningModal key={`${user.id}:${user.role}`} isOpen isPageMode onClose={() => navigate('/mood')} onComplete={() => undefined} onPersisted={onPersisted} />
         </PrivacyGuard>)
     },
     {
       path: '/counselors', sidebarSection: 'tools',
-      element: layout('Jadwal & Direktori Konselor', 'Lihat profil konselor yang tersedia dan ajukan sesi pendampingan. Kebijakan privasi mengikuti layanan kampus dan RuangTenang.', 'Direktori',
+      element: layout('Jadwal & Direktori Konselor', 'Temukan konselor kampus yang tepat untuk mendampingi ceritamu.', 'Direktori',
         <div className="max-w-7xl mx-auto p-3 sm:p-4 md:p-5 w-full space-y-4">
-          <div className="surface-card rounded-2xl p-3 sm:p-4 border border-teal-200/60 dark:border-teal-900/60 bg-teal-50/40 dark:bg-teal-950/20 flex flex-col md:flex-row items-center justify-between gap-3 shadow-3xs">
+          <div className="surface-card rounded-2xl p-3.5 sm:p-4 border border-teal-200/60 dark:border-teal-800/50 bg-gradient-to-r from-teal-50/70 via-white/90 to-emerald-50/50 dark:from-teal-950/35 dark:via-[#141b23] dark:to-emerald-950/20 flex flex-col md:flex-row items-center justify-between gap-3">
             <div className="flex items-center gap-3 w-full md:w-auto">
-              <div className="w-8 h-8 rounded-xl bg-teal-700 text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-3xs">1-2-3</div>
-              <div><h3 className="text-xs sm:text-sm font-bold text-teal-900 dark:text-teal-200">Alur Pemesanan Sesi Konseling Terstruktur</h3><p className="text-[11px] text-teal-700 dark:text-teal-400">1. Pilih Konselor → 2. Pilih Slot & Waktu → 3. Konfirmasi Jadwal</p></div>
+              <div className="w-9 h-9 rounded-2xl bg-teal-700 text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-[0_6px_16px_-4px_rgba(13,148,136,0.35)]">1-2-3</div>
+              <div><h3 className="text-xs sm:text-sm font-bold text-teal-950 dark:text-teal-100">Langkah Mudah Menjadwalkan Sesi</h3><p className="text-[11.5px] text-teal-700 dark:text-teal-300/90">1. Pilih Konselor → 2. Pilih Waktu yang Nyaman → 3. Konfirmasi Jadwal</p></div>
             </div>
-            <div className="flex items-center gap-2 text-[11px] font-semibold text-teal-800 dark:text-teal-300 shrink-0">
-              <span className="px-2.5 py-1 rounded-lg bg-teal-100/80 dark:bg-teal-900/50 border border-teal-200/80 dark:border-teal-800">{selectedCounselor ? `Konselor Terpilih: ${selectedCounselor.name}` : 'Pilih konselor dari direktori di bawah'}</span>
+            <div className="flex items-center gap-2 text-[11px] font-semibold text-teal-800 dark:text-teal-200 shrink-0">
+              <span className="px-3 py-1 rounded-full bg-teal-100/80 dark:bg-teal-900/50 border border-teal-200/80 dark:border-teal-800/70">{selectedCounselor ? `Konselor Terpilih: ${selectedCounselor.name}` : 'Pilih konselor dari daftar di bawah'}</span>
             </div>
           </div>
           <div className="flex flex-col xl:flex-row gap-3.5 sm:gap-4.5">

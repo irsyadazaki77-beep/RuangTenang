@@ -224,9 +224,12 @@ export async function runBackup() {
   }
 }
 
+const scriptName = path.basename(process.argv[1] || '').toLowerCase();
+const isTargetCli = scriptName.startsWith('backuptool');
 const isDirectCliExecution =
   (typeof process !== 'undefined' &&
     Boolean(process.argv[1]) &&
+    isTargetCli &&
     path.resolve(fileURLToPath(import.meta.url)).toLowerCase() ===
       path.resolve(process.argv[1]).toLowerCase()) ||
   (typeof require !== 'undefined' && typeof module !== 'undefined' && require.main === module);

@@ -16,10 +16,10 @@ export const Surface: React.FC<SurfaceProps> = ({
   ...props
 }) => {
   const levelStyles = {
-    base: 'bg-[#f8f9fb] dark:bg-[#0b0d10]',
-    card: 'bg-white dark:bg-[#17191d] border border-slate-200/80 dark:border-slate-800 shadow-3xs',
-    elevated: 'bg-white dark:bg-[#191c20] border border-slate-200/80 dark:border-slate-800 shadow-sm',
-    sunken: 'bg-slate-50 dark:bg-[#202328] border border-slate-200/70 dark:border-slate-700/70',
+    base: 'surface-page',
+    card: 'surface-card',
+    elevated: 'surface-elevated',
+    sunken: 'surface-muted',
   };
 
   return (
@@ -50,9 +50,9 @@ export const Card: React.FC<CardProps> = ({
   return (
     <div
       className={`
-        bg-white dark:bg-[#17191d] rounded-2xl border border-slate-200/80 dark:border-slate-800/80
-        shadow-3xs overflow-hidden flex flex-col text-left transition-all duration-150
-        ${interactive ? 'hover:border-slate-300 dark:hover:border-slate-700 hover:shadow-xs cursor-pointer active:scale-[0.99]' : ''}
+        surface-card rounded-2xl
+        overflow-hidden flex flex-col text-left transition-all duration-200
+        ${interactive ? 'card-organic-lift hover:border-teal-400/50 dark:hover:border-teal-500/40 cursor-pointer active:scale-[0.985]' : ''}
         ${className}
       `}
       {...props}
@@ -375,9 +375,14 @@ export const LoadingState: React.FC<{ message?: string; className?: string }> = 
   className = '',
 }) => {
   return (
-    <div className={`flex flex-col items-center justify-center gap-3 p-8 sm:p-12 ${className}`}>
-      <Loader2 className="w-6 h-6 text-teal-600 animate-spin" />
-      <span className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-medium">{message}</span>
+    <div className={`flex flex-col items-center justify-center gap-3.5 p-8 sm:p-12 ${className}`}>
+      <div className="relative flex items-center justify-center w-12 h-12">
+        <span className="absolute inset-0 rounded-full bg-teal-500/15 dark:bg-teal-400/15 animate-breathe pointer-events-none" />
+        <div className="relative w-9 h-9 rounded-2xl bg-white/90 dark:bg-slate-900/90 border border-teal-500/25 shadow-sm flex items-center justify-center">
+          <Loader2 className="w-5 h-5 text-teal-600 dark:text-teal-400 animate-spin" />
+        </div>
+      </div>
+      <span className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-medium tracking-tight">{message}</span>
     </div>
   );
 };

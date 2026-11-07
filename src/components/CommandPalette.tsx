@@ -17,8 +17,11 @@ import {
   X,
   Compass,
   FileText,
-  Sparkles
+  Sparkles,
+  Code2,
+  Keyboard
 } from 'lucide-react';
+import { OPEN_SHORTCUTS_EVENT } from './KeyboardShortcutsModal';
 import { Chat } from '../features/chat/types';
 import { safeLocalStorage } from '../lib/storage';
 import { dispatchWorkspaceCommand } from '../features/workspace/utils/workspaceCommandEvents';
@@ -34,7 +37,7 @@ interface CommandItem {
   id: string;
   title: string;
   subtitle: string;
-  category: 'Mode & Ruang' | 'Ruang Kerja' | 'Aksi Akademik' | 'Relaksasi & Tenang' | 'Riwayat Obrolan';
+  category: 'Mode & Ruang' | 'Ruang Kerja' | 'Aksi Akademik' | 'Relaksasi & Tenang' | 'Riwayat Obrolan' | 'Bantuan & Sistem';
   icon: React.ComponentType<{ className?: string }>;
   badge?: string;
   shortcut?: string;
@@ -90,6 +93,18 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         badge: 'Akademik',
         action: () => {
           navigate('/workspace');
+          onClose();
+        }
+      },
+      {
+        id: 'nav-ruangcoder',
+        title: 'RuangCoder — Web IDE & Sandbox Kode',
+        subtitle: 'Editor kode, terminal Python/SQL/C, pratinjau web, dan asisten pemrograman',
+        category: 'Mode & Ruang',
+        icon: Code2,
+        badge: 'Coding',
+        action: () => {
+          navigate('/coder');
           onClose();
         }
       },
@@ -214,6 +229,18 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         action: () => {
           navigate('/mood');
           onClose();
+        }
+      },
+      {
+        id: 'action-keyboard-shortcuts',
+        title: 'Daftar Pintasan Keyboard',
+        subtitle: 'Lihat seluruh pintasan navigasi, obrolan, dan kontrol editor',
+        category: 'Bantuan & Sistem',
+        icon: Keyboard,
+        shortcut: 'Alt+/',
+        action: () => {
+          onClose();
+          window.dispatchEvent(new CustomEvent(OPEN_SHORTCUTS_EVENT));
         }
       }
     ];
@@ -477,7 +504,19 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
             </div>
 
             <div className="flex items-center gap-1.5 font-mono text-[10.5px]">
-              <span>RuangTenang & RuangKerja</span>
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  window.dispatchEvent(new CustomEvent(OPEN_SHORTCUTS_EVENT));
+                }}
+                className="hover:text-teal-600 dark:hover:text-teal-400 transition-colors cursor-pointer"
+                title="Buka daftar pintasan lengkap"
+              >
+                Pintasan: Alt+/
+              </button>
+              <span className="text-slate-300 dark:text-slate-700">·</span>
+              <span>Ctrl+K / ?</span>
             </div>
           </div>
         </motion.div>

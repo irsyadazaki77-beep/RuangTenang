@@ -12,7 +12,7 @@ if (!existsSync(htmlPath)) {
 }
 
 const html = readFileSync(htmlPath, 'utf8');
-const assetUrls = [...html.matchAll(/(?:src|href)="(\/assets\/[^\"]+)"/g)]
+const assetUrls = [...html.matchAll(/(?:src|href)="(\/assets\/[^"]+)"/g)]
   .map(match => match[1])
   .filter((url): url is string => Boolean(url));
 const uniqueAssetUrls = [...new Set(assetUrls)];

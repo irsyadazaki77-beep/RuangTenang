@@ -488,6 +488,7 @@ export const VideoConsultationRoom: React.FC<VideoConsultationRoomProps> = ({
     let isCancelled = false;
 
     const pollSignals = async () => {
+      if (typeof document !== 'undefined' && document.hidden) return;
       try {
         const res = await apiClient.get<any>(
           `/api/v1/appointments/${appointment.id}/webrtc/signals?since=${lastSignalTimeRef.current}`
@@ -557,6 +558,7 @@ export const VideoConsultationRoom: React.FC<VideoConsultationRoomProps> = ({
     let isSubscribed = true;
 
     const pingRoom = async () => {
+      if (typeof document !== 'undefined' && document.hidden) return;
       try {
         const presenceRes = await apiClient.post(`/api/v1/appointments/${appointment.id}/room-presence`, {
           isScreenSharing,
@@ -605,6 +607,7 @@ export const VideoConsultationRoom: React.FC<VideoConsultationRoomProps> = ({
     let isSubscribed = true;
 
     const fetchNotes = async () => {
+      if (typeof document !== 'undefined' && document.hidden) return;
       try {
         const res = await apiClient.get<any>(`/api/v1/appointments/${appointment.id}/in-call-notes`);
         if (!isSubscribed) return;

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { MessageBubble } from './MessageBubble';
 import { StreamingBubble } from './StreamingBubble';
@@ -23,6 +23,7 @@ import { ErrorState } from '../../../components/common/ErrorState';
 import { apiClient } from '../../../lib/apiClient';
 import { ChatSearchBar } from './ChatSearchBar';
 import { RhythmicTypingIndicator } from '../../../components/ui/RhythmicTypingIndicator';
+import { BrandLogo } from '../../../components/ui/BrandLogo';
 import { detectAcademicDistress } from '../../workspace/utils/distressDetector';
 import { dispatchAuroraActivity } from '../../../lib/auroraEvents';
 import { readGuestAiConsent } from '../../../lib/guestAiConsent';
@@ -41,6 +42,8 @@ import { useChatBookmarks } from '../hooks/useChatBookmarks';
 import { useChatMemory } from '../hooks/useChatMemory';
 import { useChatPlugins } from '../hooks/useChatPlugins';
 import { useChatScroll } from '../hooks/useChatScroll';
+import { SelfCareWidgetGeneratorModal } from './SelfCareWidgetGeneratorModal';
+import { ChatArtifactSidecar, type ChatSidecarArtifact } from './ChatArtifactSidecar';
 
 interface MainChatProps {
   user: UserSession | null;
@@ -93,6 +96,9 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
   }, [aiModel]);
 
   const [followUps, setFollowUps] = useState<string[]>([]);
+  // Session-only answer versions, keyed by the user prompt that produced them.
+  const [answerVersions, setAnswerVersions] = useState<Record<string, string[]>>({});
+  const [selectedVersion, setSelectedVersion] = useState<Record<string, number>>({});
   const [streamingMessage, setStreamingMessage] = useState<Message | null>(null);
   const pendingConsentSendRef = React.useRef<{
     content: string;
@@ -111,10 +117,15 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
   const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false);
   const [isBranchModalOpen, setIsBranchModalOpen] = useState(false);
   const [branchTarget, setBranchTarget] = useState<{ messageId: string; contentSnippet: string } | null>(null);
+  const [isWalkAndTalkOpen, setIsWalkAndTalkOpen] = useState(false);
+  const [isFirstAidOpen, setIsFirstAidOpen] = useState(false);
+  const [isSleepSanctuaryOpen, setIsSleepSanctuaryOpen] = useState(false);
+  const [sidecarArtifact, setSidecarArtifact] = useState<ChatSidecarArtifact | null>(null);
 
   // --- Custom Hook consumption to maintain pristine segregation of concerns ---
   const { upcomingAppointment, isReminderDismissed, setIsReminderDismissed } = useUpcomingAppointment(user);
   const { isPrivacyMode, handleTogglePrivacy } = usePrivacyShield();
+  const [isSelfCareGeneratorOpen, setIsSelfCareGeneratorOpen] = useState<boolean>(false);
   const { activePlugin, setActivePlugin, isBreathingOpen, setIsBreathingOpen, isGroundingOpen, setIsGroundingOpen, handleOpenPlugin, handleClosePlugin } = useChatPlugins();
   const { isBookmarksModalOpen, setIsBookmarksModalOpen, bookmarkedMessageIds, setBookmarkedMessageIds, handleToggleBookmark } = useChatBookmarks({ user, chatId, showToast });
   const { isMemoryModalOpen, setIsMemoryModalOpen, useMemoryForChat, setUseMemoryForChat } = useChatMemory(currentChat);
@@ -124,6 +135,14 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
     nextCursor, isLoadingMore, fetchMessages, loadedChatIdRef
   } = useChatHistory(chatId);
   const isEmptyConversation = !isLoadingMessages && !fetchMessagesError && messages.length === 0;
+  const lastAssistantMessage = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === 'assistant' && messages[i].content) {
+        return messages[i].content;
+      }
+    }
+    return '';
+  }, [messages]);
 
   const { isTyping, streamMessage, abortStream } = useChatStreaming();
 
@@ -318,6 +337,8 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
       chatId: activeChatId,
     });
     setStreamingMessage({ id: assistantMsgId, role: 'assistant', content: '' });
+    scrollToBottom(true);
+    setTimeout(() => scrollToBottom(true), 60);
 
     const clientHistory = isGuest && messages.length > 0
       ? messages.map(m => ({ role: m.role, content: m.content }))
@@ -361,7 +382,8 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
             counselors: 'Berikut akses untuk melihat pilihan pendampingan konselor.',
             emergency: 'Pusat bantuan darurat tersedia di bawah. Jika ada bahaya langsung, hubungi layanan darurat setempat.',
             articles: 'Berikut bahan bacaan yang mungkin relevan untukmu.',
-            ai_memory: 'Permintaan konteks personalisasi diterima.'
+            ai_memory: 'Permintaan konteks personalisasi diterima.',
+            generate_image: 'Berikut gambar yang berhasil dibuat sesuai permintaanmu:'
           };
           const pluginMessage: Message = {
             id: assistantMsgId,
@@ -479,7 +501,7 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
         }
       }
     );
-  }, [chatId, isTemporary, chatMode, responseStyle, aiModel, user, messages, streamMessage, navigate, setChats, showToast, setMessages, loadedChatIdRef, onRequestAiConsent]);
+  }, [chatId, isTemporary, chatMode, responseStyle, aiModel, user, messages, streamMessage, navigate, setChats, showToast, setMessages, loadedChatIdRef, onRequestAiConsent, scrollToBottom]);
 
   const handleSend = useCallback((content: string, pluginResult?: string, attachments?: Attachment[], preserveUserMessage = false) => {
     if (aiConsentAllowed !== true) {
@@ -583,6 +605,21 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
 
   const handleRegenerate = useCallback((messageId?: string) => {
     let lastUser: Message | undefined;
+    const regenTarget = messageId
+      ? messages.find(m => m.id === messageId)
+      : [...messages].reverse().find(m => m.role === 'assistant');
+    if (regenTarget && regenTarget.role === 'assistant' && regenTarget.content && !regenTarget.error) {
+      const tIdx = messages.findIndex(m => m.id === regenTarget.id);
+      const prompt = messages.slice(0, tIdx).reverse().find(m => m.role === 'user');
+      if (prompt) {
+        const key = prompt.content;
+        setAnswerVersions(prev => {
+          const existing = prev[key] ?? [];
+          return existing.includes(regenTarget.content) ? prev : { ...prev, [key]: [...existing, regenTarget.content] };
+        });
+        setSelectedVersion(prev => { const next = { ...prev }; delete next[key]; return next; });
+      }
+    }
     if (messageId) {
       const idx = messages.findIndex(m => m.id === messageId);
       if (idx !== -1) {
@@ -602,6 +639,42 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
       }
     }
   }, [messages, chatId, handleEditMessage, handleSend, setMessages]);
+
+  const getVersionView = useCallback((msg: Message, index: number) => {
+    if (msg.role !== 'assistant' || msg.error) return { msg, versionNav: undefined };
+    const prompt = messages.slice(0, index).reverse().find(m => m.role === 'user');
+    const previous = prompt ? answerVersions[prompt.content] : undefined;
+    if (!prompt || !previous || previous.length === 0) return { msg, versionNav: undefined };
+    const all = previous.includes(msg.content) ? previous : [...previous, msg.content];
+    const current = Math.min(selectedVersion[prompt.content] ?? all.length - 1, all.length - 1);
+    return {
+      msg: current === all.length - 1 ? msg : { ...msg, content: all[current] },
+      versionNav: {
+        index: current,
+        total: all.length,
+        onChange: (next: number) => setSelectedVersion(prev => ({ ...prev, [prompt.content]: next }))
+      }
+    };
+  }, [messages, answerVersions, selectedVersion]);
+
+  const handleTransferToWorkspace = useCallback((content: string) => {
+    const firstHeading = content.match(/^#+\s+(.+)$/m)?.[1]?.trim();
+    const title = firstHeading || currentChat?.title || 'Draf Catatan RuangTenang';
+    setSidecarArtifact({ title, content });
+  }, [currentChat?.title]);
+
+  const handleSendToFullWorkspace = useCallback((content: string, title: string) => {
+    navigate('/workspace', {
+      state: {
+        transferToCanvas: content,
+        transferTitle: title || 'Draf Catatan Refleksi RuangTenang'
+      }
+    });
+  }, [navigate]);
+
+  const handleResumeStream = useCallback(() => {
+    handleSend('Lanjutkan jawabanmu sebelumnya tepat dari kalimat terakhir yang terputus.');
+  }, [handleSend]);
 
   const handleSendPluginResult = useCallback((res: string) => {
     handleSend('', res);
@@ -801,13 +874,24 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
         onOpenBreathing={() => setIsBreathingOpen(true)}
         chatId={chatId}
         currentChatTitle={currentChat?.title}
+        isWalkAndTalkOpen={isWalkAndTalkOpen}
+        onCloseWalkAndTalk={() => setIsWalkAndTalkOpen(false)}
+        onWalkAndTalkSendMessage={(text) => handleSend('', text)}
+        lastAssistantMessage={lastAssistantMessage}
+        isAiStreaming={isTyping}
+        isFirstAidOpen={isFirstAidOpen}
+        onCloseFirstAid={() => setIsFirstAidOpen(false)}
+        onFirstAidPrompt={(prompt) => handleSend('', prompt)}
+        isSleepSanctuaryOpen={isSleepSanctuaryOpen}
+        onCloseSleepSanctuary={() => setIsSleepSanctuaryOpen(false)}
+        onSleepStoryPrompt={() => handleSend('', 'Tolong bacakan sebuah cerita pengantar tidur yang lembut, puitis, dan menenangkan untuk membantu pikiranku rileks sebelum tidur malam ini.')}
       />
 
       <div
-        className="flex-1 flex flex-col h-full min-h-0 bg-transparent relative min-w-0 overflow-hidden"
+        className="flex-1 flex flex-row h-full min-h-0 bg-transparent relative min-w-0 overflow-hidden"
         style={viewportHeight ? { height: `${viewportHeight}px`, maxHeight: `${viewportHeight}px` } : undefined}
       >
-        <div className="relative z-10 flex flex-col flex-1 h-full min-h-0 overflow-hidden bg-transparent">
+        <div className="relative z-10 flex flex-col flex-1 h-full min-h-0 min-w-0 overflow-hidden bg-transparent">
           <ChatHeader
             user={user}
             chatId={chatId}
@@ -831,6 +915,11 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
             hasMessages={messages.length > 0}
             isPrivacyMode={isPrivacyMode}
             onTogglePrivacy={handleTogglePrivacy}
+            onOpenWalkAndTalk={() => setIsWalkAndTalkOpen(true)}
+            onOpenFirstAid={() => setIsFirstAidOpen(true)}
+            onOpenSleepSanctuary={() => setIsSleepSanctuaryOpen(true)}
+            onOpenPrivacyCenter={onOpenPrivacyCenter}
+            onOpenSelfCareGenerator={() => setIsSelfCareGeneratorOpen(true)}
           />
 
           <ChatSearchBar
@@ -944,10 +1033,13 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
                     </div>
                   )}
 
-                  {messages.map((msg) => (
+                  {messages.map((rawMsg, msgIndex) => {
+                    const { msg, versionNav } = getVersionView(rawMsg, msgIndex);
+                    return (
                     <MessageBubble
                       key={msg.id}
                       msg={msg}
+                      versionNav={versionNav}
                       isTyping={false}
                       onRegenerate={handleRegenerate}
                       onSendPluginResult={handleSendPluginResult}
@@ -958,8 +1050,11 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
                       onBranch={handleOpenBranch}
                       searchHighlightQuery={isSearchOpen ? searchQuery : undefined}
                       isSearchTarget={isSearchOpen && searchMatches[currentSearchIndex] === msg.id}
+                      onTransferToWorkspace={handleTransferToWorkspace}
+                      onResumeStream={handleResumeStream}
                     />
-                  ))}
+                    );
+                  })}
 
                   {streamingMessage && (
                     <StreamingBubble
@@ -969,7 +1064,30 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
                   )}
 
                   {isTyping && !streamingMessage && messages[messages.length - 1]?.role !== 'assistant' && (
-                    <RhythmicTypingIndicator label="RuangTenang sedang merespons..." />
+                    <div className="render-optimized-item flex items-start gap-3 sm:gap-3.5 group w-full justify-start transition-all duration-200 animate-fade-in">
+                      <div className="shrink-0 mt-0.5 relative self-start">
+                        <div className="absolute -inset-0.5 rounded-xl bg-teal-500/20 blur-xs animate-pulse" />
+                        <div className="relative rounded-xl ring-1 ring-teal-500/30 shadow-[0_0_8px_rgba(20,184,166,0.2)]">
+                          <BrandLogo size="xs" iconOnly />
+                        </div>
+                      </div>
+                      <div className="flex-1 min-w-0 max-w-full space-y-2">
+                        <div className="flex items-center gap-2 select-none text-xs text-slate-500 dark:text-slate-400">
+                          <span className="font-semibold text-slate-900 dark:text-slate-100 text-xs">RuangTenang</span>
+                          <span className="text-slate-300 dark:text-slate-600">·</span>
+                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-teal-50/90 dark:bg-teal-950/60 text-[11px] text-teal-700 dark:text-teal-300 font-medium border border-teal-200/60 dark:border-teal-800/60 shadow-3xs">
+                            <span className="relative flex h-1.5 w-1.5">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-teal-400 opacity-75" />
+                              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-teal-500" />
+                            </span>
+                            <span>Sedang Merespons...</span>
+                          </span>
+                        </div>
+                        <div className="py-0.5">
+                          <RhythmicTypingIndicator mode="RUANG_TENANG" hideAvatar />
+                        </div>
+                      </div>
+                    </div>
                   )}
 
                   {!isTyping && followUps.length > 0 && (
@@ -983,6 +1101,38 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
                           {q}
                         </button>
                       ))}
+                    </div>
+                  )}
+
+                  {!isTyping && followUps.length === 0 && messages.length > 0 && messages.length <= 2 && (
+                    <div className="mt-5 pt-3.5 border-t border-dashed border-teal-200/70 dark:border-teal-900/40 animate-fade-in">
+                      <div className="flex items-center gap-1.5 mb-2.5 text-xs text-teal-800/80 dark:text-teal-300/80 font-medium select-none">
+                        <Sparkles className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+                        <span>Mungkin ada yang ingin kamu bicarakan hari ini:</span>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleSend('Pikiranku lagi penuh banget hari ini. Boleh bantu aku urai satu per satu?')}
+                          className="px-3 py-1.5 rounded-full text-xs bg-white/90 dark:bg-slate-900/90 border border-teal-200/70 dark:border-teal-800/60 hover:border-teal-400 dark:hover:border-teal-600 text-stone-700 dark:text-stone-300 hover:text-teal-800 dark:hover:text-teal-200 shadow-3xs transition-all cursor-pointer text-left active:scale-95"
+                        >
+                          🌪️ Pikiranku lagi riuh & cemas
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleSend('Aku lagi kewalahan dengan deadline tugas kuliah. Bisa bantu pilih satu langkah kecil untuk mulai?')}
+                          className="px-3 py-1.5 rounded-full text-xs bg-white/90 dark:bg-slate-900/90 border border-teal-200/70 dark:border-teal-800/60 hover:border-teal-400 dark:hover:border-teal-600 text-stone-700 dark:text-stone-300 hover:text-teal-800 dark:hover:text-teal-200 shadow-3xs transition-all cursor-pointer text-left active:scale-95"
+                        >
+                          📚 Kewalahan tugas kuliah
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setIsBreathingOpen(true)}
+                          className="px-3 py-1.5 rounded-full text-xs bg-teal-50/90 dark:bg-teal-950/60 border border-teal-300/70 dark:border-teal-800/60 hover:border-teal-500 text-teal-800 dark:text-teal-200 shadow-3xs transition-all cursor-pointer text-left active:scale-95"
+                        >
+                          🌬️ Pandu jeda napas 1 menit
+                        </button>
+                      </div>
                     </div>
                   )}
 
@@ -1094,7 +1244,19 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
 
           {!isEmptyConversation && renderChatComposer()}
         </div>
+        <ChatArtifactSidecar
+          artifact={sidecarArtifact}
+          onClose={() => setSidecarArtifact(null)}
+          onUpdateContent={(newContent) =>
+            setSidecarArtifact(prev => (prev ? { ...prev, content: newContent } : null))
+          }
+          onSendToFullWorkspace={handleSendToFullWorkspace}
+        />
       </div>
+      <SelfCareWidgetGeneratorModal
+        isOpen={isSelfCareGeneratorOpen}
+        onClose={() => setIsSelfCareGeneratorOpen(false)}
+      />
     </>
   );
 }

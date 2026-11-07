@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyArtifactPatch, getArtifactSelectionContext } from '../../features/workspace/utils/artifactPatch';
+import { applyArtifactPatch, getArtifactSelectionContext, relocateArtifactPatch } from '../../features/workspace/utils/artifactPatch';
 import { ArtifactPatch } from '../../features/workspace/types';
 
 const baseContent = '# Report\n\nThe data is bad.\n\nConclusion: revise the plan.';
@@ -34,5 +34,16 @@ describe('artifact patches', () => {
     const context = getArtifactSelectionContext(text, start, start + 8, 40);
     expect(context).toContain('<selected_text>selected</selected_text>');
     expect(context.length).toBeLessThan(140);
+  });
+});
+
+describe('relocateArtifactPatch', () => {
+  it('re-anchors when unrelated text was edited and the target is unique', () => {
+    const edited = `Intro added.\n\n${baseContent}`;
+    expect(relocateArtifactPatch({ patch, artifactId: 'report', currentContent: edited })).toEqual({ valid: true, content: `Intro added.\n\n# Report\n\nThe data is incomplete.\n\nConclusion: revise the plan.` });
+  });
+  it('rejects ambiguous or missing targets', () => {
+    expect(relocateArtifactPatch({ patch, artifactId: 'report', currentContent: `${baseContent}\nThe data is bad.` })).toEqual({ valid: false, reason: 'target_mismatch' });
+    expect(relocateArtifactPatch({ patch, artifactId: 'report', currentContent: 'gone' })).toEqual({ valid: false, reason: 'target_mismatch' });
   });
 });

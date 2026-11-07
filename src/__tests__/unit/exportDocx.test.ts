@@ -36,4 +36,16 @@ describe('editable academic DOCX export', () => {
       citationStyle: 'APA7', pageNumbering: 'roman_front_arabic_main'
     });
   });
+
+  it('embeds image caption and aligns tables properly in document XML', async () => {
+    const blob = await createAcademicDocxBlob({
+      title: 'Uji Gambar dan Tabel',
+      templateType: 'skripsi',
+      content: '# BAB I PENDAHULUAN\nUraian pendahuluan.\n\n![Arsitektur Sistem](/api/ai/images/arsitektur.jpg)\n\n| Item | Nilai |\n| :--- | :---: |\n| Data A | 100 |\n'
+    });
+    const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+    const documentXml = await zip.file('word/document.xml')!.async('text');
+    expect(documentXml).toContain('Gambar: Arsitektur Sistem');
+    expect(documentXml).toContain('<w:tbl>');
+  });
 });

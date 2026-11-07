@@ -106,6 +106,9 @@ describe('FASE 10 — Comprehensive File Pipeline Hardening Verification', () =>
           title: 'RuangKerja User A Chat'
         }
       });
+      await prisma.userConsents.createMany({
+        data: [userA, userB].map(userId => ({ userId, consentForAI: true, consentTimestamp: new Date(), grantedAt: new Date() }))
+      });
     } catch {}
   });
 
@@ -118,6 +121,9 @@ describe('FASE 10 — Comprehensive File Pipeline Hardening Verification', () =>
         await documentIngestionService.deleteAttachment(id, userB);
       } catch {}
     }
+    await prisma.userConsents.deleteMany({ where: { userId: { in: [userA, userB] } } });
+    await prisma.chats.deleteMany({ where: { id: chatA } });
+    await prisma.users.deleteMany({ where: { id: { in: [userA, userB] } } });
   });
 
   // 1. Valid PDF

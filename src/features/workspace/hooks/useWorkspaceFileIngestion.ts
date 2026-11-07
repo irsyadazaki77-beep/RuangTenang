@@ -398,6 +398,7 @@ export function useWorkspaceFileIngestion(
     isDraggingOver,
     fileInputRef,
     handleFileUploadChange,
+    handleProcessFiles,
     handleDragOver,
     handleDragLeave,
     handleDrop,

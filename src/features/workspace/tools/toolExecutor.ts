@@ -2,6 +2,7 @@ import { WorkspaceToolDefinition, WorkspaceToolExecutionPayload, WorkspaceToolEx
 import { WorkspaceToolRegistry } from './toolRegistry';
 import { paraphraseAcademicText, ParaphraseStyle } from '../utils/paraphraseEngine';
 import { generateBibTeX, generateRIS } from '../utils/citationExport';
+import { auditInTextCitations, auditChapterCoherence, generateLiteratureMatrixTemplate } from '../utils/academicAuditTools';
 
 export class WorkspaceToolExecutor {
   /**
@@ -153,6 +154,94 @@ export class WorkspaceToolExecutor {
           filename: `${(artifact?.title || 'sitasi').toLowerCase().replace(/\s+/g, '_')}.ris`,
           mimeType: 'application/x-research-info-systems',
           content: ris
+        }
+      };
+    }
+
+    // 5. Audit Sitasi In-Text vs Daftar Pustaka (F3.7)
+    if (tool.id === 'academic_citation_intext_audit') {
+      const audit = auditInTextCitations(content);
+      let outputText = `### 📋 Hasil Audit Sitasi In-Text vs Daftar Pustaka\n\n`;
+      outputText += `- **Total Sitasi In-Text Ditemukan:** ${audit.inTextCitations.length} kutipan (${audit.uniqueAuthors.length} penulis unik)\n`;
+      outputText += `- **Status Bagian Daftar Pustaka:** ${audit.hasBibliographySection ? `✅ Ditemukan (${audit.bibliographyEntriesCount} entri)` : '❌ Belum Ditemukan'}\n`;
+      outputText += `- **Sitasi Tervalidasi Konsisten:** ${audit.matchedCount} / ${audit.uniqueAuthors.length}\n\n`;
+
+      if (audit.unmatchedInText.length > 0) {
+        outputText += `#### ⚠️ Sitasi di Naskah yang Belum Tercantum di Daftar Pustaka:\n`;
+        audit.unmatchedInText.forEach(a => {
+          outputText += `- \`${a}\`\n`;
+        });
+        outputText += `\n`;
+      }
+
+      if (audit.suggestions.length > 0) {
+        outputText += `#### 💡 Rekomendasi Perbaikan:\n`;
+        audit.suggestions.forEach(s => {
+          outputText += `- ${s}\n`;
+        });
+      }
+
+      return {
+        success: true,
+        toolId: tool.id,
+        outputType: 'TEXT',
+        proposedContent: outputText,
+        metadata: {
+          inTextCount: audit.inTextCitations.length,
+          matchedCount: audit.matchedCount,
+          unmatchedCount: audit.unmatchedInText.length
+        }
+      };
+    }
+
+    // 6. Audit Konsistensi Antar-Bab Skripsi (F3.7)
+    if (tool.id === 'academic_chapter_coherence') {
+      const audit = auditChapterCoherence(content, artifact?.chapterScope);
+      let outputText = `### ⚖️ Laporan Audit Konsistensi Antar-Bab Skripsi\n\n`;
+      outputText += `- **Skor Koherensi Keseluruhan:** **${audit.coherenceScore}/100**\n`;
+      outputText += `- **Penilaian:** ${audit.overallAssessment}\n\n`;
+      outputText += `#### 📑 Deteksi Cakupan Bab:\n`;
+      outputText += `- Bab 1 (Pendahuluan): ${audit.chapterCoverage.BAB_1 ? '✅ Ada' : '⚪ Belum terdeteksi'}\n`;
+      outputText += `- Bab 2 (Tinjauan Pustaka): ${audit.chapterCoverage.BAB_2 ? '✅ Ada' : '⚪ Belum terdeteksi'}\n`;
+      outputText += `- Bab 3 (Metodologi): ${audit.chapterCoverage.BAB_3 ? '✅ Ada' : '⚪ Belum terdeteksi'}\n`;
+      outputText += `- Bab 4 (Hasil & Pembahasan): ${audit.chapterCoverage.BAB_4 ? '✅ Ada' : '⚪ Belum terdeteksi'}\n`;
+      outputText += `- Bab 5 (Kesimpulan): ${audit.chapterCoverage.BAB_5 ? '✅ Ada' : '⚪ Belum terdeteksi'}\n\n`;
+
+      if (audit.issues.length > 0) {
+        outputText += `#### ⚠️ Temuan & Kesenjangan Logis:\n`;
+        audit.issues.forEach((issue, idx) => {
+          const badge = issue.severity === 'CRITICAL' ? '🚨 [KRITIS]' : issue.severity === 'WARNING' ? '⚠️ [PERINGATAN]' : '💡 [SARAN]';
+          outputText += `${idx + 1}. **${badge} ${issue.title}** (${issue.chapter})\n`;
+          outputText += `   - *Deskripsi:* ${issue.description}\n`;
+          outputText += `   - *Rekomendasi:* ${issue.recommendation}\n\n`;
+        });
+      } else {
+        outputText += `✅ Tidak ditemukan diskoneksi kritis antara rumusan masalah, metodologi, dan kesimpulan.\n`;
+      }
+
+      return {
+        success: true,
+        toolId: tool.id,
+        outputType: 'TEXT',
+        proposedContent: outputText,
+        metadata: {
+          coherenceScore: audit.coherenceScore,
+          issuesCount: audit.issues.length
+        }
+      };
+    }
+
+    // 7. Generator Matriks Literatur Riset (F3.7)
+    if (tool.id === 'academic_lit_matrix_builder') {
+      const template = generateLiteratureMatrixTemplate();
+      return {
+        success: true,
+        toolId: tool.id,
+        outputType: 'ARTIFACT_CREATE',
+        proposedContent: template,
+        metadata: {
+          artifactType: 'TABLE',
+          title: 'Matriks Sintesis Literatur'
         }
       };
     }

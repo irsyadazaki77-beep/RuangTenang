@@ -7,6 +7,7 @@ describe('WorkspaceWorkflowPipeline component', () => {
   it('renders all four sequential steps in the integrated pipeline', () => {
     render(
       <WorkspaceWorkflowPipeline
+        isCollapsed={false}
         uploadedFilesCount={0}
         readyFilesCount={0}
         isAnalyzing={false}
@@ -33,6 +34,7 @@ describe('WorkspaceWorkflowPipeline component', () => {
 
     render(
       <WorkspaceWorkflowPipeline
+        isCollapsed={false}
         uploadedFilesCount={2}
         readyFilesCount={2}
         isAnalyzing={false}
@@ -75,6 +77,7 @@ describe('WorkspaceWorkflowPipeline component', () => {
 
     const { rerender } = render(
       <WorkspaceWorkflowPipeline
+        isCollapsed={false}
         uploadedFilesCount={1}
         readyFilesCount={1}
         isAnalyzing={true}
@@ -96,6 +99,7 @@ describe('WorkspaceWorkflowPipeline component', () => {
     // Rerender with welcome document (not real user draft)
     rerender(
       <WorkspaceWorkflowPipeline
+        isCollapsed={false}
         uploadedFilesCount={1}
         readyFilesCount={1}
         isAnalyzing={false}

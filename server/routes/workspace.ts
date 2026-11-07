@@ -48,6 +48,12 @@ import {
 } from '../services/workspaceWorkflowService.js';
 import { runWorkspaceAgent, AgentExecutionError } from '../services/agent/agentOrchestrator.js';
 import { AgentExecutionResultSchema } from '../services/agent/agentContracts.js';
+import { literatureMatrixService } from '../services/file-intelligence/literatureMatrixService.js';
+import { literatureMatrixExportService } from '../services/file-intelligence/literatureMatrixExportService.js';
+import { attachmentStorageService } from '../services/attachmentStorageService.js';
+import { DocumentExtractor } from '../services/file-intelligence/documentExtractor.js';
+import { buildKnowledgeGraphFromChunks } from '../services/file-intelligence/graphRagService.js';
+import { runCouncilDebate } from '../services/agent/agentCouncilDebateService.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -942,6 +948,190 @@ router.delete('/:chatId/memories/:memoryId', async (req: Request, res: Response)
   } catch (error: any) {
     console.error('[WORKSPACE_MEMORY_DELETE_ERROR]', error);
     return res.status(500).json({ success: false, code: 'WORKSPACE_MEMORY_DELETE_FAILED', message: 'Gagal menghapus memori.' });
+  }
+});
+
+router.post('/:chatId/literature-matrix', aiChatLimiter, async (req: Request, res: Response) => {
+  try {
+    const workspace = await ownedWorkspace(req.params.chatId, req.user!.userId, false);
+    if (!workspace) return res.status(404).json({ success: false, code: 'WORKSPACE_NOT_FOUND', message: 'Workspace tidak ditemukan.' });
+
+    const { attachmentIds, topicOrFocus } = req.body;
+    if (!Array.isArray(attachmentIds) || attachmentIds.length === 0) {
+      return res.status(400).json({ success: false, code: 'INVALID_ATTACHMENT_LIST', message: 'Pilih minimal satu berkas jurnal untuk sintesis.' });
+    }
+
+    const targetIds = attachmentIds.slice(0, 5);
+    const docResults = await Promise.all(targetIds.map(async (id: string) => {
+      try {
+        const attData = await attachmentStorageService.getAttachmentForUser(id, req.user!.userId);
+        if (!attData) return null;
+
+        // Fast-path: use pre-extracted text from database if already processed
+        if (attData.attachment.extractedText && attData.attachment.extractedText.trim().length > 0) {
+          const rawText = attData.attachment.isEncrypted
+            ? (encryptionService.decryptSensitive(attData.attachment.extractedText) || attData.attachment.extractedText)
+            : attData.attachment.extractedText;
+          return {
+            id,
+            filename: attData.attachment.filename,
+            text: rawText
+          };
+        }
+
+        // Fallback: extract on-demand if buffer exists
+        if (attData.buffer) {
+          const extracted = await DocumentExtractor.extractDocument({
+            buffer: attData.buffer,
+            filename: attData.attachment.filename,
+            mimeType: attData.attachment.mimeType
+          });
+          if (extracted.text) {
+            // Persist for future fast-path lookups without blocking
+            prisma.attachments.update({
+              where: { id },
+              data: { extractedText: extracted.text, status: 'ready' }
+            }).catch(() => undefined);
+
+            return {
+              id,
+              filename: attData.attachment.filename,
+              text: extracted.text
+            };
+          }
+        }
+        return null;
+      } catch (err: any) {
+        console.warn(`[LITERATURE_MATRIX_EXTRACT_WARN] id=${id}:`, err?.message || err);
+        return null;
+      }
+    }));
+
+    const docs = docResults.filter((d): d is { id: string; filename: string; text: string } => Boolean(d));
+
+    if (docs.length === 0) {
+      return res.status(400).json({ success: false, code: 'NO_READABLE_DOCUMENTS', message: 'Tidak dapat mengekstrak teks dari berkas yang dipilih.' });
+    }
+
+    const synthesis = await literatureMatrixService.synthesizeMatrix({
+      userId: req.user!.userId,
+      userTier: (req.user as any)?.tier,
+      topicOrFocus,
+      documents: docs
+    });
+
+    // Save as interactive artifact in Workspace
+    const artifact = await prisma.artifacts.create({
+      data: {
+        id: `art_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        chatId: req.params.chatId,
+        userId: req.user!.userId,
+        title: 'Matriks Sintesis Literatur (Bab 2 Skripsi)',
+        type: 'TABLE',
+        content: encryptionService.encryptSensitive(synthesis.artifactMarkdown) || synthesis.artifactMarkdown,
+        version: 1
+      }
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        artifactId: artifact.id,
+        title: artifact.title,
+        content: synthesis.artifactMarkdown,
+        isExplicitCached: synthesis.isExplicitCached,
+        totalPapers: synthesis.totalPapers
+      }
+    });
+  } catch (error: any) {
+    console.error('[WORKSPACE_LITERATURE_MATRIX_ERROR]', error);
+    return res.status(500).json({ success: false, code: 'LITERATURE_MATRIX_FAILED', message: error?.message || 'Gagal menghasilkan matriks literatur.' });
+  }
+});
+
+router.post('/:chatId/literature-matrix/export', async (req: Request, res: Response) => {
+  try {
+    const workspace = await ownedWorkspace(req.params.chatId, req.user!.userId, false);
+    if (!workspace) return res.status(404).json({ success: false, code: 'WORKSPACE_NOT_FOUND', message: 'Workspace tidak ditemukan.' });
+
+    const { format = 'docx', data } = req.body;
+    if (!data || !Array.isArray(data.rows)) {
+      return res.status(400).json({ success: false, code: 'INVALID_EXPORT_DATA', message: 'Data baris matriks diperlukan untuk ekspor.' });
+    }
+
+    if (format === 'xlsx') {
+      const buffer = await literatureMatrixExportService.generateExcel(data);
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', 'attachment; filename="Matriks_Penelitian_Terdahulu_Bab2.xlsx"');
+      return res.send(buffer);
+    } else {
+      const buffer = await literatureMatrixExportService.generateDocx(data);
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+      res.setHeader('Content-Disposition', 'attachment; filename="Bab2_Matriks_Literatur_Skripsi.docx"');
+      return res.send(buffer);
+    }
+  } catch (error: any) {
+    console.error('[LITERATURE_MATRIX_EXPORT_ERROR]', error);
+    return res.status(500).json({ success: false, code: 'EXPORT_FAILED', message: error?.message || 'Gagal mengekspor matriks literatur.' });
+  }
+});
+
+router.post('/council-debate', aiChatLimiter, async (req: Request, res: Response) => {
+  try {
+    const { topic, context } = req.body;
+    if (!topic || typeof topic !== 'string') {
+      return res.status(400).json({ success: false, code: 'INVALID_TOPIC', message: 'Topik debat diperlukan.' });
+    }
+    const sanitizedTopic = sanitizeInput(topic);
+    const debate = await runCouncilDebate(sanitizedTopic, context ? sanitizeInput(context) : undefined);
+    return res.json({ success: true, data: debate });
+  } catch (error: any) {
+    console.error('[COUNCIL_DEBATE_ERROR]', error);
+    return res.status(500).json({ success: false, code: 'COUNCIL_DEBATE_FAILED', message: error?.message || 'Gagal menjalankan debat dewan AI.' });
+  }
+});
+
+router.post('/:chatId/council-debate', aiChatLimiter, async (req: Request, res: Response) => {
+  try {
+    const { topic, context } = req.body;
+    if (!topic || typeof topic !== 'string') {
+      return res.status(400).json({ success: false, code: 'INVALID_TOPIC', message: 'Topik debat diperlukan.' });
+    }
+    const sanitizedTopic = sanitizeInput(topic);
+    const debate = await runCouncilDebate(sanitizedTopic, context ? sanitizeInput(context) : undefined);
+    return res.json({ success: true, data: debate });
+  } catch (error: any) {
+    console.error('[COUNCIL_DEBATE_ERROR]', error);
+    return res.status(500).json({ success: false, code: 'COUNCIL_DEBATE_FAILED', message: error?.message || 'Gagal menjalankan debat dewan AI.' });
+  }
+});
+
+router.post('/knowledge-graph', async (req: Request, res: Response) => {
+  try {
+    const { workspaceId, chunks } = req.body;
+    const targetWorkspaceId = (typeof workspaceId === 'string' && workspaceId.trim()) ? workspaceId : 'workspace_global';
+    const graphData = buildKnowledgeGraphFromChunks(
+      targetWorkspaceId,
+      Array.isArray(chunks) ? chunks : []
+    );
+    return res.json({ success: true, data: graphData });
+  } catch (error: any) {
+    console.error('[KNOWLEDGE_GRAPH_ERROR]', error);
+    return res.status(500).json({ success: false, code: 'KNOWLEDGE_GRAPH_FAILED', message: error?.message || 'Gagal memproses knowledge graph.' });
+  }
+});
+
+router.post('/:chatId/knowledge-graph', async (req: Request, res: Response) => {
+  try {
+    const { chunks } = req.body;
+    const graphData = buildKnowledgeGraphFromChunks(
+      req.params.chatId,
+      Array.isArray(chunks) ? chunks : []
+    );
+    return res.json({ success: true, data: graphData });
+  } catch (error: any) {
+    console.error('[KNOWLEDGE_GRAPH_ERROR]', error);
+    return res.status(500).json({ success: false, code: 'KNOWLEDGE_GRAPH_FAILED', message: error?.message || 'Gagal memproses knowledge graph.' });
   }
 });
 

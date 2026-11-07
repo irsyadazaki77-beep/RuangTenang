@@ -37,9 +37,57 @@ export class RedisService {
   private isConnected: boolean = false;
   private memoryCache = new Map<string, CacheEntry>();
   private lastWarnTimestamp = 0;
+  private cleanupTimer: NodeJS.Timeout | null = null;
+  private static readonly MAX_MEMORY_CACHE_ENTRIES = 5000;
 
   constructor() {
     this.initRedis();
+    this.initCleanupTimer();
+  }
+
+  private initCleanupTimer(): void {
+    if (this.cleanupTimer) return;
+    // Periodic sweep every 5 minutes to prevent memory leak from unread expired cache entries
+    this.cleanupTimer = setInterval(() => {
+      this.sweepExpiredMemoryCache();
+    }, 5 * 60 * 1000);
+    if (this.cleanupTimer.unref) {
+      this.cleanupTimer.unref();
+    }
+  }
+
+  private sweepExpiredMemoryCache(): void {
+    const now = Date.now();
+    for (const [key, entry] of this.memoryCache.entries()) {
+      if (entry.expiresAt !== null && entry.expiresAt <= now) {
+        this.memoryCache.delete(key);
+      }
+    }
+    if (this.memoryCache.size > RedisService.MAX_MEMORY_CACHE_ENTRIES) {
+      const excess = this.memoryCache.size - RedisService.MAX_MEMORY_CACHE_ENTRIES;
+      let removed = 0;
+      for (const key of this.memoryCache.keys()) {
+        if (removed >= excess) break;
+        this.memoryCache.delete(key);
+        removed++;
+      }
+    }
+  }
+
+  private enforceMemoryCacheCapacity(): void {
+    if (this.memoryCache.size >= RedisService.MAX_MEMORY_CACHE_ENTRIES) {
+      // First try sweeping expired
+      this.sweepExpiredMemoryCache();
+      // If still at capacity, evict oldest 50 entries
+      if (this.memoryCache.size >= RedisService.MAX_MEMORY_CACHE_ENTRIES) {
+        let count = 0;
+        for (const key of this.memoryCache.keys()) {
+          this.memoryCache.delete(key);
+          count++;
+          if (count >= 50) break;
+        }
+      }
+    }
   }
 
   private initRedis() {
@@ -202,6 +250,7 @@ export class RedisService {
     }
 
     // In-Memory Fallback
+    this.enforceMemoryCacheCapacity();
     const expiresAt = ttlSeconds && ttlSeconds > 0 ? Date.now() + ttlSeconds * 1000 : null;
     this.memoryCache.set(key, { value: valStr, expiresAt });
   }
@@ -230,6 +279,7 @@ export class RedisService {
       return false; // Already locked
     }
 
+    this.enforceMemoryCacheCapacity();
     this.memoryCache.set(key, {
       value: valStr,
       expiresAt: now + ttlSeconds * 1000,
@@ -404,6 +454,10 @@ export class RedisService {
   }
 
   public async disconnect(): Promise<void> {
+    if (this.cleanupTimer) {
+      clearInterval(this.cleanupTimer);
+      this.cleanupTimer = null;
+    }
     this.memoryCache.clear();
     if (this.subscriberClient) {
       try {

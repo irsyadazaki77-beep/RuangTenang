@@ -1,4 +1,4 @@
-import { refreshOllamaInventory } from '../services/ai/ollamaRuntime.js';
+import { refreshOllamaInventory, prewarmOllamaModel } from '../services/ai/ollamaRuntime.js';
 import { prisma } from '../database.js';
 import { MAX_CHAT_ATTACHMENTS_PER_MESSAGE, MAX_WORKSPACE_ACTIVE_ATTACHMENTS } from '../../shared/contracts/files.js';
 import { Router, Request, Response, NextFunction } from 'express';
@@ -202,6 +202,24 @@ const checkChatOwnership = async (req: Request, res: Response, next: NextFunctio
 
 // Routes delegation to ChatController
 router.get('/chat/models', optionalAuth, ChatController.getModels);
+router.post('/chat/prewarm', optionalAuth, async (req: Request, res: Response) => {
+  try {
+    const requestedModelId = typeof req.body?.modelId === 'string' ? req.body.modelId.trim() : undefined;
+    let providerModelId = 'si-pinter:latest';
+    if (requestedModelId) {
+      const def = getModelDefinition(requestedModelId);
+      if (def && def.provider === 'ollama') {
+        providerModelId = def.providerModelId;
+      } else if (requestedModelId.startsWith('ollama-')) {
+        providerModelId = requestedModelId.replace(/^ollama-/, '').replace(/-/g, ':');
+      }
+    }
+    const result = await prewarmOllamaModel(providerModelId);
+    res.json({ success: result.success, prewarmed: result.success, model: result.model, durationMs: result.durationMs });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message || 'PREWARM_FAILED' });
+  }
+});
 router.get('/chat/history', requireAuth, ChatController.getHistory);
 router.get('/chat/search', requireAuth, ChatController.search);
 
@@ -329,6 +347,26 @@ router.post('/chat/:id/truncate', requireAuth, checkChatOwnership, async (req: R
 
 router.post('/chat/summary', requireAuth, checkChatOwnership, aiSummaryLimiter, aiAbuseLimiter, (req: Request, res: Response) => {
   return ChatController.generateSummary(req, res);
+});
+
+// Dual SLM Tandem Co-Op Endpoint (Si Pinter Draft + Si Gacor Architect/Verifier)
+router.post('/chat/tandem', optionalAuth, aiChatLimiter, aiAbuseLimiter, async (req: Request, res: Response) => {
+  try {
+    const { prompt, mode = 'draft_and_verify' } = req.body || {};
+    if (!prompt || typeof prompt !== 'string') {
+      return res.status(400).json({ success: false, error: 'Prompt wajib diisi.' });
+    }
+    const { tandemCoOpService } = await import('../services/ai/tandemCoOpService.js');
+    const result = await tandemCoOpService.executeTandem({
+      prompt,
+      mode,
+      userId: req.user?.userId,
+      userTier: req.user?.tier
+    });
+    return res.json({ success: true, ...result });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err?.message || 'Gagal mengeksekusi Tandem Co-Op.' });
+  }
 });
 
 // Canonical Chat Endpoint (Non-streaming JSON & Pre-flight Safe Interceptor)
@@ -510,6 +548,7 @@ router.post('/chat/stream', authenticateChatStream, optionalAttachmentOwner, aiC
       return sendError(res, 'WORKSPACE_CONTEXT_TOO_LARGE', 'Konteks Workspace terlalu besar. Pilih teks yang lebih pendek atau nonaktifkan konteks Canvas.', 413);
     }
     const safeWorkspaceContext = isWorkspace && typeof workspaceContext === 'string'
+      // eslint-disable-next-line no-control-regex
       ? scanAndSanitizePII(workspaceContext.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '')).sanitizedText
       : undefined;
     if (safeWorkspaceContext && safeWorkspaceContext.length > MAX_WORKSPACE_CONTEXT_CHARS) {
@@ -521,17 +560,20 @@ router.post('/chat/stream', authenticateChatStream, optionalAttachmentOwner, aiC
 
     let userTier = (req.user as { tier?: string })?.tier;
     let userRole = req.user?.role;
-    if (userId) {
-      const dbUser = await serverDb.getUserById(userId);
+    let hasAiConsent = false;
+    if (userId && userId !== 'guest') {
+      const [dbUser, consentAllowed] = await Promise.all([
+        serverDb.getUserById(userId),
+        consentService.canUseAI(userId)
+      ]);
       if (dbUser) {
         userTier = dbUser.tier;
         userRole = dbUser.role;
       }
+      hasAiConsent = consentAllowed;
+    } else {
+      hasAiConsent = guestAiConsent === true;
     }
-
-    const hasAiConsent = userId && userId !== 'guest'
-      ? await consentService.canUseAI(userId)
-      : guestAiConsent === true;
 
     // Ask for consent before creating a chat or storing the user's message.
     // Keep deterministic crisis support available without involving an AI provider.
@@ -722,6 +764,7 @@ router.post('/chat/stream', authenticateChatStream, optionalAttachmentOwner, aiC
     const activeIsTemporary = isGuestChat;
     let currentChatId = chatId || existingWorkspaceUserMessage?.chatId;
     let isNewChat = false;
+    let currentPersistedUserMessageId: string | undefined;
 
     if (!activeIsTemporary && userId) {
       try {
@@ -798,6 +841,7 @@ router.post('/chat/stream', authenticateChatStream, optionalAttachmentOwner, aiC
               content: encryptionService.encryptSensitive(cleanMessage) || cleanMessage
             }
           });
+          currentPersistedUserMessageId = msgResult.id;
 
 
           if (attachments && Array.isArray(attachments) && attachments.length > 0) {
@@ -860,7 +904,7 @@ router.post('/chat/stream', authenticateChatStream, optionalAttachmentOwner, aiC
             data: { updatedAt: new Date() }
           });
         } else {
-          await prisma.chatMessages.create({
+          const pluginMsg = await prisma.chatMessages.create({
             data: {
                id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
                chatId: currentChatId,
@@ -869,6 +913,7 @@ router.post('/chat/stream', authenticateChatStream, optionalAttachmentOwner, aiC
                plugin: 'system_plugin_result'
             }
           });
+          currentPersistedUserMessageId = pluginMsg.id;
         }
       } catch (dbErr: any) {
         await rollbackUserAiQuota(userId, clientIp).catch(() => undefined);
@@ -886,10 +931,11 @@ router.post('/chat/stream', authenticateChatStream, optionalAttachmentOwner, aiC
 
     if (!activeIsTemporary && userId && currentChatId) {
       try {
+        const historyTake = isolatedTaskExecution === true ? 50 : 20;
         const history = await prisma.chatMessages.findMany({
           where: { chatId: currentChatId },
           orderBy: { createdAt: 'desc' },
-          take: 100,
+          take: historyTake,
           include: { attachments: true }
         });
         history.reverse();
@@ -902,6 +948,7 @@ router.post('/chat/stream', authenticateChatStream, optionalAttachmentOwner, aiC
         for (const msg of history) {
            if (workspaceUserMessageId && msg.id === workspaceUserMessageId) continue;
            if (existingWorkspaceAssistantMessage && msg.id === workspaceAssistantMessageId) continue;
+           if (currentPersistedUserMessageId && msg.id === currentPersistedUserMessageId) continue;
            // Skip duplicating the current prompt
           const decryptedContent = encryptionService.decryptSensitive(msg.content) || msg.content;
           if (msg.plugin === 'system_plugin_result') {
@@ -1084,9 +1131,9 @@ router.post('/chat/stream', authenticateChatStream, optionalAttachmentOwner, aiC
           : 'File hanya dapat digunakan dari Workspace yang memilikinya.', isWorkspace ? 401 : 403);
       }
       if (!isGuestWorkspaceRequest && currentChatId) {
-        // Link any previously unassigned ready attachments belonging to this user to currentChatId.
+        // Link any previously unassigned attachments belonging to this user to currentChatId.
         await prisma.attachments.updateMany({
-          where: { id: { in: requestedWorkspaceAttachmentIds }, userId: attachmentOwnerId, chatId: null, status: 'ready' },
+          where: { id: { in: requestedWorkspaceAttachmentIds }, userId: attachmentOwnerId, chatId: null },
           data: { chatId: currentChatId }
         }).catch(() => undefined);
       }
@@ -1236,6 +1283,7 @@ router.post('/chat/stream', authenticateChatStream, optionalAttachmentOwner, aiC
       let isToolCall = false;
       let validToolCallParsed: any = null;
       let hasStreamedAnyText = false;
+      let actualUsage: { promptTokenCount?: number; candidatesTokenCount?: number } | undefined;
 
       // Emit routing decision event so client can display which model was actually routed
       if (pipelineRes.routingDecision && !res.writableEnded) {
@@ -1296,6 +1344,10 @@ router.post('/chat/stream', authenticateChatStream, optionalAttachmentOwner, aiC
           continue;
         }
 
+        if ((chunk as any)?.usageMetadata) {
+          actualUsage = (chunk as any).usageMetadata;
+        }
+
         const text = chunk.text;
         if (text) {
           if (!firstTokenTime) {
@@ -1340,6 +1392,8 @@ router.post('/chat/stream', authenticateChatStream, optionalAttachmentOwner, aiC
         estimatedInputTokens: aiMetricsService.estimateTokens(metricInput || pluginResult || ''),
         outputChars: fullResponseText.length,
         estimatedOutputTokens: aiMetricsService.estimateTokens(fullResponseText),
+        actualInputTokens: actualUsage?.promptTokenCount,
+        actualOutputTokens: actualUsage?.candidatesTokenCount,
         contextSavedTokens: 0,
         modelUsed: pipelineRes.modelUsed || aiModel,
         provider: getModelDefinition(pipelineRes.modelUsed || aiModel)?.provider,
@@ -1364,6 +1418,25 @@ router.post('/chat/stream', authenticateChatStream, optionalAttachmentOwner, aiC
 
           if (validation.isValid && validation.toolCall) {
             validToolCallParsed = { tool_call: validation.toolCall, parameters: validation.parameters || {} };
+
+            if (validToolCallParsed.tool_call === 'generate_image') {
+               const imgPrompt = validToolCallParsed.parameters.prompt;
+               if (imgPrompt) {
+                  try {
+                    const { imageGenerationService } = await import('../services/imageGenerationService.js');
+                    const imgResult = await imageGenerationService.generateImage({
+                      prompt: imgPrompt,
+                      width: validToolCallParsed.parameters.width || 1024,
+                      height: validToolCallParsed.parameters.height || 1024
+                    });
+                    validToolCallParsed.parameters.imageUrl = imgResult.imageUrl;
+                    validToolCallParsed.parameters.provider = imgResult.provider;
+                  } catch (imgErr: any) {
+                    console.error('[Chat] Gagal generate_image:', imgErr);
+                    validToolCallParsed.parameters.error = 'Gagal menghasilkan gambar melalui AI image service.';
+                  }
+               }
+            }
 
             if (validToolCallParsed.tool_call === 'ai_memory' && validToolCallParsed.parameters.action === 'save') {
                const memContent = validToolCallParsed.parameters.content;
@@ -1402,7 +1475,7 @@ router.post('/chat/stream', authenticateChatStream, optionalAttachmentOwner, aiC
                       id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
                       chatId: currentChatId,
                       role: 'assistant',
-                      content: encryptionService.encryptSensitive(`Memanggil ${validToolCallParsed.tool_call}`) || `Memanggil ${validToolCallParsed.tool_call}`,
+                      content: encryptionService.encryptSensitive(validToolCallParsed.tool_call === 'generate_image' && validToolCallParsed.parameters.imageUrl ? `![${validToolCallParsed.parameters.prompt || 'Gambar AI'}](${validToolCallParsed.parameters.imageUrl})` : `Memanggil ${validToolCallParsed.tool_call}`) || (validToolCallParsed.tool_call === 'generate_image' && validToolCallParsed.parameters.imageUrl ? `![${validToolCallParsed.parameters.prompt || 'Gambar AI'}](${validToolCallParsed.parameters.imageUrl})` : `Memanggil ${validToolCallParsed.tool_call}`),
                       plugin: validToolCallParsed.tool_call
                     }
                  });

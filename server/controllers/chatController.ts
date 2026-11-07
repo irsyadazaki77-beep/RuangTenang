@@ -13,9 +13,13 @@ export class ChatController {
   static async getModels(req: Request, res: Response) {
     await refreshOllamaInventory();
     const tier = req.user?.tier || 'Free';
+    let models = getPublicModelCatalog(tier);
+    if (process.env.LOCAL_AI_ONLY === 'true' || process.env.DISABLE_CLOUD_AI === 'true') {
+      models = models.filter(m => m.provider === 'ollama');
+    }
     return res.json({
       defaultModel: getConfiguredDefaultAiModelId(tier),
-      models: getPublicModelCatalog(tier),
+      models,
       profiles: getPublicProfileCatalog(tier),
       defaultTenangProfile: DEFAULT_TENANG_PROFILE_ID,
       defaultKerjaProfile: DEFAULT_KERJA_PROFILE_ID

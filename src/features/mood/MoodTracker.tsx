@@ -269,7 +269,7 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
           <button
             type="button"
             onClick={() => setIsReportModalOpen(true)}
-            className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs sm:text-sm font-semibold shadow-3xs transition-colors cursor-pointer"
+            className="btn-tactile flex items-center gap-2 px-3.5 py-2.5 rounded-full border border-slate-200/80 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xs text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs sm:text-sm font-semibold shadow-3xs transition-all cursor-pointer"
             title="Ekspor Ringkasan Laporan Konseling (PDF)"
           >
             <FileText className="w-4 h-4 text-teal-600 dark:text-teal-400" />
@@ -278,7 +278,7 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
           <button
             type="button"
             onClick={handleOpenCheckin}
-            className="btn-primary flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold shadow-xs"
+            className="btn-primary btn-tactile flex items-center justify-center gap-2 px-4.5 py-2.5 rounded-full text-xs sm:text-sm font-semibold shadow-xs"
           >
             <Plus className="w-4 h-4" />
             <span>Catat Mood Hari Ini</span>
@@ -289,16 +289,16 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
       {/* 4-Column Statistics Overview */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Card 1: Streak */}
-        <div className="surface-card p-4 sm:p-5 rounded-2xl border border-default space-y-2 flex flex-col justify-between shadow-3xs">
+        <div className="surface-card card-organic-lift p-4 sm:p-5 rounded-2xl border border-default space-y-2 flex flex-col justify-between shadow-3xs transition-all">
           <div className="flex items-center justify-between">
             <span className="text-xs text-secondary font-medium uppercase tracking-wider">Mood Streak</span>
-            <div className="p-1.5 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-500">
+            <div className="p-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-500 shadow-2xs">
               <Flame className={`w-4 h-4 ${streakCount > 0 ? 'animate-pulse' : ''}`} />
             </div>
           </div>
           <div>
             <div className="flex items-baseline gap-1.5">
-              <span className="text-2xl sm:text-3xl font-bold text-primary">{streakCount}</span>
+              <span className="text-2xl sm:text-3xl font-bold text-primary tracking-tight">{streakCount}</span>
               <span className="text-xs font-semibold text-secondary">Hari Berturut-turut</span>
             </div>
             <p className="text-xs text-muted mt-1 leading-normal">
@@ -312,16 +312,16 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
         </div>
 
         {/* Card 2: Average Mood */}
-        <div className="surface-card p-4 sm:p-5 rounded-2xl border border-default space-y-2 flex flex-col justify-between shadow-3xs">
+        <div className="surface-card card-organic-lift p-4 sm:p-5 rounded-2xl border border-default space-y-2 flex flex-col justify-between shadow-3xs transition-all">
           <div className="flex items-center justify-between">
             <span className="text-xs text-secondary font-medium uppercase tracking-wider">Rata-rata Mood</span>
-            <div className="p-1.5 rounded-lg bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400">
+            <div className="p-1.5 rounded-xl bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400 shadow-2xs">
               <Smile className="w-4 h-4" />
             </div>
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-2xl sm:text-3xl font-bold text-primary">{averageMood}</span>
+              <span className="text-2xl sm:text-3xl font-bold text-primary tracking-tight">{averageMood}</span>
               <span className="text-2xl">{moodSummary.emoji}</span>
             </div>
             <p className="text-xs text-secondary font-medium mt-1">
@@ -331,10 +331,10 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
         </div>
 
         {/* Card 3: Top Emotion */}
-        <div className="surface-card p-4 sm:p-5 rounded-2xl border border-default space-y-2 flex flex-col justify-between shadow-3xs">
+        <div className="surface-card card-organic-lift p-4 sm:p-5 rounded-2xl border border-default space-y-2 flex flex-col justify-between shadow-3xs transition-all">
           <div className="flex items-center justify-between">
             <span className="text-xs text-secondary font-medium uppercase tracking-wider">Emosi Dominan</span>
-            <div className="p-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400">
+            <div className="p-1.5 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 shadow-2xs">
               <Tag className="w-4 h-4" />
             </div>
           </div>
@@ -342,7 +342,7 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
             {topEmotions.length > 0 ? (
               <div className="flex flex-wrap gap-1.5">
                 {topEmotions.map((emotion, i) => (
-                  <span key={i} className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-primary text-xs font-semibold rounded-md border border-default">
+                  <span key={i} className="px-2.5 py-0.5 bg-slate-100 dark:bg-slate-800 text-primary text-xs font-semibold rounded-full border border-default/70">
                     {emotion}
                   </span>
                 ))}
@@ -355,16 +355,16 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
         </div>
 
         {/* Card 4: Sleep Quality */}
-        <div className="surface-card p-4 sm:p-5 rounded-2xl border border-default space-y-2 flex flex-col justify-between shadow-3xs">
+        <div className="surface-card card-organic-lift p-4 sm:p-5 rounded-2xl border border-default space-y-2 flex flex-col justify-between shadow-3xs transition-all">
           <div className="flex items-center justify-between">
             <span className="text-xs text-secondary font-medium uppercase tracking-wider">Rata-rata Tidur</span>
-            <div className="p-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400">
+            <div className="p-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 shadow-2xs">
               <Moon className="w-4 h-4" />
             </div>
           </div>
           <div>
             <div className="flex items-baseline gap-1.5">
-              <span className="text-2xl sm:text-3xl font-bold text-primary">{averageSleep}</span>
+              <span className="text-2xl sm:text-3xl font-bold text-primary tracking-tight">{averageSleep}</span>
               <span className="text-xs font-semibold text-secondary">Jam / Hari</span>
             </div>
             <p className="text-xs text-muted mt-1 leading-normal">
@@ -398,12 +398,12 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
 
           <div className="flex flex-wrap items-center gap-3">
             {/* Time Range Selector */}
-            <div className="flex surface-muted rounded-xl p-0.5 border border-default">
+            <div className="flex surface-muted rounded-full p-0.5 border border-default/70">
               {(['7', '30', '90'] as const).map(range => (
                 <button
                   key={range}
                   onClick={() => setTimeRange(range)}
-                  className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+                  className={`btn-tactile px-3.5 py-1 text-xs font-semibold rounded-full transition-all cursor-pointer ${
                     timeRange === range
                       ? 'bg-teal-700 text-white shadow-xs'
                       : 'text-secondary hover:text-primary'
@@ -445,7 +445,7 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
                 return (
                   <div
                     key={idx}
-                    className={`p-3 rounded-xl border border-default text-center transition-all cursor-pointer group relative flex flex-col justify-center items-center min-h-[72px] ${colorClass}`}
+                    className={`p-3 rounded-xl border border-default text-center transition-all cursor-pointer group relative flex flex-col justify-center items-center min-h-[72px] hover:-translate-y-0.5 hover:shadow-xs active:scale-95 ${colorClass}`}
                   >
                     <span className="text-xs font-medium opacity-90">{cell.dayName}</span>
                     <span className="text-base font-bold">{cell.dayNumber}</span>
@@ -472,7 +472,7 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
                 return (
                   <div
                     key={idx}
-                    className={`h-9 sm:h-10 rounded-lg border border-default transition-all cursor-pointer relative group flex flex-col items-center justify-center ${colorClass}`}
+                    className={`h-9 sm:h-10 rounded-xl border border-default transition-all cursor-pointer relative group flex flex-col items-center justify-center hover:scale-105 hover:shadow-3xs active:scale-95 ${colorClass}`}
                     title={`${cell.label}: ${cell.log ? MOOD_OPTIONS[cell.log.mood - 1].label : 'Kosong'}`}
                   >
                     <span className="text-[11px] leading-tight select-none">
@@ -509,7 +509,7 @@ export const MoodTracker: React.FC<MoodTrackerProps> = ({
                 return (
                   <div
                     key={idx}
-                    className={`h-7 sm:h-8 rounded-md border border-default transition-all cursor-pointer relative group flex items-center justify-center ${colorClass}`}
+                    className={`h-7 sm:h-8 rounded-lg border border-default transition-all cursor-pointer relative group flex items-center justify-center hover:scale-110 hover:shadow-3xs active:scale-95 ${colorClass}`}
                     title={`${cell.label}: ${cell.log ? MOOD_OPTIONS[cell.log.mood - 1].label : 'Kosong'}`}
                   >
                     <span className="text-[9px] leading-tight select-none opacity-80">

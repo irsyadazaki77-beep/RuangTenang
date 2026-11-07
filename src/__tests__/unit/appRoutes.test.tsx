@@ -38,11 +38,12 @@ describe('declarative application routes', () => {
     const paths = new Set(routes.map(route => route.path));
 
     expect(paths).toEqual(new Set([
-      '/', '/c/:chatId', '/workspace', '/workspace/new', '/workspace/c/:chatId', '/mood', '/mindfulness',
+      '/', '/c/:chatId', '/workspace', '/workspace/new', '/workspace/c/:chatId', '/coder', '/ruang-coder', '/mood', '/mindfulness',
       '/screening', '/counselors', '/counselor-portal', '/counselordashboard', '/emergency', '*'
     ]));
     expect(routes.find(route => route.path === '/workspace')?.mode).toBe('ruangkerja');
     expect(routes.find(route => route.path === '/c/:chatId')?.mode).toBe('ruangtenang');
+    expect(routes.find(route => route.path === '/coder')?.mode).toBe('ruangcoder');
   });
 
   it('supports direct counselor URLs and redirects previous entry paths', () => {

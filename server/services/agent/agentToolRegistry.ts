@@ -281,6 +281,24 @@ export const AGENT_TOOL_REGISTRY: readonly AgentToolDefinition[] = Object.freeze
     executionLocation: 'server', permission: 'read', requiresApproval: false,
     timeoutMs: 10_000, isIdempotent: true,
     allowedTaskTypes: ['analysis', 'writing', 'review', 'transform']
+  },
+  {
+    id: 'generate_image',
+    version: '1.0.0',
+    description: 'Generate an AI illustration, poster, cover graphic, or conceptual diagram from a detailed text prompt.',
+    inputSchema: z.object({
+      prompt: z.string().trim().min(2).max(500),
+      width: z.number().int().min(256).max(1024).optional(),
+      height: z.number().int().min(256).max(1024).optional()
+    }).strict(),
+    outputSchema: z.object({
+      imageUrl: z.string().min(1).max(500),
+      prompt: z.string().min(1).max(500),
+      provider: z.string().min(1).max(100)
+    }).strict(),
+    executionLocation: 'server', permission: 'read', requiresApproval: false,
+    timeoutMs: 30_000, isIdempotent: true,
+    allowedTaskTypes: ['writing', 'research', 'analysis', 'coding', 'review', 'transform']
   }
 ]);
 

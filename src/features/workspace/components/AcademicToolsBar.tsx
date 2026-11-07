@@ -4,11 +4,16 @@ import {
   Quote,
   Code2,
   FileText,
+  Table,
   Sparkles,
   Pencil,
   ChevronRight,
   Lightbulb,
-  X
+  X,
+  BarChart2,
+  ShieldCheck,
+  Share2,
+  Users
 } from 'lucide-react';
 import { AcademicTaskTemplate } from '../types';
 
@@ -66,6 +71,26 @@ Format Output Wajib:
 Berikut artikel / abstrak jurnal yang ingin dibedah:`
   },
   {
+    id: 'matriks-literatur-bab2',
+    title: 'Matriks Sintesis Literatur (Bab 2)',
+    description: 'Sintesis komparatif multi-jurnal: APA 7th, variabel X/Y, metodologi, temuan, gap riset, dan narasi skripsi.',
+    icon: 'Table',
+    targetArtifact: 'DOCUMENT',
+    prompt: `Bantu saya menyusun Matriks Sintesis Literatur Penelitian Terdahulu untuk Bab 2 Skripsi secara komparatif dari dokumen jurnal yang saya lampirkan.
+Wajib gunakan format kanvas:
+:::artifact{type="markdown" title="Matriks Sintesis Literatur (Bab 2 Skripsi)"}
+# 📊 Matriks Penelitian Terdahulu & Sintesis Pustaka
+
+| No | Peneliti & Tahun [Sitasi] | Variabel / Fokus Penelitian | Metodologi & Sampel | Temuan Kunci Empiris | Keterbatasan & Research Gap | Relevansi dengan Skripsi |
+| :---: | :--- | :--- | :--- | :--- | :--- | :--- |
+
+## 2.2 Draf Narasi Sintesis Penelitian Terdahulu (Bab 2 Skripsi)
+*(Paragraf akademik kohesif yang mengaitkan persamaan, perbedaan, dan gap penelitian di atas dengan posisi riset mahasiswa saat ini)*
+:::
+
+Fokus / Topik Skripsi saya:`
+  },
+  {
     id: 'format-sitasi',
     title: 'Format Sitasi Ilmiah',
     description: 'Buat daftar pustaka otomatis berstandar APA 7th, IEEE, atau Harvard.',
@@ -115,6 +140,82 @@ Bungkus kerangka proposal dalam artefak:
 Topik / Ide Penelitian:`
   },
   {
+    id: 'poster-ilmiah-generator',
+    title: 'Poster Ilmiah Konferensi (A1/A2)',
+    description: 'Rancang poster ilmiah multi-kolom siap pajang dari temuan riset skripsi atau paper.',
+    icon: 'Sparkles',
+    targetArtifact: 'DOCUMENT',
+    prompt: `Bantu saya menyusun draf konten untuk Poster Ilmiah Konferensi berdasarkan topik atau naskah berikut.
+Gunakan format poster terstruktur yang rapi:
+:::artifact{type="markdown" title="Poster Ilmiah Konferensi"}
+# [Judul Poster Ilmiah yang Menarik dan Jelas]
+**Penulis:** [Nama Penulis / Tim Peneliti]
+**Afiliasi:** [Departemen, Fakultas, Universitas]
+
+## 1. Latar Belakang & Urgensi
+[Ringkasan singkat masalah dan kesenjangan riset dalam 2-3 poin jelas]
+
+## 2. Tujuan & Hipotesis
+[Tujuan utama dan hipotesis kerja yang diuji]
+
+## 3. Metodologi & Desain Eksperimen
+[Diagram alur metode, populasi/sampel, instrumen, dan teknik analisis data]
+
+## 4. Hasil & Temuan Utama
+[Highlight data numerik, temuan kunci, grafik perbandingan]
+
+## 5. Kesimpulan & Manfaat
+[Jawaban konkret terhadap hipotesis dan implikasi teoretis/praktis]
+
+## 6. Referensi Terpilih
+[3-5 rujukan utama berstandar sitasi akademik]
+:::
+
+Topik / Intisari Naskah:`
+  },
+  {
+    id: 'presentasi-sidang-skripsi',
+    title: 'Slide Presentasi Sidang (PPT)',
+    description: 'Susun draf 10-12 slide presentasi ujian proposal atau sidang skripsi terstruktur.',
+    icon: 'BookOpen',
+    targetArtifact: 'DOCUMENT',
+    prompt: `Bantu saya merancang slide presentasi untuk Sidang Skripsi / Ujian Seminar dengan pembagian slide profesional:
+:::artifact{type="markdown" title="Slide Presentasi Sidang Skripsi"}
+# [Judul Skripsi / Tugas Akhir]
+- Presenter: [Nama Mahasiswa]
+- Pembimbing: [Nama Dosen Pembimbing]
+- Departemen & Universitas
+
+## Latar Belakang Masalah
+- Masalah nyata yang melandasi penelitian
+- Kesenjangan riset terdahulu
+- Urgensi penyelesaian masalah
+
+## Rumusan Masalah & Tujuan
+- Rumusan masalah utama
+- Sasaran hasil penelitian
+
+## Tinjauan Pustaka & Kerangka Konseptual
+- Landasan teori kunci
+- Hubungan antar variabel yang diteliti
+
+## Metodologi Penelitian
+- Pendekatan dan desain riset
+- Teknik pengumpulan data
+- Metode analisis dan validasi
+
+## Hasil & Pembahasan Kunci
+- Temuan data empiris
+- Analisis komparasi dan interpretasi hasil
+
+## Kesimpulan & Saran
+- Kesimpulan menjawab tujuan penelitian
+- Keterbatasan dan rekomendasi penelitian lanjutan
+:::
+
+Topik / Draf Naskah Skripsi:`
+  },
+  {
     id: 'parafrase-akademik',
     title: 'Parafrase Akademik',
     description: 'Tulis ulang kalimat atau draf dengan gaya ilmiah dan bahasa baku (KBBI).',
@@ -126,6 +227,121 @@ Topik / Ide Penelitian:`
 </artifact>
 
 Teks Asli:`
+  },
+  {
+    id: 'catatan-tulis-tangan-visual',
+    title: 'Catatan Tulis Tangan Estetik',
+    description: 'Ringkasan materi bergaya buku tulis tangan bergaris (font Caveat/Kalam, stabilo, sticky notes, doodle).',
+    icon: 'Pencil',
+    targetArtifact: 'CODE',
+    prompt: `Buatkan catatan materi visual estetik bergaya TULIS TANGAN (handwritten study notes) untuk topik materi di bawah ini.
+Gunakan format artefak kode HTML lengkap:
+:::artifact{type="code" language="html" title="Catatan Tulis Tangan: [Topik]"}
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Kalam:wght@400;700&family=Patrick+Hand&family=Plus+Jakarta+Sans:wght@400;600;700&display=swap');
+  /* Desain kertas binder bergaris/grid, stabilo neon/pastel, sticky notes, tulisan tangan rapi */
+</style>
+</head>
+<body class="visual-canvas">
+  ...konten visual estetika catatan tangan lengkap dengan judul, poin kunci bertanda stabilo, rumus/kotak penting, dan doodle ikon SVG...
+</body>
+</html>
+:::
+
+Materi yang ingin dibuatkan catatan tangan:`
+  },
+  {
+    id: 'cheatsheet-infografis-visual',
+    title: 'Cheatsheet & Infografis Rumus',
+    description: 'Rangkuman visual satu lembar padat berisi rumus formula, diagram alur, dan trik kilat ujian.',
+    icon: 'Sparkles',
+    targetArtifact: 'CODE',
+    prompt: `Buatkan cheatsheet ringkasan visual satu halaman (formula cheatsheet / concept map) yang modern, padat, dan rapi untuk topik berikut.
+Gunakan format artefak kode HTML mandiri:
+:::artifact{type="code" language="html" title="Cheatsheet: [Topik]"}
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap');
+  /* Layout grid modern 2-3 kolom, formula card bergaris tegas, badge highlight */
+</style>
+</head>
+<body class="visual-canvas">
+  ...desain cheatsheet lengkap dengan formula kotak rumus, tabel perbandingan ringkas, dan tip trik ujian...
+</body>
+</html>
+:::
+
+Topik / Rumus Materi:`
+  },
+  {
+    id: 'simulasi-ujian-quiz',
+    title: 'Simulasi Ujian & Kuis (AI)',
+    description: 'Uji pemahaman Anda dengan simulasi soal ujian interaktif, penilaian instan, dan pembahasan materi.',
+    icon: 'Sparkles',
+    targetArtifact: 'DOCUMENT',
+    prompt: `Bantu saya membuat simulasi latihan ujian / kuis pilihan ganda dari topik materi berikut.
+Gunakan format JSON kuis interaktif berikut:
+:::artifact{type="document" title="Simulasi Ujian: [Topik]"}
+{
+  "format": "ruangtenang-quiz-v1",
+  "title": "Simulasi Ujian: [Topik]",
+  "topic": "[Topik]",
+  "difficulty": "sedang",
+  "timeLimitMinutes": 15,
+  "totalQuestions": 5,
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Pertanyaan soal...",
+      "options": ["Opsi A", "Opsi B", "Opsi C", "Opsi D"],
+      "correctIndex": 0,
+      "explanation": "Penjelasan mengapa jawaban tepat...",
+      "topicTag": "Nama Subtopik"
+    }
+  ]
+}
+:::
+
+Materi atau Topik yang Ingin Diujikan:`
+  },
+  {
+    id: 'drill-tanya-jawab-sidang',
+    title: 'Drill Tanya Jawab Sidang Skripsi',
+    description: 'Prediksi pertanyaan kritis dewan penguji skripsi/UTS/UAS dengan panduan pembelaan argumen ilmiah.',
+    icon: 'Sparkles',
+    targetArtifact: 'DOCUMENT',
+    prompt: `Kamu bertindak sebagai Dewan Penguji Skripsi & Ujian Akademik Senior.
+Berdasarkan topik atau draf naskah yang saya berikan, buatkan paket drill simulasi tanya jawab kritis ujian sidang skripsi:
+:::artifact{type="markdown" title="Simulasi Tanya Jawab Kritis Sidang Skripsi"}
+# 🎓 Paket Prediksi Pertanyaan & Pembelaan Argumen Sidang Skripsi
+
+## 1. Pertanyaan Metodologis & Desain Riset
+- **Pertanyaan Penguji:** [Pertanyaan tajam terkait rasionalitas desain riset, teknik sampling, atau instrumen]
+  - *Arah Jawaban / Pembelaan Ilmiah:* [Poin kunci yang harus disampaikan mahasiswa berbasis kaidah ilmiah]
+
+## 2. Pertanyaan Teori & State-of-the-Art
+- **Pertanyaan Penguji:** [Pertanyaan menguji penguasaan teori primer serta kebaruan penelitian dibanding literatur terdahulu]
+  - *Arah Jawaban / Pembelaan Ilmiah:* [Argumen sintesis pustaka]
+
+## 3. Pertanyaan Keterbatasan & Ancaman Validitas
+- **Pertanyaan Penguji:** [Pertanyaan kritis mengenai ancaman validitas internal/eksternal dan bias]
+  - *Arah Jawaban / Pembelaan Ilmiah:* [Sikap rendah hati namun solutif dan akademis]
+
+## 4. Tabel Flashcards Istilah & Variabel (Quick Recall)
+| Variabel / Konsep Kunci | Definisi Operasional & Landasan Teori |
+| :--- | :--- |
+| [Variabel X / Konsep 1] | [Definisi ringkas dan tajam] |
+| [Variabel Y / Konsep 2] | [Definisi ringkas dan tajam] |
+:::
+
+Topik / Draf Naskah Skripsi:`
   }
 ];
 
@@ -133,12 +349,30 @@ interface AcademicToolsBarProps {
   onSelectTemplate: (template: AcademicTaskTemplate, customInput?: string) => void;
   activeTemplateId?: string | null;
   compact?: boolean;
+  onOpenLiteratureMatrix?: () => void;
+  onOpenMockDefense?: () => void;
+  onOpenSupervisorNotes?: () => void;
+  onOpenThesisBinder?: () => void;
+  onOpenCitationAudit?: () => void;
+  onOpenDataStudioChart?: () => void;
+  onOpenTurnitinAudit?: () => void;
+  onOpenKnowledgeGraph?: () => void;
+  onOpenCouncilDebate?: () => void;
 }
 
 export const AcademicToolsBar: React.FC<AcademicToolsBarProps> = ({
   onSelectTemplate,
   activeTemplateId,
-  compact = false
+  compact = false,
+  onOpenLiteratureMatrix,
+  onOpenMockDefense,
+  onOpenSupervisorNotes,
+  onOpenThesisBinder,
+  onOpenCitationAudit,
+  onOpenDataStudioChart,
+  onOpenTurnitinAudit,
+  onOpenKnowledgeGraph,
+  onOpenCouncilDebate
 }) => {
   const [selectedForModal, setSelectedForModal] = useState<AcademicTaskTemplate | null>(null);
   const [inputSnippet, setInputSnippet] = useState('');
@@ -149,6 +383,7 @@ export const AcademicToolsBar: React.FC<AcademicToolsBarProps> = ({
       case 'Quote': return <Quote className={className} />;
       case 'Code2': return <Code2 className={className} />;
       case 'FileText': return <FileText className={className} />;
+      case 'Table': return <Table className={className} />;
       case 'Pencil': return <Pencil className={className} />;
       default: return <Sparkles className={className} />;
     }
@@ -174,6 +409,114 @@ export const AcademicToolsBar: React.FC<AcademicToolsBarProps> = ({
             <Sparkles className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
             <span className="hidden sm:inline">Template:</span>
           </div>
+
+          {onOpenLiteratureMatrix && (
+            <button
+              type="button"
+              onClick={onOpenLiteratureMatrix}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors shrink-0 cursor-pointer select-none border border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 shadow-2xs"
+              title="Buka Matriks Literatur Interaktif (Multi-PDF)"
+            >
+              <BookOpen className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+              <span>Matriks Literatur (Bab 2)</span>
+            </button>
+          )}
+
+          {onOpenMockDefense && (
+            <button
+              type="button"
+              onClick={onOpenMockDefense}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors shrink-0 cursor-pointer select-none border border-indigo-300 dark:border-indigo-700 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 shadow-2xs"
+              title="Simulasi Ujian Sidang Skripsi & Sempro (AI Mock Defense)"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+              <span>Simulasi Sidang (AI)</span>
+            </button>
+          )}
+
+          {onOpenSupervisorNotes && (
+            <button
+              type="button"
+              onClick={onOpenSupervisorNotes}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors shrink-0 cursor-pointer select-none border border-violet-300 dark:border-violet-700 bg-violet-50 dark:bg-violet-950/60 text-violet-700 dark:text-violet-300 hover:bg-violet-100 dark:hover:bg-violet-900/60 shadow-2xs"
+              title="Ubah Catatan Bimbingan Dosen menjadi Action Plan"
+            >
+              <FileText className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400" />
+              <span>Notulensi Bimbingan</span>
+            </button>
+          )}
+
+          {onOpenThesisBinder && (
+            <button
+              type="button"
+              onClick={onOpenThesisBinder}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors shrink-0 cursor-pointer select-none border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/60 shadow-2xs"
+              title="Gabungkan Bab 1-5 menjadi naskah skripsi lengkap (.docx)"
+            >
+              <Table className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+              <span>Binder Skripsi</span>
+            </button>
+          )}
+
+          {onOpenCitationAudit && (
+            <button
+              type="button"
+              onClick={onOpenCitationAudit}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors shrink-0 cursor-pointer select-none border border-teal-300 dark:border-teal-700 bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300 hover:bg-teal-100 dark:hover:bg-teal-900/60 shadow-2xs"
+              title="Audit Konsistensi Sitasi dan Bersihkan Ghost References"
+            >
+              <Quote className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+              <span>Audit Sitasi</span>
+            </button>
+          )}
+
+          {onOpenDataStudioChart && (
+            <button
+              type="button"
+              onClick={onOpenDataStudioChart}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors shrink-0 cursor-pointer select-none border border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 shadow-2xs"
+              title="Data Studio & Visualisasi Grafik Skripsi (Bab 4)"
+            >
+              <BarChart2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+              <span>Data Studio (Grafik)</span>
+            </button>
+          )}
+
+          {onOpenTurnitinAudit && (
+            <button
+              type="button"
+              onClick={onOpenTurnitinAudit}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors shrink-0 cursor-pointer select-none border border-rose-300 dark:border-rose-700 bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-900/60 shadow-2xs"
+              title="Audit Kesiapan Turnitin & Parafrase Akademik Standar Dikti"
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
+              <span>Audit Turnitin</span>
+            </button>
+          )}
+
+          {onOpenKnowledgeGraph && (
+            <button
+              type="button"
+              onClick={onOpenKnowledgeGraph}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors shrink-0 cursor-pointer select-none border border-purple-300 dark:border-purple-700 bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/60 shadow-2xs"
+              title="Visualisasi Jejaring Konsep & Teori Skripsi (GraphRAG)"
+            >
+              <Share2 className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
+              <span>Jejaring Konsep (GraphRAG)</span>
+            </button>
+          )}
+
+          {onOpenCouncilDebate && (
+            <button
+              type="button"
+              onClick={onOpenCouncilDebate}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors shrink-0 cursor-pointer select-none border border-indigo-300 dark:border-indigo-700 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 shadow-2xs"
+              title="Debat Multi-Agen Dewan Penguji AI (Pembimbing & Penguji)"
+            >
+              <Users className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+              <span>Debat Dewan AI</span>
+            </button>
+          )}
 
           {ACADEMIC_TEMPLATES.map((tpl) => {
             const isActive = activeTemplateId === tpl.id;

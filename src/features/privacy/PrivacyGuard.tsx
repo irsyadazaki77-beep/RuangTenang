@@ -11,8 +11,8 @@ interface PrivacyGuardProps {
 
 export const PrivacyGuard: React.FC<PrivacyGuardProps> = ({
   children,
-  title = 'Bilik Pribadi Terkunci',
-  description = 'PIN membatasi akses ke halaman ini pada sesi browser Anda. PIN ini tidak mengenkripsi data yang sudah tersimpan di perangkat.'
+  title = 'Ruang Pribadi Terkunci',
+  description = 'Ruang pribadi ini dikunci dengan PIN demi kenyamanan privasimu di sesi browser ini.'
 }) => {
   const { isVaultConfigured, isVaultUnlocked } = usePrivacyVault();
   const [isPinModalOpen, setIsPinModalOpen] = useState(false);
@@ -25,13 +25,13 @@ export const PrivacyGuard: React.FC<PrivacyGuardProps> = ({
   // Vault is configured and currently locked
   return (
     <div className="flex flex-col items-center justify-center min-h-[70vh] p-6 text-center animate-fade-in">
-      <div className="max-w-md w-full surface-card border border-default p-8 rounded-3xl shadow-xl space-y-6">
-        <div className="w-16 h-16 rounded-3xl bg-teal-50 dark:bg-teal-950/60 border border-teal-200 dark:border-teal-800 text-teal-600 dark:text-teal-400 flex items-center justify-center mx-auto shadow-md">
-          <Lock className="w-8 h-8" />
+      <div className="max-w-md w-full surface-card p-8 rounded-3xl space-y-6">
+        <div className="w-16 h-16 rounded-3xl bg-teal-50 dark:bg-teal-950/60 border border-teal-200/70 dark:border-teal-800/70 text-teal-600 dark:text-teal-400 flex items-center justify-center mx-auto shadow-[0_8px_24px_-6px_rgba(13,148,136,0.2)]">
+          <Lock className="w-7 h-7" />
         </div>
 
         <div className="space-y-2">
-          <h2 className="text-xl font-bold text-primary">
+          <h2 className="text-xl font-bold text-primary tracking-tight">
             {title}
           </h2>
           <p className="text-xs sm:text-sm text-secondary leading-relaxed">
@@ -45,7 +45,7 @@ export const PrivacyGuard: React.FC<PrivacyGuardProps> = ({
               setModalMode(isVaultConfigured ? 'unlock' : 'setup');
               setIsPinModalOpen(true);
             }}
-            className="w-full py-3.5 px-6 rounded-2xl bg-teal-700 hover:bg-teal-800 active:scale-98 text-white font-bold text-sm shadow-md shadow-teal-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
+            className="w-full py-3.5 px-6 rounded-2xl bg-teal-700 hover:bg-teal-800 text-white font-semibold text-sm shadow-[0_8px_22px_-6px_rgba(13,148,136,0.3)] transition-all flex items-center justify-center gap-2 cursor-pointer btn-tactile"
           >
             <Unlock className="w-4 h-4" />
             <span>{isVaultConfigured ? 'Buka Kunci dengan PIN' : 'Atur PIN untuk Membuka'}</span>

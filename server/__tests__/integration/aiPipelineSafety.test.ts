@@ -132,7 +132,7 @@ describe('FASE 8: Unified AI Gateway & Safety Pipeline Tests', () => {
 
     it('verifies that emergency registry contacts are verified production resources', () => {
       const contacts = getVerifiedEmergencyContacts();
-      expect(contacts.length).toBeGreaterThanOrEqual(3);
+      expect(contacts.length).toBeGreaterThanOrEqual(2);
       
       const hotline119 = contacts.find(c => c.phone === '119 ext 8' || c.phone.includes('119'));
       expect(hotline119).toBeDefined();

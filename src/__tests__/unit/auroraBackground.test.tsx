@@ -9,7 +9,7 @@ import {
   AURORA_ACTIVITY_EVENT
 } from '../../lib/auroraEvents';
 
-describe('AuroraBackground Component Unit Tests — Unified Aurora 2.0', () => {
+describe('AuroraBackground Component Unit Tests — Aurora 3.0', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -30,8 +30,7 @@ describe('AuroraBackground Component Unit Tests — Unified Aurora 2.0', () => {
       expect(root.className).toContain('fixed inset-0');
       expect(root.className).toContain('pointer-events-none');
       expect(root.className).toContain('custom-test-class');
-      expect(root.className).toContain('bg-[#fafaf9]');
-      expect(root.className).toContain('dark:bg-[#080d16]');
+      expect(root.className).toContain('bg-[var(--rt-page)]');
 
       // Check SVG grain filter
       const svg = container.querySelector('svg');
@@ -45,8 +44,7 @@ describe('AuroraBackground Component Unit Tests — Unified Aurora 2.0', () => {
 
       expect(root).toBeDefined();
       expect(root.getAttribute('data-aurora-variant')).toBe('kerja');
-      expect(root.className).toContain('bg-secondary-50');
-      expect(root.className).toContain('dark:bg-[#090e17]');
+      expect(root.className).toContain('bg-[var(--rt-page)]');
     });
 
     it('renders 3 fluid atmospheric light masses with distinct gradients per variant', () => {
@@ -63,6 +61,14 @@ describe('AuroraBackground Component Unit Tests — Unified Aurora 2.0', () => {
       const kerjaLayer1Style = (kerjaLayers[0] as HTMLElement).style.background;
       expect(tenangLayer1Style).toContain('13, 148, 136'); // Teal
       expect(kerjaLayer1Style).toContain('99, 102, 241'); // Indigo
+    });
+
+    it('pauses ambient motion while an editable control is focused', () => {
+      const { container } = render(<AuroraBackground variant="kerja"><textarea aria-label="Draft" /></AuroraBackground>);
+      const root = container.firstChild as HTMLElement;
+      expect(root.getAttribute('data-aurora-paused')).toBe('false');
+      act(() => container.querySelector('textarea')?.focus());
+      expect(root.getAttribute('data-aurora-paused')).toBe('true');
     });
   });
 

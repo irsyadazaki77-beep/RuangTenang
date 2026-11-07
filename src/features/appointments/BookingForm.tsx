@@ -690,7 +690,7 @@ export const BookingForm: React.FC<BookingFormProps> = ({
                   <button
                     type="button"
                     onClick={() => setCurrentStep(1)}
-                    className="text-xs font-semibold text-teal-700 dark:text-teal-400 hover:underline shrink-0 p-1.5 min-h-[36px] min-w-[44px] flex items-center justify-center cursor-pointer"
+                    className="text-xs font-semibold text-teal-700 dark:text-teal-400 hover:underline shrink-0 p-1.5 min-h-9 min-w-11 flex items-center justify-center cursor-pointer"
                   >
                     Ganti
                   </button>

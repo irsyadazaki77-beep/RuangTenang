@@ -98,6 +98,9 @@ export function parseTagAttributes(attrString: string): ParsedTagAttributes {
         const upperType = cleanValue.toUpperCase();
         if (upperType === 'CODE' || upperType === 'CITATION' || upperType === 'OUTLINE' || upperType === 'DOCUMENT') {
           result.type = upperType as ArtifactType;
+        } else if (upperType === 'VISUAL' || upperType === 'HTML') {
+          result.type = 'CODE';
+          result.language = 'html';
         } else if (upperType === 'MARKDOWN' || upperType === 'TEXT' || upperType === 'MD') {
           result.type = 'DOCUMENT';
           result.language = 'markdown';

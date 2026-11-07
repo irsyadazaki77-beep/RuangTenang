@@ -112,5 +112,5 @@ export function buildWorkspaceContextNote(snapshot: WorkspaceRequestSnapshot): s
   }
   if (context.activeFiles.length) contextData.activeFiles = context.activeFiles.slice(0, 20).map(file => ({ id: file.id?.slice(0, 100), name: file.name.slice(0, 120) }));
   if (!Object.keys(contextData).length) return undefined;
-  return `Konteks tambahan RuangKerja untuk permintaan saat ini, dalam JSON. Prioritaskan Selected text untuk permintaan spesifik, gunakan Active Canvas document sebagai konteks pendukung, lalu gunakan berkas terlampir yang relevan; jangan menebak isi berkas dari namanya.\n${JSON.stringify(contextData)}`;
+  return `Konteks tambahan RuangKerja untuk permintaan saat ini, dalam JSON. Prioritaskan Selected text untuk permintaan spesifik, gunakan Active Canvas document sebagai konteks pendukung, lalu gunakan teks dokumen berkas terlampir yang diekstraksi ke dalam sistem; jangan menebak isi berkas tanpa membaca teks rujukan dokumen yang disediakan.\n${JSON.stringify(contextData)}`;
 }

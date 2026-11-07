@@ -32,7 +32,7 @@ export const AcademicDistressBanner: React.FC<AcademicDistressBannerProps> = ({
               : 'Kamu terdengar lelah dan butuh jeda hening sejenak.'}
           </p>
           <p className="text-[11px] text-teal-300/80 hidden sm:block">
-            RuangTenang hadir untuk memulihkan ketenangan dan fokusmu sebelum melanjutkan tugas.
+            Draf tulisanmu aman tersimpan otomatis. Ambil jeda sejenak untuk memulihkan energi sebelum melanjutkan.
           </p>
         </div>
       </div>

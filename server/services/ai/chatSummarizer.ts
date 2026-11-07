@@ -34,11 +34,13 @@ export const chatSummarizer = {
 
   /**
    * Retrieves or incrementally updates summary for chat history older than the last 5 turns.
+   * If nonBlocking=true and no fresh cache exists, returns an instant local fallback summary
+   * and triggers LLM summarization asynchronously in the background.
    */
   async getOrUpdateSummary(
     chatId: string,
     fullHistory: ChatMessageItem[],
-    _options?: { userId?: string; abortSignal?: AbortSignal }
+    _options?: { userId?: string; abortSignal?: AbortSignal; nonBlocking?: boolean }
   ): Promise<{ summary: string; lastSummarizedMsgId: string; tokensSaved: number }> {
     if (!chatId || !Array.isArray(fullHistory) || fullHistory.length <= 10) {
       return { summary: '', lastSummarizedMsgId: '', tokensSaved: 0 };
@@ -67,6 +69,31 @@ export const chatSummarizer = {
       return {
         summary: cached.summary,
         lastSummarizedMsgId: cached.lastSummarizedMsgId,
+        tokensSaved
+      };
+    }
+
+    // Fast-path: When nonBlocking is requested and cache is cold/stale,
+    // return deterministic local fallback summary immediately to avoid blocking TTFT,
+    // while initiating background LLM summarization for future turns.
+    if (_options?.nonBlocking === true) {
+      const localHistory = olderMessages.map(m => ({ role: m.role, content: m.content }));
+      let instantSummary = getLocalFallbackSummary(localHistory);
+      instantSummary = scanAndSanitizePII(instantSummary).sanitizedText.replace(/[[\]<>]/g, '');
+      const rawOlderText = olderMessages.map(m => m.content).join(' ');
+      const rawTokens = aiMetricsService.estimateTokens(rawOlderText);
+      const summaryTokens = aiMetricsService.estimateTokens(instantSummary);
+      const tokensSaved = Math.max(0, rawTokens - summaryTokens);
+
+      // Trigger background summarization without blocking caller
+      setTimeout(() => {
+        this.getOrUpdateSummary(chatId, fullHistory, { ..._options, nonBlocking: false })
+          .catch(err => console.warn('[CHAT_SUMMARIZER_BG_ERR]', err?.message || err));
+      }, 0);
+
+      return {
+        summary: instantSummary,
+        lastSummarizedMsgId: targetMsgId,
         tokensSaved
       };
     }

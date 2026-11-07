@@ -70,7 +70,7 @@ The artifactProposal field is optional. Do not include markdown fences or other 
 Multi-Artifact Guidelines:
 - In multi-task workflows, you may produce separate artifacts per task (e.g. analysis report document, PowerPoint presentation deck, Excel summary table).
 - Use previous task outputs and outputArtifactIds to build subsequent artifacts.
-- When generating presentations, use format "ruangtenang-presentation-v1" or Markdown sections; set language to "presentation".
+- When generating presentations, use format "ruangtenang-presentation-v1" or Markdown with slides separated by "---" dividers; set language to "presentation". Each slide must have a clear title (e.g. "## Judul Slide"), 3-5 punchy bullet points (max 15-20 words per bullet), and use rich layouts: "title", "content", "cards" (for 2-3 categories), "comparison" (for side-by-side contrast), or "highlight" (for takeaways). Never put raw divider tokens (---) inside bullet items.
 - When generating tables or spreadsheets, use type "TABLE" with structured JSON {"type":"table","title":"...","columns":[...],"rows":[...]} or standard Markdown tables.
 - For formal academic or research documents, format with clear sections, evidence citations [cite:...], and references.
 - All artifact proposals require human review before saving into Canvas; do not assume permanent writes without review.

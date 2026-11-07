@@ -26,7 +26,7 @@ import {
 } from '../../lib/soundscapeEngine';
 
 interface AmbientSoundscapeWidgetProps {
-  currentMode?: 'RUANG_TENANG' | 'RUANG_KERJA';
+  currentMode?: 'RUANG_TENANG' | 'RUANG_KERJA' | 'RUANG_CODER';
 }
 
 export const AmbientSoundscapeWidget: React.FC<AmbientSoundscapeWidgetProps> = ({
@@ -40,10 +40,12 @@ export const AmbientSoundscapeWidget: React.FC<AmbientSoundscapeWidgetProps> = (
 
   // Sync state with soundscape engine
   useEffect(() => {
+    const handleOpen = () => { setIsOpen(true); setIsMinimized(false); };
+    window.addEventListener('ruangtenang_open_soundscape', handleOpen);
     const unsubscribe = soundscapeEngine.subscribe(newState => {
       setEngineState(newState);
     });
-    return () => unsubscribe();
+    return () => { window.removeEventListener('ruangtenang_open_soundscape', handleOpen); unsubscribe(); };
   }, []);
 
   // Visualizer Animation Loop
@@ -85,12 +87,16 @@ export const AmbientSoundscapeWidget: React.FC<AmbientSoundscapeWidgetProps> = (
     currentMode === 'RUANG_KERJA' ? t.category === 'RUANG_KERJA' : t.category === 'RUANG_TENANG'
   );
 
+  if (currentMode === 'RUANG_KERJA' && !engineState.isPlaying && !isOpen) {
+    return null;
+  }
+
   return (
     <>
       {/* Floating Widget: Compact Icon when Inactive vs Ambient Pill when Playing */}
       <aside
         aria-label="Pemutar Suara Latar Ambient & Timer Fokus"
-        className="fixed bottom-28 right-3.5 sm:bottom-20 sm:right-4 z-20 flex items-center gap-2 select-none pointer-events-auto"
+        className="fixed bottom-24 right-3.5 sm:bottom-20 sm:right-6 z-20 flex items-center gap-2 select-none pointer-events-auto"
       >
         <AnimatePresence mode="wait">
           {!engineState.isPlaying || isMinimized ? (
@@ -109,15 +115,16 @@ export const AmbientSoundscapeWidget: React.FC<AmbientSoundscapeWidgetProps> = (
                     setIsMinimized(false);
                   }
                 }}
-                className={`group relative w-8 h-8 sm:w-8.5 sm:h-8.5 rounded-full flex items-center justify-center backdrop-blur-md border shadow-2xs hover:shadow-xs transition-all cursor-pointer ${
+                className={`group relative flex items-center gap-1.5 px-3 py-1.5 rounded-full backdrop-blur-md border shadow-2xs hover:shadow-xs transition-all cursor-pointer ${
                   engineState.isPlaying
                     ? 'bg-teal-700 text-white border-teal-500 shadow-teal-600/20'
-                    : 'bg-white/90 dark:bg-slate-900/90 border-stone-200/70 dark:border-slate-800 text-stone-500 dark:text-slate-400 hover:text-teal-600 dark:hover:text-teal-400 hover:border-stone-300 dark:hover:border-slate-700'
+                    : 'bg-white/95 dark:bg-slate-900/95 border-stone-200/80 dark:border-slate-800 text-stone-600 dark:text-slate-300 hover:text-teal-700 dark:hover:text-teal-400 hover:border-teal-300 dark:hover:border-teal-800 shadow-3xs'
                 }`}
-                title="Buka Pemutar Soundscape"
+                title="Buka Pemutar Suara Ambient (Hujan, Ombak, Lofi)"
                 aria-label="Buka Pemutar Soundscape Ambient"
               >
-                <Headphones className="w-3.5 h-3.5" />
+                <Headphones className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+                <span className="text-[11px] font-medium hidden sm:inline">Suara Tenang</span>
 
                 {/* Tooltip on hover */}
                 <span className="absolute right-full mr-2 px-2 py-0.5 rounded-md text-[10px] font-medium bg-stone-900 text-white dark:bg-stone-100 dark:text-stone-900 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap shadow-3xs">

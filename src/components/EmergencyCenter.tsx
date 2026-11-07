@@ -208,11 +208,11 @@ export const EmergencyCenter: React.FC<{ onTriggerSOS?: () => void; onOpenPrivac
   return (
     <div className="max-w-5xl mx-auto px-3.5 sm:px-4 md:px-5 py-3.5 sm:py-4 md:py-5 space-y-3.5 sm:space-y-4 font-sans">
       {/* Alert Header */}
-      <div className="surface-card rounded-xl p-3.5 sm:p-4 border border-rose-100/80 dark:border-rose-950/60 shadow-3xs flex flex-col sm:flex-row items-center sm:items-start gap-3 sm:gap-4">
-        <div className="w-10 h-10 rounded-xl bg-rose-50 dark:bg-rose-950/80 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0 border border-rose-200/50 dark:border-rose-900/60">
+      <div className="surface-card rounded-2xl p-4 sm:p-5 border border-rose-200/80 dark:border-rose-950/60 shadow-3xs flex flex-col sm:flex-row items-center sm:items-start gap-3.5 sm:gap-4">
+        <div className="w-11 h-11 rounded-2xl bg-rose-50 dark:bg-rose-950/80 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0 border border-rose-200/50 dark:border-rose-900/60 shadow-2xs">
           <ShieldAlert className="w-5 h-5" />
         </div>
-        <div className="text-center sm:text-left space-y-0.5 flex-1 min-w-0">
+        <div className="text-center sm:text-left space-y-1 flex-1 min-w-0">
           <h2 className="font-bold text-primary text-base sm:text-lg tracking-tight">
             Bantuan Krisis Kesehatan Mental
           </h2>
@@ -225,34 +225,36 @@ export const EmergencyCenter: React.FC<{ onTriggerSOS?: () => void; onOpenPrivac
       {/* Main 1-Click Action Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 sm:gap-4">
         {/* ACTION CARD 1: DIRECT HOTLINE DIAL */}
-        <div className="surface-card rounded-xl p-3.5 sm:p-4 flex flex-col justify-between space-y-3.5 group hover:shadow-xs border border-default shadow-3xs transition-all">
+        <div className="surface-card card-organic-lift rounded-2xl p-4 sm:p-5 flex flex-col justify-between space-y-4 group hover:shadow-xs border border-default/80 shadow-3xs transition-all">
           <div className="space-y-1.5">
-            <h2 className="text-sm sm:text-base font-bold text-primary">
+            <h2 className="text-sm sm:text-base font-bold text-primary tracking-tight">
               {EMERGENCY_CONTACTS[0].name}
             </h2>
             <p className="text-xs text-secondary leading-relaxed">
               {EMERGENCY_CONTACTS[0].description}
             </p>
           </div>
-          <a
-            href={EMERGENCY_CONTACTS[0].url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="w-full py-2.5 px-3.5 bg-rose-50 dark:bg-rose-950/60 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 rounded-lg font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 transition-colors border border-rose-200 dark:border-rose-900 cursor-pointer min-h-[44px] sm:min-h-[36px]"
-          >
-            <Phone className="w-3.5 h-3.5" />
-            <span>Buka Healing119 (telepon / chat)</span>
-          </a>
-          <a href="tel:119" className="w-full py-2.5 px-3.5 surface-muted text-primary rounded-lg font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 border border-default cursor-pointer min-h-[44px] sm:min-h-[36px]">
-            <PhoneCall className="w-3.5 h-3.5" />
-            <span>Telepon 119, lalu tekan 8</span>
-          </a>
+          <div className="space-y-2">
+            <a
+              href={EMERGENCY_CONTACTS[0].url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn-tactile w-full py-2.5 px-4 bg-rose-50 dark:bg-rose-950/60 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 rounded-xl font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 transition-colors border border-rose-200 dark:border-rose-900 cursor-pointer min-h-[46px] shadow-3xs"
+            >
+              <Phone className="w-3.5 h-3.5" />
+              <span>Buka Healing119 (telepon / chat)</span>
+            </a>
+            <a href="tel:119" className="btn-tactile w-full py-2.5 px-4 surface-muted text-primary hover:bg-stone-100 dark:hover:bg-slate-800 rounded-xl font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 border border-default cursor-pointer min-h-[46px]">
+              <PhoneCall className="w-3.5 h-3.5" />
+              <span>Telepon 119, lalu tekan 8</span>
+            </a>
+          </div>
         </div>
 
         {/* ACTION CARD 2: INSTANT SOS SIGNAL */}
-        <div className="surface-card rounded-xl p-3.5 sm:p-4 flex flex-col justify-between space-y-3.5 group hover:shadow-xs border border-default shadow-3xs transition-all">
+        <div className="surface-card card-organic-lift rounded-2xl p-4 sm:p-5 flex flex-col justify-between space-y-4 group hover:shadow-xs border border-default/80 shadow-3xs transition-all">
           <div className="space-y-1.5">
-            <h2 className="text-sm sm:text-base font-bold text-primary">
+            <h2 className="text-sm sm:text-base font-bold text-primary tracking-tight">
               Sinyal SOS ke Kontak Darurat
             </h2>
             <p className="text-xs text-secondary leading-relaxed">
@@ -261,15 +263,15 @@ export const EmergencyCenter: React.FC<{ onTriggerSOS?: () => void; onOpenPrivac
           </div>
 
           <div className="space-y-2.5">
-            <label className="flex items-start gap-2 text-[11px] text-secondary leading-relaxed">
-              <input type="checkbox" checked={shareLocation} onChange={event => setShareLocation(event.target.checked)} className="mt-0.5 accent-rose-600" />
+            <label className="flex items-start gap-2 text-[11px] text-secondary leading-relaxed cursor-pointer select-none">
+              <input type="checkbox" checked={shareLocation} onChange={event => setShareLocation(event.target.checked)} className="mt-0.5 accent-rose-600 rounded" />
               <span>Bagikan lokasi perangkat saat ini bersama sinyal SOS. Lokasi hanya diminta setelah Anda memilih opsi ini.</span>
             </label>
             <button
               type="button"
               onClick={handleSendSOS}
               disabled={isTriggeringSOS}
-              className="btn-danger w-full py-2.5 px-3.5 rounded-lg text-xs sm:text-sm flex items-center justify-center gap-2 min-h-[44px] sm:min-h-[36px] disabled:opacity-50 cursor-pointer"
+              className="btn-danger btn-tactile w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-semibold flex items-center justify-center gap-2 min-h-[46px] disabled:opacity-50 cursor-pointer shadow-sm"
             >
               <ShieldAlert
                 className={`w-3.5 h-3.5 ${isTriggeringSOS ? "animate-spin" : "text-white"}`}
@@ -357,7 +359,7 @@ export const EmergencyCenter: React.FC<{ onTriggerSOS?: () => void; onOpenPrivac
       {/* Grid of Helpline Directory & Contact Settings */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 sm:gap-4">
         {/* LEFT/MAIN COLUMN: HELPLINE DIRECTORY (7 cols) */}
-        <div className="lg:col-span-7 surface-card rounded-xl p-3.5 sm:p-4 space-y-3 border border-default shadow-3xs">
+        <div className="lg:col-span-7 surface-card rounded-2xl p-4 sm:p-5 space-y-3.5 border border-default shadow-3xs">
           {user?.campusId && (
             <section className="space-y-2 rounded-xl border border-teal-200 bg-teal-50/60 p-3 dark:border-teal-900 dark:bg-teal-950/30" aria-labelledby="campus-referrals-title">
               <div>
@@ -456,7 +458,7 @@ export const EmergencyCenter: React.FC<{ onTriggerSOS?: () => void; onOpenPrivac
         </div>
 
         {/* RIGHT COLUMN: EMERGENCY CONTACT MANAGER (5 cols) */}
-        <div className="lg:col-span-5 surface-card rounded-xl p-3.5 sm:p-4 flex flex-col justify-between space-y-3 border border-default shadow-3xs">
+        <div className="lg:col-span-5 surface-card rounded-2xl p-4 sm:p-5 flex flex-col justify-between space-y-3.5 border border-default shadow-3xs">
           <div className="space-y-0.5">
             <h2 className="text-xs sm:text-sm font-bold text-primary flex items-center gap-1.5">
               <User className="w-4 h-4 text-teal-600 dark:text-teal-400" />
@@ -568,7 +570,7 @@ export const EmergencyCenter: React.FC<{ onTriggerSOS?: () => void; onOpenPrivac
             <button
               type="submit"
               disabled={!canUseDigitalSOS || isContactLoading}
-              className="w-full py-2.5 px-3.5 bg-teal-700 hover:bg-teal-800 text-white font-semibold text-xs sm:text-sm rounded-lg shadow-3xs transition-all flex items-center justify-center gap-1.5 cursor-pointer min-h-[44px] sm:min-h-[36px] border-none disabled:opacity-50 disabled:cursor-not-allowed"
+              className="btn-primary btn-tactile w-full py-2.5 px-3.5 bg-teal-700 hover:bg-teal-800 text-white font-semibold text-xs sm:text-sm rounded-xl shadow-3xs transition-all flex items-center justify-center gap-1.5 cursor-pointer min-h-[46px] border-none disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Save className="w-3.5 h-3.5" />
               <span>

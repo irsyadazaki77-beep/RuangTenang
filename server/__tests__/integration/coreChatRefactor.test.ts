@@ -6,7 +6,7 @@ import jwt from 'jsonwebtoken';
 import { prisma, serverDb } from '../../database.js';
 import chatRouter from '../../routes/chat.js';
 import { chatSummarizer } from '../../services/ai/chatSummarizer.js';
-import { geminiAdapter } from '../../services/ai/geminiAdapter.js';
+import { aiRequestService } from '../../services/ai/aiRequestService.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-for-development-ruangtenang';
 
@@ -93,7 +93,7 @@ describe('Core Chat Refactor Integration Tests', () => {
   describe('1. Long Chat & Summary Token Budgeting', () => {
     it('summarizes older history incrementally and calculates tokens saved', async () => {
       chatSummarizer.clearCache(longChatId);
-      const generate = vi.spyOn(geminiAdapter, 'generate').mockResolvedValue({ text: 'Ringkasan deterministik untuk pengujian.' } as any);
+      const generate = vi.spyOn(aiRequestService, 'generateChatResponse').mockResolvedValue({ text: 'Ringkasan deterministik untuk pengujian.', modelUsed: 'fixture', isFallback: false });
       try {
         const history = await prisma.chatMessages.findMany({
           where: { chatId: longChatId },

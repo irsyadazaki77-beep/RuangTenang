@@ -359,10 +359,10 @@ export function useWorkspaceArtifacts({
     }
   }, [chatId, identityScope, persistArtifact, showToast, userId, workspaceIdentity]);
 
-  const createArtifactFromContent = useCallback(async (content: string, title: string, operationId?: string): Promise<boolean> => {
+  const createArtifactFromContent = useCallback(async (content: string, title: string, operationId?: string, type: ArtifactType = 'DOCUMENT'): Promise<boolean> => {
     const id = operationId || `art_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     const draft: WorkspaceArtifact = {
-      id, chatId: chatId || undefined, localWorkspaceId: workspaceIdentity, localOwnerId: userId || 'guest', persistenceStatus: chatId ? 'saving' : 'local', title: title.slice(0, 120), type: 'DOCUMENT',
+      id, chatId: chatId || undefined, localWorkspaceId: workspaceIdentity, localOwnerId: userId || 'guest', persistenceStatus: chatId ? 'saving' : 'local', title: title.slice(0, 120), type,
       content, version: 1, updatedAt: new Date().toISOString()
     };
     if (!chatId) upsertLocalDraft(workspaceIdentity, draft, userId);

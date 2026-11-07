@@ -9,7 +9,8 @@ import {
   Bell,
   LayoutDashboard,
   ChevronDown,
-  Lock
+  Lock,
+  Code2
 } from 'lucide-react';
 import { WorkspaceMode } from '../../../features/workspace/types';
 import { SidebarTooltip } from './SidebarTooltip';
@@ -53,6 +54,7 @@ export const SidebarNavLinks: React.FC<SidebarNavLinksProps> = ({
   }, [location.pathname]);
 
   const isRuangKerja = currentMode === 'RUANG_KERJA';
+  const isRuangCoder = currentMode === 'RUANG_CODER';
 
   const handleNavigate = (path: string) => {
     navigate(path);
@@ -61,7 +63,7 @@ export const SidebarNavLinks: React.FC<SidebarNavLinksProps> = ({
 
   if (isCollapsed) {
     return (
-      <div className="py-2 px-2 border-t border-slate-200/60 dark:border-slate-800/60 space-y-1 flex flex-col items-center shrink-0">
+      <div className="sidebar-nav py-2 px-2 border-t border-slate-200/60 dark:border-slate-800/60 space-y-1 flex flex-col items-center shrink-0">
         <SidebarTooltip content="AI Chat (Utama)" show={true} position="right">
           <button
             type="button"
@@ -77,24 +79,36 @@ export const SidebarNavLinks: React.FC<SidebarNavLinksProps> = ({
           </button>
         </SidebarTooltip>
 
-        {isRuangKerja ? (
-          <>
-            <SidebarTooltip content="Live Canvas Workspace" show={true} position="right">
-              <button
-                type="button"
-                onClick={() => handleNavigate('/workspace')}
-                className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors cursor-pointer ${
-                  location.pathname.startsWith('/workspace')
-                    ? 'bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 font-bold'
-                    : 'text-slate-500 hover:bg-slate-200/70 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-200'
-                }`}
-                aria-label="Canvas Workspace"
-              >
-                <LayoutDashboard className="w-4 h-4" />
-              </button>
-            </SidebarTooltip>
-
-          </>
+        {isRuangCoder ? (
+          <SidebarTooltip content="RuangCoder Web IDE" show={true} position="right">
+            <button
+              type="button"
+              onClick={() => handleNavigate('/coder')}
+              className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors cursor-pointer ${
+                location.pathname.startsWith('/coder')
+                  ? 'bg-sky-500/20 text-sky-600 dark:text-sky-400 font-bold'
+                  : 'text-slate-500 hover:bg-slate-200/70 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-200'
+              }`}
+              aria-label="RuangCoder Web IDE"
+            >
+              <Code2 className="w-4 h-4" />
+            </button>
+          </SidebarTooltip>
+        ) : isRuangKerja ? (
+          <SidebarTooltip content="Live Canvas Workspace" show={true} position="right">
+            <button
+              type="button"
+              onClick={() => handleNavigate('/workspace')}
+              className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors cursor-pointer ${
+                location.pathname.startsWith('/workspace')
+                  ? 'bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 font-bold'
+                  : 'text-slate-500 hover:bg-slate-200/70 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-200'
+              }`}
+              aria-label="Canvas Workspace"
+            >
+              <LayoutDashboard className="w-4 h-4" />
+            </button>
+          </SidebarTooltip>
         ) : (
           <>
             <SidebarTooltip content="Mood Tracker & Jurnal" show={true} position="right">
@@ -181,24 +195,29 @@ export const SidebarNavLinks: React.FC<SidebarNavLinksProps> = ({
   }
 
   return (
-    <div className="px-2.5 py-1.5 border-t border-slate-200/60 dark:border-slate-800/70 shrink-0 space-y-1">
+    <div className="sidebar-nav px-2.5 py-2 border-t border-slate-200/50 dark:border-white/[0.06] shrink-0 space-y-1">
       {/* Collapsible Accordion Header */}
       <button
         type="button"
         onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full flex items-center justify-between px-2 py-1 rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100/80 dark:hover:bg-slate-800/60 transition-colors cursor-pointer group select-none"
+        className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-white/70 dark:hover:bg-white/5 transition-all cursor-pointer group select-none btn-tactile"
         aria-expanded={isExpanded}
       >
-        <div className="flex items-center gap-1.5">
-          {isRuangKerja ? (
+        <div className="flex items-center gap-2">
+          {isRuangCoder ? (
             <>
-              <LayoutDashboard className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
-              <span>Alat Akademik</span>
+              <Code2 className="w-3.5 h-3.5 text-sky-500 dark:text-sky-400 shrink-0" />
+              <span>RuangCoder IDE</span>
+            </>
+          ) : isRuangKerja ? (
+            <>
+              <LayoutDashboard className="w-3.5 h-3.5 text-indigo-500 dark:text-indigo-400 shrink-0" />
+              <span>Ruang Fokus & Dokumen</span>
             </>
           ) : (
             <>
               <Heart className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 shrink-0" />
-              <span>Kesehatan Mental</span>
+              <span>Catatan & Refleksi Diri</span>
             </>
           )}
         </div>
@@ -216,80 +235,102 @@ export const SidebarNavLinks: React.FC<SidebarNavLinksProps> = ({
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.15 }}
-            className="overflow-hidden space-y-0.5 pt-0.5"
+            transition={{ type: 'spring', stiffness: 320, damping: 28 }}
+            className="overflow-hidden space-y-1 pt-0.5"
           >
-            {isRuangKerja ? (
-              /* Workspace navigation */
-              <>
-                <button
-                  type="button"
-                  onClick={() => handleNavigate('/workspace')}
-                  className={`w-full flex items-center justify-between px-2 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+            {isRuangCoder ? (
+              <button
+                type="button"
+                onClick={() => handleNavigate('/coder')}
+                className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl text-xs font-medium transition-all cursor-pointer btn-tactile ${
+                  location.pathname.startsWith('/coder')
+                    ? 'bg-sky-50/90 dark:bg-sky-950/50 text-sky-800 dark:text-sky-200 font-semibold border border-sky-200/70 dark:border-sky-800/50 shadow-2xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:bg-white/70 dark:hover:bg-white/5'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <span className="w-6 h-6 rounded-lg bg-sky-100/80 dark:bg-sky-900/40 flex items-center justify-center shrink-0">
+                    <Code2 className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400" />
+                  </span>
+                  <span>RuangCoder IDE</span>
+                </div>
+              </button>
+            ) : isRuangKerja ? (
+              <button
+                type="button"
+                onClick={() => handleNavigate('/workspace')}
+                className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl text-xs font-medium transition-all cursor-pointer btn-tactile ${
                   location.pathname.startsWith('/workspace')
-                      ? 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-800 dark:text-indigo-300 font-semibold'
-                      : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60'
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <LayoutDashboard className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
-                    <span>Beranda RuangKerja</span>
-                  </div>
-                </button>
-
-              </>
+                    ? 'bg-white/90 dark:bg-white/10 text-slate-900 dark:text-slate-100 font-semibold border border-slate-200/70 dark:border-white/10 shadow-2xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:bg-white/70 dark:hover:bg-white/5'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <span className="w-6 h-6 rounded-lg bg-indigo-50 dark:bg-indigo-950/50 flex items-center justify-center shrink-0">
+                    <LayoutDashboard className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                  </span>
+                  <span>Beranda RuangKerja</span>
+                </div>
+              </button>
             ) : (
-              /* Campus Services */
               <>
                 <button
                   type="button"
                   onClick={() => handleNavigate('/mood')}
-                  className={`w-full flex items-center gap-2 px-2 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+                  className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl text-xs font-medium transition-all cursor-pointer btn-tactile ${
                     location.pathname === '/mood'
-                      ? 'bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300 font-semibold'
-                      : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60'
+                      ? 'bg-white/95 dark:bg-teal-950/50 text-teal-800 dark:text-teal-200 font-semibold border border-teal-200/70 dark:border-teal-800/50 shadow-2xs'
+                      : 'text-slate-600 dark:text-slate-300 hover:bg-white/70 dark:hover:bg-white/5'
                   }`}
                 >
-                  <Heart className="w-3.5 h-3.5 text-teal-500 shrink-0" />
+                  <span className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${location.pathname === '/mood' ? 'bg-teal-100/80 dark:bg-teal-900/60 text-teal-700 dark:text-teal-300' : 'bg-teal-50/70 dark:bg-white/5 text-teal-600 dark:text-teal-400'}`}>
+                    <Heart className="w-3.5 h-3.5" />
+                  </span>
                   <span>Mood & Jurnal</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => handleNavigate('/mindfulness')}
-                  className={`w-full flex items-center gap-2 px-2 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+                  className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl text-xs font-medium transition-all cursor-pointer btn-tactile ${
                     location.pathname === '/mindfulness'
-                      ? 'bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300 font-semibold'
-                      : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60'
+                      ? 'bg-white/95 dark:bg-teal-950/50 text-teal-800 dark:text-teal-200 font-semibold border border-teal-200/70 dark:border-teal-800/50 shadow-2xs'
+                      : 'text-slate-600 dark:text-slate-300 hover:bg-white/70 dark:hover:bg-white/5'
                   }`}
                 >
-                  <Compass className="w-3.5 h-3.5 text-teal-500 shrink-0" />
+                  <span className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${location.pathname === '/mindfulness' ? 'bg-teal-100/80 dark:bg-teal-900/60 text-teal-700 dark:text-teal-300' : 'bg-teal-50/70 dark:bg-white/5 text-teal-600 dark:text-teal-400'}`}>
+                    <Compass className="w-3.5 h-3.5" />
+                  </span>
                   <span>Tenang Mandiri</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => handleNavigate('/screening')}
-                  className={`w-full flex items-center gap-2 px-2 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+                  className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl text-xs font-medium transition-all cursor-pointer btn-tactile ${
                     location.pathname === '/screening'
-                      ? 'bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300 font-semibold'
-                      : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60'
+                      ? 'bg-white/95 dark:bg-teal-950/50 text-teal-800 dark:text-teal-200 font-semibold border border-teal-200/70 dark:border-teal-800/50 shadow-2xs'
+                      : 'text-slate-600 dark:text-slate-300 hover:bg-white/70 dark:hover:bg-white/5'
                   }`}
                 >
-                  <Stethoscope className="w-3.5 h-3.5 text-teal-500 shrink-0" />
+                  <span className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${location.pathname === '/screening' ? 'bg-teal-100/80 dark:bg-teal-900/60 text-teal-700 dark:text-teal-300' : 'bg-teal-50/70 dark:bg-white/5 text-teal-600 dark:text-teal-400'}`}>
+                    <Stethoscope className="w-3.5 h-3.5" />
+                  </span>
                   <span>Skrining Mandiri</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => handleNavigate('/counselors')}
-                  className={`w-full flex items-center gap-2 px-2 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+                  className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl text-xs font-medium transition-all cursor-pointer btn-tactile ${
                     location.pathname === '/counselors'
-                      ? 'bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300 font-semibold'
-                      : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60'
+                      ? 'bg-white/95 dark:bg-teal-950/50 text-teal-800 dark:text-teal-200 font-semibold border border-teal-200/70 dark:border-teal-800/50 shadow-2xs'
+                      : 'text-slate-600 dark:text-slate-300 hover:bg-white/70 dark:hover:bg-white/5'
                   }`}
                 >
-                  <Users className="w-3.5 h-3.5 text-teal-500 shrink-0" />
+                  <span className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${location.pathname === '/counselors' ? 'bg-teal-100/80 dark:bg-teal-900/60 text-teal-700 dark:text-teal-300' : 'bg-teal-50/70 dark:bg-white/5 text-teal-600 dark:text-teal-400'}`}>
+                    <Users className="w-3.5 h-3.5" />
+                  </span>
                   <span>Direktori Konselor</span>
                 </button>
 
@@ -297,14 +338,16 @@ export const SidebarNavLinks: React.FC<SidebarNavLinksProps> = ({
                   <button
                     type="button"
                     onClick={() => handleNavigate('/counselor-portal')}
-                    className={`w-full flex items-center justify-between px-2 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+                    className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl text-xs font-medium transition-all cursor-pointer btn-tactile ${
                       location.pathname === '/counselor-portal'
-                        ? 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 font-semibold'
+                        ? 'bg-indigo-50/90 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 font-semibold border border-indigo-200/70 dark:border-indigo-800/50 shadow-2xs'
                         : 'text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50/70 dark:hover:bg-indigo-950/30'
                     }`}
                   >
-                    <div className="flex items-center gap-2">
-                      <Stethoscope className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                    <div className="flex items-center gap-2.5">
+                      <span className="w-6 h-6 rounded-lg bg-indigo-100/80 dark:bg-indigo-900/40 flex items-center justify-center shrink-0">
+                        <Stethoscope className="w-3.5 h-3.5 text-indigo-500" />
+                      </span>
                       <span>Portal Konselor</span>
                     </div>
                   </button>

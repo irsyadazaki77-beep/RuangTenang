@@ -55,7 +55,7 @@ describe('Audit Tahap 1 - F01 Screening Empty State Representation', () => {
 
     // Recommendation card should state 'Belum Ada Hasil Skrining'
     expect(screen.getByText('Belum Ada Hasil Skrining')).toBeDefined();
-    expect(screen.getByText(/Lakukan skrining mandiri pertama Anda/i)).toBeDefined();
+    expect(screen.getByText(/Lakukan tes PHQ-9 & GAD-7 untuk memetakan kondisi/i)).toBeDefined();
   });
 
   it('renders valid 0 score and Minimal category when screening test was actually taken with score 0', () => {

@@ -1,4 +1,4 @@
-import { ArtifactType } from '../types';
+import { ArtifactType, WorkspaceChapterScope } from '../types';
 import { ModelTier } from '../../../lib/aiModels';
 
 export type WorkspaceToolCategory =
@@ -58,6 +58,7 @@ export interface WorkspaceToolContext {
     language?: string;
     content: string;
     version?: number;
+    chapterScope?: WorkspaceChapterScope;
   } | null;
   selectedText?: string;
   chatId?: string;

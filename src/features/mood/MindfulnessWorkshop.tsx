@@ -362,7 +362,7 @@ export const MindfulnessWorkshop: React.FC<{ userId: string }> = ({ userId }) =>
           <div
             role="tablist"
             aria-label="Kategori Lokakarya Ketenangan"
-            className="flex bg-slate-100 dark:bg-slate-900 border border-slate-200/70 dark:border-slate-800 rounded-full p-0.5 max-w-full overflow-x-auto shrink-0 scrollbar-none"
+            className="flex bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border border-slate-200/75 dark:border-white/10 rounded-full p-1 max-w-full overflow-x-auto shrink-0 scrollbar-none shadow-2xs"
           >
             <button
               type="button"
@@ -371,10 +371,10 @@ export const MindfulnessWorkshop: React.FC<{ userId: string }> = ({ userId }) =>
               aria-controls="panel-soundscape"
               aria-selected={activeTab === 'soundscape'}
               onClick={() => setActiveTab('soundscape')}
-              className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${
+              className={`px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 btn-tactile ${
                 activeTab === 'soundscape'
-                  ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-xs'
-                  : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
+                  ? 'bg-teal-700 text-white shadow-[0_4px_12px_-2px_rgba(13,148,136,0.3)]'
+                  : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100/70 dark:hover:bg-white/5'
               }`}
             >
               <Music className="w-3.5 h-3.5" />
@@ -387,10 +387,10 @@ export const MindfulnessWorkshop: React.FC<{ userId: string }> = ({ userId }) =>
               aria-controls="panel-grounding"
               aria-selected={activeTab === 'grounding'}
               onClick={() => setActiveTab('grounding')}
-              className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${
+              className={`px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 btn-tactile ${
                 activeTab === 'grounding'
-                  ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-xs'
-                  : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
+                  ? 'bg-teal-700 text-white shadow-[0_4px_12px_-2px_rgba(13,148,136,0.3)]'
+                  : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100/70 dark:hover:bg-white/5'
               }`}
             >
               <Wind className="w-3.5 h-3.5" />
@@ -403,10 +403,10 @@ export const MindfulnessWorkshop: React.FC<{ userId: string }> = ({ userId }) =>
               aria-controls="panel-gratitude"
               aria-selected={activeTab === 'gratitude'}
               onClick={() => setActiveTab('gratitude')}
-              className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${
+              className={`px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 btn-tactile ${
                 activeTab === 'gratitude'
-                  ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-xs'
-                  : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
+                  ? 'bg-teal-700 text-white shadow-[0_4px_12px_-2px_rgba(13,148,136,0.3)]'
+                  : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100/70 dark:hover:bg-white/5'
               }`}
             >
               <Smile className="w-3.5 h-3.5" />
@@ -419,10 +419,10 @@ export const MindfulnessWorkshop: React.FC<{ userId: string }> = ({ userId }) =>
               aria-controls="panel-compassion"
               aria-selected={activeTab === 'compassion'}
               onClick={() => setActiveTab('compassion')}
-              className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${
+              className={`px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 btn-tactile ${
                 activeTab === 'compassion'
-                  ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-xs'
-                  : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
+                  ? 'bg-teal-700 text-white shadow-[0_4px_12px_-2px_rgba(13,148,136,0.3)]'
+                  : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100/70 dark:hover:bg-white/5'
               }`}
             >
               <PenTool className="w-3.5 h-3.5" />

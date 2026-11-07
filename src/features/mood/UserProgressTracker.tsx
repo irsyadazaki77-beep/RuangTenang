@@ -140,7 +140,7 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
       }
     }
     setSelfCareChecklist(nextChecklist.map(task => ({ ...task })));
-  }, [dashboardIdentity, CHECKLIST_KEY]);
+  }, [dashboardIdentity, CHECKLIST_KEY, user?.id, user?.role]);
 
   useEffect(() => {
     if (!user?.id || user.role === 'guest') {
@@ -575,17 +575,17 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
             {/* Top 4 KPI Summary Cards (2x2 on mobile, 4-col on lg) */}
             <motion.div variants={itemVariants} className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
               {/* Mood Terakhir */}
-              <div className="surface-card p-3.5 sm:p-5 rounded-2xl border border-default flex flex-col justify-between shadow-3xs space-y-2.5 sm:space-y-3">
+              <div className="surface-card card-organic-lift p-3.5 sm:p-5 rounded-2xl border border-default/70 flex flex-col justify-between shadow-3xs space-y-2.5 sm:space-y-3 transition-all hover:border-teal-500/30">
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] sm:text-xs font-semibold text-secondary uppercase tracking-wider truncate">
                     Mood Terakhir
                   </span>
-                  <div className={`p-1.5 sm:p-2 rounded-xl shrink-0 ${getMoodColor(latestMood)}`}>
+                  <div className={`p-1.5 sm:p-2 rounded-xl shrink-0 shadow-2xs ${getMoodColor(latestMood)}`}>
                     <Brain className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                   </div>
                 </div>
                 <div>
-                  <div className="text-lg sm:text-2xl font-bold text-primary truncate">
+                  <div className="text-lg sm:text-2xl font-bold text-primary tracking-tight truncate">
                     {latestMood === 0 ? 'Belum Ada' : getMoodLabel(latestMood)}
                   </div>
                   <p className="text-[11px] sm:text-xs text-secondary mt-1 truncate">
@@ -595,17 +595,17 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
               </div>
 
               {/* Streak Check-in */}
-              <div className="surface-card p-3.5 sm:p-5 rounded-2xl border border-default flex flex-col justify-between shadow-3xs space-y-2.5 sm:space-y-3">
+              <div className="surface-card card-organic-lift p-3.5 sm:p-5 rounded-2xl border border-default/70 flex flex-col justify-between shadow-3xs space-y-2.5 sm:space-y-3 transition-all hover:border-amber-500/30">
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] sm:text-xs font-semibold text-secondary uppercase tracking-wider truncate">
                     Streak Check-in
                   </span>
-                  <div className="p-1.5 sm:p-2 rounded-xl bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 shrink-0">
+                  <div className="p-1.5 sm:p-2 rounded-xl bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 shrink-0 shadow-2xs">
                     <TrendingUp className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                   </div>
                 </div>
                 <div>
-                  <div className="text-lg sm:text-2xl font-bold text-primary">
+                  <div className="text-lg sm:text-2xl font-bold text-primary tracking-tight">
                     {streakCount === 0 ? '0 Hari' : `${streakCount} Hari`}
                   </div>
                   <p className="text-[11px] sm:text-xs text-secondary mt-1 font-medium truncate">
@@ -615,22 +615,22 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
               </div>
 
               {/* PHQ-9 Terbaru */}
-              <div className="surface-card p-3.5 sm:p-5 rounded-2xl border border-default flex flex-col justify-between shadow-3xs space-y-2.5 sm:space-y-3">
+              <div className="surface-card card-organic-lift p-3.5 sm:p-5 rounded-2xl border border-default/70 flex flex-col justify-between shadow-3xs space-y-2.5 sm:space-y-3 transition-all hover:border-blue-500/30">
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] sm:text-xs font-semibold text-secondary uppercase tracking-wider truncate">
                     PHQ-9 (Depresi)
                   </span>
-                  <div className="p-1.5 sm:p-2 rounded-xl bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 shrink-0">
+                  <div className="p-1.5 sm:p-2 rounded-xl bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 shrink-0 shadow-2xs">
                     <Activity className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                   </div>
                 </div>
                 <div>
                   <div className="flex items-baseline gap-1">
-                    <span className="text-lg sm:text-2xl font-bold text-primary">
+                    <span className="text-lg sm:text-2xl font-bold text-primary tracking-tight">
                       {currentPhq9 === null ? '—' : currentPhq9}
                     </span>
                     {currentPhq9 !== null && (
-                      <span className="text-[10px] sm:text-xs text-secondary">/ 27</span>
+                      <span className="text-[10px] sm:text-xs text-secondary font-medium">/ 27</span>
                     )}
                   </div>
                   <p className="text-[11px] sm:text-xs text-secondary mt-1 font-medium truncate">
@@ -642,22 +642,22 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
               </div>
 
               {/* GAD-7 Terbaru */}
-              <div className="surface-card p-3.5 sm:p-5 rounded-2xl border border-default flex flex-col justify-between shadow-3xs space-y-2.5 sm:space-y-3">
+              <div className="surface-card card-organic-lift p-3.5 sm:p-5 rounded-2xl border border-default/70 flex flex-col justify-between shadow-3xs space-y-2.5 sm:space-y-3 transition-all hover:border-teal-500/30">
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] sm:text-xs font-semibold text-secondary uppercase tracking-wider truncate">
                     GAD-7 (Cemas)
                   </span>
-                  <div className="p-1.5 sm:p-2 rounded-xl bg-teal-50 dark:bg-teal-950/50 text-teal-600 dark:text-teal-400 shrink-0">
+                  <div className="p-1.5 sm:p-2 rounded-xl bg-teal-50 dark:bg-teal-950/50 text-teal-600 dark:text-teal-400 shrink-0 shadow-2xs">
                     <Activity className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                   </div>
                 </div>
                 <div>
                   <div className="flex items-baseline gap-1">
-                    <span className="text-lg sm:text-2xl font-bold text-primary">
+                    <span className="text-lg sm:text-2xl font-bold text-primary tracking-tight">
                       {currentGad7 === null ? '—' : currentGad7}
                     </span>
                     {currentGad7 !== null && (
-                      <span className="text-[10px] sm:text-xs text-secondary">/ 21</span>
+                      <span className="text-[10px] sm:text-xs text-secondary font-medium">/ 21</span>
                     )}
                   </div>
                   <p className="text-[11px] sm:text-xs text-secondary mt-1 font-medium truncate">
@@ -680,10 +680,10 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
                 role="tab"
                 aria-selected={activeSection === 'all'}
                 onClick={() => setActiveSection('all')}
-                className={`px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
+                className={`btn-tactile px-4 py-1.5 rounded-full text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
                   activeSection === 'all'
                     ? 'bg-teal-700 text-white shadow-xs'
-                    : 'surface-card border border-default text-secondary hover:text-primary'
+                    : 'surface-card border border-default/80 text-secondary hover:text-primary hover:border-teal-500/30'
                 }`}
               >
                 Semua Bagian
@@ -693,10 +693,10 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
                 role="tab"
                 aria-selected={activeSection === 'mood'}
                 onClick={() => setActiveSection('mood')}
-                className={`px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
+                className={`btn-tactile px-4 py-1.5 rounded-full text-xs sm:text-sm font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
                   activeSection === 'mood'
                     ? 'bg-teal-700 text-white shadow-xs'
-                    : 'surface-card border border-default text-secondary hover:text-primary'
+                    : 'surface-card border border-default/80 text-secondary hover:text-primary hover:border-teal-500/30'
                 }`}
               >
                 <Brain className="w-3.5 h-3.5" />
@@ -707,10 +707,10 @@ export const UserProgressTracker: React.FC<UserProgressTrackerProps> = ({
                 role="tab"
                 aria-selected={activeSection === 'screening'}
                 onClick={() => setActiveSection('screening')}
-                className={`px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
+                className={`btn-tactile px-4 py-1.5 rounded-full text-xs sm:text-sm font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
                   activeSection === 'screening'
                     ? 'bg-teal-700 text-white shadow-xs'
-                    : 'surface-card border border-default text-secondary hover:text-primary'
+                    : 'surface-card border border-default/80 text-secondary hover:text-primary hover:border-teal-500/30'
                 }`}
               >
                 <Activity className="w-3.5 h-3.5" />

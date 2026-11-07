@@ -21,6 +21,18 @@ export function useAcademicDistress(inputText: string) {
     const detected = detectAcademicDistress(inputText);
     if (detected.isDistressed) {
       setDistressResult(detected);
+    } else {
+      const now = new Date();
+      const currentHour = now.getHours();
+      const isLateNight = currentHour >= 23 || currentHour < 5;
+      if (isLateNight && inputText.trim().length > 100) {
+        setDistressResult({
+          isDistressed: true,
+          distressType: 'exhaustion',
+          triggerKeywords: ['larut malam'],
+          suggestedAction: 'Istirahat sejenak 1 menit untuk menjaga ketajaman berpikirmu.'
+        });
+      }
     }
   }, [inputText, isDistressDismissed]);
 

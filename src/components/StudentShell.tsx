@@ -98,11 +98,13 @@ export const StudentShell: React.FC<StudentShellProps> = ({
   const location = useLocation();
   const currentMode = getWorkspaceModeFromPath(location.pathname);
   React.useEffect(() => {
-    const brand = BRAND_IDENTITIES[currentMode];
+    const brand = BRAND_IDENTITIES[currentMode] || BRAND_IDENTITIES.RUANG_TENANG;
     const previousTitle = document.title;
     const favicon = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
     const previousIcon = favicon?.getAttribute('href');
-    document.title = currentMode === 'RUANG_KERJA'
+    document.title = currentMode === 'RUANG_CODER'
+      ? 'RuangCoder — Autonomous Local AI Coding Agent'
+      : currentMode === 'RUANG_KERJA'
       ? 'RuangKerja — RuangTenang'
       : 'RuangTenang - Pendamping Refleksi & Ruang Kerja Mahasiswa';
     favicon?.setAttribute('href', brand.src);
@@ -212,35 +214,39 @@ export const StudentShell: React.FC<StudentShellProps> = ({
       >
         Lewati ke konten utama
       </a>
-      <ChatAuroraBackground
-        variant={currentMode === 'RUANG_KERJA' ? 'kerja' : 'tenang'}
-        intensity={((safeLocalStorage.getItem('aurora_intensity') as 'subtle' | 'normal' | 'vivid' | null) || 'normal')}
-      />
-      <Sidebar
-        isOpen={isSidebarOpen}
-        setIsOpen={setIsSidebarOpen}
-        onNewChat={() => {
-          navigate(currentMode === 'RUANG_KERJA' ? '/workspace/new' : getModeHomePath(currentMode));
-        }}
-        chats={chats}
-        currentChatId={getChatIdFromPath(location.pathname)}
-        currentMode={currentMode}
-        onSwitchMode={handleSwitchMode}
-        onSelectChat={(id) => {
-          navigate(getModeChatPath(currentMode, id));
-        }}
-        onDeleteChat={handleDeleteChat}
-        onUpdateTitle={handleUpdateTitle}
-        onTogglePin={handleTogglePin}
-        onToggleArchive={handleToggleArchive}
-        onLogout={handleLogout}
-        onOpenSettings={() => setIsSettingsOpen(true)}
-        onOpenAuth={() => setIsAuthModalOpen(true)}
-        onOpenChangelog={() => setIsChangelogOpen(true)}
-        onOpenNotifications={() => setIsNotificationOpen(true)}
-        user={user}
-        isLoading={isLoadingChats}
-      />
+      {currentMode !== 'RUANG_CODER' && (
+        <>
+          <ChatAuroraBackground
+            variant={currentMode === 'RUANG_KERJA' ? 'kerja' : 'tenang'}
+            intensity={((safeLocalStorage.getItem('aurora_intensity') as 'subtle' | 'normal' | 'vivid' | null) || 'normal')}
+          />
+          <Sidebar
+            isOpen={isSidebarOpen}
+            setIsOpen={setIsSidebarOpen}
+            onNewChat={() => {
+              navigate(currentMode === 'RUANG_KERJA' ? '/workspace/new' : getModeHomePath(currentMode));
+            }}
+            chats={chats}
+            currentChatId={getChatIdFromPath(location.pathname)}
+            currentMode={currentMode}
+            onSwitchMode={handleSwitchMode}
+            onSelectChat={(id) => {
+              navigate(getModeChatPath(currentMode, id));
+            }}
+            onDeleteChat={handleDeleteChat}
+            onUpdateTitle={handleUpdateTitle}
+            onTogglePin={handleTogglePin}
+            onToggleArchive={handleToggleArchive}
+            onLogout={handleLogout}
+            onOpenSettings={() => setIsSettingsOpen(true)}
+            onOpenAuth={() => setIsAuthModalOpen(true)}
+            onOpenChangelog={() => setIsChangelogOpen(true)}
+            onOpenNotifications={() => setIsNotificationOpen(true)}
+            user={user}
+            isLoading={isLoadingChats}
+          />
+        </>
+      )}
 
       <main id="main-content" tabIndex={-1} className="flex-1 flex flex-col relative min-w-0 h-full overflow-hidden">
         {isOffline && (
@@ -255,7 +261,7 @@ export const StudentShell: React.FC<StudentShellProps> = ({
               <button
                 type="button"
                 onClick={() => setIsSettingsOpen(false)}
-                className="mr-3 px-3 py-2 min-h-[44px] min-w-[44px] flex items-center gap-1.5 rounded-xl border border-default hover:bg-slate-100 dark:hover:bg-slate-800 text-secondary hover:text-primary transition-colors cursor-pointer text-xs sm:text-sm font-semibold"
+                className="mr-3 px-3 py-2 min-h-11 min-w-11 flex items-center gap-1.5 rounded-xl border border-default hover:bg-slate-100 dark:hover:bg-slate-800 text-secondary hover:text-primary transition-colors cursor-pointer text-xs sm:text-sm font-semibold"
                 aria-label="Kembali dari pengaturan"
               >
                 &larr; <span>Kembali</span>
@@ -288,7 +294,9 @@ export const StudentShell: React.FC<StudentShellProps> = ({
               <AnimatePresence mode="wait" initial={false}>
                 <motion.div
                   key={
-                    currentMode === 'RUANG_KERJA'
+                    currentMode === 'RUANG_CODER'
+                      ? 'coder-mode'
+                      : currentMode === 'RUANG_KERJA'
                       ? 'workspace-mode'
                       : (location.pathname === '/' || location.pathname.startsWith('/c/'))
                       ? 'tenang-mode'
@@ -363,7 +371,7 @@ export const StudentShell: React.FC<StudentShellProps> = ({
         }}
       />
       {isPrivacyCenterOpen && (
-        <Suspense fallback={<div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/50 text-sm font-medium text-white">Memuat Pusat Persetujuan…</div>}>
+        <Suspense fallback={<div className="fixed inset-0 z-60 flex items-center justify-center bg-slate-900/50 text-sm font-medium text-white">Memuat Pusat Persetujuan…</div>}>
           <PrivacyCenterModal
             isOpen
             onClose={() => setIsPrivacyCenterOpen(false)}

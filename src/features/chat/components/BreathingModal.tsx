@@ -211,16 +211,18 @@ export function BreathingModal({ isOpen, onClose }: BreathingModalProps) {
       <div className="flex flex-col items-center text-center py-2 sm:py-4 px-2 select-none">
         
         {/* Top Status Bar: Countdown & Cycle */}
-        <div className="flex items-center justify-between w-full px-2 sm:px-4 py-2 mb-4 sm:mb-6 rounded-2xl bg-stone-100/70 dark:bg-slate-800/60 border border-stone-200/60 dark:border-slate-700/60 text-xs text-stone-600 dark:text-stone-300">
-          <div className="flex items-center gap-1.5 font-medium">
-            <Wind className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+        <div className="flex items-center justify-between w-full px-3.5 sm:px-4 py-2.5 mb-4 sm:mb-6 rounded-full bg-white/85 dark:bg-slate-900/80 backdrop-blur-md border border-stone-200/70 dark:border-slate-800 shadow-3xs text-xs text-stone-600 dark:text-stone-300">
+          <div className="flex items-center gap-2 font-medium">
+            <span className="p-1 rounded-full bg-teal-100/70 dark:bg-teal-950/70 text-teal-700 dark:text-teal-400">
+              <Wind className="w-3.5 h-3.5" />
+            </span>
             <span>Pola Pernapasan 4-4-6</span>
           </div>
           <div className="flex items-center gap-3">
-            <span className="text-[11px] text-stone-400 dark:text-stone-500">
+            <span className="text-[11px] text-stone-400 dark:text-stone-500 font-medium">
               Siklus: <strong className="text-stone-700 dark:text-stone-200">{completedCycles + 1}</strong>
             </span>
-            <span className="font-mono font-bold text-teal-700 dark:text-teal-400 bg-teal-50 dark:bg-teal-950/60 px-2 py-0.5 rounded-md border border-teal-200/60 dark:border-teal-800/60">
+            <span className="font-mono font-bold text-teal-700 dark:text-teal-300 bg-teal-50 dark:bg-teal-950/70 px-2.5 py-0.5 rounded-full border border-teal-200/60 dark:border-teal-800/60 shadow-3xs">
               {formatTime(timeLeft)}
             </span>
           </div>
@@ -313,7 +315,7 @@ export function BreathingModal({ isOpen, onClose }: BreathingModalProps) {
                 <button
                   type="button"
                   onClick={handleRestart}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-medium text-stone-600 dark:text-stone-300 bg-stone-100 hover:bg-stone-200/80 dark:bg-slate-800 dark:hover:bg-slate-700/80 transition-colors cursor-pointer min-h-[44px]"
+                  className="btn-tactile inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-medium text-stone-600 dark:text-stone-300 bg-stone-100/80 hover:bg-stone-200/80 dark:bg-slate-800/80 dark:hover:bg-slate-700/80 border border-stone-200/50 dark:border-slate-700/50 transition-colors cursor-pointer min-h-[44px]"
                   aria-label="Putar ulang latihan"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
@@ -322,7 +324,7 @@ export function BreathingModal({ isOpen, onClose }: BreathingModalProps) {
                 <button
                   type="button"
                   onClick={onClose}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-medium text-teal-700 dark:text-teal-300 bg-teal-50 hover:bg-teal-100/80 dark:bg-teal-950/60 dark:hover:bg-teal-900/60 border border-teal-200/60 dark:border-teal-800/60 transition-colors cursor-pointer min-h-[44px]"
+                  className="btn-tactile inline-flex items-center gap-1.5 px-4.5 py-2 rounded-full text-xs font-semibold text-teal-700 dark:text-teal-300 bg-teal-50/90 hover:bg-teal-100/80 dark:bg-teal-950/60 dark:hover:bg-teal-900/60 border border-teal-200/60 dark:border-teal-800/60 transition-colors cursor-pointer min-h-[44px]"
                 >
                   <span>Selesai Lebih Awal</span>
                 </button>

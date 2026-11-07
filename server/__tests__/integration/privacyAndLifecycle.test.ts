@@ -17,6 +17,13 @@ import { csrfProtection } from '../../middleware/csrf.js';
 describe('FASE 7: Data Privacy, Sensitive Data Lifecycle & Security Tests', () => {
   const TEST_USER_ID = 'test-priv-lifecycle-user';
   const TEST_COUNSELOR_ID = 'test-priv-counselor-1';
+  const futureAppointmentDate = (() => {
+    const date = new Date();
+    date.setUTCHours(12, 0, 0, 0);
+    const daysUntilMonday = (1 - date.getUTCDay() + 7) % 7 || 7;
+    date.setUTCDate(date.getUTCDate() + daysUntilMonday);
+    return date.toISOString().slice(0, 10);
+  })();
 
   beforeAll(async () => {
     // Clean up
@@ -258,8 +265,8 @@ describe('FASE 7: Data Privacy, Sensitive Data Lifecycle & Security Tests', () =
         userId: TEST_USER_ID,
         counselorId: TEST_COUNSELOR_ID,
         counselorName: 'Dr. Konselor',
-        date: '2026-09-01',
-        time: '10:00',
+        date: futureAppointmentDate,
+        time: '10:30',
         studentName: 'Mahasiswa Rahasia',
         studentNIM: rawNIM,
         studentEmail: rawEmail,

@@ -91,7 +91,13 @@ describe('VideoConsultationRoom', () => {
     });
 
     vi.spyOn(apiClient, 'post').mockResolvedValue({ success: true });
+    vi.mocked(apiClient.get).mockClear();
+    vi.mocked(apiClient.post).mockClear();
   });
+
+  const waitForRoomAuthorization = async () => {
+    await waitFor(() => expect(apiClient.get).toHaveBeenCalledWith('/api/v1/appointments/apt-123/ice-servers'));
+  };
 
   const mockAppointment: any = {
     id: 'apt-123',
@@ -101,7 +107,7 @@ describe('VideoConsultationRoom', () => {
     counselorAvatar: 'avatar.png'
   };
 
-  it('renders correctly with given appointment', () => {
+  it('renders correctly with given appointment after room authorization', async () => {
     const handleClose = vi.fn();
     const handleEndCall = vi.fn();
 
@@ -114,8 +120,8 @@ describe('VideoConsultationRoom', () => {
       />
     );
 
-    // Verify UI elements
-    expect(screen.getByText(/Tele-Konseling Terenkripsi/i)).toBeInTheDocument();
+    await waitForRoomAuthorization();
+    expect(screen.getByText('Ruang Konsultasi Video')).toBeInTheDocument();
     expect(screen.getAllByText('Dr. Jane Doe').length).toBeGreaterThanOrEqual(1);
   });
 
@@ -176,7 +182,7 @@ describe('VideoConsultationRoom', () => {
     expect(videoButton.className).toContain('text-rose-400');
   });
 
-  it('handles screen-sharing toggle and cancellation safely without breaking call', async () => {
+  it('handles a cancelled screen-share request without breaking the call', async () => {
     render(
       <VideoConsultationRoom
         appointment={mockAppointment}
@@ -186,19 +192,15 @@ describe('VideoConsultationRoom', () => {
       />
     );
 
+    await waitForRoomAuthorization();
     const screenShareBtn = screen.getByTitle(/Berbagi Layar/i);
+    (navigator.mediaDevices.getDisplayMedia as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('Permission denied by user'));
     fireEvent.click(screenShareBtn);
 
-    await waitFor(() => {
-      expect(navigator.mediaDevices.getDisplayMedia).toHaveBeenCalled();
-    });
-
-    // Simulate display media rejection / user abort
-    (navigator.mediaDevices.getDisplayMedia as any).mockRejectedValueOnce(new Error('Permission denied by user'));
-    fireEvent.click(screenShareBtn);
+    await waitFor(() => expect(navigator.mediaDevices.getDisplayMedia).toHaveBeenCalled());
 
     // Should not throw or crash component
-    expect(screen.getByText(/Tele-Konseling Terenkripsi/i)).toBeInTheDocument();
+    expect(screen.getByText('Ruang Konsultasi Video')).toBeInTheDocument();
   });
 
   it('opens and closes collaborative in-call notes panel', () => {
@@ -218,7 +220,7 @@ describe('VideoConsultationRoom', () => {
     expect(screen.getByPlaceholderText(/Tulis poin-poin kesepakatan/i)).toBeInTheDocument();
   });
 
-  it('shows counselor notes panel for counselor role', () => {
+  it('shows counselor notes panel for counselor role after room authorization', async () => {
     render(
       <VideoConsultationRoom
         appointment={mockAppointment}
@@ -228,9 +230,10 @@ describe('VideoConsultationRoom', () => {
       />
     );
 
-    expect(screen.getByText(/Catatan Klinis Privat/i)).toBeInTheDocument();
+    await waitForRoomAuthorization();
+    expect(screen.getByText(/Draft catatan konselor/i)).toBeInTheDocument();
     expect(screen.getByText('Stress Test')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText(/Ketik catatan medis/i)).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/Tulis draft yang nanti dapat dipindahkan ke Catatan SOAP/i)).toBeInTheDocument();
   });
 
   it('does not show counselor notes panel for student role', () => {
@@ -243,10 +246,10 @@ describe('VideoConsultationRoom', () => {
       />
     );
 
-    expect(screen.queryByText(/Catatan Klinis Privat/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Draft catatan konselor/i)).not.toBeInTheDocument();
   });
 
-  it('calls onEndCall and onClose when End Call button is clicked and confirmed', () => {
+  it('calls onEndCall and onClose when End Call button is clicked and confirmed', async () => {
     const handleClose = vi.fn();
     const handleEndCall = vi.fn();
     
@@ -261,13 +264,15 @@ describe('VideoConsultationRoom', () => {
       />
     );
 
-    const textarea = screen.getByPlaceholderText(/Ketik catatan medis/i);
+    await waitForRoomAuthorization();
+    const textarea = screen.getByPlaceholderText(/Tulis draft yang nanti dapat dipindahkan ke Catatan SOAP/i);
     fireEvent.change(textarea, { target: { value: 'Patient feels better' } });
 
-    const endCallButton = screen.getByTitle(/Akhiri Panggilan/i);
+    const endCallButton = screen.getByTitle(/Akhiri sesi konsultasi/i);
     fireEvent.click(endCallButton);
 
-    expect(handleEndCall).toHaveBeenCalledWith('apt-123', 'Patient feels better');
+    expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('tidak otomatis disimpan'));
+    expect(handleEndCall).toHaveBeenCalledWith('apt-123');
     expect(handleClose).toHaveBeenCalled();
     
     vi.restoreAllMocks();

@@ -4,9 +4,9 @@ import { Chat } from '../features/chat/types';
 import { WorkspaceMode } from '../features/workspace/types';
 import { lazyWithRetry } from '../lib/lazyWithRetry';
 import { CommandPalette } from './CommandPalette';
+import { KeyboardShortcutsModal } from './KeyboardShortcutsModal';
 import { AmbientSoundscapeWidget } from './soundscape/AmbientSoundscapeWidget';
 import { PanicScreen } from '../features/privacy/PanicScreen';
-
 
 const AuthModal = lazyWithRetry(() => import('../features/authentication/AuthModal').then(module => ({ default: module.AuthModal })));
 const LegalDocsModal = lazyWithRetry(() => import('../features/privacy/LegalDocsModal').then(module => ({ default: module.LegalDocsModal })));
@@ -64,6 +64,8 @@ export const GlobalOverlays: React.FC<GlobalOverlaysProps> = ({
   onOnboardingComplete,
   isCounselorView = false
 }) => {
+  const isCoderMode = workspaceMode === 'RUANG_CODER';
+
   return (
     <>
       {isAuthModalOpen && (
@@ -125,6 +127,7 @@ export const GlobalOverlays: React.FC<GlobalOverlaysProps> = ({
 
       {!isCounselorView && (
         <>
+          <KeyboardShortcutsModal />
           {setIsCommandPaletteOpen && (
             <CommandPalette
               isOpen={isCommandPaletteOpen}
@@ -133,11 +136,13 @@ export const GlobalOverlays: React.FC<GlobalOverlaysProps> = ({
             />
           )}
 
-          {/* Module 1: Ambient Soundscape & Focus Timer Floating Widget */}
-          <AmbientSoundscapeWidget currentMode={workspaceMode} />
-
-          {/* Module 3: Panic Screen Decoy & Privacy Screen */}
-          <PanicScreen />
+          {/* Floating Soundscape & Panic screens hidden in RuangCoder IDE to prevent button overlaps */}
+          {!isCoderMode && (
+            <>
+              <AmbientSoundscapeWidget currentMode={workspaceMode} />
+              <PanicScreen />
+            </>
+          )}
         </>
       )}
     </>

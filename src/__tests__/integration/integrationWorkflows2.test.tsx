@@ -12,8 +12,8 @@ vi.mock('../../lib/apiClient', () => ({
   AUTH_SESSION_INVALIDATED_EVENT: 'rt_auth_session_invalidated',
   apiClient: {
     get: vi.fn().mockImplementation(async (url: string) => {
-      if (url.includes('/api/v1/auth/me')) {
-        return { success: true, user: { id: 'test_user_1', name: 'Mahasiswa Test', role: 'mahasiswa' } };
+      if (url.includes('/api/auth/me')) {
+        return { success: true, data: { user: { id: 'test_user_1', name: 'Mahasiswa Test', role: 'mahasiswa' } } };
       }
       if (url.includes('/api/v1/chat/history')) {
         return {

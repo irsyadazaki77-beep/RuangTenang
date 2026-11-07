@@ -8,8 +8,10 @@ import {
   LogIn,
   AlertCircle,
   MoreVertical,
-  ShieldCheck
+  ShieldCheck,
+  Keyboard
 } from 'lucide-react';
+import { OPEN_SHORTCUTS_EVENT } from '../../KeyboardShortcutsModal';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { SidebarTooltip } from './SidebarTooltip';
 import { safeLocalStorage } from '../../../lib/storage';
@@ -157,32 +159,31 @@ export const SidebarFooter: React.FC<SidebarFooterProps> = ({
   }
 
   return (
-    <div ref={menuRef} className="mt-auto border-t border-slate-200/60 dark:border-slate-800/80 px-2.5 py-2 space-y-1.5 shrink-0 relative bg-slate-50/40 dark:bg-[#111315]/80">
-      {/* 1. Compact SOS Strip Button (1 Line) */}
+    <div ref={menuRef} className="mt-auto border-t border-slate-200/60 dark:border-white/5 px-2.5 py-2 space-y-1.5 shrink-0 relative bg-transparent">
+      {/* 1. Dignified Emergency / SOS Access (Calm & Non-Intrusive) */}
       <button
         type="button"
         onClick={handleOpenEmergency}
-        className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium text-rose-700 dark:text-rose-300 bg-rose-50/60 dark:bg-rose-950/25 hover:bg-rose-50 dark:hover:bg-rose-950/45 border border-rose-200/70 dark:border-rose-900/50 transition-colors cursor-pointer"
+        className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl text-xs font-medium text-slate-500 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-400 hover:bg-rose-50/50 dark:hover:bg-rose-950/20 border border-slate-200/60 dark:border-white/5 transition-colors cursor-pointer"
         title="Bantuan krisis psikologis dan darurat medis"
       >
-        <div className="flex items-center gap-1.5">
-          <div className="w-1.5 h-1.5 rounded-full bg-rose-500" />
-          <AlertCircle className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+        <div className="flex items-center gap-2">
+          <AlertCircle className="w-3.5 h-3.5 text-slate-400 group-hover:text-rose-500 shrink-0" />
           <span>Bantuan Darurat (SOS)</span>
         </div>
-        <span className="text-[10px] text-rose-600/80 dark:text-rose-400 font-medium">
+        <span className="text-[10px] text-slate-400 font-medium">
           SOS
         </span>
       </button>
 
       {/* 2. Unified Profile Bar with Popover Trigger */}
       <div className="relative">
-        <div className="flex items-center justify-between gap-1 p-0.5 rounded-lg hover:bg-slate-200/50 dark:hover:bg-slate-800/60 transition-colors">
+        <div className="flex items-center justify-between gap-1 p-0.5 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 transition-colors">
           {isGuest ? (
             <button
               type="button"
               onClick={() => { onOpenAuth?.(); onCloseMobile(); }}
-              className="flex items-center gap-2 py-1 px-1.5 rounded-md text-left flex-1 min-w-0 cursor-pointer"
+              className="flex items-center gap-2 py-1 px-1.5 rounded-lg text-left flex-1 min-w-0 cursor-pointer"
               title="Masuk Akun"
             >
               <div className="w-7 h-7 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 shrink-0">
@@ -201,11 +202,11 @@ export const SidebarFooter: React.FC<SidebarFooterProps> = ({
             <button
               type="button"
               onClick={() => setIsMenuOpen(!isMenuOpen)}
-              className="flex items-center gap-2 py-1 px-1.5 rounded-md text-left flex-1 min-w-0 cursor-pointer"
+              className="flex items-center gap-2.5 py-1 px-1.5 rounded-lg text-left flex-1 min-w-0 cursor-pointer"
               title={user?.name || 'Profil Pengguna'}
               aria-expanded={isMenuOpen}
             >
-              <div className="w-7 h-7 rounded-full bg-emerald-600 text-white flex items-center justify-center text-xs font-bold shrink-0 shadow-2xs relative">
+              <div className="w-7 h-7 rounded-full bg-slate-900 text-white dark:bg-white dark:text-slate-900 flex items-center justify-center text-xs font-semibold shrink-0 shadow-2xs relative">
                 {user?.name?.charAt(0)?.toUpperCase() || 'U'}
                 {todayMood && (
                   <span className="absolute -bottom-1 -right-1 text-[9px] bg-white dark:bg-slate-800 rounded-full px-0.5 leading-none shadow-2xs">
@@ -304,6 +305,22 @@ export const SidebarFooter: React.FC<SidebarFooterProps> = ({
               >
                 <Settings className="w-3.5 h-3.5 text-slate-400" />
                 <span>Pengaturan Akun</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setIsMenuOpen(false);
+                  onCloseMobile();
+                  window.dispatchEvent(new CustomEvent(OPEN_SHORTCUTS_EVENT));
+                }}
+                className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer text-left"
+              >
+                <div className="flex items-center gap-2">
+                  <Keyboard className="w-3.5 h-3.5 text-slate-400" />
+                  <span>Pintasan Keyboard</span>
+                </div>
+                <kbd className="text-[10px] font-mono text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700">Alt+/</kbd>
               </button>
 
               <button

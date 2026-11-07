@@ -117,4 +117,51 @@ describe('Workspace document context retrieval', () => {
     expect(result.contextBlock).toContain('Value Chain optimization');
     expect(result.sourceReferences[0].filename).toBe('Agile.pdf');
   });
+
+  it('handles general reading queries like "baca dokumen ini" by retrieving sequential chunks starting with Chunk 0 instead of trapping on random meta-word matches', async () => {
+    findChunks.mockResolvedValue([
+      { id: 'chunk-title', attachmentId: 'file-agile', chunkIndex: 0, content: 'Judul: Implementasi Deep Learning untuk Deteksi Polip Kolorektal. Abstrak: Penelitian ini mengembangkan model vision transformer.', tokenCount: 25, isEncrypted: false, pageStart: 1 },
+      { id: 'chunk-method', attachmentId: 'file-agile', chunkIndex: 1, content: 'Dataset terdiri atas 5000 citra kolonoskopi yang diaugmentasi.', tokenCount: 20, isEncrypted: false, pageStart: 2 },
+      { id: 'chunk-footer', attachmentId: 'file-agile', chunkIndex: 10, content: 'Dokumen ini dicetak secara otomatis dari arsip perpustakaan digital.', tokenCount: 15, isEncrypted: false, pageStart: 12 }
+    ]);
+    const result = await contextRetrievalService.retrieveContext({
+      userId: 'user-a', chatId: 'workspace-1', attachmentIds: ['file-agile'],
+      userQuery: 'baca dokumen ini dong, jelaskan isinya',
+      maxTokens: 500, maxChunks: 4
+    });
+
+    expect(result.chunksSelected.length).toBeGreaterThanOrEqual(2);
+    expect(result.chunksSelected[0].id).toBe('chunk-title');
+    expect(result.contextBlock).toContain('Judul: Implementasi Deep Learning');
+    expect(result.contextBlock).toContain('DOKUMEN PENGGUNA TERSEDIA');
+    expect(result.contextBlock).toContain('DILARANG KERAS mengarang');
+  });
+
+  it('falls back to synthesizing chunks from attachment.extractedText when documentChunks table has 0 chunks', async () => {
+    findAttachments.mockResolvedValue([
+      {
+        id: 'file-fastpath',
+        chatId: 'workspace-1',
+        filename: 'Laporan_Keuangan.pdf',
+        mimeType: 'application/pdf',
+        fileKind: 'document',
+        checksum: 'sha-fastpath',
+        updatedAt: new Date('2026-10-01T00:00:00Z'),
+        extractedText: 'Laporan Keuangan PT Maju Mundur 2026. Laba bersih tercatat 50 miliar rupiah.',
+        isEncrypted: false
+      }
+    ]);
+    findChunks.mockResolvedValue([]); // No chunks in DB
+
+    const result = await contextRetrievalService.retrieveContext({
+      userId: 'user-a', chatId: 'workspace-1', attachmentIds: ['file-fastpath'],
+      userQuery: 'baca dokumen ini',
+      maxTokens: 500
+    });
+
+    expect(result.chunksSelected.length).toBeGreaterThan(0);
+    expect(result.chunksSelected[0].text).toContain('Laporan Keuangan PT Maju Mundur 2026');
+    expect(result.contextBlock).toContain('50 miliar rupiah');
+    expect(result.sourceReferences[0].filename).toBe('Laporan_Keuangan.pdf');
+  });
 });

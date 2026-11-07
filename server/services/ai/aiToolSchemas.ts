@@ -11,7 +11,8 @@ export const validToolNames = [
   'counselors',
   'emergency',
   'articles',
-  'ai_memory'
+  'ai_memory',
+  'generate_image'
 ] as const;
 
 export type ValidToolName = (typeof validToolNames)[number];
@@ -47,13 +48,24 @@ export const aiMemoryToolSchema = z.object({
   content: z.string().max(200).optional()
 }).strict();
 
+export const generateImageToolSchema = z.object({
+  reason: z.string().max(200).optional(),
+  prompt: z.string().min(2).max(500),
+  width: z.number().int().min(256).max(1024).optional(),
+  height: z.number().int().min(256).max(1024).optional(),
+  imageUrl: z.string().optional(),
+  provider: z.string().optional(),
+  error: z.string().optional()
+}).strict();
+
 export const toolSchemasMap = {
   screening: screeningToolSchema,
   mood: moodToolSchema,
   counselors: counselorsToolSchema,
   emergency: emergencyToolSchema,
   articles: articlesToolSchema,
-  ai_memory: aiMemoryToolSchema
+  ai_memory: aiMemoryToolSchema,
+  generate_image: generateImageToolSchema
 };
 
 export const pluginCallSchema = z.object({

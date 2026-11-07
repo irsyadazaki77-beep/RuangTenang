@@ -54,9 +54,28 @@ function extractErrorCode(body: unknown, fallbackCode: string): string {
 
 function getCookie(name: string): string | null {
   if (typeof document === 'undefined') return null;
-  const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
-  if (match) return decodeURIComponent(match[2]);
+  const match = document.cookie.match(new RegExp('(?:^|;\\s*)' + name + '=([^;]+)'));
+  if (match) return decodeURIComponent(match[1]);
   return null;
+}
+
+let inflightCsrfPromise: Promise<string | null> | null = null;
+
+export async function fetchCsrfToken(): Promise<string | null> {
+  if (typeof window === 'undefined') return null;
+  if (!inflightCsrfPromise) {
+    inflightCsrfPromise = fetch('/api/csrf-token', { credentials: 'include' })
+      .then(async res => {
+        if (!res.ok) return null;
+        const data = await res.json();
+        return (data?.csrfToken as string) || getCookie('XSRF-TOKEN');
+      })
+      .catch(() => null)
+      .finally(() => {
+        inflightCsrfPromise = null;
+      });
+  }
+  return inflightCsrfPromise;
 }
 
 export async function fetchWithTimeoutAndRetry<T = unknown>(
@@ -126,9 +145,12 @@ export async function fetchWithTimeoutAndRetry<T = unknown>(
     }
   }
 
-  // Also attach CSRF token for mutation requests if cookie is present
+  // Also attach CSRF token and XMLHttpRequest indicator for mutation requests
   if (!isGetOrHead) {
-    const csrfToken = getCookie('XSRF-TOKEN');
+    let csrfToken = getCookie('XSRF-TOKEN');
+    if (!csrfToken && typeof window !== 'undefined' && !url.includes('/api/csrf-token')) {
+      csrfToken = await fetchCsrfToken();
+    }
     if (csrfToken) {
       if (options.headers instanceof Headers) {
         finalHeaders = new Headers(options.headers) as unknown as Record<string, string>;
@@ -140,6 +162,20 @@ export async function fetchWithTimeoutAndRetry<T = unknown>(
           ...finalHeaders,
           'X-CSRF-Token': csrfToken
         };
+      }
+    }
+    // Set X-Requested-With header
+    if (finalHeaders instanceof Headers) {
+      if (!finalHeaders.has('X-Requested-With')) {
+        finalHeaders.set('X-Requested-With', 'XMLHttpRequest');
+      }
+    } else if (Array.isArray(finalHeaders)) {
+      if (!finalHeaders.some(([k]) => k.toLowerCase() === 'x-requested-with')) {
+        finalHeaders.push(['X-Requested-With', 'XMLHttpRequest']);
+      }
+    } else {
+      if (!finalHeaders['X-Requested-With'] && !finalHeaders['x-requested-with']) {
+        finalHeaders['X-Requested-With'] = 'XMLHttpRequest';
       }
     }
   }
@@ -185,6 +221,41 @@ export async function fetchWithTimeoutAndRetry<T = unknown>(
         errorDetails = body.details;
       } catch {
         // ignore json parse error on non-ok
+      }
+
+      // If 403 occurs due to CSRF token mismatch/expiry, attempt fresh token refresh once
+      if (res.status === 403 && (code === 'CSRF_FORBIDDEN' || errorMsg.toLowerCase().includes('csrf')) && !isGetOrHead && attempt === 1 && typeof window !== 'undefined') {
+        try {
+          const freshRes = await fetch('/api/csrf-token', { credentials: 'include' });
+          if (freshRes.ok) {
+            const freshData = await freshRes.json();
+            const freshToken = (freshData?.csrfToken as string) || getCookie('XSRF-TOKEN');
+            if (freshToken) {
+              let retryHeaders: HeadersInit;
+              if (options.headers instanceof Headers) {
+                const h = new Headers(options.headers);
+                h.set('X-CSRF-Token', freshToken);
+                h.set('X-Requested-With', 'XMLHttpRequest');
+                retryHeaders = h;
+              } else if (Array.isArray(options.headers)) {
+                retryHeaders = [
+                  ...options.headers.filter(([k]) => k.toLowerCase() !== 'x-csrf-token'),
+                  ['X-CSRF-Token', freshToken],
+                  ['X-Requested-With', 'XMLHttpRequest']
+                ];
+              } else {
+                retryHeaders = {
+                  ...(options.headers as Record<string, string>),
+                  'X-CSRF-Token': freshToken,
+                  'X-Requested-With': 'XMLHttpRequest'
+                };
+              }
+              return fetchWithTimeoutAndRetry<T>(url, { ...options, headers: retryHeaders }, 0, timeoutMs, attempt + 1);
+            }
+          }
+        } catch {
+          // Fall through to return error response
+        }
       }
 
       // Protected requests can be the first signal that a session expired. Notify

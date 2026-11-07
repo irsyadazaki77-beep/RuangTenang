@@ -103,12 +103,12 @@ export const WorkspaceModelSelector = React.memo(function WorkspaceModelSelector
             close();
           }
         }}
-        className="inline-flex h-9 w-9 shrink-0 items-center justify-center gap-1 rounded-lg px-0 text-xs text-slate-700 transition-colors hover:bg-slate-200/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-50 dark:text-slate-200 dark:hover:bg-slate-800 sm:h-8 sm:w-auto sm:max-w-[min(30vw,10.5rem)] sm:justify-start sm:gap-1.5 sm:px-2"
+        className="inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-full px-2.5 text-xs font-medium text-slate-700 bg-slate-100/80 hover:bg-slate-200/80 dark:bg-white/10 dark:hover:bg-white/15 dark:text-slate-200 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer sm:max-w-[min(30vw,12rem)]"
         title={disabled ? 'Profil AI tidak dapat diubah selama pemrosesan' : `Profil AI: ${displayName}`}
       >
         <ActiveIcon className="h-3.5 w-3.5 shrink-0 text-indigo-600 dark:text-indigo-400" />
-        <span className="hidden truncate font-medium sm:inline">{displayName}</span>
-        <ChevronDown className="h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden="true" />
+        <span className="truncate font-medium">{displayName}</span>
+        <ChevronDown className="h-3 w-3 shrink-0 text-slate-400" aria-hidden="true" />
       </button>
 
       {open && !disabled && (

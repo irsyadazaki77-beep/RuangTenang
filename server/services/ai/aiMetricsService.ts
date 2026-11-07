@@ -71,8 +71,12 @@ function providerBucket(provider?: string): string {
 export const aiMetricsService = {
   estimateTokens(text: string): number {
     if (!text) return 0;
-    // Approximates token count: ~4 characters per token for English/Indonesian text
-    return Math.ceil(text.length / 4);
+    // Approximates token count: Indonesian text averages ~2.8 chars per token
+    // on SentencePiece/BPE tokenizers due to morphology and subword segmentation;
+    // English averages ~4.0 chars per token.
+    const isIndonesian = /[a-zA-Z]/.test(text) && /\b(yang|dan|di|ke|dari|ini|itu|untuk|dengan|kamu|saya|bisa|adalah|tidak|pada|akan|sudah|apakah|bagaimana|mereka|kami|kita)\b/i.test(text);
+    const charsPerToken = isIndonesian ? 2.8 : 4.0;
+    return Math.ceil(text.length / charsPerToken);
   },
 
   recordRequestMetric(metric: Omit<RequestMetric, 'timestamp'>): void {

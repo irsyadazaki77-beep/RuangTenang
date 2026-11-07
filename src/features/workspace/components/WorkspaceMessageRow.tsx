@@ -6,39 +6,53 @@ import type { Message } from '../../chat/types';
 import { LazyMarkdown } from '../../../components/common/LazyMarkdown';
 import type { FileSourceReference } from '../../../../shared/contracts/files';
 
-function getSourceCategoryBadge(source?: FileSourceReference) {
-  if (!source) return { label: 'Inferensi AI', color: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300' };
-  if (source.url || source.filename.toLowerCase().includes('web') || source.documentId?.startsWith('web_')) {
-    return { label: 'Web · belum diverifikasi', color: 'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300' };
-  }
-  return { label: 'Rujukan dokumen', color: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300' };
+function getCleanModelName(rawName?: string, rawUsed?: string): string {
+  const name = rawName || rawUsed || '';
+  if (!name) return '';
+  // Clean up Ollama verbose strings like "Auto: Qwen 3 1.7B via Ollama" -> "Qwen 3 1.7B"
+  return name.replace(/^(?:Auto:\s*|Manual:\s*)/i, '').replace(/\s*via\s+Ollama/i, '').trim();
 }
 
-function ResearchCitationContent({ content, sources, onOpenSource }: { content: string; sources: NonNullable<Message['sources']>; onOpenSource: (source: FileSourceReference) => void }) {
-  const byId = new Map(sources.filter(source => source.citationId).map(source => [source.citationId!, source]));
+function getSourceCategoryBadge(source?: FileSourceReference) {
+  if (!source) return { label: 'Inferensi AI', color: 'bg-amber-100/70 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300' };
+  if (source.url || source.filename.toLowerCase().includes('web') || source.documentId?.startsWith('web_')) {
+    return { label: 'Web', color: 'bg-sky-100/70 text-sky-800 dark:bg-sky-950/50 dark:text-sky-300' };
+  }
+  return { label: 'Dokumen', color: 'bg-indigo-100/70 text-indigo-800 dark:bg-indigo-950/50 dark:text-indigo-300' };
+}
+
+function ResearchCitationContent({ content, sources = [], onOpenSource }: { content: string; sources?: FileSourceReference[]; onOpenSource: (source: FileSourceReference) => void }) {
+  const safeSources = sources || [];
+  const byId = new Map(safeSources.filter(source => source.citationId).map(source => [source.citationId!, source]));
   const parts: Array<{ text?: string; id?: string }> = [];
   const marker = /\[cite:([A-Za-z0-9_-]+)\]/g;
   let cursor = 0; let match: RegExpExecArray | null;
   while ((match = marker.exec(content))) {
     if (match.index > cursor) parts.push({ text: content.slice(cursor, match.index) });
-    parts.push(byId.has(match[1]) ? { id: match[1] } : { text: '[referensi sumber tidak dikenali]' });
+    parts.push({ id: match[1] });
     cursor = marker.lastIndex;
   }
   if (cursor < content.length) parts.push({ text: content.slice(cursor) });
   return <>{parts.map((part, index) => {
     if (!part.id) return <LazyMarkdown key={`text-${index}`} content={part.text || ''} />;
-    const src = byId.get(part.id);
+    const src: FileSourceReference = byId.get(part.id) || {
+      citationId: part.id,
+      documentId: `doc_${part.id}`,
+      filename: `Rujukan Dokumen #${part.id.replace('SRC_', '')}`,
+      sourceRef: `Bagian rujukan #${part.id.replace('SRC_', '')}`,
+      snippet: 'Rujukan data yang diekstraksi dari dokumen terlampir pengguna.'
+    };
     const badge = getSourceCategoryBadge(src);
-    const tooltip = `${src?.sourceRef || 'Sumber'} (${badge.label})`;
+    const tooltip = `${src.sourceRef || src.filename} (${badge.label}) - Klik untuk pratinjau sumber`;
     return (
       <button
         key={`cite-${index}`}
         type="button"
-        onClick={() => src && onOpenSource(src)}
+        onClick={() => onOpenSource(src)}
         title={tooltip}
-        className={`inline-flex items-center gap-0.5 rounded px-1.5 py-0.2 mx-0.5 text-[11px] font-semibold underline decoration-dotted underline-offset-2 transition-colors cursor-pointer ${badge.color}`}
+        className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 mx-0.5 text-[11px] font-medium bg-slate-100/90 text-indigo-600 hover:bg-indigo-50/80 hover:text-indigo-700 dark:bg-white/10 dark:text-indigo-300 dark:hover:bg-indigo-950/50 transition-colors cursor-pointer border border-slate-200/80 dark:border-white/10 shadow-3xs"
       >
-        <span>[{part.id.replace('SRC_', '')}]</span>
+        <span>📌 [{part.id.replace('SRC_', '')}]</span>
       </button>
     );
   })}</>;
@@ -77,6 +91,7 @@ export const WorkspaceMessageRow = React.memo(function WorkspaceMessageRow({
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(msg.content);
+  const [showSourcesExpanded, setShowSourcesExpanded] = useState(false);
 
   useEffect(() => {
     setEditContent(msg.content);
@@ -131,107 +146,134 @@ export const WorkspaceMessageRow = React.memo(function WorkspaceMessageRow({
     setIsEditing(false);
   }, [editContent, msg.content, msg.id, onEditUserMessage]);
 
+  const cleanModelName = getCleanModelName(msg.modelName, msg.modelUsed);
+
+  // USER MESSAGE VIEW: Right-aligned pill, sleek ChatGPT / Claude aesthetic
+  if (msg.role === 'user') {
+    return (
+      <div
+        data-workspace-message-id={msg.id}
+        className={`workspace-message-row workspace-message-virtualized flex flex-col items-end self-end w-full max-w-[85%] sm:max-w-[78%] group ${shouldReduceMotion ? '' : 'animate-fade-in'} ${isHighlighted ? 'ring-2 ring-indigo-400 rounded-3xl' : ''}`}
+      >
+        <div className="w-full">
+          {isEditing ? (
+            <div className="flex flex-col gap-2 rounded-2xl border border-indigo-300 bg-white p-3 shadow-lg dark:border-indigo-800 dark:bg-slate-900">
+              <textarea
+                value={editContent}
+                onChange={(e) => setEditContent(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                    e.preventDefault();
+                    handleSaveEdit();
+                  } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    setEditContent(msg.content);
+                    setIsEditing(false);
+                  }
+                }}
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
+                rows={3}
+                autoFocus
+              />
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] text-slate-400 hidden sm:inline">Ctrl+Enter untuk kirim, Esc batal</span>
+                <div className="flex justify-end gap-1.5 ml-auto">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditContent(msg.content);
+                      setIsEditing(false);
+                    }}
+                    className="rounded-lg px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveEdit}
+                    disabled={!editContent.trim()}
+                    className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-indigo-700 disabled:opacity-50"
+                  >
+                    Simpan &amp; Kirim
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col items-end">
+              <div className="rounded-xl border border-slate-200/90 dark:border-white/10 rounded-tr-md bg-slate-100/90 dark:bg-white/10 text-slate-900 dark:text-slate-100 px-4 py-2.5 text-[14px] leading-relaxed shadow-xs break-words">
+                <div className="whitespace-pre-wrap selection:bg-indigo-200 dark:selection:bg-indigo-900">
+                  {msg.content}
+                </div>
+              </div>
+
+              {/* User message hover controls (Edit, Copy, Timestamp) */}
+              <div className="flex items-center gap-2 mt-1 px-2 text-[11px] text-slate-400 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                <span>{formatMessageTime(msg.createdAt)}</span>
+                {onEditUserMessage && (
+                  <button
+                    type="button"
+                    onClick={() => setIsEditing(true)}
+                    className="inline-flex items-center gap-1 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer"
+                    aria-label="Edit pesan"
+                    title="Edit pertanyaan ini"
+                  >
+                    <Edit2 className="w-3 h-3" />
+                    <span>Edit</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => onCopyMessage(msg)}
+                  className="inline-flex items-center gap-1 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer"
+                  aria-label="Salin teks"
+                >
+                  <Copy className="w-3 h-3" />
+                  <span>{isCopied ? 'Tersalin' : 'Salin'}</span>
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ASSISTANT MESSAGE VIEW: Clean, editorial, ChatGPT/Claude/Gemini style
   return (
     <div
       data-workspace-message-id={msg.id}
-      className={`workspace-message-row workspace-message-virtualized mx-auto flex w-full max-w-4xl flex-col items-start rounded-lg transition-colors group ${shouldReduceMotion ? '' : 'animate-fade-in'} ${isHighlighted ? 'bg-indigo-50/70 ring-1 ring-indigo-300 dark:bg-indigo-950/30 dark:ring-indigo-800' : ''}`}
+      className={`workspace-message-row workspace-message-virtualized flex flex-col items-start self-start w-full group ${shouldReduceMotion ? '' : 'animate-fade-in'} ${isHighlighted ? 'bg-indigo-50/50 p-3 rounded-2xl ring-1 ring-indigo-300 dark:bg-indigo-950/20' : ''}`}
     >
-      {msg.role === 'assistant' && (
-        <div className="flex items-center gap-1.5 mb-1 px-1 select-none text-xs text-slate-500 dark:text-slate-400 flex-wrap">
-          <BrandLogo mode="RUANG_KERJA" size="xs" iconOnly />
-          <span className="font-semibold text-slate-700 dark:text-slate-300">Asisten RuangKerja</span>
-          {msg.modelUsed && <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[10px] font-medium bg-indigo-100/70 dark:bg-indigo-950/70 text-indigo-800 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800/60" title={msg.isFallback ? `${msg.fallbackFromName || 'Model utama'} gagal; respons diselesaikan dengan ${msg.modelName || msg.modelUsed}.` : msg.routingReason || `Model yang digunakan: ${msg.modelName || msg.modelUsed}`}>
-            {msg.isFallback ? 'Fallback · ' : msg.routingMode === 'auto' ? 'Auto: ' : ''}{msg.modelName || msg.modelUsed}
-          </span>}
-          {msg.degradationNotice && (
-            <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[10px] font-medium bg-amber-100/80 dark:bg-amber-950/80 text-amber-900 dark:text-amber-200 border border-amber-300/70 dark:border-amber-800/70" title={msg.degradationNotice}>
-              Penyesuaian: {msg.degradationNotice}
-            </span>
-          )}
-          <span>·</span>
-          <span className="font-mono text-[10.5px] opacity-75">{formatMessageTime(msg.createdAt)}</span>
-        </div>
-      )}
-      {msg.role === 'user' && (
-        <div className="flex items-center justify-between w-full mb-1 px-1 select-none text-[10.5px] font-mono text-slate-400">
-          <div className="flex items-center gap-1">
-            <span className="font-sans font-semibold text-slate-600 dark:text-slate-300">Anda</span>
-            <span>·</span>
-            <span>{formatMessageTime(msg.createdAt)}</span>
-          </div>
-          {!isEditing && onEditUserMessage && (
-            <button
-              type="button"
-              onClick={() => setIsEditing(true)}
-              className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:focus:opacity-100 transition-opacity inline-flex items-center gap-1 text-[11px] font-sans text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 cursor-pointer"
-              aria-label="Edit pesan"
-              title="Edit pertanyaan ini"
-            >
-              <Edit2 className="w-3 h-3" />
-              <span>Edit</span>
-            </button>
-          )}
-        </div>
-      )}
-      <div className={`w-full max-w-full leading-relaxed ${
-        msg.error
-          ? 'rounded-xl border border-rose-200/80 bg-rose-50/70 p-4 text-rose-900 shadow-xs dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-100'
-          : msg.role === 'user'
-            ? 'rounded-xl border border-slate-200/90 bg-gradient-to-b from-slate-100/95 to-slate-100/80 px-4 py-3 text-slate-900 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.04)] selection:bg-indigo-200 selection:text-slate-900 dark:border-slate-800/80 dark:bg-gradient-to-b dark:from-slate-900/90 dark:to-slate-900/60 dark:text-slate-100 dark:shadow-none dark:selection:bg-indigo-900 dark:selection:text-indigo-100 text-xs sm:text-sm font-normal'
-            : 'w-full max-w-full text-slate-800 dark:text-slate-100 text-xs sm:text-sm selection:bg-indigo-100 selection:text-indigo-900 dark:selection:bg-indigo-950 dark:selection:text-indigo-100'
-      }`}>
-        {isEditing && msg.role === 'user' ? (
-          <div className="flex flex-col gap-2">
-            <textarea
-              value={editContent}
-              onChange={(e) => setEditContent(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                  e.preventDefault();
-                  handleSaveEdit();
-                } else if (e.key === 'Escape') {
-                  e.preventDefault();
-                  setEditContent(msg.content);
-                  setIsEditing(false);
-                }
-              }}
-              className="w-full rounded-lg border border-indigo-300 bg-white p-2.5 text-xs sm:text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-indigo-800 dark:bg-slate-950 dark:text-slate-100"
-              rows={3}
-              autoFocus
-            />
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] text-slate-400 hidden sm:inline">Tekan Ctrl+Enter untuk kirim, Esc untuk batal</span>
-              <div className="flex justify-end gap-1.5 ml-auto">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditContent(msg.content);
-                    setIsEditing(false);
-                  }}
-                  className="rounded-md px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-200 dark:text-slate-300 dark:hover:bg-slate-800"
-                >
-                  Batal
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSaveEdit}
-                  disabled={!editContent.trim()}
-                  className="rounded-md bg-indigo-600 px-2.5 py-1 text-xs font-semibold text-white shadow-2xs hover:bg-indigo-700 disabled:opacity-50"
-                >
-                  Simpan &amp; Kirim
-                </button>
-              </div>
-            </div>
-          </div>
-        ) : msg.error ? (
-          <div className="space-y-2">
+      {/* Header bar: Sleek avatar & clean model tag */}
+      <div className="flex items-center gap-2 mb-1.5 select-none text-xs text-slate-500 dark:text-slate-400 flex-wrap">
+        <BrandLogo mode="RUANG_KERJA" size="xs" iconOnly />
+        <span className="font-semibold text-slate-900 dark:text-slate-100 text-xs">RuangKerja</span>
+        {cleanModelName && (
+          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10.5px] font-medium bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-300" title={msg.routingReason || `Model: ${cleanModelName}`}>
+            {cleanModelName}
+          </span>
+        )}
+        {msg.degradationNotice && (
+          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10.5px] font-medium bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800/50" title={msg.degradationNotice}>
+            {msg.degradationNotice}
+          </span>
+        )}
+        <span className="text-slate-300 dark:text-slate-600">·</span>
+        <span className="text-[11px] text-slate-400">{formatMessageTime(msg.createdAt)}</span>
+      </div>
+
+      {/* Main Content Area */}
+      <div className="w-full max-w-full leading-relaxed text-slate-800 dark:text-slate-100 text-[14px] sm:text-[15px] selection:bg-indigo-100 selection:text-indigo-900 dark:selection:bg-indigo-950 dark:selection:text-indigo-100">
+        {msg.error ? (
+          <div className="space-y-3 rounded-2xl border border-rose-200/80 bg-rose-50/70 p-4 text-rose-900 shadow-xs dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-100">
             <div className="flex items-start gap-2 text-rose-700 dark:text-rose-300">
               <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-600 dark:text-rose-400" />
-              <div className="flex-1 text-xs sm:text-sm font-medium leading-relaxed">
+              <div className="flex-1 text-sm font-medium leading-relaxed">
                 {msg.content}
               </div>
             </div>
-            <div className="pt-2 flex items-center gap-2">
+            <div className="pt-1 flex items-center gap-2">
               <button
                 type="button"
                 disabled={!lastUserPrompt}
@@ -245,95 +287,113 @@ export const WorkspaceMessageRow = React.memo(function WorkspaceMessageRow({
           </div>
         ) : (
           <>
-            <div className={`prose max-w-none text-xs sm:text-sm prose-p:my-1.5 prose-pre:my-1.5 ${msg.role === 'user' ? 'text-slate-900 dark:text-slate-100 prose-headings:text-slate-900 dark:prose-headings:text-slate-100 prose-code:text-slate-900 dark:prose-code:text-slate-100 prose-a:text-indigo-600 dark:prose-a:text-indigo-400' : 'dark:prose-invert text-slate-800 dark:text-slate-200 prose-headings:text-slate-900 dark:prose-headings:text-slate-100 prose-code:text-slate-800 dark:prose-code:text-slate-200 prose-a:text-indigo-600 dark:prose-a:text-indigo-400'}`}>
-              {msg.sources?.some(source => source.citationId) ? <ResearchCitationContent content={msg.content} sources={msg.sources} onOpenSource={onOpenSource} /> : <LazyMarkdown content={msg.content} />}
+            <div className="prose dark:prose-invert max-w-none text-[14px] sm:text-[15px] leading-relaxed prose-p:my-2 prose-pre:my-2 prose-headings:font-semibold prose-headings:tracking-tight prose-a:text-indigo-600 dark:prose-a:text-indigo-400">
+              {msg.sources?.some(source => source.citationId) || /\[cite:[A-Za-z0-9_-]+\]/.test(msg.content) ? (
+                <ResearchCitationContent content={msg.content} sources={msg.sources} onOpenSource={onOpenSource} />
+              ) : (
+                <LazyMarkdown content={msg.content} />
+              )}
             </div>
-            {msg.role === 'assistant' && msg.sources?.length ? (
-              <details className="mt-2 rounded-lg border border-slate-200 bg-slate-50/70 px-2.5 py-2 text-[10px] dark:border-slate-800 dark:bg-slate-900/60">
-                <summary className="cursor-pointer font-semibold text-slate-600 dark:text-slate-300">
-                  Sumber yang dirujuk · {msg.sources.length}
-                </summary>
-                <p className="mt-1 text-slate-500 dark:text-slate-400">Daftar ini menunjukkan sumber yang dicantumkan. Dukungan sumber terhadap klaim belum diverifikasi otomatis.</p>
-                <ul className="mt-2 space-y-2">
-                  {msg.sources.map((source, index) => {
+
+            {/* Perplexity/Gemini style Sources Strip */}
+            {msg.sources && msg.sources.length > 0 && (
+              <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-white/5">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-500 dark:text-slate-400 mr-1 select-none">
+                    <FileText className="h-3 w-3" aria-hidden="true" />
+                    Sumber ({msg.sources.length})
+                  </span>
+                  {msg.sources.slice(0, showSourcesExpanded ? undefined : 3).map((source, index) => {
                     const badge = getSourceCategoryBadge(source);
                     return (
-                      <li key={`${source.documentId}:${source.sourceRef}:${index}`} className="leading-5 text-slate-600 dark:text-slate-400">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => onOpenSource(source)}
-                            className="text-left font-medium text-slate-700 hover:text-indigo-700 hover:underline dark:text-slate-200 dark:hover:text-indigo-300"
-                          >
-                            <span>{source.filename}</span>
-                            {source.sourceRef && source.sourceRef !== source.filename && <span> · {source.sourceRef}</span>}
-                          </button>
-                          <span className={`rounded px-1.5 py-0.2 text-[9px] font-semibold ${badge.color}`}>
-                            {badge.label}
-                          </span>
-                          {source.citationId && (
-                            <span className="rounded bg-slate-200 px-1 font-mono text-[9px] dark:bg-slate-700">
-                              {source.citationId}
-                            </span>
-                          )}
-                        </div>
-                        {source.snippet && <p className="mt-0.5 line-clamp-3 text-[9.5px] italic text-slate-500">{source.snippet}</p>}
-                      </li>
+                      <button
+                        key={`${source.documentId}:${source.sourceRef}:${index}`}
+                        type="button"
+                        onClick={() => onOpenSource(source)}
+                        className="group/chip inline-flex items-center gap-1.5 rounded-full border border-slate-200/80 bg-white/80 px-2.5 py-0.5 text-[11px] text-slate-600 shadow-3xs transition-all hover:border-indigo-400 hover:text-indigo-700 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:border-indigo-500/50 cursor-pointer"
+                        title={`${source.filename}${source.sourceRef ? ' · ' + source.sourceRef : ''} (${badge.label})`}
+                      >
+                        <span className="text-[10px] font-semibold text-slate-400 group-hover/chip:text-indigo-500">{index + 1}</span>
+                        <span className="max-w-[110px] truncate">{source.filename}</span>
+                      </button>
                     );
                   })}
-                </ul>
-              </details>
-            ) : null}
-            {msg.role === 'assistant' && showArtifactLink && msg.content.includes('📦 **Artefak Aktif') && <div className="mt-2.5 pt-2 border-t border-slate-200/70 dark:border-slate-800 flex items-center justify-between"><button type="button" onClick={onOpenCanvas} className="text-xs text-indigo-700 dark:text-indigo-400 font-semibold hover:underline flex items-center gap-1 cursor-pointer"><FileText className="w-3.5 h-3.5" /><span>Buka Dokumen di Canvas &rarr;</span></button></div>}
+                  {msg.sources.length > 3 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowSourcesExpanded(prev => !prev)}
+                      className="text-[11px] font-medium text-indigo-600 dark:text-indigo-400 hover:underline px-1 py-0.5 cursor-pointer"
+                    >
+                      {showSourcesExpanded ? 'Lebih sedikit' : `+${msg.sources.length - 3} lainnya`}
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Artifact shortcut button */}
+            {showArtifactLink && (msg.content.includes('📦 **Artefak Aktif') || msg.content.includes(':::artifact') || msg.content.includes('<artifact')) && (
+              <div className="mt-3 pt-2 border-t border-slate-100 dark:border-white/5 flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={onOpenCanvas}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 text-xs font-semibold text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors cursor-pointer"
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>Buka Dokumen di Canvas &rarr;</span>
+                </button>
+              </div>
+            )}
           </>
         )}
       </div>
-      {msg.role === 'assistant' && !msg.error && (
-        <div className="mt-1 flex flex-wrap items-center gap-1 text-[11px] text-slate-400 opacity-90 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100 transition-opacity duration-150">
+
+      {/* Modern Minimalist Action Bar (ChatGPT / Claude / Gemini style) */}
+      {!msg.error && (
+        <div className="mt-2 flex items-center gap-0.5 text-slate-400 opacity-90 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100 transition-opacity duration-150">
           <button
             type="button"
             onClick={() => onCopyMessage(msg)}
-            className="inline-flex min-h-7 items-center gap-1.5 rounded-md px-2 py-1 text-slate-500 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-lg hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-white/10 dark:hover:text-slate-200 transition-colors cursor-pointer"
             aria-label="Salin jawaban"
+            title={isCopied ? 'Tersalin' : 'Salin jawaban'}
           >
-            {isCopied ? <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
-            <span>{isCopied ? 'Tersalin' : 'Salin'}</span>
+            {isCopied ? <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" /> : <Copy className="h-4 w-4" />}
           </button>
           {lastUserPrompt && (
             <button
               type="button"
               onClick={() => onRetryMessage(lastUserPrompt, msg.id)}
-              className="inline-flex min-h-7 items-center gap-1.5 rounded-md px-2 py-1 text-slate-500 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
-              aria-label="Buat ulang respon ini"
-              title="Buat ulang respon ini (Regenerate)"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-white/10 dark:hover:text-slate-200 transition-colors cursor-pointer"
+              aria-label="Buat ulang respons"
+              title="Buat ulang respons (Regenerate)"
             >
-              <RefreshCw className="h-3.5 w-3.5" />
-              <span>Regenerasi</span>
+              <RefreshCw className="h-4 w-4" />
             </button>
           )}
           <button
             type="button"
             onClick={handleToggleSpeech}
-            className={`inline-flex min-h-7 items-center gap-1.5 rounded-md px-2 py-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
+            className={`inline-flex h-8 w-8 items-center justify-center rounded-lg transition-colors cursor-pointer ${
               isSpeaking
-                ? 'bg-indigo-100 text-indigo-700 font-medium dark:bg-indigo-950/60 dark:text-indigo-300'
-                : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200'
+                ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300'
+                : 'hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-white/10 dark:hover:text-slate-200'
             }`}
-            aria-label={isSpeaking ? 'Hentikan pembacaan suara' : 'Dengarkan suara (Read Aloud)'}
-            title={isSpeaking ? 'Hentikan pembacaan suara' : 'Dengarkan suara (Read Aloud)'}
+            aria-label={isSpeaking ? 'Hentikan pembacaan' : 'Dengarkan suara'}
+            title={isSpeaking ? 'Hentikan pembacaan suara' : 'Dengarkan suara'}
           >
-            {isSpeaking ? <VolumeX className="h-3.5 w-3.5 animate-pulse text-indigo-600 dark:text-indigo-400" /> : <Volume2 className="h-3.5 w-3.5" />}
-            <span>{isSpeaking ? 'Berhenti' : 'Baca Suara'}</span>
+            {isSpeaking ? <VolumeX className="h-4 w-4 text-indigo-600 animate-pulse" /> : <Volume2 className="h-4 w-4" />}
           </button>
           {onSendToCanvas && (
             <button
               type="button"
               onClick={() => onSendToCanvas(msg.content)}
-              className="inline-flex min-h-7 items-center gap-1.5 rounded-md px-2 py-1 text-slate-500 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+              className="inline-flex h-7.5 items-center gap-1.5 px-2.5 rounded-full text-xs font-medium text-indigo-700 bg-indigo-50/70 hover:bg-indigo-100 hover:text-indigo-900 dark:text-indigo-300 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/50 dark:hover:text-indigo-100 border border-indigo-200/60 dark:border-indigo-800/40 transition-colors cursor-pointer shadow-3xs"
               aria-label="Kirim ke Canvas"
+              title="Pindahkan teks ini ke editor dokumen Canvas"
             >
-              <FilePlus2 className="h-3.5 w-3.5 text-indigo-500" />
-              <span>Kirim ke Canvas</span>
+              <FilePlus2 className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+              <span>Buka di Canvas</span>
             </button>
           )}
         </div>

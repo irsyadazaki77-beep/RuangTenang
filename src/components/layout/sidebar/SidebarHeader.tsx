@@ -43,6 +43,9 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
   onToggleArchiveView,
 }) => {
   const isRuangKerja = currentMode === 'RUANG_KERJA';
+  const isRuangCoder = currentMode === 'RUANG_CODER';
+  const isRuangTenang = currentMode === 'RUANG_TENANG';
+  const modeLabel = isRuangCoder ? 'RuangCoder' : isRuangKerja ? 'RuangKerja' : 'RuangTenang';
   const [isModeMenuOpen, setIsModeMenuOpen] = useState(false);
   const modeMenuRef = useRef<HTMLDivElement>(null);
 
@@ -99,15 +102,21 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
         {/* Mode Switcher Toggle Button */}
         <div className="pt-1 border-t border-slate-200/60 dark:border-slate-800/60 w-full flex justify-center">
           <SidebarTooltip
-            content={isRuangKerja ? 'Beralih ke RuangTenang' : 'Beralih ke RuangKerja'}
+            content={isRuangKerja ? 'Beralih ke RuangCoder' : isRuangCoder ? 'Beralih ke RuangTenang' : 'Beralih ke RuangKerja'}
             show={true}
             position="right"
           >
             <button
               type="button"
-              onClick={() => onSwitchMode?.(isRuangKerja ? 'RUANG_TENANG' : 'RUANG_KERJA')}
+              onClick={() =>
+                onSwitchMode?.(
+                  isRuangTenang ? 'RUANG_KERJA' : isRuangKerja ? 'RUANG_CODER' : 'RUANG_TENANG'
+                )
+              }
               className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all cursor-pointer ${
-                isRuangKerja
+                isRuangCoder
+                  ? 'bg-sky-500/15 text-sky-600 dark:text-sky-400 border border-sky-500/30'
+                  : isRuangKerja
                   ? 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30'
                   : 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
               }`}
@@ -146,13 +155,13 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
             type="button"
             onClick={() => setIsModeMenuOpen(prev => !prev)}
             className="flex items-center gap-2 px-2 py-1.5 -ml-1.5 rounded-xl hover:bg-slate-200/60 dark:hover:bg-slate-800/70 transition-colors cursor-pointer text-left group"
-            aria-label={`Mode: ${isRuangKerja ? 'RuangKerja' : 'RuangTenang'}`}
+            aria-label={`Mode: ${modeLabel}`}
             aria-expanded={isModeMenuOpen}
           >
             <BrandLogo mode={currentMode} size="xs" />
             <div className="flex items-center gap-1 min-w-0">
               <span className="font-bold text-sm tracking-tight text-slate-900 dark:text-slate-100 truncate">
-                {isRuangKerja ? 'RuangKerja' : 'RuangTenang'}
+                {modeLabel}
               </span>
               <ChevronDown
                 className={`w-3.5 h-3.5 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300 transition-transform duration-150 shrink-0 ${
@@ -170,7 +179,7 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: 4 }}
                 transition={{ duration: 0.12 }}
-                className="absolute left-0 top-full mt-1.5 z-50 w-[236px] bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200/80 dark:border-slate-800 rounded-xl shadow-xl p-1.5 space-y-1"
+                className="absolute left-0 top-full mt-1.5 z-50 w-[246px] bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200/80 dark:border-slate-800 rounded-xl shadow-xl p-1.5 space-y-1"
                 onClick={e => e.stopPropagation()}
               >
                 <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 select-none">
@@ -185,7 +194,7 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
                     setIsModeMenuOpen(false);
                   }}
                   className={`w-full flex items-center justify-between p-2 rounded-lg text-left transition-colors cursor-pointer ${
-                    !isRuangKerja
+                    isRuangTenang
                       ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200 ring-1 ring-emerald-500/20'
                       : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
                   }`}
@@ -198,7 +207,7 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
                       <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate">Refleksi, skrining & dukungan emosional</div>
                     </div>
                   </div>
-                  {!isRuangKerja && <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />}
+                  {isRuangTenang && <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />}
                 </button>
 
                 {/* Option: RuangKerja */}
@@ -224,6 +233,30 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
                   </div>
                   {isRuangKerja && <Check className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />}
                 </button>
+
+                {/* Option: RuangCoder */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    onSwitchMode?.('RUANG_CODER');
+                    setIsModeMenuOpen(false);
+                  }}
+                  className={`w-full flex items-center justify-between p-2 rounded-lg text-left transition-colors cursor-pointer ${
+                    isRuangCoder
+                      ? 'bg-sky-50 dark:bg-sky-950/40 text-sky-900 dark:text-sky-200 ring-1 ring-sky-500/20'
+                      : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
+                  }`}
+                  aria-label="RuangCoder"
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <img src="/ruangcoder.svg" alt="" className="w-5 h-5 rounded object-contain shrink-0" />
+                    <div className="min-w-0">
+                      <div className="text-xs font-semibold truncate text-slate-900 dark:text-slate-100">RuangCoder</div>
+                      <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate">Autonomous Local AI Coding Agent</div>
+                    </div>
+                  </div>
+                  {isRuangCoder && <Check className="w-4 h-4 text-sky-600 dark:text-sky-400 shrink-0" />}
+                </button>
               </motion.div>
             )}
           </AnimatePresence>
@@ -235,7 +268,7 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
             <button
               type="button"
               onClick={onNewChat}
-              className="p-1.5 rounded-lg transition-all duration-150 cursor-pointer text-slate-600 dark:text-slate-300 hover:bg-slate-200/70 dark:hover:bg-slate-800 active:scale-95 hover:text-emerald-600 dark:hover:text-emerald-400"
+              className="p-1.5 rounded-lg transition-all duration-150 cursor-pointer text-slate-600 dark:text-slate-300 hover:bg-slate-200/70 dark:hover:bg-slate-800 active:scale-95 hover:text-slate-900 dark:hover:text-slate-100"
               aria-label="Chat Baru (Obrolan Baru)"
             >
               <SquarePen className="w-4 h-4" />
@@ -266,10 +299,10 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
         </div>
       </div>
 
-      {/* 2. Baris 2: Search Bar Kompak & Archive Icon Button (Langsung di bawah, tanpa slider duplikat!) */}
+      {/* 2. Baris 2: Search Bar Kompak & Archive Icon Button */}
       <div className="flex items-center gap-1.5">
         <div
-          className="flex-1 h-[32px] px-2.5 rounded-lg flex items-center gap-1.5 text-xs bg-slate-100/80 dark:bg-slate-800/60 hover:bg-slate-200/50 dark:hover:bg-slate-800 transition-colors cursor-text border border-slate-200/70 dark:border-slate-750 focus-within:ring-1 focus-within:border-emerald-500/70 focus-within:ring-emerald-500/20"
+          className="flex-1 h-[32px] px-2.5 rounded-lg flex items-center gap-1.5 text-xs bg-slate-100/80 dark:bg-slate-800/60 hover:bg-slate-200/50 dark:hover:bg-slate-800 transition-colors cursor-text border border-slate-200/70 dark:border-slate-750 focus-within:ring-1 focus-within:border-slate-400 dark:focus-within:border-white/20 focus-within:ring-1 focus-within:ring-slate-400/20"
           onClick={() => searchInputRef.current?.focus()}
         >
           <Search className="w-3.5 h-3.5 text-slate-400 shrink-0 pointer-events-none" />

@@ -17,8 +17,10 @@ import { TriageItem, SoapNote, CounselorStats } from './types';
 import { TriageQueue } from './components/TriageQueue';
 import { SoapNoteEditor } from './components/SoapNoteEditor';
 import { CounselorAnalytics } from './components/CounselorAnalytics';
+import { PeerCounselorSimulatorModal } from './PeerCounselorSimulatorModal';
+import { Brain } from 'lucide-react';
 
-type Tab = 'triage' | 'soap-editor' | 'soap-history' | 'analytics';
+type Tab = 'triage' | 'soap-editor' | 'soap-history' | 'analytics' | 'peer-simulator';
 
 export const CounselorPortal: React.FC = () => {
   const { user } = useAuth();
@@ -323,6 +325,22 @@ export const CounselorPortal: React.FC = () => {
             <span>Telemetri & Analitik Kampus</span>
           </button>
         </div>
+          <button
+            type="button"
+            role="tab"
+            id="tab-peer-simulator"
+            aria-controls="panel-peer-simulator"
+            aria-selected={activeTab === 'peer-simulator'}
+            onClick={() => setActiveTab('peer-simulator')}
+            className={`flex items-center gap-2 py-3 px-4 text-xs sm:text-sm font-semibold border-b-2 transition whitespace-nowrap cursor-pointer ${
+              activeTab === 'peer-simulator'
+                ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400 font-bold'
+                : 'border-transparent text-secondary hover:text-primary'
+            }`}
+          >
+            <Brain className="w-4 h-4" />
+            <span>Simulator Peer-Counselor</span>
+          </button>
         {/* Right gradient fade mask indicating more tabs on narrow viewports */}
         <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-slate-50 dark:from-slate-900 to-transparent sm:hidden opacity-80" />
       </div>
@@ -432,6 +450,7 @@ export const CounselorPortal: React.FC = () => {
         )}
 
         {activeTab === 'analytics' && <CounselorAnalytics stats={stats} />}
+        {activeTab === 'peer-simulator' && <PeerCounselorSimulatorModal />}
       </div>
     </div>
   );

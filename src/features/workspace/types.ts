@@ -1,4 +1,4 @@
-export type WorkspaceMode = 'RUANG_TENANG' | 'RUANG_KERJA';
+export type WorkspaceMode = 'RUANG_TENANG' | 'RUANG_KERJA' | 'RUANG_CODER';
 
 export type WorkspaceResponseMode = 'Ringkas' | 'Seimbang' | 'Mendalam';
 export type WorkspaceResponseStyle = 'Default' | 'Akademik' | 'Langkah demi langkah' | 'Formal';

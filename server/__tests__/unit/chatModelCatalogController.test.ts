@@ -3,16 +3,26 @@ import { ChatController } from '../../controllers/chatController.js';
 
 describe('GET /chat/models controller contract', () => {
   it('returns a safe, unique, tier-aware public catalog', async () => {
-    const json = vi.fn();
-    await ChatController.getModels({ user: { tier: 'Free' } } as never, { json } as never);
-    const payload = json.mock.calls[0][0] as { defaultModel: string; models: Array<Record<string, unknown>> };
-    const ids = payload.models.map(model => model.id);
+    const originalLocal = process.env.LOCAL_AI_ONLY;
+    const originalCloud = process.env.DISABLE_CLOUD_AI;
+    delete process.env.LOCAL_AI_ONLY;
+    delete process.env.DISABLE_CLOUD_AI;
 
-    expect(new Set(ids).size).toBe(ids.length);
-    expect(payload.defaultModel).toBeTruthy();
-    expect(payload.models.every(model => typeof model.available === 'boolean' && typeof model.providerAvailable === 'boolean')).toBe(true);
-    expect(payload.models.every(model => model.available || model.selectable === false)).toBe(true);
-    expect(payload.models.find(model => model.id === 'gemini-3.1-pro-preview')?.selectable).toBe(false);
-    expect(payload.models.every(model => !('providerModelId' in model) && !('apiKey' in model))).toBe(true);
-  });
+    try {
+      const json = vi.fn();
+      await ChatController.getModels({ user: { tier: 'Free' } } as never, { json } as never);
+      const payload = json.mock.calls[0][0] as { defaultModel: string; models: Array<Record<string, unknown>> };
+      const ids = payload.models.map(model => model.id);
+
+      expect(new Set(ids).size).toBe(ids.length);
+      expect(payload.defaultModel).toBeTruthy();
+      expect(payload.models.every(model => typeof model.available === 'boolean' && typeof model.providerAvailable === 'boolean')).toBe(true);
+      expect(payload.models.every(model => model.available || model.selectable === false)).toBe(true);
+      expect(payload.models.find(model => model.id === 'gemini-3.1-pro-preview')?.selectable).toBe(false);
+      expect(payload.models.every(model => !('providerModelId' in model) && !('apiKey' in model))).toBe(true);
+    } finally {
+      if (originalLocal !== undefined) process.env.LOCAL_AI_ONLY = originalLocal;
+      if (originalCloud !== undefined) process.env.DISABLE_CLOUD_AI = originalCloud;
+    }
+  }, 30000);
 });

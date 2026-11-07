@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect, useLayoutEffect, useMemo } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { FileText, Paperclip, Sparkles } from 'lucide-react';
+import { FileText, MessageSquareText, Paperclip, Sparkles } from 'lucide-react';
 import { safeLocalStorage } from '../../lib/storage';
 import { WorkspaceMode, WorkspaceArtifact, WorkspaceCanvasDraft, WorkspaceTab, WorkspaceComposerConfig, WorkspaceComparisonCandidate, WorkspaceComparisonRun, WorkspaceRequestSnapshot, WorkspaceArtifactSelection, ArtifactPatch, WorkspaceChapterScope } from './types';
 import { UserSession } from '../../types';
@@ -412,7 +412,7 @@ function StudentWorkspaceSession({
     isLoadingAttachments,
     isDraggingOver,
     fileInputRef,
-    handleFileUploadChange,
+    handleFileUploadChange, handleProcessFiles,
     handleDragOver,
     handleDragLeave,
     handleDrop,
@@ -1392,7 +1392,7 @@ function StudentWorkspaceSession({
       />
 
       {/* Keep the workflow summary out of the way until there is work to track. */}
-      {(workspaceAttachments.length > 0 || Boolean(workspacePlan?.tasks.length) || isStreaming || isAgentExecuting) && (
+      {(workspaceAttachments.length > 0 || Boolean(workspacePlan?.tasks.length) || isAgentExecuting) && (
         <React.Suspense fallback={null}>
           <WorkspaceWorkflowPipeline
             uploadedFilesCount={workspaceAttachments.length}
@@ -1465,6 +1465,21 @@ function StudentWorkspaceSession({
             </button>
           </div>
         )
+      )}
+
+      {/* Floating Quick-Switch Back to Chat for Mobile when viewing Canvas */}
+      {mobileActiveTab === 'canvas' && (
+        <div className="xl:hidden fixed bottom-5 left-1/2 -translate-x-1/2 z-30 pointer-events-auto">
+          <button
+            type="button"
+            onClick={() => handleSetMobileTab('chat')}
+            className="inline-flex items-center gap-2 rounded-full border border-indigo-200/80 dark:border-indigo-800/80 bg-slate-900/95 dark:bg-white/95 text-white dark:text-slate-900 px-4 py-2 text-xs font-semibold shadow-xl backdrop-blur-md transition-transform active:scale-95 cursor-pointer"
+            aria-label="Kembali ke Obrolan"
+          >
+            <MessageSquareText className="w-3.5 h-3.5 text-indigo-400 dark:text-indigo-600" />
+            <span>Kembali ke Obrolan</span>
+          </button>
+        </div>
       )}
 
       {/* 2. Main Dual-Pane Workspace */}
@@ -1551,6 +1566,7 @@ function StudentWorkspaceSession({
             onRetryAttachment={retryAttachment}
             onRecheckAttachment={recheckAttachment}
             onFileUploadChange={handleFileUploadChange}
+            onPasteFiles={handleProcessFiles}
             onOpenBreathing={openBreathingModal}
             onSwitchToRuangTenang={handleSwitchToQuietMode}
             onDismissDistress={dismissDistress}

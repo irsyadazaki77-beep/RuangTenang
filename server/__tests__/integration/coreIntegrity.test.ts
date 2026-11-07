@@ -28,6 +28,18 @@ app.use('/api/screenings', screeningRouter);
 
 const generateToken = (user: any) => jwt.sign({ ...user, sessionId: "test-session" }, JWT_SECRET, { issuer: 'ruangtenang', audience: 'ruangtenang-web', algorithm: 'HS256' });
 
+const nextCounselorDate = (weekday: 1 | 3, from = new Date()) => {
+  const date = new Date(from);
+  date.setUTCHours(12, 0, 0, 0);
+  const daysUntil = (weekday - date.getUTCDay() + 7) % 7 || 7;
+  date.setUTCDate(date.getUTCDate() + daysUntil);
+  return date.toISOString().slice(0, 10);
+};
+
+const firstBookingDate = nextCounselorDate(1);
+const secondBookingDate = nextCounselorDate(3, new Date(`${firstBookingDate}T12:00:00Z`));
+const thirdBookingDate = nextCounselorDate(1, new Date(`${secondBookingDate}T12:00:00Z`));
+
 describe('Core Feature Integrity Integration Tests (FASE 8)', () => {
   const student1 = { userId: 'usr-student-integ-1', name: 'Budi Santoso', email: 'budi.integ@univ.ac.id', role: 'mahasiswa' };
   const student2 = { userId: 'usr-student-integ-2', name: 'Siti Rahma', email: 'siti.integ@univ.ac.id', role: 'mahasiswa' };
@@ -43,6 +55,7 @@ describe('Core Feature Integrity Integration Tests (FASE 8)', () => {
 
   beforeAll(async () => {
     vi.spyOn(serverDb, 'isSessionActive').mockResolvedValue(true);
+    await prisma.idempotencyRecord.deleteMany({ where: { key: { contains: 'offline-owner-test' } } });
 
     // Clean up test records
     await prisma.appointments.deleteMany({
@@ -244,7 +257,7 @@ describe('Core Feature Integrity Integration Tests (FASE 8)', () => {
         .send({
           counselorId: 'c-integ-1',
           counselorName: counselor1.name,
-          date: '2026-12-10',
+          date: secondBookingDate,
           time: '10:30',
           timezone: 'WIB',
           mode: 'video_call',
@@ -264,8 +277,8 @@ describe('Core Feature Integrity Integration Tests (FASE 8)', () => {
       const bookingData = {
         counselorId: 'c-integ-1',
         counselorName: 'Dr. Anita Rahmawati, M.Psi., Psikolog',
-        date: '2026-09-10',
-        time: '10:00',
+        date: firstBookingDate,
+        time: '10:30',
         mode: 'video_call' as const,
         notes: 'Konsultasi krisis skripsi dan burnout'
       };
@@ -285,8 +298,8 @@ describe('Core Feature Integrity Integration Tests (FASE 8)', () => {
       const conflictBooking = {
         counselorId: 'c-integ-1',
         counselorName: 'Dr. Anita Rahmawati, M.Psi., Psikolog',
-        date: '2026-09-10',
-        time: '10:00',
+        date: firstBookingDate,
+        time: '10:30',
         mode: 'video_call' as const,
         notes: 'Ingin booking di jam yang sama'
       };
@@ -331,7 +344,7 @@ describe('Core Feature Integrity Integration Tests (FASE 8)', () => {
 
     it('allows assigned counselor 1 to update status: requested -> confirmed -> in progress -> completed', async () => {
       const actualNow = new Date();
-      vi.setSystemTime(new Date('2026-09-10T09:50:00+07:00'));
+      vi.setSystemTime(new Date(`${firstBookingDate}T10:30:00+07:00`));
       try {
         const resConfirm = await request(app)
           .put(`/api/appointments/${createdApptId}`)
@@ -384,8 +397,8 @@ describe('Core Feature Integrity Integration Tests (FASE 8)', () => {
         .send({
           counselorId: 'c-integ-1',
           counselorName: 'Dr. Anita Rahmawati, M.Psi., Psikolog',
-          date: '2026-09-11',
-          time: '11:00',
+          date: thirdBookingDate,
+          time: '10:30',
           timezone: 'WIB',
           mode: 'video_call',
           notes: 'Appointment status concurrency regression',

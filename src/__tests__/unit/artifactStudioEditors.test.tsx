@@ -46,4 +46,23 @@ describe('Artifact Studio data editors', () => {
     expect(deck.slides[0].notes).toBe('Explain evidence');
     expect(deck.theme).toBe('professional');
   });
+
+  it('creates presentation from markdown separated by --- dividers and bold headings', async () => {
+    const { createPresentationFromMarkdown } = await import('../../features/workspace/components/ArtifactDataEditors');
+    const raw = `Pembukaan presentasi
+---
+**Latar Belakang**
+- Masalah A
+- Masalah B
+---
+**Solusi & Rekomendasi**
+- Langkah 1
+- Langkah 2`;
+    const deck = createPresentationFromMarkdown(raw, 'Presentasi Solusi');
+    expect(deck.slides).toHaveLength(3);
+    expect(deck.slides[0].title).toBe('Presentasi Solusi');
+    expect(deck.slides[1].title).toBe('Latar Belakang');
+    expect(deck.slides[2].title).toBe('Solusi & Rekomendasi');
+    expect(deck.slides[1].body).not.toContain('---');
+  });
 });

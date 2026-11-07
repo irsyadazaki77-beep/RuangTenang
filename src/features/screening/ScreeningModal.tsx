@@ -30,6 +30,8 @@ import { OPTIONS } from './constants';
 import { ALL_QUESTIONS, TOTAL_QUESTIONS } from './screeningQuestions';
 import { ScoreGaugeMeter } from './components/ScoreGaugeMeter';
 import { SafetyCheckModal } from './components/SafetyCheckModal';
+import { OfflineEmergencySosModal } from './components/OfflineEmergencySosModal';
+import { WifiOff } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { addNotification } from '../../lib/notificationStore';
 import { modalBackdropVariants, modalPanelVariants, reducedMotionVariants } from '../../lib/motionTokens';
@@ -100,6 +102,7 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
 
   const [persistenceStatus, setPersistenceStatus] = useState<'idle' | 'pending' | 'saved' | 'local-only' | 'failed'>('idle');
   const [persistenceError, setPersistenceError] = useState<string | null>(null);
+  const [isOfflineSosOpen, setIsOfflineSosOpen] = useState<boolean>(false);
 
   const modalRef = useRef<HTMLDivElement>(null);
 
@@ -695,13 +698,13 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
                   initial="enter"
                   animate="center"
                   exit="exit"
-                  className="surface-card border border-default p-4 sm:p-5 rounded-2xl shadow-3xs space-y-4 w-full"
+                  className="surface-card card-organic-lift border border-default/80 p-5 sm:p-6 rounded-2xl shadow-3xs space-y-4 w-full"
                 >
                   <div className="flex items-start gap-3">
-                    <span className="w-7 h-7 shrink-0 rounded-lg bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300 font-extrabold text-xs flex items-center justify-center border border-teal-200/70 dark:border-teal-800/70">
+                    <span className="w-8 h-8 shrink-0 rounded-xl bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300 font-extrabold text-xs flex items-center justify-center border border-teal-200/70 dark:border-teal-800/70 shadow-2xs">
                       {currentQ.numberDisplay}
                     </span>
-                    <h3 aria-live="polite" aria-atomic="true" className="text-sm sm:text-base font-medium text-primary leading-snug pt-0.5">
+                    <h3 aria-live="polite" aria-atomic="true" className="text-sm sm:text-base font-semibold text-primary leading-snug pt-1">
                       {currentQ.questionText}
                     </h3>
                   </div>
@@ -715,14 +718,14 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
                           key={opt.value}
                           onClick={() => handleSelectOption(opt.value)}
                           aria-pressed={isSelected}
-                          className={`p-3.5 sm:p-4 min-h-13 rounded-xl text-xs sm:text-sm font-medium border text-left transition-all focus:outline-none focus:ring-2 focus:ring-teal-500/30 cursor-pointer flex items-center justify-between group chip-tactile ${
+                          className={`btn-tactile p-3.5 sm:p-4 min-h-13 rounded-2xl text-xs sm:text-sm font-medium border text-left transition-all focus:outline-none focus:ring-2 focus:ring-teal-500/30 cursor-pointer flex items-center justify-between group ${
                             isSelected
                               ? 'bg-teal-700 text-white border-teal-700 shadow-md scale-[1.01]'
                               : 'surface-card border-default text-primary hover:bg-teal-50/60 dark:hover:bg-teal-950/30 hover:border-teal-300 dark:hover:border-teal-700 shadow-3xs'
                           }`}
                         >
                           <div className="flex items-center gap-2.5">
-                            <span className={`w-6 h-6 rounded-md text-[11px] font-bold flex items-center justify-center transition-colors ${
+                            <span className={`w-6 h-6 rounded-lg text-[11px] font-bold flex items-center justify-center transition-colors ${
                               isSelected
                                 ? 'bg-white/20 text-white'
                                 : 'bg-slate-100 dark:bg-slate-800 text-secondary group-hover:bg-teal-100 dark:group-hover:bg-teal-900 group-hover:text-teal-700 dark:group-hover:text-teal-300'
@@ -915,6 +918,14 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
                   <HeartPulse className="h-3.5 w-3.5" aria-hidden="true" />
                   Buka Pusat Bantuan Krisis
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setIsOfflineSosOpen(true)}
+                  className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-rose-500/50 bg-rose-500/10 px-3 text-[11px] font-semibold text-rose-700 dark:text-rose-300 hover:bg-rose-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-600"
+                >
+                  <WifiOff className="h-3.5 w-3.5" aria-hidden="true" />
+                  Protokol SOS Offline
+                </button>
               </div>
             )}
 
@@ -998,6 +1009,13 @@ export const ScreeningModal: React.FC<ScreeningModalProps> = ({
           onClose={() => setShowSafetyCheckModal(false)}
           safetyAssessment={safetyAssessment}
           setSafetyAssessment={setSafetyAssessment}
+        />
+
+        {/* OFFLINE EMERGENCY SOS MODAL */}
+        <OfflineEmergencySosModal
+          isOpen={isOfflineSosOpen}
+          onClose={() => setIsOfflineSosOpen(false)}
+          severityCategory={finalResult?.phq9?.severity || 'Krisis Berat'}
         />
     </>
   );
