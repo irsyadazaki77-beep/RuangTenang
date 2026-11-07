@@ -273,6 +273,17 @@ function StudentWorkspaceSession({
   const [revisionCommit, setRevisionCommit] = useState<{ artifactId: string; content: string; version: number } | null>(null);
   const [isCreatingArtifact, setIsCreatingArtifact] = useState(false);
   const [isWorkflowExportOpen, setIsWorkflowExportOpen] = useState(false);
+  const [isMockDefenseOpen, setIsMockDefenseOpen] = useState(false);
+  const handleOpenMockDefense = useCallback(() => setIsMockDefenseOpen(true), []);
+  const handleCloseMockDefense = useCallback(() => setIsMockDefenseOpen(false), []);
+  const handleSaveDefenseToCanvas = useCallback((markdownContent: string, title: string) => {
+    void createArtifactFromContent(markdownContent, title).then(saved => {
+      if (saved) {
+        openWorkspaceInspector('canvas');
+        showToast('Berita Acara Sidang berhasil disimpan ke Kanvas!', 'success');
+      }
+    });
+  }, [createArtifactFromContent, openWorkspaceInspector, showToast]);
   const [pendingCanvasTransfer, setPendingCanvasTransfer] = useState<{ id: string; content: string; title: string } | null>(null);
   const revisionRequestRef = React.useRef<{ scope: 'document' | 'selection'; artifactId: string; title: string; baseContent: string; baseVersion: number; workspaceId?: string; selection?: WorkspaceArtifactSelection } | null>(null);
   const requestSnapshotsRef = React.useRef(new Map<string, { snapshot: WorkspaceRequestSnapshot; attachments?: StoredAttachment[]; customSystemNote?: string; revisionRequest?: NonNullable<typeof revisionRequestRef.current> }>());
@@ -1581,6 +1592,7 @@ function StudentWorkspaceSession({
             onDuplicatePreset={duplicatePreset}
             onDeletePreset={deleteCustomPreset}
             onResetPersonalization={resetPersonalization}
+            onOpenMockDefense={handleOpenMockDefense}
           />
         </section>
 
@@ -1713,6 +1725,7 @@ function StudentWorkspaceSession({
           activeChapterScope={activeChapterScope}
           onChangeChapterScope={handleChangeChapterScope}
           onCreateChapterArtifact={handleCreateChapterArtifact}
+          onOpenMockDefense={handleOpenMockDefense}
         />
       </main>
 
@@ -1754,6 +1767,11 @@ function StudentWorkspaceSession({
         onCloseWorkflowExport={() => setIsWorkflowExportOpen(false)}
         exportContent={canvasDraft && canvasDraft.artifactId === visibleActiveArtifact?.id ? canvasDraft.content : visibleActiveArtifact?.content}
         showToast={showToast}
+        isMockDefenseOpen={isMockDefenseOpen}
+        onCloseMockDefense={handleCloseMockDefense}
+        mockDefenseInitialTitle={visibleActiveArtifact?.title || workspaceData?.name || 'Skripsi Mahasiswa'}
+        mockDefenseContextText={visibleActiveArtifact?.content || ''}
+        onSaveMockDefenseToCanvas={handleSaveDefenseToCanvas}
       />
     </div>
   );

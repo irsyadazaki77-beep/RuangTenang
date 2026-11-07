@@ -17,6 +17,9 @@ const MicroBreathingModal = React.lazy(() =>
 const WorkspaceToolConfigModal = React.lazy(() =>
   import('./WorkspaceToolConfigModal').then(module => ({ default: module.WorkspaceToolConfigModal }))
 );
+const MockDefenseModal = React.lazy(() =>
+  import('./MockDefenseModal').then(module => ({ default: module.MockDefenseModal }))
+);
 
 export interface PendingCanvasTransferState {
   id: string;
@@ -72,6 +75,13 @@ export interface WorkspaceModalsContainerProps {
   onCloseWorkflowExport: () => void;
   exportContent?: string;
   showToast: (message: string, type?: 'success' | 'error' | 'info') => void;
+
+  // Mock Defense Modal
+  isMockDefenseOpen?: boolean;
+  onCloseMockDefense?: () => void;
+  mockDefenseInitialTitle?: string;
+  mockDefenseContextText?: string;
+  onSaveMockDefenseToCanvas?: (markdownContent: string, title: string) => void;
 }
 
 export const WorkspaceModalsContainer: React.FC<WorkspaceModalsContainerProps> = React.memo(({
@@ -101,6 +111,11 @@ export const WorkspaceModalsContainer: React.FC<WorkspaceModalsContainerProps> =
   onCloseWorkflowExport,
   exportContent,
   showToast,
+  isMockDefenseOpen,
+  onCloseMockDefense,
+  mockDefenseInitialTitle,
+  mockDefenseContextText,
+  onSaveMockDefenseToCanvas,
 }) => {
   return (
     <>
@@ -309,6 +324,19 @@ export const WorkspaceModalsContainer: React.FC<WorkspaceModalsContainerProps> =
             attachmentId={previewAttachmentId}
             onClose={onCloseFilePreview}
             onArtifactCreated={onArtifactCreatedFromFilePreview}
+          />
+        </React.Suspense>
+      )}
+
+      {/* Mock Defense Modal */}
+      {isMockDefenseOpen && (
+        <React.Suspense fallback={null}>
+          <MockDefenseModal
+            isOpen={isMockDefenseOpen}
+            onClose={onCloseMockDefense || (() => {})}
+            initialTitle={mockDefenseInitialTitle}
+            contextText={mockDefenseContextText}
+            onSaveToCanvas={onSaveMockDefenseToCanvas}
           />
         </React.Suspense>
       )}

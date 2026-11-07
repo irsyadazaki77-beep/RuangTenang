@@ -1,7 +1,7 @@
 /**
  * Mock Defense Model & Simulation Engine for RuangKerja (RuangTenang Kampus)
  * Provides interactive thesis defense simulations with examiner personas,
- * scoring matrices, and counter-argument recommendations.
+ * scoring matrices, counter-argument recommendations, and voice integration.
  */
 
 export type DefenseExamType = 'SEMINAR_PROPOSAL' | 'SEMINAR_HASIL' | 'SIDANG_SKRIPSI';
@@ -73,6 +73,15 @@ export const DEFAULT_EXAMINERS: DefenseExaminer[] = [
     focusArea: 'Landasan Teori, State-of-the-Art, Research Gap, dan Kebaruan Ilmiah',
     avatarBg: 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800',
     avatarText: 'RK'
+  },
+  {
+    id: 'examiner-3',
+    name: 'Dra. Hj. Nurul Hidayati, M.Pd.',
+    title: 'Dosen Pembimbing & Sekretaris Sidang',
+    role: 'Sekretaris',
+    focusArea: 'Sistematika Penulisan, Konsistensi Temuan, Etika Penelitian, dan Solusi Revisi',
+    avatarBg: 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800',
+    avatarText: 'NH'
   }
 ];
 
@@ -106,7 +115,7 @@ export function generateMockQuestions(thesisTitle: string, examType: DefenseExam
           'Formula penentuan jumlah sampel minimum',
           'Langkah mitigasi jika responden tidak merespons (oversampling)'
         ],
-        suggestedCounterDefense: 'Izin menjawab Dr. Hendra. Kami menggunakan stratified random sampling untuk memastikan seluruh karakteristik populasi terwakili proporsional. Ukuran sampel dihitung menggunakan margin of error 5%, dan kami mengantisipasi non-response bias dengan menyiapkan cadangan oversampling sebesar 15% serta uji non-response bias komparatif.'
+        suggestedCounterDefense: 'Izin menjawab Dr. Hendra. Kami menggunakan stratified random sampling untuk memastikan seluruh karakteristik populasi terwakili proporsional. Ukuran sampel dihitung menggunakan rumus Slovin dengan margin of error 5%, dan kami mengantisipasi non-response bias dengan menyiapkan cadangan oversampling sebesar 15% serta uji non-response bias komparatif.'
       },
       {
         id: 'q-sempro-3',
@@ -120,6 +129,19 @@ export function generateMockQuestions(thesisTitle: string, examType: DefenseExam
           'Teknik korelasi butir atau analisis faktor untuk validitas konstruk'
         ],
         suggestedCounterDefense: 'Instrumen ini diadaptasi dari skala standar yang telah divalidasi secara internasional, kemudian melalui proses back-translation dan telaah ahli (expert judgment). Sebelum disebar penuh, kami melakukan pilot testing pada 30 responden untuk menguji validitas butir dan reliabilitas Cronbach Alpha di atas 0.70.'
+      },
+      {
+        id: 'q-sempro-4',
+        examinerId: 'examiner-3',
+        chapterTag: 'Bab 1-3: Timeline & Kelayakan Lapangan',
+        question: 'Sebagai pembimbing, saya ingin memastikan: sejauh mana kesiapan perizinan lapangan dan jadwal kerja saudara agar penyusunan skripsi ini dapat tuntas tepat waktu dalam 1 semester?',
+        contextHint: 'Jelaskan tahapan perizinan instansi, kontak awal, dan jadwal mitigasi waktu.',
+        expectedKeyPoints: [
+          'Jadwal tahapan riset yang terukur',
+          'Status perizinan etik/lokasi penelitian',
+          'Rencana kontingensi jika izin tertunda'
+        ],
+        suggestedCounterDefense: 'Terima kasih Ibu Nurul. Draf surat izin penelitian telah kami siapkan dan kontak awal dengan instansi telah dilakukan secara informal. Kami mengalokasikan 4 minggu untuk pengambilan data dengan jadwal cadangan 2 minggu jika ada kendala di lapangan.'
       }
     ];
   }
@@ -164,6 +186,19 @@ export function generateMockQuestions(thesisTitle: string, examType: DefenseExam
         'Memberikan saran yang spesifik dan terukur (actionable)'
       ],
       suggestedCounterDefense: 'Keterbatasan utama penelitian ini adalah pengambilan data yang terbatas pada satu institusi dalam satu kurun semester, sehingga generalisasi pada sektor lain perlu kehati-hatian. Kami menyarankan penelitian mendatang menggunakan studi longitudinal lintas kampus dengan metode campuran (mixed methods).'
+    },
+    {
+      id: 'q-sidang-4',
+      examinerId: 'examiner-3',
+      chapterTag: 'Etika & Manfaat Aplikatif Hasil Riset',
+      question: 'Bagaimana saudara menjamin kerahasiaan data responden selama penelitian, dan apa manfaat aplikatif langsung rekomendasi saudara bagi subjek penelitian?',
+      contextHint: 'Jelaskan informed consent, anonimitas data, dan implikasi kebijakan praktis.',
+      expectedKeyPoints: [
+        'Prosedur informed consent tertulis',
+        'Anonimitas dan enkripsi data responden',
+        'Rekomendasi aplikatif untuk institusi terkait'
+      ],
+      suggestedCounterDefense: 'Seluruh responden menandatangani lembar persetujuan (informed consent) dan identitas disamarkan menggunakan kode anonim. Data disimpan terenkripsi dan hasil penelitian ini kami rangkum dalam bentuk executive summary sebagai masukan praktis bagi institusi terkait.'
     }
   ];
 }
@@ -202,30 +237,44 @@ export function evaluateDefenseAnswer(question: DefenseQuestion, answer: string)
     }
   }
 
-  let baseScore = 65 + (hits * 10);
-  if (wordCount > 40) baseScore += 5;
-  if (wordCount > 80) baseScore += 5;
+  let baseScore = 65 + (hits * 8);
+  if (wordCount > 35) baseScore += 5;
+  if (wordCount > 70) baseScore += 5;
   const score = Math.min(96, Math.max(50, baseScore));
 
-  const confidenceScore = Math.min(95, Math.max(55, score + (wordCount > 60 ? 5 : -5)));
-  const theoryScore = Math.min(98, Math.max(50, 60 + (hits * 12)));
-  const defenseLogicScore = Math.min(95, Math.max(50, Math.round((score + confidenceScore) / 2)));
+  const confidenceScore = Math.min(95, Math.max(55, score + (wordCount > 50 ? 5 : -5)));
+  const theoryScore = Math.min(98, Math.max(50, baseScore + (hits > 1 ? 5 : -5)));
+  const defenseLogicScore = Math.min(95, Math.max(52, score));
 
-  let grade: DefenseAnswerEvaluation['grade'] = 'C';
+  let grade: DefenseAnswerEvaluation['grade'];
   if (score >= 85) grade = 'A';
   else if (score >= 78) grade = 'B+';
-  else if (score >= 70) grade = 'B';
+  else if (score >= 68) grade = 'B';
+  else if (score >= 58) grade = 'C';
+  else grade = 'Perlu Perbaikan';
 
-  const strengths = [
-    'Penyampaian sopan dan menjunjung etika sidang akademik',
-    ...(hits > 0 ? [`Mencakup poin kunci: ${matchedPoints.join(', ')}`] : ['Berusaha mengaitkan konteks jawaban']),
-    ...(wordCount > 50 ? ['Elaborasi argumen cukup komprehensif'] : [])
-  ];
+  const strengths: string[] = [];
+  const weaknesses: string[] = [];
 
-  const weaknesses = [
-    ...(hits < question.expectedKeyPoints.length ? ['Ada aspek pertanyaan yang belum terjawab tuntas'] : []),
-    ...(wordCount < 35 ? ['Bisa diperkuat dengan data statistik atau nama ahli'] : [])
-  ];
+  if (hits >= 2) {
+    strengths.push('Menguasai premis utama yang ditanyakan penguji');
+  } else {
+    weaknesses.push('Belum menyentuh seluruh poin ekspektasi jawaban');
+  }
+
+  if (wordCount >= 40) {
+    strengths.push('Artikulasi argumen cukup mendalam dan terstruktur');
+  } else {
+    weaknesses.push('Elaborasi argumen masih dapat diperdalam lagi');
+  }
+
+  if (lower.includes('terima kasih') || lower.includes('izin menjawab') || lower.includes('pertanyaan')) {
+    strengths.push('Sikap santun dan profesional dalam merespons dewan penguji');
+  }
+
+  const critique = score >= 80
+    ? 'Argumen saudara kuat dan terartikulasi dengan baik. Penguji menghargai ketegasan ilmiah serta rujukan konkret yang saudara paparkan.'
+    : 'Jawaban saudara sudah pada jalur yang benar, namun perlu penekanan lebih kuat pada metodologi atau rujukan teori agar tidak terkesan spekulatif.';
 
   return {
     questionId: question.id,
@@ -235,9 +284,7 @@ export function evaluateDefenseAnswer(question: DefenseQuestion, answer: string)
     confidenceScore,
     theoryScore,
     defenseLogicScore,
-    critique: score >= 80
-      ? 'Pertahanan argumen yang sangat solid! Saudara mampu menjawab dengan kepala dingin, terminologi ilmiah yang tepat, dan tidak defensif berlebihan.'
-      : 'Jawaban saudara sudah berada di arah yang tepat, namun disarankan menyertakan rujukan literatur atau justifikasi metodologis yang lebih tegas saat sidang sesungguhnya.',
+    critique,
     strengths,
     weaknesses,
     suggestedImprovement: question.suggestedCounterDefense
@@ -245,53 +292,73 @@ export function evaluateDefenseAnswer(question: DefenseQuestion, answer: string)
 }
 
 export function generateDefenseReportMarkdown(session: MockDefenseSession): string {
-  const evalList = Object.values(session.evaluations);
-  const avgScore = evalList.length > 0
-    ? Math.round(evalList.reduce((acc, cur) => acc + cur.score, 0) / evalList.length)
-    : 0;
+  const evals = Object.values(session.evaluations);
+  const totalScore = evals.reduce((acc, curr) => acc + curr.score, 0);
+  const avgScore = evals.length ? Math.round(totalScore / evals.length) : 0;
+  
+  let finalGrade: string;
+  if (avgScore >= 85) finalGrade = 'A (Lulus Memuaskan)';
+  else if (avgScore >= 78) finalGrade = 'B+ (Lulus Baik Sekali)';
+  else if (avgScore >= 70) finalGrade = 'B (Lulus Cukup)';
+  else finalGrade = 'C (Perlu Sidang Ulang / Revisi Mayor)';
 
-  const letterGrade = avgScore >= 85 ? 'A (Sangat Memuaskan)' : avgScore >= 75 ? 'B+ (Memuaskan)' : avgScore >= 68 ? 'B (Cukup)' : 'Revisi Mayor';
+  const dateStr = new Date().toLocaleDateString('id-ID', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  });
 
-  return `:::artifact{type="markdown" title="Berita Acara & Evaluasi Simulasi Sidang (${session.examType === 'SEMINAR_PROPOSAL' ? 'Sempro' : 'Skripsi'})"}
-# 🎓 Berita Acara Evaluasi Simulasi Ujian Sidang
-**Judul Naskah:** ${session.thesisTitle}  
-**Jenis Ujian:** ${session.examType.replace(/_/g, ' ')}  
-**Tanggal Simulasi:** ${new Date(session.startedAt).toLocaleDateString('id-ID', { dateStyle: 'full' })}  
-**Nilai Akhir Rata-rata:** **${avgScore}/100 (${letterGrade})**
+  return `# BERITA ACARA SIMULASI ${session.examType.replace(/_/g, ' ')}
+**Ekosistem RuangTenang & RuangKerja Kampus**
 
 ---
 
-### 🏛️ Tim Dewan Penguji Simulasi
-${session.examiners.map(e => `- **${e.name}** (${e.role}) — *Fokus: ${e.focusArea}*`).join('\n')}
+### I. Data Pelaksanaan
+- **Judul Penelitian:** ${session.thesisTitle}
+- **Tanggal Simulasi:** ${dateStr}
+- **Bentuk Evaluasi:** Simulasi Sidang Interaktif (AI Mock Defense Drill)
+- **Status Akhir:** **${finalGrade}** (Nilai Rata-rata: **${avgScore}/100**)
 
 ---
 
-### 📊 Rekapitulasi Penilaian Butir Pertanyaan
+### II. Susunan Dewan Penguji AI
+1. **${session.examiners[0]?.name || 'Dr. Ir. Hendra Suhartono, M.Kom.'}** (Ketua Penguji - Metodologi & Sampling)
+2. **${session.examiners[1]?.name || 'Prof. Dr. Ratna Kusuma Dewi, M.Si.'}** (Penguji Ahli - Teori & Research Gap)
+3. **${session.examiners[2]?.name || 'Dra. Hj. Nurul Hidayati, M.Pd.'}** (Sekretaris - Sistematika & Konsistensi)
+
+---
+
+### III. Rekapitulasi Penilaian Butir Pertanyaan
+
 ${session.questions.map((q, idx) => {
   const ev = session.evaluations[q.id];
-  return `#### Pertanyaan ${idx + 1} (${q.chapterTag})
-*Dosen Penguji: ${session.examiners.find(e => e.id === q.examinerId)?.name || 'Penguji'}*
+  const ex = session.examiners.find(e => e.id === q.examinerId) || session.examiners[0];
+  if (!ev) return `#### ${idx + 1}. [${q.chapterTag}] *(Belum dijawab)*\n\n`;
+
+  return `#### ${idx + 1}. [${q.chapterTag}] - Penguji: ${ex.name}
+**Pertanyaan:**
 > "${q.question}"
 
-**Jawaban Mahasiswa:**  
-"${ev ? ev.studentAnswer : '(Belum dijawab)'}"
+**Jawaban Mahasiswa:**
+"${ev.studentAnswer}"
 
-**Hasil Evaluasi Penguji:**
-- Skor: **${ev ? ev.score : 0}/100** | Grade: **${ev ? ev.grade : '-'}**
-- Ketepatan Teori: ${ev ? ev.theoryScore : 0}% | Logika Sanggahan: ${ev ? ev.defenseLogicScore : 0}% | Kepercayaan Diri: ${ev ? ev.confidenceScore : 0}%
-- **Komentar Penguji:** ${ev ? ev.critique : '-'}
-
-💡 **Rekomendasi Pembelaan Ilmiah Ideal:**
-> "${q.suggestedCounterDefense}"
+**Hasil Penilaian:**
+- **Skor:** ${ev.score}/100 (Predikat: **${ev.grade}**)
+- **Kekuatan:** ${ev.strengths.join(', ') || '-'}
+- **Catatan Evaluasi:** ${ev.critique}
+- **Rekomendasi Argumen Balik (Counter-Defense):**
+  > *"${ev.suggestedImprovement}"*
 
 ---
 `;
 }).join('\n')}
 
-### 📝 Catatan Perbaikan Sebelum Hari Sidang
-1. Latih artikulasi intonasi agar tidak terburu-buru saat menjawab cecaran penguji.
-2. Selalu siapkan slide cadangan (*appendix slides*) yang memuat data statistik mentah, uji normalitas, atau instrumen kuesioner.
-3. Gunakan frasa pembuka etis: *"Terima kasih atas pertanyaan kritis yang sangat mencerahkan dari Bapak/Ibu Dewan Penguji..."*
-:::
+### IV. Catatan Dewan Penguji untuk Revisi Naskah
+1. Perkuat konsistensi antara rumusan masalah di Bab 1 dengan teknik sampling di Bab 3.
+2. Pastikan argumentasi tidak spekulatif dan selalu ditopang rujukan buku teks atau artikel jurnal bereputasi.
+3. Latih ketenangan intonasi suara saat menjawab cecaran penguji dengan memulai dari penegasan fakta.
+
+*(Dokumen ini dihasilkan secara otomatis oleh RuangKerja AI Mock Defense Engine untuk persiapan mental dan ketangguhan argumen akademik mahasiswa).*
 `;
 }
