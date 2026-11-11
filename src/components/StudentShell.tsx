@@ -207,7 +207,7 @@ export const StudentShell: React.FC<StudentShellProps> = ({
   }, [user.campusId, user.id, user.role]);
 
   return (
-    <div className="flex w-full h-dvh bg-transparent text-primary font-sans relative overflow-hidden">
+    <div data-space={currentMode === 'RUANG_CODER' ? 'coder' : currentMode === 'RUANG_KERJA' ? 'kerja' : 'tenang'} className="flex w-full h-dvh bg-transparent text-primary font-sans relative overflow-hidden">
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:px-4 focus:py-2 focus:bg-teal-700 focus:text-white focus:rounded-lg focus:shadow-md focus:outline-none text-xs font-semibold"
@@ -218,7 +218,7 @@ export const StudentShell: React.FC<StudentShellProps> = ({
         <>
           <ChatAuroraBackground
             variant={currentMode === 'RUANG_KERJA' ? 'kerja' : 'tenang'}
-            intensity={((safeLocalStorage.getItem('aurora_intensity') as 'subtle' | 'normal' | 'vivid' | null) || 'normal')}
+            intensity={((safeLocalStorage.getItem('aurora_intensity') as 'subtle' | 'normal' | 'vivid' | null) || (location.pathname.startsWith('/c/') || location.pathname.startsWith('/workspace/c/') ? 'subtle' : 'normal'))}
           />
           <Sidebar
             isOpen={isSidebarOpen}

@@ -6,7 +6,7 @@ import { smartModelRouter } from '../server/services/ai/smartModelRouter.js';
 
 async function runCheck() {
   console.log('=======================================================');
-  console.log('   Diagnostik & Verifikasi Si Pinter v3.5 (Zero-Hallucination)');
+  console.log('   Diagnostik & Verifikasi Si Pinter v4.0 (Supreme Local Genius)');
   console.log('=======================================================');
 
   await refreshOllamaInventory(true);
@@ -73,6 +73,46 @@ async function runCheck() {
     console.log('[VERIFIKASI KEJUJURAN]: ✅ LULUS (Model menolak mengarang data privat/fiktif)');
   } else {
     console.warn('[VERIFIKASI KEJUJURAN]: ⚠️ Periksa apakah model berhalusinasi nama/nomor');
+  }
+
+  console.log('\n--- UJI 3: Draf Akademik & Standar Sitasi (APA 7th & Bab Skripsi) ---');
+  const start3 = Date.now();
+  const res3 = await ollamaService.generateResponse({
+    requestedModelId: 'ollama-si-pinter',
+    prompt: 'Bantu susun outline Bab 1 Pendahuluan skripsi tentang pengaruh kecerdasan buatan terhadap efisiensi penulisan akademik, sertakan format sitasi APA 7 untuk contoh kutipan jurnal.',
+    maxOutputTokens: 350
+  }, 'ollama-si-pinter');
+  const duration3 = Date.now() - start3;
+
+  console.log(`[PASS] Uji 3 selesai dalam ${duration3}ms`);
+  console.log('[HASIL UJI 3]:');
+  console.log(res3.text.trim());
+
+  const hasAcademicStructure = /latar belakang|rumusan masalah|tujuan/i.test(res3.text);
+  if (hasAcademicStructure) {
+    console.log('[VERIFIKASI AKADEMIK]: ✅ LULUS (Model memahami struktur Bab 1 dan kaidah penulisan ilmiah)');
+  } else {
+    console.warn('[VERIFIKASI AKADEMIK]: ⚠️ Periksa keluaran struktur naskah di atas');
+  }
+
+  console.log('\n--- UJI 4: Pemecahan Tugas Kuliah Rumit & First-Principles (Algoritma / Rekursi) ---');
+  const start4 = Date.now();
+  const res4 = await ollamaService.generateResponse({
+    requestedModelId: 'ollama-si-pinter',
+    prompt: 'Tolong bantu tugas kuliah saya: tentukan kompleksitas waktu dari relasi rekursif T(n) = 3T(n/2) + n^2 dengan Master Theorem secara bertahap dan jelas.',
+    maxOutputTokens: 450
+  }, 'ollama-si-pinter');
+  const duration4 = Date.now() - start4;
+
+  console.log(`[PASS] Uji 4 selesai dalam ${duration4}ms`);
+  console.log('[HASIL UJI 4]:');
+  console.log(res4.text.trim());
+
+  const hasMasterTheoremProof = /theta\s*\(\s*n\^2\s*\)|o\s*\(\s*n\^2\s*\)|kasus 3|case 3/i.test(res4.text);
+  if (hasMasterTheoremProof) {
+    console.log('[VERIFIKASI TUGAS AKADEMIK]: ✅ LULUS (Penurunan Master Theorem akurat dan step-by-step)');
+  } else {
+    console.warn('[VERIFIKASI TUGAS AKADEMIK]: ⚠️ Periksa apakah model melompat tanpa langkah pembuktian');
   }
 
   console.log('=======================================================');

@@ -317,15 +317,19 @@ export default function MarkdownRenderer({ content }: Props) {
   }), []);
 
   const normalized = useMemo(() => normalizeMathDelimiters(content), [content]);
+  const hasMath = useMemo(() => normalized.includes('$'), [normalized]);
 
   useEffect(() => {
-    if (normalized.includes('$')) {
+    if (hasMath) {
       ensureKatexStyles();
     }
-  }, [normalized]);
+  }, [hasMath]);
+
+  const remarkPlugins = useMemo(() => (hasMath ? [remarkMath] : []), [hasMath]);
+  const rehypePlugins = useMemo(() => (hasMath ? [rehypeKatex] : []), [hasMath]);
 
   return (
-    <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]} components={components}>
+    <ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins} components={components}>
       {normalized}
     </ReactMarkdown>
   );

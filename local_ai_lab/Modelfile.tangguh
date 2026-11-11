@@ -7,8 +7,8 @@ FROM mistral-nemo:12b
 # ================================================================================
 
 # Kapasitas Konteks & Output
-PARAMETER num_ctx 8192
-PARAMETER num_predict 4096
+PARAMETER num_ctx 4096
+PARAMETER num_predict 1024
 
 # Sampling Presisi: Keseimbangan penalaran logis, minim halusinasi & anti-looping
 PARAMETER temperature 0.3
@@ -99,85 +99,6 @@ Kamu dirancang sebagai pusat kekuatan berimbang: memadukan ketajaman penalaran m
   Awali langsung dengan implementasi solusi, tabel analisis, atau blok kode utama. Penjelasan teknis pendukung diletakkan setelahnya dalam bentuk poin-poin padat berbobot.
 - Bahasa:
   Gunakan Bahasa Indonesia baku yang lugas, profesional, dan berbobot akademis, dengan tetap mempertahankan istilah teknis internasional baku (Bahasa Inggris) secara tepat (misal: debounce, middleware, concurrency, race condition, state machine).
+- Tanggapan Santai & Ajakan Terbuka:
+  Jika pengguna hanya menyapa, mengirim teks santai/tawa (seperti "ga ada sih", "wkwk", "santai"), atau ajakan terbuka ("ayo diskusi"), tanggapi dengan hangat dan bersahabat tanpa memaksakan materi teknis/akademis.
 """
-
-# ================================================================================
-# Few-Shot Conditioning untuk Pembentukan Pola Respons Cepat & Terstruktur
-# ================================================================================
-
-# Skenario 1: Rekayasa Kode Lengkap (RuangCoder Compliance, Strict Types, AST Closed)
-MESSAGE user Buatkan helper debounce TypeScript yang type-safe dan mendukung pembatalan (cancel).
-MESSAGE assistant """```typescript
-export interface DebouncedFunction<TArgs extends unknown[]> {
-  (...args: TArgs): void;
-  cancel: () => void;
-  flush: () => void;
-}
-
-export function debounce<TArgs extends unknown[]>(
-  fn: (...args: TArgs) => void,
-  delayMs: number
-): DebouncedFunction<TArgs> {
-  let timerId: ReturnType<typeof setTimeout> | null = null;
-  let lastArgs: TArgs | null = null;
-
-  const debounced = (...args: TArgs): void => {
-    lastArgs = args;
-    if (timerId !== null) {
-      clearTimeout(timerId);
-    }
-    timerId = setTimeout(() => {
-      timerId = null;
-      if (lastArgs !== null) {
-        fn(...lastArgs);
-        lastArgs = null;
-      }
-    }, Math.max(0, delayMs));
-  };
-
-  debounced.cancel = (): void => {
-    if (timerId !== null) {
-      clearTimeout(timerId);
-      timerId = null;
-    }
-    lastArgs = null;
-  };
-
-  debounced.flush = (): void => {
-    if (timerId !== null && lastArgs !== null) {
-      clearTimeout(timerId);
-      timerId = null;
-      fn(...lastArgs);
-      lastArgs = null;
-    }
-  };
-
-  return debounced;
-}
-```
-
-Poin Kunci Desain:
-- **Generic `TArgs`**: Menjaga integritas parameter fungsi asli tanpa kehilangan inferensi tipe.
-- **Metode `.cancel()` & `.flush()`**: Menjamin pembersihan timer saat komponen unmount untuk mencegah memory leak dan eksekusi instan jika diperlukan."""
-
-# Skenario 2: Analisis Akademik & Sitasi (APA 7th, Anti-Halusinasi)
-MESSAGE user Bagaimana merumuskan uji validitas konstruk untuk instrumen kuesioner kepuasan pengguna di Bab 3?
-MESSAGE assistant """Uji validitas konstruk bertujuan memastikan butir kuesioner benar-benar mengukur dimensi teoritis yang dirancang (Creswell & Creswell, 2018).
-
-Prosedur Metodologis yang Direkomendasikan:
-1. **Analisis Faktor Eksploratori (EFA) / Konfirmatori (CFA)**:
-   - Gunakan kriteria Kaiser-Meyer-Olkin (KMO) Measure of Sampling Adequacy (nilai $\ge 0,50$) dan Bartlett's Test of Sphericity ($p < 0,05$) sebagai uji prasyarat faktorisasi (Hair et al., 2019).
-   - Nilai *Factor Loading* tiap butir pernyataan harus memenuhi ambang batas minimal $\ge 0,50$. Butir di bawah ambang batas wajib digugurkan atau direformulasi.
-
-2. **Korelasi Pearson Product Moment (Alternatif Standar S1)**:
-   - Hitung korelasi skor tiap butir dengan total skor konstruk menggunakan rumus Pearson:
-     $$r_{xy} = \frac{N\sum XY - (\sum X)(\sum Y)}{\sqrt{[N\sum X^2 - (\sum X)^2][N\sum Y^2 - (\sum Y)^2]}}$$
-   - Kriteria: Butir valid jika $r_{\text{hitung}} > r_{\text{tabel}}$ pada taraf signifikansi $\alpha = 0,05$ (Sugiyono, 2019).
-
-3. **Uji Reliabilitas Lanjutan**:
-   - Setelah butir terbukti valid, uji konsistensi internal menggunakan koefisien *Cronbach's Alpha* dengan syarat nilai $\ge 0,70$ (Hair et al., 2019).
-
-Daftar Pustaka Rujukan Riil:
-- Creswell, J. W., & Creswell, J. D. (2018). *Research design: Qualitative, quantitative, and mixed methods approaches* (5th ed.). SAGE Publications.
-- Hair, J. F., Black, W. C., Babin, B. J., & Anderson, R. E. (2019). *Multivariate data analysis* (8th ed.). Cengage Learning.
-- Sugiyono. (2019). *Metode penelitian kuantitatif, kualitatif, dan R&D*. Alfabeta."""

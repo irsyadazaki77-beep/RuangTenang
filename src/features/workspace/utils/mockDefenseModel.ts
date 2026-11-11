@@ -38,6 +38,8 @@ export interface DefenseAnswerEvaluation {
   strengths: string[];
   weaknesses: string[];
   suggestedImprovement: string;
+  followUpQuestion?: string;
+  isAiEvaluated?: boolean;
 }
 
 export interface MockDefenseSession {
@@ -309,7 +311,7 @@ export function generateDefenseReportMarkdown(session: MockDefenseSession): stri
     day: 'numeric'
   });
 
-  return `# BERITA ACARA SIMULASI ${session.examType.replace(/_/g, ' ')}
+  return `# BERITA ACARA SIMULASI & Berita Acara Evaluasi Simulasi Ujian Sidang - ${session.examType.replace(/_/g, ' ')}
 **Ekosistem RuangTenang & RuangKerja Kampus**
 
 ---

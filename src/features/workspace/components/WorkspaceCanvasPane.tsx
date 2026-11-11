@@ -337,7 +337,7 @@ export const WorkspaceCanvasPane: React.FC<WorkspaceCanvasPaneProps> = React.mem
         animate={{ opacity: 1, x: 0 }}
         exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, x: 20 }}
         transition={shouldReduceMotion ? { duration: 0.12 } : { type: 'spring', stiffness: 360, damping: 32, mass: 0.85 }}
-        className="hidden min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white/80 dark:bg-slate-950/80 backdrop-blur-md xl:flex"
+        className="hidden min-h-0 min-w-0 xl:min-w-[420px] flex-1 flex-col overflow-hidden bg-white/80 dark:bg-slate-950/80 backdrop-blur-md xl:flex"
         >
           {isCreatingArtifact && <div role="status" className="flex h-8 shrink-0 items-center gap-2 border-b border-indigo-100 bg-indigo-50/70 px-3 text-xs font-medium text-indigo-800 dark:border-indigo-900/50 dark:bg-indigo-950/30 dark:text-indigo-300"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-indigo-500" />Membuat dokumen di Canvas…</div>}
           {activeArtifact?.persistenceStatus && activeArtifact.persistenceStatus !== 'persistent' && <div className="flex min-h-8 shrink-0 items-center justify-between gap-2 border-b border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200" role="status">

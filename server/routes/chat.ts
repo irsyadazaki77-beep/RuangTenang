@@ -74,6 +74,39 @@ const sendModelSelectionError = (res: Response, error: unknown) => {
   return true;
 };
 
+/**
+ * Safely writes an SSE packet to the HTTP response with backpressure protection.
+ * If the socket buffer is full (res.write returns false), pauses upstream consumption
+ * until the 'drain' event fires, safeguarding Node.js heap memory under slow mobile networks.
+ */
+async function writeSseSafe(res: Response, payload: string, abortSignal?: AbortSignal): Promise<boolean> {
+  if (res.writableEnded || (abortSignal && abortSignal.aborted)) {
+    return false;
+  }
+  const ok = res.write(payload);
+  if (!ok && !res.writableEnded) {
+    await new Promise<void>((resolve) => {
+      let settled = false;
+      const done = () => {
+        if (settled) return;
+        settled = true;
+        res.off('drain', onDrain);
+        res.off('close', onClose);
+        abortSignal?.removeEventListener('abort', onAbort);
+        resolve();
+      };
+      const onDrain = () => done();
+      const onClose = () => done();
+      const onAbort = () => done();
+
+      res.once('drain', onDrain);
+      res.once('close', onClose);
+      abortSignal?.addEventListener('abort', onAbort, { once: true });
+    });
+  }
+  return !res.writableEnded && !(abortSignal && abortSignal.aborted);
+}
+
 const authenticateChatStream = (req: Request, res: Response, next: NextFunction) => {
   // Only explicitly temporary, chat-less requests or guest requests may run anonymously. A stale
   // login must never silently turn a saved conversation into an in-memory chat.
@@ -1246,7 +1279,7 @@ router.post('/chat/stream', authenticateChatStream, optionalAttachmentOwner, aiC
          const chunk = word + ' ';
          currentFullText += chunk;
          if (!res.writableEnded) {
-           res.write(`data: ${JSON.stringify({ text: chunk })}\n\n`);
+           await writeSseSafe(res, `data: ${JSON.stringify({ text: chunk })}\n\n`, reqAbortController.signal);
          }
          await new Promise(resolve => setTimeout(resolve, 30));
       }
@@ -1374,7 +1407,7 @@ router.post('/chat/stream', authenticateChatStream, optionalAttachmentOwner, aiC
             }
 
             hasStreamedAnyText = true;
-            res.write(`data: ${JSON.stringify({ text })}\n\n`);
+            await writeSseSafe(res, `data: ${JSON.stringify({ text })}\n\n`, reqAbortController.signal);
           }
         }
       }

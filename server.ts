@@ -33,25 +33,36 @@ async function startServer() {
   // Initialize modular Express application instance
   const app = await createApp({ port: PORT });
 
-  // Background Data Retention Cron Jobs
-  try {
-    const { initRetentionCronJobs } = await import('./server/jobs/cronRetention.js');
-    initRetentionCronJobs();
-    
-    // Appointment Reminder Job
-    const { startAppointmentReminderJob } = await import('./server/jobs/appointmentReminderJob.js');
-    startAppointmentReminderJob();
-  } catch (err) {
-    console.error('Failed to initialize cron jobs:', err);
-  }
-
   const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`\n🚀 Server RuangTenang running at:`);
     console.log(`   > Local:   http://localhost:${PORT}`);
     console.log(`   > Network: http://127.0.0.1:${PORT}\n`);
+
+    // Asynchronously initialize background cron jobs without blocking HTTP port startup
+    setImmediate(async () => {
+      try {
+        const { initRetentionCronJobs } = await import('./server/jobs/cronRetention.js');
+        initRetentionCronJobs();
+        
+        const { startAppointmentReminderJob } = await import('./server/jobs/appointmentReminderJob.js');
+        startAppointmentReminderJob();
+      } catch (err) {
+        console.error('Failed to initialize background cron jobs:', err);
+      }
+    });
+
     if (process.env.LOCAL_AI_ONLY === 'true') {
-      ensureOllamaRunning().then(ok => {
-        if (ok) console.log('🤖 Ollama daemon terdeteksi dan aktif untuk Local AI (Bebas Kuota).');
+      ensureOllamaRunning().then(async ok => {
+        if (ok) {
+          console.log('🤖 Ollama daemon terdeteksi dan aktif untuk Local AI (Bebas Kuota).');
+          try {
+            const { prewarmOllamaModel } = await import('./server/services/ai/ollamaRuntime.js');
+            const warm = await prewarmOllamaModel('si-pinter:latest');
+            if (warm.success) {
+              console.log(`⚡ Model Si Pinter siap di VRAM GPU (${warm.durationMs}ms pre-warm).`);
+            }
+          } catch {}
+        }
       }).catch(() => {});
     }
   });

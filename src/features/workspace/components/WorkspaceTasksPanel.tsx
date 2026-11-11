@@ -1,5 +1,5 @@
 import React, { useEffect, useLayoutEffect, useMemo, useState } from 'react';
-import { Check, ChevronDown, ChevronUp, Circle, ListChecks, Pause, Play, Plus, Sparkles, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronUp, Circle, Laptop, ListChecks, Pause, Play, Plus, Sparkles, Terminal, X } from 'lucide-react';
 import type { WorkspacePlan, WorkspaceTaskStatus } from '../../../../shared/contracts/workspace';
 import { KERJA_PROFILES, isKerjaProfile } from '../../../lib/aiModels';
 import { migrateLegacyWorkspaceModelToProfile } from '../utils/workspaceModelPreference';
@@ -12,7 +12,19 @@ const agentToolLabels: Record<string, string> = {
   read_workspace_artifact: 'Membaca artefak',
   inspect_workspace_dataset: 'Inspeksi dataset',
   analyze_workspace_dataset: 'Analisis dataset',
-  search_web: 'Pencarian web'
+  search_web: 'Pencarian web',
+  generate_image: 'Generasi gambar AI',
+  propose_document_draft: 'Draft dokumen Word/DOCX',
+  propose_presentation_deck: 'Draft presentasi slide',
+  propose_tabular_dataset: 'Draft spreadsheet Excel/XLSX',
+  revise_workspace_artifact: 'Revisi artefak',
+  verify_artifact_structure: 'Verifikasi struktur',
+  list_laptop_files: 'Pemeriksaan direktori laptop',
+  read_laptop_file: 'Membaca berkas laptop',
+  write_laptop_file: 'Menulis berkas laptop',
+  run_laptop_command: 'Terminal command laptop',
+  open_laptop_app: 'Membuka aplikasi laptop',
+  inspect_laptop_system: 'Cek status sistem laptop'
 };
 
 interface Props {
@@ -95,14 +107,29 @@ export const WorkspaceTasksPanel: React.FC<Props> = ({ plan, workspaceKey, isLoa
     {(expanded || hideHeader) && <div className="max-h-[calc(100dvh-8rem)] overflow-y-auto px-3 py-3 sm:px-4">
       {error && <p role="alert" className="mb-2 text-xs text-rose-600">{error}</p>}
       {isLoading ? <p role="status" className="py-5 text-center text-xs text-slate-500">Memuat rencana Workspace…</p> : !plan ? <>
-        <p className="mb-2 text-xs text-slate-500">Buat draft langkah yang bisa ditinjau dan diedit sebelum dijalankan.</p>
+        <p className="mb-2 text-xs text-slate-500">Buat draft langkah kerja mandiri yang bisa ditinjau dan dieksekusi oleh Agent.</p>
+        <div className="mb-2 flex items-center gap-1.5 flex-wrap">
+          <span className="text-[10px] text-slate-400">Contoh tugas:</span>
+          <button type="button" onClick={() => setGoal('Periksa berkas di folder project laptop dan buatkan ringkasan laporan di Canvas')} className="rounded bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-600 dark:text-slate-300 hover:text-emerald-600 cursor-pointer">Inspeksi berkas laptop</button>
+          <button type="button" onClick={() => setGoal('Jalankan script Python analisis data dan buatkan slide presentasi hasil')} className="rounded bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-600 dark:text-slate-300 hover:text-emerald-600 cursor-pointer">Analisis Python + Slide</button>
+        </div>
         {!canPersist && <p className="mb-2 text-[11px] text-slate-500">Kirim pesan untuk menyimpan Workspace sebelum membuat plan.</p>}
         <form onSubmit={event => { event.preventDefault(); if (goal.trim()) { setExpanded(true); onGenerate(goal.trim()); } }} className="flex gap-2">
-          <input value={goal} onChange={event => setGoal(event.target.value.slice(0, 1000))} maxLength={1000} placeholder="Apa yang ingin diselesaikan?" aria-label="Tujuan workflow" className="h-9 min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 text-xs outline-none focus:border-emerald-500 dark:border-slate-700 dark:bg-slate-900" />
+          <input value={goal} onChange={event => setGoal(event.target.value.slice(0, 1000))} maxLength={1000} placeholder="Apa yang ingin diselesaikan? (Bisa akses berkas laptop & terminal)" aria-label="Tujuan workflow" className="h-9 min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 text-xs outline-none focus:border-emerald-500 dark:border-slate-700 dark:bg-slate-900" />
           <button type="submit" disabled={!canPersist || !goal.trim() || isGenerating} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-emerald-700 px-3 text-xs font-semibold text-white disabled:opacity-50"><Sparkles className="h-3.5 w-3.5" />{isGenerating ? 'Menyusun…' : 'Buat plan'}</button>
         </form>
       </> : <>
         <div className="flex items-start justify-between gap-3"><div className="min-w-0"><h3 className="text-xs font-semibold text-slate-800 dark:text-slate-100">{plan.title}</h3><p className="mt-1 text-[11px] text-slate-500">Tujuan: {plan.goal}</p></div><span className="shrink-0 rounded-full bg-slate-100 px-2 py-1 text-[10px] capitalize text-slate-600 dark:bg-slate-800 dark:text-slate-300">{plan.status}</span></div>
+        <div className="mt-2 flex items-center gap-2 flex-wrap">
+          <span className="inline-flex items-center gap-1 rounded-md bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800/60 px-2 py-0.5 text-[10px] font-medium text-sky-700 dark:text-sky-300">
+            <Laptop className="h-3 w-3 text-sky-600 dark:text-sky-400" />
+            Laptop &amp; OS Agent Active
+          </span>
+          <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 px-2 py-0.5 text-[10px] font-medium text-emerald-700 dark:text-emerald-300">
+            <Terminal className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+            Shell &amp; Filesystem Ready
+          </span>
+        </div>
         {plan.tasks.some(task => task.type === 'research') && plan.status !== 'completed' && plan.status !== 'cancelled' && <div role="note" className="mt-3 rounded-lg border border-amber-200 bg-amber-50/80 p-2.5 text-[10.5px] leading-relaxed text-amber-950 dark:border-amber-900/70 dark:bg-amber-950/30 dark:text-amber-100">
           <p><span className="font-semibold">Privasi riset web.</span> Jika Tavily dikonfigurasi, task berjenis Riset dapat mengirim kueri yang disusun Agent ke layanan eksternal tersebut. Filter pola data pribadi tidak menjamin anonimisasi. Mode <code>LOCAL_AI_ONLY</code> membatasi provider model, tetapi tidak mematikan Tavily.</p>
           <label className="mt-2 flex min-h-8 items-center gap-2 font-semibold">
@@ -184,7 +211,33 @@ export const WorkspaceTasksPanel: React.FC<Props> = ({ plan, workspaceKey, isLoa
         <div className="mt-3 flex flex-wrap items-center gap-2">
           {plan.status === 'draft' && <>
             <button type="button" disabled={plan.tasks.length >= 12} onClick={() => void persist({ ...plan, tasks: [...plan.tasks, { id: crypto.randomUUID(), title: 'Task baru', type: 'analysis', dependsOn: [], status: 'todo' }] })} className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-200 px-2.5 text-[11px] font-semibold text-slate-700 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200"><Plus className="h-3 w-3" />Tambah task</button>
-            <button type="button" disabled={plan.tasks.length === 0 || plan.tasks.some(task => !(titleEdits[task.id] ?? task.title).trim())} onClick={() => void persist({ ...plan, status: 'approved', tasks: plan.tasks.map(task => ({ ...task, title: titleEdits[task.id]?.trim() || task.title })) })} className="ml-auto h-8 rounded-lg bg-emerald-700 px-3 text-[11px] font-semibold text-white disabled:opacity-50">Setujui plan</button>
+            <button
+              type="button"
+              disabled={plan.tasks.length === 0 || plan.tasks.some(task => !(titleEdits[task.id] ?? task.title).trim()) || isExecuting}
+              onClick={async () => {
+                const approvedTasks = plan.tasks.map(task => ({ ...task, title: titleEdits[task.id]?.trim() || task.title }));
+                const approvedPlan = { ...plan, status: 'approved' as const, tasks: approvedTasks };
+                await persist(approvedPlan);
+                if (onStartContinuous) {
+                  onStartContinuous();
+                } else if (approvedTasks.length > 0) {
+                  const firstTask = approvedTasks.find(t => t.dependsOn.length === 0) || approvedTasks[0];
+                  onRun(firstTask.id);
+                }
+              }}
+              className="ml-auto inline-flex h-8 items-center gap-1.5 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 px-3 text-[11px] font-semibold text-white shadow-xs transition-all disabled:opacity-50 cursor-pointer"
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              Setujui &amp; Jalankan Otomatis
+            </button>
+            <button
+              type="button"
+              disabled={plan.tasks.length === 0 || plan.tasks.some(task => !(titleEdits[task.id] ?? task.title).trim())}
+              onClick={() => void persist({ ...plan, status: 'approved', tasks: plan.tasks.map(task => ({ ...task, title: titleEdits[task.id]?.trim() || task.title })) })}
+              className="h-8 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 text-[11px] font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors disabled:opacity-50 cursor-pointer"
+            >
+              Setujui saja
+            </button>
           </>}
           {(plan.status === 'approved' || plan.status === 'running') && <>
             {onStartContinuous && nextTask && !isContinuousRunning && (

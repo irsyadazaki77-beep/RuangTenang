@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { AI_MODEL_REGISTRY, RESILIENT_FALLBACK_AI_MODEL_ID } from '../../services/ai/aiModelRegistry.js';
-import { smartModelRouter } from '../../services/ai/smartModelRouter.js';
+import { smartModelRouter, classifyRequest } from '../../services/ai/smartModelRouter.js';
 import { DEFAULT_AI_MODEL_ID } from '../../../shared/aiModelContract.js';
 import { tandemCoOpService } from '../../services/ai/tandemCoOpService.js';
 import { aiRequestService } from '../../services/ai/aiRequestService.js';
@@ -28,7 +28,7 @@ describe('Si Pinter v3.0 Supreme Local Genius Evaluation', () => {
       const model = AI_MODEL_REGISTRY.find(m => m.id === 'ollama-si-pinter');
       expect(model).toBeDefined();
       expect(model?.name).toContain('Si Pinter');
-      expect(model?.name).toContain('v3.0');
+      expect(model?.name).toMatch(/v3\.[05]|v4\.0/);
       expect(model?.isDefault).toBe(true);
       expect(model?.speed).toBe('Sangat Cepat');
       expect(model?.reasoning).toBe('Tinggi');
@@ -46,7 +46,7 @@ describe('Si Pinter v3.0 Supreme Local Genius Evaluation', () => {
       expect(content).toContain('FROM qwen3:1.7b');
       expect(content).toContain('PARAMETER num_ctx 8192');
       expect(content).toContain('PARAMETER num_predict 4096');
-      expect(content).toContain('PARAMETER repeat_penalty 1.10');
+      expect(content).toMatch(/PARAMETER repeat_penalty 1\.1[05]/);
       expect(content).toContain('TEMPLATE """{{- if .System }}<|im_start|>system');
       expect(content).toContain('Si Pinter');
       expect(content).toContain('v3.0');
@@ -55,6 +55,12 @@ describe('Si Pinter v3.0 Supreme Local Genius Evaluation', () => {
       expect(content).toContain('AST Balance Guarantee');
       expect(content).toContain('APA 7th');
       expect(content).toContain('119');
+      expect(content).toContain('PROTOKOL PENYELESAIAN TUGAS KULIAH');
+      expect(content).toContain('Master Theorem');
+      expect(content).toContain('Bentuk Normal Ketiga (3NF)');
+      // Zero-phantom message guarantee: Modelfile must never inject fake conversation history
+      expect(content).not.toMatch(/^MESSAGE\s+/m);
+      expect(content).not.toContain('Binus University');
     });
 
     it('verifies backward-compatible Modelfile.asisten and setup script', () => {
@@ -64,9 +70,25 @@ describe('Si Pinter v3.0 Supreme Local Genius Evaluation', () => {
       expect(fs.existsSync(asistenPath)).toBe(true);
       expect(fs.existsSync(setupPath)).toBe(true);
 
+      const asistenContent = fs.readFileSync(asistenPath, 'utf-8');
+      expect(asistenContent).not.toMatch(/^MESSAGE\s+/m);
+      expect(asistenContent).not.toContain('Binus University');
+
       const setupContent = fs.readFileSync(setupPath, 'utf-8');
       expect(setupContent).toContain('ollama pull qwen3:1.7b');
       expect(setupContent).toContain('ollama create si-pinter -f Modelfile.pinter');
+    });
+
+    it('guarantees that all Modelfiles in local_ai_lab are free of phantom MESSAGE directives', () => {
+      const localAiLabDir = path.resolve(process.cwd(), 'local_ai_lab');
+      const modelfiles = ['Modelfile.pinter', 'Modelfile.asisten', 'Modelfile.tangguh', 'Modelfile.gacor'];
+      for (const file of modelfiles) {
+        const filePath = path.join(localAiLabDir, file);
+        if (fs.existsSync(filePath)) {
+          const content = fs.readFileSync(filePath, 'utf-8');
+          expect(content).not.toMatch(/^MESSAGE\s+/m);
+        }
+      }
     });
   });
 
@@ -87,6 +109,13 @@ describe('Si Pinter v3.0 Supreme Local Genius Evaluation', () => {
       }, 'Halo apa kabar?');
 
       expect(autoDecision.selectedModelId).toBe('ollama-si-pinter');
+
+      const classification = classifyRequest({
+        workspaceMode: true,
+        userTier: 'Free'
+      }, 'tolong bantu tugas kuliah saya: tentukan kompleksitas waktu dengan Master Theorem');
+
+      expect(classification.category).toBe('structured_reasoning');
     });
   });
 

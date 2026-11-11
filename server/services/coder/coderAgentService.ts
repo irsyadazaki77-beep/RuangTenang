@@ -86,8 +86,8 @@ export const AGENT_PERSONAS: AgentPersonaConfig[] = [
     role: 'Chief System Architect & Master Engineer',
     avatar: '📐',
     badgeColor: 'amber',
-    specialty: 'Arsitektur sistem kompleks, algoritma tingkat tinggi, dan blueprint multi-file.',
-    targetModel: 'qwen3:1.7b'
+    specialty: 'Arsitektur sistem kompleks, blueprint multi-file modular, dan rancangan modular skala besar.',
+    targetModel: 'si-gacor:latest'
   },
   {
     id: 'kihadjar',
@@ -96,7 +96,7 @@ export const AGENT_PERSONAS: AgentPersonaConfig[] = [
     avatar: '🧠',
     badgeColor: 'purple',
     specialty: 'Chain-of-Thought (CoT) mendalam, analisis akar masalah error/crash, dan investigasi logika.',
-    targetModel: 'deepseek-r1:1.5b'
+    targetModel: 'si-gacor:latest'
   },
   {
     id: 'sutarjo',
@@ -105,7 +105,7 @@ export const AGENT_PERSONAS: AgentPersonaConfig[] = [
     avatar: '⚡',
     badgeColor: 'sky',
     specialty: 'Penulisan fungsi presisi, pembuatan berkas baru, operasi diff terarah, dan manipulasi kode.',
-    targetModel: 'qwen3:1.7b'
+    targetModel: 'si-pinter:latest'
   },
   {
     id: 'dewi',
@@ -114,7 +114,7 @@ export const AGENT_PERSONAS: AgentPersonaConfig[] = [
     avatar: '🎨',
     badgeColor: 'teal',
     specialty: 'Desain antarmuka visual responsif, HTML/CSS, Tailwind styling, estetika dan live preview.',
-    targetModel: 'gemma3:1b'
+    targetModel: 'si-tangguh:latest'
   },
   {
     id: 'bambang',
@@ -123,7 +123,7 @@ export const AGENT_PERSONAS: AgentPersonaConfig[] = [
     avatar: '🛡️',
     badgeColor: 'emerald',
     specialty: 'Validasi unit test terminal, keamanan script eksekusi, mitigasi bug, dan kepastian build.',
-    targetModel: 'phi4-mini:latest'
+    targetModel: 'si-tangguh:latest'
   },
   {
     id: 'kartini',
@@ -132,7 +132,7 @@ export const AGENT_PERSONAS: AgentPersonaConfig[] = [
     avatar: '📚',
     badgeColor: 'rose',
     specialty: 'Review kualitas keterbacaan kode (clean code), standarisasi dokumentasi, dan panduan proyek.',
-    targetModel: 'phi4-mini:latest'
+    targetModel: 'si-tangguh:latest'
   },
   {
     id: 'gibran',
@@ -141,7 +141,7 @@ export const AGENT_PERSONAS: AgentPersonaConfig[] = [
     avatar: '🚀',
     badgeColor: 'indigo',
     specialty: 'Klasifikasi maksud instruksi super cepat (<150ms) dan routing tool call secara presisi.',
-    targetModel: 'qwen3.5:0.8b'
+    targetModel: 'si-pinter:latest'
   },
   {
     id: 'kancil',
@@ -150,7 +150,7 @@ export const AGENT_PERSONAS: AgentPersonaConfig[] = [
     avatar: '⚡',
     badgeColor: 'orange',
     specialty: 'Perapian indentasi kilat, pembersihan spasi berlebih, dan validasi sintaksis sebelum save.',
-    targetModel: 'gemma3:270m'
+    targetModel: 'si-pinter:latest'
   }
 ];
 
@@ -467,6 +467,29 @@ function classifyLocalModel(name: string): {
   supportsNativeTools: boolean;
 } {
   const lower = name.toLowerCase();
+  // 1. Trio Model Lokal RuangTenang
+  if (lower.includes('si-pinter') || lower.includes('pinter')) {
+    return {
+      roleBadge: '⭐ Utama (Coding Presisi & Tool Agent • 1.7B)',
+      recommendedForCoding: true,
+      supportsNativeTools: true
+    };
+  }
+  if (lower.includes('si-tangguh') || lower.includes('tangguh')) {
+    return {
+      roleBadge: '🛡️ Workhorse (QA, Testing & UI Engine • 12B)',
+      recommendedForCoding: true,
+      supportsNativeTools: true
+    };
+  }
+  if (lower.includes('si-gacor') || lower.includes('gacor')) {
+    return {
+      roleBadge: '🏛️ Flagship Titan (Arsitektur & Deep Reasoning • 27B)',
+      recommendedForCoding: true,
+      supportsNativeTools: false
+    };
+  }
+  // 2. Base model fallback matching
   if (lower.includes('qwen') || lower.includes('coder')) {
     return {
       roleBadge: '⭐ Utama (Coding & Tool Agent)',
@@ -493,6 +516,13 @@ function classifyLocalModel(name: string): {
       roleBadge: '🏗️ Deep Architecture (27B)',
       recommendedForCoding: true,
       supportsNativeTools: false
+    };
+  }
+  if (lower.includes('mistral-nemo') || lower.includes('nemo')) {
+    return {
+      roleBadge: '🛡️ Balanced Workhorse (12B)',
+      recommendedForCoding: true,
+      supportsNativeTools: true
     };
   }
   return {
@@ -735,6 +765,33 @@ export async function searchWorkspaceCode(
   return results;
 }
 
+export function truncateOutput(text: string, maxChars = 3500): string {
+  if (!text || text.length <= maxChars) return text;
+  const half = Math.floor(maxChars / 2) - 40;
+  return `${text.slice(0, half)}\n\n[... Truncated ${text.length - maxChars} karakter log untuk efisiensi konteks VRAM SLM ...]\n\n${text.slice(-half)}`;
+}
+
+/**
+ * Forcefully terminates a process and all its spawned child processes (process tree)
+ * to prevent orphaned zombie background processes from consuming CPU / RAM.
+ */
+export function killProcessTree(pid: number | undefined): void {
+  if (!pid) return;
+  try {
+    if (process.platform === 'win32') {
+      exec(`taskkill /pid ${pid} /T /F`, { windowsHide: true }, () => {});
+    } else {
+      try {
+        process.kill(-pid, 'SIGKILL');
+      } catch {
+        process.kill(pid, 'SIGKILL');
+      }
+    }
+  } catch {
+    // Process already terminated or inaccessible
+  }
+}
+
 export async function executeSafeShellCommand(
   command: string,
   cwd = DEFAULT_WORKSPACE_DIR,
@@ -750,7 +807,7 @@ export async function executeSafeShellCommand(
     }
   }
 
-  await ensureCoderWorkspaceInitialized();
+  await ensureCoderWorkspaceInitialized(cwd);
   const startedAt = Date.now();
 
   // Strip sensitive production credentials, tokens, and database secrets from subprocess environment
@@ -769,27 +826,54 @@ export async function executeSafeShellCommand(
     NODE_ENV: 'sandbox'
   };
 
-  try {
-    const { stdout, stderr } = await execAsync(trimmed, {
+  const effectiveTimeout = Math.min(Math.max(timeoutMs, 2000), 30000);
+
+  return new Promise((resolve) => {
+    let timer: NodeJS.Timeout | null = null;
+    let isSettled = false;
+
+    const child = exec(trimmed, {
       cwd,
       env: safeEnv,
-      timeout: Math.min(Math.max(timeoutMs, 2000), 30000),
-      maxBuffer: 1024 * 512
+      maxBuffer: 1024 * 512,
+      windowsHide: true
+    }, (err, stdout, stderr) => {
+      if (isSettled) return;
+      isSettled = true;
+      if (timer) clearTimeout(timer);
+
+      const durationMs = Date.now() - startedAt;
+      if (err) {
+        resolve({
+          stdout: truncateOutput(String(stdout || (err as any).stdout || ''), 3500),
+          stderr: truncateOutput(String(stderr || (err as any).stderr || err.message || 'Command execution error'), 2500),
+          exitCode: typeof (err as any).code === 'number' ? (err as any).code : 1,
+          durationMs
+        });
+      } else {
+        resolve({
+          stdout: truncateOutput(stdout || '', 3500),
+          stderr: truncateOutput(stderr || '', 2500),
+          exitCode: 0,
+          durationMs
+        });
+      }
     });
-    return {
-      stdout: stdout.slice(0, 12000),
-      stderr: stderr.slice(0, 8000),
-      exitCode: 0,
-      durationMs: Date.now() - startedAt
-    };
-  } catch (err: any) {
-    return {
-      stdout: String(err?.stdout || '').slice(0, 12000),
-      stderr: String(err?.stderr || err?.message || 'Command execution error').slice(0, 8000),
-      exitCode: typeof err?.code === 'number' ? err.code : 1,
-      durationMs: Date.now() - startedAt
-    };
-  }
+
+    // Watchdog timer with robust Process-Tree Termination
+    timer = setTimeout(() => {
+      if (isSettled) return;
+      isSettled = true;
+      killProcessTree(child.pid);
+      const durationMs = Date.now() - startedAt;
+      resolve({
+        stdout: '',
+        stderr: `Batas waktu eksekusi (${effectiveTimeout / 1000}s) tercapai. Seluruh pohon proses terminal anak telah dihentikan secara aman oleh sandbox RuangCoder.`,
+        exitCode: 124, // Standard timeout exit code (SIGALRM)
+        durationMs
+      });
+    }, effectiveTimeout);
+  });
 }
 
 /**
@@ -861,7 +945,8 @@ export async function executeCoderAgentTool(
 
         const allLines = content.split(/\r?\n/);
         const sliced = allLines.slice(startLine - 1, endLine);
-        const numbered = sliced.map((line, idx) => `${startLine + idx}: ${line}`).join('\n');
+        const rawNumbered = sliced.map((line, idx) => `${startLine + idx}: ${line}`).join('\n');
+        const numbered = truncateOutput(rawNumbered, 4000);
 
         return {
           toolCallId: toolCall.id,

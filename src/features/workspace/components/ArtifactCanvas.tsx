@@ -661,10 +661,11 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
     ['Fix bug', 'Cari dan perbaiki bug pada kode terpilih.'],
     ['Add comments', 'Tambahkan komentar yang membantu pada kode terpilih.']
   ] : [
-    ['Improve', 'Perbaiki teks terpilih agar lebih jelas dan efektif.'],
-    ['Shorten', 'Ringkas teks terpilih tanpa menghilangkan makna utama.'],
-    ['Expand', 'Kembangkan teks terpilih dengan detail yang relevan.'],
-    ['Rewrite', 'Tulis ulang teks terpilih dengan makna yang tetap sama.']
+    ['Improve', 'Perbaiki teks terpilih agar lebih jelas, efektif, dan baku.'],
+    ['PUEBI Baku', 'Tulis ulang dan sempurnakan teks terpilih agar sepenuhnya mematuhi kaidah PUEBI, KBBI, dan standar bahasa baku akademik Indonesia.'],
+    ['Parafrase Ilmiah', 'Parafrase teks terpilih dengan struktur kalimat berbeda dan kosakata ilmiah formal tanpa mengubah esensi makna aslinya.'],
+    ['Perkuat Argumen', 'Kembangkan dan perkuat teks terpilih dengan penalaran logis yang lebih mendalam, data pendukung, dan elaborasi analitis.'],
+    ['Ringkas Intisari', 'Ringkas teks terpilih menjadi 1-2 kalimat padat dan jelas yang langsung mengemukakan poin inti atau temuan utama.']
   ];
 
   const requestInlineEdit = (instruction: string) => {
@@ -2006,7 +2007,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = React.memo(({
               )}
 
               {/* Clean Typography (Lora Serif or Plus Jakarta Sans) & Emerald Accent Blockquotes */}
-              <div ref={proseContainerRef} className={`prose dark:prose-invert max-w-none text-xs sm:text-sm md:text-base leading-relaxed ${documentFont === 'serif' ? 'font-serif' : 'font-sans'} prose-headings:scroll-mt-4 prose-headings:font-heading prose-headings:tracking-tight prose-headings:text-slate-900 dark:prose-headings:text-slate-50 prose-p:leading-relaxed prose-p:my-3.5 prose-a:text-emerald-600 dark:prose-a:text-emerald-400 prose-blockquote:border-l-[3px] prose-blockquote:border-emerald-500/80 prose-blockquote:bg-emerald-50/40 dark:prose-blockquote:bg-emerald-950/20 prose-blockquote:py-2.5 prose-blockquote:px-4 prose-blockquote:rounded-r-xl prose-blockquote:italic prose-pre:bg-slate-900 prose-pre:text-slate-100 prose-hr:border-slate-200 dark:prose-hr:border-slate-800`}>
+              <div ref={proseContainerRef} className={`artifact-document-body prose dark:prose-invert max-w-none text-xs sm:text-sm md:text-base leading-relaxed ${documentFont === 'serif' ? 'font-serif' : 'font-sans'} prose-headings:scroll-mt-4 prose-headings:font-heading prose-headings:tracking-tight prose-headings:text-slate-900 dark:prose-headings:text-slate-50 prose-p:leading-relaxed prose-p:my-3.5 prose-a:text-emerald-600 dark:prose-a:text-emerald-400 prose-blockquote:border-l-[3px] prose-blockquote:border-emerald-500/80 prose-blockquote:bg-emerald-50/40 dark:prose-blockquote:bg-emerald-950/20 prose-blockquote:py-2.5 prose-blockquote:px-4 prose-blockquote:rounded-r-xl prose-blockquote:italic prose-pre:bg-slate-900 prose-pre:text-slate-100 prose-hr:border-slate-200 dark:prose-hr:border-slate-800`}>
                 <LazyMarkdown content={editableContent || '*(Artefak kosong)*'} />
                 {isStreaming && <span className="inline-block w-2 h-4.5 ml-1 bg-emerald-500 animate-pulse align-middle rounded-xs" />}
               </div>

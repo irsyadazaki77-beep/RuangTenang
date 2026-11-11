@@ -387,7 +387,7 @@ router.post('/coder/terminal/exec', optionalAuth, requireAuthInProduction, coder
 // 7. Autonomous AI Coding Agent SSE Stream (Supports Local Disk & Browser Sandbox)
 router.post('/coder/agent/stream', optionalAuth, coderAgentLimiter, async (req, res) => {
   const prompt = String(req.body?.prompt || '').trim();
-  const modelName = String(req.body?.modelName || 'si-gacor:latest').trim();
+  const modelName = String(req.body?.modelName || 'si-pinter:latest').trim();
   const provider: CoderAiProvider = req.body?.provider === 'gemini' ? 'gemini' : (req.body?.provider === 'ollama' ? 'ollama' : 'auto');
   const sandboxMode: SandboxMode = req.body?.sandboxMode === 'browser' ? 'browser' : 'local';
   const personaMode: CouncilPersonaMode = req.body?.personaMode === 'professional' ? 'professional' : 'creative';

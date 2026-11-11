@@ -72,34 +72,65 @@ function formatUntrustedExtractionMetadata(value: unknown): string {
 
 function scoreChunksWithBM25<T extends { content: string; section?: string | null }>(chunks: T[], queryTerms: string[]): number[] {
   if (queryTerms.length === 0) return chunks.map(() => 1);
-  const tokenized = chunks.map(chunk => tokenize(chunk.content));
-  const averageLength = tokenized.reduce((sum, tokens) => sum + tokens.length, 0) / Math.max(1, tokenized.length);
-  const documentFrequency = new Map<string, number>();
-  for (const term of new Set(queryTerms)) {
-    documentFrequency.set(term, tokenized.reduce((count, tokens) => count + (tokens.includes(term) ? 1 : 0), 0));
-  }
+  const uniqueQueryTerms = [...new Set(queryTerms)];
   const queryPhrase = queryTerms.join(' ');
+  const hasPhrase = queryPhrase.length > 5;
+
+  // Single-pass Tokenization, Frequency Counting, and Document Frequency Indexing
+  const chunkTokens: string[][] = new Array(chunks.length);
+  const termFreqs: Map<string, number>[] = new Array(chunks.length);
+  const docFreq = new Map<string, number>();
+  let totalTokenCount = 0;
+
+  for (let i = 0; i < chunks.length; i++) {
+    const tokens = tokenize(chunks[i].content);
+    chunkTokens[i] = tokens;
+    totalTokenCount += tokens.length;
+    const freqs = new Map<string, number>();
+    const seenInDoc = new Set<string>();
+
+    for (const token of tokens) {
+      freqs.set(token, (freqs.get(token) || 0) + 1);
+      if (!seenInDoc.has(token)) {
+        seenInDoc.add(token);
+        docFreq.set(token, (docFreq.get(token) || 0) + 1);
+      }
+    }
+    termFreqs[i] = freqs;
+  }
+
+  const avgDocLength = totalTokenCount / Math.max(1, chunks.length);
   const k1 = 1.2;
   const b = 0.75;
 
+  // Precompute IDF values for unique query terms once (O(Q) instead of O(N * Q))
+  const idfMap = new Map<string, number>();
+  for (const term of uniqueQueryTerms) {
+    const df = docFreq.get(term) || 0;
+    if (df > 0) {
+      idfMap.set(term, Math.log(1 + (chunks.length - df + 0.5) / (df + 0.5)));
+    }
+  }
+
   return chunks.map((chunk, index) => {
-    const frequencies = new Map<string, number>();
-    for (const term of tokenized[index]) frequencies.set(term, (frequencies.get(term) || 0) + 1);
+    const freqs = termFreqs[index];
+    const docLen = chunkTokens[index].length;
     let score = 0;
-    for (const term of queryTerms) {
-      const frequency = frequencies.get(term) || 0;
-      if (!frequency) continue;
-      const df = documentFrequency.get(term) || 0;
-      const inverseDocumentFrequency = Math.log(1 + (chunks.length - df + 0.5) / (df + 0.5));
-      const normalizedFrequency = (frequency * (k1 + 1)) /
-        (frequency + k1 * (1 - b + b * tokenized[index].length / Math.max(1, averageLength)));
-      score += inverseDocumentFrequency * normalizedFrequency;
+
+    for (const term of uniqueQueryTerms) {
+      const freq = freqs.get(term);
+      if (!freq) continue;
+      const idf = idfMap.get(term) || 0;
+      const normFreq = (freq * (k1 + 1)) / (freq + k1 * (1 - b + b * (docLen / Math.max(1, avgDocLength))));
+      score += idf * normFreq;
     }
 
     const normalizedBody = normalizeSearchText(chunk.content);
     const normalizedSection = normalizeSearchText(chunk.section || '');
-    if (queryPhrase.length > 5 && normalizedBody.includes(queryPhrase)) score += 3;
-    for (const term of new Set(queryTerms)) if (normalizedSection.includes(term)) score += 2;
+    if (hasPhrase && normalizedBody.includes(queryPhrase)) score += 3;
+    for (const term of uniqueQueryTerms) {
+      if (normalizedSection.includes(term)) score += 2;
+    }
     return score;
   });
 }

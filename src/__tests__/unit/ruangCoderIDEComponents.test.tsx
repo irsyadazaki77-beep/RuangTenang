@@ -7,6 +7,7 @@ import { MabaExplainerModal } from '../../features/coder/components/MabaExplaine
 import { FrustrationSupportModal } from '../../features/coder/components/FrustrationSupportModal';
 import { PeerPairReviewModal } from '../../features/coder/components/PeerPairReviewModal';
 import { AutograderReport } from '../../features/coder/services/codeEdgeCaseTester';
+import { FormattedAgentContent, CoderMobileNavBar, PomodoroFocusBadge } from '../../features/coder/ide/coderCore';
 
 describe('Ruang Coder Next-Gen UI Modals', () => {
   const mockReport: AutograderReport = {
@@ -123,5 +124,11 @@ describe('Ruang Coder Next-Gen UI Modals', () => {
     expect(screen.getByText(/Driver \(Penulis\)/i)).toBeDefined();
     expect(screen.getByText(/Navigator \(Reviewer\)/i)).toBeDefined();
     expect(screen.getByText(/Unduh Kartu Asistensi/i)).toBeDefined();
+    render(<FormattedAgentContent content="Berikut analisisnya. **Think:** Periksa fungsi utama **Call:** read_file index.js" isDark={true} />);
+    expect(screen.getByText('Pemikiran Internal Agen')).toBeDefined();
+    expect(screen.getByRole('status', { name: /Panggilan tool agen/i })).toBeDefined();
+    render(<><PomodoroFocusBadge isDark={true} /><CoderMobileNavBar isDark={true} mobileTab="editor" viewSplitMode="editor" isTerminalOpen={false} onSelectFiles={vi.fn()} onSelectEditor={vi.fn()} onSelectPreview={vi.fn()} onSelectAi={vi.fn()} onSelectTerminal={vi.fn()} onSelectDiff={vi.fn()} /></>);
+    expect(screen.getByRole('button', { name: /Mulai Pomodoro Focus 25 Menit/i })).toBeDefined();
+    expect(screen.getByRole('tab', { name: /Buka File Explorer/i })).toBeDefined();
   });
 });

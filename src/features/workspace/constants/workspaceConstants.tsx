@@ -1,5 +1,5 @@
 import React from 'react';
-import { BookOpen, Code2, FileText, FlaskConical } from 'lucide-react';
+import { BookOpen, Code2, FileText, FlaskConical, Laptop, Terminal } from 'lucide-react';
 import { WorkspaceArtifact, StarterTaskItem, AcademicPromptPill } from '../types';
 
 export const DEFAULT_WELCOME_ARTIFACT_ID = 'art_welcome';
@@ -49,6 +49,22 @@ export const STARTER_TASKS: StarterTaskItem[] = [
     icon: <FileText className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />,
     primary: true,
     prompt: 'Bantu saya menganalisis dokumen yang saya lampirkan. Rangkum tujuan, temuan utama, bukti pendukung, dan pertanyaan yang masih terbuka.'
+  },
+  {
+    id: 'tugas-laptop-agent',
+    title: 'Tugas Agent Laptop',
+    subtitle: 'Otomasi berkas, jalankan skrip terminal, & draf laporan',
+    icon: <Laptop className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />,
+    primary: true,
+    prompt: '/tugas Periksa berkas di direktori laptop saya, buatkan skrip analisis data/otomasi, dan jalankan di terminal.'
+  },
+  {
+    id: 'terminal-command-runner',
+    title: 'Inspeksi & Terminal',
+    subtitle: 'Cek status sistem laptop & jalankan perintah terminal',
+    icon: <Terminal className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />,
+    primary: false,
+    prompt: '/tugas Lakukan inspeksi sistem laptop (OS, memori, direktori kerja) dan laporkan ringkasannya.'
   },
   {
     id: 'tulis-dokumen',

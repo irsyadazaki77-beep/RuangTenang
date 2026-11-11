@@ -65,7 +65,13 @@ export async function ensureOllamaRunning(targetUrl?: string): Promise<boolean> 
       detached: true,
       stdio: 'ignore',
       shell: false,
-      windowsHide: true
+      windowsHide: true,
+      env: {
+        ...process.env,
+        OLLAMA_FLASH_ATTENTION: '0',
+        OLLAMA_MAX_LOADED_MODELS: process.env.OLLAMA_MAX_LOADED_MODELS || '1',
+        OLLAMA_NUM_PARALLEL: process.env.OLLAMA_NUM_PARALLEL || '1'
+      }
     });
     proc.unref();
 
@@ -143,38 +149,94 @@ export function isLocalModelAvailable(name: string): boolean {
 
 function aborted(): Error { return Object.assign(new Error('Request aborted'), { name: 'AbortError' }); }
 
-/** FIFO semaphore: the app runs ONE local inference, including its entire stream. */
+/**
+ * Adaptive Multi-Slot Inference Queue for Local LLMs (Ollama)
+ * - Supports configurable concurrent slots via OLLAMA_MAX_CONCURRENT (default 2, up to 8)
+ * - Priority scheduling: interactive chat requests jump ahead of background jobs
+ * - Automatic timeout cleanup and queue metrics tracking
+ */
 export class LocalInferenceQueue {
-  private active = false;
-  private waiters: Array<() => void> = [];
+  private activeCount = 0;
+  private maxConcurrent: number;
+  private waiters: Array<{ grant: () => void; priority: 'high' | 'normal' }> = [];
 
-  acquire(signal?: AbortSignal): Promise<() => void> {
+  constructor(maxConcurrent?: number) {
+    const envLimit = (process.env.NODE_ENV !== 'test' && process.env.OLLAMA_MAX_CONCURRENT)
+      ? parseInt(process.env.OLLAMA_MAX_CONCURRENT, 10)
+      : 1;
+    this.maxConcurrent = Math.max(1, Math.min(8, maxConcurrent ?? (isNaN(envLimit) ? 1 : envLimit)));
+  }
+
+  getStats(): { active: number; waiting: number; maxConcurrent: number } {
+    return {
+      active: this.activeCount,
+      waiting: this.waiters.length,
+      maxConcurrent: this.maxConcurrent
+    };
+  }
+
+  acquire(signal?: AbortSignal, priority: 'high' | 'normal' = 'normal'): Promise<() => void> {
     if (signal?.aborted) return Promise.reject(aborted());
-    if (this.waiters.length >= 32) return Promise.reject(Object.assign(new Error('OLLAMA_QUEUE_FULL'), { statusCode: 429 }));
+    if (this.waiters.length >= 64) {
+      return Promise.reject(Object.assign(new Error('OLLAMA_QUEUE_FULL'), { statusCode: 429 }));
+    }
+
     return new Promise((resolve, reject) => {
       let timer: ReturnType<typeof setTimeout> | undefined;
+      const waiterEntry = {
+        grant: () => {},
+        priority
+      };
+
       const remove = () => {
         if (timer) clearTimeout(timer);
         signal?.removeEventListener('abort', onAbort);
-        this.waiters = this.waiters.filter(entry => entry !== grant);
+        this.waiters = this.waiters.filter(entry => entry !== waiterEntry);
       };
-      const onAbort = () => { remove(); reject(aborted()); };
+
+      const onAbort = () => {
+        remove();
+        reject(aborted());
+      };
+
       const grant = () => {
         remove();
-        this.active = true;
+        this.activeCount++;
         let released = false;
         resolve(() => {
           if (released) return;
           released = true;
-          this.active = false;
-          this.waiters.shift()?.();
+          this.activeCount = Math.max(0, this.activeCount - 1);
+          // Dispatch next waiter (high priority first)
+          if (this.waiters.length > 0) {
+            const nextIdx = this.waiters.findIndex(w => w.priority === 'high');
+            const targetWaiter = nextIdx !== -1 ? this.waiters.splice(nextIdx, 1)[0] : this.waiters.shift();
+            targetWaiter?.grant();
+          }
         });
       };
+
+      waiterEntry.grant = grant;
       signal?.addEventListener('abort', onAbort, { once: true });
-      if (!this.active) grant();
-      else {
-        this.waiters.push(grant);
-        timer = setTimeout(() => { remove(); reject(new Error('OLLAMA_QUEUE_TIMEOUT')); }, 120_000);
+
+      if (this.activeCount < this.maxConcurrent) {
+        grant();
+      } else {
+        if (priority === 'high') {
+          // Insert after existing high priority waiters, ahead of normal ones
+          const lastHighIdx = this.waiters.map(w => w.priority).lastIndexOf('high');
+          if (lastHighIdx !== -1) {
+            this.waiters.splice(lastHighIdx + 1, 0, waiterEntry);
+          } else {
+            this.waiters.unshift(waiterEntry);
+          }
+        } else {
+          this.waiters.push(waiterEntry);
+        }
+        timer = setTimeout(() => {
+          remove();
+          reject(new Error('OLLAMA_QUEUE_TIMEOUT'));
+        }, 120_000);
       }
     });
   }

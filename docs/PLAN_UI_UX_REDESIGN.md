@@ -38,3 +38,23 @@ Membuat RuangTenang dan RuangKerja terasa seperti satu produk AI yang matang: be
 - [x] Penyelarasan halaman pendukung dan pemeriksaan hasil.
 - [x] Build produksi.
 - [x] Pemeriksaan tipe TypeScript.
+
+
+## Pembaruan Tahap 2 — Penyempurnaan Setara AI Frontier (ChatGPT, Gemini, Claude, Cursor)
+
+- [x] **Fase 0 — Baseline Visual & E2E Spec**: Penambahan [`e2e/ui-baseline.spec.ts`](../e2e/ui-baseline.spec.ts) untuk pengujian tangkapan layar Light/Dark lintas Desktop, Tablet, dan Mobile.
+- [x] **Fase 1 — Sistem Desain Terpadu & Primitives**:
+  - Skala tipografi 6 tingkat (`.headline-hero`, `.headline-display`, `.headline-page`, `.headline-section`, `.body-prose`, `.text-meta-inline`) dan font kode (`--font-mono` / `.font-code`).
+  - Token permukaan berlapis (`--rt-surface-0`, `--rt-surface-1`, `--rt-surface-2`) dan aksen kontekstual `[data-space="tenang" | "kerja" | "coder"]`.
+  - Komponen badge pintasan keyboard `Kbd` dan penyempurnaan `CommandPalette` (`Ctrl/⌘+K` aktif dari mana saja termasuk saat mengetik di composer chat/workspace, dengan header kategori dan navigasi ARIA `listbox`/`option`).
+  - Penurunan intensitas latar aurora saat percakapan aktif dan pengurangan beban `backdrop-filter` pada layar mobile.
+- [x] **Fase 2 — RuangTenang**:
+  - Akses tombol darurat **SOS** permanen 1-klik di `ChatHeader`.
+  - Lebar baca optimal `max-w-[720px]` pada respons asisten & animasi token streaming halus (`.animate-token-fade`).
+  - Petunjuk pintasan keyboard desktop pada `ChatComposer` dan tombol mengambang "Pesan Baru" dengan transisi tenang.
+- [x] **Fase 3 — RuangKerja**:
+  - Split-view proporsional dengan batas lebar minimum (`min-w-[380px]` obrolan, `min-w-[420px]` Canvas) dan divider `role="separator"` yang mendukung fokus serta navigasi keyboard (`ArrowLeft`/`ArrowRight`/`Home`).
+  - Indikator status penyimpanan eksplisit ("Tersimpan di Ruang Kerja") di `ArtifactCanvasToolbar` dan skeleton pemuatan di `WorkspaceInspectorPanel`.
+- [x] **Fase 4 — RuangCoder**:
+  - Ekstraksi sub-komponen dan konfigurasi inti ke [`src/features/coder/ide/coderCore.tsx`](../src/features/coder/ide/coderCore.tsx) (`PomodoroFocusBadge`, `FormattedAgentContent`, `CoderMobileNavBar`, konfigurasi persona & starter).
+  - Peningkatan aksesibilitas ARIA menyeluruh (`role="tree"`, `role="treeitem"`, `role="tablist"`, `role="tab"`, `role="log"`, `aria-live="polite"`, dan `aria-label` pada kontrol input/tombol).

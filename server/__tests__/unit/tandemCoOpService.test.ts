@@ -61,4 +61,37 @@ describe('TandemCoOpService (Si Pinter & Si Gacor)', () => {
     expect(result.pass2Model).toBe('ollama-si-pinter');
     expect(result.finalContent).toContain('Panduan Mahasiswa');
   });
+
+  it('executes draft_verify_and_polish 3-stage pipeline', async () => {
+    const mockGenerate = vi.spyOn(aiRequestService, 'generateChatResponse')
+      .mockResolvedValueOnce({
+        text: 'Draf Bab 3: Desain penelitian kuantitatif survei.',
+        modelUsed: 'ollama-si-pinter',
+        isFallback: false
+      })
+      .mockResolvedValueOnce({
+        text: 'Audit: Perlu perjelas kriteria inklusi sampel dan uji validitas instrumen.',
+        modelUsed: 'ollama-si-gacor',
+        isFallback: false
+      })
+      .mockResolvedValueOnce({
+        text: 'Naskah Final Bab 3 Lengkap: Populasi 1000, n=286 via Slovin, uji validitas Pearson.',
+        modelUsed: 'ollama-si-pinter',
+        isFallback: false
+      });
+
+    const passEvents: any[] = [];
+    const result = await TandemCoOpService.executeTandem({
+      prompt: 'Susun metodologi penelitian skripsi',
+      mode: 'draft_verify_and_polish',
+      onPassComplete: (pass, res) => passEvents.push({ pass, ...res })
+    });
+
+    expect(mockGenerate).toHaveBeenCalledTimes(3);
+    expect(passEvents).toHaveLength(3);
+    expect(result.pass1Model).toBe('ollama-si-pinter');
+    expect(result.pass2Model).toBe('ollama-si-gacor');
+    expect(result.pass3Model).toBe('ollama-si-pinter');
+    expect(result.finalContent).toContain('Naskah Final Bab 3 Lengkap');
+  });
 });

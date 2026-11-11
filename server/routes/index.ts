@@ -23,6 +23,7 @@ import workspaceRouter from './workspace.js';
 import campusesRouter from './campuses.js';
 import { imageGenerationRouter } from './imageGeneration.js';
 import { quizRouter } from './quizGeneration.js';
+import { defenseRouter } from './defense.js';
 import performanceTelemetryRouter from './performanceTelemetry.js';
 import coderRouter from './coder.js';
 
@@ -53,9 +54,10 @@ export function createApiRouter(): Router {
   router.use(counselorChatRouter);
   router.use(chatRouter);
 
-  // AI Generation & Comparison
+  // AI Generation, Quiz & Defense Simulation
   router.use('/ai', imageGenerationRouter);
   router.use('/ai', quizRouter);
+  router.use('/ai', defenseRouter);
   router.use(workspaceComparisonRouter);
 
   // Attachments & User Data

@@ -366,3 +366,33 @@ export const ScoreIndicator: React.FC<ScoreIndicatorProps> = ({
     </div>
   );
 };
+
+
+/* =========================================================================
+   KBD (Keyboard Shortcut Badge — ChatGPT / Linear / Cursor style)
+   ========================================================================= */
+export interface KbdProps extends React.HTMLAttributes<HTMLElement> {
+  size?: 'xs' | 'sm';
+}
+
+export const Kbd: React.FC<KbdProps> = ({
+  size = 'xs',
+  className = '',
+  children,
+  ...props
+}) => {
+  return (
+    <kbd
+      className={`
+        inline-flex items-center justify-center font-mono font-semibold select-none
+        bg-slate-100/90 dark:bg-slate-800/90 text-slate-500 dark:text-slate-400
+        border border-slate-200/90 dark:border-slate-700/80 shadow-3xs
+        ${size === 'xs' ? 'px-1.5 py-0.5 text-[10px] rounded-md min-w-[20px]' : 'px-2 py-0.5 text-[11px] rounded-lg min-w-[24px]'}
+        ${className}
+      `}
+      {...props}
+    >
+      {children}
+    </kbd>
+  );
+};

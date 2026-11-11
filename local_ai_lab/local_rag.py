@@ -1,10 +1,11 @@
 """
-Local RAG Engine v1.2 (Local AI Lab)
+Local RAG Engine v2.0 (Local AI Lab) - Hybrid Search Edition
 Fitur Utama:
-- Smart Incremental Auto-Sync (hanya embed file baru/diedit lewat MD5 tracking)
-- Multi-format ingestion (.pdf, .docx, .txt, .md)
-- Real-time Token Streaming di terminal
-- Anti-halusinasi dengan penguncian konteks dokumen
+- Hybrid Retrieval: Dense Vector Embedding (all-minilm) + BM25Okapi Lexical Ranker
+- Reciprocal Rank Fusion (RRF) & Dynamic Thresholding
+- Smart Incremental Auto-Sync (MD5 tracking untuk PDF, DOCX, TXT, MD)
+- Real-time Token Streaming dengan penanganan tag <think>
+- Anti-halusinasi presisi tinggi dengan penguncian konteks dokumen resmi
 """
 
 import os
@@ -13,6 +14,7 @@ import glob
 import json
 import math
 import hashlib
+import re
 import urllib.request
 import urllib.error
 from typing import List, Dict, Any, Tuple
@@ -35,6 +37,14 @@ LLM_MODEL = "si-pinter"
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE_DIR, "data")
 CACHE_FILE = os.path.join(BASE_DIR, "vector_store.json")
+
+# Stopwords umum bahasa Indonesia untuk tokenisasi leksikal BM25
+INDONESIAN_STOPWORDS = {
+    "yang", "di", "ke", "dari", "dan", "atau", "ini", "itu", "pada", "untuk",
+    "dengan", "adalah", "sebagai", "oleh", "dalam", "bisa", "dapat", "akan",
+    "saya", "kami", "anda", "dia", "mereka", "kita", "sudah", "telah", "belum",
+    "ada", "tidak", "bukan", "hanya", "juga", "lagi", "pun", "serta"
+}
 
 
 def compute_file_hash(filepath: str) -> str:
@@ -65,12 +75,61 @@ def call_ollama_embed(text: str) -> List[float]:
 
 def cosine_similarity(v1: List[float], v2: List[float]) -> float:
     """Menghitung kemiripan sudut (cosine similarity) antara dua vektor."""
+    if not v1 or not v2 or len(v1) != len(v2):
+        return 0.0
     dot = sum(a * b for a, b in zip(v1, v2))
     norm1 = math.sqrt(sum(a * a for a in v1))
     norm2 = math.sqrt(sum(b * b for b in v2))
     if norm1 == 0 or norm2 == 0:
         return 0.0
     return dot / (norm1 * norm2)
+
+
+def tokenize_academic_text(text: str) -> List[str]:
+    """Tokenisasi teks akademik untuk pencarian leksikal BM25."""
+    tokens = re.findall(r"\b[a-zA-Z0-9_\-\.]{2,}\b", text.lower())
+    return [t for t in tokens if t not in INDONESIAN_STOPWORDS]
+
+
+class BM25Ranker:
+    """Implementasi BM25Okapi mandiri untuk pencarian leksikal presisi."""
+    def __init__(self, corpus_tokens: List[List[str]], k1: float = 1.5, b: float = 0.75):
+        self.k1 = k1
+        self.b = b
+        self.corpus_size = len(corpus_tokens)
+        self.doc_lens = [len(doc) for doc in corpus_tokens]
+        self.avgdl = (sum(self.doc_lens) / self.corpus_size) if self.corpus_size > 0 else 1.0
+        self.doc_freqs: List[Dict[str, int]] = []
+        self.idf: Dict[str, float] = {}
+
+        df: Dict[str, int] = {}
+        for doc in corpus_tokens:
+            freq: Dict[str, int] = {}
+            for token in doc:
+                freq[token] = freq.get(token, 0) + 1
+            self.doc_freqs.append(freq)
+            for token in freq.keys():
+                df[token] = df.get(token, 0) + 1
+
+        for token, n in df.items():
+            self.idf[token] = math.log(1.0 + (self.corpus_size - n + 0.5) / (n + 0.5))
+
+    def score(self, query_tokens: List[str]) -> List[float]:
+        scores = [0.0] * self.corpus_size
+        if self.corpus_size == 0 or not query_tokens:
+            return scores
+
+        for token in query_tokens:
+            idf_val = self.idf.get(token, 0.0)
+            if idf_val <= 0:
+                continue
+            for i, doc_freq in enumerate(self.doc_freqs):
+                tf = doc_freq.get(token, 0)
+                if tf == 0:
+                    continue
+                denom = tf + self.k1 * (1.0 - self.b + self.b * (self.doc_lens[i] / self.avgdl))
+                scores[i] += idf_val * (tf * (self.k1 + 1.0)) / denom
+        return scores
 
 
 def load_vector_store() -> Dict[str, Any]:
@@ -83,7 +142,7 @@ def load_vector_store() -> Dict[str, Any]:
                     return data
         except Exception:
             pass
-    return {"version": "1.2", "file_hashes": {}, "chunks": []}
+    return {"version": "2.0", "file_hashes": {}, "chunks": []}
 
 
 def save_vector_store(store: Dict[str, Any]):
@@ -98,11 +157,10 @@ def sync_documents(force: bool = False) -> Dict[str, Any]:
     Hanya meng-embed file yang BARU atau BERUBAH.
     File yang dihapus akan otomatis dibersihkan dari database vektor.
     """
-    store = load_vector_store() if not force else {"version": "1.2", "file_hashes": {}, "chunks": []}
+    store = load_vector_store() if not force else {"version": "2.0", "file_hashes": {}, "chunks": []}
     existing_hashes = store.get("file_hashes", {})
     chunks = store.get("chunks", [])
 
-    # Ambil semua file yang didukung di folder data/
     supported_exts = (".txt", ".md", ".pdf", ".docx", ".doc")
     all_files = [
         f for f in glob.glob(os.path.join(DATA_DIR, "*.*"))
@@ -112,7 +170,6 @@ def sync_documents(force: bool = False) -> Dict[str, Any]:
     current_files = {os.path.basename(f): f for f in all_files}
     current_hashes = {name: compute_file_hash(path) for name, path in current_files.items()}
 
-    # Deteksi perubahan
     new_or_modified = []
     for name, h in current_hashes.items():
         if name not in existing_hashes or existing_hashes[name] != h:
@@ -121,13 +178,11 @@ def sync_documents(force: bool = False) -> Dict[str, Any]:
     deleted_files = [name for name in existing_hashes if name not in current_hashes]
 
     if not new_or_modified and not deleted_files and chunks:
-        # Tidak ada perubahan sama sekali
         return store
 
     print("\n" + "-" * 50)
-    print("[Smart Sync v1.2] Memeriksa perubahan dokumen...")
+    print("[Smart Sync v2.0] Memeriksa perubahan dokumen kampus...")
 
-    # 1. Hapus chunk dari file yang dihapus atau file yang dimodifikasi (akan di-embed ulang)
     files_to_remove = set(deleted_files + new_or_modified)
     if files_to_remove:
         chunks = [c for c in chunks if c.get("source") not in files_to_remove]
@@ -135,11 +190,10 @@ def sync_documents(force: bool = False) -> Dict[str, Any]:
             existing_hashes.pop(name, None)
             print(f"  [-] Menghapus cache file lama: {name}")
 
-    # 2. Proses file baru / termodifikasi
     for name in new_or_modified:
         filepath = current_files[name]
         print(f"  [+] Memproses file: {name} ...")
-        new_doc_chunks = load_and_chunk_document(filepath, chunk_size=400, chunk_overlap=50)
+        new_doc_chunks = load_and_chunk_document(filepath, chunk_size=450, chunk_overlap=60)
         print(f"      Dibuat {len(new_doc_chunks)} potongan informasi. Menghitung embedding...")
 
         for c in new_doc_chunks:
@@ -150,14 +204,76 @@ def sync_documents(force: bool = False) -> Dict[str, Any]:
 
         existing_hashes[name] = current_hashes[name]
 
-    # Simpan hasil pembaruan
     store["file_hashes"] = existing_hashes
     store["chunks"] = chunks
+    store["version"] = "2.0"
     save_vector_store(store)
 
     print(f"[OK] Sync selesai! Total {len(chunks)} potongan informasi dari {len(existing_hashes)} dokumen.")
     print("-" * 50 + "\n")
     return store
+
+
+def hybrid_search(question: str, top_k: int = 3, rrf_k: int = 60) -> List[Tuple[Dict[str, Any], float, float, float]]:
+    """
+    Melakukan Hybrid Search (Dense Cosine Similarity + BM25 Lexical Ranking)
+    menggunakan Reciprocal Rank Fusion (RRF).
+    Mengembalikan list tuple: (chunk, rrf_score, cosine_score, bm25_score)
+    """
+    store = sync_documents()
+    chunks = store.get("chunks", [])
+    if not chunks:
+        return []
+
+    # 1. Dense Vector Scoring
+    q_vec = call_ollama_embed(question)
+    dense_scores = []
+    if q_vec:
+        for c in chunks:
+            s = cosine_similarity(q_vec, c.get("vector", []))
+            dense_scores.append(s)
+    else:
+        dense_scores = [0.0] * len(chunks)
+
+    # 2. BM25 Lexical Scoring
+    q_tokens = tokenize_academic_text(question)
+    corpus_tokens = [tokenize_academic_text(c["text"]) for c in chunks]
+    bm25 = BM25Ranker(corpus_tokens)
+    bm25_scores = bm25.score(q_tokens)
+
+    # Max normalization
+    max_dense = max(dense_scores) if dense_scores and max(dense_scores) > 0 else 1.0
+    max_bm25 = max(bm25_scores) if bm25_scores and max(bm25_scores) > 0 else 1.0
+
+    # Sort ranks for RRF
+    dense_ranked_indices = sorted(range(len(chunks)), key=lambda i: dense_scores[i], reverse=True)
+    bm25_ranked_indices = sorted(range(len(chunks)), key=lambda i: bm25_scores[i], reverse=True)
+
+    dense_rank_map = {idx: rank for rank, idx in enumerate(dense_ranked_indices)}
+    bm25_rank_map = {idx: rank for rank, idx in enumerate(bm25_ranked_indices)}
+
+    # 3. Reciprocal Rank Fusion & Combined Score
+    fused_results = []
+    for idx, c in enumerate(chunks):
+        d_score = dense_scores[idx]
+        b_score = bm25_scores[idx]
+
+        # RRF formula
+        rrf = (1.0 / (rrf_k + dense_rank_map[idx])) + (1.0 / (rrf_k + bm25_rank_map[idx]))
+
+        # Linear blend for safety thresholding
+        norm_dense = d_score / max_dense if max_dense > 0 else 0.0
+        norm_bm25 = b_score / max_bm25 if max_bm25 > 0 else 0.0
+        blended = (0.55 * norm_dense) + (0.45 * norm_bm25)
+
+        # Pertahankan jika ada relevansi memadai
+        if d_score >= 0.22 or b_score > 0.1:
+            fused_results.append((c, rrf, d_score, b_score, blended))
+
+    # Urutkan berdasarkan gabungan RRF dan blended score
+    fused_results.sort(key=lambda x: (x[1] * 0.5 + x[4] * 0.5), reverse=True)
+
+    return [(item[0], item[1], item[2], item[3]) for item in fused_results[:top_k]]
 
 
 def stream_ollama_generate(prompt: str):
@@ -167,8 +283,12 @@ def stream_ollama_generate(prompt: str):
         "model": LLM_MODEL,
         "prompt": prompt,
         "stream": True,
+        "think": False,
         "options": {
-            "temperature": 0.25
+            "temperature": 0.2,
+            "top_p": 0.85,
+            "num_predict": 1024,
+            "num_ctx": 4096
         }
     }).encode("utf-8")
 
@@ -182,7 +302,6 @@ def stream_ollama_generate(prompt: str):
                 data = json.loads(line.decode("utf-8"))
                 token = data.get("response", "")
 
-                # Penanganan jika model menggunakan tag reasoning <think>
                 if "<think>" in token:
                     in_think_block = True
                     continue
@@ -200,55 +319,37 @@ def stream_ollama_generate(prompt: str):
 
 
 def ask_rag(question: str):
-    """Menjawab pertanyaan menggunakan RAG v1.2."""
-    store = sync_documents()
-    chunks = store.get("chunks", [])
-
-    if not chunks:
-        print("\n[!] Belum ada dokumen di folder data/. Masukkan file .txt, .md, .pdf, atau .docx.")
-        return
-
-    # 1. Hitung embedding pertanyaan
-    q_vec = call_ollama_embed(question)
-    if not q_vec:
-        print("[!] Gagal menghitung embedding pertanyaan.")
-        return
-
-    # 2. Ranking relevansi dokumen
-    scored = []
-    for c in chunks:
-        score = cosine_similarity(q_vec, c.get("vector", []))
-        scored.append((score, c))
-
-    scored.sort(key=lambda x: x[0], reverse=True)
-
-    # Ambil 3 chunk paling relevan dengan skor minimal 0.25
-    top_chunks = [c for score, c in scored[:3] if score >= 0.25]
+    """Menjawab pertanyaan menggunakan Hybrid RAG v2.0."""
+    scored_chunks = hybrid_search(question, top_k=3)
 
     print("\n" + "=" * 55)
     print(f"PERTANYAAN: {question}")
     print("=" * 55)
 
-    if not top_chunks:
+    if not scored_chunks:
         print("\n[Info Dokumen] Tidak ada informasi yang relevan dalam dokumen internal.")
         print("Tips: Coba tambahkan dokumen terkait ke folder: local_ai_lab/data/")
         print("=" * 55 + "\n")
         return
 
-    print(f"[Konteks Ditemukan] {len(top_chunks)} bagian dokumen relevan:")
-    for idx, c in enumerate(top_chunks):
+    print(f"[Hybrid Context Ditemukan] {len(scored_chunks)} bagian dokumen relevan:")
+    for idx, (c, rrf, dense_s, bm25_s) in enumerate(scored_chunks):
         page_info = f" (Halaman {c.get('page')})" if c.get("page") else ""
-        print(f"  * Sumber {idx+1}: {c['source']}{page_info} [Bagian {c['chunk_id']}]")
+        print(f"  * Sumber {idx+1}: {c['source']}{page_info} [Bagian {c['chunk_id']}] (Vektor: {dense_s:.2f}, BM25: {bm25_s:.2f})")
 
-    print("\n[Jawaban AI (Streaming)]:\n")
+    print("\n[Jawaban Si Pinter v4.0 (Streaming)]:\n")
 
-    # 3. Bentuk prompt terspesifikasi
     context_text = "\n\n---\n\n".join([
-        f"Dokumen: {c['source']}\n{c['text']}" for c in top_chunks
+        f"Dokumen: {c['source']}\n{c['text']}" for c, _, _, _ in scored_chunks
     ])
 
-    rag_prompt = f"""Kamu adalah asisten pintar. Jawab pertanyaan pengguna HANYA berdasarkan KONTEKS DOKUMEN resmi yang diberikan di bawah ini.
-Sebutkan nama dokumen saat memberikan informasi penting. Jika jawabannya tidak ada di dalam konteks, nyatakan bahwa informasi tersebut tidak tercantum dalam dokumen resmi.
+    rag_prompt = f"""Kamu adalah Si Pinter — asisten akademik cerdas RuangTenang & RuangKerja Kampus.
+Jawab pertanyaan pengguna secara terstruktur, akurat, dan HANYA berdasarkan KONTEKS DOKUMEN resmi yang diberikan di bawah ini.
+
+Aturan Penting:
+1. Sebutkan nama dokumen sumber saat menyampaikan poin penting.
+2. Jika jawabannya tidak ada di dalam konteks dokumen, nyatakan dengan jujur bahwa informasi tersebut tidak tercantum dalam dokumen resmi yang tersedia.
+3. Hindari mengarang aturan, jadwal, atau angka di luar teks dokumen.
 
 [KONTEKS DOKUMEN]:
 {context_text}
@@ -258,9 +359,29 @@ Sebutkan nama dokumen saat memberikan informasi penting. Jika jawabannya tidak a
 
 [JAWABAN LENGKAP & TERSTRUKTUR]:"""
 
-    # 4. Stream jawaban langsung ke terminal
     stream_ollama_generate(rag_prompt)
     print("=" * 55 + "\n")
+
+
+def query_local_rag(question: str, top_k: int = 3) -> Dict[str, Any]:
+    """API Helper untuk eksekusi terprogram dari modul lain."""
+    results = hybrid_search(question, top_k=top_k)
+    return {
+        "question": question,
+        "found": len(results) > 0,
+        "chunks": [
+            {
+                "source": c["source"],
+                "page": c.get("page", 1),
+                "chunk_id": c.get("chunk_id"),
+                "text": c["text"],
+                "rrf_score": round(rrf, 4),
+                "dense_score": round(dense_s, 4),
+                "bm25_score": round(bm25_s, 4)
+            }
+            for c, rrf, dense_s, bm25_s in results
+        ]
+    }
 
 
 def print_help():
@@ -293,13 +414,11 @@ def main():
         ask_rag(query)
         return
 
-    # Mode Interaktif REPL
     print("=" * 55)
-    print("   Local AI Lab - RAG & Modelfile Engine v1.2")
-    print("   Model: si-pinter (Qwen 1.7B) | Embedding: all-minilm")
+    print("   Local AI Lab - Hybrid RAG v2.0 Engine")
+    print("   Model: si-pinter (Qwen 1.7B) | Hybrid: Dense + BM25")
     print("=" * 55)
 
-    # Auto-sync dokumen awal
     sync_documents()
     print_help()
 

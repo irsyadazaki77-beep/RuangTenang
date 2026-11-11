@@ -152,8 +152,7 @@ export const MessageBubble = memo(function MessageBubble({
         const el = document.getElementById(`msg-${msg.id}`);
         if (el) el.style.willChange = 'auto';
       }}
-      style={{ willChange: 'transform, opacity' }}
-      className={`render-optimized-item group flex w-full transition-all duration-200 ${
+      className={`render-optimized-item group flex w-full transition-colors duration-150 ${
         isSearchTarget ? 'ring-2 ring-amber-500/80 dark:ring-amber-400/80 rounded-2xl p-2 bg-amber-50/40 dark:bg-amber-950/30' : ''
       } ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
     >
@@ -214,7 +213,7 @@ export const MessageBubble = memo(function MessageBubble({
               )}
 
               {/* Chat Bubble */}
-              <div className="rounded-3xl rounded-br-lg bg-gradient-to-br from-teal-600 to-teal-700 text-white dark:from-teal-600 dark:to-teal-800 px-4 sm:px-5 py-2.5 sm:py-3 text-[14px] sm:text-[15px] leading-relaxed break-words shadow-[0_8px_22px_-6px_rgba(13,148,136,0.3)] font-normal selection:bg-teal-900 selection:text-white">
+              <div className="rounded-3xl rounded-br-lg bg-teal-700 dark:bg-teal-800/95 text-white px-4 sm:px-5 py-2.5 sm:py-3 text-[14.5px] sm:text-[15px] leading-relaxed break-words shadow-xs font-normal selection:bg-teal-900 selection:text-white">
                 {renderHighlightedContent(msg.content.replace('[PLUGIN_RESULT]\n', 'Hasil Fitur: '), searchHighlightQuery)}
               </div>
 
@@ -318,7 +317,7 @@ export const MessageBubble = memo(function MessageBubble({
                 <RhythmicTypingIndicator label="Menuliskan pesan yang tenang..." avatarSrc="" mode="RUANG_TENANG" hideAvatar />
               </div>
             ) : (
-              <div className="prose prose-slate dark:prose-invert max-w-none break-words text-[14px] sm:text-[15px] leading-relaxed text-slate-800 dark:text-slate-100 space-y-2.5">
+              <div className="prose prose-slate dark:prose-invert max-w-[720px] break-words text-[14.5px] sm:text-[15px] leading-[1.7] text-slate-800 dark:text-slate-100 space-y-2.5">
                 {reasoning.thinking || reasoning.isThinking ? (
                   <ReasoningAccordion thinking={reasoning.thinking} isThinking={reasoning.isThinking} />
                 ) : null}

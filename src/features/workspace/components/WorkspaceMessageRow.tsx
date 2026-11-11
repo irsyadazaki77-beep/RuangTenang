@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { useReducedMotion } from 'motion/react';
-import { RefreshCw, FileText, Copy, Check, FilePlus2, AlertCircle, Volume2, VolumeX, Edit2 } from 'lucide-react';
+import { RefreshCw, FileText, Copy, Check, FilePlus2, AlertCircle, Volume2, VolumeX, Edit2, Sparkles, ChevronDown, Laptop, Play } from 'lucide-react';
 import { BrandLogo } from '../../../components/ui/BrandLogo';
 import type { Message } from '../../chat/types';
 import { LazyMarkdown } from '../../../components/common/LazyMarkdown';
@@ -58,6 +58,26 @@ function ResearchCitationContent({ content, sources = [], onOpenSource }: { cont
   })}</>;
 }
 
+interface ParsedPlanData {
+  title: string;
+  tasks: Array<{ title: string; description?: string; type?: string; dependsOn?: number[] }>;
+}
+
+function tryExtractPlanData(content: string): ParsedPlanData | null {
+  try {
+    const trimmed = content.trim();
+    if (!trimmed.includes('"tasks"') || !trimmed.includes('"title"')) return null;
+    const jsonStr = trimmed.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+    const parsed = JSON.parse(jsonStr) as ParsedPlanData;
+    if (parsed && typeof parsed.title === 'string' && Array.isArray(parsed.tasks) && parsed.tasks.length > 0) {
+      return parsed;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export interface WorkspaceMessageRowProps {
   message: Message;
   lastUserPrompt?: string;
@@ -71,6 +91,9 @@ export interface WorkspaceMessageRowProps {
   onCopyMessage: (message: Message) => void;
   onEditUserMessage?: (messageId: string, newContent: string) => void;
   formatMessageTime: (date?: Date | string) => string;
+  isLastMessage?: boolean;
+  onSelectFollowUp?: (prompt: string) => void;
+  onOpenPlan?: () => void;
 }
 
 export const WorkspaceMessageRow = React.memo(function WorkspaceMessageRow({
@@ -85,13 +108,34 @@ export const WorkspaceMessageRow = React.memo(function WorkspaceMessageRow({
   onSendToCanvas,
   onCopyMessage,
   onEditUserMessage,
-  formatMessageTime
+  formatMessageTime,
+  isLastMessage = false,
+  onSelectFollowUp,
+  onOpenPlan
 }: WorkspaceMessageRowProps) {
   const shouldReduceMotion = useReducedMotion();
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(msg.content);
   const [showSourcesExpanded, setShowSourcesExpanded] = useState(false);
+
+  // Extract thinking/reasoning if present
+  const { thoughtText, mainContent } = React.useMemo(() => {
+    const raw = msg.content || '';
+    const match = raw.match(/<(?:thought|think)>([\s\S]*?)<\/(?:thought|think)>/i);
+    if (match) {
+      return {
+        thoughtText: match[1].trim(),
+        mainContent: raw.replace(match[0], '').trim()
+      };
+    }
+    const anyMsg = msg as unknown as Record<string, unknown>;
+    const directThought = typeof anyMsg.reasoning === 'string' ? anyMsg.reasoning : typeof anyMsg.thought === 'string' ? anyMsg.thought : '';
+    return {
+      thoughtText: directThought.trim(),
+      mainContent: raw
+    };
+  }, [msg]);
 
   useEffect(() => {
     setEditContent(msg.content);
@@ -287,11 +331,23 @@ export const WorkspaceMessageRow = React.memo(function WorkspaceMessageRow({
           </div>
         ) : (
           <>
+            {thoughtText && (
+              <details className="group mb-3 rounded-2xl border border-slate-200/80 dark:border-white/10 bg-[#f0f4f9]/80 dark:bg-[#1e1f20]/80 overflow-hidden text-xs">
+                <summary className="flex items-center gap-2 px-3.5 py-2 cursor-pointer font-medium text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 select-none list-none transition-colors">
+                  <Sparkles className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                  <span>Alur Berpikir AI</span>
+                  <ChevronDown className="w-3.5 h-3.5 ml-auto text-slate-400 group-open:rotate-180 transition-transform shrink-0" />
+                </summary>
+                <div className="px-3.5 pb-3 pt-1 text-slate-600 dark:text-slate-300 border-t border-slate-200/50 dark:border-white/5 leading-relaxed font-mono text-[11px] whitespace-pre-wrap">
+                  {thoughtText}
+                </div>
+              </details>
+            )}
             <div className="prose dark:prose-invert max-w-none text-[14px] sm:text-[15px] leading-relaxed prose-p:my-2 prose-pre:my-2 prose-headings:font-semibold prose-headings:tracking-tight prose-a:text-indigo-600 dark:prose-a:text-indigo-400">
-              {msg.sources?.some(source => source.citationId) || /\[cite:[A-Za-z0-9_-]+\]/.test(msg.content) ? (
-                <ResearchCitationContent content={msg.content} sources={msg.sources} onOpenSource={onOpenSource} />
+              {msg.sources?.some(source => source.citationId) || /\[cite:[A-Za-z0-9_-]+\]/.test(mainContent) ? (
+                <ResearchCitationContent content={mainContent} sources={msg.sources} onOpenSource={onOpenSource} />
               ) : (
-                <LazyMarkdown content={msg.content} />
+                <LazyMarkdown content={mainContent} />
               )}
             </div>
 
@@ -342,6 +398,27 @@ export const WorkspaceMessageRow = React.memo(function WorkspaceMessageRow({
                   <FileText className="w-3.5 h-3.5" />
                   <span>Buka Dokumen di Canvas &rarr;</span>
                 </button>
+              </div>
+            )}
+
+            {/* Smart Follow-up Prompt Pills (Gemini style) */}
+            {isLastMessage && onSelectFollowUp && !msg.error && mainContent.trim().length > 0 && (
+              <div className="mt-3.5 pt-2.5 border-t border-slate-100 dark:border-white/5 flex flex-wrap items-center gap-1.5" aria-label="Saran pertanyaan lanjutan">
+                <span className="text-[11px] font-medium text-slate-400 select-none mr-1">Lanjutkan:</span>
+                {[
+                  { label: '💡 Beri contoh konkret', prompt: 'Bisa berikan contoh kasus konkret untuk penjelasan ini?' },
+                  { label: '⚡ Sederhanakan bahasa', prompt: 'Tolong jelaskan kembali poin utama di atas dengan bahasa yang lebih sederhana dan mudah dipahami.' },
+                  { label: '📊 Buat tabel rangkuman', prompt: 'Tolong buatkan tabel perbandingan/rangkuman terstruktur dari poin-poin di atas.' }
+                ].map((item) => (
+                  <button
+                    key={item.label}
+                    type="button"
+                    onClick={() => onSelectFollowUp(item.prompt)}
+                    className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium border border-slate-200/80 bg-white hover:bg-slate-50 hover:border-slate-300 text-slate-700 dark:border-white/10 dark:bg-[#1e1f20] dark:text-slate-300 dark:hover:bg-[#282a2c] transition-all cursor-pointer shadow-3xs active:scale-95"
+                  >
+                    <span>{item.label}</span>
+                  </button>
+                ))}
               </div>
             )}
           </>
@@ -411,4 +488,7 @@ export const WorkspaceMessageRow = React.memo(function WorkspaceMessageRow({
   previous.onSendToCanvas === next.onSendToCanvas &&
   previous.onCopyMessage === next.onCopyMessage &&
   previous.onEditUserMessage === next.onEditUserMessage &&
-  previous.formatMessageTime === next.formatMessageTime);
+  previous.formatMessageTime === next.formatMessageTime &&
+  previous.isLastMessage === next.isLastMessage &&
+  previous.onSelectFollowUp === next.onSelectFollowUp &&
+  previous.onOpenPlan === next.onOpenPlan);

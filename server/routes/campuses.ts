@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { prisma } from '../database.js';
 import { requireAuth, requireCampusAdmin, requireRole, normalizeRole } from '../middleware/auth.js';
 import { redisService } from '../services/redisService.js';
+import { generateCampusWellnessHeatmap, type CampusStrainMetric } from '../services/campus/campusHeatmapService.js';
 import { CAMPUS_PRODUCT_EVENT_TYPES, recordCampusProductEvent, toSuppressedCampusMetric, type CampusProductEventType } from '../services/campusProductAnalyticsService.js';
 
 const router = Router();
@@ -353,6 +354,100 @@ router.post('/analytics/events', requireAuth, async (req, res) => {
   if (!campus) return res.status(204).end();
   await recordCampusProductEvent(req.user!.userId, campus.id, parsed.data.eventType);
   return res.status(202).json({ success: true });
+});
+
+
+async function fetchAndRenderCampusHeatmap(campusId: string, res: any) {
+  try {
+    const campus = await prisma.campuses.findUnique({
+      where: { id: campusId }
+    });
+    if (!campus) {
+      return res.status(404).json({ success: false, error: 'CAMPUS_NOT_FOUND' });
+    }
+
+    const students = await prisma.users.findMany({
+      where: { campusId, role: 'mahasiswa' },
+      select: {
+        id: true,
+        university: true,
+        screenings: {
+          take: 1,
+          orderBy: { timestamp: 'desc' },
+          select: { phq9Score: true, gad7Score: true }
+        },
+        moodLogs: {
+          take: 1,
+          orderBy: { timestamp: 'desc' },
+          select: { intensity: true, factors: true }
+        }
+      }
+    });
+
+    const rawRecords: Array<{ faculty: string; stressScore: number; factor: CampusStrainMetric['dominantStrainFactor'] }> = [];
+
+    for (const student of students) {
+      const faculty = student.university && student.university.trim().length > 0
+        ? student.university.trim()
+        : 'Fakultas / Program Studi Umum';
+
+      let stressScore = 40;
+      let factor: CampusStrainMetric['dominantStrainFactor'] = 'thesis_deadline';
+
+      if (student.screenings && student.screenings.length > 0) {
+        const scr = student.screenings[0];
+        stressScore = Math.min(100, Math.round(((scr.phq9Score + scr.gad7Score) / 48) * 100));
+        if (scr.phq9Score >= 15) factor = 'exam_load';
+      } else if (student.moodLogs && student.moodLogs.length > 0) {
+        const mood = student.moodLogs[0];
+        stressScore = Math.min(100, Math.max(10, (mood.intensity || 5) * 10));
+        const factorsRaw = (mood.factors || '').toLowerCase();
+        if (factorsRaw.includes('keuangan') || factorsRaw.includes('biaya')) {
+          factor = 'financial_burnout';
+        } else if (factorsRaw.includes('kesepian') || factorsRaw.includes('teman')) {
+          factor = 'social_isolation';
+        } else if (factorsRaw.includes('ujian') || factorsRaw.includes('kuliah')) {
+          factor = 'exam_load';
+        }
+      }
+
+      rawRecords.push({ faculty, stressScore, factor });
+    }
+
+    const heatmap = generateCampusWellnessHeatmap(
+      campus.id,
+      campus.name,
+      rawRecords,
+      MINIMUM_ANALYTICS_COHORT
+    );
+
+    return res.json({
+      success: true,
+      heatmap,
+      kAnonymityEnforced: true,
+      minimumCohort: MINIMUM_ANALYTICS_COHORT
+    });
+  } catch (err: any) {
+    console.error('[CAMPUS_HEATMAP_ERROR]', err?.message || err);
+    return res.status(500).json({ success: false, error: 'HEATMAP_GENERATION_FAILED' });
+  }
+}
+
+router.get(['/campus-admin/heatmap', '/campus-admin/wellness-heatmap'], requireAuth, requireCampusAdmin, async (req, res) => {
+  const campusId = req.user!.campusId!;
+  return fetchAndRenderCampusHeatmap(campusId, res);
+});
+
+router.get('/campuses/:id/heatmap', requireAuth, async (req, res) => {
+  const userRole = normalizeRole(req.user?.role);
+  const userCampusId = req.user?.campusId;
+  const targetCampusId = req.params.id;
+
+  if (userRole !== 'admin' && (userCampusId !== targetCampusId || (userRole !== 'campus_admin' && userRole !== 'konselor'))) {
+    return res.status(403).json({ success: false, error: 'ACCESS_DENIED' });
+  }
+
+  return fetchAndRenderCampusHeatmap(targetCampusId, res);
 });
 
 export default router;

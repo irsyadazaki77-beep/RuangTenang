@@ -13,7 +13,10 @@ import {
   Mic,
   Volume2,
   VolumeX,
-  Radio
+  Radio,
+  Flame,
+  RefreshCw,
+  Cpu
 } from 'lucide-react';
 import {
   DefenseExamType,
@@ -26,6 +29,7 @@ import {
   generateDefenseReportMarkdown
 } from '../utils/mockDefenseModel';
 import { speechDefenseService } from '../services/speechDefenseService';
+import { defenseApiService } from '../services/defenseApiService';
 import { FluidVoiceVisualizer } from '../../chat/components/FluidVoiceVisualizer';
 import { safeLocalStorage } from '../../../lib/storage';
 
@@ -47,12 +51,14 @@ export const MockDefenseModal: React.FC<MockDefenseModalProps> = ({
   onSaveToCanvas
 }) => {
   const [examType, setExamType] = useState<DefenseExamType>('SIDANG_SKRIPSI');
+  const [rigorLevel, setRigorLevel] = useState<'standar' | 'killer'>('standar');
   const [thesisTitle] = useState(initialTitle || 'Analisis Efektivitas Pembelajaran Mandiri');
   const [questions, setQuestions] = useState<DefenseQuestion[]>(() => generateMockQuestions(initialTitle, 'SIDANG_SKRIPSI', contextText));
   const [currentIdx, setCurrentIdx] = useState(0);
   const [studentInput, setStudentInput] = useState('');
   const [evaluations, setEvaluations] = useState<Record<string, DefenseAnswerEvaluation>>({});
   const [isEvaluating, setIsEvaluating] = useState(false);
+  const [isGeneratingAiQuestions, setIsGeneratingAiQuestions] = useState(false);
   const [showSummary, setShowSummary] = useState(false);
   const [timerSeconds, setTimerSeconds] = useState(120); // 2 minutes countdown per question
   const [isTimerRunning, setIsTimerRunning] = useState(false);
@@ -60,6 +66,7 @@ export const MockDefenseModal: React.FC<MockDefenseModalProps> = ({
   // Voice states (Native browser Web Speech API: STT & TTS)
   const [isListening, setIsListening] = useState(false);
   const [isSpeakingExaminer, setIsSpeakingExaminer] = useState(false);
+  const [isSpeakingCritique, setIsSpeakingCritique] = useState(false);
   const [speechError, setSpeechError] = useState<string | null>(null);
 
   const isSpeechSupported = speechDefenseService.isRecognitionSupported();
@@ -77,6 +84,9 @@ export const MockDefenseModal: React.FC<MockDefenseModalProps> = ({
             setCurrentIdx(parsed.currentIdx || 0);
             setEvaluations(parsed.evaluations || {});
             setShowSummary(Boolean(parsed.showSummary));
+            if (parsed.rigorLevel === 'killer' || parsed.rigorLevel === 'standar') {
+              setRigorLevel(parsed.rigorLevel);
+            }
             return;
           }
         }
@@ -102,6 +112,7 @@ export const MockDefenseModal: React.FC<MockDefenseModalProps> = ({
         safeLocalStorage.setItem(STORAGE_KEY, JSON.stringify({
           thesisTitle,
           examType,
+          rigorLevel,
           questions,
           currentIdx,
           evaluations,
@@ -112,7 +123,7 @@ export const MockDefenseModal: React.FC<MockDefenseModalProps> = ({
         // ignore
       }
     }
-  }, [isOpen, thesisTitle, examType, questions, currentIdx, evaluations, showSummary]);
+  }, [isOpen, thesisTitle, examType, rigorLevel, questions, currentIdx, evaluations, showSummary]);
 
   // Clean up speech on unmount or close
   useEffect(() => {
@@ -183,32 +194,99 @@ export const MockDefenseModal: React.FC<MockDefenseModalProps> = ({
     }
   };
 
+  // Toggle Examiner Critique Speech (TTS)
+  const toggleSpeakCritique = () => {
+    if (isSpeakingCritique) {
+      speechDefenseService.stopSpeaking();
+      setIsSpeakingCritique(false);
+    } else {
+      if (!currentEval?.critique) return;
+      speechDefenseService.speak(currentEval.critique, {
+        examinerId: activeExaminer.id,
+        onStart: () => setIsSpeakingCritique(true),
+        onEnd: () => setIsSpeakingCritique(false),
+        onError: () => setIsSpeakingCritique(false)
+      });
+    }
+  };
+
   // Stop speaking when question changes
   useEffect(() => {
     speechDefenseService.stopSpeaking();
     setIsSpeakingExaminer(false);
+    setIsSpeakingCritique(false);
   }, [currentIdx]);
 
   if (!isOpen) return null;
 
-  const handleAnswerSubmit = () => {
+  const handleAnswerSubmit = async () => {
     if (!currentQ || !studentInput.trim() || isEvaluating) return;
     setIsEvaluating(true);
     speechDefenseService.stopListening();
     setIsListening(false);
 
-    setTimeout(() => {
+    try {
+      const ev = await defenseApiService.evaluateAnswer({
+        question: currentQ,
+        studentAnswer: studentInput,
+        examiner: activeExaminer,
+        thesisTitle,
+        examType,
+        rigorLevel
+      });
+      setEvaluations(prev => ({ ...prev, [currentQ.id]: ev }));
+      setIsTimerRunning(false);
+    } catch {
       const ev = evaluateDefenseAnswer(currentQ, studentInput);
       setEvaluations(prev => ({ ...prev, [currentQ.id]: ev }));
-      setIsEvaluating(false);
       setIsTimerRunning(false);
-    }, 450);
+    } finally {
+      setIsEvaluating(false);
+    }
+  };
+
+  const handleGenerateAiQuestions = async (newRigor?: 'standar' | 'killer', newExamType?: DefenseExamType) => {
+    const targetRigor = newRigor || rigorLevel;
+    const targetExam = newExamType || examType;
+    setIsGeneratingAiQuestions(true);
+    speechDefenseService.stopSpeaking();
+    speechDefenseService.stopListening();
+    setIsSpeakingExaminer(false);
+    setIsSpeakingCritique(false);
+
+    try {
+      const res = await defenseApiService.generateQuestions({
+        thesisTitle,
+        examType: targetExam,
+        contextText,
+        rigorLevel: targetRigor
+      });
+      setQuestions(res.questions);
+      setCurrentIdx(0);
+      setStudentInput('');
+      setEvaluations({});
+      setShowSummary(false);
+      setTimerSeconds(120);
+      setIsTimerRunning(true);
+    } catch {
+      const q = generateMockQuestions(thesisTitle, targetExam, contextText);
+      setQuestions(q);
+      setCurrentIdx(0);
+      setStudentInput('');
+      setEvaluations({});
+      setShowSummary(false);
+      setTimerSeconds(120);
+      setIsTimerRunning(true);
+    } finally {
+      setIsGeneratingAiQuestions(false);
+    }
   };
 
   const handleNextQuestion = () => {
     speechDefenseService.stopSpeaking();
     speechDefenseService.stopListening();
     setIsSpeakingExaminer(false);
+    setIsSpeakingCritique(false);
     setIsListening(false);
 
     if (isLastQuestion) {
@@ -224,6 +302,8 @@ export const MockDefenseModal: React.FC<MockDefenseModalProps> = ({
   const handleResetSession = () => {
     speechDefenseService.stopSpeaking();
     speechDefenseService.stopListening();
+    setIsSpeakingExaminer(false);
+    setIsSpeakingCritique(false);
     safeLocalStorage.removeItem(STORAGE_KEY);
     const q = generateMockQuestions(thesisTitle, examType, contextText);
     setQuestions(q);
@@ -307,34 +387,74 @@ export const MockDefenseModal: React.FC<MockDefenseModalProps> = ({
           </div>
         </div>
 
-        {/* Exam Type Selector & Voice status bar */}
+        {/* Exam Type Selector, Rigor Mode & Voice status bar */}
         <div className="px-5 py-2.5 bg-slate-100/60 dark:bg-slate-800/40 border-b border-slate-200/60 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs">
-          <div className="flex items-center gap-1.5">
-            <span className="text-slate-500 dark:text-slate-400 font-medium">Jenis Ujian:</span>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-slate-500 dark:text-slate-400 font-medium">Ujian:</span>
             <div className="inline-flex rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-0.5">
               <button
                 type="button"
-                onClick={() => setExamType('SEMINAR_PROPOSAL')}
+                onClick={() => { setExamType('SEMINAR_PROPOSAL'); handleGenerateAiQuestions(rigorLevel, 'SEMINAR_PROPOSAL'); }}
                 className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-colors ${
                   examType === 'SEMINAR_PROPOSAL'
                     ? 'bg-indigo-600 text-white shadow-2xs'
                     : 'text-slate-600 dark:text-slate-300 hover:text-indigo-600'
                 }`}
               >
-                Seminar Proposal (Sempro)
+                Sempro
               </button>
               <button
                 type="button"
-                onClick={() => setExamType('SIDANG_SKRIPSI')}
+                onClick={() => { setExamType('SIDANG_SKRIPSI'); handleGenerateAiQuestions(rigorLevel, 'SIDANG_SKRIPSI'); }}
                 className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-colors ${
                   examType === 'SIDANG_SKRIPSI'
                     ? 'bg-indigo-600 text-white shadow-2xs'
                     : 'text-slate-600 dark:text-slate-300 hover:text-indigo-600'
                 }`}
               >
-                Sidang Skripsi Akhir
+                Sidang Skripsi
               </button>
             </div>
+
+            {/* Rigor Selector: Standar vs Killer */}
+            <div className="inline-flex rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-0.5">
+              <button
+                type="button"
+                onClick={() => setRigorLevel('standar')}
+                className={`px-2 py-1 rounded-md text-[11px] font-semibold transition-colors ${
+                  rigorLevel === 'standar'
+                    ? 'bg-slate-700 text-white shadow-2xs'
+                    : 'text-slate-600 dark:text-slate-300 hover:text-indigo-600'
+                }`}
+              >
+                Standar
+              </button>
+              <button
+                type="button"
+                onClick={() => setRigorLevel('killer')}
+                className={`px-2 py-1 rounded-md text-[11px] font-semibold transition-colors flex items-center gap-1 ${
+                  rigorLevel === 'killer'
+                    ? 'bg-rose-600 text-white shadow-2xs'
+                    : 'text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40'
+                }`}
+                title="Mode Penguji Killer: Mencecar metodologi, validitas instrumen, dan bias secara agresif"
+              >
+                <Flame className="w-3 h-3 text-amber-300" />
+                <span>Penguji Killer</span>
+              </button>
+            </div>
+
+            {/* AI Regenerate Questions Button */}
+            <button
+              type="button"
+              disabled={isGeneratingAiQuestions}
+              onClick={() => handleGenerateAiQuestions()}
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-indigo-200 dark:border-indigo-800 bg-indigo-50/70 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 text-[11px] font-semibold hover:bg-indigo-100 dark:hover:bg-indigo-900/40 transition-colors disabled:opacity-50"
+              title="Generate 4 pertanyaan baru berdasarkan judul & abstrak skripsi saudara menggunakan AI"
+            >
+              <RefreshCw className={`w-3 h-3 ${isGeneratingAiQuestions ? 'animate-spin' : ''}`} />
+              <span>{isGeneratingAiQuestions ? 'Menyusun Soal...' : 'Soal AI Khusus Judul'}</span>
+            </button>
           </div>
 
           <div className="flex items-center gap-3">
@@ -521,6 +641,12 @@ export const MockDefenseModal: React.FC<MockDefenseModalProps> = ({
                       }`}>
                         Skor: {currentEval.score}/100 (Grade {currentEval.grade})
                       </div>
+                      {currentEval.isAiEvaluated && (
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 flex items-center gap-1 border border-indigo-200 dark:border-indigo-800">
+                          <Cpu className="w-3 h-3 text-indigo-600" />
+                          <span>AI First-Principles</span>
+                        </span>
+                      )}
                     </div>
 
                     <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
@@ -532,14 +658,46 @@ export const MockDefenseModal: React.FC<MockDefenseModalProps> = ({
 
                   {/* Critique */}
                   <div className="space-y-1.5">
-                    <h5 className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-indigo-500" />
-                      Ulasan Dewan Penguji:
-                    </h5>
+                    <div className="flex items-center justify-between">
+                      <h5 className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-indigo-500" />
+                        Ulasan Dewan Penguji:
+                      </h5>
+
+                      {isSynthesisSupported && (
+                        <button
+                          type="button"
+                          onClick={toggleSpeakCritique}
+                          className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[11px] font-semibold border transition-all ${
+                            isSpeakingCritique
+                              ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs animate-pulse'
+                              : 'bg-white dark:bg-slate-900 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800 hover:bg-indigo-50'
+                          }`}
+                          title="Dengarkan ulasan dan cecaran penguji dengan suara lisan"
+                        >
+                          {isSpeakingCritique ? <VolumeX className="w-3 h-3" /> : <Volume2 className="w-3 h-3" />}
+                          <span>{isSpeakingCritique ? 'Hentikan Suara' : 'Dengar Ulasan 🔊'}</span>
+                        </button>
+                      )}
+                    </div>
+
                     <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-100 dark:border-slate-800">
                       {currentEval.critique}
                     </p>
                   </div>
+
+                  {/* Follow-up question / Cecaran tambahan */}
+                  {currentEval.followUpQuestion && (
+                    <div className="p-3 rounded-xl bg-rose-50/80 dark:bg-rose-950/40 border border-rose-200/80 dark:border-rose-900/60 space-y-1 text-xs">
+                      <div className="flex items-center gap-1.5 font-bold text-rose-700 dark:text-rose-300">
+                        <Flame className="w-3.5 h-3.5 text-rose-600" />
+                        <span>Cecaran Lanjutan Dosen Penguji:</span>
+                      </div>
+                      <p className="text-rose-900/90 dark:text-rose-200/90 italic font-serif leading-relaxed">
+                        "{currentEval.followUpQuestion}"
+                      </p>
+                    </div>
+                  )}
 
                   {/* Strengths & Weaknesses */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">

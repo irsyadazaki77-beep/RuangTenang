@@ -68,7 +68,10 @@ export const AuroraBackground: React.FC<AuroraBackgroundProps> = memo(({
   const [internalPhase, setInternalPhase] = useState<AuroraPhase>('idle');
   const [isTabHidden, setIsTabHidden] = useState(false);
   const [isUserEditing, setIsUserEditing] = useState(false);
-  const [isLowPowerDevice] = useState(() => {
+  const [isLowPowerDevice, setIsLowPowerDevice] = useState(() => {
+    if (typeof window !== 'undefined') {
+      try { if (localStorage.getItem('rt_performance_mode') === 'true') return true; } catch {}
+    }
     if (typeof navigator === 'undefined') return false;
     const hardware = navigator as Navigator & { deviceMemory?: number };
     return (hardware.deviceMemory !== undefined && hardware.deviceMemory <= 4)
@@ -114,20 +117,37 @@ export const AuroraBackground: React.FC<AuroraBackgroundProps> = memo(({
     };
   }, []);
 
-  // Monitor visibility tab untuk menghemat CPU/GPU saat browser berpindah tab
+  // Monitor visibility tab & toggle mode performa untuk menghemat CPU/GPU
   useEffect(() => {
     if (typeof document === 'undefined') return;
     const handleVisibility = () => {
       setIsTabHidden(document.hidden);
     };
+    const syncPerfMode = () => {
+      try {
+        const perfMode = localStorage.getItem('rt_performance_mode') === 'true';
+        if (perfMode) {
+          setIsLowPowerDevice(true);
+        } else {
+          const hardware = navigator as Navigator & { deviceMemory?: number };
+          const isHardwareConstrained = (hardware.deviceMemory !== undefined && hardware.deviceMemory <= 4)
+            || (navigator.hardwareConcurrency > 0 && navigator.hardwareConcurrency <= 4);
+          setIsLowPowerDevice(isHardwareConstrained);
+        }
+      } catch {}
+    };
     document.addEventListener('visibilitychange', handleVisibility);
-    return () => document.removeEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('storage', syncPerfMode);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('storage', syncPerfMode);
+    };
   }, []);
 
   // Interactive Cursor Aura & 3D Parallax Inertia (Zero-Rerender 60fps Lerp Loop)
   useEffect(() => {
     if (typeof document === 'undefined' || typeof window === 'undefined') return;
-    if (shouldReduceMotion || isTabHidden || isLowPowerDevice) return;
+    if (shouldReduceMotion || isTabHidden || isLowPowerDevice || isUserEditing) return;
 
     let rafId: number | null = null;
     let targetNx = 0.5;
@@ -178,7 +198,7 @@ export const AuroraBackground: React.FC<AuroraBackgroundProps> = memo(({
       document.removeEventListener('pointermove', handlePointerMove);
       if (rafId !== null) cancelAnimationFrame(rafId);
     };
-  }, [shouldReduceMotion, isTabHidden, isLowPowerDevice]);
+  }, [shouldReduceMotion, isTabHidden, isLowPowerDevice, isUserEditing]);
 
   const clearPendingTimers = () => {
     if (finishingTimerRef.current) {
@@ -562,7 +582,7 @@ export const AuroraBackground: React.FC<AuroraBackgroundProps> = memo(({
         <div ref={parallaxGroupRef} className="w-full h-full will-change-transform">
           {/* Layer 1: Wide Diffuse Flow (Top-Left) with Dynamic Morph */}
           <motion.div
-            className="absolute top-[-20%] left-[-16%] w-[88vw] sm:w-[72vw] md:w-[62vw] h-[76vw] sm:h-[60vw] md:h-[52vw] rounded-[48%_52%_64%_36%/45%_55%_45%_55%] blur-[32px] sm:blur-[44px] md:blur-[56px]"
+            className="absolute top-[-20%] left-[-16%] w-[88vw] sm:w-[72vw] md:w-[62vw] h-[76vw] sm:h-[60vw] md:h-[52vw] rounded-[48%_52%_64%_36%/45%_55%_45%_55%] blur-[16px] sm:blur-[22px] md:blur-[28px]"
             style={{
               ...hardwareLayerStyle,
               background: layer1Gradient,
@@ -586,7 +606,7 @@ export const AuroraBackground: React.FC<AuroraBackgroundProps> = memo(({
 
           {/* Layer 2: Flowing Complementary Wave (Bottom-Right) with Dynamic Morph */}
           <motion.div
-            className="absolute bottom-[-18%] right-[-14%] w-[86vw] sm:w-[68vw] md:w-[58vw] h-[76vw] sm:h-[60vw] md:h-[52vw] rounded-[42%_58%_54%_46%/58%_44%_56%_42%] blur-[32px] sm:blur-[44px] md:blur-[56px]"
+            className="absolute bottom-[-18%] right-[-14%] w-[86vw] sm:w-[68vw] md:w-[58vw] h-[76vw] sm:h-[60vw] md:h-[52vw] rounded-[42%_58%_54%_46%/58%_44%_56%_42%] blur-[16px] sm:blur-[22px] md:blur-[28px]"
             style={{
               ...hardwareLayerStyle,
               background: layer2Gradient,
@@ -613,7 +633,7 @@ export const AuroraBackground: React.FC<AuroraBackgroundProps> = memo(({
 
           {/* Layer 3: Reactive Accent Light (Top-Right / Center-Right) with Dynamic Morph */}
           <motion.div
-            className="absolute top-[-12%] right-[-14%] w-[82vw] sm:w-[64vw] md:w-[54vw] h-[72vw] sm:h-[56vw] md:h-[48vw] rounded-[52%_48%_42%_58%/44%_58%_42%_56%] blur-[32px] sm:blur-[44px] md:blur-[56px]"
+            className="absolute top-[-12%] right-[-14%] w-[82vw] sm:w-[64vw] md:w-[54vw] h-[72vw] sm:h-[56vw] md:h-[48vw] rounded-[52%_48%_42%_58%/44%_58%_42%_56%] blur-[16px] sm:blur-[22px] md:blur-[28px]"
             style={{
               ...hardwareLayerStyle,
               background: layer3Gradient,
@@ -659,7 +679,7 @@ export const AuroraBackground: React.FC<AuroraBackgroundProps> = memo(({
               ? 'radial-gradient(circle, rgba(20, 184, 166, 0.16) 0%, rgba(16, 185, 129, 0.08) 42%, transparent 72%)'
               : 'radial-gradient(circle, rgba(13, 148, 136, 0.20) 0%, rgba(45, 212, 191, 0.10) 42%, transparent 72%)',
           }}
-          className="absolute top-0 left-0 rounded-full blur-[40px] transition-opacity duration-500 opacity-85 dark:opacity-75"
+          className="absolute top-0 left-0 rounded-full blur-[18px] transition-opacity duration-500 opacity-85 dark:opacity-75"
         />
 
         {/* 2. Typing & Active Composer Luminescence Halo */}
@@ -674,7 +694,7 @@ export const AuroraBackground: React.FC<AuroraBackgroundProps> = memo(({
               ? 'radial-gradient(ellipse 60% 55% at 50% 50%, rgba(13, 148, 136, 0.24) 0%, rgba(16, 185, 129, 0.11) 48%, transparent 78%)'
               : 'radial-gradient(ellipse 60% 55% at 50% 50%, rgba(13, 148, 136, 0.26) 0%, rgba(45, 212, 191, 0.12) 48%, transparent 78%)',
           }}
-          className={`absolute bottom-[4%] left-1/2 -translate-x-1/2 w-[min(92vw,54rem)] h-[19rem] rounded-full blur-[44px] transition-all duration-700 ease-out ${
+          className={`absolute bottom-[4%] left-1/2 -translate-x-1/2 w-[min(92vw,54rem)] h-[19rem] rounded-full blur-[20px] transition-all duration-700 ease-out ${
             isUserEditing || isThinking || isStreaming
               ? 'opacity-90 scale-105'
               : 'opacity-25 scale-95'
@@ -702,7 +722,7 @@ export const AuroraBackground: React.FC<AuroraBackgroundProps> = memo(({
             repeat: Infinity,
             ease: 'easeInOut',
           }}
-          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(78vw,44rem)] h-[min(78vw,44rem)] rounded-full blur-[52px]"
+          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(78vw,44rem)] h-[min(78vw,44rem)] rounded-full blur-[22px]"
         />
       </div>
 
@@ -741,7 +761,7 @@ export const AuroraBackground: React.FC<AuroraBackgroundProps> = memo(({
             <feColorMatrix type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 1 0" />
           </filter>
         </defs>
-        <rect width="100%" height="100%" filter="url(#auroraNoiseFilter)" />
+        {!shouldPauseMotion && !isLowPowerDevice && <rect width="100%" height="100%" filter="url(#auroraNoiseFilter)" />}
       </svg>
 
       {children}

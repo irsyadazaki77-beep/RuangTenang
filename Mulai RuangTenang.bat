@@ -38,6 +38,13 @@ if not exist "dist\server.mjs" (
   call npm run build
 )
 
+rem --- Proteksi kestabilan GPU AMD/Intel & Optimasi Konteks AI ---
+set "OLLAMA_FLASH_ATTENTION=0"
+set "OLLAMA_NUM_CTX=4096"
+set "OLLAMA_KEEP_ALIVE=30m"
+set "OLLAMA_MAX_LOADED_MODELS=1"
+set "OLLAMA_NUM_PARALLEL=1"
+
 rem --- Pastikan Ollama lokal aktif ---
 curl.exe -f -s -m 1 "http://127.0.0.1:11434/api/tags" >nul 2>&1
 if errorlevel 1 (
@@ -54,7 +61,7 @@ if errorlevel 1 (
 
 rem --- Menyalakan Server RuangTenang (Super Cepat & Hemat RAM) ---
 echo [INFO] Menyalakan server RuangTenang di port %PORT%...
-set "NODE_OPTIONS=--max-old-space-size=512"
+set "NODE_OPTIONS=--max-old-space-size=4096"
 set "SERVE_STATIC=true"
 start "RuangTenang Server" /min cmd.exe /k "node dist/server.mjs"
 
@@ -75,19 +82,19 @@ echo [OK] RuangTenang siap! Membuka jendela aplikasi...
 :launch_app
 rem Membuka RuangTenang dalam mode aplikasi mandiri (tanpa tab, tanpa URL bar)
 if exist "%ProgramFiles%\Google\Chrome\Application\chrome.exe" (
-  start "" "%ProgramFiles%\Google\Chrome\Application\chrome.exe" --app="http://127.0.0.1:%PORT%"
+  start "" "%ProgramFiles%\Google\Chrome\Application\chrome.exe" --app="http://127.0.0.1:%PORT%" --enable-gpu-rasterization
   exit /b 0
 )
 if exist "%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe" (
-  start "" "%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe" --app="http://127.0.0.1:%PORT%"
+  start "" "%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe" --app="http://127.0.0.1:%PORT%" --enable-gpu-rasterization
   exit /b 0
 )
 if exist "%ProgramFiles%\Microsoft\Edge\Application\msedge.exe" (
-  start "" "%ProgramFiles%\Microsoft\Edge\Application\msedge.exe" --app="http://127.0.0.1:%PORT%"
+  start "" "%ProgramFiles%\Microsoft\Edge\Application\msedge.exe" --app="http://127.0.0.1:%PORT%" --enable-gpu-rasterization
   exit /b 0
 )
 if exist "%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe" (
-  start "" "%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe" --app="http://127.0.0.1:%PORT%"
+  start "" "%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe" --app="http://127.0.0.1:%PORT%" --enable-gpu-rasterization
   exit /b 0
 )
 

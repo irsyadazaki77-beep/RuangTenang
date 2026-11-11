@@ -78,6 +78,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   const [prefCounselingUpdates, setPrefCounselingUpdates] = useState(() => safeLocalStorage.getItem('pref_counseling_updates') !== 'false');
   const [prefNewsletter, setPrefNewsletter] = useState(() => safeLocalStorage.getItem('pref_newsletter') === 'true');
   const [prefAiCompletionChime, setPrefAiCompletionChime] = useState(() => safeLocalStorage.getItem('pref_ai_completion_chime') !== 'false');
+  const [prefPerformanceMode, setPrefPerformanceMode] = useState(() => safeLocalStorage.getItem('rt_performance_mode') === 'true');
 
   useEffect(() => {
     if (!isTenangProfile(aiModel)) {
@@ -557,6 +558,35 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                   <Volume2 className="w-3.5 h-3.5" />
                   <span>Uji Nada</span>
                 </button>
+              </label>
+            </div>
+
+            {/* Graphics & Performance Mode Setting */}
+            <div className="pt-3 border-t border-default">
+              <label className="flex items-start justify-between gap-3 p-3.5 hover:surface-muted/55 rounded-xl border border-default transition-colors cursor-pointer">
+                <div className="flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    checked={prefPerformanceMode}
+                    onChange={(e) => {
+                      setPrefPerformanceMode(e.target.checked);
+                      safeLocalStorage.setItem('rt_performance_mode', e.target.checked ? 'true' : 'false');
+                      try { window.dispatchEvent(new Event('storage')); } catch {}
+                      setSuccessMsg(e.target.checked ? 'Mode Performa Tinggi diaktifkan (animasi & filter aurora dinonaktifkan).' : 'Mode Visual Penuh diaktifkan.');
+                      setTimeout(() => setSuccessMsg(null), 3000);
+                    }}
+                    className="mt-1 rounded border-default text-teal-600 focus:ring-teal-500 w-4 h-4 cursor-pointer"
+                  />
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <Zap className="w-4 h-4 text-amber-500 shrink-0" />
+                      <span className="text-xs font-bold text-primary">Mode Performa Tinggi (Hemat Baterai & GPU)</span>
+                    </div>
+                    <span className="text-[11px] text-muted block leading-relaxed">
+                      Menonaktifkan filter aurora berat dan menghentikan efek parallax mouse untuk rendering antarmuka yang sangat ringan dan mulus di semua perangkat.
+                    </span>
+                  </div>
+                </div>
               </label>
             </div>
           </div>

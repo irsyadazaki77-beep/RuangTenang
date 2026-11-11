@@ -1,4 +1,10 @@
 import { randomUUID } from 'node:crypto';
+import fs from 'node:fs/promises';
+import fsSync from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
+import { exec } from 'node:child_process';
+import { promisify } from 'node:util';
 import { prisma } from '../../database.js';
 import { encryptionService } from '../encryptionService.js';
 import { contextRetrievalService } from '../file-intelligence/contextRetrievalService.js';
@@ -8,10 +14,48 @@ import { scanAndSanitizePII } from '../piiService.js';
 import { attachmentStorageService } from '../attachmentStorageService.js';
 import { searchWeb, webCitationDocumentId } from '../webSearchService.js';
 import { createTabularDataset, parseTabularWorkbook, runTabularAnalysis } from '../tabularDatasetService.js';
+import { executeSafeShellCommand } from '../coder/coderAgentService.js';
 import type { WorkspacePlan } from '../../../shared/contracts/workspace.js';
 import { AGENT_EXECUTION_LIMITS } from './agentExecutionPolicy.js';
 import { AgentToolResultSchema, type AgentToolResult } from './agentContracts.js';
 import { getAgentToolDefinition } from './agentToolRegistry.js';
+
+const execAsync = promisify(exec);
+
+export function isProtectedLaptopPath(resolvedPath: string): boolean {
+  const lower = resolvedPath.toLowerCase();
+  return (
+    lower.startsWith('c:\\windows') ||
+    lower.startsWith('/etc') ||
+    lower.startsWith('/sys') ||
+    lower.startsWith('/boot') ||
+    lower.includes('\\system32') ||
+    lower.includes('/system32')
+  );
+}
+
+export function resolveLaptopSafePath(requestedPath?: string): string {
+  if (!requestedPath || !requestedPath.trim()) {
+    return process.cwd();
+  }
+  const trimmed = requestedPath.trim();
+  if (trimmed.startsWith('~')) {
+    return path.resolve(os.homedir(), trimmed.slice(1).replace(/^[/\\]+/, ''));
+  }
+  if (path.isAbsolute(trimmed)) {
+    return path.resolve(trimmed);
+  }
+  // Allow seamless access to standard user profile folders (e.g. Downloads, Desktop, Documents, OneDrive)
+  const userSpecialDirs = ['desktop', 'downloads', 'documents', 'dokumen', 'onedrive', 'pictures', 'videos', 'music'];
+  const firstSegment = trimmed.split(/[/\\]/)[0].toLowerCase();
+  if (userSpecialDirs.includes(firstSegment)) {
+    const candidateInHome = path.resolve(os.homedir(), trimmed);
+    if (fsSync.existsSync(candidateInHome)) {
+      return candidateInHome;
+    }
+  }
+  return path.resolve(process.cwd(), trimmed);
+}
 
 export interface AgentToolExecutionContext {
   executionId: string;
@@ -478,6 +522,228 @@ async function executeRegisteredTool(toolId: string, input: unknown, context: Ag
     };
   }
 
+  if (toolId === 'list_laptop_files') {
+    const args = input as { path?: string; maxDepth?: number; showHidden?: boolean };
+    const resolvedPath = resolveLaptopSafePath(args.path);
+    const maxDepth = args.maxDepth || 2;
+    const showHidden = Boolean(args.showHidden);
+
+    const items: Array<{ name: string; path: string; type: 'file' | 'directory'; sizeBytes?: number; modifiedAt?: string }> = [];
+
+    async function walk(currentDir: string, currentDepth: number) {
+      if (currentDepth > maxDepth || items.length >= 35) return;
+      try {
+        const entries = await fs.readdir(currentDir, { withFileTypes: true });
+        for (const entry of entries) {
+          if (items.length >= 35) break;
+          if (!showHidden && entry.name.startsWith('.')) continue;
+          if (['node_modules', '.git', '.vscode', 'dist', '.gemini', 'backups', 'tmp', 'uploads'].includes(entry.name)) continue;
+
+          const fullItemPath = path.join(currentDir, entry.name);
+          const relPath = path.relative(resolvedPath, fullItemPath);
+          const isDir = entry.isDirectory();
+          let sizeBytes: number | undefined;
+          let modifiedAt: string | undefined;
+
+          try {
+            const stat = await fs.stat(fullItemPath);
+            if (!isDir) sizeBytes = stat.size;
+            modifiedAt = stat.mtime.toISOString();
+          } catch {}
+
+          items.push({
+            name: entry.name,
+            path: relPath || entry.name,
+            type: isDir ? 'directory' : 'file',
+            ...(sizeBytes !== undefined ? { sizeBytes } : {}),
+            ...(modifiedAt ? { modifiedAt } : {})
+          });
+
+          if (isDir && currentDepth < maxDepth) {
+            await walk(fullItemPath, currentDepth + 1);
+          }
+        }
+      } catch {
+        // Silently handle directories that cannot be read
+      }
+    }
+
+    await walk(resolvedPath, 1);
+
+    return {
+      requestedPath: args.path || '.',
+      resolvedPath,
+      totalItems: items.length,
+      items
+    };
+  }
+
+  if (toolId === 'read_laptop_file') {
+    const args = input as { path: string; maxChars?: number };
+    const resolvedPath = resolveLaptopSafePath(args.path);
+    if (isProtectedLaptopPath(resolvedPath)) {
+      throw new Error('PROTECTED_SYSTEM_PATH');
+    }
+    const maxChars = args.maxChars || 15_000;
+    try {
+      const stat = await fs.stat(resolvedPath);
+      if (stat.isDirectory()) {
+        const entries = await fs.readdir(resolvedPath, { withFileTypes: true });
+        const items = entries.map(e => ({
+          name: e.name,
+          type: e.isDirectory() ? 'directory' : 'file'
+        }));
+        return {
+          resolvedPath,
+          isDirectory: true,
+          totalEntries: items.length,
+          entries: items.slice(0, 50),
+          content: `Direktori: ${resolvedPath}\nTotal Berkas: ${items.length}\nDaftar Berkas:\n${items.map(f => `- [${f.type}] ${f.name}`).join('\n')}`
+        };
+      }
+
+      const ext = path.extname(resolvedPath).toLowerCase();
+      let rawText = '';
+      if (['.pdf', '.docx', '.pptx', '.xlsx'].includes(ext)) {
+        const buffer = await fs.readFile(resolvedPath);
+        const { DocumentExtractor } = await import('../file-intelligence/documentExtractor.js');
+        const extracted = await DocumentExtractor.extractDocument({
+          buffer,
+          filename: path.basename(resolvedPath)
+        });
+        rawText = extracted.text || '';
+      } else {
+        rawText = await fs.readFile(resolvedPath, 'utf-8');
+      }
+      const truncated = rawText.length > maxChars;
+      const content = truncated ? rawText.slice(0, maxChars) : rawText;
+      return {
+        resolvedPath,
+        sizeBytes: stat.size,
+        truncated,
+        content: scanAndSanitizePII(content).sanitizedText
+      };
+    } catch (err: any) {
+      if (err.message === 'PROTECTED_SYSTEM_PATH') throw err;
+      throw new Error('LAPTOP_FILE_READ_FAILED');
+    }
+  }
+
+  if (toolId === 'write_laptop_file') {
+    const args = input as { path: string; content: string; append?: boolean };
+    const resolvedPath = resolveLaptopSafePath(args.path);
+
+    const lower = resolvedPath.toLowerCase();
+    if (lower.startsWith('c:\\windows') || lower.startsWith('/etc') || lower.startsWith('/sys') || lower.startsWith('/boot')) {
+      throw new Error('PROTECTED_SYSTEM_PATH');
+    }
+
+    try {
+      await fs.mkdir(path.dirname(resolvedPath), { recursive: true });
+      const contentToWrite = args.content;
+      if (args.append) {
+        await fs.appendFile(resolvedPath, contentToWrite, 'utf-8');
+      } else {
+        await fs.writeFile(resolvedPath, contentToWrite, 'utf-8');
+      }
+      const bytesWritten = Buffer.byteLength(contentToWrite, 'utf-8');
+      return {
+        resolvedPath,
+        bytesWritten,
+        success: true,
+        message: `Berhasil menulis ${bytesWritten} byte ke ${path.basename(resolvedPath)}`
+      };
+    } catch {
+      throw new Error('LAPTOP_FILE_WRITE_FAILED');
+    }
+  }
+
+  if (toolId === 'run_laptop_command') {
+    const args = input as { command: string; cwd?: string; timeoutMs?: number };
+    const resolvedCwd = resolveLaptopSafePath(args.cwd);
+    const timeout = Math.min(Math.max(args.timeoutMs || 20_000, 2000), 60_000);
+
+    try {
+      const res = await executeSafeShellCommand(args.command, resolvedCwd, timeout);
+      return {
+        command: args.command,
+        cwd: resolvedCwd,
+        exitCode: res.exitCode,
+        durationMs: res.durationMs,
+        stdout: res.stdout.slice(0, 10_000),
+        stderr: res.stderr.slice(0, 5_000)
+      };
+    } catch {
+      throw new Error('LAPTOP_COMMAND_EXEC_FAILED');
+    }
+  }
+
+  if (toolId === 'open_laptop_app') {
+    const args = input as { target: string; app?: string };
+    const target = args.target.trim();
+    if (!target) throw new Error('TARGET_REQUIRED');
+
+    try {
+      const isWin = process.platform === 'win32';
+      const isMac = process.platform === 'darwin';
+
+      let cmd = '';
+      if (isWin) {
+        if (args.app) {
+          cmd = `start "" "${args.app}" "${target}"`;
+        } else {
+          cmd = `start "" "${target}"`;
+        }
+      } else if (isMac) {
+        if (args.app) {
+          cmd = `open -a "${args.app}" "${target}"`;
+        } else {
+          cmd = `open "${target}"`;
+        }
+      } else {
+        cmd = `xdg-open "${target}"`;
+      }
+
+      await execAsync(cmd, { timeout: 10_000 });
+      return {
+        target,
+        opened: true,
+        message: `Target "${target}" berhasil dibuka di laptop pengguna.`
+      };
+    } catch (err: any) {
+      return {
+        target,
+        opened: false,
+        message: `Percobaan membuka "${target}" menghasilkan respon: ${err?.message || 'Gagal membuka'}`
+      };
+    }
+  }
+
+  if (toolId === 'inspect_laptop_system') {
+    const totalMemBytes = os.totalmem();
+    const freeMemBytes = os.freemem();
+    const totalMemoryMB = Math.round(totalMemBytes / (1024 * 1024));
+    const freeMemoryMB = Math.round(freeMemBytes / (1024 * 1024));
+
+    let username = 'user';
+    try {
+      username = os.userInfo().username;
+    } catch {}
+
+    return {
+      platform: os.platform(),
+      release: os.release(),
+      arch: os.arch(),
+      hostname: os.hostname(),
+      username,
+      homeDir: os.homedir(),
+      cwd: process.cwd(),
+      totalMemoryMB,
+      freeMemoryMB,
+      uptimeSeconds: Math.round(os.uptime())
+    };
+  }
+
   throw new Error('TOOL_NOT_FOUND');
 }
 
@@ -491,6 +757,12 @@ function safeToolError(error: unknown): { code: string; message: string } {
     ARTIFACT_NOT_ALLOWED: 'Artifact tersebut tidak termasuk dalam konteks task ini.',
     ARTIFACT_NOT_FOUND: 'Artifact tidak tersedia untuk task ini.',
     ARTIFACT_READ_FAILED: 'Isi artifact tidak dapat dibaca.',
+    PATH_IS_DIRECTORY: 'Path yang dituju adalah folder, bukan berkas.',
+    LAPTOP_FILE_READ_FAILED: 'Gagal membaca berkas di laptop.',
+    PROTECTED_SYSTEM_PATH: 'Akses tulis ditolak ke direktori sistem operasi yang dilindungi.',
+    LAPTOP_FILE_WRITE_FAILED: 'Gagal menulis berkas ke laptop.',
+    LAPTOP_COMMAND_EXEC_FAILED: 'Eksekusi perintah terminal laptop gagal atau ditolak kebijakan keamanan.',
+    TARGET_REQUIRED: 'Target aplikasi atau berkas wajib diisi.',
     TOOL_NOT_FOUND: 'Tool tidak tersedia.',
     TOOL_OUTPUT_INVALID: 'Hasil tool tidak lolos validasi.',
     TOOL_OUTPUT_TOO_LARGE: 'Hasil tool melebihi batas ukuran.',
@@ -526,7 +798,7 @@ export async function executeAuthorizedAgentTool(
   const toolCallId = randomUUID();
   const startedAt = Date.now();
   const definition = getAgentToolDefinition(toolId);
-  const isAllowedPermission = definition && (definition.permission === 'read' || definition.permission === 'propose');
+  const isAllowedPermission = definition && (definition.permission === 'read' || definition.permission === 'propose' || definition.permission === 'write');
   if (!definition || !context.allowedToolIds.has(toolId) || !isAllowedPermission || definition.requiresApproval) {
     const result = AgentToolResultSchema.parse({ executionId: context.executionId, toolCallId, toolId, status: 'failed', error: { code: 'TOOL_NOT_ALLOWED', message: 'Tool tidak diizinkan untuk task ini.' }, durationMs: 0 });
     console.info('[WORKSPACE_AGENT_TOOL]', JSON.stringify({ executionId: context.executionId, toolCallId, toolId, status: 'failed', durationMs: 0, errorCode: 'TOOL_NOT_ALLOWED' }));

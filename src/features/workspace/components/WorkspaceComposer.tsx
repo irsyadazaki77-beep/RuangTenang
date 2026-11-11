@@ -26,7 +26,8 @@ import {
   BarChart2,
   ShieldCheck,
   Share2,
-  Users
+  Users,
+  Laptop
 } from 'lucide-react';
 import { useComposerVoiceInput } from '../../chat/hooks/useComposerVoiceInput';
 import { WorkspaceFileAttachment, WorkspaceArtifact, AcademicPromptPill, WorkspaceComposerConfig, WorkspaceResponseMode, WorkspaceResponseStyle, StarterTaskItem } from '../types';
@@ -112,6 +113,8 @@ interface WorkspaceComposerProps {
   onOpenTurnitinAudit?: () => void;
   onOpenKnowledgeGraph?: () => void;
   onOpenCouncilDebate?: () => void;
+  onGenerateTasks?: (goal: string) => void;
+  onOpenPlan?: () => void;
   artifacts?: WorkspaceArtifact[];
 }
 
@@ -167,6 +170,8 @@ export const WorkspaceComposer: React.FC<WorkspaceComposerProps> = React.memo(({
   onOpenTurnitinAudit,
   onOpenKnowledgeGraph,
   onOpenCouncilDebate,
+  onGenerateTasks,
+  onOpenPlan,
   allPresets,
   activePreset,
   activePresetId,
@@ -244,6 +249,18 @@ export const WorkspaceComposer: React.FC<WorkspaceComposerProps> = React.memo(({
   const slashCommands = useMemo(() => (slashQuery === null ? [] : filterSlashCommands(slashQuery)), [slashQuery]);
   const isSlashMenuOpen = slashCommands.length > 0 && inputFocused;
   useEffect(() => { setSlashIndex(0); }, [slashQuery]);
+
+  const detectedLaptopPath = useMemo(() => {
+    if (!inputText) return null;
+    const match = inputText.match(/([a-zA-Z]:[\\/][^"'\n\r*?<>|]+|~[\\/][^"'\n\r*?<>|]+|\b(?:OneDrive|Dokumen|Documents|Downloads|Desktop)[\\/][^"'\n\r*?<>|]+)/);
+    if (match) {
+      const raw = match[0].replace(/[.,;:!?"']+$/, '').trim();
+      const segments = raw.split(/[\\/]/).filter(Boolean);
+      const filename = segments.pop() || raw;
+      return { raw, filename };
+    }
+    return null;
+  }, [inputText]);
 
   const applySlashCommand = (command: SlashCommand) => {
     if (command.id === 'gambar' && onOpenImageGenerator) {
@@ -330,9 +347,24 @@ export const WorkspaceComposer: React.FC<WorkspaceComposerProps> = React.memo(({
   const handleSend = () => {
     let prompt = inputText.trim();
     if (!prompt && !hasAttachments) return;
+    const lowerPrompt = prompt.toLowerCase();
+
+    // Command interceptor for /tugas, /laptop, /agent, /run
+    if (
+      lowerPrompt.startsWith('/tugas') ||
+      lowerPrompt.startsWith('/laptop') ||
+      lowerPrompt.startsWith('/agent') ||
+      lowerPrompt.startsWith('/run')
+    ) {
+      const extractedGoal = prompt.replace(/^\/(tugas|laptop|agent|run)\s*/i, '').trim();
+      setInputText('');
+      if (onGenerateTasks) {
+        onGenerateTasks(extractedGoal || 'Periksa berkas di direktori laptop, jalankan skrip yang dibutuhkan, dan susun laporannya.');
+        return;
+      }
+    }
 
     // Command interceptor for /gambar or /image
-    const lowerPrompt = prompt.toLowerCase();
     if (lowerPrompt.startsWith('/gambar') || lowerPrompt.startsWith('/image')) {
       const extracted = prompt.replace(/^\/(gambar|image)\s*/i, '').trim();
       setInputText('');
@@ -482,21 +514,21 @@ export const WorkspaceComposer: React.FC<WorkspaceComposerProps> = React.memo(({
                 Sesi sementara · pesan tidak disimpan
               </p>
             )}
-            <h2 className="text-2xl font-bold leading-tight tracking-tight text-slate-900 dark:text-slate-100 sm:text-4xl">
-              Apa yang ingin kamu kerjakan?
-            </h2>
-            <p className="mx-auto mt-2 max-w-lg text-xs sm:text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-              Tulis pertanyaan, lampirkan dokumen, atau mulai dari draf Canvas.
+            <h1 className="text-3xl sm:text-5xl font-medium tracking-tight bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 dark:from-blue-400 dark:via-indigo-300 dark:to-purple-300 bg-clip-text text-transparent">
+              Halo, Mau kerjakan apa hari ini?
+            </h1>
+            <p className="mx-auto mt-2 max-w-lg text-xs sm:text-sm leading-relaxed text-slate-500 dark:text-slate-400 font-normal">
+              Tulis pertanyaan, telaah dokumen skripsi, atau diskusikan draf di Canvas.
             </p>
           </div>
         )}
 
-        <div className={`relative rounded-3xl border transition-all duration-300 bg-white/92 dark:bg-[#1e1f20]/95 backdrop-blur-xl ring-1 ring-black/[0.03] dark:ring-white/[0.05] ${
+        <div className={`relative rounded-3xl transition-all duration-300 backdrop-blur-xl ${
           isStreaming
-            ? 'border-indigo-400/90 dark:border-indigo-500/70 ring-2 ring-indigo-500/20 shadow-[0_12px_36px_-4px_rgba(99,102,241,0.18)]'
+            ? 'bg-white dark:bg-[#1e1f20] border border-indigo-400/80 dark:border-indigo-500/60 shadow-[0_4px_24px_rgba(99,102,241,0.12)]'
             : inputFocused
-            ? 'border-indigo-400/60 dark:border-indigo-400/50 ring-2 ring-indigo-500/15 shadow-[0_12px_38px_-4px_rgba(99,102,241,0.14)]'
-            : 'border-slate-200/80 dark:border-white/10 shadow-[0_8px_30px_rgb(0,0,0,0.05)] dark:shadow-[0_8px_32px_rgb(0,0,0,0.38)] hover:border-slate-300 dark:hover:border-white/20'
+            ? 'bg-white dark:bg-[#1e1f20] border border-slate-300/90 dark:border-white/20 shadow-[0_8px_32px_rgba(0,0,0,0.06)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.35)]'
+            : 'bg-[#f0f4f9] dark:bg-[#1e1f20] border border-slate-200/60 dark:border-white/5 hover:border-slate-300/80 dark:hover:border-white/10 shadow-3xs'
         } ${isFreshWorkspace ? 'p-3.5 sm:p-4' : 'p-2.5'}`}>
           {modelPreferenceNotice && (
             <p role="status" className="mb-1 px-1 text-[11px] text-amber-700 dark:text-amber-300">
@@ -515,12 +547,12 @@ export const WorkspaceComposer: React.FC<WorkspaceComposerProps> = React.memo(({
 
           {/* Quick Action Chips when documents are ready */}
           {readyAttachments.length > 0 && !isStreaming && (
-            <div className="flex flex-wrap items-center gap-1.5 px-1 py-1.5 mb-1" role="group" aria-label="Aksi Cepat Dokumen">
+            <div className="flex items-center gap-1.5 px-1 py-1 mb-2 overflow-x-auto no-scrollbar" role="group" aria-label="Aksi Cepat Dokumen">
               {onOpenQuizModal && (
                 <button
                   type="button"
                   onClick={() => onOpenQuizModal(readyAttachments[0]?.name?.replace(/\.[^/.]+$/, ''))}
-                  className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-full bg-slate-100/90 hover:bg-slate-200/80 text-slate-700 dark:bg-white/5 dark:hover:bg-white/10 dark:text-slate-300 border border-slate-200/70 dark:border-white/10 transition-colors cursor-pointer"
+                  className="inline-flex shrink-0 items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-full bg-white dark:bg-white/10 text-slate-700 dark:text-slate-200 border border-slate-200/60 dark:border-white/10 hover:bg-slate-50 dark:hover:bg-white/15 transition-all shadow-3xs cursor-pointer"
                   title="Buat Simulasi Ujian & Kuis AI dari dokumen ini"
                 >
                   <Award className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
@@ -534,7 +566,7 @@ export const WorkspaceComposer: React.FC<WorkspaceComposerProps> = React.memo(({
                   setInputText(text);
                   textareaRef.current?.focus();
                 }}
-                className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-full bg-slate-100/90 hover:bg-slate-200/80 text-slate-700 dark:bg-white/5 dark:hover:bg-white/10 dark:text-slate-300 border border-slate-200/70 dark:border-white/10 transition-colors cursor-pointer"
+                className="inline-flex shrink-0 items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-full bg-white dark:bg-white/10 text-slate-700 dark:text-slate-200 border border-slate-200/60 dark:border-white/10 hover:bg-slate-50 dark:hover:bg-white/15 transition-all shadow-3xs cursor-pointer"
                 title="Rangkum isi dokumen secara eksekutif"
               >
                 <FileText className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
@@ -547,7 +579,7 @@ export const WorkspaceComposer: React.FC<WorkspaceComposerProps> = React.memo(({
                   setInputText(text);
                   textareaRef.current?.focus();
                 }}
-                className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-full bg-slate-100/90 hover:bg-slate-200/80 text-slate-700 dark:bg-white/5 dark:hover:bg-white/10 dark:text-slate-300 border border-slate-200/70 dark:border-white/10 transition-colors cursor-pointer"
+                className="inline-flex shrink-0 items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-full bg-white dark:bg-white/10 text-slate-700 dark:text-slate-200 border border-slate-200/60 dark:border-white/10 hover:bg-slate-50 dark:hover:bg-white/15 transition-all shadow-3xs cursor-pointer"
                 title="Evaluasi dan beri masukan kritis"
               >
                 <CheckCircle2 className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
@@ -560,7 +592,7 @@ export const WorkspaceComposer: React.FC<WorkspaceComposerProps> = React.memo(({
                   setInputText(text);
                   textareaRef.current?.focus();
                 }}
-                className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-full bg-slate-100/90 hover:bg-slate-200/80 text-slate-700 dark:bg-white/5 dark:hover:bg-white/10 dark:text-slate-300 border border-slate-200/70 dark:border-white/10 transition-colors cursor-pointer"
+                className="inline-flex shrink-0 items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-full bg-white dark:bg-white/10 text-slate-700 dark:text-slate-200 border border-slate-200/60 dark:border-white/10 hover:bg-slate-50 dark:hover:bg-white/15 transition-all shadow-3xs cursor-pointer"
                 title="Daftar poin kunci dan to-do"
               >
                 <ListChecks className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
@@ -573,12 +605,39 @@ export const WorkspaceComposer: React.FC<WorkspaceComposerProps> = React.memo(({
                   setInputText(text);
                   textareaRef.current?.focus();
                 }}
-                className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-full bg-slate-100/90 hover:bg-slate-200/80 text-slate-700 dark:bg-white/5 dark:hover:bg-white/10 dark:text-slate-300 border border-slate-200/70 dark:border-white/10 transition-colors cursor-pointer"
+                className="inline-flex shrink-0 items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-full bg-white dark:bg-white/10 text-slate-700 dark:text-slate-200 border border-slate-200/60 dark:border-white/10 hover:bg-slate-50 dark:hover:bg-white/15 transition-all shadow-3xs cursor-pointer"
                 title="Susun draf revisi untuk Canvas"
               >
                 <PenTool className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
                 <span>Drafkan ke Canvas</span>
               </button>
+            </div>
+          )}
+
+          {/* Laptop Path Detected Hint Bar */}
+          {detectedLaptopPath && (
+            <div className="flex items-center gap-2 px-3 py-1.5 mb-2 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-xs text-emerald-800 dark:text-emerald-200 animate-in fade-in slide-in-from-top-1 duration-150">
+              <Laptop className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+              <div className="flex-1 min-w-0">
+                <span className="font-semibold text-emerald-900 dark:text-emerald-100">Akses Berkas Laptop: </span>
+                <span className="font-mono text-[11px] font-medium truncate">{detectedLaptopPath.filename}</span>
+                <span className="hidden sm:inline text-emerald-600 dark:text-emerald-400 text-[11px]"> (RuangKerja membaca berkas lokal langsung dari laptopmu)</span>
+              </div>
+              {onGenerateTasks && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const currentGoal = inputText.trim();
+                    setInputText('');
+                    onGenerateTasks(currentGoal);
+                  }}
+                  className="shrink-0 px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-medium text-[11px] transition-colors shadow-3xs cursor-pointer flex items-center gap-1"
+                  title="Jalankan tugas mandiri bertahap di laptop menggunakan agent"
+                >
+                  <Laptop className="h-3 w-3" />
+                  <span>Jalankan Plan Agent</span>
+                </button>
+              )}
             </div>
           )}
 
@@ -670,6 +729,21 @@ export const WorkspaceComposer: React.FC<WorkspaceComposerProps> = React.memo(({
                 {hasActiveContext && <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-indigo-500" aria-hidden="true" />}
                 <span className="hidden truncate ml-1.5 2xl:inline max-w-[120px]">{displayedContextSummary}</span>
               </button>
+
+              {/* Tombol Cepat Tugas Agent Laptop */}
+              {onOpenPlan && (
+                <button
+                  type="button"
+                  onClick={onOpenPlan}
+                  disabled={isStreaming || isDisabled}
+                  aria-label="Tugas Agent Laptop"
+                  title="Buka panel tugas mandiri laptop dan eksekusi terminal"
+                  className="inline-flex h-8 items-center gap-1.5 rounded-full px-2.5 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300 dark:hover:bg-emerald-900/50 border border-emerald-200/60 dark:border-emerald-800/60 transition-colors cursor-pointer shadow-3xs"
+                >
+                  <Laptop className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                  <span className="hidden sm:inline">Tugas Laptop</span>
+                </button>
+              )}
 
               {/* Unified Alat Skripsi & Riset Popover */}
               {(onOpenLitMatrix || onOpenMockDefense || onOpenCitationAudit || onOpenSupervisorNotes || onOpenDataStudioChart || onOpenThesisBinder || onOpenTurnitinAudit || onOpenKnowledgeGraph || onOpenCouncilDebate || onOpenImageGenerator) && (
@@ -1050,7 +1124,7 @@ export const WorkspaceComposer: React.FC<WorkspaceComposerProps> = React.memo(({
                 type="button"
                 onClick={() => onSelectStarterTask(task.prompt)}
                 disabled={isStreaming || isDisabled}
-                className="group flex min-h-16 items-center gap-2.5 rounded-2xl border border-slate-200/80 bg-white/85 backdrop-blur-md p-3 text-left text-slate-800 shadow-2xs transition-all duration-200 hover:-translate-y-0.5 hover:border-indigo-300/80 hover:bg-white hover:shadow-md active:scale-[0.98] dark:border-white/10 dark:bg-white/5 dark:text-slate-100 dark:hover:border-indigo-500/40 dark:hover:bg-white/10 sm:p-3.5 cursor-pointer"
+                className="group flex min-h-14 items-center gap-2.5 rounded-2xl border border-slate-200/60 bg-white/70 dark:bg-[#1e1f20]/60 hover:bg-white dark:hover:bg-[#1e1f20] hover:border-slate-300 dark:hover:border-white/10 p-3 text-left text-slate-800 dark:text-slate-100 shadow-3xs hover:shadow-xs transition-all duration-200 active:scale-[0.98] sm:p-3.5 cursor-pointer"
               >
                 <span aria-hidden="true" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-slate-100 dark:bg-white/10 text-slate-700 dark:text-slate-300 transition-colors group-hover:bg-indigo-50 group-hover:text-indigo-600 dark:group-hover:bg-indigo-950/60 dark:group-hover:text-indigo-400">{task.icon}</span>
                 <span className="min-w-0 flex-1">
@@ -1069,16 +1143,27 @@ export const WorkspaceComposer: React.FC<WorkspaceComposerProps> = React.memo(({
                 type="button"
                 onClick={onOpenTemplateGallery}
                 disabled={isDisabled}
-                className="group inline-flex min-h-8.5 items-center gap-1.5 rounded-full border border-slate-200/80 bg-white/80 px-3.5 py-1.5 text-xs font-medium text-slate-700 shadow-3xs transition-all hover:border-indigo-400 hover:bg-indigo-50/40 hover:text-indigo-700 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:border-indigo-500/50 dark:hover:bg-indigo-950/30 dark:hover:text-indigo-200 cursor-pointer"
+                className="group inline-flex min-h-8 items-center gap-1.5 rounded-full border border-slate-200/60 bg-white/70 hover:bg-white dark:bg-white/5 dark:hover:bg-white/10 dark:border-white/5 px-3.5 py-1 text-xs font-medium text-slate-600 dark:text-slate-400 transition-all cursor-pointer"
               >
                 <LayoutTemplate className="h-3.5 w-3.5 text-slate-400 transition-colors group-hover:text-indigo-600 dark:text-slate-500 dark:group-hover:text-indigo-400" aria-hidden="true" />
                 Galeri Template
               </button>
+              {onOpenPlan && (
+                <button
+                  type="button"
+                  onClick={onOpenPlan}
+                  disabled={isStreaming || isDisabled}
+                  className="group inline-flex min-h-8 items-center gap-1.5 rounded-full border border-emerald-200/80 bg-emerald-50/80 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/50 dark:border-emerald-800/60 px-3.5 py-1 text-xs font-semibold text-emerald-800 dark:text-emerald-300 transition-all cursor-pointer shadow-3xs"
+                >
+                  <Laptop className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+                  Tugas Agent Laptop
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => { onCompareModeChange(true); setOptionsOpen(true); }}
                 disabled={isStreaming || isDisabled}
-                className="group inline-flex min-h-8.5 items-center gap-1.5 rounded-full border border-slate-200/80 bg-white/80 px-3.5 py-1.5 text-xs font-medium text-slate-700 shadow-3xs transition-all hover:border-indigo-400 hover:bg-indigo-50/40 hover:text-indigo-700 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:border-indigo-500/50 dark:hover:bg-indigo-950/30 dark:hover:text-indigo-200 cursor-pointer"
+                className="group inline-flex min-h-8 items-center gap-1.5 rounded-full border border-slate-200/60 bg-white/70 hover:bg-white dark:bg-white/5 dark:hover:bg-white/10 dark:border-white/5 px-3.5 py-1 text-xs font-medium text-slate-600 dark:text-slate-400 transition-all cursor-pointer"
               >
                 <GitCompareArrows className="h-3.5 w-3.5 text-slate-400 transition-colors group-hover:text-indigo-600 dark:text-slate-500 dark:group-hover:text-indigo-400" aria-hidden="true" />
                 Bandingkan Model
@@ -1088,7 +1173,7 @@ export const WorkspaceComposer: React.FC<WorkspaceComposerProps> = React.memo(({
                   type="button"
                   onClick={onOpenMockDefense}
                   disabled={isStreaming || isDisabled}
-                  className="group inline-flex min-h-8.5 items-center gap-1.5 rounded-full border border-slate-200/80 bg-white/80 px-3.5 py-1.5 text-xs font-medium text-slate-700 shadow-3xs transition-all hover:border-indigo-400 hover:bg-indigo-50/40 hover:text-indigo-700 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:border-indigo-500/50 dark:hover:bg-indigo-950/30 dark:hover:text-indigo-200 cursor-pointer"
+                  className="group inline-flex min-h-8 items-center gap-1.5 rounded-full border border-slate-200/60 bg-white/70 hover:bg-white dark:bg-white/5 dark:hover:bg-white/10 dark:border-white/5 px-3.5 py-1 text-xs font-medium text-slate-600 dark:text-slate-400 transition-all cursor-pointer"
                 >
                   <Sparkles className="h-3.5 w-3.5 text-slate-400 transition-colors group-hover:text-indigo-600 dark:text-slate-500 dark:group-hover:text-indigo-400" aria-hidden="true" />
                   Simulasi Sidang (AI)

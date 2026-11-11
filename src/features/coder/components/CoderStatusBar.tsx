@@ -6,10 +6,11 @@ interface CoderStatusBarProps {
   branch?: string;
   errorCount: number;
   warningCount: number;
-  cursor: { line: number; column: number };
+  cursor?: { line: number; column: number };
   language: string;
   aiLabel: string;
   isDirty?: boolean;
+  isSaving?: boolean;
   onOpenProblems: () => void;
   onOpenGit: () => void;
 }
@@ -24,9 +25,27 @@ export const CoderStatusBar: React.FC<CoderStatusBarProps> = ({
   language,
   aiLabel,
   isDirty = false,
+  isSaving = false,
   onOpenProblems,
   onOpenGit
 }) => {
+  const [localCursor, setLocalCursor] = React.useState<{ line: number; column: number }>(() => cursor || { line: 1, column: 1 });
+
+  React.useEffect(() => {
+    if (cursor) setLocalCursor(cursor);
+  }, [cursor?.line, cursor?.column]);
+
+  React.useEffect(() => {
+    const handler = (e: Event) => {
+      const custom = e as CustomEvent<{ line: number; column: number }>;
+      if (custom?.detail && typeof custom.detail.line === 'number') {
+        setLocalCursor(custom.detail);
+      }
+    };
+    window.addEventListener('coder:cursor-change', handler);
+    return () => window.removeEventListener('coder:cursor-change', handler);
+  }, []);
+
   const item = `h-full px-2 flex items-center gap-1 transition-colors ${
     isDark ? 'hover:bg-slate-800' : 'hover:bg-slate-200'
   }`;
@@ -52,10 +71,19 @@ export const CoderStatusBar: React.FC<CoderStatusBarProps> = ({
           <AlertTriangle className={`w-3 h-3 ml-1 ${warningCount > 0 ? 'text-amber-400' : ''}`} />
           <span data-testid="status-warnings">{warningCount}</span>
         </button>
+        <span className={`${item} font-medium`}>
+          {isSaving ? (
+            <span className="text-amber-300 animate-pulse">Menyimpan...</span>
+          ) : isDirty ? (
+            <span className="text-amber-400">● Belum Disimpan</span>
+          ) : (
+            <span className="text-emerald-400">✓ Tersimpan</span>
+          )}
+        </span>
       </div>
       <div className="flex items-center h-full">
         <span className={item} data-testid="status-cursor">
-          Ln {cursor.line}, Col {cursor.column}
+          Ln {localCursor.line}, Col {localCursor.column}
         </span>
         <span className={item}>Spaces: 2</span>
         <span className={item}>UTF-8</span>

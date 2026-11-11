@@ -385,7 +385,7 @@ export const WorkspaceInspectorPanel: React.FC<WorkspaceInspectorPanelProps> = R
             </div>
           </div>
           {isLoadingAttachments ? (
-            <p role="status" className="rounded-lg border border-slate-200 px-3 py-5 text-center text-xs text-slate-500 dark:border-slate-700">Memuat dokumen Workspace…</p>
+            <div role="status" className="rounded-lg border border-slate-200 px-3 py-4 text-center text-xs text-slate-500 dark:border-slate-700 space-y-2"><div className="h-3 w-3/4 mx-auto rounded bg-slate-200/80 dark:bg-slate-800 animate-pulse" /><div className="h-3 w-1/2 mx-auto rounded bg-slate-200/60 dark:bg-slate-800/70 animate-pulse" /><p>Memuat dokumen Workspace…</p></div>
           ) : workspaceAttachments.length === 0 ? (
             <div className="rounded-lg border border-dashed border-slate-300 px-4 py-6 text-center dark:border-slate-700">
               <p className="text-xs font-medium text-slate-700 dark:text-slate-200">Belum ada dokumen</p>

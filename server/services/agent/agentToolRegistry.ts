@@ -299,6 +299,127 @@ export const AGENT_TOOL_REGISTRY: readonly AgentToolDefinition[] = Object.freeze
     executionLocation: 'server', permission: 'read', requiresApproval: false,
     timeoutMs: 30_000, isIdempotent: true,
     allowedTaskTypes: ['writing', 'research', 'analysis', 'coding', 'review', 'transform']
+  },
+  {
+    id: 'list_laptop_files',
+    version: '1.0.0',
+    description: 'List files and directories from the host laptop environment (workspace projects, user documents, downloads, desktop) with their types, sizes, and modification dates.',
+    inputSchema: z.object({
+      path: z.string().trim().max(1000).optional(),
+      maxDepth: z.number().int().min(1).max(4).default(2),
+      showHidden: z.boolean().default(false)
+    }).strict(),
+    outputSchema: z.object({
+      requestedPath: z.string().max(1000),
+      resolvedPath: z.string().max(1000),
+      totalItems: z.number().int().nonnegative(),
+      items: z.array(z.object({
+        name: z.string().max(300),
+        path: z.string().max(1000),
+        type: z.enum(['file', 'directory']),
+        sizeBytes: z.number().int().nonnegative().optional(),
+        modifiedAt: z.string().max(60).optional()
+      }).strict()).max(50)
+    }).strict(),
+    executionLocation: 'server', permission: 'read', requiresApproval: false,
+    timeoutMs: 15_000, isIdempotent: true,
+    allowedTaskTypes: ['coding', 'analysis', 'research', 'writing', 'review', 'transform']
+  },
+  {
+    id: 'read_laptop_file',
+    version: '1.0.0',
+    description: 'Read the contents of a local file on the user laptop (source code, markdown, csv, json, text, configuration files).',
+    inputSchema: z.object({
+      path: z.string().trim().min(1).max(1000),
+      maxChars: z.number().int().min(100).max(50_000).default(12_000)
+    }).strict(),
+    outputSchema: z.object({
+      resolvedPath: z.string().max(1000),
+      sizeBytes: z.number().int().nonnegative(),
+      truncated: z.boolean(),
+      content: z.string().max(50_000)
+    }).strict(),
+    executionLocation: 'server', permission: 'read', requiresApproval: false,
+    timeoutMs: 15_000, isIdempotent: true,
+    allowedTaskTypes: ['coding', 'analysis', 'research', 'writing', 'review', 'transform']
+  },
+  {
+    id: 'write_laptop_file',
+    version: '1.0.0',
+    description: 'Write, create, or append to a file directly on the user laptop. Automatically creates parent directories.',
+    inputSchema: z.object({
+      path: z.string().trim().min(1).max(1000),
+      content: z.string().max(100_000),
+      append: z.boolean().default(false)
+    }).strict(),
+    outputSchema: z.object({
+      resolvedPath: z.string().max(1000),
+      bytesWritten: z.number().int().nonnegative(),
+      success: z.boolean(),
+      message: z.string().max(500)
+    }).strict(),
+    executionLocation: 'server', permission: 'write', requiresApproval: false,
+    timeoutMs: 20_000, isIdempotent: false,
+    allowedTaskTypes: ['coding', 'analysis', 'research', 'writing', 'review', 'transform']
+  },
+  {
+    id: 'run_laptop_command',
+    version: '1.0.0',
+    description: 'Execute a shell command in the local laptop terminal (PowerShell, CMD, Bash) inside a safe sandbox environment to run scripts, compile code, execute tests, or check environment status.',
+    inputSchema: z.object({
+      command: z.string().trim().min(1).max(1000),
+      cwd: z.string().trim().max(1000).optional(),
+      timeoutMs: z.number().int().min(2000).max(60_000).default(20_000)
+    }).strict(),
+    outputSchema: z.object({
+      command: z.string().max(1000),
+      cwd: z.string().max(1000),
+      exitCode: z.number().int(),
+      durationMs: z.number().int().nonnegative(),
+      stdout: z.string().max(10_000),
+      stderr: z.string().max(5_000)
+    }).strict(),
+    executionLocation: 'server', permission: 'write', requiresApproval: false,
+    timeoutMs: 65_000, isIdempotent: false,
+    allowedTaskTypes: ['coding', 'analysis', 'research', 'writing', 'review', 'transform']
+  },
+  {
+    id: 'open_laptop_app',
+    version: '1.0.0',
+    description: 'Open a local application, document, folder, or URL in the default viewer or browser on the user laptop.',
+    inputSchema: z.object({
+      target: z.string().trim().min(1).max(1000),
+      app: z.string().trim().max(100).optional()
+    }).strict(),
+    outputSchema: z.object({
+      target: z.string().max(1000),
+      opened: z.boolean(),
+      message: z.string().max(500)
+    }).strict(),
+    executionLocation: 'server', permission: 'write', requiresApproval: false,
+    timeoutMs: 15_000, isIdempotent: false,
+    allowedTaskTypes: ['coding', 'analysis', 'research', 'writing', 'review', 'transform']
+  },
+  {
+    id: 'inspect_laptop_system',
+    version: '1.0.0',
+    description: 'Inspect the host laptop system details including OS platform, release, CPU architecture, hostname, memory usage, uptime, and current directories.',
+    inputSchema: z.object({}).strict(),
+    outputSchema: z.object({
+      platform: z.string().max(50),
+      release: z.string().max(100),
+      arch: z.string().max(50),
+      hostname: z.string().max(100),
+      username: z.string().max(100),
+      homeDir: z.string().max(1000),
+      cwd: z.string().max(1000),
+      totalMemoryMB: z.number().int().nonnegative(),
+      freeMemoryMB: z.number().int().nonnegative(),
+      uptimeSeconds: z.number().int().nonnegative()
+    }).strict(),
+    executionLocation: 'server', permission: 'read', requiresApproval: false,
+    timeoutMs: 10_000, isIdempotent: true,
+    allowedTaskTypes: ['coding', 'analysis', 'research', 'writing', 'review', 'transform']
   }
 ]);
 

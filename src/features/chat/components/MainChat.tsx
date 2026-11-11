@@ -1233,7 +1233,7 @@ export default function MainChat({ user, setChats, chats = [], onOpenSidebar, on
           {showScrollBottom && !isPrivacyMode && (
             <button
               onClick={() => scrollToBottom(true)}
-              className="absolute bottom-24 sm:bottom-22 left-1/2 -translate-x-1/2 z-30 px-4 py-2 bg-teal-700 hover:bg-teal-800 text-white rounded-full shadow-lg text-xs font-semibold flex items-center gap-1.5 transition-all animate-bounce cursor-pointer active:scale-95 border border-teal-400/50"
+              className="absolute bottom-24 sm:bottom-22 left-1/2 -translate-x-1/2 z-30 px-4 py-2 bg-[var(--rt-surface-raised)] hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-100 rounded-full shadow-lg text-xs font-semibold flex items-center gap-1.5 transition-all animate-slide-up cursor-pointer active:scale-95 border border-[var(--rt-border)]"
               title="Pesan Baru ↓"
               aria-label="Gulir ke Pesan Baru"
             >

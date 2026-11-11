@@ -119,7 +119,7 @@ export function ChatHeader({
   });
 
   return (
-    <header className="sticky top-0 z-20 w-full shrink-0 flex items-center justify-between px-2.5 sm:px-4 pt-safe pt-[env(safe-area-inset-top,0px)] min-h-[calc(3.25rem+env(safe-area-inset-top,0px))] bg-white/78 dark:bg-[#0e1319]/80 backdrop-blur-2xl border-b border-slate-200/50 dark:border-white/[0.05] shadow-[0_2px_16px_-4px_rgba(13,148,136,0.04)] transition-colors">
+    <header className="sticky top-0 z-20 w-full shrink-0 flex items-center justify-between px-2.5 sm:px-4 pt-safe pt-[env(safe-area-inset-top,0px)] min-h-[calc(3.25rem+env(safe-area-inset-top,0px))] bg-white/85 dark:bg-[#0e1319]/88 backdrop-blur-md border-b border-slate-200/50 dark:border-white/[0.05] shadow-[0_2px_16px_-4px_rgba(13,148,136,0.04)] transition-colors">
 
       {/* Left: Mobile Navigation Drawer Toggle & Identity / Model Trigger */}
       <div className="flex items-center gap-1 sm:gap-2 min-w-0 flex-1">
@@ -551,6 +551,18 @@ export function ChatHeader({
             </>
           )}
         </div>
+
+        {/* Always-Visible Emergency / SOS Button (Safety Constraint) */}
+        <button
+          type="button"
+          onClick={() => navigate('/emergency')}
+          className="inline-flex items-center gap-1 h-9 px-2.5 sm:px-3 rounded-full text-xs font-semibold text-rose-700 dark:text-rose-300 bg-rose-50/90 hover:bg-rose-100 dark:bg-rose-950/50 dark:hover:bg-rose-950/80 border border-rose-200/80 dark:border-rose-800/60 transition-colors cursor-pointer shrink-0 btn-tactile"
+          title="Pusat Bantuan Krisis & SOS (24/7)"
+          aria-label="Pusat Bantuan Krisis & SOS"
+        >
+          <PhoneCall className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400 shrink-0" />
+          <span>SOS</span>
+        </button>
 
         {/* 3. More Actions Popover (Unified Home for Session, Privacy & Theme) */}
         <div className="relative">

@@ -136,571 +136,32 @@ import {
   resetVirtualFiles as resetVirtualFilesIdb
 } from './services/virtualFsStorage';
 
-export interface AgentPersonaConfig {
-  id: string;
-  name: string;
-  role: string;
-  avatar: string;
-  badgeColor: string;
-  specialty: string;
-}
-
-export const COUNCIL_PERSONAS: AgentPersonaConfig[] = [
-  {
-    id: 'habibie',
-    name: 'Pak Habibie',
-    role: 'Chief System Architect',
-    avatar: '📐',
-    badgeColor: 'amber',
-    specialty: 'Arsitektur sistem kompleks & blueprint multi-file'
-  },
-  {
-    id: 'kihadjar',
-    name: 'Ki Hadjar',
-    role: 'Deep Reasoning & Debugger',
-    avatar: '🧠',
-    badgeColor: 'purple',
-    specialty: 'Chain-of-Thought (CoT), analisis akar masalah & deduksi logika'
-  },
-  {
-    id: 'sutarjo',
-    name: 'Mas Sutarjo',
-    role: 'Core Implementor',
-    avatar: '⚡',
-    badgeColor: 'sky',
-    specialty: 'Penulisan fungsi presisi & surgical diff'
-  },
-  {
-    id: 'dewi',
-    name: 'Mbak Dewi',
-    role: 'Frontend & UI/UX Specialist',
-    avatar: '🎨',
-    badgeColor: 'teal',
-    specialty: 'Desain visual antarmuka, CSS, Tailwind & layout responsif'
-  },
-  {
-    id: 'bambang',
-    name: 'Pak Bambang',
-    role: 'QA & Safety Inspector',
-    avatar: '🛡️',
-    badgeColor: 'emerald',
-    specialty: 'Terminal test, mitigasi bug, sanitasi & kepastian build'
-  },
-  {
-    id: 'kartini',
-    name: 'Ibu Kartini',
-    role: 'Code Governance & Docs',
-    avatar: '📚',
-    badgeColor: 'rose',
-    specialty: 'Review clean code, tata kelola & standarisasi dokumentasi'
-  },
-  {
-    id: 'gibran',
-    name: 'Mas Gibran',
-    role: 'Sat-Set Router & Dispatcher',
-    avatar: '🚀',
-    badgeColor: 'indigo',
-    specialty: 'Klasifikasi maksud instruksi super cepat (<150ms) & routing'
-  },
-  {
-    id: 'kancil',
-    name: 'Si Kancil',
-    role: 'Ultra-Fast Linter',
-    avatar: '⚡',
-    badgeColor: 'orange',
-    specialty: 'Perapian indentasi kilat & validasi sintaks sebelum save'
-  }
-];
-
-export const PROFESSIONAL_PERSONAS: AgentPersonaConfig[] = [
-  {
-    id: 'habibie',
-    name: 'Lead Architect',
-    role: 'Principal System Architect',
-    avatar: '🏛️',
-    badgeColor: 'amber',
-    specialty: 'Rancangan arsitektur sistem tingkat tinggi & blueprint multi-file modular'
-  },
-  {
-    id: 'kihadjar',
-    name: 'Debug Specialist',
-    role: 'Deep Reasoning & Root Cause',
-    avatar: '🔬',
-    badgeColor: 'purple',
-    specialty: 'Investigasi deduksi mendalam (Chain-of-Thought) & resolusi exception'
-  },
-  {
-    id: 'sutarjo',
-    name: 'Core Engineer',
-    role: 'Senior Implementor',
-    avatar: '💻',
-    badgeColor: 'sky',
-    specialty: 'Implementasi coding fungsi presisi & surgical diff patching'
-  },
-  {
-    id: 'dewi',
-    name: 'UI/UX Specialist',
-    role: 'Frontend & Responsive Lead',
-    avatar: '🎨',
-    badgeColor: 'teal',
-    specialty: 'Penataan visual modern responsif, CSS layout & estetika antarmuka'
-  },
-  {
-    id: 'bambang',
-    name: 'QA & SecOps',
-    role: 'Safety & Terminal Inspector',
-    avatar: '🛡️',
-    badgeColor: 'emerald',
-    specialty: 'Sandbox terminal testing, sanitasi script & verifikasi build'
-  },
-  {
-    id: 'kartini',
-    name: 'Governance Lead',
-    role: 'Documentation & Code Auditor',
-    avatar: '📋',
-    badgeColor: 'rose',
-    specialty: 'Audit clean code, standar repository & pemeliharaan dokumentasi'
-  },
-  {
-    id: 'gibran',
-    name: 'Fast Dispatcher',
-    role: 'Rapid Triage & Tool Router',
-    avatar: '⚡',
-    badgeColor: 'indigo',
-    specialty: 'Routing maksud perintah instan (<150ms) & eksekusi cepat'
-  }
-];
-
-type SandboxMode = 'local' | 'browser';
-type ViewSplitMode = 'editor' | 'split' | 'preview';
-
-interface LocalOllamaModel {
-  name: string;
-  sizeBytes: number;
-  sizeFormatted: string;
-  family: string;
-  parameterSize: string;
-  roleBadge: string;
-  recommendedForCoding: boolean;
-  supportsNativeTools: boolean;
-}
-
-interface FileTreeNode {
-  name: string;
-  path: string;
-  type: 'file' | 'directory';
-  size?: number;
-  children?: FileTreeNode[];
-}
-
-interface AgentToolStep {
-  toolCallId: string;
-  toolName: string;
-  args: Record<string, any>;
-  status: 'running' | 'completed' | 'failed';
-  summary?: string;
-  output?: string;
-  durationMs?: number;
-  fileChanged?: {
-    path: string;
-    beforeContent?: string;
-    afterContent: string;
-  };
-}
-
-interface AgentChatMessage {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-  timestamp: string;
-  modelUsed?: string;
-  thoughts?: string[];
-  toolSteps?: AgentToolStep[];
-  modifiedFiles?: string[];
-  statusText?: string;
-  isStreaming?: boolean;
-  error?: string;
-  retryPrompt?: string;
-  durationMs?: number;
-  activePersona?: AgentPersonaConfig;
-  activeAgents?: string[];
-  qaAuditResult?: {
-    status: 'passed' | 'warning' | 'error';
-    score: number;
-    issuesCount: number;
-  };
-}
-
-interface TerminalEntry {
-  id: string;
-  command: string;
-  stdout: string;
-  stderr: string;
-  exitCode: number;
-  durationMs: number;
-  source: 'user' | 'agent';
-  timestamp: string;
-}
-
-export type TerminalTabType = 'terminal' | 'js_repl' | 'python_repl' | 'c_runner' | 'sql_runner' | 'problems' | 'test_runner' | 'agent_logs' | 'preview_console';
-
-export interface CodebaseSnapshot {
-  id: string;
-  timestamp: string;
-  source: 'ai_tool' | 'manual_save' | 'checkpoint';
-  label: string;
-  files: Record<string, string>;
-  fileCount: number;
-}
-
-interface RuangCoderIDEProps {
-  onOpenSidebar?: () => void;
-  onSwitchMode?: (mode: WorkspaceMode) => void;
-}
-
-const BROWSER_SANDBOX_STORAGE_KEY = 'ruangcoder_browser_virtual_files_v2';
-const RUANGCODER_CHAT_HISTORY_KEY = 'ruangcoder_chat_messages_v1';
-
-const DEFAULT_STARTER_FILES: Record<string, string> = {
-  'index.html': `<!DOCTYPE html>
-<html lang="id">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>RuangCoder Sandbox Application</title>
-  <link rel="stylesheet" href="styles.css" />
-</head>
-<body>
-  <div class="app-card">
-    <div class="badge">⚡ RuangCoder Live Sandbox</div>
-    <h1>Halo dari RuangCoder!</h1>
-    <p>AI Coding Agent otonom berbasis Local AI (Ollama). Minta agent di panel kanan untuk menambahkan fitur baru atau merombak UI.</p>
-    <div class="counter-box">
-      <button id="decBtn" class="btn btn-secondary">-</button>
-      <span id="countValue">0</span>
-      <button id="incBtn" class="btn btn-primary">+</button>
-    </div>
-    <p id="statusText" class="status-text">Siap mengeksekusi instruksi koding...</p>
-  </div>
-  <script src="app.js"></script>
-</body>
-</html>`,
-  'styles.css': `* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
-body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  background: radial-gradient(circle at 50% 10%, #1e293b, #090d16);
-  color: #f8fafc;
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-}
-.app-card {
-  background: rgba(15, 23, 42, 0.85);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(56, 189, 248, 0.25);
-  border-radius: 20px;
-  padding: 32px;
-  max-width: 440px;
-  width: 100%;
-  text-align: center;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
-}
-.badge {
-  display: inline-block;
-  padding: 5px 12px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 700;
-  background: rgba(16, 185, 129, 0.15);
-  color: #34d399;
-  border: 1px solid rgba(16, 185, 129, 0.3);
-  margin-bottom: 16px;
-}
-h1 {
-  font-size: 24px;
-  font-weight: 800;
-  margin-bottom: 10px;
-  background: linear-gradient(90deg, #38bdf8, #34d399);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-p {
-  color: #94a3b8;
-  font-size: 13px;
-  line-height: 1.6;
-  margin-bottom: 24px;
-}
-.counter-box {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-  margin-bottom: 20px;
-}
-#countValue {
-  font-size: 36px;
-  font-weight: 800;
-  min-width: 60px;
-  color: #f8fafc;
-}
-.btn {
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
-  border: none;
-  font-size: 20px;
-  font-weight: bold;
-  cursor: pointer;
-  transition: transform 0.12s ease;
-}
-.btn:active {
-  transform: scale(0.92);
-}
-.btn-primary {
-  background: #10b981;
-  color: #052e16;
-}
-.btn-secondary {
-  background: #334155;
-  color: #f8fafc;
-}
-.status-text {
-  font-size: 12px;
-  color: #38bdf8;
-}`,
-  'app.js': `// RuangCoder Application Logic
-let count = 0;
-
-function updateDisplay() {
-  const countEl = typeof document !== 'undefined' ? document.getElementById('countValue') : null;
-  const statusEl = typeof document !== 'undefined' ? document.getElementById('statusText') : null;
-  if (countEl) countEl.textContent = String(count);
-  if (statusEl) statusEl.textContent = \`Counter: \${count}\`;
-}
-
-if (typeof document !== 'undefined') {
-  document.getElementById('incBtn')?.addEventListener('click', () => {
-    count++;
-    updateDisplay();
-  });
-  document.getElementById('decBtn')?.addEventListener('click', () => {
-    count--;
-    updateDisplay();
-  });
-} else {
-  console.log('RuangCoder backend runner script executed.');
-}`,
-  'utils.js': `export function calculateStats(numbers) {
-  if (!Array.isArray(numbers) || numbers.length === 0) {
-    return { sum: 0, average: 0, min: 0, max: 0 };
-  }
-  const sum = numbers.reduce((acc, n) => acc + n, 0);
-  return {
-    sum,
-    average: Number((sum / numbers.length).toFixed(2)),
-    min: Math.min(...numbers),
-    max: Math.max(...numbers)
-  };
-}`,
-  'test.js': `import { calculateStats } from './utils.js';
-
-const stats = calculateStats([10, 20, 30, 40]);
-console.log('Statistik:', stats);
-
-if (stats.sum === 100 && stats.average === 25) {
-  console.log('✅ TEST PASSED: Kalkulasi akurat!');
-  process.exit(0);
-} else {
-  console.error('❌ TEST FAILED');
-  process.exit(1);
-}`,
-  'package.json': JSON.stringify(
-    {
-      name: 'ruangcoder-workspace',
-      version: '1.0.0',
-      type: 'module',
-      scripts: {
-        test: 'node test.js',
-        start: 'node app.js'
-      }
-    },
-    null,
-    2
-  ),
-  'README.md': `# RuangCoder Project Workspace
-Workspace ini dikelola langsung oleh **RuangCoder Autonomous AI Agent** via Ollama.`
-};
-
-const PROMPT_SUGGESTIONS = [
-  '🔍 Audit seluruh struktur kode di workspace dan jelaskan alurnya.',
-  '🎨 Ubah index.html dan styles.css menjadi Todo List & Pomodoro Timer bertema modern.',
-  '🧪 Tambahkan fungsi hitung median di utils.js lalu jalankan test.js di terminal.',
-  '⚡ Buat fitur kalkulator interaktif lengkap di index.html dan app.js.'
-];
-
-function isImageFile(filename: string): boolean {
-  const lower = filename.toLowerCase();
-  return (
-    lower.endsWith('.png') ||
-    lower.endsWith('.jpg') ||
-    lower.endsWith('.jpeg') ||
-    lower.endsWith('.svg') ||
-    lower.endsWith('.webp') ||
-    lower.endsWith('.gif') ||
-    lower.endsWith('.ico')
-  );
-}
-
-function getFileIcon(filename: string) {
-  const lower = filename.toLowerCase();
-  if (lower.endsWith('.html') || lower.endsWith('.htm')) {
-    return <FileCode className="w-3.5 h-3.5 text-orange-500 shrink-0" />;
-  }
-  if (lower.endsWith('.css')) {
-    return <Layers className="w-3.5 h-3.5 text-sky-500 shrink-0" />;
-  }
-  if (lower.endsWith('.js') || lower.endsWith('.mjs') || lower.endsWith('.ts')) {
-    return <FileCode className="w-3.5 h-3.5 text-amber-500 shrink-0" />;
-  }
-  if (lower.endsWith('.json')) {
-    return <FileJson className="w-3.5 h-3.5 text-emerald-500 shrink-0" />;
-  }
-  if (isImageFile(filename)) {
-    return <ImageIcon className="w-3.5 h-3.5 text-purple-400 shrink-0" />;
-  }
-  return <FileText className="w-3.5 h-3.5 text-slate-400 shrink-0" />;
-}
-
-/**
- * Isolated Pomodoro Timer component to avoid re-rendering the entire 4,000+ line IDE every 1 second.
- */
-const PomodoroFocusBadge: React.FC<{ isDark: boolean }> = React.memo(({ isDark }) => {
-  const [pomodoroSeconds, setPomodoroSeconds] = useState<number>(25 * 60);
-  const [isPomodoroRunning, setIsPomodoroRunning] = useState<boolean>(false);
-
-  useEffect(() => {
-    let timer: any = null;
-    if (isPomodoroRunning && pomodoroSeconds > 0) {
-      timer = setInterval(() => {
-        setPomodoroSeconds(prev => {
-          if (prev <= 1) {
-            setIsPomodoroRunning(false);
-            alert('🎉 Sesi Fokus 25 Menit Selesai! Saatnya istirahat mata sejenak 5 menit.');
-            return 25 * 60;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    }
-    return () => {
-      if (timer) clearInterval(timer);
-    };
-  }, [isPomodoroRunning, pomodoroSeconds]);
-
-  return (
-    <button
-      type="button"
-      onClick={() => setIsPomodoroRunning(p => !p)}
-      className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer border ${
-        isPomodoroRunning
-          ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-xs'
-          : isDark
-          ? 'bg-slate-850 hover:bg-slate-800 text-slate-400 border-slate-700'
-          : 'bg-slate-100 hover:bg-slate-200 text-slate-600 border-slate-300'
-      }`}
-      title={isPomodoroRunning ? 'Jeda Pomodoro Timer' : 'Mulai Pomodoro Focus 25 Menit'}
-    >
-      <Timer className={`w-3.5 h-3.5 ${isPomodoroRunning ? 'animate-spin text-amber-400' : ''}`} />
-      <span className="font-mono text-[11px]">
-        {Math.floor(pomodoroSeconds / 60)
-          .toString()
-          .padStart(2, '0')}
-        :{(pomodoroSeconds % 60).toString().padStart(2, '0')}
-      </span>
-    </button>
-  );
-});
-
-const FormattedAgentContent: React.FC<{ content: string; isDark: boolean }> = ({ content, isDark }) => {
-  if (!content) return null;
-
-  // Check for raw leaked **Think:^** or **Think:** or **Call:** in the agent's text
-  const thinkRegex = /\*\*Think:?\^?\*\*([\s\S]*?)(?=(?:\*\*Call:?\*\*|$))/i;
-  const callRegex = /\*\*Call:?\*\*([\s\S]*?)$/i;
-
-  const hasThink = thinkRegex.test(content);
-  const hasCall = callRegex.test(content);
-
-  if (!hasThink && !hasCall) {
-    return (
-      <div className={`whitespace-pre-wrap leading-relaxed ${isDark ? 'text-slate-100' : 'text-slate-800'}`}>
-        {content}
-      </div>
-    );
-  }
-
-  let intro = content;
-  let thinkText = '';
-  let callText = '';
-
-  const thinkMatch = content.match(thinkRegex);
-  if (thinkMatch) {
-    intro = content.slice(0, thinkMatch.index).trim();
-    thinkText = thinkMatch[1].trim();
-  }
-
-  const callMatch = content.match(callRegex);
-  if (callMatch) {
-    if (!thinkMatch) {
-      intro = content.slice(0, callMatch.index).trim();
-    }
-    callText = callMatch[1].trim();
-  }
-
-  return (
-    <div className="space-y-2">
-      {intro && (
-        <div className={`whitespace-pre-wrap leading-relaxed ${isDark ? 'text-slate-100' : 'text-slate-800'}`}>
-          {intro}
-        </div>
-      )}
-      {thinkText && (
-        <details
-          className={`group rounded-xl border p-2.5 text-xs transition-colors ${
-            isDark ? 'bg-purple-950/20 border-purple-500/25 text-purple-200' : 'bg-purple-50/70 border-purple-200 text-purple-900 shadow-2xs'
-          }`}
-        >
-          <summary className="font-semibold cursor-pointer flex items-center justify-between select-none opacity-85 group-hover:opacity-100">
-            <div className="flex items-center gap-1.5 text-[11px]">
-              <Brain className="w-3.5 h-3.5 text-purple-500 animate-pulse shrink-0" />
-              <span>Pemikiran Internal Agen</span>
-            </div>
-            <span className="text-[10px] text-purple-400 group-open:rotate-180 transition-transform">▼</span>
-          </summary>
-          <div className="mt-2 pt-2 border-t border-purple-500/20 text-[11px] font-mono whitespace-pre-wrap leading-relaxed opacity-95">
-            {thinkText}
-          </div>
-        </details>
-      )}
-      {callText && (
-        <div
-          className={`rounded-xl border px-3 py-1.5 text-xs font-mono flex items-center gap-2 ${
-            isDark ? 'bg-slate-900/80 border-slate-800 text-slate-300' : 'bg-slate-100/90 border-slate-200 text-slate-700 shadow-2xs'
-          }`}
-        >
-          <Wrench className="w-3 h-3 text-sky-500 shrink-0" />
-          <span className="truncate">{callText}</span>
-        </div>
-      )}
-    </div>
-  );
-};
+import {
+  AgentPersonaConfig,
+  COUNCIL_PERSONAS,
+  PROFESSIONAL_PERSONAS,
+  SandboxMode,
+  ViewSplitMode,
+  LocalOllamaModel,
+  FileTreeNode,
+  AgentToolStep,
+  AgentChatMessage,
+  TerminalEntry,
+  TerminalTabType,
+  CodebaseSnapshot,
+  RuangCoderIDEProps,
+  BROWSER_SANDBOX_STORAGE_KEY,
+  RUANGCODER_CHAT_HISTORY_KEY,
+  DEFAULT_STARTER_FILES,
+  PROMPT_SUGGESTIONS,
+  isImageFile,
+  getFileIcon,
+  PomodoroFocusBadge,
+  FormattedAgentContent,
+  CoderMobileNavBar
+} from './ide/coderCore';
+export type { AgentPersonaConfig, TerminalTabType, CodebaseSnapshot };
+export { COUNCIL_PERSONAS, PROFESSIONAL_PERSONAS };
 
 export const RuangCoderIDE: React.FC<RuangCoderIDEProps> = ({ onSwitchMode }) => {
   const navigate = useNavigate();
@@ -726,7 +187,7 @@ export const RuangCoderIDE: React.FC<RuangCoderIDEProps> = ({ onSwitchMode }) =>
   // Local AI (Ollama) Models
   const [_models, setModels] = useState<LocalOllamaModel[]>([]);
   const [selectedModel, setSelectedModel] = useState<string>(() => {
-    return safeLocalStorage.getItem('ruangcoder_selected_model') || 'qwen3:8b';
+    return safeLocalStorage.getItem('ruangcoder_selected_model') || 'si-pinter:latest';
   });
   const [ollamaReachable, setOllamaReachable] = useState<boolean>(true);
   const [_ollamaBaseUrl, setOllamaBaseUrl] = useState<string>('http://127.0.0.1:11434');
@@ -805,7 +266,6 @@ export const RuangCoderIDE: React.FC<RuangCoderIDEProps> = ({ onSwitchMode }) =>
   const [secondaryEditorContent, setSecondaryEditorContent] = useState<string>('');
   const [secondaryIsDirty, setSecondaryIsDirty] = useState<boolean>(false);
   const [problemMarkers, setProblemMarkers] = useState<Record<string, EditorProblemMarker[]>>({});
-  const [cursorPos, setCursorPos] = useState<{ line: number; column: number }>({ line: 1, column: 1 });
 
   const dirtyTabs = useMemo(() => {
     const s = new Set<string>();
@@ -1402,7 +862,11 @@ export const RuangCoderIDE: React.FC<RuangCoderIDEProps> = ({ onSwitchMode }) =>
 
   useEffect(() => {
     try {
-      safeLocalStorage.setItem(BROWSER_SANDBOX_STORAGE_KEY, JSON.stringify(browserFiles));
+      const serialized = JSON.stringify(browserFiles);
+      // Guard against quota overflow (> 2MB): IndexedDB is the primary persistent store
+      if (serialized.length < 2_000_000) {
+        safeLocalStorage.setItem(BROWSER_SANDBOX_STORAGE_KEY, serialized);
+      }
     } catch {}
   }, [browserFiles]);
 
@@ -1433,8 +897,13 @@ export const RuangCoderIDE: React.FC<RuangCoderIDEProps> = ({ onSwitchMode }) =>
         const list: LocalOllamaModel[] = Array.isArray(payload.models) ? payload.models : [];
         setModels(list);
         if (list.length > 0 && !list.some(m => m.name === selectedModel)) {
-          const qwen = list.find(m => m.name.includes('qwen3:8b')) || list[0];
-          setSelectedModel(qwen.name);
+          const preferredModel =
+            list.find(m => m.name.includes('si-pinter')) ||
+            list.find(m => m.name.includes('si-tangguh')) ||
+            list.find(m => m.name.includes('si-gacor')) ||
+            list.find(m => m.name.includes('qwen')) ||
+            list[0];
+          setSelectedModel(preferredModel.name);
         }
       }
     } catch {
@@ -1600,6 +1069,18 @@ Berdasarkan log pengujian di atas, modul program \`${activeFilePath}\` telah dij
   const loadFileIntoEditor = useCallback(
     async (filePath: string, modeOverride?: SandboxMode) => {
       const mode = modeOverride || sandboxMode;
+
+      // Safety auto-save previous file before switching if it was dirty
+      if (isDirty && activeFilePath && activeFilePath !== filePath) {
+        if (mode === 'browser') {
+          setBrowserFiles(prev => ({ ...prev, [activeFilePath]: editorContent }));
+          void saveVirtualFileIdb(activeFilePath, editorContent);
+        } else {
+          apiClient.post('/api/v1/coder/fs/file', { path: activeFilePath, content: editorContent }).catch(() => {});
+          setLocalFileCache(prev => ({ ...prev, [activeFilePath]: editorContent }));
+        }
+      }
+
       setActiveFilePath(filePath);
       setIsDirty(false);
 
@@ -1626,7 +1107,7 @@ Berdasarkan log pengujian di atas, modul program \`${activeFilePath}\` telah dij
         setDebouncedEditorContent('');
       }
     },
-    [sandboxMode, browserFiles, openTabs]
+    [sandboxMode, browserFiles, openTabs, isDirty, activeFilePath, editorContent]
   );
 
   // Sync cache for web preview
@@ -2636,9 +2117,14 @@ Berdasarkan log pengujian di atas, modul program \`${activeFilePath}\` telah dij
                 void refreshLocalWorkspace();
               }
 
-              setActiveFilePath(fPath);
-              setEditorContent(newContent);
-              setIsDirty(false);
+              // Update editor content smoothly if the modified file is currently active
+              if (activeFilePath === fPath) {
+                setEditorContent(newContent);
+                setDebouncedEditorContent(newContent);
+                setIsDirty(false);
+              }
+              // Ensure modified file is in open tabs without jarringly switching active file
+              setOpenTabs(prev => (prev.includes(fPath) ? prev : [...prev, fPath]));
               // Avoid force-destroying iframe DOM instance; livePreviewHtml smoothly syncs into srcDoc
               createSnapshot(`AI: Modifikasi ${fPath}`, 'ai_tool');
 
@@ -2999,6 +2485,21 @@ Berdasarkan log pengujian di atas, modul program \`${activeFilePath}\` telah dij
   window.addEventListener('error', function(e) {
     sendLog('error', [e.message + (e.lineno ? ' (baris ' + e.lineno + ')' : '')]);
   });
+  window.addEventListener('unhandledrejection', function(e) {
+    sendLog('error', ['Promise Rejection: ' + (e.reason?.message || String(e.reason))]);
+  });
+
+  // Infinite Loop Protection: detect runaway iterations
+  let __loopCounter = 0;
+  let __loopCheckpoint = Date.now();
+  window.__infiniteLoopGuard = function() {
+    __loopCounter++;
+    if (__loopCounter % 10000 === 0) {
+      if (Date.now() - __loopCheckpoint > 3000) {
+        throw new Error('Infinite Loop Terdeteksi: Loop sinkronus dihentikan untuk menjaga kestabilan browser.');
+      }
+    }
+  };
 
   // Visual UI Element Inspector (Hover outline + Click-to-prompt)
   let hoverOverlay = null;
@@ -3154,7 +2655,7 @@ Berdasarkan log pengujian di atas, modul program \`${activeFilePath}\` telah dij
         isDark={isDark}
         errorCount={Object.values(problemMarkers).reduce((a, c) => a + c.filter(m => m.severity >= 8).length, 0)}
         warningCount={Object.values(problemMarkers).reduce((a, c) => a + c.filter(m => m.severity < 8).length, 0)}
-        cursor={cursorPos}
+        isSaving={isSavingFile}
         language={detectMonacoLanguage(activeFilePath)}
         aiLabel={aiProvider === 'gemini' ? 'Gemini Cloud' : aiProvider === 'ollama' ? 'Ollama Lokal' : 'AI Auto'}
         isDirty={isDirty}
@@ -3760,6 +3261,7 @@ Berdasarkan log pengujian di atas, modul program \`${activeFilePath}\` telah dij
                   <Search className="w-3 h-3 text-slate-400 shrink-0" />
                   <input
                     type="text"
+                    aria-label="Filter berkas di workspace"
                     value={fileFilter}
                     onChange={e => setFileFilter(e.target.value)}
                     placeholder="Filter file..."
@@ -3776,9 +3278,9 @@ Berdasarkan log pengujian di atas, modul program \`${activeFilePath}\` telah dij
               </div>
 
               {/* File Tree List */}
-              <div className="flex-1 overflow-y-auto p-1.5 space-y-0.5">
+              <div className="flex-1 overflow-y-auto p-1.5 space-y-0.5" role="tree" aria-label="Daftar Berkas Workspace">
                 {fileItems.length === 0 ? (
-                  <div className="p-4 text-center text-xs text-slate-400">
+                  <div className="p-4 text-center text-xs text-slate-400" role="status">
                     {sandboxMode === 'local' ? 'Memuat file local workspace...' : 'Tidak ada file'}
                   </div>
                 ) : (
@@ -3787,7 +3289,16 @@ Berdasarkan log pengujian di atas, modul program \`${activeFilePath}\` telah dij
                     return (
                       <div
                         key={file.path}
+                        role="treeitem"
+                        aria-selected={isSelected}
+                        tabIndex={isSelected ? 0 : -1}
                         onClick={() => void loadFileIntoEditor(file.path)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            void loadFileIntoEditor(file.path);
+                          }
+                        }}
                         className={`group flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs cursor-pointer transition-all ${
                           isSelected
                             ? isDark
@@ -4798,7 +4309,7 @@ Berdasarkan log pengujian di atas, modul program \`${activeFilePath}\` telah dij
                     </div>
                     <div className="flex-1 min-h-0 relative">
                       <RuangMonacoEditor
-                        onCursorChange={(line, column) => setCursorPos({ line, column })}
+                        onCursorChange={(line, column) => window.dispatchEvent(new CustomEvent('coder:cursor-change', { detail: { line, column } }))}
                         filePath={activeFilePath}
                         value={editorContent}
                         onChange={val => {
@@ -4870,7 +4381,7 @@ Berdasarkan log pengujian di atas, modul program \`${activeFilePath}\` telah dij
                 /* Single Standard Editor */
                 <>
                   <RuangMonacoEditor
-                    onCursorChange={(line, column) => setCursorPos({ line, column })}
+                    onCursorChange={(line, column) => window.dispatchEvent(new CustomEvent('coder:cursor-change', { detail: { line, column } }))}
                     filePath={activeFilePath}
                     value={editorContent}
                     onChange={val => {
@@ -5240,70 +4751,82 @@ Berdasarkan log pengujian di atas, modul program \`${activeFilePath}\` telah dij
 
             {/* Terminal Header */}
             <div className="h-7 px-3 bg-[#0b0f19] border-b border-[#1f293d] flex items-center justify-between text-xs shrink-0 overflow-x-auto">
-              <div className="flex items-center gap-3 shrink-0">
+              <div className="flex items-center gap-3 shrink-0" role="tablist" aria-label="Tab Terminal & REPL">
                 <button
                   type="button"
+                  role="tab"
+                  aria-selected={terminalTab === 'terminal'}
                   onClick={() => setTerminalTab('terminal')}
                   className={`font-semibold text-[11px] cursor-pointer flex items-center gap-1 ${
                     terminalTab === 'terminal' ? 'text-sky-400 border-b border-sky-400' : 'text-slate-400 hover:text-white'
                   }`}
                 >
-                  <TerminalIcon className="w-3 h-3" />
+                  <TerminalIcon className="w-3 h-3" aria-hidden="true" />
                   <span>TERMINAL</span>
                 </button>
                 <button
                   type="button"
+                  role="tab"
+                  aria-selected={terminalTab === 'js_repl'}
                   onClick={() => setTerminalTab('js_repl')}
                   className={`font-semibold text-[11px] cursor-pointer flex items-center gap-1 ${
                     terminalTab === 'js_repl' ? 'text-amber-400 border-b border-amber-400' : 'text-slate-400 hover:text-white'
                   }`}
                   title="JavaScript Interactive Evaluator REPL"
                 >
-                  <Code2 className="w-3 h-3 text-amber-400" />
+                  <Code2 className="w-3 h-3 text-amber-400" aria-hidden="true" />
                   <span>JS REPL</span>
                 </button>
                 <button
                   type="button"
+                  role="tab"
+                  aria-selected={terminalTab === 'python_repl'}
                   onClick={() => setTerminalTab('python_repl')}
                   className={`font-semibold text-[11px] cursor-pointer flex items-center gap-1 ${
                     terminalTab === 'python_repl' ? 'text-sky-400 border-b border-sky-400' : 'text-slate-400 hover:text-white'
                   }`}
                   title="In-Browser Python Simulator"
                 >
-                  <Code2 className="w-3 h-3 text-sky-400" />
+                  <Code2 className="w-3 h-3 text-sky-400" aria-hidden="true" />
                   <span>PYTHON REPL</span>
                 </button>
                 <button
                   type="button"
+                  role="tab"
+                  aria-selected={terminalTab === 'c_runner'}
                   onClick={() => setTerminalTab('c_runner')}
                   className={`font-semibold text-[11px] cursor-pointer flex items-center gap-1 ${
                     terminalTab === 'c_runner' ? 'text-emerald-400 border-b border-emerald-400' : 'text-slate-400 hover:text-white'
                   }`}
                   title="C/C++ Student Simulator & Virtual Memory"
                 >
-                  <Cpu className="w-3 h-3 text-emerald-400" />
+                  <Cpu className="w-3 h-3 text-emerald-400" aria-hidden="true" />
                   <span>C/C++ SIM</span>
                 </button>
                 <button
                   type="button"
+                  role="tab"
+                  aria-selected={terminalTab === 'sql_runner'}
                   onClick={() => setTerminalTab('sql_runner')}
                   className={`font-semibold text-[11px] cursor-pointer flex items-center gap-1 ${
                     terminalTab === 'sql_runner' ? 'text-indigo-400 border-b border-indigo-400' : 'text-slate-400 hover:text-white'
                   }`}
                   title="SQLite Relational Database Canvas (SIAKAD)"
                 >
-                  <Database className="w-3 h-3 text-indigo-400" />
+                  <Database className="w-3 h-3 text-indigo-400" aria-hidden="true" />
                   <span>SQL CANVAS</span>
                 </button>
                 <button
                   type="button"
+                  role="tab"
+                  aria-selected={terminalTab === 'problems'}
                   onClick={() => setTerminalTab('problems')}
                   className={`font-semibold text-[11px] cursor-pointer flex items-center gap-1 ${
                     terminalTab === 'problems' ? 'text-rose-400 border-b border-rose-400' : 'text-slate-400 hover:text-white'
                   }`}
                   title="Monaco Diagnostics & Syntax Problems"
                 >
-                  <AlertTriangle className="w-3 h-3 text-rose-400" />
+                  <AlertTriangle className="w-3 h-3 text-rose-400" aria-hidden="true" />
                   <span>PROBLEMS</span>
                   {Object.values(problemMarkers).reduce((a, c) => a + c.length, 0) > 0 && (
                     <span className="px-1.5 py-0.2 rounded-full bg-rose-500/20 text-rose-300 font-mono text-[9px]">
@@ -5313,32 +4836,38 @@ Berdasarkan log pengujian di atas, modul program \`${activeFilePath}\` telah dij
                 </button>
                 <button
                   type="button"
+                  role="tab"
+                  aria-selected={terminalTab === 'test_runner'}
                   onClick={() => setTerminalTab('test_runner')}
                   className={`font-semibold text-[11px] cursor-pointer flex items-center gap-1 ${
                     terminalTab === 'test_runner' ? 'text-emerald-400 border-b border-emerald-400' : 'text-slate-400 hover:text-white'
                   }`}
                 >
-                  <CheckCircle2 className="w-3 h-3" />
+                  <CheckCircle2 className="w-3 h-3" aria-hidden="true" />
                   <span>TEST RUNNER</span>
                 </button>
                 <button
                   type="button"
+                  role="tab"
+                  aria-selected={terminalTab === 'agent_logs'}
                   onClick={() => setTerminalTab('agent_logs')}
                   className={`font-semibold text-[11px] cursor-pointer flex items-center gap-1 ${
                     terminalTab === 'agent_logs' ? 'text-purple-400 border-b border-purple-400' : 'text-slate-400 hover:text-white'
                   }`}
                 >
-                  <Cpu className="w-3 h-3" />
+                  <Cpu className="w-3 h-3" aria-hidden="true" />
                   <span>AGENT LOGS</span>
                 </button>
                 <button
                   type="button"
+                  role="tab"
+                  aria-selected={terminalTab === 'preview_console'}
                   onClick={() => setTerminalTab('preview_console')}
                   className={`font-semibold text-[11px] cursor-pointer flex items-center gap-1 ${
                     terminalTab === 'preview_console' ? 'text-amber-400 border-b border-amber-400' : 'text-slate-400 hover:text-white'
                   }`}
                 >
-                  <Bug className="w-3 h-3" />
+                  <Bug className="w-3 h-3" aria-hidden="true" />
                   <span>CONSOLE ({previewLogs.length})</span>
                 </button>
               </div>
@@ -5419,8 +4948,8 @@ Berdasarkan log pengujian di atas, modul program \`${activeFilePath}\` telah dij
 
             {/* TAB CONTENT 1: SHELL TERMINAL */}
             {terminalTab === 'terminal' && (
-              <div className="flex-1 flex flex-col min-h-0">
-                <div className="flex-1 overflow-y-auto p-2.5 font-mono text-[11.5px] space-y-1.5 select-text leading-5">
+              <div className="flex-1 flex flex-col min-h-0" role="tabpanel" aria-label="Shell Terminal">
+                <div className="flex-1 overflow-y-auto p-2.5 font-mono text-[11.5px] space-y-1.5 select-text leading-5" role="log" aria-live="polite" aria-label="Output Terminal">
                   {terminalEntries.length === 0 ? (
                     <div className="text-slate-500">
                       Ketik perintah shell di bawah atau jalankan tombol cepat <code className="text-emerald-400">node test.js</code>.
@@ -5475,6 +5004,7 @@ Berdasarkan log pengujian di atas, modul program \`${activeFilePath}\` telah dij
                   <span className="text-emerald-400 font-mono font-bold">$</span>
                   <input
                     type="text"
+                    aria-label="Perintah Shell Terminal"
                     value={terminalInput}
                     onChange={e => setTerminalInput(e.target.value)}
                     placeholder="node test.js... (ketik 'help' untuk daftar perintah)"
@@ -5817,7 +5347,7 @@ Berdasarkan log pengujian di atas, modul program \`${activeFilePath}\` telah dij
           )}
 
           {/* Agent Feed (Reasoning + Tool Calls + Responses) */}
-          <div className="flex-1 overflow-y-auto p-3.5 space-y-4 select-text">
+          <div className="flex-1 overflow-y-auto p-3.5 space-y-4 select-text" role="log" aria-live="polite" aria-label="Percakapan AI Agent RuangCoder">
             {messages.length === 0 ? (
               <div className="space-y-3 py-2">
                 <div
@@ -6247,6 +5777,7 @@ Berdasarkan log pengujian di atas, modul program \`${activeFilePath}\` telah dij
             }`}
           >
             <textarea
+              aria-label="Instruksi untuk RuangCoder AI Agent"
               value={promptInput}
               onChange={e => setPromptInput(e.target.value)}
               onKeyDown={e => {
@@ -6312,252 +5843,216 @@ Berdasarkan log pengujian di atas, modul program \`${activeFilePath}\` telah dij
       {/* ============================================================== */}
       {/* 5. MOBILE BOTTOM NAVIGATION RAIL (< 1024px)                     */}
       {/* ============================================================== */}
-      <nav
-        aria-label="Mobile Navigation"
-        className={`lg:hidden fixed bottom-0 left-0 right-0 h-12 border-t z-50 flex items-center justify-around px-2 ${
-          isDark ? 'bg-[#090d16] border-slate-800 text-slate-400' : 'bg-white border-slate-200 text-slate-600'
-        }`}
-      >
-        <button
-          type="button"
-          onClick={() => {
-            setMobileTab('files');
-            setIsSidebarVisible(true);
-            setActiveActivityTab('explorer');
-          }}
-          className={`flex flex-col items-center gap-0.5 text-[10px] font-semibold py-1 px-2 rounded-lg cursor-pointer ${
-            mobileTab === 'files' ? 'text-sky-400 font-bold' : ''
-          }`}
-        >
-          <FolderOpen className="w-4 h-4" />
-          <span>Files</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => {
-            setMobileTab('editor');
-            setViewSplitMode('editor');
-          }}
-          className={`flex flex-col items-center gap-0.5 text-[10px] font-semibold py-1 px-2 rounded-lg cursor-pointer ${
-            mobileTab === 'editor' && viewSplitMode !== 'preview' ? 'text-sky-400 font-bold' : ''
-          }`}
-        >
-          <FileCode className="w-4 h-4" />
-          <span>Editor</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => {
-            setMobileTab('preview');
-            setViewSplitMode('preview');
-          }}
-          className={`flex flex-col items-center gap-0.5 text-[10px] font-semibold py-1 px-2 rounded-lg cursor-pointer ${
-            mobileTab === 'preview' || viewSplitMode === 'preview' ? 'text-emerald-400 font-bold' : ''
-          }`}
-        >
-          <Globe className="w-4 h-4" />
-          <span>Preview</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => {
-            setMobileTab('ai');
-          }}
-          className={`flex flex-col items-center gap-0.5 text-[10px] font-semibold py-1 px-2 rounded-lg cursor-pointer ${
-            mobileTab === 'ai' ? 'text-purple-400 font-bold' : ''
-          }`}
-        >
-          <Sparkles className="w-4 h-4" />
-          <span>AI Agent</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => {
-            setMobileTab('terminal');
-            setIsTerminalOpen(true);
-          }}
-          className={`flex flex-col items-center gap-0.5 text-[10px] font-semibold py-1 px-2 rounded-lg cursor-pointer ${
-            mobileTab === 'terminal' || isTerminalOpen ? 'text-amber-400 font-bold' : ''
-          }`}
-        >
-          <TerminalIcon className="w-4 h-4" />
-          <span>Terminal</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => {
-            setMobileTab('diff');
-            setIsSidebarVisible(true);
-            setActiveActivityTab('diff');
-          }}
-          className={`flex flex-col items-center gap-0.5 text-[10px] font-semibold py-1 px-2 rounded-lg cursor-pointer ${
-            mobileTab === 'diff' ? 'text-rose-400 font-bold' : ''
-          }`}
-        >
-          <GitCompare className="w-4 h-4" />
-          <span>Diff</span>
-        </button>
-      </nav>
+      <CoderMobileNavBar
+        isDark={isDark}
+        mobileTab={mobileTab}
+        viewSplitMode={viewSplitMode}
+        isTerminalOpen={isTerminalOpen}
+        onSelectFiles={() => {
+          setMobileTab('files');
+          setIsSidebarVisible(true);
+          setActiveActivityTab('explorer');
+        }}
+        onSelectEditor={() => {
+          setMobileTab('editor');
+          setViewSplitMode('editor');
+        }}
+        onSelectPreview={() => {
+          setMobileTab('preview');
+          setViewSplitMode('preview');
+        }}
+        onSelectAi={() => setMobileTab('ai')}
+        onSelectTerminal={() => {
+          setMobileTab('terminal');
+          setIsTerminalOpen(true);
+        }}
+        onSelectDiff={() => {
+          setMobileTab('diff');
+          setIsSidebarVisible(true);
+          setActiveActivityTab('diff');
+        }}
+      />
 
       {/* Starter Template Selector Modal */}
-      <TemplateSelectorModal
-        isOpen={isTemplateModalOpen}
-        onClose={() => setIsTemplateModalOpen(false)}
-        onSelectTemplate={tpl => void handleApplyStarterTemplate(tpl)}
-      />
+      {isTemplateModalOpen && (
+        <TemplateSelectorModal
+          isOpen={isTemplateModalOpen}
+          onClose={() => setIsTemplateModalOpen(false)}
+          onSelectTemplate={tpl => void handleApplyStarterTemplate(tpl)}
+        />
+      )}
 
       {/* Starter Template Gallery Modal (Vanilla, Tailwind, Snake 2D Arcade, Algorithm Lab) */}
-      <StarterTemplateModal
-        isOpen={isStarterGalleryOpen}
-        onClose={() => setIsStarterGalleryOpen(false)}
-        onSelectTemplate={tpl => {
-          if (sandboxMode === 'browser') {
-            void (async () => {
-              const fresh = await resetVirtualFilesIdb(tpl.files);
-              setBrowserFiles(fresh);
-              const firstFile = Object.keys(tpl.files)[0] || 'index.html';
-              setOpenTabs(Object.keys(tpl.files));
-              void loadFileIntoEditor(firstFile);
-              setPreviewKey(k => k + 1);
-            })();
-          } else {
-            void (async () => {
-              for (const [filePath, content] of Object.entries(tpl.files)) {
-                await apiClient.post('/api/v1/coder/fs/file', { path: filePath, content });
-              }
-              await refreshLocalWorkspace();
-              const firstFile = Object.keys(tpl.files)[0] || 'index.html';
-              setOpenTabs(Object.keys(tpl.files));
-              void loadFileIntoEditor(firstFile);
-              setPreviewKey(k => k + 1);
-            })();
-          }
-        }}
-        isDark={isDark}
-      />
+      {isStarterGalleryOpen && (
+        <StarterTemplateModal
+          isOpen={isStarterGalleryOpen}
+          onClose={() => setIsStarterGalleryOpen(false)}
+          onSelectTemplate={tpl => {
+            if (sandboxMode === 'browser') {
+              void (async () => {
+                const fresh = await resetVirtualFilesIdb(tpl.files);
+                setBrowserFiles(fresh);
+                const firstFile = Object.keys(tpl.files)[0] || 'index.html';
+                setOpenTabs(Object.keys(tpl.files));
+                void loadFileIntoEditor(firstFile);
+                setPreviewKey(k => k + 1);
+              })();
+            } else {
+              void (async () => {
+                for (const [filePath, content] of Object.entries(tpl.files)) {
+                  await apiClient.post('/api/v1/coder/fs/file', { path: filePath, content });
+                }
+                await refreshLocalWorkspace();
+                const firstFile = Object.keys(tpl.files)[0] || 'index.html';
+                setOpenTabs(Object.keys(tpl.files));
+                void loadFileIntoEditor(firstFile);
+                setPreviewKey(k => k + 1);
+              })();
+            }
+          }}
+          isDark={isDark}
+        />
+      )}
 
       {/* Diff Review & Accept/Revert Modal */}
-      <DiffReviewModal
-        isOpen={isDiffReviewModalOpen}
-        onClose={() => setIsDiffReviewModalOpen(false)}
-        diff={lastDiff}
-        onAccept={() => {
-          handleAcceptDiff();
-          setIsDiffReviewModalOpen(false);
-        }}
-        onRevert={() => {
-          void handleRevertDiff();
-          setIsDiffReviewModalOpen(false);
-        }}
-      />
+      {isDiffReviewModalOpen && (
+        <DiffReviewModal
+          isOpen={isDiffReviewModalOpen}
+          onClose={() => setIsDiffReviewModalOpen(false)}
+          diff={lastDiff}
+          onAccept={() => {
+            handleAcceptDiff();
+            setIsDiffReviewModalOpen(false);
+          }}
+          onRevert={() => {
+            void handleRevertDiff();
+            setIsDiffReviewModalOpen(false);
+          }}
+        />
+      )}
 
       {/* QR Mobile Preview Modal */}
-      <QrPreviewModal
-        isOpen={isQrModalOpen}
-        onClose={() => setIsQrModalOpen(false)}
-        previewUrl={typeof window !== 'undefined' ? `${window.location.origin}/ruangcoder-virtual/index.html` : 'http://localhost:3000'}
-      />
+      {isQrModalOpen && (
+        <QrPreviewModal
+          isOpen={isQrModalOpen}
+          onClose={() => setIsQrModalOpen(false)}
+          previewUrl={typeof window !== 'undefined' ? `${window.location.origin}/ruangcoder-virtual/index.html` : 'http://localhost:3000'}
+        />
+      )}
 
       {/* Quick Open File Modal (Ctrl+P) */}
-      <QuickOpenModal
-        isOpen={isQuickOpenOpen}
-        onClose={() => setIsQuickOpenOpen(false)}
-        files={fileItems.map(f => f.path)}
-        activeFilePath={activeFilePath}
-        onSelectFile={filePath => void loadFileIntoEditor(filePath)}
-        isDark={isDark}
-      />
+      {isQuickOpenOpen && (
+        <QuickOpenModal
+          isOpen={isQuickOpenOpen}
+          onClose={() => setIsQuickOpenOpen(false)}
+          files={fileItems.map(f => f.path)}
+          activeFilePath={activeFilePath}
+          onSelectFile={filePath => void loadFileIntoEditor(filePath)}
+          isDark={isDark}
+        />
+      )}
 
       {/* Command Palette Modal (Ctrl+Shift+P / F1) */}
-      <CommandPaletteModal
-        isOpen={isCommandPaletteOpen}
-        onClose={() => setIsCommandPaletteOpen(false)}
-        commands={commandPaletteCommands}
-        isDark={isDark}
-      />
+      {isCommandPaletteOpen && (
+        <CommandPaletteModal
+          isOpen={isCommandPaletteOpen}
+          onClose={() => setIsCommandPaletteOpen(false)}
+          commands={commandPaletteCommands}
+          isDark={isDark}
+        />
+      )}
 
       {/* Inline AI Coding Assist Modal (Ctrl+K) */}
-      <InlineAiAssistModal
-        isOpen={isInlineAiOpen}
-        onClose={() => setIsInlineAiOpen(false)}
-        activeFilePath={activeFilePath}
-        onSubmit={prompt => void handleSendAgentPrompt(prompt)}
-        isDark={isDark}
-      />
+      {isInlineAiOpen && (
+        <InlineAiAssistModal
+          isOpen={isInlineAiOpen}
+          onClose={() => setIsInlineAiOpen(false)}
+          activeFilePath={activeFilePath}
+          onSubmit={prompt => void handleSendAgentPrompt(prompt)}
+          isDark={isDark}
+        />
+      )}
 
       {/* CDN / Popular Libraries Injector Modal */}
-      <CdnLibraryModal
-        isOpen={isCdnModalOpen}
-        onClose={() => setIsCdnModalOpen(false)}
-        indexHtmlContent={sandboxMode === 'browser' ? (browserFiles['index.html'] || '') : (localFileCache['index.html'] || '')}
-        onUpdateIndexHtml={handleUpdateIndexHtml}
-        isDark={isDark}
-      />
+      {isCdnModalOpen && (
+        <CdnLibraryModal
+          isOpen={isCdnModalOpen}
+          onClose={() => setIsCdnModalOpen(false)}
+          indexHtmlContent={sandboxMode === 'browser' ? (browserFiles['index.html'] || '') : (localFileCache['index.html'] || '')}
+          onUpdateIndexHtml={handleUpdateIndexHtml}
+          isDark={isDark}
+        />
+      )}
 
       {/* Antigravity Artifacts Viewer Modal */}
-      <ArtifactViewerModal
-        isOpen={isArtifactModalOpen}
-        onClose={() => setIsArtifactModalOpen(false)}
-        artifact={activeArtifact}
-        onApplyAction={actionPrompt => {
-          void handleSendAgentPrompt(actionPrompt);
-        }}
-      />
+      {isArtifactModalOpen && (
+        <ArtifactViewerModal
+          isOpen={isArtifactModalOpen}
+          onClose={() => setIsArtifactModalOpen(false)}
+          artifact={activeArtifact}
+          onApplyAction={actionPrompt => {
+            void handleSendAgentPrompt(actionPrompt);
+          }}
+        />
+      )}
 
       {/* Workspace Project Management Modal */}
-      <WorkspaceProjectModal
-        isOpen={isProjectModalOpen}
-        onClose={() => setIsProjectModalOpen(false)}
-        projects={projectsList}
-        currentProjectId={currentProjectId}
-        onSelectProject={projId => {
-          setCurrentProjectId(projId);
-          if (sandboxMode === 'local') {
-            void refreshLocalWorkspace();
-          }
-        }}
-        onCreateProject={handleCreateProject}
-        isDark={isDark}
-      />
+      {isProjectModalOpen && (
+        <WorkspaceProjectModal
+          isOpen={isProjectModalOpen}
+          onClose={() => setIsProjectModalOpen(false)}
+          projects={projectsList}
+          currentProjectId={currentProjectId}
+          onSelectProject={projId => {
+            setCurrentProjectId(projId);
+            if (sandboxMode === 'local') {
+              void refreshLocalWorkspace();
+            }
+          }}
+          onCreateProject={handleCreateProject}
+          isDark={isDark}
+        />
+      )}
 
       {/* Zen Coding Sanctuary & Anti-Burnout Modal */}
-      <ZenCodingBreakModal
-        isOpen={isZenBreakOpen}
-        onClose={() => setIsZenBreakOpen(false)}
-        reason={zenBreakReason}
-        isDark={isDark}
-      />
+      {isZenBreakOpen && (
+        <ZenCodingBreakModal
+          isOpen={isZenBreakOpen}
+          onClose={() => setIsZenBreakOpen(false)}
+          reason={zenBreakReason}
+          isDark={isDark}
+        />
+      )}
 
       {/* Code Flowchart & Responsi Modal */}
-      <CodeFlowchartModal
-        isOpen={isFlowchartModalOpen}
-        onClose={() => setIsFlowchartModalOpen(false)}
-        code={editorContent}
-        filename={activeFilePath}
-        onAskKiHadjar={prompt => {
-          const kihadjar = COUNCIL_PERSONAS.find(p => p.id === 'kihadjar');
-          if (kihadjar) setActiveCouncilPersona(kihadjar);
-          setPromptInput(prompt);
-          setIsAgentPanelOpen(true);
-          void handleSendAgentPrompt(prompt);
-        }}
-        isDark={isDark}
-      />
+      {isFlowchartModalOpen && (
+        <CodeFlowchartModal
+          isOpen={isFlowchartModalOpen}
+          onClose={() => setIsFlowchartModalOpen(false)}
+          code={editorContent}
+          filename={activeFilePath}
+          onAskKiHadjar={prompt => {
+            const kihadjar = COUNCIL_PERSONAS.find(p => p.id === 'kihadjar');
+            if (kihadjar) setActiveCouncilPersona(kihadjar);
+            setPromptInput(prompt);
+            setIsAgentPanelOpen(true);
+            void handleSendAgentPrompt(prompt);
+          }}
+          isDark={isDark}
+        />
+      )}
 
       {/* GitHub Gist Export Modal */}
-      <GitHubExportModal
-        isOpen={isGitHubModalOpen}
-        onClose={() => setIsGitHubModalOpen(false)}
-        files={sandboxMode === 'browser' ? browserFiles : { [activeFilePath]: editorContent }}
-        projectName={currentProjectId}
-        onDownloadZip={() => void handleExportZip()}
-        isDark={isDark}
-      />
+      {isGitHubModalOpen && (
+        <GitHubExportModal
+          isOpen={isGitHubModalOpen}
+          onClose={() => setIsGitHubModalOpen(false)}
+          files={sandboxMode === 'browser' ? browserFiles : { [activeFilePath]: editorContent }}
+          projectName={currentProjectId}
+          onDownloadZip={() => void handleExportZip()}
+          isDark={isDark}
+        />
+      )}
 
       {/* Docked Inspector Lab: Audit, Autograder, SQL, Bedah Maba, Metodologi */}
       <CoderInspectorDock

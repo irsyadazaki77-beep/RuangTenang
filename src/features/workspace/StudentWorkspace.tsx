@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect, useLayoutEffect, useMemo } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { FileText, MessageSquareText, Paperclip, Sparkles } from 'lucide-react';
+import { FileText, MessageSquareText, Paperclip, Sparkles, Minimize2 } from 'lucide-react';
 import { safeLocalStorage } from '../../lib/storage';
 import { WorkspaceMode, WorkspaceArtifact, WorkspaceCanvasDraft, WorkspaceTab, WorkspaceComposerConfig, WorkspaceComparisonCandidate, WorkspaceComparisonRun, WorkspaceRequestSnapshot, WorkspaceArtifactSelection, ArtifactPatch, WorkspaceChapterScope } from './types';
 import { UserSession } from '../../types';
@@ -1189,6 +1189,11 @@ function StudentWorkspaceSession({
     onTaskAccepted: handleAcceptedAgentTask,
     showToast
   });
+  const handleComposerGenerateTasks = useCallback((goal: string) => {
+    openWorkspaceInspector('plan');
+    handleGenerateWorkspaceTasks(goal);
+  }, [openWorkspaceInspector, handleGenerateWorkspaceTasks]);
+
   const handleSaveWorkspaceInstructions = useCallback(async () => {
     setIsInstructionsSaving(true);
     try {
@@ -1493,6 +1498,22 @@ function StudentWorkspaceSession({
         </div>
       )}
 
+      {/* Floating Zen Mode exit control when Canvas is expanded to full width */}
+      {isCanvasExpanded && isCanvasOpen && (
+        <div className="fixed top-3.5 right-4 z-40 animate-fade-in pointer-events-auto">
+          <button
+            type="button"
+            onClick={handleToggleFocusMode}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-slate-200/80 dark:border-white/10 bg-white/95 dark:bg-[#1e1f20]/95 text-xs font-semibold text-slate-800 dark:text-slate-200 shadow-md backdrop-blur-md hover:border-indigo-400 hover:text-indigo-600 dark:hover:border-indigo-500/50 dark:hover:text-indigo-400 transition-all cursor-pointer"
+            title="Keluar Mode Fokus Zen (Alt+Z)"
+            aria-label="Keluar Mode Fokus"
+          >
+            <Minimize2 className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+            <span>Keluar Fokus</span>
+          </button>
+        </div>
+      )}
+
       {/* 2. Main Dual-Pane Workspace */}
       <main ref={mainContainerRef} className={`relative flex min-h-0 min-w-0 flex-1 overflow-hidden bg-transparent ${isResizingSplit ? 'select-none cursor-col-resize' : ''}`}>
         {/* LEFT PANE: CONVERSATION & COMPOSER */}
@@ -1502,10 +1523,10 @@ function StudentWorkspaceSession({
             isCanvasExpanded
               ? 'hidden'
               : isSplitView
-                ? 'w-full xl:flex-[0_0_var(--split-ratio,52%)] shrink-0 border-r border-slate-200/80 bg-[#f8f9fb] dark:border-slate-800/80 dark:bg-[#0b0d10]'
+                ? 'w-full xl:min-w-[380px] xl:flex-[0_0_var(--split-ratio,52%)] shrink-0 border-r border-slate-200/80 bg-[#f8f9fa] dark:border-slate-800/80 dark:bg-[#131314]'
                 : isFreshWorkspace
                   ? 'mx-auto w-full max-w-none border-r-0 bg-transparent dark:bg-transparent '
-                  : 'mx-auto w-full max-w-3xl border-r-0 bg-[#f8f9fb] xl:max-w-5xl dark:bg-[#0b0d10]'
+                  : 'mx-auto w-full max-w-3xl border-r-0 bg-[#f8f9fa] xl:max-w-5xl dark:bg-[#131314]'
           } ${mobileActiveTab === 'chat' || workspaceView.inspector === 'sources' ? 'flex' : 'hidden xl:flex'}`}
         >
           {!isFreshWorkspace && <WorkspaceConversation
@@ -1593,6 +1614,8 @@ function StudentWorkspaceSession({
             onDeletePreset={deleteCustomPreset}
             onResetPersonalization={resetPersonalization}
             onOpenMockDefense={handleOpenMockDefense}
+            onGenerateTasks={handleComposerGenerateTasks}
+            onOpenPlan={() => openWorkspaceInspector('plan')}
           />
         </section>
 
@@ -1604,7 +1627,7 @@ function StudentWorkspaceSession({
             aria-label="Ubah ukuran panel obrolan dan Canvas"
             title="Geser untuk mengubah ukuran panel (Klik ganda untuk reset 50:50)"
             onMouseDown={handleDividerPointerDown}
-            onDoubleClick={() => setSplitRatio(50)}
+            onDoubleClick={() => setSplitRatio(50)} tabIndex={0} aria-valuenow={Math.round(splitRatio)} aria-valuemin={28} aria-valuemax={72} onKeyDown={(e) => { if (e.key === 'ArrowLeft') { e.preventDefault(); setSplitRatio((r) => Math.max(28, r - 4)); } else if (e.key === 'ArrowRight') { e.preventDefault(); setSplitRatio((r) => Math.min(72, r + 4)); } else if (e.key === 'Home' || e.key === 'Enter') { e.preventDefault(); setSplitRatio(50); } }}
             className={`hidden xl:flex w-1.5 shrink-0 items-center justify-center cursor-col-resize group transition-colors z-20 -ml-[3px] -mr-[3px] ${
               isResizingSplit ? 'bg-indigo-500/30' : 'hover:bg-indigo-500/20'
             }`}

@@ -66,7 +66,7 @@ export const MermaidRenderer: React.FC<MermaidRendererProps> = ({
     setLoading(true);
     setError(null);
 
-    const renderMermaidChart = async () => {
+    const timer = setTimeout(async () => {
       try {
         const mermaid = (await import('mermaid')).default;
 
@@ -108,12 +108,11 @@ export const MermaidRenderer: React.FC<MermaidRendererProps> = ({
           setLoading(false);
         }
       }
-    };
-
-    renderMermaidChart();
+    }, 250);
 
     return () => {
       isMounted = false;
+      clearTimeout(timer);
     };
   }, [chart]);
 

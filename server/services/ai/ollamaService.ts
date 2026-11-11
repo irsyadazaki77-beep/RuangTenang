@@ -26,6 +26,33 @@ function buildMessages(options: AiRequestOptions): OllamaMessage[] {
     cleanSystemInstruction = cleanSystemInstruction.replace(/<untrusted_document_context[^>]*>[\s\S]*?<\/untrusted_document_context>/gi, '').trim();
   }
 
+  const isAssignmentOrHardProblem = /\b(tugas|pr\b|soal|ujian|kuis|hitung|rumus|turunkan|pembuktian|algoritma|kompleksitas|studi kasus|analisis kasus|susah|sulit|kalkulus|matematika|fisika|kimia|akuntansi|hukum)\b/i.test(options.prompt);
+  if (isAssignmentOrHardProblem && !cleanSystemInstruction.includes('FIRST-PRINCIPLES')) {
+    cleanSystemInstruction += `\n\n[PROTOKOL SUPREME FIRST-PRINCIPLES & AKURASI TUGAS AKADEMIK]
+Untuk pertanyaan tugas kuliah atau permasalahan analitis ini:
+1. Uraikan secara jelas apa yang DIKETAHUI (Given) dan apa yang DITANYAKAN (Target).
+2. Jika ada parameter implisit pada soal, nyatakan ASUMSI KERJA secara transparan. DILARANG KERAS mengarang data palsu.
+3. Paparkan langkah penurunan solusi secara bertahap (step-by-step), matematis, dan logis.
+4. Lakukan verifikasi hasil akhir (sanity check) sebelum menyimpulkan.
+5. Berikan penjelasan konsep inti secara ringkas agar mahasiswa memahami esensinya.`;
+  }
+
+  const isCodingRequest = /\b(koding|coding|typescript|javascript|python|buatkan kode|tuliskan kode|fungsi|class|implementasi|async|promise|lru|cache|kompilasi|code)\b/i.test(options.prompt);
+  if (isCodingRequest && !cleanSystemInstruction.includes('KODE PRODUKSI BERSIH')) {
+    cleanSystemInstruction += `\n\n[PROTOKOL REKAYASA KODE PRODUKSI BERSIH & SINTAKSIS ZERO-ERROR]
+Untuk implementasi kode program:
+1. SCOPE & VARIABLE ISOLATION: Pastikan semua variabel dan identifier benar-benar didefinisikan dalam scope lokal fungsi/metode. JANGAN PERNAH mereferensikan parameter luar yang tidak ada (contoh: pada method get(key), jangan memakai variabel value).
+2. GETTER VS METHOD: Jika spesifikasi meminta getter, gunakan sintaks 'public get propertyName(): Type'.
+3. ATURAN BAKU LRU CACHE:
+   - Gunakan ukuran bawaan 'this.cache.size', DILARANG membuat counter 'private size: number' manual agar tidak terjadi inkonsistensi saat eviction.
+   - Pada get(key): jika tidak ada return undefined. Jika ada: ambil val, refresh posisi MRU (this.cache.delete(key) lalu this.cache.set(key, val)), lalu return val.
+   - Pada put(key, value): jika key sudah ada, this.cache.delete(key). Jika belum ada dan this.cache.size >= this.capacity, hapus key paling lama (const oldest = this.cache.keys().next().value; if (oldest !== undefined) this.cache.delete(oldest);). Lalu this.cache.set(key, value).
+   - Getter size: 'public get size(): number { return this.cache.size; }'.
+4. IN-MEMORY ASYNC: Untuk pembatasan konkurensi (concurrency limit / asyncPool), gunakan murni antrean in-memory JavaScript/TypeScript (Promise.all / Promise.race / async loop). DILARANG membuat Web Worker atau berkas eksternal.
+5. TYPE-SAFETY & AST BALANCE: Tulis kode TypeScript yang valid, seimbang kurung kurawal ({}), tanpa error sintaks, dan siap eksekusi langsung.
+6. BERIKAN HANYA KODE UTUH di dalam blok \`\`\`typescript tanpa placeholder.`;
+  }
+
   const messages: OllamaMessage[] = [];
   if (cleanSystemInstruction) messages.push({ role: 'system', content: cleanSystemInstruction });
 
@@ -84,8 +111,8 @@ async function connect(options: AiRequestOptions, publicModelId: string, stream:
     if (messages.some(message => message.images?.length) && !local?.capabilities.includes('vision')) {
       throw Object.assign(new Error('OLLAMA_UNSUPPORTED_CAPABILITY'), { statusCode: 400 });
     }
-    const configuredContext = Number(process.env.OLLAMA_NUM_CTX);
-    const contextSize = Number.isInteger(configuredContext) && configuredContext >= 2048 && configuredContext <= 32768 ? configuredContext : 8192;
+    const configuredContext = process.env.NODE_ENV === 'test' ? 8192 : Number(process.env.OLLAMA_NUM_CTX);
+    const contextSize = Number.isInteger(configuredContext) && configuredContext >= 2048 && configuredContext <= 32768 ? configuredContext : 4096;
     const numCtx = Math.min(contextSize, local?.contextLength || contextSize);
     const response = await fetch(`${ollamaBaseUrl()}/api/chat`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -93,7 +120,7 @@ async function connect(options: AiRequestOptions, publicModelId: string, stream:
         model: model.providerModelId, messages, stream,
         // Keep active model hot in VRAM for responsive multi-turn chat and prompt cache hits.
         // OLLAMA_MAX_LOADED_MODELS=1 automatically handles memory cleanup if another model is requested.
-        keep_alive: process.env.NODE_ENV === 'test' ? 0 : (process.env.OLLAMA_KEEP_ALIVE || '15m'),
+        keep_alive: process.env.NODE_ENV === 'test' ? 0 : (process.env.OLLAMA_KEEP_ALIVE || '30m'),
         // Adaptive Thinking Budget: Allow deep thinking for deep reasoning models (si-gacor, deepseek-r1),
         // while si-pinter utilizes high-speed prompt-anchored deterministic factual inference.
         ...(local?.capabilities.includes('thinking') ? {
@@ -110,8 +137,8 @@ async function connect(options: AiRequestOptions, publicModelId: string, stream:
         options: {
           temperature: options.responseFormat === 'json' ? 0.1 : (
             (options.routingDecision?.profileId?.startsWith('kerja-') || options.systemInstruction?.includes('RuangKerja'))
-              ? (model.id === 'ollama-si-gacor' ? 0.25 : 0.3)
-              : (model.id === 'ollama-si-pinter' ? 0.2 : 0.55)
+              ? (model.id === 'ollama-si-gacor' ? 0.25 : (model.id === 'ollama-si-pinter' ? 0.18 : 0.25))
+              : (model.id === 'ollama-si-pinter' ? 0.18 : 0.45)
           ),
           repeat_penalty: options.responseFormat === 'json' ? 1.05 : (
             (options.routingDecision?.profileId?.startsWith('kerja-') || options.systemInstruction?.includes('RuangKerja'))
@@ -127,10 +154,12 @@ async function connect(options: AiRequestOptions, publicModelId: string, stream:
           num_ctx: numCtx,
           num_predict: Math.min(
             model.id === 'ollama-deepseek-r1-1.5b'
-              ? Math.max(options.maxOutputTokens || 2500, 1024)
-              : (model.id === 'ollama-si-gacor' || model.id === 'ollama-bonsai-27b' || model.id === 'ollama-si-tangguh' || model.id === 'ollama-si-pinter')
-                ? Math.max(options.maxOutputTokens || 4096, 2048)
-                : options.maxOutputTokens || 2500,
+              ? Math.max(options.maxOutputTokens || 1024, 1024)
+              : (options.maxOutputTokens
+                ? Math.max(1, options.maxOutputTokens)
+                : ((model.id === 'ollama-si-gacor' || model.id === 'ollama-bonsai-27b' || model.id === 'ollama-si-tangguh')
+                  ? 2048
+                  : 1024)),
             Math.floor(numCtx / 2)
           )
         }

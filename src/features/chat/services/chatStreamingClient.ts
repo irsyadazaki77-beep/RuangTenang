@@ -165,13 +165,34 @@ export class ChatStreamingClient {
       }
 
       if (token !== this.activeToken || abortController.signal.aborted) return;
-      let response: Response | null = await fetch('/api/v1/chat/stream', {
-        method: 'POST',
-        headers,
-        credentials: 'include',
-        body: JSON.stringify(payload),
-        signal: abortController.signal
-      });
+      let response: Response | null = null;
+      try {
+        response = await fetch('/api/v1/chat/stream', {
+          method: 'POST',
+          headers,
+          credentials: 'include',
+          body: JSON.stringify(payload),
+          signal: abortController.signal
+        });
+      } catch (initialFetchErr: any) {
+        // Resilient network retry on transient socket/connection drops before abort
+        if (!abortController.signal.aborted && token === this.activeToken && initialFetchErr instanceof TypeError) {
+          await new Promise(resolve => setTimeout(resolve, 600));
+          if (token === this.activeToken && !abortController.signal.aborted) {
+            response = await fetch('/api/v1/chat/stream', {
+              method: 'POST',
+              headers,
+              credentials: 'include',
+              body: JSON.stringify(payload),
+              signal: abortController.signal
+            });
+          } else {
+            throw initialFetchErr;
+          }
+        } else {
+          throw initialFetchErr;
+        }
+      }
 
       // If 403 occurs due to CSRF token mismatch/expiry, attempt fresh token refresh once
       if (response.status === 403 && token === this.activeToken && !abortController.signal.aborted) {

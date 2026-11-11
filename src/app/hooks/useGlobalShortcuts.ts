@@ -12,10 +12,14 @@ export function useGlobalShortcuts(toggleCommandPalette: () => void) {
   useEffect(() => {
     const handleKeydown = (event: KeyboardEvent) => {
       if (isEditableTarget(event.target)) return;
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+
+      if ((event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === 'k') {
         event.preventDefault();
         toggleCommandPalette();
-      } else if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'o') {
+        return;
+      }
+
+      if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'o') {
         event.preventDefault();
         navigate('/');
       } else if (((event.ctrlKey || event.metaKey) && event.key === '/') || (event.key === '?' && !event.ctrlKey && !event.metaKey && !event.altKey)) {

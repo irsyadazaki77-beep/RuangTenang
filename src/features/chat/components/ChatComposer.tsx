@@ -35,7 +35,7 @@ interface Props {
   isEmptyState?: boolean;
 }
 
-export function ChatComposer({
+export const ChatComposer = React.memo(function ChatComposer({
   onSend,
   isTyping,
   onStop,
@@ -781,9 +781,9 @@ export function ChatComposer({
 
         {/* Reassurance Caption */}
         <p className="text-[11px] text-slate-400 dark:text-slate-500 text-center mt-2 select-none">
-          RuangTenang memberikan ruang refleksi dan dukungan emosional yang aman
+          RuangTenang memberikan ruang refleksi dan dukungan emosional yang aman <span className="hidden sm:inline text-slate-300 dark:text-slate-700 mx-1">·</span><span className="hidden sm:inline font-mono text-[10px]">Enter kirim · Shift+Enter baris baru</span>
         </p>
       </div>
     </div>
   );
-}
+});

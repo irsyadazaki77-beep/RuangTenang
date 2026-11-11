@@ -143,13 +143,13 @@ export function classifyRequest(context: AiRoutingContext, promptText?: string):
     };
   }
 
-  if (/\b(bukti|proof|logika|deduksi|probabilitas|persamaan|matematika|analisis mendalam|step by step proof|alasan logis)\b/i.test(text)) {
+  if (/\b(bukti|proof|logika|deduksi|probabilitas|persamaan|matematika|kalkulus|integral|turunan|aljabar|studi kasus|analisis kasus|pembuktian|turunkan|hitunglah|carilah nilai|selesaikan persamaan|tugas kuliah|tugas saya|pr\b|soal nomor|soal ujian|soal kuis|latihan soal|langkah pengerjaan|step by step|alasan logis)\b/i.test(text)) {
     return {
       category: 'structured_reasoning',
       latencyPreference: 'deep',
       qualityPreference: 'very_high',
       requiredCapabilities: ['chat'],
-      reasonHint: 'Kebutuhan penalaran analitis, logika, atau pemecahan masalah bertahap'
+      reasonHint: 'Kebutuhan penalaran analitis, penyelesaian tugas akademik, atau kalkulasi bertahap'
     };
   }
 

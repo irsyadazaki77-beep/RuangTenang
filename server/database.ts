@@ -382,8 +382,10 @@ export async function ensureDatabaseReady(): Promise<void> {
         await prisma.$queryRawUnsafe('PRAGMA journal_mode = WAL;');
         await prisma.$queryRawUnsafe('PRAGMA busy_timeout = 5000;');
         await prisma.$queryRawUnsafe('PRAGMA synchronous = NORMAL;');
-        await prisma.$queryRawUnsafe('PRAGMA cache_size = -32000;');
+        await prisma.$queryRawUnsafe('PRAGMA cache_size = -64000;');
         await prisma.$queryRawUnsafe('PRAGMA temp_store = MEMORY;');
+        await prisma.$queryRawUnsafe('PRAGMA mmap_size = 268435456;');
+        await prisma.$queryRawUnsafe('PRAGMA threads = 4;');
       } catch {}
       console.log('[DATABASE READY] SQLite database connection verified.');
     } else {

@@ -10,6 +10,9 @@ export interface SlashCommand {
 }
 
 export const SLASH_COMMANDS: SlashCommand[] = [
+  { id: 'tugas', label: '/tugas', emoji: '🤖', description: 'Tugas Agent Laptop (Jalankan workflow tugas mandiri di laptop)', template: '/tugas ' },
+  { id: 'laptop', label: '/laptop', emoji: '💻', description: 'Akses File & Terminal Laptop (Jalankan script, compiler, atau periksa folder)', template: '/laptop ' },
+  { id: 'run', label: '/run', emoji: '⚡', description: 'Eksekusi Perintah Terminal Laptop secara aman', template: '/run ' },
   { id: 'tandem', label: '/tandem', emoji: '⚡', description: 'Tandem Co-Op (Si Pinter Draf Cepat + Si Gacor Audit Arsitektur)', template: 'Jalankan mode Tandem Co-Op (Si Pinter draf awal + Si Gacor verifikasi mendalam) untuk: ' },
   { id: 'sidang', label: '/sidang', emoji: '🎓', description: 'Simulasi Ujian Sidang Skripsi & Sempro (AI Mock Defense)', template: '' },
   { id: 'bimbingan', label: '/bimbingan', emoji: '📋', description: 'Notulensi bimbingan dosen to Action Plan tugas', template: '' },

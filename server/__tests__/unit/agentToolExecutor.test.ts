@@ -251,4 +251,94 @@ describe('server Agent tool authorization', () => {
       }
     });
   });
+
+  it('inspects host laptop system specs and environment details', async () => {
+    const laptopContext = {
+      ...context,
+      allowedToolIds: new Set(['inspect_laptop_system'])
+    };
+    const result = await executeAuthorizedAgentTool('inspect_laptop_system', {}, laptopContext);
+
+    expect(result.status).toBe('completed');
+    expect(result).toMatchObject({
+      data: {
+        platform: expect.any(String),
+        arch: expect.any(String),
+        hostname: expect.any(String),
+        username: expect.any(String),
+        cwd: expect.any(String),
+        totalMemoryMB: expect.any(Number)
+      }
+    });
+  });
+
+  it('lists laptop workspace directory files', async () => {
+    const listContext = {
+      ...context,
+      allowedToolIds: new Set(['list_laptop_files'])
+    };
+    const result = await executeAuthorizedAgentTool('list_laptop_files', { path: '.' }, listContext);
+
+    expect(result.status).toBe('completed');
+    expect(result).toMatchObject({
+      data: {
+        totalItems: expect.any(Number),
+        items: expect.arrayContaining([
+          expect.objectContaining({ name: 'package.json', type: 'file' })
+        ])
+      }
+    });
+  });
+
+  it('writes and reads files on laptop safely', async () => {
+    const fsContext = {
+      ...context,
+      allowedToolIds: new Set(['write_laptop_file', 'read_laptop_file'])
+    };
+    const testPath = 'tmp/test_agent_laptop_work.txt';
+    const writeResult = await executeAuthorizedAgentTool('write_laptop_file', {
+      path: testPath,
+      content: 'Halo dari RuangKerja AI Agent!'
+    }, fsContext);
+
+    expect(writeResult.status).toBe('completed');
+    expect(writeResult).toMatchObject({
+      data: {
+        success: true,
+        bytesWritten: expect.any(Number)
+      }
+    });
+
+    const readResult = await executeAuthorizedAgentTool('read_laptop_file', {
+      path: testPath
+    }, fsContext);
+
+    expect(readResult.status).toBe('completed');
+    expect(readResult).toMatchObject({
+      data: {
+        content: 'Halo dari RuangKerja AI Agent!',
+        truncated: false
+      }
+    });
+  });
+
+  it('executes safe commands on the laptop terminal', async () => {
+    const cmdContext = {
+      ...context,
+      allowedToolIds: new Set(['run_laptop_command'])
+    };
+    const isWin = process.platform === 'win32';
+    const command = isWin ? 'cmd.exe /c echo HelloFromAgent' : 'echo HelloFromAgent';
+    const result = await executeAuthorizedAgentTool('run_laptop_command', {
+      command
+    }, cmdContext);
+
+    expect(result.status).toBe('completed');
+    expect(result).toMatchObject({
+      data: {
+        exitCode: 0,
+        stdout: expect.stringContaining('HelloFromAgent')
+      }
+    });
+  });
 });
